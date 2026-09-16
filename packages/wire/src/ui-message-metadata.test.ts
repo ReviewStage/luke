@@ -92,7 +92,6 @@ test("every way the brain writes a user row for itself is a source, and a source
     new Set([
       OBSERVATION_SOURCE.HOOK,
       OBSERVATION_SOURCE.ROSTER_LOOK,
-      OBSERVATION_SOURCE.HOLD_RELEASE,
       OBSERVATION_SOURCE.CHILD,
       OBSERVATION_SOURCE.CHILD_COMPLETION,
       OBSERVATION_SOURCE.RECALLED_NOTES,
@@ -105,7 +104,7 @@ test("every way the brain writes a user row for itself is a source, and a source
     { author: MESSAGE_AUTHOR.BRAIN, source: "" },
     { author: MESSAGE_AUTHOR.BRAIN },
     { author: MESSAGE_AUTHOR.CHILD, source: OBSERVATION_SOURCE.CHILD },
-    { author: MESSAGE_AUTHOR.DEVELOPER, source: OBSERVATION_SOURCE.HOLD_RELEASE },
+    { author: MESSAGE_AUTHOR.DEVELOPER, source: OBSERVATION_SOURCE.ROSTER_LOOK },
   ];
   for (const value of refused) {
     assert.equal(refusalOf(USER_MESSAGE_METADATA, value), SCHEMA_REFUSAL.MALFORMED);

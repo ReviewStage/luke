@@ -93,7 +93,7 @@ import { ThinkingDots } from "./thinking-dots";
  * session it reached as a chip — whether it did something to a session or to
  * Luke, or only read a roster, a transcript, a file, or the notebook; what a
  * read answered is never drawn. A turn the developer
- * did not open — a roster look, a hold's release, a child's end — is Luke's
+ * did not open — a roster look, a child's end — is Luke's
  * own judgment, and everything it did leads with his face under that name and
  * never wears a reply's bubble, so what he decided for himself is never read
  * as something the developer asked. Each of Luke's messages — a reply, a

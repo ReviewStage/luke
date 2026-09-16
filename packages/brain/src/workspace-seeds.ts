@@ -26,7 +26,6 @@ const SEED_AGENTS = [
   "- An observation turn carries what the coding agents' transcripts gained since you last",
   "  looked. Decide whether anything is worth the developer's attention. Usually nothing is.",
   "- A developer ask is the developer speaking or typing to you. Your final text is the reply.",
-  "- A hold release lists briefings held while the developer was in a meeting. Decide again.",
   "",
   "## Tool notes",
   "",

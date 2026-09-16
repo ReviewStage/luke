@@ -705,47 +705,6 @@ export function listTurns(
   );
 }
 
-const QueuedTurnRowSchema = Schema.Struct({
-  id: Schema.String,
-  conversationId: Schema.String,
-  queuedAt: InstantColumnSchema,
-}).pipe(Schema.encodeKeys({ conversationId: "conversation_id", queuedAt: "queued_at" }));
-
-/** A queued turn as the opener reads it: the row, the conversation it waits on, and when it was queued. */
-export type QueuedTurnRecord = typeof QueuedTurnRowSchema.Type;
-
-const findQueuedTurns = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, origin: Schema.String, limit: Schema.Number }),
-  Result: QueuedTurnRowSchema,
-  execute: (options) =>
-    statement(
-      (sql) => sql`
-        select turns.id, turns.conversation_id, turns.queued_at
-        from turns
-        ${standingJoin(sql, "turns.conversation_id")}
-        where turns.user_id = ${options.userId}
-          and turns.origin = ${options.origin}
-          and turns.status = ${TURN_STATUS.QUEUED}
-        order by turns.queued_at asc, turns.id asc
-        limit ${options.limit}
-      `,
-    ),
-});
-
-/**
- * The account's queued turns of one origin over its standing conversations,
- * oldest first: the opener's inbox, read to be handed to eve and removed.
- * A queued row of a stamped conversation is nobody's to run and is not
- * listed.
- */
-export function queuedTurns(
-  userId: string,
-  origin: TurnOrigin,
-  limit: number,
-): Effect.Effect<readonly QueuedTurnRecord[], MessageReadFailure, SqlClient.SqlClient> {
-  return findQueuedTurns({ userId, origin, limit });
-}
-
 /** The turn rows a page of messages names, whichever standing conversations they ran over, so the view can place each group under its turn. */
 export function turnsNamed(
   userId: string,

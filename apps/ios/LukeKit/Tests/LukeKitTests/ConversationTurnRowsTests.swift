@@ -130,7 +130,7 @@ final class ConversationTurnRowsTests: XCTestCase {
             conversationId: "3c000000-0000-4000-8000-000000000002",
             source: .observed(session),
             turn: ConversationViewTurn(
-                id: "1a000000-0000-4000-8000-000000000004", origin: .holdRelease, status: status,
+                id: "1a000000-0000-4000-8000-000000000004", origin: .rosterDiff, status: status,
                 queuedAt: Date(timeIntervalSince1970: 1_757_505_780)
             ),
             messages: [
@@ -188,7 +188,6 @@ final class ConversationTurnRowsTests: XCTestCase {
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.typed)), .ask)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.spoken)), .ask)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.rosterDiff)), .own)
-        XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.holdRelease)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.child)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.childCompletion)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: nil), .ask)

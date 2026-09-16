@@ -272,10 +272,6 @@ test("an announcement is unspoken when its latest speech event is the expiry, wh
   };
   assert.equal(unspokenUnder([]), false);
   assert.equal(
-    unspokenUnder([CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_HELD]),
-    false,
-  );
-  assert.equal(
     unspokenUnder([CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED]),
     true,
   );
@@ -410,7 +406,7 @@ test("an observation that acted crosses as its action parts, the refused one fla
   assert.equal(groups.length, 1);
   const [group] = groups;
   assert.equal(group?.turnId, TURN.ACTED);
-  assert.equal(group?.turn?.origin, TURN_ORIGIN.HOLD_RELEASE);
+  assert.equal(group?.turn?.origin, TURN_ORIGIN.ROSTER_DIFF);
   assert.equal(group?.messages.length, 1);
   const [message] = group?.messages ?? [];
   assert.deepEqual(

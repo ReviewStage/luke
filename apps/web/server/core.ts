@@ -51,7 +51,6 @@ export {
   CHILD_COMPLETION_STATUS,
   childCompletionInputText,
   childTaskInputText,
-  holdReleasedInputText,
   maximumBriefingLength,
   READ_TOOLS,
   type ReadToolModule,

@@ -69,20 +69,18 @@ interface ObservationTickReads {
    */
   sweepAbandonedTurns: (now: number) => TickRead<number>;
   /**
-   * The pass over every briefing still on offer, of any account: held while
-   * a device of its account reports quiet ahead, released unspoken with a
-   * turn queued for the brain to decide again once the quiet lifts, and
-   * expired unspoken past its own instant. It rides on the tick for the same
-   * reason the purge does, and like the purge it observes nothing: it reads
-   * the offers' events and the devices' quiet instants, never a word.
+   * The pass over every briefing still on offer, of any account, expiring
+   * unspoken the ones past their own instant. It rides on the tick for the
+   * same reason the purge does, and like the purge it observes nothing: it
+   * reads the offers' events, never a word.
    */
   sweepSpeech: (now: number) => TickRead<SpeechSweepOutcome>;
   /**
    * The pass over the briefings still on offer after the sweep, of any
    * account, pushing to a phone the ones no device is placed to say, as the
    * push module decides from the offers' standing and the devices' reported
-   * presence. It runs after the sweep so an offer the sweep just held or
-   * ended is never read as open here.
+   * presence. It runs after the sweep so an offer the sweep just ended is
+   * never read as open here.
    */
   pushSpeech: (now: number) => TickRead<SpeechPushOutcome>;
   /** One read-only pass over the account's cloud providers, written down as the pass module does. */
@@ -145,7 +143,7 @@ interface ObservationTickAnswer {
   push: SpeechPushOutcome;
   /** What the accounts' sweeps over their ended children owed a completion did, summed. */
   children: ChildCompletionSweepOutcome;
-  /** The turns the accounts' changes and queued hold releases were opened as, and the bookmarks reseeded across a stale gap instead of woken from. */
+  /** The turns the accounts' changes were opened as, and the bookmarks reseeded across a stale gap instead of woken from. */
   turns: TurnOpeningOutcome;
 }
 
@@ -154,7 +152,6 @@ const FAILED_PASS: AccountPassOutcome = { complete: false, changed: false };
 /** An opening that threw or outran the deadline, counted as one failure: what it did not consume stands for the next tick. */
 const FAILED_OPENING: TurnOpeningOutcome = {
   observation: 0,
-  holdRelease: 0,
   failed: 1,
   reseeded: 0,
 };
@@ -280,7 +277,6 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
       if (pass.changed) answer.changed += 1;
       answer.turns = {
         observation: answer.turns.observation + turns.observation,
-        holdRelease: answer.turns.holdRelease + turns.holdRelease,
         failed: answer.turns.failed + turns.failed,
         reseeded: answer.turns.reseeded + turns.reseeded,
       };

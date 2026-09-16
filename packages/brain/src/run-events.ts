@@ -16,8 +16,8 @@ import type { BrainTurnTrigger } from "./turn.js";
 
 /**
  * What a turn tells whoever is listening, as it happens, whichever kind of
- * turn it is: a developer's ask, an observation, a hold's release, a child's
- * task, or a child's completion. Two audiences hear one stream. A relay into
+ * turn it is: a developer's ask, an observation, a child's task, or a
+ * child's completion. Two audiences hear one stream. A relay into
  * a live conversation reads the recorded run's moments: the one step worth a
  * spoken update, the moment every write it took has its result journaled,
  * the answer a sentence at a time once that moment has passed — the words of
@@ -82,8 +82,6 @@ export const BRAIN_TURN_ORIGIN = {
   SPOKEN: "spoken",
   /** A wake for one session, or the roster look on the observation pass. */
   OBSERVATION: "observation",
-  /** A hold's release of briefings decided earlier. */
-  HOLD_RELEASE: "hold_release",
   /** A child's own delegated task. */
   CHILD: "child",
   /** A requester's turn opened by a child's completion. */

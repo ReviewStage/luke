@@ -2,7 +2,7 @@ import { CHILD_RUN_STATUS } from "@sidecar/runtime/vocabulary";
 import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { maximumChildTaskLength } from "./tools/names.js";
-import type { BrainDelivery, BrainWakeEvent } from "./wake-events.js";
+import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The words a turn opens with, each a marker naming what kind of turn it is
@@ -32,7 +32,6 @@ function sessionSummary(session: Session): WireRecord {
 export const BRAIN_INPUT_MARKER = {
   OBSERVED_EVENTS: "[observed events]",
   DEVELOPER_ASK: "[developer ask]",
-  HOLD_RELEASED: "[hold released]",
   STANDING_CONTEXT: "[standing context]",
   /** What sibling conversations did since this one last ran, as the host's own counts. */
   ACTIVITY_NOTICES: "[activity notices]",
@@ -92,22 +91,6 @@ export function wakeInputText(events: readonly BrainWakeEvent[], now: number): s
     BRAIN_INPUT_MARKER.OBSERVED_EVENTS,
     now,
     JSON.stringify({ events: events.map(eventRecord) }),
-  );
-}
-
-function deliveryRecord(delivery: BrainDelivery): WireRecord {
-  return {
-    briefing: delivery.briefing,
-    decided_at: new Date(delivery.decidedAt).toISOString(),
-  };
-}
-
-/** The words a hold-released turn opens with: the briefings that waited, for one re-decision. */
-export function holdReleasedInputText(held: readonly BrainDelivery[], now: number): string {
-  return marked(
-    BRAIN_INPUT_MARKER.HOLD_RELEASED,
-    now,
-    JSON.stringify({ held_briefings: held.map(deliveryRecord) }),
   );
 }
 

@@ -89,8 +89,6 @@ export const BRAIN_HOST_TURN = {
   TYPED: "typed",
   SPOKEN: "spoken",
   OBSERVATION: "observation",
-  /** A hold's release: the briefings a meeting or a pause held back, handed to the conversation that decided them for one re-decision. */
-  HOLD_RELEASE: "hold_release",
   /** A child's own turn: the task its requester delegated, handed to the child conversation as its words. */
   CHILD_TASK: "child-task",
   /** A requester's turn opened by a child's completion, with the child's result as its words. */
@@ -108,8 +106,8 @@ export function isBrainHostTurn(value: string): value is BrainHostTurn {
 /**
  * Where the developer's line of a turn stands on the record. Eve's received
  * message is the brain's input: for a typed ask it is the developer's own
- * words and the relay writes it as the user row; for an observation or a
- * hold's release it is the host's own notice and is written the same way. A
+ * words and the relay writes it as the user row; for an observation it is
+ * the host's own notice and is written the same way. A
  * spoken ask is the exception: the developer's line is the voice session's
  * transcript, cut at the delegation and written by the voice writer under the
  * delegation's id, while eve's input is the question the service composed
@@ -142,11 +140,6 @@ export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.OBSERVATION]: {
     origin: BRAIN_TURN_ORIGIN.OBSERVATION,
     trigger: BRAIN_TURN_TRIGGER.ROSTER,
-    receivedLine: RECEIVED_LINE.RELAY,
-  },
-  [BRAIN_HOST_TURN.HOLD_RELEASE]: {
-    origin: BRAIN_TURN_ORIGIN.HOLD_RELEASE,
-    trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
     receivedLine: RECEIVED_LINE.RELAY,
   },
   [BRAIN_HOST_TURN.CHILD_TASK]: {

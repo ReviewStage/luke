@@ -920,7 +920,7 @@ spoken ask leaves one developer line: the transcript's row, cut at the
 delegation by the voice writer under the delegation's id. Eve's received
 message for a spoken turn is the question the service composed around those
 words, which stands on the ask's record and is not written as a user row,
-where a typed ask's, an observation's, and a hold release's are;
+where a typed ask's and an observation's are;
 `BRAIN_HOST_TURN_KIND` says for each kind whose row the received message is,
 so the relay consults the table rather than a branch. The line and the ask
 share one id, the delegation's, which the service submits the ask under, so
@@ -984,13 +984,13 @@ briefing**: `voice_sessions.device_id` is null until the handshake that
 creates the row carries a device the account owns, and a path that cannot
 prove which device is speaking must not speak. That is the contract, not a
 gap: the accountless introduction never claims, and a device that sends no
-device id hears its briefings by push instead. The service's own hold stands
-empty here: a held offer is `speech.held` on the record, and the look reads
-the account's quiet instant the way the sweep and the push do, so an offer
-the minute's sweep has not yet marked held is still not spoken into a
-meeting. Every open offer of the account is read at each look and only the
-still-offered ones are claimed, a bounded few per look, so rows claimed or
-held elsewhere cannot fill a page ahead of a newer offer; and a briefing is
+device id hears its briefings by push instead. A quiet instant on the
+account is a mute and nothing more: the look reads it the way the push does
+and leaves a quiet account's offers unread, so nothing is spoken into a
+meeting, and an offer made under the quiet expires on its own instant. Every
+open offer of the account is read at each look and only the still-offered
+ones are claimed, a bounded few per look, so rows claimed elsewhere cannot
+fill a page ahead of a newer offer; and a briefing is
 handed to the service as decided at its claim, since the record's expiry is
 what says how long an offer stands and the service's staleness rule measures
 only the wait from that decision to the speech.
@@ -1236,7 +1236,7 @@ but a query. An event is one thing that
 happened to a message after it was written, numbered by the conversation's
 own event sequence, unique on `(conversation_id, seq)` like a message: a
 briefing's `speech.offered`, `speech.claimed`, `speech.spoken`,
-`speech.pushed`, `speech.expired`, or `speech.held`, or a `rating`. The
+`speech.pushed`, or `speech.expired`, or a `rating`. The
 partial unique index over `message_id` where the kind is `speech.claimed` is
 the whole guarantee of at most one authorization to speak per briefing,
 carried by the schema alone: two devices claiming at once both insert and
@@ -1256,15 +1256,12 @@ folded from the speech events on its message in sequence order, the latest
 being the state. What is guaranteed is one authorization per briefing and
 never that the words were heard, so a claimed briefing whose device vanished
 is never offered to anyone else: it expires like an unclaimed one. The sweep
-on the observation tick writes the rest: `speech.held`, carrying the quiet
-instant, on every open offer of an account whose device reports quiet still
-ahead, during which nothing is claimed, pushed, or expired; `speech.expired`
-with the reason `hold_released` once that quiet lifts, beside one
-`hold_release` turn queued on the offer's conversation so the brain decides
-again against the roster as it then is rather than speaking a stale
-briefing (a queued `turns` row; draining queued rows into eve is the
-opener's, not yet built); and `speech.expired` with the reason `due` on an
-offer past its own instant with no hold over it. The Conversation view marks
+on the observation tick writes the one end left: `speech.expired` with the
+reason `due` on an offer past its own instant. A quiet instant a device
+reports (a meeting, or the pause switch restated as an instant) mutes the
+account and writes nothing: the push and the briefing look leave a quiet
+account's offers unread, and an offer made under the quiet expires due like
+any other, so nothing is saved for later or decided again. The Conversation view marks
 an announcement unspoken when the latest speech event on its message is
 `speech.expired`. A prompt and a tool set are
 content-addressed, the hash of the text or the schemas as the key, and the
@@ -1644,34 +1641,6 @@ session that appeared, did something, and vanished between two visits,
 which is mentioned to nobody; that happens only where a visit could not
 hand its change over, where the earlier design dropped the change entirely.
 
-The opener's other inbox is the queued `turns` rows the speech sweep writes
-when a hold lifts, one per conversation per release, each saying the
-briefings a meeting or a pause held back deserve a fresh decision. A queued
-row is the opener's inbox and never the run's record: for each conversation
-with rows queued, the opener hands eve one message under
-`x-luke-turn: hold_release` listing every briefing released and named in
-no hold-release message of the conversation yet — the record's own contents
-as the boundary, since the opening words the relay writes for each
-re-decision name what it carried, so a message not yet written can only
-make a release be listed again and never lose one; the words are read back
-through `heldBriefingsNamed`, the one reader coupled to what
-`holdReleasedInputText` writes, and a round-trip test holds the two
-together — taken from the
-`speech.expired` events whose reason is the hold's and the announcing rows'
-own words, and
-once eve has it removes the rows through the writer's `dequeueTurn`, which
-takes only a queued row no message names, so the turn eve runs is the
-relay's row under `hold_release` and the record still says why Luke spoke.
-A row eve refuses stands for the next tick; a conversation whose rows name
-no released briefing left to decide has its rows removed without a turn,
-said in the log rather than sent as an empty ask. The Conversation view
-draws no queued row, since it groups messages by their turn and a queued
-row has none, and the turns read and its change-signal head skip a queued
-row too, answering a turn only once the relay has moved it to running, so
-the minute between the sweep's row and the opener's send reaches no device
-as a turn that then goes. Hold releases are opened first, being the older news, and count
-against the same per-account bound as the observations.
-
 The account's visit ends with the child-completion sweep
 (`server/hosted/brain-host/child-completion.ts`), run after its pass and its
 opening under the same deadline: it visits at most
@@ -1695,8 +1664,8 @@ account in `x-luke-account`, and the eve door's first authenticator admits
 that pair as a principal of the deployment's own type — the deployment's one
 id, the account as its attribute — for a message naming a kind of turn its
 table, `DEPLOYMENT_TURNS` in `server/hosted/brain-host/channel.ts`, admits (a
-spoken turn, an observation, a hold's release, a child's task, or a child's
-completion) and nothing else: any other
+spoken turn, an observation, a child's task, or a child's completion) and
+nothing else: any other
 route or kind of turn carrying the secret is refused outright rather than
 passed to the account authenticator behind it.
 Which account a request acts for is one accessor over both principal types,

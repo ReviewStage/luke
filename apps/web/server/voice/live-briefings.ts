@@ -28,12 +28,11 @@ import {
  * recorded as claimed can be pushed again and heard twice. A session whose
  * row names no device claims nothing and speaks no briefing: a path that
  * cannot prove which device is speaking must not speak, and `device_id` is
- * null until the handshake that creates the row carries it. The hold is not
- * this module's: on the hosted path a held offer is `speech.held` on the
- * record, so nothing is queued or re-decided in the service, and the look
- * reads the account's quiet the way the sweep and the push do, so an offer
- * the minute's sweep has not yet marked held is still not spoken into a
- * meeting. A briefing is handed over as decided at its claim, not at its
+ * null until the handshake that creates the row carries it. The quiet is a
+ * mute and nothing more: the look reads the account's quiet instant the way
+ * the push does and leaves a quiet account's offers unread, so nothing is
+ * spoken into a meeting, and an offer made under the quiet expires on its
+ * own instant. A briefing is handed over as decided at its claim, not at its
  * offer: the record's own expiry is what says how long an offer stands, and
  * the service's staleness rule measures the wait from that decision to the
  * speech, so an offer minutes old that the record still holds open is said

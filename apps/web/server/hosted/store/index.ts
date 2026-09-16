@@ -348,7 +348,6 @@ export {
   offerSpeech,
   openSpeechOffers,
   quietUntilByAccount,
-  releasedBriefings,
   SPEECH_STATE,
   type SpeechOffer,
   type SpeechStore,

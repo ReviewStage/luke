@@ -344,10 +344,10 @@ test("the briefings on offer are the messages whose latest speech event is an un
   assert.equal(sync.openOffers(NOW), 2);
   // Past its own instant an offer no longer stands, whatever the events still say.
   assert.equal(sync.openOffers(NOW + 60_000), 0);
-  // A later state on the message ends the offer: claimed here, spoken, pushed, held, or expired.
+  // A later state on the message ends the offer: claimed here, spoken, pushed, or expired.
   sync.applyEvents([speech(1, 3, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)], "e2", false);
   assert.equal(sync.openOffers(NOW), 1);
-  sync.applyEvents([speech(2, 4, CONVERSATION_EVENT_KIND.SPEECH_HELD)], "e3", false);
+  sync.applyEvents([speech(2, 4, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED)], "e3", false);
   assert.equal(sync.openOffers(NOW), 0);
   // An offer told again is the same offer, and an earlier event arriving late changes nothing.
   sync.applyEvents([offered(1, 1, NOW + 60_000)], "e4", false);

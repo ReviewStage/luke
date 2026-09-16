@@ -33,7 +33,6 @@
               "speech.spoken",
               "speech.pushed",
               "speech.expired",
-              "speech.held",
               "rating"
             ]
           },

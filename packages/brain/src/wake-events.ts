@@ -37,8 +37,3 @@ export interface BrainWakeEvent {
   transcriptDelta?: BrainTranscriptDelta;
   atMs: number;
 }
-
-export interface BrainDelivery {
-  briefing: string;
-  decidedAt: number;
-}

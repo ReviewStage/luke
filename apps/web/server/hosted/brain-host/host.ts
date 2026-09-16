@@ -481,7 +481,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         });
         if (!admitted.ok) return skippedHousekeeping(admitted.refusal);
         // OpenClaw's session-kind gate: a scaffolding turn — the roster's
-        // observation, a hold's release — produces no durable memory, so only
+        // observation, a child's task — produces no durable memory, so only
         // a turn the developer opened flushes, typed or spoken.
         const turn = turnKindOf(capture.session.auth.current);
         if (turn === undefined || BRAIN_HOST_TURN_KIND[turn].trigger !== BRAIN_TURN_TRIGGER.ASK) {

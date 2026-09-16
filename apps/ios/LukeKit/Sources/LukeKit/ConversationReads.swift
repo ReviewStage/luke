@@ -26,7 +26,6 @@ public enum TurnOrigin: String, Sendable {
     case typed
     case spoken
     case rosterDiff = "roster_diff"
-    case holdRelease = "hold_release"
     case child
     case childCompletion = "child_completion"
 }
@@ -75,7 +74,6 @@ public enum ConversationEventKind: String, Sendable {
     case speechSpoken = "speech.spoken"
     case speechPushed = "speech.pushed"
     case speechExpired = "speech.expired"
-    case speechHeld = "speech.held"
     case rating
 
     /// Every kind but a rating is about how a briefing's delivery went.

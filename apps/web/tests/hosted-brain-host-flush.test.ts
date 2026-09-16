@@ -31,7 +31,7 @@ import { insertConversation, readMessagesByConversation } from "./support/store-
  * turn offered `append_daily_note` alone, whose appends land in the day's
  * note and nowhere on the conversation; the cycle eve names flushes once,
  * however often eve replays the capture; a scaffolding turn — the roster's
- * observation, a hold's release — flushes nothing, as does a session the host
+ * observation, a child's task — flushes nothing, as does a session the host
  * does not admit; and every failure is an outcome written on the
  * conversation's row rather than an error the developer's turn would meet.
  * Synthetic accounts, sessions, and words throughout.
@@ -282,14 +282,13 @@ test("one compaction cycle flushes once: a replayed capture runs no turn, and th
   assert.equal((await noteFor(userId))?.content.match(/First cycle/g)?.length, 2);
 });
 
-test("a scaffolding turn flushes nothing: the roster's observation, a hold's release, a child's task, and a child's completion run no turn and claim no cycle", async () => {
+test("a scaffolding turn flushes nothing: the roster's observation, a child's task, and a child's completion run no turn and claim no cycle", async () => {
   const userId = await database.createUser();
   const conversationId = await ownedConversation(userId);
   const model = appendingModel("- Never written.");
 
   for (const turn of [
     BRAIN_HOST_TURN.OBSERVATION,
-    BRAIN_HOST_TURN.HOLD_RELEASE,
     BRAIN_HOST_TURN.CHILD_TASK,
     BRAIN_HOST_TURN.CHILD_COMPLETION,
   ]) {

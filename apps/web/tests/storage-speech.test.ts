@@ -9,10 +9,8 @@ import {
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewEvent,
   DEVICE_PLATFORM,
-  holdReleasedInputText,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
-  OBSERVATION_SOURCE,
   readStoredUIMessages,
   SPEECH_EXPIRY_REASON,
   type StoredUIMessage,
@@ -21,7 +19,6 @@ import {
   TURN_STATUS,
   unparsedWire,
   type WireRecord,
-  wakeInputText,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -30,14 +27,12 @@ import {
   markSpeechPushed,
   offerSpeech,
   openSpeechOffers,
-  releasedBriefings,
   SPEECH_STATE,
   type SpeechStore,
   storeWriter,
   sweepSpeech,
 } from "../server/hosted/store";
 import {
-  heldBriefingsNamed,
   markSpeechSpoken,
   type OpenSpeechOffersQuery,
   SPEECH_OFFER,
@@ -52,7 +47,6 @@ import {
   insertTurn,
   readEventsByMessage,
   readMessageById,
-  readTurnsByConversation,
   setConversationDeletedAt,
 } from "./support/store-rows";
 
@@ -166,13 +160,6 @@ async function reportQuiet(userId: string, deviceId: string, quietUntil: number 
       `;
     }),
   );
-}
-
-async function queuedTurns(conversationId: string) {
-  const rows = await readTurnsByConversation(database.run, conversationId);
-  return rows
-    .filter((row) => row.status === TURN_STATUS.QUEUED)
-    .map((row) => ({ origin: row.origin, status: row.status }));
 }
 
 /** Whether the Conversation view, over the announcement's row and its events as stored, marks it unspoken. */
@@ -540,7 +527,7 @@ test("the sweep expires an offer past its instant, claimed or not, marks it unsp
       userIds: accounts,
     }),
   );
-  assert.deepEqual(early, { held: 0, released: 0, expired: 1, turns: 0 });
+  assert.deepEqual(early, { expired: 1 });
   assert.deepEqual(await speechEvents(unreadable.messageId), [
     { kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, deviceId: null, payload: null },
     {
@@ -552,12 +539,9 @@ test("the sweep expires an offer past its instant, claimed or not, marks it unsp
 
   clock = NOW + SPEECH_OFFER.TTL_MS;
   const due = await database.run(sweepSpeech(store, { now: clock, userIds: accounts }));
-  assert.deepEqual(due, { held: 0, released: 0, expired: 2, turns: 0 });
+  assert.deepEqual(due, { expired: 2 });
   assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: accounts })), {
-    held: 0,
-    released: 0,
     expired: 0,
-    turns: 0,
   });
   for (const row of [unclaimed, claimed]) {
     assert.deepEqual((await speechEvents(row.messageId)).at(-1), {
@@ -581,171 +565,45 @@ test("the sweep expires an offer past its instant, claimed or not, marks it unsp
   assert.equal(await viewMarksUnspoken(fresh), false);
 });
 
-test("while a device reports quiet nothing is claimed, pushed, or expired; when it lifts the offer ends unspoken and one hold_release turn is queued per conversation", async () => {
+test("a quiet instant mutes and saves nothing: an offer of an account reporting quiet expires due on its own instant like any other, and the sweep skips a conversation the Clear stamped and stops at its bound", async () => {
   clock = NOW;
   const first = await offered();
   const { userId } = first;
+  const cleared = await offered(userId);
+  await setConversationDeletedAt(database.run, cleared.conversationId, new Date(clock));
+  clock = NOW + 1_000;
   const second = await offered(userId);
-  const claimed = await offered(userId);
-  assert.equal(
-    (await database.run(claimSpeech(store, userId, claimed.messageId, MAC, clock))).ok,
-    true,
-  );
-  const elsewhere = await offered();
-  const accounts = [userId, elsewhere.userId];
-  const quietUntil = NOW + 30 * 60_000;
-  await reportQuiet(userId, MAC, quietUntil);
-  await reportQuiet(userId, PHONE, null);
+  await reportQuiet(userId, MAC, NOW + 30 * 60_000);
 
-  const held = await database.run(sweepSpeech(store, { now: clock, userIds: accounts }));
-  assert.deepEqual(held, { held: 3, released: 0, expired: 0, turns: 0 });
-  assert.deepEqual((await speechEvents(first.messageId)).at(-1), {
-    kind: CONVERSATION_EVENT_KIND.SPEECH_HELD,
-    deviceId: null,
-    payload: { quietUntil },
+  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
+    expired: 0,
   });
   assert.deepEqual(
-    new Map(
-      (await openOffers({ userId })).map((offer) => [
-        offer.messageId,
-        [offer.state, offer.quietUntil, offer.claimedByDeviceId],
-      ]),
-    ),
-    new Map([
-      [first.messageId, [SPEECH_STATE.HELD, quietUntil, undefined]],
-      [second.messageId, [SPEECH_STATE.HELD, quietUntil, undefined]],
-      [claimed.messageId, [SPEECH_STATE.HELD, quietUntil, MAC]],
-    ]),
+    (await openOffers({ userId })).map((offer) => offer.state),
+    [SPEECH_STATE.OFFERED, SPEECH_STATE.OFFERED],
+  );
+
+  // Under the quiet the offers still expire on their instant, the bound taking the oldest first.
+  clock = NOW + SPEECH_OFFER.TTL_MS;
+  assert.deepEqual(
+    await database.run(sweepSpeech(store, { now: clock, limit: 1, userIds: [userId] })),
+    { expired: 1 },
   );
   assert.deepEqual(
-    (await openOffers({ userId: elsewhere.userId })).map((offer) => offer.state),
-    [SPEECH_STATE.OFFERED],
+    (await openOffers({ userId })).map((offer) => offer.messageId),
+    [second.messageId],
   );
-  for (const refused of [
-    database.run(claimSpeech(store, userId, first.messageId, PHONE, clock)),
-    database.run(markSpeechPushed(store, userId, first.messageId, clock, PHONE)),
-    database.run(markSpeechSpoken(store, userId, claimed.messageId, MAC)),
-  ]) {
-    assert.deepEqual(await refused, { ok: false, refusal: SPEECH_REFUSAL.HELD });
-  }
-
-  // The same quiet standing writes nothing again, and the offers' own expiry passes under the hold.
-  clock = NOW + SPEECH_OFFER.TTL_MS + 60_000;
-  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: accounts })), {
-    held: 0,
-    released: 0,
+  clock = NOW + 1_000 + SPEECH_OFFER.TTL_MS;
+  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
     expired: 1,
-    turns: 0,
   });
-  assert.deepEqual(
-    (await speechEvents(elsewhere.messageId)).at(-1)?.kind,
-    CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
-  );
-  assert.equal((await speechEvents(first.messageId)).length, 2);
-
-  // A quiet moved later is held again; one moved earlier is not.
-  const extended = quietUntil + 15 * 60_000;
-  await reportQuiet(userId, PHONE, extended);
-  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: accounts })), {
-    held: 3,
-    released: 0,
-    expired: 0,
-    turns: 0,
-  });
-  assert.deepEqual((await speechEvents(first.messageId)).at(-1)?.payload, { quietUntil: extended });
-  await reportQuiet(userId, PHONE, null);
-  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: accounts })), {
-    held: 0,
-    released: 0,
-    expired: 0,
-    turns: 0,
-  });
-
-  clock = extended;
-  const released = await database.run(sweepSpeech(store, { now: clock, userIds: accounts }));
-  assert.deepEqual(released, { held: 0, released: 3, expired: 0, turns: 3 });
-  for (const row of [first, second, claimed]) {
+  for (const row of [first, second]) {
     assert.deepEqual((await speechEvents(row.messageId)).at(-1), {
       kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
       deviceId: null,
-      payload: { reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED },
+      payload: { reason: SPEECH_EXPIRY_REASON.DUE },
     });
-    assert.equal(await viewMarksUnspoken(row), true);
-    assert.deepEqual(await queuedTurns(row.conversationId), [
-      { origin: TURN_ORIGIN.HOLD_RELEASE, status: TURN_STATUS.QUEUED },
-    ]);
   }
-  assert.deepEqual(await openOffers({ userId }), []);
-  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: accounts })), {
-    held: 0,
-    released: 0,
-    expired: 0,
-    turns: 0,
-  });
-});
-
-test("two held offers on one conversation release with one turn between them, and the sweep skips a conversation the Clear stamped and stops at its bound", async () => {
-  clock = NOW;
-  const first = await offered();
-  const { userId, conversationId } = first;
-  const messageId = await insertMessage(database.run, {
-    userId,
-    conversationId,
-    seq: 2,
-    turnId: first.turnId,
-    clientId: `client-${randomUUID()}`,
-    role: MESSAGE_ROLE.ASSISTANT,
-    parts: [announcePart(`call_${randomUUID()}`, { briefing: "Another fixture agent finished." })],
-    metadata: { author: MESSAGE_AUTHOR.BRAIN },
-    createdAt: new Date(clock),
-    finishedAt: new Date(clock),
-  });
-  assert.equal((await database.run(offerSpeech(store, userId, messageId, clock))).ok, true);
-  const cleared = await offered(userId);
-  await setConversationDeletedAt(database.run, cleared.conversationId, new Date(clock));
-
-  const quietUntil = NOW + 30 * 60_000;
-  await reportQuiet(userId, MAC, quietUntil);
-  assert.deepEqual(
-    await database.run(sweepSpeech(store, { now: clock, limit: 1, userIds: [userId] })),
-    {
-      held: 1,
-      released: 0,
-      expired: 0,
-      turns: 0,
-    },
-  );
-  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
-    held: 1,
-    released: 0,
-    expired: 0,
-    turns: 0,
-  });
-
-  // A standing hold does not starve the bound: with the held account's two
-  // offers older than everything else, a read bounded to one still reaches
-  // another account's due offer, because the held account is read apart.
-  clock = NOW + 60_000;
-  const starved = await offered();
-  assert.deepEqual(
-    await database.run(
-      sweepSpeech(store, {
-        now: NOW + 60_000 + SPEECH_OFFER.TTL_MS,
-        limit: 1,
-        userIds: [userId, starved.userId],
-      }),
-    ),
-    { held: 0, released: 0, expired: 1, turns: 0 },
-  );
-  assert.deepEqual(
-    (await speechEvents(starved.messageId)).at(-1)?.kind,
-    CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
-  );
-  assert.deepEqual(
-    (await openOffers({ userId })).map((offer) => offer.state),
-    [SPEECH_STATE.HELD, SPEECH_STATE.HELD],
-  );
-  clock = NOW;
   assert.deepEqual(await speechEvents(cleared.messageId), [
     {
       kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
@@ -753,17 +611,10 @@ test("two held offers on one conversation release with one turn between them, an
       payload: { expiresAt: NOW + SPEECH_OFFER.TTL_MS },
     },
   ]);
-
   await reportQuiet(userId, MAC, null);
   assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
-    held: 0,
-    released: 2,
     expired: 0,
-    turns: 1,
   });
-  assert.deepEqual(await queuedTurns(conversationId), [
-    { origin: TURN_ORIGIN.HOLD_RELEASE, status: TURN_STATUS.QUEUED },
-  ]);
 });
 
 test("a sweep write racing a settled transition is refused under the lock: the offer pushed between the read and the expiry stays pushed, and the sweep counts nothing", async () => {
@@ -771,7 +622,6 @@ test("a sweep write racing a settled transition is refused under the lock: the o
   const due = await offered();
   const settling: SpeechSweepStore = {
     writer: {
-      enqueueTurn: (target, enqueue) => store.writer.enqueueTurn(target, enqueue),
       recordEvent: (target, event) =>
         Effect.flatMap(
           event.kind === CONVERSATION_EVENT_KIND.SPEECH_EXPIRED
@@ -788,103 +638,11 @@ test("a sweep write racing a settled transition is refused under the lock: the o
     await database.run(
       sweepSpeech(settling, { now: NOW + SPEECH_OFFER.TTL_MS, userIds: [due.userId] }),
     ),
-    {
-      held: 0,
-      released: 0,
-      expired: 0,
-      turns: 0,
-    },
+    { expired: 0 },
   );
   assert.deepEqual(
     (await speechEvents(due.messageId)).map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
   );
   assert.equal(await viewMarksUnspoken(due), false);
-});
-
-test("the briefings a hold released are read back with their words and instants, a due expiry among them is not, and one a hold-release message already names is not read again", async () => {
-  clock = NOW;
-  const held = await offered();
-  const { userId } = held;
-  const alsoHeld = await offered(userId);
-  const target = { userId, conversationId: held.conversationId };
-  await reportQuiet(userId, MAC, NOW + 30 * 60_000);
-  clock = NOW + 60_000;
-  await database.run(sweepSpeech(store, { now: clock, userIds: [userId] }));
-  await reportQuiet(userId, MAC, null);
-  clock = NOW + 120_000;
-  const released = await database.run(sweepSpeech(store, { now: clock, userIds: [userId] }));
-  assert.equal(released.released, 2);
-
-  const read = await database.run(releasedBriefings(target, { limit: 8 }));
-  assert.deepEqual(
-    read.map((briefing) => [briefing.messageId, briefing.briefing, briefing.decidedAt]),
-    [[held.messageId, "One fixture agent finished.", NOW]],
-  );
-  assert.equal(read[0]?.releasedAt, NOW + 120_000);
-  assert.equal(
-    (
-      await database.run(
-        releasedBriefings({ userId, conversationId: alsoHeld.conversationId }, { limit: 8 }),
-      )
-    ).length,
-    1,
-  );
-
-  // The re-decision's own opening words, as the relay writes them, are what marks the release carried.
-  const words = await database.run(
-    storeWriter({
-      tools: CATALOG_TOOL_SET,
-      now: () => new Date(clock),
-    }),
-  );
-  const carried = await database.run(
-    words.recordUserMessage(target, {
-      clientId: "hold-release-words",
-      text: holdReleasedInputText(
-        read.map((briefing) => ({ briefing: briefing.briefing, decidedAt: briefing.decidedAt })),
-        clock,
-      ),
-      metadata: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE },
-    }),
-  );
-  assert.equal(carried.ok, true);
-  assert.deepEqual(await database.run(releasedBriefings(target, { limit: 8 })), []);
-
-  clock = NOW;
-  const expiredDue = await offered();
-  clock = NOW + SPEECH_OFFER.TTL_MS;
-  await database.run(sweepSpeech(store, { now: clock, userIds: [expiredDue.userId] }));
-  assert.deepEqual(
-    await database.run(
-      releasedBriefings(
-        { userId: expiredDue.userId, conversationId: expiredDue.conversationId },
-        { limit: 8 },
-      ),
-    ),
-    [],
-  );
-});
-
-test("the hold-release item the host writes reads back to exactly the briefings it named, alone and folded by eve between other items", () => {
-  const plain = { briefing: "Plain.", decidedAt: NOW + 2_000 };
-  const named = [
-    { briefing: 'Quoted "words", a {brace} and a comma, here.', decidedAt: NOW },
-    { briefing: "Two lines\nof briefing — with a dash and 日本語.", decidedAt: NOW + 1 },
-    plain,
-  ];
-  const item = holdReleasedInputText(named, NOW + 3_000);
-  assert.deepEqual(heldBriefingsNamed(item), named);
-
-  // eve folds the deliveries waiting when a turn settles into one received message, a blank line between.
-  const folded = [wakeInputText([], NOW + 3_000), item, wakeInputText([], NOW + 4_000)].join(
-    "\n\n",
-  );
-  assert.deepEqual(heldBriefingsNamed(folded), named);
-  const twice = [item, holdReleasedInputText([plain], NOW + 5_000)].join("\n\n");
-  assert.equal(heldBriefingsNamed(twice).length, 4);
-
-  assert.deepEqual(heldBriefingsNamed(wakeInputText([], NOW)), []);
-  assert.deepEqual(heldBriefingsNamed(`${item.split("\n")[0]}\nnot json`), []);
-  assert.deepEqual(heldBriefingsNamed(""), []);
 });

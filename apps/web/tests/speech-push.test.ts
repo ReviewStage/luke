@@ -297,7 +297,7 @@ function offer(overrides: Partial<SpeechOffer> = {}): SpeechOffer {
   };
 }
 
-test("the rule: no active device pushes at once, an active device is given the grace and then pushed, a claim is never pushed, a hold is the sweep's, and a due offer is the sweep's", () => {
+test("the rule: no active device pushes at once, an active device is given the grace and then pushed, a claim is never pushed, and a due offer is the sweep's", () => {
   assert.equal(speechPushDecision(offer(), false, NOW), SPEECH_PUSH_DECISION.PUSH);
   assert.equal(speechPushDecision(offer(), true, NOW), SPEECH_PUSH_DECISION.WAIT);
   assert.equal(
@@ -318,23 +318,10 @@ test("the rule: no active device pushes at once, an active device is given the g
       SPEECH_PUSH_DECISION.CLAIMED,
     );
     assert.equal(
-      speechPushDecision(
-        offer({ state: SPEECH_STATE.HELD, quietUntil: NOW + 60_000 }),
-        active,
-        NOW,
-      ),
-      SPEECH_PUSH_DECISION.HELD,
-    );
-    assert.equal(
       speechPushDecision(offer(), active, NOW + SPEECH_OFFER.TTL_MS),
       SPEECH_PUSH_DECISION.DUE,
     );
   }
-  // A held offer past its instant is still held, not due: nothing expires under a hold.
-  assert.equal(
-    speechPushDecision(offer({ state: SPEECH_STATE.HELD }), false, NOW + SPEECH_OFFER.TTL_MS),
-    SPEECH_PUSH_DECISION.HELD,
-  );
 });
 
 test("the notification carries the briefing and the message's id and nothing else: one alert body, the default sound, the ordinary level, one custom key, no thread, no collapse id", () => {
@@ -490,7 +477,7 @@ test("Mac active and claimed: never pushed; Mac active and unclaimed: waited on 
   );
 });
 
-test("quiet reported: nothing is pushed and nothing expires while it stands, whether or not the sweep has marked the hold, and when it lifts the offer is re-decided rather than pushed", async () => {
+test("quiet reported: nothing is pushed while it stands, the offer expires on its own instant meanwhile, and a quiet account's old rows do not starve another account's push", async () => {
   clock = NOW;
   const userId = await database.createUser();
   const quietUntil = NOW + 30 * 60_000;
@@ -499,39 +486,23 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
   const row = await offered(userId);
   const { seams, sent } = fakeSender();
 
-  // Before the sweep marks it, the push reads the devices' quiet itself.
+  // The push reads the devices' quiet itself and leaves the account out.
   assert.deepEqual(
     await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
     NOTHING,
   );
   assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
-    held: 1,
-    released: 0,
     expired: 0,
-    turns: 0,
-  });
-  // Past the offer's own instant, the hold still stands over both the push and the expiry.
-  clock = NOW + SPEECH_OFFER.TTL_MS + 60_000;
-  assert.deepEqual(
-    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
-    NOTHING,
-  );
-  assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
-    held: 0,
-    released: 0,
-    expired: 0,
-    turns: 0,
   });
   assert.deepEqual(
     (await openOffers({ userId })).map((open) => open.state),
-    [SPEECH_STATE.HELD],
+    [SPEECH_STATE.OFFERED],
   );
-  assert.deepEqual(sent, []);
 
-  // A quiet account's held offers are the oldest open rows; under a read bound of one they must not hide another account's push.
+  // A quiet account's offers are the oldest open rows; under a read bound of one they must not hide another account's push.
   const other = await database.createUser();
   await device(other, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
-  const unheld = await offered(other);
+  const unmuted = await offered(other);
   assert.deepEqual(
     await database.run(pushSpeech(seams, { now: clock, userIds: [userId, other], limit: 1 })),
     {
@@ -540,37 +511,37 @@ test("quiet reported: nothing is pushed and nothing expires while it stands, whe
     },
   );
   assert.deepEqual(
-    (await speechEvents(unheld.messageId)).map((event) => event.kind),
+    (await speechEvents(unmuted.messageId)).map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
   );
   assert.equal(sent.length, 1);
   sent.length = 0;
 
-  await report(mac, { quietUntil: null });
-  // Between the quiet lifting and the sweep's release, the held offer is still not pushed.
+  // Past the offer's own instant the quiet still stands over the push, and the sweep expires it due.
+  clock = NOW + SPEECH_OFFER.TTL_MS + 60_000;
   assert.deepEqual(
     await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
     NOTHING,
   );
   assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: [userId] })), {
-    held: 0,
-    released: 1,
-    expired: 0,
-    turns: 1,
+    expired: 1,
   });
-  assert.deepEqual(
-    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
-    NOTHING,
-  );
-  assert.deepEqual(sent, []);
-  const [, , ended] = (await readEventsByMessage(database.run, row.messageId)).map((event) => ({
+  const [, ended] = (await readEventsByMessage(database.run, row.messageId)).map((event) => ({
     kind: event.kind,
     payload: event.payload,
   }));
   assert.deepEqual(ended, {
     kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
-    payload: { reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED },
+    payload: { reason: SPEECH_EXPIRY_REASON.DUE },
   });
+
+  // The quiet lifting finds nothing left to push.
+  await report(mac, { quietUntil: null });
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
+  assert.deepEqual(sent, []);
 });
 
 test("an account with no token-holding device leaves the offer standing for the sweep; a due offer is never pushed stale; a row this build cannot read the words of is left standing", async () => {
@@ -613,10 +584,7 @@ test("an account with no token-holding device leaves the offer standing for the 
   );
   assert.deepEqual(sent, []);
   assert.deepEqual(await database.run(sweepSpeech(store, { now: clock, userIds: accounts })), {
-    held: 0,
-    released: 0,
     expired: 3,
-    turns: 0,
   });
 });
 

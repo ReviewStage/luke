@@ -5,18 +5,9 @@ import { ConnectionError, SqlError } from "effect/unstable/sql/SqlError";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
-  BRAIN_TOOL,
-  CONVERSATION_EVENT_KIND,
-  holdReleasedInputText,
-  MESSAGE_AUTHOR,
-  MESSAGE_ROLE,
-  OBSERVATION_SOURCE,
   type ProviderSessionObservation,
   SESSION_STATUS,
   type SessionIdentity,
-  SPEECH_EXPIRY_REASON,
-  TURN_ORIGIN,
-  TURN_STATUS,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
@@ -27,7 +18,6 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import {
   openAccountTurns,
-  openHoldReleaseTurns,
   openObservationTurns,
   type ScheduledTurn,
   type TurnOpenerSeams,
@@ -38,12 +28,10 @@ import {
   type HostedTranscriptReads,
   keepTranscriptCursor,
 } from "../server/hosted/brain-host/transcript";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { OBSERVATION_TICK } from "../server/hosted/observation-bounds";
 import { decodeObservedRoster, type ObservedRoster } from "../server/hosted/observed-roster";
-import { releasedBriefings, storeWriter } from "../server/hosted/store";
-import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
+import { userSeal } from "../server/hosted/store/database";
 import {
   CONSUMED_ROSTER,
   keepConsumedRoster,
@@ -64,12 +52,6 @@ import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/host
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
-const writer = await database.run(
-  storeWriter({
-    tools: CATALOG_TOOL_SET,
-    now: () => new Date(NOW),
-  }),
-);
 
 const NOW = Date.parse("2026-09-11T09:00:00.000Z");
 const PROVIDER = "conductor";
@@ -217,7 +199,6 @@ function seams(
   const reports: string[] = [];
   return {
     store: database.store,
-    writer,
     eve: fakeEve().eve,
     transcripts: fakeTranscripts(),
     now: () => NOW + 5_000,
@@ -226,8 +207,6 @@ function seams(
     reports,
   };
 }
-
-const IdRowSchema = Schema.Struct({ id: Schema.String });
 
 const CursorRowSchema = Schema.Struct({ cursor: Schema.String });
 
@@ -254,22 +233,6 @@ function setConversationRuntimeSessionId(conversationId: string, sessionId: stri
       yield* sql`
         update conversations set runtime_session_id = ${sessionId} where id = ${conversationId}
       `;
-    }),
-  );
-}
-
-function insertSettledTurn(userId: string, conversationId: string, at: Date): Promise<string> {
-  return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        insert into turns (user_id, conversation_id, origin, status, queued_at, settled_at)
-        values (
-          ${userId}, ${conversationId}, ${TURN_ORIGIN.ROSTER_DIFF}, ${TURN_STATUS.SETTLED}, ${at}, ${at}
-        )
-        returning id
-      `;
-      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
     }),
   );
 }
@@ -356,7 +319,6 @@ test("three passes about one session before one visit become one turn: one eve m
 
   assert.deepEqual(outcome, {
     observation: 1,
-    holdRelease: 0,
     failed: 0,
     reseeded: 0,
   } satisfies TurnOpeningOutcome);
@@ -382,7 +344,7 @@ test("three passes about one session before one visit become one turn: one eve m
   assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW + 3_000, sessions: ["s-1"] });
 
   const again = await database.run(openObservationTurns(opener, userId));
-  assert.deepEqual(again, { observation: 0, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(again, { observation: 0, failed: 0, reseeded: 0 });
   assert.equal(handed.length, 1);
 });
 
@@ -435,7 +397,6 @@ test("a handover the store refuses is one refused send, said and counted, rather
 
   assert.deepEqual(outcome, {
     observation: 0,
-    holdRelease: 0,
     failed: 1,
     reseeded: 0,
   } satisfies TurnOpeningOutcome);
@@ -473,7 +434,7 @@ test("a conversation already running in an eve session is sent to, not reopened;
   const outcome = await database.run(
     openObservationTurns(seams({ eve: retired.eve, roster: rosterNow }), retiredUser),
   );
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 1, failed: 0, reseeded: 0 });
   assert.deepEqual(
     retired.handed.map((turn) => turn.kind),
     ["send", "open"],
@@ -498,7 +459,7 @@ test("a turn eve refuses leaves the cursor and the bookmark standing, and nothin
 
   const outcome = await database.run(openObservationTurns(opener, userId));
 
-  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 0, failed: 1, reseeded: 0 });
   assert.equal(refusing.handed.length, 1);
   assert.equal(await cursorOf(userId, identity("s-1")), undefined);
   assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
@@ -510,7 +471,7 @@ test("a turn eve refuses leaves the cursor and the bookmark standing, and nothin
   const thrown = await database.run(
     openObservationTurns(seams({ eve: throwing.eve, roster: opener.roster }), userId),
   );
-  assert.deepEqual(thrown, { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 });
+  assert.deepEqual(thrown, { observation: 0, failed: 1, reseeded: 0 });
   assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
 });
 
@@ -575,7 +536,7 @@ test("a transcript read that throws costs the turn its delta and nothing else; t
     roster: hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000),
   });
   const outcome = await database.run(openObservationTurns(opener, userId));
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 1, failed: 0, reseeded: 0 });
   assert.equal(
     eventsOf(
       handed[0]?.message ?? { conversationId: "", turn: BRAIN_HOST_TURN.OBSERVATION, message: "" },
@@ -605,7 +566,7 @@ test("the bound is per account: two accounts under a bound of one each get their
         limit: 1,
       }),
     );
-    assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+    assert.deepEqual(outcome, { observation: 1, failed: 0, reseeded: 0 });
     assert.equal(handed.length, 1);
     assert.equal((await bookmarkOf(userId))?.observedAt, NOW + 1_000);
   }
@@ -622,7 +583,7 @@ test("within an account the bound wakes the oldest changes first and leaves the 
   const bounded = fakeEve();
   const cut = seams({ eve: bounded.eve, roster: rosterNow });
   const outcome = await database.run(openObservationTurns(cut, userId, { limit: 1 }));
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 1, failed: 0, reseeded: 0 });
   assert.deepEqual(
     bounded.handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
     [["s-2"]],
@@ -649,7 +610,6 @@ test("within an account the bound wakes the oldest changes first and leaves the 
     ),
     {
       observation: 0,
-      holdRelease: 0,
       failed: 0,
       reseeded: 0,
     },
@@ -661,7 +621,7 @@ test("within an account the bound wakes the oldest changes first and leaves the 
   const wideOutcome = await database.run(
     openObservationTurns(seams({ eve: cutting.eve, roster: rosterNow }), wide, { limit: 2 }),
   );
-  assert.deepEqual(wideOutcome, { observation: 2, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(wideOutcome, { observation: 2, failed: 0, reseeded: 0 });
   assert.equal(cutting.handed.length, 2);
   assert.deepEqual(await bookmarkOf(wide), { observedAt: NOW + 1_000, sessions: ["s-1", "s-2"] });
 });
@@ -689,7 +649,6 @@ test("a bookmark this build cannot open is replaced by the snapshot over its own
   const first = seams({ eve, roster: hostedRosterFrom(before, NOW) });
   assert.deepEqual(await database.run(openObservationTurns(first, userId)), {
     observation: 0,
-    holdRelease: 0,
     failed: 0,
     reseeded: 0,
   });
@@ -703,7 +662,7 @@ test("a bookmark this build cannot open is replaced by the snapshot over its own
     await database.run(
       openObservationTurns(seams({ eve, roster: hostedRosterFrom(after, NOW + 1_000) }), userId),
     ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
+    { observation: 1, failed: 0, reseeded: 0 },
   );
   assert.equal(handed.length, 1);
 });
@@ -721,7 +680,6 @@ test("a change no wake is derived from, a workspace coming or going, settles the
     await database.run(openObservationTurns(seams({ eve, roster: rosterNow }), userId)),
     {
       observation: 0,
-      holdRelease: 0,
       failed: 0,
       reseeded: 0,
     },
@@ -758,7 +716,7 @@ test("a provider key replaced since the bookmark wakes nothing: the bookmark set
     await database.run(
       openObservationTurns(seams({ eve, roster: hostedRosterFrom(rekeyed, NOW + 1_000) }), userId),
     ),
-    { observation: 0, holdRelease: 0, failed: 0, reseeded: 0 },
+    { observation: 0, failed: 0, reseeded: 0 },
   );
   assert.equal(handed.length, 0);
   assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW + 1_000, sessions: ["s-9"] });
@@ -779,7 +737,7 @@ test("a provider key replaced since the bookmark wakes nothing: the bookmark set
     await database.run(
       openObservationTurns(seams({ eve, roster: hostedRosterFrom(moved, NOW + 2_000) }), userId),
     ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
+    { observation: 1, failed: 0, reseeded: 0 },
   );
   assert.deepEqual(
     handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
@@ -803,7 +761,6 @@ test("a snapshot this build cannot open wakes nothing and is said, rather than f
   });
   assert.deepEqual(await database.run(openObservationTurns(opener, userId)), {
     observation: 0,
-    holdRelease: 0,
     failed: 0,
     reseeded: 0,
   });
@@ -821,7 +778,7 @@ test("a bookmark first stands where the snapshot does: an account the opener has
     await database.run(
       openObservationTurns(seams({ eve, roster: hostedRosterFrom(before, NOW) }), userId),
     ),
-    { observation: 0, holdRelease: 0, failed: 0, reseeded: 0 },
+    { observation: 0, failed: 0, reseeded: 0 },
   );
   assert.equal(handed.length, 0);
   assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW, sessions: ["s-1", "s-2"] });
@@ -834,7 +791,7 @@ test("a bookmark first stands where the snapshot does: an account the opener has
   const outcome = await database.run(
     openObservationTurns(seams({ eve, roster: hostedRosterFrom(after, NOW + 1_000) }), userId),
   );
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 1, failed: 0, reseeded: 0 });
   assert.deepEqual(
     handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
     [["s-1"]],
@@ -863,7 +820,6 @@ test("a bookmark trailing the snapshot past the stale gap is reseeded from the s
   const visit = seams({ eve, roster: hostedRosterFrom(after, resumedAt) });
   assert.deepEqual(await database.run(openAccountTurns(visit, userId)), {
     observation: 0,
-    holdRelease: 0,
     failed: 0,
     reseeded: 1,
   });
@@ -883,7 +839,7 @@ test("a bookmark trailing the snapshot past the stale gap is reseeded from the s
     await database.run(
       openAccountTurns(seams({ eve, roster: hostedRosterFrom(later, resumedAt + 60_000) }), userId),
     ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
+    { observation: 1, failed: 0, reseeded: 0 },
   );
   assert.deepEqual(
     handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
@@ -905,7 +861,6 @@ test("a roster unchanged for longer than the stale gap is idle, not an outage: e
     const visit = seams({ eve, roster: hostedRosterFrom(idle, at) });
     assert.deepEqual(await database.run(openAccountTurns(visit, userId)), {
       observation: 0,
-      holdRelease: 0,
       failed: 0,
       reseeded: 0,
     });
@@ -925,7 +880,7 @@ test("a roster unchanged for longer than the stale gap is idle, not an outage: e
     await database.run(
       openAccountTurns(seams({ eve, roster: hostedRosterFrom(changed, at) }), userId),
     ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
+    { observation: 1, failed: 0, reseeded: 0 },
   );
   assert.deepEqual(
     handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
@@ -940,7 +895,6 @@ test("a visit whose pass left the snapshot standing, with the bookmark already l
   const visit = seams({ eve, roster: hostedRosterFrom(idle, NOW) });
   assert.deepEqual(await database.run(openObservationTurns(visit, userId)), {
     observation: 0,
-    holdRelease: 0,
     failed: 0,
     reseeded: 0,
   });
@@ -957,7 +911,7 @@ test("a bookmark trailing the snapshot by exactly the stale gap is still news: t
     await database.run(
       openObservationTurns(seams({ eve, roster: hostedRosterFrom(after, at) }), userId),
     ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
+    { observation: 1, failed: 0, reseeded: 0 },
   );
   assert.equal(handed.length, 1);
   assert.equal((await bookmarkOf(userId))?.observedAt, at);
@@ -976,7 +930,7 @@ test("a change eve refused for longer than the stale gap is history too: once ev
         userId,
       ),
     ),
-    { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
+    { observation: 0, failed: 1, reseeded: 0 },
   );
   assert.equal(refusing.handed.length, 1);
   assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
@@ -989,7 +943,7 @@ test("a change eve refused for longer than the stale gap is history too: once ev
     await database.run(
       openObservationTurns(seams({ eve, roster: hostedRosterFrom(changed, resumedAt) }), userId),
     ),
-    { observation: 0, holdRelease: 0, failed: 0, reseeded: 1 },
+    { observation: 0, failed: 0, reseeded: 1 },
   );
   assert.equal(handed.length, 0);
   assert.deepEqual(await bookmarkOf(userId), { observedAt: resumedAt, sessions: ["s-1"] });
@@ -1008,7 +962,7 @@ test("a change about a session the snapshot no longer holds still wakes its conv
       userId,
     ),
   );
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 1, failed: 0, reseeded: 0 });
   const events = eventsOf(
     handed[0]?.message ?? { conversationId: "", turn: BRAIN_HOST_TURN.OBSERVATION, message: "" },
   );
@@ -1041,7 +995,6 @@ test("a bookmark is kept only over the one the read began from, so a pass that r
   });
   assert.deepEqual(await database.run(openObservationTurns(slow, first)), {
     observation: 1,
-    holdRelease: 0,
     failed: 0,
     reseeded: 0,
   });
@@ -1097,394 +1050,6 @@ test("the bookmark is kept only over the one the read began from, so a visit tha
   const outcome = await database.run(
     openObservationTurns(seams({ eve: raced.eve, roster: rosterNow }), userId),
   );
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 1, failed: 0, reseeded: 0 });
   assert.equal((await bookmarkOf(userId))?.observedAt, NOW + 9_000);
-});
-
-/** The hold-release drain. */
-
-interface Released {
-  readonly userId: string;
-  readonly conversationId: string;
-  readonly queued: string[];
-}
-
-/** One held briefing as the opener reads it back: the briefing's words and when the brain decided it. */
-interface HeldBriefingRecord {
-  readonly briefing: string;
-  readonly decided_at: string;
-}
-
-function heldBriefingsOf(message: EveMessage<ScheduledTurn>): readonly HeldBriefingRecord[] {
-  const [, ...body] = message.message.split("\n");
-  // SAFETY: the words are the host's own JSON behind the marker, read here to assert on their shape.
-  const parsed = JSON.parse(body.join("\n")) as { held_briefings: HeldBriefingRecord[] };
-  return parsed.held_briefings;
-}
-
-/**
- * An observed conversation whose one settled turn announced a briefing that a
- * hold then released unspoken, with `rows` hold-release turns queued for it
- * the way the sweep queues them. The release event and the announcing row
- * are written as the sweep and the relay leave them.
- */
-async function releasedConversation(
-  userId: string,
-  sessionId: string,
-  options: { rows: number; briefings?: number; releasedAt?: number; carried?: boolean } = {
-    rows: 1,
-  },
-): Promise<Released> {
-  const conversationId = await database.run(
-    database.store.directory.observed(userId, identity(sessionId), NOW),
-  );
-  assert.ok(conversationId);
-  const target = { userId, conversationId };
-  const decided: { briefing: string; decidedAt: number }[] = [];
-  for (let index = 0; index < (options.briefings ?? 1); index += 1) {
-    const at = new Date(NOW - 60_000 + index);
-    const turnId = await insertSettledTurn(userId, conversationId, at);
-    const parts = JSON.stringify([
-      {
-        type: `tool-${BRAIN_TOOL.ANNOUNCE}`,
-        toolCallId: `call-${index}`,
-        state: "output-available",
-        input: { briefing: `Fixture briefing ${index + 1}.` },
-        output: { status: "accepted" },
-      },
-    ]);
-    const metadata = JSON.stringify({ author: MESSAGE_AUTHOR.BRAIN });
-    const messageId = await database.run(
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        const rows = yield* sql`
-          insert into messages (
-            user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata,
-            created_at, placed_at, finished_at
-          )
-          values (
-            ${userId}, ${conversationId}, ${index + 1}, ${turnId}, ${turnId}, ${MESSAGE_ROLE.ASSISTANT},
-            ${parts}::jsonb, ${metadata}::jsonb, ${at}, ${at}, ${at}
-          )
-          returning id
-        `;
-        return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
-      }),
-    );
-    const payload = JSON.stringify({ reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED });
-    await database.run(
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* sql`
-          insert into events (user_id, conversation_id, seq, message_id, kind, payload, created_at)
-          values (
-            ${userId}, ${conversationId}, ${index + 1}, ${messageId},
-            ${CONVERSATION_EVENT_KIND.SPEECH_EXPIRED}, ${payload}::jsonb,
-            ${new Date(options.releasedAt ?? NOW - 30_000)}
-          )
-        `;
-      }),
-    );
-    decided.push({ briefing: `Fixture briefing ${index + 1}.`, decidedAt: NOW - 60_000 + index });
-  }
-  if (options.carried) {
-    // The re-decision eve already ran, as the relay records its opening words: every briefing so far is named there.
-    const words = await database.run(
-      writer.recordUserMessage(target, {
-        clientId: `carried-${conversationId}`,
-        text: holdReleasedInputText(decided, NOW - 20_000),
-        metadata: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE },
-      }),
-    );
-    assert.equal(words.ok, true);
-  }
-  const queued: string[] = [];
-  for (let index = 0; index < options.rows; index += 1) {
-    const row = await database.run(
-      writer.enqueueTurn(target, { origin: TURN_ORIGIN.HOLD_RELEASE }),
-    );
-    assert.equal(row.ok, true);
-    if (row.ok) queued.push(row.turnId);
-  }
-  return { userId, conversationId, queued };
-}
-
-async function queuedRows(conversationId: string): Promise<string[]> {
-  const rows = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select id from turns where conversation_id = ${conversationId} and status = ${TURN_STATUS.QUEUED}
-      `;
-    }),
-  );
-  return rows.map((row) => Schema.decodeUnknownSync(IdRowSchema)(row).id);
-}
-
-test("a conversation's queued hold releases become one hold_release message listing the briefings the hold released, and the rows go once eve has it", async () => {
-  const userId = await accountSeeing(roster([observation("s-1")]));
-  const released = await releasedConversation(userId, "s-1", { rows: 2, briefings: 2 });
-  const { eve, handed } = fakeEve();
-  const opener = seams({ eve, roster: hostedRosterFrom(roster([observation("s-1")]), NOW) });
-
-  const outcome = await database.run(openHoldReleaseTurns(opener, userId));
-
-  assert.deepEqual(outcome, { observation: 0, holdRelease: 1, failed: 0, reseeded: 0 });
-  assert.equal(handed.length, 1);
-  const [turn] = handed;
-  assert.ok(turn);
-  assert.equal(turn.message.turn, BRAIN_HOST_TURN.HOLD_RELEASE);
-  assert.equal(turn.message.conversationId, released.conversationId);
-  assert.deepEqual(
-    heldBriefingsOf(turn.message).map((briefing) => briefing.briefing),
-    ["Fixture briefing 1.", "Fixture briefing 2."],
-  );
-  assert.deepEqual(await queuedRows(released.conversationId), []);
-  assert.equal(released.queued.length, 2);
-  assert.deepEqual(await database.run(openHoldReleaseTurns(opener, userId)), {
-    observation: 0,
-    holdRelease: 0,
-    failed: 0,
-    reseeded: 0,
-  });
-  assert.equal(handed.length, 1);
-});
-
-test("a hold-release row the relay has moved to running is the run's record and not the inbox: the drain hands eve nothing for it and leaves it standing", async () => {
-  const userId = await accountSeeing(roster([observation("s-1")]));
-  const released = await releasedConversation(userId, "s-1", { rows: 1 });
-  const [running] = released.queued;
-  assert.ok(running);
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update turns set status = ${TURN_STATUS.RUNNING}, started_at = ${new Date(NOW - 1_000)}
-        where id = ${running}
-      `;
-    }),
-  );
-  const { eve, handed } = fakeEve();
-
-  const outcome = await database.run(
-    openHoldReleaseTurns(
-      seams({ eve, roster: hostedRosterFrom(roster([observation("s-1")]), NOW) }),
-      userId,
-    ),
-  );
-
-  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 0, reseeded: 0 });
-  assert.deepEqual(handed, []);
-  const rows = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select status from turns where id = ${running}`;
-    }),
-  );
-  assert.deepEqual(rows[0], { status: TURN_STATUS.RUNNING });
-});
-
-test("a hold release eve refuses leaves its rows queued; one whose briefings a hold-release message already names goes without a turn, said rather than sent", async () => {
-  const userId = await accountSeeing(roster([observation("s-1"), observation("s-2")]));
-  const refused = await releasedConversation(userId, "s-1", { rows: 1 });
-  const refusing = fakeEve(() => ({ outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }));
-  const rosterNow = hostedRosterFrom(roster([observation("s-1"), observation("s-2")]), NOW);
-  assert.deepEqual(
-    await database.run(
-      openHoldReleaseTurns(seams({ eve: refusing.eve, roster: rosterNow }), userId),
-    ),
-    { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
-  );
-  assert.deepEqual(await queuedRows(refused.conversationId), refused.queued);
-
-  const stale = await releasedConversation(userId, "s-2", { rows: 1, carried: true });
-  const { eve, handed } = fakeEve();
-  const opener = seams({ eve, roster: rosterNow });
-  const outcome = await database.run(openHoldReleaseTurns(opener, userId, { limit: 8 }));
-  assert.equal(outcome.holdRelease, 1);
-  assert.deepEqual(
-    handed.map((turn) => turn.message.conversationId),
-    [refused.conversationId],
-  );
-  assert.deepEqual(await queuedRows(stale.conversationId), []);
-  assert.equal(opener.reports.length, 1);
-});
-
-test("an account's opening takes the hold releases first and the observations under what remains of one bound", async () => {
-  const before = roster([observation("s-1"), observation("s-2")]);
-  const after = roster([
-    observation("s-1"),
-    observation("s-2", { status: SESSION_STATUS.WAITING }),
-  ]);
-  const userId = await accountSeeing(before);
-  await passed(userId, after, NOW + 1_000, NOW);
-  await releasedConversation(userId, "s-1", { rows: 1 });
-  const rosterNow = hostedRosterFrom(after, NOW + 1_000);
-
-  const bounded = fakeEve();
-  assert.deepEqual(
-    await database.run(
-      openAccountTurns(seams({ eve: bounded.eve, roster: rosterNow }), userId, { limit: 1 }),
-    ),
-    { observation: 0, holdRelease: 1, failed: 0, reseeded: 0 },
-  );
-  assert.deepEqual(
-    bounded.handed.map((turn) => turn.message.turn),
-    [BRAIN_HOST_TURN.HOLD_RELEASE],
-  );
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
-
-  const next = fakeEve();
-  assert.deepEqual(
-    await database.run(
-      openAccountTurns(seams({ eve: next.eve, roster: rosterNow }), userId, { limit: 1 }),
-    ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
-  );
-  assert.deepEqual(
-    next.handed.map((turn) => turn.message.turn),
-    [BRAIN_HOST_TURN.OBSERVATION],
-  );
-});
-
-test("a first bookmark is adopted whatever the bound has left: a visit whose bound the hold releases used up, or whose hold release eve refused, still places it, so no later adoption swallows the changes in between", async () => {
-  const before = roster([observation("s-1")]);
-  const filled = await database.createUser();
-  await passed(filled, before, NOW, undefined);
-  await releasedConversation(filled, "s-1", { rows: 1 });
-  const { eve } = fakeEve();
-  assert.deepEqual(
-    await database.run(
-      openAccountTurns(seams({ eve, roster: hostedRosterFrom(before, NOW) }), filled, {
-        limit: 1,
-      }),
-    ),
-    { observation: 0, holdRelease: 1, failed: 0, reseeded: 0 },
-  );
-  assert.deepEqual(await bookmarkOf(filled), { observedAt: NOW, sessions: ["s-1"] });
-
-  const refused = await database.createUser();
-  await passed(refused, before, NOW, undefined);
-  await releasedConversation(refused, "s-1", { rows: 1 });
-  const refusing = fakeEve(() => ({ outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }));
-  assert.deepEqual(
-    await database.run(
-      openAccountTurns(
-        seams({ eve: refusing.eve, roster: hostedRosterFrom(before, NOW) }),
-        refused,
-      ),
-    ),
-    { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
-  );
-  assert.deepEqual(await bookmarkOf(refused), { observedAt: NOW, sessions: ["s-1"] });
-});
-
-test("a re-decision carries every release no hold-release message has named, however many, and none a message already names", async () => {
-  const userId = await accountSeeing(roster([observation("s-1")]));
-  const released = await releasedConversation(userId, "s-1", { rows: 1, briefings: 12 });
-  // One more, released earlier and named by the re-decision that carried it.
-  const earlierParts = JSON.stringify([
-    {
-      type: `tool-${BRAIN_TOOL.ANNOUNCE}`,
-      toolCallId: "call-earlier",
-      state: "output-available",
-      input: { briefing: "An earlier briefing." },
-      output: { status: "accepted" },
-    },
-  ]);
-  const earlierMetadata = JSON.stringify({ author: MESSAGE_AUTHOR.BRAIN });
-  const earlierId = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        insert into messages (
-          user_id, conversation_id, seq, client_id, role, parts, metadata,
-          created_at, placed_at, finished_at
-        )
-        values (
-          ${userId}, ${released.conversationId}, ${40}, ${"earlier-announcement"}, ${MESSAGE_ROLE.ASSISTANT},
-          ${earlierParts}::jsonb, ${earlierMetadata}::jsonb,
-          ${new Date(NOW - 120_000)}, ${new Date(NOW - 120_000)}, ${new Date(NOW - 120_000)}
-        )
-        returning id
-      `;
-      return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
-    }),
-  );
-  const earlierPayload = JSON.stringify({ reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED });
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        insert into events (user_id, conversation_id, seq, message_id, kind, payload, created_at)
-        values (
-          ${userId}, ${released.conversationId}, ${40}, ${earlierId},
-          ${CONVERSATION_EVENT_KIND.SPEECH_EXPIRED}, ${earlierPayload}::jsonb, ${new Date(NOW - 60_000)}
-        )
-      `;
-    }),
-  );
-  const carried = await database.run(
-    writer.recordUserMessage(
-      { userId, conversationId: released.conversationId },
-      {
-        clientId: "carried-earlier",
-        text: holdReleasedInputText(
-          [{ briefing: "An earlier briefing.", decidedAt: NOW - 120_000 }],
-          NOW - 50_000,
-        ),
-        metadata: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOLD_RELEASE },
-      },
-    ),
-  );
-  assert.equal(carried.ok, true);
-  // Three sentences for a recurrence, in the order a row travels: the fixture's rows stand, the drain reads them, eve receives them. A failure here says which of the three it was.
-  const expected = Array.from({ length: 12 }, (_, index) => `Fixture briefing ${index + 1}.`);
-  const target = { userId, conversationId: released.conversationId };
-  const releaseEvents = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select seq from events
-        where conversation_id = ${released.conversationId}
-          and kind = ${CONVERSATION_EVENT_KIND.SPEECH_EXPIRED}
-        order by seq
-      `;
-    }),
-  );
-  assert.deepEqual(
-    releaseEvents.map((row) => Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq)),
-    [...Array.from({ length: 12 }, (_, index) => index + 1), 40],
-  );
-  const rows = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select seq from messages where conversation_id = ${released.conversationId} order by seq
-      `;
-    }),
-  );
-  assert.deepEqual(
-    rows.map((row) => Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq)),
-    [...Array.from({ length: 12 }, (_, index) => index + 1), 40, 41],
-  );
-  const read = await database.run(releasedBriefings(target, { limit: 64 }));
-  assert.deepEqual(
-    read.map((briefing) => briefing.briefing),
-    expected,
-  );
-  const { eve, handed } = fakeEve();
-  const opener = seams({ eve, roster: hostedRosterFrom(roster([observation("s-1")]), NOW) });
-  const outcome = await database.run(openHoldReleaseTurns(opener, userId));
-  assert.deepEqual(outcome, { observation: 0, holdRelease: 1, failed: 0, reseeded: 0 });
-  // The read bound (64) is reported when met; thirteen rows sit well inside it, so a full page here would be a different failure and says so.
-  assert.deepEqual(opener.reports, []);
-  const listed = heldBriefingsOf(
-    handed[0]?.message ?? { conversationId: "", turn: BRAIN_HOST_TURN.HOLD_RELEASE, message: "" },
-  );
-  assert.deepEqual(
-    listed.map((briefing) => briefing.briefing),
-    expected,
-  );
-  assert.deepEqual(await queuedRows(released.conversationId), []);
 });
