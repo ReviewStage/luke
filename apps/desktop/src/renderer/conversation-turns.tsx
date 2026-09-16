@@ -439,8 +439,10 @@ function Chip({
  * by another hand: it mints the same open act, for the identity the record
  * names, and the host answers with the address the provider reported — or
  * refuses, for a session that reported none. Every other chip is a name.
+ * Exported for the one place outside the thread that wears it: the transcript
+ * page's header, where an agent's title is this chip for its session.
  */
-function SessionChip({
+export function SessionChip({
   chip,
   onOpenChat,
 }: {

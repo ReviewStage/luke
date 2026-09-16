@@ -583,6 +583,14 @@
   white-space: nowrap;
 }
 
+/* An agent's title is the session's chip, as an action row's is, and a long
+   session title ends at the header's edge rather than running under the
+   status word. */
+.agent-transcript-title > .conversation-action-chip {
+  max-width: 100%;
+  overflow: hidden;
+}
+
 .agents-header > .agent-status {
   flex: 0 0 auto;
   color: var(--text-secondary);

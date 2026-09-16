@@ -2,7 +2,8 @@
 
 import assert from "node:assert/strict";
 import { type AgentRead, CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
-import { CONVERSATION_VIEW_SOURCE } from "@sidecar/session";
+import { ProviderMark } from "@sidecar/panel";
+import { CONVERSATION_VIEW_SOURCE, type SessionIdentity } from "@sidecar/session";
 import { TRANSCRIPT_KIND } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -304,6 +305,7 @@ test("pressing a row of either kind opens its transcript, named as the row is", 
       kind: TRANSCRIPT_KIND.OBSERVED,
       title: DEPARTED_AGENT.title,
       status: CHILD_STATUS.SETTLED,
+      session: { providerId: "conductor", providerSessionId: FIXTURE_SESSION.DEPARTED },
     },
     childTranscriptRow(BARE),
     childTranscriptRow(LABELLED),
@@ -344,7 +346,15 @@ const OPEN_AGENT: TranscriptRow = {
   kind: TRANSCRIPT_KIND.OBSERVED,
   title: FIXTURE_TITLE.HELD,
   status: CHILD_STATUS.RUNNING,
+  session: { providerId: "conductor", providerSessionId: FIXTURE_SESSION.HELD },
 };
+
+/** The mark a chip wears, as the thread's chips wear theirs. */
+function chipMark(providerId: string): string {
+  return renderToStaticMarkup(
+    createElement(ProviderMark, { providerId, className: "conversation-chip-mark" }),
+  );
+}
 
 function renderTranscript(extra: Partial<TranscriptProps> = {}): string {
   return renderToStaticMarkup(
@@ -367,10 +377,60 @@ test("the transcript page stands under the thread's own root and names the way b
   assert.ok(markup.includes("‹ Agents"));
   assert.ok(markup.includes(">Audit the release notes</h2>"));
   assert.ok(markup.includes(">Running</span>"));
-  // An agent's page wears the row's words the same way, looked up nowhere.
+  // An agent's page wears the row's status the same way, and its session's
+  // chip in the title's place: the roster's title under the agent's mark,
+  // a press while the roster holds the session, inside a heading named by
+  // the title so heading navigation hears the conversation and not the press.
   const agent = renderTranscript({ open: { ...OPEN_AGENT, status: CHILD_STATUS.SETTLED } });
-  assert.ok(agent.includes(`>${FIXTURE_TITLE.HELD}</h2>`));
+  assert.ok(
+    agent.includes(
+      `<h2 class="agents-title agent-transcript-title" aria-label="${FIXTURE_TITLE.HELD}"><button type="button" class="conversation-action-chip" aria-label="Open ${FIXTURE_TITLE.HELD}">${chipMark("claude-code")}${FIXTURE_TITLE.HELD}</button></h2>`,
+    ),
+  );
   assert.ok(agent.includes(">Done</span>"));
+  // A child's page wears no chip: a child has no session to open.
+  assert.ok(!markup.includes("conversation-action-chip"));
+});
+
+test("the transcript header's chip is the session's own press while the roster holds it, and a name once it does not", () => {
+  const chats: SessionIdentity[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (roster: TranscriptProps["roster"]) => {
+    act(() => {
+      root.render(
+        createElement(AgentTranscriptPanel, {
+          open: OPEN_AGENT,
+          transcript: undefined,
+          roster,
+          now: FIXTURE_NOW,
+          onOpenChat: (identity) => chats.push(identity),
+          onBack: () => undefined,
+        }),
+      );
+    });
+    return container.querySelector(".agent-transcript-title > .conversation-action-chip");
+  };
+  const held = render(FIXTURE_ROSTER);
+  assert.ok(held instanceof HTMLButtonElement);
+  act(() => {
+    held.click();
+  });
+  assert.deepEqual(chats, [{ providerId: "conductor", providerSessionId: FIXTURE_SESSION.HELD }]);
+  // The roster lets the session go while the page is open: the chip stands, under the provider's
+  // mark and the title the row wore, but is no longer a press.
+  const departed = render([]);
+  assert.ok(departed instanceof HTMLSpanElement);
+  assert.equal(departed.textContent, FIXTURE_TITLE.HELD);
+  assert.equal(departed.querySelector(".conversation-chip-mark")?.outerHTML, chipMark("conductor"));
+  // The roster holds it again but its provider reports no address: a name still.
+  const quiet = render(FIXTURE_ROSTER.map((session) => ({ ...session, openable: false })));
+  assert.ok(quiet instanceof HTMLSpanElement);
+  act(() => {
+    quiet.click();
+  });
+  assert.equal(chats.length, 1);
 });
 
 test("the turns of either kind are drawn as the thread draws its own, under the same scroll scaffolding", () => {
