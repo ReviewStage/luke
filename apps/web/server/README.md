@@ -1628,7 +1628,12 @@ first; past the bound the chats are held back, said on the log, and the mark
 stops strictly before the first held-back instant — the provider compares
 with `>`, so a mark at that instant would skip it, and a tie between the last
 taken and the first held back leaves the mark where the visit read it — so
-the next minute reads them again. A provider that refuses the changes read
+the next minute reads them again. The bound counts turns opened and not
+chats read: a chat taken at a tied instant the mark could not pass is read
+again the next minute to an empty delta, which costs a read and no turn, so
+the chats behind it are reached rather than held back behind the same prefix
+forever; the reads themselves stop at thirty-two a visit
+(`TURN_OPENER.CHANGED_CHATS_READ`). A provider that refuses the changes read
 wakes nothing and leaves the mark standing, since one mark serves every
 provider and could not move past a refusing one's instants on another's
 answer. A first visit finds no mark, adopts the newest instant the providers
