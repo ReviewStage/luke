@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import { test } from "vitest";
 import agent from "../eve/agent";
-import { ACTION_TOOL, BRAIN_TOOL, BRAIN_TURN_TRIGGER, brainToolCatalog } from "../server/core";
+import {
+  ACTION_TOOL,
+  BRAIN_TOOL,
+  BRAIN_TURN_TRIGGER,
+  brainToolCatalog,
+  TOOL_POLICY_LAYER,
+} from "../server/core";
 import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import { hostedTurnPolicy } from "../server/hosted/brain-host/tools";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -32,7 +38,7 @@ test("follow-ups queue behind a turn under way, and the account bearer is checke
   assert.equal(Array.isArray(channel.auth), false);
 });
 
-test("the hosted policy withholds the machine's tools, keeps the notebook's reads and writes, and offers announce only to an observation", () => {
+test("the hosted policy withholds the machine's tools and skills, keeps the notebook's reads and writes, offers delegation, and offers announce only to an observation", () => {
   const ask = hostedTurnPolicy(BRAIN_TURN_TRIGGER.ASK);
   const observation = hostedTurnPolicy(BRAIN_TURN_TRIGGER.ROSTER);
   const askNames = ask.allowed.map((tool) => tool.schema.name);
@@ -44,7 +50,6 @@ test("the hosted policy withholds the machine's tools, keeps the notebook's read
     ACTION_TOOL.SHOW_PANEL,
     ACTION_TOOL.OPEN_FEEDBACK_COMPOSER,
     ACTION_TOOL.RUN_UPDATE_ACTION,
-    BRAIN_TOOL.SESSIONS_SPAWN,
     BRAIN_TOOL.LOAD_SKILL,
   ]) {
     assert.equal(askNames.includes(denied), false);
@@ -60,12 +65,32 @@ test("the hosted policy withholds the machine's tools, keeps the notebook's read
     BRAIN_TOOL.LIST_DAILY_NOTES,
     NOTEBOOK_MEMORY_TOOL.SEARCH,
     NOTEBOOK_MEMORY_TOOL.GET,
+    BRAIN_TOOL.SESSIONS_SPAWN,
+    BRAIN_TOOL.SUBAGENTS,
+    BRAIN_TOOL.SESSIONS_LIST,
+    BRAIN_TOOL.SESSIONS_HISTORY,
   ]) {
     assert.equal(askNames.includes(kept), true);
     assert.equal(observationNames.includes(kept), true);
   }
   assert.equal(askNames.includes(BRAIN_TOOL.ANNOUNCE), false);
   assert.equal(observationNames.includes(BRAIN_TOOL.ANNOUNCE), true);
+});
+
+test("a child's task is offered the ask's set less sessions_spawn: it cannot spawn or announce, and still lists, reads, and cancels", () => {
+  const childTask = hostedTurnPolicy(BRAIN_TURN_TRIGGER.CHILD_TASK);
+  const childTaskNames = childTask.allowed.map((tool) => tool.schema.name);
+  for (const denied of [BRAIN_TOOL.SESSIONS_SPAWN, BRAIN_TOOL.ANNOUNCE]) {
+    assert.equal(childTaskNames.includes(denied), false);
+    assert.equal(childTask.deniedBy(denied), TOOL_POLICY_LAYER.TURN);
+  }
+  for (const kept of [
+    BRAIN_TOOL.SUBAGENTS,
+    BRAIN_TOOL.SESSIONS_LIST,
+    BRAIN_TOOL.SESSIONS_HISTORY,
+  ]) {
+    assert.equal(childTaskNames.includes(kept), true);
+  }
 });
 
 test("the writer and the reader share one catalog tool set, which names the whole catalog and declares no output schema", () => {
