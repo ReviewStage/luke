@@ -16,9 +16,9 @@ sessions" below: the Mac app reads that stored roster from our service about
 once a minute, draws each row — the session's title, status, repository,
 branch, the agent kind running it, and the error line it stopped on — from
 nothing else, and keeps none of those fields in a file of its own. Luke's
-look at those sessions runs on our service too, never here: a change our
-service observes on a Conductor chat wakes a turn there, in a conversation of
-Luke's own that follows that one session, and that turn may read the messages
+look at those sessions runs on our service too, never here: a Conductor chat
+our service learns gained messages wakes a turn there, in a conversation of
+Luke's own that follows that one session, and that turn reads the messages
 the chat gained since he last looked — your own messages and the agent's
 replies, not its tool activity — under the terms below; what our service
 keeps of such a turn is described under "Your account". No part of his
@@ -351,23 +351,28 @@ Conductor key and have signed in within the last 7 days, our service reads
 your Conductor sessions on its own schedule, about once a minute, the same
 read-only pass the iOS app used to ask for on demand: your open workspaces,
 their chats, each chat's status, the agent kind running it, and the error
-line it stopped on. It never reads a chat's messages. A status change the
-pass finds on a Conductor chat wakes Luke's judgment for that chat, on our
-service; that turn may read what the chat's conversation gained since he
-last looked — your own messages and the agent's replies, not its tool
-activity, cut from the front to 20,000 characters — under the same synced
-key, and the pass itself still reads none. We keep the latest roster it read, encrypted at rest with the same
-server-only secret as your keys, and beside it what changed since the pass
-before — a session that appeared or vanished, a status that moved, an error
-line that changed — so the Mac app, the phone, and the watch can show your
-sessions without asking Conductor again (the Mac app reads this stored roster
-from our service on your account about once a minute, and draws its rows from
-nothing else), and so Luke can later be woken by a change rather
-than by a clock. The roster and its changes are replaced on every pass;
-nothing older is kept.
-Observation stops, and the stored roster and changes are deleted, when you
-delete the synced key, when you have not signed in for 7 days, and alongside
-your account if you delete that.
+line it stopped on. It never reads a chat's messages. Beside that pass, and
+only for the chats it listed, our service asks Conductor which of those chats'
+transcripts changed since it last asked, through Conductor's documented
+read-only query of each chat's last-changed instant; that read carries no
+message either. A chat that gained messages wakes Luke's judgment for that
+chat, on our service; that turn reads what the chat's conversation gained
+since he last looked — your own messages and the agent's replies, not its
+tool activity, cut from the front to 20,000 characters — under the same
+synced key, and hands them to Luke as one line per message under the speaker's
+name, alongside the chat's title, workspace, and provider from the stored
+roster. A chat that gained only tool activity wakes nothing. We keep the latest
+roster the pass read, encrypted at rest with the same server-only secret as
+your keys, so the Mac app, the phone, and the watch can show your sessions
+without asking Conductor again (the Mac app reads this stored roster from our
+service on your account about once a minute, and draws its rows from nothing
+else); beside it we keep one instant per account, the point up to which Luke
+has been told of your chats' changes, and one position per chat marking where
+his last read of it ended. The roster is replaced on every pass; nothing older
+is kept.
+Observation stops, and the stored roster, the instant, and the positions are
+deleted, when you delete the synced key, when you have not signed in for 7
+days, and alongside your account if you delete that.
 
 **Devices.** When you sign in on the Mac app, the iOS app, or the Apple Watch
 app, that installation registers itself with our service as one device row.
