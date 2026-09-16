@@ -453,6 +453,7 @@ export function PanelBody({
           roster={roster}
           now={now}
           onOpenTranscript={onOpenTranscript}
+          onOpenChat={onOpenChat}
           onBack={() => onConversationPageChange(CONVERSATION_PAGE.THREAD)}
         />
       ) : transcriptRow !== undefined ? (
