@@ -1088,19 +1088,18 @@ it, writes the row's `closed_at`, `close_reason`, and
 `usage { seconds, confirmed: true }`, records `usage.seconds` through
 `recordVoiceSeconds` in `server/hosted/quota.ts`
 — the session row is the idempotency ledger: the seconds land only where none
-stand yet, and only then does the day's `voice_seconds` on `hosted_usage`
-move, in one transaction, so a report seen by two connections adds nothing —
-and closes both ends. A device that hangs up first has `session.close` sent
+stand yet, so a report seen by two connections adds nothing — and closes both
+ends. A device that hangs up first has `session.close` sent
 on its behalf and the sideband held for `session.closed` for 15 seconds, the
 docs' close sequence. A sideband that ends first closes the device's socket
 with code 1001 and reason `upstream-closed` and records nothing: the last
 unconfirmed snapshot standing with `closed_at` null is the honest record, and
 a re-attached connection's `session.closed` later confirms it. Only these
 functions write `voice_sessions`; the seconds ledger and it both cascade with
-the user row. The seconds column stands beside the call count
-rather than replacing it: a session still spends one call when it opens, and
-the mint routes and their meter stay as they are for installed desktops until
-the seconds are what the allowance is measured in.
+the user row. The seconds ledger meters nothing on its own: a session still
+spends one call when it opens, and the mint routes and their meter stay as
+they are for installed desktops until the seconds are what the allowance is
+measured in.
 
 ### How a refusal looks
 

@@ -20,7 +20,7 @@ const openUser = Effect.gen(function* () {
 
 it.layer(testSqlClient)("recording a live session's billed seconds", (it) => {
   it.effect(
-    "records a session's seconds once and moves the day's counter only the first time",
+    "records a session's seconds once, and a report repeated for the same session records nothing",
     () =>
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
@@ -65,14 +65,6 @@ it.layer(testSqlClient)("recording a live session's billed seconds", (it) => {
           ],
         );
 
-        const [day] = yield* sql<{ calls: number; voice_seconds: number }>`
-          select calls, voice_seconds from hosted_usage
-          where user_id = ${userId} and day = ${utcDayKey(NOW)}
-        `;
-        assert.deepEqual(day && { calls: day.calls, voiceSeconds: day.voice_seconds }, {
-          calls: 0,
-          voiceSeconds: 91.5,
-        });
         assert.equal(utcDayKey(NOW), "2026-09-10");
       }),
   );
