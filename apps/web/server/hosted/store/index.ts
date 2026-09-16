@@ -9,7 +9,6 @@ import {
   type ChildrenHeadPosition,
   childrenHead,
   listChildren,
-  readChild,
 } from "./children.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import {
@@ -156,8 +155,6 @@ export interface HostedStore {
     ): HostedStoreEffect<string | undefined>;
     /** The account's standing children, newest first and at most `limit` of them, each where its latest turn leaves it. */
     children(userId: string, limit: number): HostedStoreEffect<readonly ChildRecord[]>;
-    /** One of the account's standing children by id, on the same terms; nothing where none stands. */
-    child(userId: string, childId: string): HostedStoreEffect<ChildRecord | undefined>;
     /** One of the account's standing child or observed conversations by id, as a page of its own is read against it; nothing for a main, a stamped row, or another account's. */
     paged(userId: string, conversationId: string): HostedStoreEffect<PagedConversation | undefined>;
     /** Where the children stand: the child that changed last and the instant it did, rendered to the microsecond, a Clear's stamp counted; nothing while no child was ever opened. */
@@ -284,7 +281,6 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       observed: (userId, identity, now) =>
         standingObservedConversation(userId, identity, new Date(now)),
       children: (userId, limit) => listChildren(userId, limit),
-      child: (userId, childId) => Effect.map(readChild(userId, childId), Option.getOrUndefined),
       paged: (userId, conversationId) =>
         Effect.map(pagedConversation(userId, conversationId), Option.getOrUndefined),
       childrenHead: (userId) => Effect.map(childrenHead(userId), Option.getOrUndefined),
@@ -333,7 +329,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
 }
 
 export type { AgentRecord } from "./agents.js";
-export { CHILD_STATUS, type ChildRecord } from "./children.js";
+export type { ChildRecord } from "./children.js";
 export { promptHashOf } from "./content-addressed.js";
 export type { HostedStoreContext } from "./database.js";
 export {

@@ -5,6 +5,7 @@ import {
   type BrainChildAccess,
   CHILD_RUN_STATUS,
   CHILD_SPAWN_REFUSAL,
+  CHILD_STATUS,
   type ChildCancellation,
   type ChildRunRecord,
   type ChildSpawnOutcome,
@@ -21,7 +22,6 @@ import {
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import {
-  CHILD_STATUS,
   type ChildRecord,
   listChildren,
   listChildrenOf,

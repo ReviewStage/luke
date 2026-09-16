@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { CHILDREN_READ_BOUNDS, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "../server/core";
+import {
+  CHILD_STATUS,
+  CHILDREN_READ_BOUNDS,
+  MESSAGE_ROLE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { CHILD_STATUS, type ChildRecord } from "../server/hosted/store";
+import type { ChildRecord } from "../server/hosted/store";
+import { openChildConversation, readChild } from "../server/hosted/store/children";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
@@ -37,7 +44,7 @@ async function parentOf(
 async function childOf(
   userId: string,
   parentConversationId: string,
-  row: { createdAt: Date; label?: string; completionDeliveredAt?: Date },
+  row: { createdAt: Date; label?: string },
 ): Promise<string> {
   return insertConversation(database.run, {
     userId,
@@ -47,6 +54,10 @@ async function childOf(
   });
 }
 
+/** One child by id as the brain host reads it, or nothing. */
+const child = (userId: string, childId: string) =>
+  database.run(Effect.map(readChild(userId, childId), Option.getOrUndefined));
+
 const ids = (children: readonly ChildRecord[]) => children.map((child) => child.id);
 
 test("children are listed newest first, bounded by the limit, and read one by id", async () => {
@@ -54,11 +65,7 @@ test("children are listed newest first, bounded by the limit, and read one by id
   const parent = await parentOf(userId);
   const oldest = await childOf(userId, parent, { createdAt: at(1), label: "fixture one" });
   const middle = await childOf(userId, parent, { createdAt: at(2) });
-  const newest = await childOf(userId, parent, {
-    createdAt: at(3),
-    label: "fixture three",
-    completionDeliveredAt: at(4),
-  });
+  const newest = await childOf(userId, parent, { createdAt: at(3), label: "fixture three" });
 
   const listed = await database.run(database.store.directory.children(userId, 10));
   assert.deepEqual(ids(listed), [newest, middle, oldest]);
@@ -76,7 +83,6 @@ test("children are listed newest first, bounded by the limit, and read one by id
     task: null,
     expectsCompletion: true,
     createdAt: at(3),
-    completionDeliveredAt: at(4),
     runtimeSessionId: null,
     status: CHILD_STATUS.ACCEPTED,
     turnId: null,
@@ -84,22 +90,18 @@ test("children are listed newest first, bounded by the limit, and read one by id
     startedAt: null,
     settledAt: null,
     failure: null,
-    nextMessageSeq: 1,
-    nextEventSeq: 1,
-    journalRevision: 0,
   });
   assert.equal(listed[2]?.label, "fixture one");
   assert.equal(listed[1]?.label, null);
-  assert.equal(listed[1]?.completionDeliveredAt, null);
 
-  assert.deepEqual(await database.run(database.store.directory.child(userId, middle)), listed[1]);
-  assert.equal(await database.run(database.store.directory.child(userId, randomUUID())), undefined);
+  assert.deepEqual(await child(userId, middle), listed[1]);
+  assert.equal(await child(userId, randomUUID()), undefined);
 });
 
 test("a child's status is its latest turn's: accepted before one runs, then running, settled, failed, or cancelled", async () => {
   const userId = await database.createUser();
   const parent = await parentOf(userId, CONVERSATION_KIND.OBSERVED);
-  const child = await childOf(userId, parent, { createdAt: at(1) });
+  const tracked = await childOf(userId, parent, { createdAt: at(1) });
   const turn = (row: {
     status: string;
     queuedAt: Date;
@@ -109,12 +111,12 @@ test("a child's status is its latest turn's: accepted before one runs, then runn
   }) =>
     insertTurn(database.run, {
       userId,
-      conversationId: child,
+      conversationId: tracked,
       origin: TURN_ORIGIN.CHILD,
       ...row,
     });
   const read = async () => {
-    const found = await database.run(database.store.directory.child(userId, child));
+    const found = await child(userId, tracked);
     assert.ok(found);
     assert.equal(found.parentKind, CONVERSATION_KIND.OBSERVED);
     return found;
@@ -163,7 +165,7 @@ test("a child's status is its latest turn's: accepted before one runs, then runn
   // A turn on the child's row but under another account lends it nothing, however late it was queued.
   await insertTurn(database.run, {
     userId: await database.createUser(),
-    conversationId: child,
+    conversationId: tracked,
     origin: TURN_ORIGIN.CHILD,
     status: TURN_STATUS.RUNNING,
     queuedAt: at(60),
@@ -192,14 +194,60 @@ test("a stamped child, another account's child, a row of another kind, and a chi
   assert.deepEqual(ids(await database.run(database.store.directory.children(userId, 10))), [
     standing,
   ]);
-  assert.equal(await database.run(database.store.directory.child(userId, nested)), undefined);
+  assert.equal(await child(userId, nested), undefined);
   assert.equal((await database.run(database.store.directory.childrenHead(userId)))?.id, stamped);
   assert.deepEqual(ids(await database.run(database.store.directory.children(other, 10))), [
     elsewhere,
   ]);
-  assert.equal(await database.run(database.store.directory.child(userId, stamped)), undefined);
-  assert.equal(await database.run(database.store.directory.child(userId, elsewhere)), undefined);
-  assert.equal(await database.run(database.store.directory.child(other, standing)), undefined);
+  assert.equal(await child(userId, stamped), undefined);
+  assert.equal(await child(userId, elsewhere), undefined);
+  assert.equal(await child(other, standing), undefined);
+});
+
+test("a child opens under a main or an observed parent, and under no thread or child, however the parent stands", async () => {
+  const userId = await database.createUser();
+  const opened = async (parentConversationId: string) => {
+    const spawnedByMessageId = await insertMessage(database.run, {
+      userId,
+      conversationId: parentConversationId,
+      seq: 1,
+      clientId: "client-1",
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: "fixture ask" }],
+    });
+    return database.run(
+      openChildConversation({
+        userId,
+        parentConversationId,
+        spawnedByMessageId,
+        label: null,
+        expectsCompletion: true,
+        now: at(1),
+      }),
+    );
+  };
+
+  const main = await parentOf(userId);
+  const observed = await parentOf(userId, CONVERSATION_KIND.OBSERVED);
+  const underMain = await opened(main);
+  const underObserved = await opened(observed);
+  assert.ok(underMain && underObserved);
+  assert.equal((await child(userId, underMain))?.parentKind, CONVERSATION_KIND.MAIN);
+  assert.equal((await child(userId, underObserved))?.parentKind, CONVERSATION_KIND.OBSERVED);
+
+  // A thread delegates nothing and a child cannot open a child of its own: the insert refuses each as a parent.
+  const thread = await insertConversation(database.run, {
+    userId,
+    kind: CONVERSATION_KIND.THREAD,
+    parentConversationId: main,
+    createdAt: at(0),
+  });
+  assert.equal(await opened(thread), undefined);
+  assert.equal(await opened(underMain), undefined);
+  assert.deepEqual(ids(await database.run(database.store.directory.children(userId, 10))), [
+    underObserved,
+    underMain,
+  ]);
 });
 
 /** The store's rendering of an instant for a head: the UTC wall clock to the millisecond the test set, and the zone spelled. */
@@ -213,18 +261,17 @@ function instantText(date: Date): string {
 test("a child's task is the text of its first user line, cut to the wire's bound, and no other line's", async () => {
   const userId = await database.createUser();
   const parent = await parentOf(userId);
-  const child = await childOf(userId, parent, { createdAt: at(1) });
+  const tasked = await childOf(userId, parent, { createdAt: at(1) });
   const line = (seq: number, role: string, parts: readonly unknown[]) =>
     insertMessage(database.run, {
       userId,
-      conversationId: child,
+      conversationId: tasked,
       seq,
       clientId: `client-${seq}`,
       role,
       parts,
     });
-  const task = async () =>
-    (await database.run(database.store.directory.child(userId, child)))?.task;
+  const task = async () => (await child(userId, tasked))?.task;
 
   assert.equal(await task(), null);
 
@@ -236,7 +283,7 @@ test("a child's task is the text of its first user line, cut to the wire's bound
   await database.run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from messages where conversation_id = ${child} and seq = 2`;
+      yield* sql`delete from messages where conversation_id = ${tasked} and seq = 2`;
     }),
   );
   await line(2, MESSAGE_ROLE.USER, [
@@ -261,7 +308,7 @@ test("a child's task is the text of its first user line, cut to the wire's bound
     ],
   });
   assert.equal(
-    (await database.run(database.store.directory.child(userId, long)))?.task,
+    (await child(userId, long))?.task,
     "word ".repeat(100).slice(0, CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS),
   );
 });

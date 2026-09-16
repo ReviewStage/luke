@@ -12,7 +12,7 @@ import {
   type TurnStatus,
 } from "../../core.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
-import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
+import { InstantColumnSchema } from "./database.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
@@ -25,8 +25,6 @@ import type { ConversationTarget } from "./writer.js";
  * otherwise the child stands where its latest turn settled. A row Clear
  * stamped went with its parent and is listed by nothing here.
  */
-
-export { CHILD_STATUS };
 
 /** The kinds a delegation runs from: a child cannot open a child of its own, and a thread delegates nothing. */
 const CHILD_PARENT_KINDS = [CONVERSATION_KIND.MAIN, CONVERSATION_KIND.OBSERVED] as const;
@@ -44,8 +42,6 @@ export interface ChildRecord {
   /** Whether the delegation waits on the child's completion coming back to the parent. */
   readonly expectsCompletion: boolean;
   readonly createdAt: Date;
-  /** When the child's completion reached its parent as a turn of the parent's own; unset until it has. */
-  readonly completionDeliveredAt: Date | null;
   /** The eve session the child runs in, once its start or the opener claimed the row. */
   readonly runtimeSessionId: string | null;
   readonly status: ChildStatus;
@@ -56,10 +52,6 @@ export interface ChildRecord {
   readonly startedAt: Date | null;
   readonly settledAt: Date | null;
   readonly failure: string | null;
-  /** The counters a page of the child's own rows is read against, as the standing conversations carry them. */
-  readonly nextMessageSeq: number;
-  readonly nextEventSeq: number;
-  readonly journalRevision: number;
 }
 
 /**
@@ -92,7 +84,6 @@ const ChildRowSchema = Schema.Struct({
   task: Schema.NullOr(Schema.String),
   expectsCompletion: Schema.Boolean,
   createdAt: InstantColumnSchema,
-  completionDeliveredAt: Schema.NullOr(InstantColumnSchema),
   runtimeSessionId: Schema.NullOr(Schema.String),
   turnId: Schema.NullOr(Schema.String),
   eveTurnId: Schema.NullOr(Schema.String),
@@ -108,25 +99,18 @@ const ChildRowSchema = Schema.Struct({
   startedAt: Schema.NullOr(InstantColumnSchema),
   settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
-  nextMessageSeq: EpochMillisColumnSchema,
-  nextEventSeq: EpochMillisColumnSchema,
-  journalRevision: EpochMillisColumnSchema,
 }).pipe(
   Schema.encodeKeys({
     parentConversationId: "parent_conversation_id",
     parentKind: "parent_kind",
     expectsCompletion: "expects_completion",
     createdAt: "created_at",
-    completionDeliveredAt: "completion_delivered_at",
     runtimeSessionId: "runtime_session_id",
     turnId: "turn_id",
     eveTurnId: "eve_turn_id",
     turnStatus: "turn_status",
     startedAt: "started_at",
     settledAt: "settled_at",
-    nextMessageSeq: "next_message_seq",
-    nextEventSeq: "next_event_seq",
-    journalRevision: "journal_revision",
   }),
 );
 
@@ -212,10 +196,9 @@ const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[
   sql`
     select child.id, child.parent_conversation_id, parent.kind as parent_kind, child.label,
            ${taskExcerpt(sql)} as task, child.expects_completion,
-           child.created_at, child.completion_delivered_at, child.runtime_session_id,
+           child.created_at, child.runtime_session_id,
            latest.id as turn_id, latest.eve_turn_id, latest.status as turn_status,
-           latest.started_at, latest.settled_at, latest.failure,
-           child.next_message_seq, child.next_event_seq, child.journal_revision
+           latest.started_at, latest.settled_at, latest.failure
     ${childrenFrom(sql, conditions)}
     order by child.created_at desc, child.id desc
     limit ${limit}
@@ -362,10 +345,11 @@ const lockUser = (userId: string) =>
 
 /**
  * The insert selects from the parent's row, so a parent that does not stand
- * for the account — cleared, another account's, or no row at all — or a
- * spawning message that is not the parent's own inserts nothing, and the
- * delegation learns so from the empty answer rather than from a child
- * hanging under a conversation its account cannot read.
+ * for the account — cleared, another account's, of a kind no delegation runs
+ * from, or no row at all — or a spawning message that is not the parent's
+ * own inserts nothing, and the delegation learns so from the empty answer
+ * rather than from a child hanging under a conversation its account cannot
+ * read.
  */
 const insertChild = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -389,6 +373,7 @@ const insertChild = SqlSchema.findOneOption({
         from conversations parent
         where parent.id = ${write.parentConversationId}
           and parent.user_id = ${write.userId}
+          and ${sql.in("parent.kind", CHILD_PARENT_KINDS)}
           and parent.deleted_at is null
           and exists (
             select 1 from messages

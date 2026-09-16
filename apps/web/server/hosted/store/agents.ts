@@ -70,7 +70,8 @@ type AgentRow = typeof AgentRowSchema.Type;
 /**
  * The rows both reads select from: the account's observed conversations,
  * each joined to the latest of its turns by the instant it was queued, the
- * id breaking a tie, so a conversation with no turn is not among them. The
+ * id breaking a tie, so a conversation with no turn is not among them, and
+ * nor is a row without its session identity, since the wire carries both. The
  * join holds to the agent's own account, so a turn written under another
  * lends it nothing. Whether a stamped row is among them is the caller's
  * condition: the list reads what stands, the head counts the stamping as
@@ -89,6 +90,9 @@ const agentsFrom = (sql: SqlClient.SqlClient, userId: string, standing: boolean)
     where ${sql.and([
       sql`agent.user_id = ${userId}`,
       sql`agent.kind = ${CONVERSATION_KIND.OBSERVED}`,
+      // An observed row without its session is a row no observation wrote, and it is no agent a device could name.
+      sql`agent.provider_id is not null`,
+      sql`agent.provider_session_id is not null`,
       ...(standing ? [sql`agent.deleted_at is null`] : []),
     ])}
   `;

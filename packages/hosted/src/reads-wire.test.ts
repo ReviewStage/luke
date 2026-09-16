@@ -389,7 +389,11 @@ test("the children answer fixture reads each child where its latest turn leaves 
     [settled.acceptedAt, settled.startedAt, settled.settledAt],
     [1757505600000, 1757505610000, 1757505700000],
   );
-  assert.equal(settled.task, "Draft the release notes for 0.6.0 from the merged pull requests.");
+  // The excerpt is the line as the relay wrote it, the child's marker included; the device strips it.
+  assert.equal(
+    settled.task,
+    "[subagent task] Draft the release notes for 0.6.0 from the merged pull requests.",
+  );
 
   // A child is answered with no task before its line stands and with no stamps before a turn runs.
   assert.deepEqual(

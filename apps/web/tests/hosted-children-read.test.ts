@@ -20,6 +20,7 @@ import {
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
 import { afterAll, test } from "vitest";
+import { childTaskInputText } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { handleConversationChildren } from "../server/hosted/resource-reads";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -223,6 +224,18 @@ test("children are answered newest first, each where its latest turn leaves it, 
       settledAt: NOW + 60_000,
     },
   ]);
+});
+
+test("the task's marker travels: the excerpt is the line as the relay wrote it, and the device is what strips the marker", async () => {
+  const userId = await database.createUser();
+  const main = await insertConversation(database.run, { userId, createdAt: at(-3_600_000) });
+  const child = await childOf(userId, main, { createdAt: at(1_000) });
+  await taskLine(userId, child, childTaskInputText("Summarise the fixture repository."));
+
+  const answer = await answered(
+    await database.run(handleConversationChildren(options(userId, request()))),
+  );
+  assert.equal(answer.children[0]?.task, "[subagent task] Summarise the fixture repository.");
 });
 
 test("a stamped child, another account's child, and a child under a parent of another kind are answered by nothing", async () => {
