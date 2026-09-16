@@ -1175,7 +1175,7 @@ and any Preview that needs a working vault) alongside `DATABASE_URL`.
 
 ## Hosted conversation store
 
-The `conversations`/`messages`/`turns`/`events`/`tool_sets`/`provider_cursors`,
+The `conversations`/`messages`/`turns`/`events`/`provider_cursors`,
 `workspace_file`, and `roster_snapshot` tables hold the hosted brain's
 conversation per account: the
 conversation rows the storage rework settled on, the identity workspace and
@@ -1208,13 +1208,12 @@ open an envelope; the rows it dropped on production were untouched seeds an
 account's next turn writes again.
 
 The conversation tables — `conversations`, `messages`, `turns`, `events`,
-`tool_sets`, and `provider_cursors` — are the shape `plan/storage-plan.md` on the
+and `provider_cursors` — are the shape `plan/storage-plan.md` on the
 `orchestration/storage-plan` branch settles on, less the `prompts` table it
-drew: a turn keeps the composed prompt's hash and the tool set's and nothing
-else of either, because the prompt embeds the developer's notebook and nothing
-replays it, and the tool set is the build's own and read from the build that
-offered it; the `tool_sets` table stands written by nothing until the migration
-that drops it. A conversation row names its
+drew and less the `tool_sets` table `0037_dead_tool_sets` dropped: a turn keeps
+the composed prompt's hash and the tool set's and nothing else of either,
+because the prompt embeds the developer's notebook and nothing replays it, and
+the tool set is the build's own and read from the build that offered it. A conversation row names its
 kind (main, observed, child, or thread), the provider session it observes,
 the parent and spawning message a child came from, the runtime's own session
 id, its soft-delete instant, and the two counters that number its messages
