@@ -348,26 +348,35 @@ function newExchange(
   };
 }
 
+type AskContext = ReturnType<TranscriptLedger["askContext"]>;
+
 /**
  * The developer's rows a delegation is about: those since the previous ask's
  * end that are no ask's yet and start at or before the delegation's offset,
- * the row containing the offset among them, oldest first. Where none starts
- * by the offset but the developer has spoken since, the latest such row is
- * the ask: the API places the offset on its own clock, and a delegation is
- * about what was said, never about nothing.
+ * the row containing the offset among them, oldest first. A row begun after
+ * the offset is the next delegation's, whatever this one's clock says.
  */
 function askRowsOf(
-  context: ReturnType<TranscriptLedger["askContext"]>,
+  context: AskContext,
   asked: ReadonlySet<string>,
   offsetMs: number,
 ): readonly TranscriptUtterance[] {
-  const unclaimed = context.turns.filter(
-    (turn) => turn.speaker === TRANSCRIPT_SPEAKER.USER && !asked.has(turn.rowId),
+  return context.turns.filter(
+    (turn) =>
+      turn.speaker === TRANSCRIPT_SPEAKER.USER &&
+      !asked.has(turn.rowId) &&
+      turn.startMs <= offsetMs,
   );
-  const byOffset = unclaimed.filter((turn) => turn.startMs <= offsetMs);
-  if (byOffset.length > 0) return byOffset;
-  const latest = unclaimed[unclaimed.length - 1];
-  return latest === undefined ? [] : [latest];
+}
+
+/**
+ * The context the brain reads, bounded as the rows are: nothing begun after
+ * the offset, so a row reserved for the next delegation is not read in this
+ * one; or, where no row is this delegation's, nothing begun after the ask it
+ * is told of all the same.
+ */
+function askContextBy(context: AskContext, boundMs: number): AskContext {
+  return { turns: context.turns.filter((turn) => turn.startMs <= boundMs), ask: context.ask };
 }
 
 function isClientDelegation(
@@ -1210,6 +1219,16 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     );
   }
 
+  /** The rows are the delegation's from here: no later delegation is about them, and the session's span moves past them and the offset. */
+  #claim(session: StandingSession, rows: readonly TranscriptUtterance[], offsetMs: number): void {
+    for (const row of rows) session.askedRows.add(row.rowId);
+    session.lastDelegationOffsetMs = Math.max(
+      session.lastDelegationOffsetMs,
+      offsetMs,
+      ...rows.map((row) => row.endMs),
+    );
+  }
+
   /**
    * The ask's rows given their delegation, each handed over as the ledger
    * holds it now, not as it stood when the delegation arrived: the API
@@ -1292,9 +1311,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const sinceMs = session.lastDelegationOffsetMs;
     const context = session.ledger.askContext(sinceMs);
     const rows = askRowsOf(context, session.askedRows, offsetMs);
-    // Every developer row since is already an ask's where the rows are empty: the brain is asked
-    // about the latest all the same, since the model waits on the delegation, and nothing new is
-    // attached, the rows being another delegation's already.
+    // No row is this delegation's where every developer row since is an ask's already, or begun
+    // after the offset: the brain is asked about the latest all the same, since the model waits on
+    // the delegation, and nothing is attached.
     const ask = rows[rows.length - 1] ?? context.ask;
     if (!ask) return Effect.void;
     // The ask is here: a pause still pending would anticipate what the turn
@@ -1302,11 +1321,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // supersede the slot that turn is taking. A read already under way is
     // left to finish, since that turn is what waits for it.
     this.#cancelAnticipation(session);
-    for (const row of rows) session.askedRows.add(row.rowId);
-    session.lastDelegationOffsetMs = Math.max(offsetMs, ...rows.map((row) => row.endMs));
+    this.#claim(session, rows, offsetMs);
     this.#trace(LIVE_TRACE_DECISION.DELEGATED);
     const question = [
-      renderAskContext(context),
+      renderAskContext(askContextBy(context, rows.length > 0 ? offsetMs : ask.startMs)),
       `The developer's ask is their latest line above: ${ask.text.trim()}`,
     ].join("\n");
     return Effect.gen({ self: this }, function* () {
@@ -1316,7 +1334,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         submissionId: delegationId,
         question,
       });
-      const rowIds = rows.map((row) => row.rowId);
+      // The rule is applied once more over the same span before the attach: the
+      // API delivers a delegation ahead of the deltas it is about, and one that
+      // landed while the brain was being asked may have opened a row of its own
+      // that starts by the offset, which is this delegation's and no one else's.
+      const late = askRowsOf(session.ledger.askContext(sinceMs), session.askedRows, offsetMs);
+      this.#claim(session, late, offsetMs);
+      const rowIds = [...rows, ...late]
+        .sort((left, right) => left.startMs - right.startMs)
+        .map((row) => row.rowId);
       if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
         if (rowIds.length > 0) yield* this.#attachAsk(session, delegationId, rowIds);
         this.#speakInto(session, delegationId, submission.refusal);

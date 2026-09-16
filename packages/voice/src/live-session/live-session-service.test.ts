@@ -652,7 +652,7 @@ it.effect(
 );
 
 it.effect(
-  "a delegation attaches every developer row since the previous ask that starts by its offset, oldest first, Luke's row between them left alone, and a row begun after the offset left for the next delegation",
+  "a delegation attaches every developer row since the previous ask that starts by its offset, oldest first, Luke's row between them left alone, and a row begun after the offset left for the next delegation and kept out of this one's question",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -687,6 +687,7 @@ it.effect(
       assert.equal(f.brain.asks.length, 1);
       assert.ok(f.brain.asks[0]?.question.endsWith("Second thing."));
       assert.ok(f.brain.asks[0]?.question.includes("Assistant: Mm-hmm."));
+      assert.equal(f.brain.asks[0]?.question.includes("Third thing."), false);
       // The next delegation is about the third row alone.
       sideband.delegation("item_2", third + 700);
       yield* settle();
@@ -700,7 +701,40 @@ it.effect(
 );
 
 it.effect(
-  "a delegation before any developer utterance is retained and composed on the next fragment, once",
+  "a row the delegation is about that opens while the brain is being asked, from a delta the API delivered late, is attached with the rows claimed at the delegation",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.brain.answerWhen = yield* Deferred.make<void>();
+      const offset = 800 + 2 * UTTERANCE_GAP_MS;
+      sideband.input("First thing.", 0, 800);
+      sideband.delegation("item_1", offset);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      // Spoken before the offset, past the gap from the first row, delivered while the brain is asked.
+      const late = 800 + UTTERANCE_GAP_MS + 200;
+      sideband.input("Second thing.", late, late + 600);
+      yield* settle();
+      yield* Deferred.succeed(f.brain.answerWhen, undefined);
+      yield* settle();
+      const rowIds = [...new Set(f.record.rows.map((row) => row.rowId))];
+      assert.equal(rowIds.length, 2);
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_1", voiceSessionId: "sess-1", rowIds },
+      ]);
+      // The next delegation finds nothing of this one's left over.
+      sideband.input("Third thing.", offset + 1000, offset + 1500);
+      sideband.delegation("item_2", offset + 1600);
+      yield* settle();
+      assert.equal(attaches(f.record)[1]?.rowIds.length, 1);
+      assert.equal(attaches(f.record)[1]?.rowIds.includes(rowIds[0] ?? ""), false);
+    }),
+);
+
+it.effect(
+  "a delegation before any developer utterance is retained and composed on the next fragment, once; a row begun after its offset is the next delegation's",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -713,20 +747,24 @@ it.effect(
       sideband.input("Open the failing one.", 500, 1400);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
-      // The row reached the record under the ledger's id ahead of the ask's write, as it
-      // does when the delegation follows the words rather than preceding them.
-      assert.deepEqual(spans(f.record.rows.slice(0, 1)), [[TRANSCRIPT_SPEAKER.USER, 500, 1400]]);
-      assert.deepEqual(attaches(f.record), [
-        { delegationId: "item_early", voiceSessionId: "sess-1", rowIds: [f.record.rows[0]?.rowId] },
-      ]);
+      // The row reached the record under the ledger's id, as it does when the delegation follows
+      // the words. It began after the delegation's offset, so it is not this delegation's: the
+      // brain is asked about it all the same, since the model waits on the delegation, and nothing
+      // is attached; the row is the next delegation's.
+      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 500, 1400]]);
+      assert.ok(f.brain.asks[0]?.question.endsWith("Open the failing one."));
+      assert.deepEqual(attaches(f.record), []);
       sideband.input(" Please.", 1400, 1700);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
-      // The row is the ask's now, and the late fragment grows it all the same.
       yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
       assert.deepEqual(spans(f.record.rows).at(-1), [TRANSCRIPT_SPEAKER.USER, 500, 1700]);
       assert.equal(f.record.rows.at(-1)?.rowId, f.record.rows[0]?.rowId);
-      assert.equal(f.record.attached.length, 1);
+      sideband.delegation("item_next", 1800);
+      yield* settle();
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_next", voiceSessionId: "sess-1", rowIds: [f.record.rows[0]?.rowId] },
+      ]);
     }),
 );
 
