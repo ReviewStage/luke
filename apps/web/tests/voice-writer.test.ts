@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { type ToolSet, tool } from "ai";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -835,4 +836,59 @@ test("Luke's later words are his rows too, and so is the brain's reply read alou
     ],
   );
   assert.deepEqual(await speechEvents(reading.conversation), []);
+});
+
+/**
+ * The client with every transaction failing after its body ran, and nothing
+ * else changed: a proxy over the real one, since the client is a callable
+ * with its statements as properties. A write made outside the transaction is
+ * committed by the real client and seen by the test.
+ */
+function transactionsFailingAfter(sql: SqlClient.SqlClient): SqlClient.SqlClient {
+  const failing: SqlClient.SqlClient["withTransaction"] = (body) =>
+    sql.withTransaction(
+      Effect.flatMap(body, () => Effect.die(new Error("the connection dropped before commit"))),
+    );
+  return new Proxy(sql, {
+    // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a call the proxy does not interpret
+    apply: (target, receiver, args) => Reflect.apply(target, receiver, args),
+    get: (target, property, receiver) =>
+      // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a property the proxy does not interpret
+      property === "withTransaction" ? failing : Reflect.get(target, property, receiver),
+  });
+}
+
+test("a segment's position and its insert are one transaction's, undone together where it fails", async () => {
+  const live = await target();
+  const voice = writer();
+  await database.run(voice.consume(live, heard("before", 1000, 2000)));
+
+  await assert.rejects(
+    database.run(
+      Effect.flatMap(SqlClient.SqlClient, (sql) =>
+        Effect.provideService(
+          voice.consume(live, heard("inside", 2000, 3000)),
+          SqlClient.SqlClient,
+          transactionsFailingAfter(sql),
+        ),
+      ),
+    ),
+  );
+
+  // Nothing of the failed append stands: the session's lock, the read of the
+  // last position, and the insert at the next one ran on the transaction's
+  // own connection rather than beside it, so they were undone with it and the
+  // position it would have taken is still free.
+  assert.deepEqual(
+    (await segments(live.liveSessionId)).map((segment) => [segment.seq, segment.text]),
+    [[1, "before"]],
+  );
+  assert.deepEqual(await database.run(voice.consume(live, heard("after", 3000, 4000))), WRITTEN);
+  assert.deepEqual(
+    (await segments(live.liveSessionId)).map((segment) => [segment.seq, segment.text]),
+    [
+      [1, "before"],
+      [2, "after"],
+    ],
+  );
 });

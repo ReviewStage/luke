@@ -1,6 +1,12 @@
+import { eq, gte, inArray, lte, notInArray, or, sql } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { devices } from "../../db/devices-schema.js";
+import { db } from "../../db/query.js";
+import { observationPass, rosterSnapshot, transcriptMark } from "../../db/roster-schema.js";
+import { providerKey } from "../../db/vault-schema.js";
 import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**
@@ -10,7 +16,8 @@ import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
  * stands clear, because it is what decides whether the snapshot is current.
  *
  * Every function here is an `Effect<A, SqlError | Schema.SchemaError,
- * SqlClient.SqlClient>` over `effect/unstable/sql`.
+ * SqlClient.SqlClient>` over `effect/unstable/sql`, its statement a Drizzle
+ * builder over the tables `db/roster-schema.ts` declares.
  */
 export interface RosterSnapshotRecord {
   readonly body: string;
@@ -36,22 +43,19 @@ export interface ObservationEligibility {
 /** How a statement here fails: the driver's own refusal, or a row this build could not decode. */
 type RosterFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const RosterSnapshotRowSchema = Schema.Struct({
   sealedBody: Schema.String,
   observedAt: EpochMillisColumnSchema,
-}).pipe(Schema.encodeKeys({ sealedBody: "sealed_body", observedAt: "observed_at" }));
+});
 
 const findRosterSnapshot = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RosterSnapshotRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`select sealed_body, observed_at from roster_snapshot where user_id = ${userId}`,
-    ),
+    db
+      .select({ sealedBody: rosterSnapshot.sealedBody, observedAt: rosterSnapshot.observedAt })
+      .from(rosterSnapshot)
+      .where(eq(rosterSnapshot.userId, userId)),
 });
 
 export function readRosterSnapshot(
@@ -69,13 +73,16 @@ export function readRosterSnapshot(
 
 const RosterSnapshotObservedAtRowSchema = Schema.Struct({
   observedAt: EpochMillisColumnSchema,
-}).pipe(Schema.encodeKeys({ observedAt: "observed_at" }));
+});
 
 const findObservedAt = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RosterSnapshotObservedAtRowSchema,
   execute: (userId) =>
-    statement((sql) => sql`select observed_at from roster_snapshot where user_id = ${userId}`),
+    db
+      .select({ observedAt: rosterSnapshot.observedAt })
+      .from(rosterSnapshot)
+      .where(eq(rosterSnapshot.userId, userId)),
 });
 
 /**
@@ -98,17 +105,25 @@ const RosterSnapshotWriteSchema = Schema.Struct({
   observedAt: Schema.Number,
 });
 
+/**
+ * Note that the conflicting update sets the values the insert carried rather
+ * than reading them back out of `excluded`, because a single-row insert's
+ * `excluded` row is exactly those values.
+ */
 const upsertSnapshot = SqlSchema.void({
   Request: RosterSnapshotWriteSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into roster_snapshot (user_id, sealed_body, observed_at)
-        values (${write.userId}, ${write.sealedBody}, ${write.observedAt})
-        on conflict (user_id) do update
-          set sealed_body = excluded.sealed_body, observed_at = excluded.observed_at
-      `,
-    ),
+    db
+      .insert(rosterSnapshot)
+      .values({
+        userId: write.userId,
+        sealedBody: write.sealedBody,
+        observedAt: write.observedAt,
+      })
+      .onConflictDoUpdate({
+        target: rosterSnapshot.userId,
+        set: { sealedBody: write.sealedBody, observedAt: write.observedAt },
+      }),
 });
 
 export function writeRosterSnapshot(
@@ -124,9 +139,11 @@ export function writeRosterSnapshot(
 }
 
 const lockObservationPass = (userId: string) =>
-  statement(
-    (sql) => sql`select user_id from observation_pass where user_id = ${userId} for update`,
-  );
+  db
+    .select({ userId: observationPass.userId })
+    .from(observationPass)
+    .where(eq(observationPass.userId, userId))
+    .for("update");
 
 /**
  * Replaces the snapshot, in one transaction under the user's pass row lock,
@@ -141,8 +158,8 @@ export function advanceRosterSnapshot(
   snapshot: RosterSnapshotRecord,
   previousObservedAt: number | undefined,
 ): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
         yield* lockObservationPass(userId);
         const standing = yield* rosterSnapshotObservedAt(userId);
@@ -158,16 +175,20 @@ const ObservationPassRowSchema = Schema.Struct({
   attemptedAt: EpochMillisColumnSchema,
   observedAt: Schema.NullOr(EpochMillisColumnSchema),
   failure: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ attemptedAt: "attempted_at", observedAt: "observed_at" }));
+});
 
 const findObservationPass = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ObservationPassRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) =>
-        sql`select attempted_at, observed_at, failure from observation_pass where user_id = ${userId}`,
-    ),
+    db
+      .select({
+        attemptedAt: observationPass.attemptedAt,
+        observedAt: observationPass.observedAt,
+        failure: observationPass.failure,
+      })
+      .from(observationPass)
+      .where(eq(observationPass.userId, userId)),
 });
 
 export function readObservationPass(
@@ -193,20 +214,35 @@ const ObservationPassWriteSchema = Schema.Struct({
   failure: Schema.NullOr(Schema.String),
 });
 
+/**
+ * A failed pass carries no whole read, and the instant of the last one is
+ * left standing on the row already there; the builder has no operator for
+ * that, so the fallback is a fragment naming the column beside the value the
+ * insert carried, still inside the one rendered statement.
+ */
+const standingObservedAt = (observedAt: number | null) =>
+  sql`coalesce(${observedAt}, ${observationPass.observedAt})`;
+
 const upsertObservationPass = SqlSchema.void({
   Request: ObservationPassWriteSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into observation_pass (user_id, attempted_at, observed_at, failure)
-        values (${write.userId}, ${write.attemptedAt}, ${write.observedAt}, ${write.failure})
-        on conflict (user_id) do update
-          set attempted_at = excluded.attempted_at,
-              failure = excluded.failure,
-              observed_at = coalesce(excluded.observed_at, observation_pass.observed_at)
-          where observation_pass.attempted_at <= excluded.attempted_at
-      `,
-    ),
+    db
+      .insert(observationPass)
+      .values({
+        userId: write.userId,
+        attemptedAt: write.attemptedAt,
+        observedAt: write.observedAt,
+        failure: write.failure,
+      })
+      .onConflictDoUpdate({
+        target: observationPass.userId,
+        set: {
+          attemptedAt: write.attemptedAt,
+          failure: write.failure,
+          observedAt: standingObservedAt(write.observedAt),
+        },
+        setWhere: lte(observationPass.attemptedAt, write.attemptedAt),
+      }),
 });
 
 /**
@@ -227,13 +263,29 @@ export function recordObservationPass(
   return upsertObservationPass({ userId, attemptedAt: attempt.attemptedAt, observedAt, failure });
 }
 
-function ineligibleWhere(sql: SqlClient.SqlClient, eligibility: ObservationEligibility) {
-  return sql`
-    (
-      user_id not in (select user_id from provider_key where ${sql.in("provider_id", eligibility.providerIds)})
-      or user_id not in (select user_id from devices where last_seen_at >= ${new Date(eligibility.seenAfter)})
-    )
-  `;
+/**
+ * Who the observation no longer runs for, as a predicate over one table's own
+ * account column: no key to one of the named providers, or no device seen
+ * since the instant. Each half is the account read out of another table, which
+ * the builder renders as the subquery it is.
+ */
+function ineligible(userId: PgColumn, eligibility: ObservationEligibility) {
+  return or(
+    notInArray(
+      userId,
+      db
+        .select({ userId: providerKey.userId })
+        .from(providerKey)
+        .where(inArray(providerKey.providerId, [...eligibility.providerIds])),
+    ),
+    notInArray(
+      userId,
+      db
+        .select({ userId: devices.userId })
+        .from(devices)
+        .where(gte(devices.lastSeenAt, new Date(eligibility.seenAfter))),
+    ),
+  );
 }
 
 /**
@@ -246,13 +298,13 @@ function ineligibleWhere(sql: SqlClient.SqlClient, eligibility: ObservationEligi
 export function forgetObservationIneligible(
   eligibility: ObservationEligibility,
 ): Effect.Effect<void, RosterFailure, SqlClient.SqlClient> {
-  return statement((sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
-        yield* sql`delete from roster_snapshot where ${ineligibleWhere(sql, eligibility)}`;
-        yield* sql`delete from transcript_mark where ${ineligibleWhere(sql, eligibility)}`;
-        yield* sql`delete from observation_pass where ${ineligibleWhere(sql, eligibility)}`;
+        yield* db.delete(rosterSnapshot).where(ineligible(rosterSnapshot.userId, eligibility));
+        yield* db.delete(transcriptMark).where(ineligible(transcriptMark.userId, eligibility));
+        yield* db.delete(observationPass).where(ineligible(observationPass.userId, eligibility));
       }),
     ),
-  ).pipe(Effect.asVoid);
+  );
 }

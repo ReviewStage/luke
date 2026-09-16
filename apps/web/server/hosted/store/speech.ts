@@ -1,6 +1,9 @@
 import { readEither } from "@sidecar/wire/effect";
+import { and, asc, eq, gt, inArray, isNull, max, notExists, notInArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Result, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   CONVERSATION_EVENT_KIND,
@@ -15,6 +18,9 @@ import {
   unparsedWire,
   WireValueSchema,
 } from "../../core.js";
+import { devices } from "../../db/devices-schema.js";
+import { db } from "../../db/query.js";
+import { conversations, events, messages } from "../../db/storage-schema.js";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
 import { ConversationEventKindSchema, STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
 
@@ -186,10 +192,6 @@ type SpeechEffect<A> = Effect.Effect<A, SpeechReadFailure, SqlClient.SqlClient>;
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
 type SpeechReadFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /** How one offer stands, folded from every speech event on its message in sequence order. */
 interface SpeechStanding {
   readonly state: SpeechState;
@@ -219,16 +221,12 @@ const SpeechEventRowSchema = Schema.Struct({
   deviceId: Schema.NullOr(Schema.String),
   payload: WireValueSchema,
   createdAt: InstantColumnSchema,
-}).pipe(
-  Schema.encodeKeys({ messageId: "message_id", deviceId: "device_id", createdAt: "created_at" }),
-);
+});
 
 type SpeechEventRow = Schema.Schema.Type<typeof SpeechEventRowSchema>;
 
 /** The conversation a message belongs to, where the message is the account's and its conversation stands. */
-const MessageConversationSchema = Schema.Struct({
-  conversationId: Schema.String,
-}).pipe(Schema.encodeKeys({ conversationId: "conversation_id" }));
+const MessageConversationSchema = Schema.Struct({ conversationId: Schema.String });
 
 const MessageKeySchema = Schema.Struct({
   userId: Schema.String,
@@ -245,43 +243,46 @@ const findMessageConversation = SqlSchema.findOneOption({
   Request: MessageKeySchema,
   Result: MessageConversationSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select messages.conversation_id
-        from messages
-        join conversations
-          on conversations.id = messages.conversation_id and conversations.deleted_at is null
-        where messages.id = ${key.messageId} and messages.user_id = ${key.userId}
-      `,
-    ),
+    db
+      .select({ conversationId: messages.conversationId })
+      .from(messages)
+      .innerJoin(
+        conversations,
+        and(eq(conversations.id, messages.conversationId), isNull(conversations.deletedAt)),
+      )
+      .where(and(eq(messages.id, key.messageId), eq(messages.userId, key.userId))),
 });
 
 const findSpeechEvents = SqlSchema.findAll({
   Request: Schema.Array(Schema.String),
   Result: SpeechEventRowSchema,
   execute: (messageIds) =>
-    statement(
-      (sql) => sql`
-        select message_id, kind, device_id, payload, created_at
-        from events
-        where message_id in ${sql.in(messageIds)}
-        order by message_id asc, seq asc
-      `,
-    ),
+    db
+      .select({
+        messageId: events.messageId,
+        kind: events.kind,
+        deviceId: events.deviceId,
+        payload: events.payload,
+        createdAt: events.createdAt,
+      })
+      .from(events)
+      .where(inArray(events.messageId, [...messageIds]))
+      .orderBy(asc(events.messageId), asc(events.seq)),
 });
 
 const findOfferedEvent = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: EventPositionSchema,
   execute: (messageId) =>
-    statement(
-      (sql) => sql`
-        select id, seq
-        from events
-        where message_id = ${messageId}
-          and kind = ${CONVERSATION_EVENT_KIND.SPEECH_OFFERED}
-      `,
-    ),
+    db
+      .select({ id: events.id, seq: events.seq })
+      .from(events)
+      .where(
+        and(
+          eq(events.messageId, messageId),
+          eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_OFFERED),
+        ),
+      ),
 });
 
 /** The standing the events fold to, or nothing where no offer is among them. */
@@ -596,41 +597,49 @@ const OfferedMessageSchema = Schema.Struct({
   userId: Schema.String,
   conversationId: Schema.String,
   messageId: Schema.String,
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    conversationId: "conversation_id",
-    messageId: "message_id",
-  }),
-);
+});
+
+/** The same table read again for the ends: an offer with one of these on its message is not open. */
+const settled = alias(events, "settled");
 
 const findOfferedMessages = SqlSchema.findAll({
   Request: OpenOffersRequestSchema,
   Result: OfferedMessageSchema,
   execute: (query) =>
-    statement(
-      (sql) => sql`
-        select events.user_id, events.conversation_id, events.message_id
-        from events
-        join conversations
-          on conversations.id = events.conversation_id and conversations.deleted_at is null
-        where ${sql.and([
-          sql`events.kind = ${CONVERSATION_EVENT_KIND.SPEECH_OFFERED}`,
-          ...(query.userId === null ? [] : [sql`events.user_id = ${query.userId}`]),
-          ...(query.userIds === null ? [] : [sql`events.user_id in ${sql.in(query.userIds)}`]),
-          ...(query.notUserIds.length === 0
-            ? []
-            : [sql`events.user_id not in ${sql.in(query.notUserIds)}`]),
-          sql`not exists (
-            select 1 from events settled
-            where settled.message_id = events.message_id
-              and settled.kind in ${sql.in(SETTLED_KINDS)}
-          )`,
-        ])}
-        order by events.created_at asc, events.conversation_id asc, events.seq asc
-        limit ${query.limit}
-      `,
-    ),
+    db
+      .select({
+        userId: events.userId,
+        conversationId: events.conversationId,
+        messageId: events.messageId,
+      })
+      .from(events)
+      .innerJoin(
+        conversations,
+        and(eq(conversations.id, events.conversationId), isNull(conversations.deletedAt)),
+      )
+      .where(
+        and(
+          eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_OFFERED),
+          query.userId === null ? undefined : eq(events.userId, query.userId),
+          query.userIds === null ? undefined : inArray(events.userId, [...query.userIds]),
+          query.notUserIds.length === 0
+            ? undefined
+            : notInArray(events.userId, [...query.notUserIds]),
+          notExists(
+            db
+              .select({ id: settled.id })
+              .from(settled)
+              .where(
+                and(
+                  eq(settled.messageId, events.messageId),
+                  inArray(settled.kind, [...SETTLED_KINDS]),
+                ),
+              ),
+          ),
+        ),
+      )
+      .orderBy(asc(events.createdAt), asc(events.conversationId), asc(events.seq))
+      .limit(query.limit),
 });
 
 /**
@@ -683,7 +692,7 @@ interface SpeechSweepOptions {
 const QuietAccountSchema = Schema.Struct({
   userId: Schema.String,
   quietUntil: InstantColumnSchema,
-}).pipe(Schema.encodeKeys({ userId: "user_id", quietUntil: "quiet_until" }));
+});
 
 const QuietRequestSchema = Schema.Struct({
   now: Schema.Date,
@@ -694,17 +703,16 @@ const findQuietAccounts = SqlSchema.findAll({
   Request: QuietRequestSchema,
   Result: QuietAccountSchema,
   execute: (query) =>
-    statement(
-      (sql) => sql`
-        select devices.user_id, max(devices.quiet_until) as quiet_until
-        from devices
-        where ${sql.and([
-          sql`devices.quiet_until > ${query.now}`,
-          ...(query.userIds === null ? [] : [sql`devices.user_id in ${sql.in(query.userIds)}`]),
-        ])}
-        group by devices.user_id
-      `,
-    ),
+    db
+      .select({ userId: devices.userId, quietUntil: max(devices.quietUntil) })
+      .from(devices)
+      .where(
+        and(
+          gt(devices.quietUntil, query.now),
+          query.userIds === null ? undefined : inArray(devices.userId, [...query.userIds]),
+        ),
+      )
+      .groupBy(devices.userId),
 });
 
 /**

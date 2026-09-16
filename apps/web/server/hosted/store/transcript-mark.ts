@@ -1,6 +1,10 @@
+import { and, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../../db/query.js";
+import { transcriptMark } from "../../db/roster-schema.js";
 import { EpochMillisColumnSchema } from "./database.js";
 
 /**
@@ -11,13 +15,11 @@ import { EpochMillisColumnSchema } from "./database.js";
  * read, so two visits that overlapped cannot put it back.
  *
  * Every function here is an `Effect<A, SqlError | Schema.SchemaError,
- * SqlClient.SqlClient>` over `effect/unstable/sql`.
+ * SqlClient.SqlClient>` over `effect/unstable/sql`, its statement a Drizzle
+ * builder over the table `db/roster-schema.ts` declares.
  */
 
 type MarkFailure = SqlError | Schema.SchemaError;
-
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
 
 const MarkRowSchema = Schema.Struct({ mark: EpochMillisColumnSchema });
 
@@ -25,7 +27,10 @@ const findMark = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: MarkRowSchema,
   execute: (userId) =>
-    statement((sql) => sql`select mark from transcript_mark where user_id = ${userId}`),
+    db
+      .select({ mark: transcriptMark.mark })
+      .from(transcriptMark)
+      .where(eq(transcriptMark.userId, userId)),
 });
 
 /** The mark standing for the account, or nothing before the opener's first visit. */
@@ -40,26 +45,21 @@ export function readTranscriptMark(
 const MarkWriteSchema = Schema.Struct({
   userId: Schema.String,
   mark: Schema.Number,
-  updatedAt: Schema.String,
+  updatedAt: Schema.Date,
 });
 
-const KeptRowSchema = Schema.Struct({ userId: Schema.String }).pipe(
-  Schema.encodeKeys({ userId: "user_id" }),
-);
+const KeptRowSchema = Schema.Struct({ userId: Schema.String });
 
 /** A first mark: lands only where none stands. */
 const insertMark = SqlSchema.findAll({
   Request: MarkWriteSchema,
   Result: KeptRowSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into transcript_mark (user_id, mark, updated_at)
-        values (${write.userId}, ${write.mark}, ${write.updatedAt}::timestamptz)
-        on conflict (user_id) do nothing
-        returning user_id
-      `,
-    ),
+    db
+      .insert(transcriptMark)
+      .values({ userId: write.userId, mark: write.mark, updatedAt: write.updatedAt })
+      .onConflictDoNothing({ target: transcriptMark.userId })
+      .returning({ userId: transcriptMark.userId }),
 });
 
 /** A later mark: lands only over the one standing at `from`, and never where none stands, since a row gone mid-visit was forgotten on purpose. */
@@ -67,14 +67,11 @@ const updateMark = SqlSchema.findAll({
   Request: Schema.Struct({ ...MarkWriteSchema.fields, from: Schema.Number }),
   Result: KeptRowSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        update transcript_mark
-        set mark = ${write.mark}, updated_at = ${write.updatedAt}::timestamptz
-        where user_id = ${write.userId} and mark = ${write.from}
-        returning user_id
-      `,
-    ),
+    db
+      .update(transcriptMark)
+      .set({ mark: write.mark, updatedAt: write.updatedAt })
+      .where(and(eq(transcriptMark.userId, write.userId), eq(transcriptMark.mark, write.from)))
+      .returning({ userId: transcriptMark.userId }),
 });
 
 /**
@@ -91,7 +88,7 @@ export function keepTranscriptMark(
   from: number | undefined,
   now: Date,
 ): Effect.Effect<boolean, MarkFailure, SqlClient.SqlClient> {
-  const write = { userId, mark, updatedAt: now.toISOString() };
+  const write = { userId, mark, updatedAt: now };
   return Effect.map(
     from === undefined ? insertMark(write) : updateMark({ ...write, from }),
     (rows) => rows.length > 0,

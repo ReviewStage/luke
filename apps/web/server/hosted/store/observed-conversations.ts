@@ -1,7 +1,11 @@
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
+import { db } from "../../db/query.js";
+import { conversations } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 
 /**
@@ -21,10 +25,6 @@ import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 /** How a statement here fails: the driver's own refusal, or a row this build could not decode. */
 type ObservedConversationFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /** What the roster calls the session at a wake: its title, and the name of the workspace holding it where the provider reports one. */
 export interface ObservedSessionNaming {
   readonly title: string;
@@ -43,16 +43,18 @@ const findStandingObservedConversationId = SqlSchema.findOneOption({
   Request: ObservedSessionSchema,
   Result: ConversationIdRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select id from conversations
-        where user_id = ${request.userId}
-          and kind = ${CONVERSATION_KIND.OBSERVED}
-          and provider_id = ${request.providerId}
-          and provider_session_id = ${request.providerSessionId}
-          and deleted_at is null
-      `,
-    ),
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, request.userId),
+          eq(conversations.kind, CONVERSATION_KIND.OBSERVED),
+          eq(conversations.providerId, request.providerId),
+          eq(conversations.providerSessionId, request.providerSessionId),
+          isNull(conversations.deletedAt),
+        ),
+      ),
 });
 
 function standingObservedConversationId(
@@ -83,34 +85,42 @@ const insertObservedConversation = SqlSchema.void({
     ...NamingColumnsSchema.fields,
   }),
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into conversations (
-          user_id, kind, provider_id, provider_session_id, created_at, last_activity_at,
-          title, workspace
-        )
-        values (
-          ${write.userId}, ${CONVERSATION_KIND.OBSERVED}, ${write.providerId},
-          ${write.providerSessionId}, ${write.now}, ${write.now},
-          ${write.title}, ${write.workspace}
-        )
-        on conflict (user_id, provider_id, provider_session_id) do nothing
-      `,
-    ),
+    db
+      .insert(conversations)
+      .values({
+        userId: write.userId,
+        kind: CONVERSATION_KIND.OBSERVED,
+        providerId: write.providerId,
+        providerSessionId: write.providerSessionId,
+        createdAt: write.now,
+        lastActivityAt: write.now,
+        title: write.title,
+        workspace: write.workspace,
+      })
+      .onConflictDoNothing({
+        target: [conversations.userId, conversations.providerId, conversations.providerSessionId],
+      }),
 });
+
+/**
+ * A name the row already carries is no change at all. The builder has no
+ * operator for a comparison that counts two nulls as equal, so each column's
+ * is a fragment; both stand inside the one rendered statement.
+ */
+const movedNaming = (title: string | null, workspace: string | null) =>
+  or(
+    sql`${conversations.title} is distinct from ${title}`,
+    sql`${conversations.workspace} is distinct from ${workspace}`,
+  );
 
 /** The row's naming follows the roster's: a write that changes nothing touches no row. */
 const refreshObservedNaming = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, ...NamingColumnsSchema.fields }),
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set title = ${write.title}, workspace = ${write.workspace}
-        where id = ${write.id}
-          and (title is distinct from ${write.title} or workspace is distinct from ${write.workspace})
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({ title: write.title, workspace: write.workspace })
+      .where(and(eq(conversations.id, write.id), movedNaming(write.title, write.workspace))),
 });
 
 /** The naming as the columns hold it: a blank title or workspace is no name at all. */

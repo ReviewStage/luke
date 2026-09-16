@@ -1,6 +1,10 @@
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Effect, type Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../../db/query.js";
+import { conversations } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
 
@@ -40,10 +44,6 @@ export type StandingConversation =
 
 type StandingConversationFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /** The row as `conversations` holds it for the view: only a main or an observed row ever reaches this select. */
 const StandingConversationRowSchema = Schema.Struct({
   id: Schema.String,
@@ -54,32 +54,32 @@ const StandingConversationRowSchema = Schema.Struct({
   nextMessageSeq: EpochMillisColumnSchema,
   nextEventSeq: EpochMillisColumnSchema,
   journalRevision: EpochMillisColumnSchema,
-}).pipe(
-  Schema.encodeKeys({
-    providerId: "provider_id",
-    providerSessionId: "provider_session_id",
-    createdAt: "created_at",
-    nextMessageSeq: "next_message_seq",
-    nextEventSeq: "next_event_seq",
-    journalRevision: "journal_revision",
-  }),
-);
+});
 
 const findStandingConversations = SqlSchema.findAll({
   Request: Schema.String,
   Result: StandingConversationRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select id, kind, provider_id, provider_session_id, created_at,
-               next_message_seq, next_event_seq, journal_revision
-        from conversations
-        where user_id = ${userId}
-          and kind in (${CONVERSATION_KIND.MAIN}, ${CONVERSATION_KIND.OBSERVED})
-          and deleted_at is null
-        order by kind asc, id asc
-      `,
-    ),
+    db
+      .select({
+        id: conversations.id,
+        kind: conversations.kind,
+        providerId: conversations.providerId,
+        providerSessionId: conversations.providerSessionId,
+        createdAt: conversations.createdAt,
+        nextMessageSeq: conversations.nextMessageSeq,
+        nextEventSeq: conversations.nextEventSeq,
+        journalRevision: conversations.journalRevision,
+      })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          inArray(conversations.kind, [CONVERSATION_KIND.MAIN, CONVERSATION_KIND.OBSERVED]),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .orderBy(asc(conversations.kind), asc(conversations.id)),
 });
 
 export function standingConversations(
@@ -136,29 +136,29 @@ const PagedConversationRowSchema = Schema.Struct({
   nextMessageSeq: EpochMillisColumnSchema,
   nextEventSeq: EpochMillisColumnSchema,
   journalRevision: EpochMillisColumnSchema,
-}).pipe(
-  Schema.encodeKeys({
-    createdAt: "created_at",
-    nextMessageSeq: "next_message_seq",
-    nextEventSeq: "next_event_seq",
-    journalRevision: "journal_revision",
-  }),
-);
+});
 
 const findPagedConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: PagedConversationRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select id, created_at, next_message_seq, next_event_seq, journal_revision
-        from conversations
-        where user_id = ${request.userId}
-          and id = ${request.conversationId}
-          and kind in (${CONVERSATION_KIND.CHILD}, ${CONVERSATION_KIND.OBSERVED})
-          and deleted_at is null
-      `,
-    ),
+    db
+      .select({
+        id: conversations.id,
+        createdAt: conversations.createdAt,
+        nextMessageSeq: conversations.nextMessageSeq,
+        nextEventSeq: conversations.nextEventSeq,
+        journalRevision: conversations.journalRevision,
+      })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, request.userId),
+          eq(conversations.id, request.conversationId),
+          inArray(conversations.kind, [CONVERSATION_KIND.CHILD, CONVERSATION_KIND.OBSERVED]),
+          isNull(conversations.deletedAt),
+        ),
+      ),
 });
 
 /** One of the account's standing child or observed conversations by id, or none: a main's id, a stamped row's, or another account's finds nothing. */
@@ -204,29 +204,35 @@ const ConversationDirectoryRowSchema = Schema.Struct({
   providerSessionId: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   lastActivityAt: InstantColumnSchema,
-}).pipe(
-  Schema.encodeKeys({
-    providerSessionId: "provider_session_id",
-    createdAt: "created_at",
-    lastActivityAt: "last_activity_at",
-  }),
-);
+});
 
 const findConversationDirectory = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, limit: Schema.Number }),
   Result: ConversationDirectoryRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select id, kind, label, provider_session_id, created_at, last_activity_at
-        from conversations
-        where user_id = ${request.userId}
-          and kind in (${CONVERSATION_KIND.MAIN}, ${CONVERSATION_KIND.OBSERVED}, ${CONVERSATION_KIND.CHILD})
-          and deleted_at is null
-        order by last_activity_at desc, id asc
-        limit ${request.limit}
-      `,
-    ),
+    db
+      .select({
+        id: conversations.id,
+        kind: conversations.kind,
+        label: conversations.label,
+        providerSessionId: conversations.providerSessionId,
+        createdAt: conversations.createdAt,
+        lastActivityAt: conversations.lastActivityAt,
+      })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, request.userId),
+          inArray(conversations.kind, [
+            CONVERSATION_KIND.MAIN,
+            CONVERSATION_KIND.OBSERVED,
+            CONVERSATION_KIND.CHILD,
+          ]),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .orderBy(desc(conversations.lastActivityAt), asc(conversations.id))
+      .limit(request.limit),
 });
 
 /** The account's standing main, observed, and child conversations, most recently written to first and at most `limit` of them. */

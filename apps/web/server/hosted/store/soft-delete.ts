@@ -1,6 +1,10 @@
+import { and, eq, inArray, isNull, lte } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { user } from "../../db/auth-schema.js";
+import { db } from "../../db/query.js";
+import { conversations } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 
 /**
@@ -32,15 +36,11 @@ export interface ClearOutcome {
 
 type ClearFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** Postgres reserves the word `user`, so the identity table's name is quoted wherever it is written by hand. */
+/** Takes the account's row lock for the transaction, so two Clears of one account run one after the other. */
 const lockUser = (userId: string) =>
-  statement((sql) => sql`select id from "user" where id = ${userId} for update`);
+  db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
 
 const StampMainSchema = Schema.Struct({ userId: Schema.String, deletedAt: Schema.Date });
 
@@ -48,14 +48,17 @@ const stampMain = SqlSchema.findAll({
   Request: StampMainSchema,
   Result: IdRowSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set deleted_at = ${write.deletedAt}
-        where user_id = ${write.userId} and kind = ${CONVERSATION_KIND.MAIN} and deleted_at is null
-        returning id
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({ deletedAt: write.deletedAt })
+      .where(
+        and(
+          eq(conversations.userId, write.userId),
+          eq(conversations.kind, CONVERSATION_KIND.MAIN),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .returning({ id: conversations.id }),
 });
 
 const StampChildrenSchema = Schema.Struct({
@@ -67,14 +70,16 @@ const stampChildren = SqlSchema.findAll({
   Request: StampChildrenSchema,
   Result: IdRowSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set deleted_at = ${write.deletedAt}
-        where ${sql.in("parent_conversation_id", write.parents)} and deleted_at is null
-        returning id
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({ deletedAt: write.deletedAt })
+      .where(
+        and(
+          inArray(conversations.parentConversationId, [...write.parents]),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .returning({ id: conversations.id }),
 });
 
 /** Stamps every not-yet-stamped child of the given rows, level by level, and answers every id stamped. */
@@ -98,21 +103,23 @@ const openMain = SqlSchema.findOneOption({
   Request: OpenMainSchema,
   Result: IdRowSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into conversations (user_id, kind, created_at, last_activity_at)
-        values (${write.userId}, ${CONVERSATION_KIND.MAIN}, ${write.now}, ${write.now})
-        returning id
-      `,
-    ),
+    db
+      .insert(conversations)
+      .values({
+        userId: write.userId,
+        kind: CONVERSATION_KIND.MAIN,
+        createdAt: write.now,
+        lastActivityAt: write.now,
+      })
+      .returning({ id: conversations.id }),
 });
 
 export function clearMainConversation(
   userId: string,
   now: Date,
 ): Effect.Effect<ClearOutcome, ClearFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
         yield* lockUser(userId);
         const stamped = yield* stampMain({ userId, deletedAt: now });
@@ -130,7 +137,10 @@ const purgeRows = SqlSchema.findAll({
   Request: Schema.Date,
   Result: IdRowSchema,
   execute: (edge) =>
-    statement((sql) => sql`delete from conversations where deleted_at <= ${edge} returning id`),
+    db
+      .delete(conversations)
+      .where(lte(conversations.deletedAt, edge))
+      .returning({ id: conversations.id }),
 });
 
 /**
