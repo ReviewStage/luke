@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { TURN_ORIGIN, TURN_STATUS } from "../server/core";
+import { CHILD_STATUS, TURN_ORIGIN, TURN_STATUS } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { type AgentRecord, CHILD_STATUS } from "../server/hosted/store";
+import type { AgentRecord } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, insertTurn, setConversationDeletedAt } from "./support/store-rows";
 
@@ -149,6 +149,35 @@ test("an observed conversation without a turn, a stamped one, a row of another k
   assert.deepEqual(ids(await database.run(database.store.directory.agents(other, 10))), [
     elsewhere,
   ]);
+});
+
+test("an observed row missing its provider or its session is no agent: listed by nothing and moving the head nowhere, whatever turn it holds", async () => {
+  const userId = await database.createUser();
+  const whole = await agentOf(userId, at(1));
+  await turnOf(userId, whole, { status: TURN_STATUS.QUEUED, queuedAt: at(10) });
+  for (const identity of [
+    { providerId: null, providerSessionId: "fixture-session-unnamed" },
+    { providerId: "conductor", providerSessionId: null },
+  ]) {
+    const unnamed = await insertConversation(database.run, {
+      userId,
+      kind: CONVERSATION_KIND.OBSERVED,
+      ...identity,
+      createdAt: at(2),
+    });
+    await turnOf(userId, unnamed, {
+      status: TURN_STATUS.RUNNING,
+      queuedAt: at(20),
+      startedAt: at(21),
+    });
+  }
+
+  // The whole row is still answered rather than the page refused over a row the schema cannot decode.
+  assert.deepEqual(ids(await database.run(database.store.directory.agents(userId, 10))), [whole]);
+  assert.deepEqual(await database.run(database.store.directory.agentsHead(userId)), {
+    id: whole,
+    changedAt: instantText(at(10)),
+  });
 });
 
 test("the agents head is the latest stamp any agent's latest turn reached, a stamp on the row included, and nothing while no agent has a turn", async () => {
