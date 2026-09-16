@@ -327,6 +327,16 @@ and `apps/web/server/hosted/store/message-reads.ts` all produce or read it.
 
 - Schema at the boundary a value crosses, never a hand-written parser beside a
   hand-written shape.
+- Drizzle's query builder is the web server's statement layer, never a raw
+  `sql` template beside it: a query module builds over the tables its own
+  `apps/web/server/db/*-schema.ts` declares, through the one handle
+  `apps/web/server/db/query.ts` holds, and still answers `Effect<A, SqlError |
+  Schema.SchemaError, SqlClient>` with its rows still Schema-decoded. The
+  modules are hand-maintained beside hand-written migrations — `drizzle-kit`
+  generates nothing — and `apps/web/tests/drizzle-schema.test.ts` compares
+  them against `information_schema` in both directions, so a migration that
+  drops a column deletes it from its module in the same PR.
+  `apps/web/server/README.md`'s "The data layer" is the whole of it.
 - Runtime only at an edge above; everywhere else returns an Effect.
 - `Scope`, not a `dispose()` a caller must remember to call.
 - `Schedule`, not a hand-rolled interval or backoff loop.
