@@ -693,9 +693,14 @@ const findMessageByClientId = SqlSchema.findOneOption({
     ),
 });
 
-/** The instant a voice session's clock counts from, so a spoken row's `from_ms` can be placed on the Conversation's. */
+/**
+ * The instant a voice session's clock counts from, so a spoken row's
+ * `from_ms` can be placed on the Conversation's. The session is read under
+ * the row's owner, so metadata naming another account's session finds no
+ * clock rather than placing the row on it.
+ */
 const findVoiceSessionStart = SqlSchema.findOneOption({
-  Request: Schema.Struct({ id: Schema.String }),
+  Request: Schema.Struct({ id: Schema.String, userId: Schema.String }),
   Result: Schema.Struct({ startedAt: InstantColumnSchema }).pipe(
     Schema.encodeKeys({ startedAt: "started_at" }),
   ),
@@ -704,7 +709,7 @@ const findVoiceSessionStart = SqlSchema.findOneOption({
       (sql) => sql`
         select started_at
         from voice_sessions
-        where id = ${request.id}
+        where id = ${request.id} and user_id = ${request.userId}
       `,
     ),
 });
@@ -1203,10 +1208,11 @@ interface InsertedMessage {
  * span's `from_ms`, so a sentence written at settle stands where it was said
  * rather than after whatever was written while it was being spoken; any other
  * row where it was written. A spoken row naming a session the store does not
- * hold has no clock to stand on and is placed where it was written, which is
- * where every row stood before the column existed.
+ * hold under the row's owner has no clock to stand on and is placed where it
+ * was written, which is where every row stood before the column existed.
  */
 const placedInstant = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
   metadata: StoredMessageMetadata | undefined,
   createdAt: Date,
 ): Effect.fn.Return<Date, WriteFailure, SqlClient.SqlClient> {
@@ -1214,7 +1220,7 @@ const placedInstant = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (metadata.channel !== MESSAGE_CHANNEL.VOICE) return createdAt;
   const { voice_session_id: sessionId, from_ms: fromMs } = metadata;
   if (sessionId === undefined || fromMs === undefined || !isWireUuid(sessionId)) return createdAt;
-  const session = yield* findVoiceSessionStart({ id: sessionId });
+  const session = yield* findVoiceSessionStart({ id: sessionId, userId: context.target.userId });
   return Option.match(session, {
     onNone: () => createdAt,
     onSome: (row) => new Date(row.startedAt.getTime() + fromMs),
@@ -1234,7 +1240,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
   const metadata: StoredMessageMetadata | undefined =
     row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
   const createdAt = context.now();
-  const placedAt = yield* placedInstant(metadata, createdAt);
+  const placedAt = yield* placedInstant(context, metadata, createdAt);
   const inserted = yield* insertMessageRow({
     userId: context.target.userId,
     conversationId: context.target.conversationId,

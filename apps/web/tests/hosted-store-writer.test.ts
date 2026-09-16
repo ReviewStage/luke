@@ -1445,13 +1445,22 @@ test("a row is placed where it stands in the Conversation: a spoken row at its s
     ).ok,
   );
   assert.ok((await spokenLine("spoken-placed", voiceSessionId, 4_000)).ok);
-  // A spoken row naming a session the store does not hold has no clock to stand on.
+  // A spoken row naming a session the store does not hold, or holds for
+  // another account, has no clock to stand on.
   assert.ok((await spokenLine("spoken-unheld", randomUUID(), 4_000)).ok);
+  const other = await conversation();
+  const foreignSessionId = await insertVoiceSession(database.run, {
+    userId: other.userId,
+    liveSessionId: `live_${randomUUID()}`,
+    delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+  });
+  assert.ok((await spokenLine("spoken-foreign", foreignSessionId, 4_000)).ok);
   const rows = await storedMessages(target);
   const placedAt = (clientId: string) => rows.find((row) => row.clientId === clientId)?.placedAt;
   assert.equal(placedAt("typed-placed")?.getTime(), NOW);
   assert.equal(placedAt("spoken-placed")?.getTime(), session.startedAt.getTime() + 4_000);
   assert.equal(placedAt("spoken-unheld")?.getTime(), NOW);
+  assert.equal(placedAt("spoken-foreign")?.getTime(), NOW);
   for (const row of rows) {
     if (row.clientId === "spoken-placed") continue;
     assert.equal(row.placedAt.getTime(), row.createdAt.getTime());
