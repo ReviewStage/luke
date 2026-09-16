@@ -5,6 +5,9 @@ export {
   type ChildCompletionStatus,
   childCompletionInputText,
   childTaskInputText,
+  OBSERVED_MESSAGES_CUT,
+  type ObservedMessagesEnvelope,
+  observedMessagesText,
   standingContextText,
   wakeInputText,
 } from "./input-items.js";
