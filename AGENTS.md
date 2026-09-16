@@ -92,7 +92,12 @@ in for the missing job before the first release.
   same. Every turn goes as the deployment acting for that one account under
   the tick's own secret (`EVE_CALLER.DEPLOYMENT`), so the account named to
   the brain is only ever one this tick enumerated, and nothing but such a
-  change opens a scheduled turn. The cursors and the mark
+  change or a settled child's undelivered completion opens a scheduled turn
+  (the sweep in `child-completion.ts` hands a child whose spawn expected a
+  completion, whose `completion_delivered_at` is null, and whose latest turn
+  is terminal to its parent as one `child-completion` turn, at most eight an
+  account a tick, and only where the relay's attempt left the row unstamped,
+  a refused send being retried nowhere). The cursors and the mark
   move in one transaction, each a compare-and-set over what the visit read,
   and only once the brain has accepted every turn; a turn the brain refused,
   or a transcript the provider would not answer, ends the visit with nothing
