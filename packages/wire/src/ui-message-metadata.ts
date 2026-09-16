@@ -39,15 +39,11 @@ export const MESSAGE_AUTHOR = {
   CHILD: "child",
 } as const;
 
-export type MessageAuthor = (typeof MESSAGE_AUTHOR)[keyof typeof MESSAGE_AUTHOR];
-
 /** How a developer's ask arrived. */
 export const MESSAGE_CHANNEL = {
   TYPED: "typed",
   VOICE: "voice",
 } as const;
-
-export type MessageChannel = (typeof MESSAGE_CHANNEL)[keyof typeof MESSAGE_CHANNEL];
 
 /**
  * What the brain wrote a user row down for itself about: the words a turn

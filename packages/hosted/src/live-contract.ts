@@ -487,8 +487,6 @@ const CREATED_FIELDS = {
   sdpAnswer: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
 } as const;
 
-export const liveSessionCreatedSchema = schemaAs<LiveSessionCreated>(Schema.Struct(CREATED_FIELDS));
-
 /**
  * The value a frame's schema admitted, or nothing. A frame the desktop sends
  * is read as declared, refusing a key it does not name; a frame the service
@@ -552,12 +550,6 @@ export function sessionAttachedFrameFromWire(
   value: UnparsedWireValue,
 ): SessionAttachedFrame | undefined {
   return admittedAnswer(sessionAttachedFrameSchema, value);
-}
-
-export function liveSessionCreatedFromWire(
-  value: UnparsedWireValue,
-): LiveSessionCreated | undefined {
-  return admittedAnswer(liveSessionCreatedSchema, value);
 }
 
 /** The value a `dropRefused` field admits: whatever the schema read, or nothing. */

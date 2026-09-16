@@ -23,24 +23,6 @@ function isFeedbackKind(value: UnparsedWireValue): value is FeedbackKind {
 }
 
 /**
- * A spoken ask to open the composer, carried on the lifecycle bus the way
- * `tab:settings` is. Keyed by kind rather than composed from one, so no
- * identifier is ever interpolated into an event name.
- */
-export const FEEDBACK_LIFECYCLE_EVENT = {
-  [FEEDBACK_KIND.FEEDBACK]: "feedback:feedback",
-  [FEEDBACK_KIND.PROMPT]: "feedback:prompt",
-};
-
-export function feedbackKindForLifecycleEvent(eventName: string): FeedbackKind | undefined {
-  if (eventName === FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.FEEDBACK]) {
-    return FEEDBACK_KIND.FEEDBACK;
-  }
-  if (eventName === FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.PROMPT]) return FEEDBACK_KIND.PROMPT;
-  return undefined;
-}
-
-/**
  * The image formats a screenshot arrives in. A fixed set rather than anything
  * `image/*`: the renderer re-encodes what does not fit, and the endpoint that
  * turns a submission into email forwards these types blind.

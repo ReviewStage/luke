@@ -1,4 +1,4 @@
-export { VoiceCapabilityAssembler, type VoiceSettings } from "./capability-assembler.js";
+export { VoiceCapabilityAssembler } from "./capability-assembler.js";
 export { holdSocket } from "./held-socket.js";
 export {
   environmentLiveVoice,

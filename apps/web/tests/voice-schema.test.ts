@@ -4,7 +4,6 @@ import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
-  type VoiceSessionUsage,
 } from "../server/db/voice-vocabulary";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
@@ -32,6 +31,15 @@ import {
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
+
+/**
+ * What the `usage` column holds: the session's seconds and whether they are
+ * the API's own confirmed count rather than the writer's elapsed estimate.
+ */
+interface VoiceSessionUsage {
+  readonly seconds: number;
+  readonly confirmed: boolean;
+}
 
 let liveSessions = 0;
 

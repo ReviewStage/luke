@@ -83,8 +83,6 @@ export {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
-  type MessageAuthor,
-  type MessageChannel,
   type MessageRole,
   MessageRoleSchema,
   OBSERVATION_SOURCE,

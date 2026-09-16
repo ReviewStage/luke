@@ -56,8 +56,9 @@ extension ActionClientError: HostedUnauthorizedSignaling {
 /// agent in its workspace, rename it or its workspace, or create a workspace
 /// in a provider project.
 ///
-/// Text bounds (`sessionMessageText` / `workspaceNameText`) are enforced on
-/// the server. The client trims text before sending as a courtesy.
+/// Text bounds (`MESSAGE_TEXT` / `WORKSPACE_NAME` in
+/// `packages/actions/src/action-schemas.ts`) are enforced on the server. The
+/// client trims text before sending as a courtesy.
 public final class ActionClient: Sendable {
     private let baseURL: URL
     private let http: HTTPClient

@@ -63,7 +63,9 @@ public final class ConversationStore {
     public static let maximumPagesPerPoll = 5
 
     private let client: ConversationReadClient
-    /// Absent on a screen that draws no rating control, the watch's, which then constructs nothing it never calls.
+    /// Optional, because a screen that draws no rating control needs none; the
+    /// watch passes one all the same and never calls it, so `canRate` there
+    /// turns on the registered device row alone.
     private let ratingClient: MessageRatingClient?
     private let deviceId: @MainActor () -> String?
     private let now: @Sendable () -> Date

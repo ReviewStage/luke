@@ -1,4 +1,3 @@
-export { ESTIMATED_CHARS_PER_TOKEN } from "./defaults.js";
 export {
   failedHousekeeping,
   MEMORY_FLUSH_DEFAULTS,
