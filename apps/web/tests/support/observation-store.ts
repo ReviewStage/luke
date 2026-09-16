@@ -16,6 +16,8 @@ export interface MemoryObservationStore extends ObservationStore {
   snapshots: Map<string, RosterSnapshotRecord>;
   /** The opener's bookmark over the snapshot, as the store keeps it. */
   consumed: Map<string, RosterSnapshotRecord>;
+  /** The opener's transcript mark, as the store keeps it. */
+  marks: Map<string, number>;
   passes: Map<string, ObservationPassRecord>;
   /** Every `advance` this store took, in order, so a test can see what a pass wrote. */
   advances: Array<{ userId: string; observedAt: number }>;
@@ -27,11 +29,13 @@ export const UNOPENABLE_BODY = "unopenable";
 export function memoryObservationStore(): MemoryObservationStore {
   const snapshots = new Map<string, RosterSnapshotRecord>();
   const consumed = new Map<string, RosterSnapshotRecord>();
+  const marks = new Map<string, number>();
   const passes = new Map<string, ObservationPassRecord>();
   const advances: MemoryObservationStore["advances"] = [];
   return {
     snapshots,
     consumed,
+    marks,
     passes,
     advances,
     roster: {
@@ -66,6 +70,13 @@ export function memoryObservationStore(): MemoryObservationStore {
         Effect.sync(() => {
           if (consumed.get(userId)?.observedAt !== from) return false;
           consumed.set(userId, roster);
+          return true;
+        }),
+      mark: (userId) => Effect.sync(() => marks.get(userId)),
+      keepMark: (userId, mark, from) =>
+        Effect.sync(() => {
+          if (marks.get(userId) !== from) return false;
+          marks.set(userId, mark);
           return true;
         }),
       pass: (userId) => Effect.sync(() => passes.get(userId)),

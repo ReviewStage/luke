@@ -162,6 +162,30 @@ test("a pass advances the snapshot only over the one it read against, and the op
   });
 });
 
+test("the opener's transcript mark is absent until kept, a first mark lands only where none stands, and a later one only over the mark the visit read", async () => {
+  const userId = await database.createUser();
+  const { roster } = database.store;
+  assert.equal(await database.run(roster.mark(userId)), undefined);
+  assert.equal(await database.run(roster.keepMark(userId, NOW + 1, NOW, NOW)), false);
+  assert.equal(await database.run(roster.mark(userId)), undefined);
+  assert.equal(await database.run(roster.keepMark(userId, NOW + 1, undefined, NOW)), true);
+  assert.equal(await database.run(roster.mark(userId)), NOW + 1);
+  assert.equal(await database.run(roster.keepMark(userId, NOW + 5, NOW, NOW)), false);
+  assert.equal(await database.run(roster.keepMark(userId, NOW + 5, undefined, NOW)), false);
+  assert.equal(await database.run(roster.mark(userId)), NOW + 1);
+  assert.equal(await database.run(roster.keepMark(userId, NOW + 5, NOW + 1, NOW + 9)), true);
+  assert.equal(await database.run(roster.mark(userId)), NOW + 5);
+
+  const [row] = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`select mark, updated_at from transcript_mark where user_id = ${userId}`;
+    }),
+  );
+  assert.ok(row);
+  assert.equal(Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.mark), NOW + 5);
+});
+
 test("a pass record moves the attempt every time, the whole read only on success, and forgetting reaches the keyless and the unseen it is told of and no account beside them", async () => {
   const userId = await database.createUser();
   const { roster } = database.store;
@@ -220,15 +244,18 @@ test("a pass record moves the attempt every time, the whole read only on success
     await database.run(
       roster.keepConsumed(id, { body: JSON.stringify({ heard: id }), observedAt: NOW }, undefined),
     );
+    await database.run(roster.keepMark(id, NOW, undefined, NOW));
   }
   await database.run(roster.forgetIneligible({ providerIds: ["conductor"], seenAfter: NOW }));
   for (const gone of [userId, unseen]) {
     assert.equal(await database.run(roster.read(gone)), undefined);
     assert.deepEqual(await database.run(roster.consumed(gone)), { state: CONSUMED_ROSTER.ABSENT });
+    assert.equal(await database.run(roster.mark(gone)), undefined);
     assert.equal(await database.run(roster.pass(gone)), undefined);
   }
   assert.equal((await database.run(roster.read(keyed)))?.observedAt, NOW);
   assert.equal((await database.run(roster.consumed(keyed))).state, CONSUMED_ROSTER.STANDING);
+  assert.equal(await database.run(roster.mark(keyed)), NOW);
   assert.equal((await database.run(roster.pass(keyed)))?.attemptedAt, NOW);
 });
 
@@ -251,6 +278,7 @@ test("deleting the user row cascades through every notebook and roster table and
         undefined,
       ),
     );
+    await database.run(database.store.roster.keepMark(id, NOW, undefined, NOW));
   }
 
   await deleteUser(database.run, userId);
@@ -260,6 +288,7 @@ test("deleting the user row cascades through every notebook and roster table and
     "workspace_embedding",
     "roster_snapshot",
     "roster_consumed",
+    "transcript_mark",
     "observation_pass",
   ]) {
     assert.equal(

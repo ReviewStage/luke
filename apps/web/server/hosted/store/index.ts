@@ -57,6 +57,7 @@ import {
   type StandingConversation,
   standingConversations,
 } from "./standing-conversations.js";
+import { keepTranscriptMark, readTranscriptMark } from "./transcript-mark.js";
 import {
   pruneWorkspaceEmbeddings,
   readWorkspaceEmbeddings,
@@ -244,12 +245,25 @@ export interface HostedStore {
       roster: RosterSnapshotRecord,
       from: number | undefined,
     ): HostedStoreEffect<boolean>;
+    /** The instant up to which every transcript change has been handed to the brain; absent before the opener's first visit. */
+    mark(userId: string): HostedStoreEffect<number | undefined>;
+    /**
+     * Moves that mark, only over the one standing at `from` (absent for
+     * none), so the opener composes it into the one transaction that also
+     * keeps its transcript cursors.
+     */
+    keepMark(
+      userId: string,
+      mark: number,
+      from: number | undefined,
+      now: number,
+    ): HostedStoreEffect<boolean>;
     pass(userId: string): HostedStoreEffect<ObservationPassRecord | undefined>;
     recordPass(
       userId: string,
       attempt: { attemptedAt: number; failure?: string },
     ): HostedStoreEffect<void>;
-    /** Drops the snapshot, diffs, and pass record of every user the schedule no longer runs for, or of the named ones alone. */
+    /** Drops the snapshot, bookmark, transcript mark, and pass record of every user the schedule no longer runs for, or of the named ones alone. */
     forgetIneligible(eligibility: ObservationEligibility): HostedStoreEffect<void>;
   };
   speech: {
@@ -318,6 +332,8 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       consumed: (userId) => readConsumedRoster(sealFor(userId), userId),
       keepConsumed: (userId, roster, from) =>
         keepConsumedRoster(sealFor(userId), userId, roster, from),
+      mark: (userId) => readTranscriptMark(userId),
+      keepMark: (userId, mark, from, now) => keepTranscriptMark(userId, mark, from, new Date(now)),
       pass: (userId) => readObservationPass(userId),
       recordPass: (userId, attempt) => recordObservationPass(userId, attempt),
       forgetIneligible: (eligibility) => forgetObservationIneligible(eligibility),
