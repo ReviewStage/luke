@@ -370,12 +370,16 @@ test("the turns of either kind are drawn as the thread draws its own, under the 
   }
 });
 
-test("a transcript not yet read draws the empty scroller, and one read with nothing says so", () => {
+test("a transcript not yet read says it is loading inside the scroller, and one read with nothing says so", () => {
   const child = { conversationId: OPEN_CHILD.conversationId, kind: TRANSCRIPT_KIND.CHILD };
   const unread = renderTranscript({ transcript: { ...child, settled: false, groups: [] } });
-  assert.ok(unread.includes('class="conversation-scroll"'));
+  const scroll = unread.indexOf('class="conversation-scroll"');
+  const loading = unread.indexOf("Loading…");
+  assert.ok(scroll >= 0 && loading > scroll);
   assert.ok(!unread.includes("Nothing said yet"));
-  assert.ok(!renderTranscript().includes("Nothing said yet"));
+  const none = renderTranscript();
+  assert.ok(none.includes("Loading…"));
+  assert.ok(!none.includes("Nothing said yet"));
   // Another conversation's transcript still standing is not this page's, read
   // or not; nor is this conversation's under another kind.
   for (const transcript of [
@@ -386,12 +390,80 @@ test("a transcript not yet read draws the empty scroller, and one read with noth
       transcript: { ...transcript, settled: true, groups: SINGLE_TURN },
     });
     assert.ok(other.includes('class="conversation-scroll"'));
+    assert.ok(other.includes("Loading…"));
     assert.ok(!other.includes('<ol class="conversation-list">'));
     assert.ok(!other.includes("Nothing said yet"));
   }
   const empty = renderTranscript({ transcript: { ...child, settled: true, groups: [] } });
   assert.ok(empty.includes("Nothing said yet"));
+  assert.ok(!empty.includes("Loading…"));
   assert.ok(!empty.includes('class="conversation-scroll"'));
+});
+
+test("the transcript opens at its tail, jumps again only when it gains a turn or another row opens, and leaves a reader who scrolled up alone", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (extra: Partial<TranscriptProps>) => {
+    act(() => {
+      root.render(
+        createElement(AgentTranscriptPanel, {
+          open: OPEN_CHILD,
+          transcript: undefined,
+          roster: FIXTURE_ROSTER,
+          now: FIXTURE_NOW,
+          onOpenChat: () => undefined,
+          onBack: () => undefined,
+          ...extra,
+        }),
+      );
+    });
+  };
+  render({});
+  const scroller = container.querySelector(".conversation-scroll");
+  assert.ok(scroller instanceof HTMLDivElement);
+  // jsdom lays nothing out, so the scroller's height and position are stood in for.
+  const metrics = { scrollTop: 0, scrollHeight: 400 };
+  Object.defineProperties(scroller, {
+    scrollTop: {
+      configurable: true,
+      get: () => metrics.scrollTop,
+      set: (value: number) => {
+        metrics.scrollTop = value;
+      },
+    },
+    scrollHeight: { configurable: true, get: () => metrics.scrollHeight },
+  });
+  const child = { conversationId: OPEN_CHILD.conversationId, kind: TRANSCRIPT_KIND.CHILD };
+  // Loading moves nothing; the first read lands at the tail.
+  assert.equal(metrics.scrollTop, 0);
+  render({ transcript: { ...child, settled: true, groups: SINGLE_TURN } });
+  assert.equal(metrics.scrollTop, 400);
+  // A re-read handing back the same turns leaves a reader who scrolled up where they are.
+  metrics.scrollTop = 40;
+  render({ transcript: { ...child, settled: true, groups: [...SINGLE_TURN] } });
+  assert.equal(metrics.scrollTop, 40);
+  // A turn gained jumps to the tail again.
+  metrics.scrollHeight = 900;
+  render({ transcript: { ...child, settled: true, groups: fixtureConversationTurns() } });
+  assert.equal(metrics.scrollTop, 900);
+  // Another row opened with as many turns jumps anew, once its own read lands.
+  metrics.scrollTop = 40;
+  render({
+    open: OPEN_AGENT,
+    transcript: { ...child, settled: true, groups: fixtureConversationTurns() },
+  });
+  assert.equal(metrics.scrollTop, 40);
+  const agent = { conversationId: OPEN_AGENT.conversationId, kind: TRANSCRIPT_KIND.OBSERVED };
+  render({
+    open: OPEN_AGENT,
+    transcript: { ...agent, settled: true, groups: fixtureConversationTurns() },
+  });
+  assert.equal(metrics.scrollTop, 900);
+  act(() => {
+    root.unmount();
+  });
+  container.remove();
 });
 
 test("a row the host could not read back is said under the transcript, as it is under the thread", () => {
