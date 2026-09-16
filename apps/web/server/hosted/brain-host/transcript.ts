@@ -77,13 +77,14 @@ export interface HostedTranscriptReads {
  * rather than dropped, since a bound met by one message is still one message.
  */
 /** What the bound left: the lines kept, and whether any were dropped from the front. */
-interface BoundedLines {
+export interface BoundedLines {
   readonly lines: readonly string[];
   readonly dropped: boolean;
 }
 
-function boundedLines(lines: readonly string[]): BoundedLines {
-  let kept = lines.reduce((total, line) => total + line.length + 1, 0);
+export function boundedLines(lines: readonly string[]): BoundedLines {
+  // The length as the turn joins it: a newline between lines, none after the last.
+  let kept = Math.max(0, lines.reduce((total, line) => total + line.length + 1, 0) - 1);
   let dropped = 0;
   while (dropped < lines.length - 1 && kept > BRAIN_HOST.TRANSCRIPT_DELTA_CHARS) {
     kept -= (lines[dropped]?.length ?? 0) + 1;
