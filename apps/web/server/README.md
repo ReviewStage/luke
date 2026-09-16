@@ -1186,7 +1186,7 @@ The `conversations`/`messages`/`turns`/`events`/`provider_cursors`,
 conversation per account: the
 conversation rows the storage rework settled on, the identity workspace and
 daily notes, and the latest roster snapshot with its
-bookmark and pass record. Every row is keyed by `user_id` and cascades with the
+transcript mark and pass record. Every row is keyed by `user_id` and cascades with the
 user row, so `server/routes/account/delete.ts` erases them with the account.
 The roster tables are read and written by the scheduled observation below and
 the routes that serve it. `server/hosted/store/` is the store the brain host
@@ -1547,7 +1547,7 @@ needs `PROVIDER_KEY_ENCRYPTION_SECRET`, because a tick that cannot read a key
 must not run at all: a pass that read nothing would be written down as an
 account with nothing.
 
-Each tick first drops the snapshot, bookmark, and pass record of every account
+Each tick first drops the snapshot, transcript mark, and pass record of every account
 that no longer holds a cloud provider key or has not been seen within the
 last 7 days, then lists up to 200 accounts that hold one and were seen —
 seen meaning one of the account's `devices` rows has a `last_seen_at` inside
@@ -1573,76 +1573,69 @@ observations as reported, advertisements and projects included, sealed —
 only while the snapshot standing is still the one it read against; a pass any
 provider refused, rate limited, or failed leaves the previous snapshot
 standing and is recorded as failed in `observation_pass`. Nothing in the
-pass decides anything: no model runs in it, no notification leaves, and the
-change it found is not written down at all; the opener derives it. Message cursors are not recorded by the pass, because
-observation never reads a chat's messages; the opener's reads, next, write
-them.
+pass decides anything: no model runs in it, no notification leaves, and no
+change is derived from it. Message cursors are not recorded by the pass,
+because observation never reads a chat's messages; the opener's reads, next,
+write them.
 
-The opener (`server/hosted/brain-host/opener.ts`) is what the snapshot is
-kept for. It runs for each account right after that account's pass, inside
-the same 25-second share of the tick, so the tick's order is: forget the
-ineligible, purge, settle the abandoned turns, sweep the briefings on offer, then per batch of four
-accounts the pass and then the opening, each account under one deadline, and
-a batch started only while a whole deadline still fits the budget; an
-opening that outruns it is counted failed and what it did not carry waits
-for the next minute. It keeps a bookmark of its own beside the snapshot,
-`roster_consumed`: the roster as of the last change it handed the brain, one
-sealed row per account of the same shape as the snapshot. Each visit it
-diffs the snapshot the pass just wrote against that bookmark, groups every
-change by the session it happened to, and hands eve one message per observed
-conversation — a row of kind `observed`, keyed by the provider and the
-session's id and opened on the first change that names it — carrying all of
-that session's news as the same `[observed events]` item the desktop's brain
-opens its observation turns with, each live chat's transcript since the
-cursor kept for it read through the provider's own `transcriptSince` and
-riding on the session's first wake. The message goes to the eve session the
-conversation's row records, or opens one where none runs or eve has retired
-it, under `x-luke-turn: observation`, and the turn itself is eve's: the relay
+The opener (`server/hosted/brain-host/opener.ts`) runs for each account
+right after that account's pass, inside the same 25-second share of the
+tick, so the tick's order is: forget the ineligible, purge, settle the
+abandoned turns, sweep the briefings on offer, then per batch of four
+accounts the pass and then the opening, each account under one deadline, and a batch started only while a
+whole deadline still fits the budget; an opening that outruns it is counted
+failed and what it did not carry waits for the next minute. What wakes it is
+a chat gaining messages, never the roster moving: the snapshot is what the
+Mac panel, the observe endpoint, the envelope, and `list_sessions` draw, and
+what names the chats a provider may be asked about, and it is never diffed.
+The opener keeps one instant per account, `transcript_mark`, the point up to
+which every change has been handed to the brain. Each visit it asks each
+cloud provider in the snapshot, through the provider's `transcriptChanges`
+read — for Conductor one fixed document over the documented read-only query
+endpoint, `SELECT session_id, transcript_updated_at FROM
+session_transcripts_view WHERE session_id IN (<the snapshot's ids>) AND
+transcript_updated_at > '<the mark>' ORDER BY transcript_updated_at ASC`,
+the ids each a UUID the roster reported and the mark an ISO instant this
+build serialised itself, and no message column named — which of those chats
+gained transcript since the mark. It takes the oldest under the bound, reads
+what each gained since the cursor kept for it through the provider's own
+`transcriptSince`, cut from the front by whole lines to 20,000 characters,
+and hands eve one message per chat with words to carry: the
+`[observed messages]` item, an envelope line naming the provider, the
+workspace, the chat's title (or `chat <id>` where the snapshot no longer
+holds it), and the instant, then `(earlier messages cut)` where the front
+was dropped, then the messages one line each under the speaker's name, the
+way a room receives them. A delta with no attributed message — tool calls,
+thinking — opens no turn and moves its cursor all the same. The message goes
+to the eve session the conversation's row records — a row of kind
+`observed`, keyed by the provider and the chat's id and opened on the first
+change that names it — or opens one where none runs or eve has retired it,
+under `x-luke-turn: observation`, and the turn itself is eve's: the relay
 records it under eve's own identity as eve starts it, the received message
-is the observation message, and `roster_diff` is its origin. No queued
+is the observation message, and `transcript_change` is its origin. No queued
 `turns` row is written for it — under eve the queued delivery is the queue,
 and a row minted ahead of eve's turn could never be the turn eve folds it
 into. Once eve has taken every message of the visit, one transaction keeps
-each cursor the visit read past and moves the bookmark, each a
-compare-and-set over the instant the read began from, so a visit that ran
-long into the next tick cannot put a later one's bookmark back; a message
-eve refuses ends the visit before that transaction, so the cursors and the
-bookmark stand and the next visit derives the same change again, wider by
-whatever moved since. Nothing is recorded that eve has not accepted, and
-nothing is dropped for having waited short of the stale gap: there is no
-queue of changes to bound, since the change is re-derived from two rosters
-on every visit. The
-visit is per account by construction and opens at most eight conversations
-of an account a tick, oldest changes first; past the bound the bookmark
-carries the sessions it woke and keeps the earlier roster for the rest, so
-each of them derives again next tick. A first visit finds no bookmark and
-adopts the snapshot whole, waking nothing, as the first pass records no
-change against nothing. The one change the opener refuses to derive is
-one across a stale gap: the bookmark's instant is the snapshot it was last
-kept level with — a visit that finds nothing to wake keeps it level all the
-same, so an idle roster never reads as a gap — and a bookmark trailing the
-snapshot the pass just wrote by more than `OBSERVATION_TICK.STALE_GAP_MS`
-(five minutes, against a once-a-minute schedule) means no visit has caught
-the brain up for that long — the cron
-paused, a deploy left a gap, `CRON_SECRET` rotated, the provider refused every
-pass, or eve refused every turn. What changed in between is history the
-roster already shows, not news: the visit reseeds the bookmark from the
-snapshot as it stands, over the bookmark's own instant, wakes nothing, says
-so on the log, and counts the reseed as `turns.reseeded` in the tick's
-answer, so the record of the tick says it happened. The gap is measured on
-the two rows' own instants, never the clock. A bookmark exactly the gap
-behind is still news; the next change under a reseeded bookmark wakes as
-usual. This is the one bound on re-deriving: a change eve refused for less
-than the gap is derived again, wider by whatever moved since, and one it
-refused for longer is not. The snapshot itself moves when the pass writes it,
-never when eve accepts: it is the roster every reader draws — the brain's
-standing context, the voice session's seed, the pass's own previous — and a
-snapshot that waited on eve would seed the voice with a roster as old as
-eve's outage; that is why the bookmark is a second roster rather than a
-later time to move the first. The one thing re-deriving nets away is a
-session that appeared, did something, and vanished between two visits,
-which is mentioned to nobody; that happens only where a visit could not
-hand its change over, where the earlier design dropped the change entirely.
+each cursor the visit read past and moves the mark, each a compare-and-set
+over what the visit read, so a visit that ran long into the next tick cannot
+put a later one's back; a message eve refuses, or a transcript the provider
+would not answer, ends the visit before that transaction, so the cursors and
+the mark stand and the next visit reads the same changes again, the messages
+eve did accept included, which the model is told to read as data. Nothing is
+recorded that eve has not accepted. The visit is per account by construction
+and opens at most eight conversations of an account a tick, oldest change
+first; past the bound the chats are held back, said on the log, and the mark
+stops strictly before the first held-back instant — the provider compares
+with `>`, so a mark at that instant would skip it, and a tie between the last
+taken and the first held back leaves the mark where the visit read it — so
+the next minute reads them again. A provider that refuses the changes read
+wakes nothing and leaves the mark standing, since one mark serves every
+provider and could not move past a refusing one's instants on another's
+answer. A first visit finds no mark, adopts the newest instant the providers
+answer, and wakes nothing: what stood before Luke was watching is history the
+roster already shows, not news. A chat that changed between the changes read
+and the messages read is answered by the messages read and reported again
+next tick as an empty delta, which the skip absorbs.
 
 The account's visit ends with the child-completion sweep
 (`server/hosted/brain-host/child-completion.ts`), run after its pass and its
