@@ -1149,6 +1149,88 @@ it.effect(
 );
 
 it.effect(
+  "a launch greeting waiting beside briefings is spoken ahead of them, whichever was asked for first",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.service.deliverBriefing({
+        briefing: "The scroll fix is on the PR.",
+        decidedAt: f.clock.now,
+      });
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+      const sideband = yield* f.open();
+      yield* settle();
+      assert.deepEqual(
+        sideband.sent.map((event) => event.type),
+        [LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND],
+      );
+      sideband.acknowledge(0, 100, 200);
+      yield* settle();
+      // The cue follows the instruction, and the briefing waits behind the cue.
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      sideband.acknowledge(1, 300, 400);
+      yield* settle();
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(commentary.length, 2);
+      assert.equal(
+        commentary[1] && "content" in commentary[1] && commentary[1].content,
+        "The scroll fix is on the PR.",
+      );
+      sideband.acknowledge(2, 500, 600);
+      sideband.output("Hey, I'm here.", 450, 900);
+      yield* settle();
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH, PROACTIVE_SPEECH_KIND.BRIEFING]);
+    }),
+);
+
+it.effect(
+  "a launch greeting reaching a session already asked to speak is settled without a word, so the briefing under way is not cut off",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.service.deliverBriefing({
+        briefing: "The scroll fix is on the PR.",
+        decidedAt: f.clock.now,
+      });
+      yield* settle();
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+      yield* settle();
+      sideband.acknowledge(0, 100, 200);
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH]);
+      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.SUPERSEDED).length, 1);
+      sideband.output("The scroll fix is on the PR.", 250, 2200);
+      yield* settle();
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH, PROACTIVE_SPEECH_KIND.BRIEFING]);
+      // Settled is spent: the run asks for no second greeting.
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
+    }),
+);
+
+it.effect(
+  "a launch greeting reaching a session the developer has already spoken into is settled without a word",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What needs me?", 0, 800);
+      yield* settle();
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH]);
+    }),
+);
+
+it.effect(
   "a proactive turn with no session asks for one, muted, and speaks once it starts; a stale one is dropped instead",
   () =>
     Effect.gen(function* () {

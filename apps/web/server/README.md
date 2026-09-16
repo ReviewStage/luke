@@ -728,7 +728,11 @@ itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone); and
 is owed, carrying the kind and the bounded observed values its script may
 mention (one working session's title, the talk key's label, the account's
 first name), which the exchange speaks from the build's own script
-(`speechAppends`, `speechOpening` in `@sidecar/live`). So no device appends
+(`speechAppends`, `speechOpening` in `@sidecar/live`); the launch greeting
+goes ahead of whatever else waits to be said, and one that reaches a session
+already speaking or spoken into — a briefing the exchange claimed the moment
+the session stood, or the developer's first words — is settled as spoken
+without a word rather than cutting that speech off. So no device appends
 anything to a session, and no sentence of a device's composing reaches one
 through this route. One frame goes the other way in that vocabulary,
 `session.spoken`: the exchange's word, by kind alone, that a proactive turn

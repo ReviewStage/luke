@@ -15,7 +15,10 @@ import { LIVE_TRACE_DECISION, type LiveTrace } from "./live-trace.js";
  * handed back for one re-decision rather than said as it stood. A beat is one
  * line, asked for once until it is spoken, refused, or withdrawn, and spent
  * for the run once spoken to the end. A request older than the notice age is
- * dropped rather than said as though it just happened.
+ * dropped rather than said as though it just happened. The launch greeting
+ * opens the conversation, so wherever it joins the backlog it stands ahead of
+ * everything else waiting: a briefing claimed at a launch's first session is
+ * said after the greeting rather than cut off by it.
  */
 
 /** How long a proactive turn stays worth saying before it is dropped as stale rather than said late. */
@@ -134,7 +137,7 @@ export class ProactiveQueue<Delivery extends { briefing: string; decidedAt: numb
         briefings.push(request.delivery);
         continue;
       }
-      this.#pending.push({ ...request, turn: { ...request.turn, decidedAt: now } });
+      this.#pend({ ...request, turn: { ...request.turn, decidedAt: now } });
     }
     return briefings;
   }
@@ -182,8 +185,14 @@ export class ProactiveQueue<Delivery extends { briefing: string; decidedAt: numb
       this.#options.trace(LIVE_TRACE_DECISION.HELD);
       return false;
     }
-    this.#pending.push(request);
+    this.#pend(request);
     return true;
+  }
+
+  /** Joins the backlog: the launch greeting at its head, since it opens the conversation; everything else at its tail. */
+  #pend(request: ProactiveRequest<Delivery>): void {
+    if (request.kind === PROACTIVE_SPEECH_KIND.LAUNCH) this.#pending.unshift(request);
+    else this.#pending.push(request);
   }
 
   #stale(request: ProactiveRequest<Delivery>): boolean {

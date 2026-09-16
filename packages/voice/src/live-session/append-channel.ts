@@ -67,6 +67,12 @@ export class AppendChannel {
    * the host writes about the desk cannot hold a quiet session open forever.
    */
   lastSentAt: number | undefined;
+  /**
+   * Whether a commentary has left on this channel: Luke has been asked to
+   * say something into this session, whatever became of it. A greeting reads
+   * this to know the conversation is already open.
+   */
+  commentarySent = false;
 
   private constructor(options: AppendChannelOptions, work: Queue.Queue<Effect.Effect<void>>) {
     this.#options = options;
@@ -114,6 +120,7 @@ export class AppendChannel {
       const acknowledged = yield* Deferred.make<Acknowledgment>();
       this.#pending.set(event.event_id, { acknowledged, onSpoken: speech });
       if (countsForIdle) this.lastSentAt = yield* Clock.currentTimeMillis;
+      if (speech !== undefined) this.commentarySent = true;
       yield* this.#options.sideband.send(event);
       const settled = yield* Effect.timeoutOption(
         Deferred.await(acknowledged),

@@ -20,6 +20,8 @@ export const LIVE_TRACE_DECISION = {
   FACTS_DROPPED: "facts-dropped",
   RETAINED: "retained",
   SPOKEN: "spoken",
+  /** The launch greeting reached a session already spoken into or heard from, and was settled without a word. */
+  SUPERSEDED: "superseded",
   UNSETTLED: "unsettled",
   DROPPED: "dropped",
   HELD: "held",

@@ -646,50 +646,8 @@ it.effect(
       await sendText(session.attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
       assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_STARTED);
 
-      // The arrival beat, as the desktop's holder sends it: the kind and the two values its script may mention.
-      const arrival = {
-        type: VOICE_SERVICE_FRAME.SESSION_BEAT,
-        kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
-        sessionTitle: "Fix the flaky test",
-        talkKeyLabel: "Right Option",
-      } as const;
-      await send(session.desktop.socket, arrival);
-      // What reaches the session is the exchange's own commentary append under no delegation,
-      // the build's script with the frame's values inside it and nothing of the desktop's wording.
-      const spoken = clientEvent(await session.upstream.next(5_000));
-      assert.equal(spoken.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.ok(spoken.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(spoken.delegation_id, null);
-      const [script] = speechAppends({ ...arrival, decidedAt: 0 });
-      assert.equal(spoken.content, script);
-      assert.ok(script?.includes('titled "Fix the flaky test"'));
-      assert.ok(script?.includes("holding the Right Option key"));
-      await sendText(session.attach.socket, JSON.stringify(appended(spoken.event_id, 1000, 4000)));
-      // Output short of the append's end is not the beat spoken; output past it is.
-      await sendText(session.attach.socket, JSON.stringify(said("You're all set.", 1000, 3000)));
-      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
-      await sendText(session.attach.socket, JSON.stringify(said(" Go back to work.", 3000, 4500)));
-      // The desktop is handed every server frame, and then the service's own word by kind alone.
-      const seen: string[] = [];
-      for (let index = 0; index < 8; index += 1) {
-        const frame = record(await session.desktop.next(5_000));
-        seen.push(String(frame.type));
-        if (frame.type === VOICE_SERVICE_FRAME.SESSION_SPOKEN) {
-          assert.deepEqual(frame, {
-            type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
-            kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
-          });
-          break;
-        }
-      }
-      assert.deepEqual(seen, [
-        LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
-        LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
-        LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
-        VOICE_SERVICE_FRAME.SESSION_SPOKEN,
-      ]);
-
-      // The launch greeting speaks the guide's way: the instruction acknowledged first, then the cue.
+      // The launch greeting opens the session the guide's way, before anything else is
+      // said into it: the instruction acknowledged first, then the cue.
       const launch = {
         type: VOICE_SERVICE_FRAME.SESSION_BEAT,
         kind: PROACTIVE_SPEECH_KIND.LAUNCH,
@@ -710,16 +668,17 @@ it.effect(
           type: LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
           event_id: "ack-launch",
           client_event_id: instructed.event_id,
-          start_ms: 5000,
-          end_ms: 5000,
+          start_ms: 1000,
+          end_ms: 1000,
         }),
       );
       const cued = clientEvent(await session.upstream.next(5_000));
       assert.equal(cued.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
       assert.ok(cued.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
       assert.equal(cued.content, opening.cue);
-      await sendText(session.attach.socket, JSON.stringify(appended(cued.event_id, 5000, 6000)));
-      await sendText(session.attach.socket, JSON.stringify(said("Hey Ada, I'm here.", 5000, 7000)));
+      await sendText(session.attach.socket, JSON.stringify(appended(cued.event_id, 1000, 2000)));
+      await sendText(session.attach.socket, JSON.stringify(said("Hey Ada, I'm here.", 1000, 3000)));
+      // The desktop is handed every server frame, and then the service's own word by kind alone.
       const toDesktop: string[] = [];
       for (let index = 0; index < 8; index += 1) {
         const frame = record(await session.desktop.next(5_000));
@@ -735,6 +694,49 @@ it.effect(
       assert.deepEqual(toDesktop, [
         LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
         LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
+        LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+        VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+      ]);
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+
+      // The arrival beat, as the desktop's holder sends it: the kind and the two values its script may mention.
+      const arrival = {
+        type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+        kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+        sessionTitle: "Fix the flaky test",
+        talkKeyLabel: "Right Option",
+      } as const;
+      await send(session.desktop.socket, arrival);
+      // What reaches the session is the exchange's own commentary append under no delegation,
+      // the build's script with the frame's values inside it and nothing of the desktop's wording.
+      const spoken = clientEvent(await session.upstream.next(5_000));
+      assert.equal(spoken.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.ok(spoken.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(spoken.delegation_id, null);
+      const [script] = speechAppends({ ...arrival, decidedAt: 0 });
+      assert.equal(spoken.content, script);
+      assert.ok(script?.includes('titled "Fix the flaky test"'));
+      assert.ok(script?.includes("holding the Right Option key"));
+      await sendText(session.attach.socket, JSON.stringify(appended(spoken.event_id, 4000, 7000)));
+      // Output short of the append's end is not the beat spoken; output past it is.
+      await sendText(session.attach.socket, JSON.stringify(said("You're all set.", 4000, 6000)));
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+      await sendText(session.attach.socket, JSON.stringify(said(" Go back to work.", 6000, 7500)));
+      const seen: string[] = [];
+      for (let index = 0; index < 8; index += 1) {
+        const frame = record(await session.desktop.next(5_000));
+        seen.push(String(frame.type));
+        if (frame.type === VOICE_SERVICE_FRAME.SESSION_SPOKEN) {
+          assert.deepEqual(frame, {
+            type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+            kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+          });
+          break;
+        }
+      }
+      assert.deepEqual(seen, [
+        LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
+        LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
         LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
         VOICE_SERVICE_FRAME.SESSION_SPOKEN,
       ]);
