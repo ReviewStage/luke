@@ -2,8 +2,7 @@
 
 import assert from "node:assert/strict";
 import { type AgentRead, CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
-import { ProviderMark } from "@sidecar/panel";
-import { CONVERSATION_VIEW_SOURCE, type SessionIdentity } from "@sidecar/session";
+import { CONVERSATION_VIEW_SOURCE } from "@sidecar/session";
 import { TRANSCRIPT_KIND } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -133,7 +132,6 @@ function panelProps(extra: Partial<PanelProps> = {}): PanelProps {
     roster: FIXTURE_ROSTER,
     now: NOW,
     onOpenTranscript: () => undefined,
-    onOpenChat: () => undefined,
     onBack: () => undefined,
     ...extra,
   };
@@ -149,27 +147,6 @@ function renderChildren(children: readonly ChildRead[], settled = true): string 
 
 function titles(container: ParentNode): string[] {
   return [...container.querySelectorAll(".agent-name")].map((node) => node.textContent ?? "");
-}
-
-/** What the agent rows' chips say, in row order. */
-function chipTitles(container: ParentNode): string[] {
-  return [...container.querySelectorAll(".agent-title > .conversation-action-chip")].map(
-    (node) => node.textContent ?? "",
-  );
-}
-
-/** The mark a chip wears, as the thread's chips wear theirs. */
-function chipMark(providerId: string): string {
-  return renderToStaticMarkup(
-    createElement(ProviderMark, { providerId, className: "conversation-chip-mark" }),
-  );
-}
-
-/** The transcript's press on a row: a sub-agent row is the button itself; an agent row's is the line beneath its chip. */
-function transcriptPress(row: Element): HTMLButtonElement {
-  const press = row instanceof HTMLButtonElement ? row : row.querySelector(".agent-open");
-  assert.ok(press instanceof HTMLButtonElement);
-  return press;
 }
 
 function sections(markup: string): Element[] {
@@ -234,7 +211,7 @@ test("each sub-agent row wears its status word, its age, and where it was delega
   const origins = rows.map((row) => row.querySelector(".agent-origin")?.textContent);
   assert.deepEqual(origins, [undefined, undefined, undefined, "from an observed session"]);
   // No sub-agent row wears a provider mark: a child is the brain's own, not a session's.
-  assert.equal(subagents.querySelector(".provider-mark"), null);
+  assert.equal(subagents.querySelector(".agent-mark"), null);
 });
 
 test("a cancelled child says so", () => {
@@ -249,7 +226,7 @@ test("a per-workspace agent row is named from the roster by session identity, th
   assert.ok(agents);
   // Rows are ordered by the instant they last moved, whatever order the service listed them in, and a
   // queued turn's row wears the age of its queuing rather than of the days-old session it was opened for.
-  assert.deepEqual(chipTitles(agents), [
+  assert.deepEqual(titles(agents), [
     FIXTURE_TITLE.UNOPENABLE,
     FIXTURE_TITLE.HELD,
     DEPARTED_AGENT.title,
@@ -263,20 +240,8 @@ test("a per-workspace agent row is named from the roster by session identity, th
     rows.map((row) => row.querySelector(".agent-age")?.textContent),
     ["2m", "5m", "3h"],
   );
-  // Every agent row's title is a chip as an action row wears it, led by a mark: the roster's agent
-  // while it holds the session, the provider once it has let go.
-  const chips = [...agents.querySelectorAll(".agent-title > .conversation-action-chip")];
-  assert.deepEqual(
-    chips.map((chip) => chip.querySelector(".conversation-chip-mark")?.outerHTML),
-    [chipMark("claude-code"), chipMark("claude-code"), chipMark("conductor")],
-  );
-  // Only a session the roster holds and would open is a press; a quiet one and a departed one are names.
-  assert.deepEqual(
-    chips.map((chip) => chip instanceof HTMLButtonElement),
-    [false, true, false],
-  );
-  assert.equal(chips[1]?.getAttribute("aria-label"), `Open ${FIXTURE_TITLE.HELD}`);
-  assert.equal(agents.querySelector(".agent-name"), null);
+  // Every agent row leads with a mark: the roster's agent while it holds the session, the provider once it has let go.
+  assert.equal(agents.querySelectorAll(".agent-mark").length, 3);
   // The roster's own title comes first while it holds the session; a row the service never named falls back to the session's id.
   const [alone] = sections(
     render({
@@ -287,7 +252,7 @@ test("a per-workspace agent row is named from the roster by session identity, th
       },
     }),
   );
-  assert.deepEqual(chipTitles(alone ?? document.createElement("div")), [
+  assert.deepEqual(titles(alone ?? document.createElement("div")), [
     "Session 6c1f2f14",
     "Session 8e3b4c36",
   ]);
@@ -296,45 +261,7 @@ test("a per-workspace agent row is named from the roster by session identity, th
       agents: { settled: true, agents: [{ ...HELD_AGENT, title: "Kept by the service" }] },
     }),
   );
-  assert.deepEqual(chipTitles(named ?? document.createElement("div")), [FIXTURE_TITLE.HELD]);
-});
-
-test("pressing an agent's chip opens its session, not its transcript, and a name alone opens nothing", () => {
-  const opened: TranscriptRow[] = [];
-  const chats: SessionIdentity[] = [];
-  const container = mount(
-    panelProps({
-      agents: { settled: true, agents: [HELD_AGENT, DEPARTED_AGENT] },
-      onOpenTranscript: (row) => opened.push(row),
-      onOpenChat: (identity) => chats.push(identity),
-    }),
-  );
-  const [held, departed] = container.querySelectorAll(".agent-title > .conversation-action-chip");
-  assert.ok(held instanceof HTMLButtonElement);
-  act(() => {
-    held.click();
-  });
-  assert.deepEqual(chats, [{ providerId: "conductor", providerSessionId: FIXTURE_SESSION.HELD }]);
-  assert.equal(opened.length, 0);
-  // A departed session's chip is a name: a press on it is a press on nothing, the transcript's included.
-  assert.ok(departed instanceof HTMLSpanElement);
-  act(() => {
-    departed.click();
-  });
-  assert.equal(opened.length, 0);
-  assert.equal(chats.length, 1);
-  // The line beneath the chip is the transcript's press, and it opens no session. It names the
-  // session it is the transcript of before the status and age it shows, since the title is a
-  // sibling and two rows' presses would otherwise read the same.
-  const row = container.querySelector(".agent-row");
-  assert.ok(row instanceof HTMLDivElement);
-  assert.equal(transcriptPress(row).textContent, `Transcript of ${FIXTURE_TITLE.HELD}: Running5m`);
-  act(() => {
-    transcriptPress(row).click();
-  });
-  assert.equal(opened.length, 1);
-  assert.equal(opened[0]?.conversationId, AGENT_ID.HELD);
-  assert.equal(chats.length, 1);
+  assert.deepEqual(titles(named ?? document.createElement("div")), [FIXTURE_TITLE.HELD]);
 });
 
 test("each read section with nothing says so, and an unread one says nothing", () => {
@@ -366,8 +293,9 @@ test("pressing a row of either kind opens its transcript, named as the row is", 
   const rows = [...container.querySelectorAll(".agent-row")];
   assert.equal(rows.length, 3);
   for (const row of rows) {
+    assert.ok(row instanceof HTMLButtonElement);
     act(() => {
-      transcriptPress(row).click();
+      row.click();
     });
   }
   assert.deepEqual(opened, [
@@ -376,7 +304,6 @@ test("pressing a row of either kind opens its transcript, named as the row is", 
       kind: TRANSCRIPT_KIND.OBSERVED,
       title: DEPARTED_AGENT.title,
       status: CHILD_STATUS.SETTLED,
-      session: { providerId: "conductor", providerSessionId: FIXTURE_SESSION.DEPARTED },
     },
     childTranscriptRow(BARE),
     childTranscriptRow(LABELLED),
@@ -417,7 +344,6 @@ const OPEN_AGENT: TranscriptRow = {
   kind: TRANSCRIPT_KIND.OBSERVED,
   title: FIXTURE_TITLE.HELD,
   status: CHILD_STATUS.RUNNING,
-  session: { providerId: "conductor", providerSessionId: FIXTURE_SESSION.HELD },
 };
 
 function renderTranscript(extra: Partial<TranscriptProps> = {}): string {
@@ -441,55 +367,10 @@ test("the transcript page stands under the thread's own root and names the way b
   assert.ok(markup.includes("‹ Agents"));
   assert.ok(markup.includes(">Audit the release notes</h2>"));
   assert.ok(markup.includes(">Running</span>"));
-  // An agent's page wears its session's chip in the title's place, as its row does.
+  // An agent's page wears the row's words the same way, looked up nowhere.
   const agent = renderTranscript({ open: { ...OPEN_AGENT, status: CHILD_STATUS.SETTLED } });
-  assert.ok(
-    agent.includes(
-      `<h2 class="agents-title agent-transcript-title" aria-label="${FIXTURE_TITLE.HELD}"><button type="button" class="conversation-action-chip" aria-label="Open ${FIXTURE_TITLE.HELD}">${chipMark("claude-code")}${FIXTURE_TITLE.HELD}</button></h2>`,
-    ),
-  );
+  assert.ok(agent.includes(`>${FIXTURE_TITLE.HELD}</h2>`));
   assert.ok(agent.includes(">Done</span>"));
-});
-
-test("the transcript header's chip is the session's own press while the roster holds it, and a name once it does not", () => {
-  const chats: SessionIdentity[] = [];
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  const render = (roster: TranscriptProps["roster"]) => {
-    act(() => {
-      root.render(
-        createElement(AgentTranscriptPanel, {
-          open: OPEN_AGENT,
-          transcript: undefined,
-          roster,
-          now: FIXTURE_NOW,
-          onOpenChat: (identity) => chats.push(identity),
-          onBack: () => undefined,
-        }),
-      );
-    });
-    return container.querySelector(".agent-transcript-title > .conversation-action-chip");
-  };
-  const held = render(FIXTURE_ROSTER);
-  assert.ok(held instanceof HTMLButtonElement);
-  act(() => {
-    held.click();
-  });
-  assert.deepEqual(chats, [{ providerId: "conductor", providerSessionId: FIXTURE_SESSION.HELD }]);
-  // The roster lets the session go while the page is open: the chip stands, under the provider's
-  // mark and the title the row wore, but is no longer a press.
-  const departed = render([]);
-  assert.ok(departed instanceof HTMLSpanElement);
-  assert.equal(departed.textContent, FIXTURE_TITLE.HELD);
-  assert.equal(departed.querySelector(".conversation-chip-mark")?.outerHTML, chipMark("conductor"));
-  // The roster holds it again but its provider reports no address: a name still.
-  const quiet = render(FIXTURE_ROSTER.map((session) => ({ ...session, openable: false })));
-  assert.ok(quiet instanceof HTMLSpanElement);
-  act(() => {
-    quiet.click();
-  });
-  assert.equal(chats.length, 1);
 });
 
 test("the turns of either kind are drawn as the thread draws its own, under the same scroll scaffolding", () => {
