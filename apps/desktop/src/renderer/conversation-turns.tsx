@@ -1040,7 +1040,12 @@ function placedLiveRows(
       at: line.at,
       row: <ConversationStreamingRow key={`live:${line.entry.kind}:${index}`} entry={line.entry} />,
     }))
-    .sort((left, right) => (left.at ?? Infinity) - (right.at ?? Infinity));
+    .sort((left, right) => {
+      if (left.at === undefined || right.at === undefined) {
+        return Number(left.at === undefined) - Number(right.at === undefined);
+      }
+      return left.at - right.at;
+    });
 }
 
 /** When a turn's rows begin and end: where its earliest and latest messages are placed, which is what dates the silence around it. */
