@@ -4,13 +4,14 @@
 
 Neon is provisioned through the Vercel integration. It supplies the pooled
 `DATABASE_URL` for application traffic and `DATABASE_URL_UNPOOLED` for
-migrations; the connection strings live nowhere in this repository. There is
-no ORM and no generated schema module: every query is a statement the
-`effect/unstable/sql` `SqlClient` runs, and a table's shape lives in its migration
-alone. Better Auth reaches its tables through its Drizzle adapter over
-`server/db/auth-schema.ts` (see below), the one schema module the app keeps,
-so a migration that changes an auth column's type changes that declaration
-too.
+migrations; the connection strings live nowhere in this repository. A table is
+declared twice and in two languages: once in the hand-written migration that
+builds it, and once in the `server/db/*-schema.ts` module the query builder
+reads it through. "The data layer" below is what holds the two together.
+Better Auth is no exception, reaching its tables through its Drizzle adapter
+over `server/db/auth-schema.ts` (see below), which is in the same barrel as
+the nine Luke-owned modules, so a migration that changes an auth column's type
+changes that declaration too.
 
 Every instant column is `timestamp with time zone` (migration 0026 moved the
 last naive ones), so a JavaScript `Date` round-trips losslessly whatever zone
@@ -23,7 +24,11 @@ For a new table or a changed one, write the migration by hand under
 `drizzle/` (a plain SQL file plus its `meta/_journal.json` entry, the shape
 `drizzle-kit` used to generate before this migration off it; the directory
 name is what stands from that era and is not itself a dependency on the
-package) and add whatever query modules under `server/` need it.
+package), fold the change into the `server/db/*-schema.ts` module that
+declares the table in the same commit, and add whatever query modules under
+`server/` need it. Dropping a column means deleting it from that module: the
+drift check reads the database both ways, so a declaration the database no
+longer carries fails it exactly as a column no module declares does.
 
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
 connection Neon supplies for that deployment. The runner holds a PostgreSQL
@@ -220,6 +225,83 @@ environment variables reach both services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
 `apps/web`, `packages`, or the workspace manifests deploys neither.
 
+## The data layer
+
+Drizzle is the statement layer and nothing else. A query module builds its
+statement with the query builder over the tables its own
+`server/db/*-schema.ts` module declares, and `server/db/drizzle.ts` — the
+bridge ported from `@effect/sql-drizzle`, named in root AGENTS.md as a
+permanent adaptor — renders it and runs it on the `SqlClient` the asking fiber
+already carries. So a module still answers `Effect<A, SqlError |
+Schema.SchemaError, SqlClient>`, a bridged statement lands inside whatever
+`client.withTransaction` encloses it rather than beside it on a second
+connection, and one module still runs on both dialects. Only
+`server/db/effect-migrator.ts` is raw by design: its six statements are
+dialect metaprogramming over the journal rather than domain queries. A tagged
+template anywhere else is a leftover, not a pattern.
+
+`server/db/query.ts` holds the one shared handle, `db`, built at module scope
+and imported wherever a statement is spelled. There is nothing per-module or
+per-request to build: the handle carries no connection, no client, and no
+context — it reads the `SqlClient` out of the fiber that yields the statement
+— so one serves every request and both dialects at once and two callers have
+nothing to contend over. It takes no `schema` config, because nothing reaches
+Drizzle's relational queries: the tables a statement names are named imports
+from their own module (`import { workspaceFile } from
+"../../db/workspace-schema.js"`), never the barrel and never a bare specifier,
+which is both what makes a renamed column a type error at the call site and
+the import `tests/store-writer-boundary.test.ts` resolves.
+
+The builder hands back the statement's rows, not a guarantee about them, so a
+row is still decoded by a `Schema`. `SqlSchema`'s `execute` takes the builder
+itself — a patched builder already is the `Effect<rows, SqlError, SqlClient>`
+that `execute` wants — so no wrapper stands between them:
+
+```ts
+const findFiles = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: WorkspaceFileListingSchema,
+  execute: (userId) =>
+    db
+      .select({ path: workspaceFile.path, updatedAt: workspaceFile.updatedAt })
+      .from(workspaceFile)
+      .where(eq(workspaceFile.userId, userId))
+      .orderBy(asc(workspaceFile.path)),
+});
+```
+
+A projection names its own fields, so a result schema is spelled in the same
+camel case the rest of its module is and no `Schema.encodeKeys` stands between
+them; that mapping existed only because raw SQL answered `created_at`.
+`EpochMillisColumnSchema` and `InstantColumnSchema` stay all the same, since
+they reconcile `pg` reading an `int8` as a string against PGlite reading it as
+a number and the builder does not close that split. Where Postgres has
+something the builder cannot spell — `starts_with`, `collate "C"` — the
+fragment is Drizzle's own `sql` inside the builder, still one rendered
+statement with its parameters bound by Drizzle, and it is named as a module
+constant so the query reads as the query it is. A transaction and a row lock
+are the client's own `withTransaction` and a `.for("update")` select inside
+it, unchanged. `server/hosted/store/workspace-files.ts` was converted first
+and its header writes that idiom out for the modules that copied it.
+
+`drizzle-kit` is not a dependency and no migration is generated from a schema
+module. Migrations stay hand-written SQL under `drizzle/`, applied by the
+Effect migrator above, and the modules are hand-maintained beside them:
+`drizzle/meta/` holds snapshots for `0000`–`0025` alone, from the era when the
+modules were `drizzle-kit`'s input and the migrations its output. What stands
+in for that lost loop is `tests/drizzle-schema.test.ts`, which compares the
+barrel against the `information_schema` of a database `runWebMigrations` has
+just built — PGlite in process, or the Postgres `LUKE_STORE_TEST_DATABASE_URL`
+names on CI — in both directions over the whole public schema: a column a
+module declares and the database has not fails, and so does a column the
+database has and no module declares, which is the direction that catches the
+migration nobody folded in. Name, type, nullability, and primary key are
+compared; defaults, indexes, foreign keys, and the `$type<>()` unions are not.
+Those unions name no Postgres type and are the compile-time claim the whole
+restoration was for — a text column read back as its own vocabulary rather
+than cast by hand under a `// SAFETY:` comment — so the module itself is the
+only thing that holds them.
+
 ## Where a function runs an Effect
 
 `server/runtime.ts` holds the one `ManagedRuntime` this app has, memoized at
@@ -242,25 +324,31 @@ hook — an instance is frozen between invocations and discarded without notice 
 so nothing in production disposes the runtime; `disposeWebRuntime()` exists so a
 test can end the one it started.
 
-The `SqlClient` is `PgClient.layerFromPool` over a pool built to the same
-`POOL_LIMITS` Drizzle's is, one connection per warm instance, and not
-`PgClient.layer`, which runs `SELECT 1` while the layer builds: an eager round
-trip there would land on the cold start of every function, including the ones
-that never query. `pg` connects on its first query instead. The hosted store is
-moving onto the client a module at a time, so the two stand side by side over
-the one database: `server/hosted/store/workspace-files.ts`,
-`standing-conversations.ts`, `soft-delete.ts`, `message-reads.ts`,
-the store writer, the voice writer, and the speech module read and write
-through this client, `ratings.ts` reaches `message-reads.ts`'s one read the
-same way, and `roster-snapshot.ts` too but for its one exported
-`readRosterSnapshot`, which `hosted-store.test.ts` still calls directly with
-the Drizzle handle to prove a sealed row does not open under another user's
-seal. Outside `server/hosted/store/`, `server/hosted/device-store.ts` and the
-provider-key vault's `server/hosted/vault-key-store.ts` are on the same client;
-`server/hosted/speech-push.ts` reads the account's devices through it too,
-beside the speech module's own reads, and `server/voice/session-record.ts` is
-on it whole, each of its five methods answering an effect over the live
-session row rather than running one. `VoiceService` yields those five
+The `SqlClient` is `PgClient.layer` over the connection string `DATABASE_URL`
+names, its pool held to the same `POOL_LIMITS` the `pg.Pool` behind Better
+Auth's Drizzle adapter is built to, one connection per warm instance, so the
+two pools on the one database cannot drift apart on how much of Neon's pooler
+a warm instance holds. The layer opens nothing while it builds: the pool keeps
+no minimum and makes its first connection on the first statement, which
+matters because this layer stands in the runtime every function shares and an
+eager round trip would land on the cold start of the functions that never
+query.
+
+Every module under `server/` that reads or writes this database reads the
+client out of the fiber it runs on rather than holding one of its own, the
+bridged statements of "The data layer" above included, so the edge serving a
+request is the one place the client behind it is provided. The hosted store's
+query modules are on it, the store writer, the voice writer, and the speech
+module among them, and `ratings.ts` reaches `message-reads.ts`'s one read the
+same way; `roster-snapshot.ts`'s exported `readRosterSnapshot` is what
+`hosted-store.test.ts` runs to prove a sealed row does not open under another
+user's seal. Outside `server/hosted/store/`, `server/hosted/device-store.ts`
+and the provider-key vault's `server/hosted/vault-key-store.ts` are on the
+same client; `server/hosted/speech-push.ts` reads the account's devices
+through it too, beside the speech module's own reads, and
+`server/voice/session-record.ts` is on it whole, each of its five methods
+answering an effect over the live session row rather than running one.
+`VoiceService` yields those five
 directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
 `voice/function.ts` hands it, so the registration, the usage snapshot, and the
 close are steps of that effect rather than promises a callback awaited. The
@@ -270,8 +358,9 @@ so the session yields each on its own fiber and a statement any of them was
 refused on ends that session the way its own row failing does, rather than
 becoming a rejected promise the service had to catch.
 `hostedStore()` takes the payload key ring and nothing else, and answers an
-`Effect<A, SqlError | ParseError, SqlClient>` from every method, so the caller
-composes a store read into whatever it already runs. A route group's own seams are effects
+`Effect<A, SqlError | Schema.SchemaError, SqlClient>` from every method, so
+the caller composes a store read into whatever it already runs. A route
+group's own seams are effects
 over that same ambient client — the account group's reads and writes, the
 vault group's three key statements, and the meter every brain and mint
 operation spends — so the group yields the seam on the request's own fiber
@@ -424,10 +513,11 @@ same provider-key queries without a second copy of them. `fixtures/observation-r
 one answer per route, a wrong method on a declared path, and a path outside
 the group, and `tests/observation-app.test.ts` answers each twice — through
 the group and by calling the handler directly — and compares the two.
-`server/observation-app.ts` itself holds no Drizzle call: the events
-handler's PostHog person read and the tick's eligible-account listing across
-`provider_key`, `devices`, and `observation_pass` are `SqlSchema` queries over
-the ambient `SqlClient`, run through `runWeb`, and the tick's vault-key read
+`server/observation-app.ts` holds two queries of its own and no more: the
+events handler's PostHog person read and the tick's eligible-account listing
+across `provider_key`, `devices`, and `observation_pass` are `SqlSchema`
+queries whose builders render against the schema modules and run on the
+ambient `SqlClient` through `runWeb`, and the tick's vault-key read
 now calls `server/hosted/vault-key-store.ts`'s own converted query instead of
 repeating it. `tests/observation-app-queries.test.ts` covers the two queries
 this file still owns directly.
@@ -540,8 +630,9 @@ effect over the ambient `SqlClient`, and so is every seam the group is handed
 into the answer it is already building, and the edge serving the request is
 the one place the client behind it is provided, so the file names no database
 and runs nothing at all: the roster's scope and
-search conditions are `sql` fragments rather than concatenated text, and the
-search term stays a bound parameter with its own wildcards escaped.
+search conditions are builder predicates and Drizzle `sql` fragments rather
+than concatenated text, and the search term stays a bound parameter with its
+own wildcards escaped.
 `tests/admin-metrics-queries.test.ts` pins the overview's aggregates for a
 seeded window under both scopes, and `tests/admin-roster-queries.test.ts` the
 roster, the day detail, the account page, and the star.
@@ -1191,8 +1282,8 @@ user row, so `server/routes/account/delete.ts` erases them with the account.
 The roster tables are read and written by the scheduled observation below and
 the routes that serve it. `server/hosted/store/` is the store the brain host
 composes against; every module there is an
-`Effect<A, SqlError | ParseError, SqlClient>` whose rows a `Schema` decodes
-and whose path rule is that schema too, which `HostedStore`, the store
+`Effect<A, SqlError | Schema.SchemaError, SqlClient>` whose rows a `Schema`
+decodes and whose path rule is that schema too, which `HostedStore`, the store
 writer, the voice writer, the speech module, and the ask record all answer as
 it came, and which a route handler composes into the one effect `runWeb`
 answers for the request.
@@ -1518,6 +1609,16 @@ nothing of eve's and the web build never traces into `eve/` (the function
 bundle guard refuses it). `tests/eve-layout.test.ts` runs the real build under
 Vercel's marker and asserts where the output landed, so a dependency bump that
 changed discovery fails the check rather than the deploy.
+
+`eve/evals/brain-host.eval.ts` is the one end-to-end eval, and nothing local
+runs it. `./scripts/check.sh` runs vitest over the workspaces
+`vitest.config.ts` lists, and `@luke/eve` is not one of them; the eval is
+`pnpm --filter @luke/web test:agent`, which writes through the real store
+writer against the database `DATABASE_URL` names and so runs on CI's "Postgres
+migrations and store" job alone, beside `test:store`, against that job's own
+Postgres service container. A green `check.sh` says nothing about it, which is
+worth knowing before a change to the brain host, the writer, or a schema
+module it reads back through.
 
 ## Scheduled Conductor observation
 
