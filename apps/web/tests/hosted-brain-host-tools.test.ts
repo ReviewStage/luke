@@ -17,6 +17,7 @@ import {
   BRAIN_TOOL,
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
+  type BrainChildAccess,
   CONVERSATION_EVENT_KIND,
   type ProviderSessionObservation,
   SESSION_STATUS,
@@ -507,14 +508,33 @@ test("a briefing is offered as an event on the turn's own journal row, and refus
   );
 });
 
-test("a spawn is offered to an ask and an observation and reaches the module, which refuses without a children access; a child's task is refused at the policy", async () => {
+test("a spawn is offered to an ask and an observation and reaches the children access; a child's task is refused at the policy", async () => {
+  const spawns: Parameters<BrainChildAccess["spawn"]>[0][] = [];
+  const children: BrainChildAccess = {
+    sessionKey: sessionKey("c-1"),
+    spawn: (ask) =>
+      Effect.sync(() => {
+        spawns.push(ask);
+        return {
+          accepted: true,
+          receipt: { childId: "child-1", childSessionKey: sessionKey("child-1") },
+        };
+      }),
+    list: () => Effect.succeed([]),
+    cancel: () => Effect.succeed(undefined),
+    conversations: () => Effect.succeed([]),
+    lines: () => Effect.succeed(undefined),
+  };
   for (const turn of [ASK, OBSERVATION]) {
-    const answered = await call(fakes().seams, turn, BRAIN_TOOL.SESSIONS_SPAWN, {
-      task: "fixture task",
-    });
-    assert.equal(answered.status, ACTION_RESULT_STATUS.REJECTED);
-    assert.notEqual(answered.reason, ACTION_REFUSAL.NO_TOOL);
+    const seams: HostedToolSeams = { ...fakes().seams, children };
+    const answered = await call(seams, turn, BRAIN_TOOL.SESSIONS_SPAWN, { task: "fixture task" });
+    assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED);
+    assert.equal(answered.child_id, "child-1");
   }
+  assert.deepEqual(
+    spawns.map((ask) => ask.task),
+    ["fixture task", "fixture task"],
+  );
   const childTask: HostedTurnStanding = {
     trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
     turnId: "t-3",
