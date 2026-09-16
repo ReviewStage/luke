@@ -159,8 +159,21 @@ export const UPDATE_ACTION = enumLiteral(
   "The action to run, as the guide's Updates line offers it.",
 );
 const AGENT_KIND = boundedText({ description: "The agent kind." });
-const MODEL_TEXT = boundedText({ description: "An optional model." });
-const EFFORT_TEXT = boundedText({ description: "An optional effort level." });
+const CHOSEN_AGENT_KIND = boundedText({
+  description:
+    "The agent kind, only when the developer named one for this workspace; omit it " +
+    "otherwise, so the developer's saved default decides.",
+});
+const MODEL_TEXT = boundedText({
+  description:
+    "The model, only when the developer named one for this agent, by the name they said; " +
+    "omit it otherwise, so the developer's saved default decides, and never supply a guess.",
+});
+const EFFORT_TEXT = boundedText({
+  description:
+    "The effort level, only when the developer named one beside a model they named; omit " +
+    "it otherwise, so the developer's saved default decides.",
+});
 
 /** A field the model may leave out entirely, rather than send holding nothing. */
 const optional = <Field extends Schema.Top>(field: Field) => Schema.optionalKey(field);
@@ -216,7 +229,7 @@ export const CREATE_WORKSPACE_REQUEST = Schema.Struct({
         "project whose line carries a target_id; a project listed without one takes none.",
     }),
   ),
-  agent: optional(AGENT_KIND),
+  agent: optional(CHOSEN_AGENT_KIND),
   name: optional(
     describeWire(
       WORKSPACE_NAME,

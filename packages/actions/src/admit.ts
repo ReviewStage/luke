@@ -348,24 +348,46 @@ function namedOnce<Entry>(
 }
 
 /**
+ * A model's name as it is retold rather than copied: `fable-5.1`, `Fable 5.1`,
+ * and `fable-5-1` are one name, so case and the punctuation between the
+ * parts are folded away and only the letters and digits are compared. A
+ * label and an id that fold alike name the same model, which is what lets
+ * both be offered as the one name.
+ */
+function foldModelName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/** The refusal for a model named beside an agent kind that runs no model by that name. */
+function agentRunsNoModel(agent: string): Refusal {
+  return refuse(`A ${agent} agent runs no model by that name.`);
+}
+
+/**
  * Resolves a model the developer named — by the label the guide lists it
  * under, or its id — to the wire pairing an endpoint takes, held to the
- * build's documented entries for the provider. The effort, when named, must be
- * one the resolved model's own agent documents: the pairing is validated as
- * the whole it will be sent as.
+ * build's documented entries for the provider. An exact name wins; a name
+ * that matches only once folded ({@link foldModelName}) is taken while it
+ * stays unambiguous. The effort, when named, must be one the resolved
+ * model's own agent documents: the pairing is validated as the whole it will
+ * be sent as.
  */
 function resolveWorkspaceAgentModel(
   entries: readonly WorkspaceAgentModels[],
   modelWord: string,
   effortWord: string | undefined,
 ): { selection: WorkspaceAgentSelection } | { refusal: Refusal; unnamedModel: boolean } {
-  const normalizedModel = modelWord.trim().toLowerCase();
-  const named = entries
+  const word = modelWord.trim();
+  const folded = foldModelName(word);
+  const candidates = entries
     .flatMap((entry) => entry.models.map((model) => ({ entry, model })))
-    .find(
-      ({ model }) =>
-        model.label.toLowerCase() === normalizedModel || model.id.toLowerCase() === normalizedModel,
-    );
+    .filter(({ model }) => [model.id, model.label].some((name) => foldModelName(name) === folded));
+  const named =
+    candidates.find(({ model }) => model.id === word || model.label === word) ??
+    (candidates.length === 1 ? candidates[0] : undefined);
   if (!named) return { refusal: refuse(ACTION_REFUSAL.NO_MODEL), unnamedModel: true };
   let effort: string | undefined;
   if (effortWord !== undefined) {
@@ -639,15 +661,16 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
     }
     const requestedAgent = textArgument(fields, "agent");
     const spawnable = project.spawnableAgents;
-    const agent =
-      (spawnable === undefined || requestedAgent === undefined
+    const namedAgent =
+      spawnable === undefined || requestedAgent === undefined
         ? undefined
         : namedOnce(
             spawnable,
             requestedAgent,
             (agentKind) => agentKind,
             (name) => name.toLocaleLowerCase(),
-          )) ?? project.defaultAgent;
+          );
+    const agent = namedAgent ?? project.defaultAgent;
     if (spawnable && (!agent || !spawnable.includes(agent))) {
       return refuse(agent ? ACTION_REFUSAL.NO_PROJECT_AGENT : ACTION_REFUSAL.NAME_A_PROJECT_AGENT);
     }
@@ -672,7 +695,10 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
     }
     // A model named for this one creation resolves against the provider's own
     // documented table, and the effort only ever rides a model: alone it has
-    // nothing documented to attach to.
+    // nothing documented to attach to. The model decides which agent runs it,
+    // so an agent the ask named beside it has to be that agent: a claude
+    // asked for beside a codex model is a refusal, never a Codex workspace,
+    // exactly as a spawn's mismatch is.
     const spokenModel = textArgument(fields, "model");
     const spokenEffort = textArgument(fields, "effort");
     if (spokenEffort !== undefined && spokenModel === undefined) {
@@ -686,6 +712,15 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
         spokenEffort,
       );
       if ("refusal" in resolved) return resolved.refusal;
+      // Only an agent the ask itself named can contradict the model; the
+      // project's default agent, filled in above, is no word of the developer's.
+      const askedAgent = namedAgent ?? requestedAgent;
+      if (
+        askedAgent !== undefined &&
+        askedAgent.toLocaleLowerCase() !== resolved.selection.agent.toLocaleLowerCase()
+      ) {
+        return agentRunsNoModel(askedAgent);
+      }
       agentSelection = resolved.selection;
     }
     const action: {
@@ -740,9 +775,7 @@ const admitAddAgent: Admitter<typeof ACTION_KIND.ADD_AGENT> = (fields, context, 
       );
       const resolved = resolveWorkspaceAgentModel(entries, spokenModel, spokenEffort);
       if ("refusal" in resolved) {
-        return resolved.unnamedModel
-          ? refuse(`A ${agent} agent runs no model by that name.`)
-          : resolved.refusal;
+        return resolved.unnamedModel ? agentRunsNoModel(agent) : resolved.refusal;
       }
       selection = resolved.selection;
     }
