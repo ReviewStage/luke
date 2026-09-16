@@ -282,7 +282,7 @@ function rememberEnd(
 const CONDUCTOR_SPEAKER_NAME = CONDUCTOR_PROVIDER_NAME;
 
 /** A read Conductor refused, named without echoing the provider's own words. */
-export function readRefusal(failure: AdapterFailure, subject: string) {
+function readRefusal(failure: AdapterFailure, subject: string) {
   return {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason:

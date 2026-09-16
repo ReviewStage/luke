@@ -75,10 +75,10 @@ in for the missing job before the first release.
   same account right after its pass and under the same deadline, and what
   wakes it is a chat gaining messages, not the roster moving: for each cloud
   provider in the snapshot it asks, through the provider's documented
-  read-only query (`transcriptChanges`, Conductor's
-  `session_transcripts_view.transcript_updated_at`, one fixed document over
-  the snapshot's own chat ids and carrying no message body), which of those
-  chats gained transcript since the account's mark (`transcript_mark`, one
+  read (`transcriptChanges`, for Conductor the status endpoint's `updatedAt`
+  the pass already read for each chat, held as the observation's
+  `lastActivityAt`, so the read sends nothing of its own and carries no
+  message body), which of those chats moved since the account's mark (`transcript_mark`, one
   instant per account), takes the oldest under the bound of eight turns an
   account a tick, reads what each gained since the cursor kept for it
   through the provider's documented
@@ -107,8 +107,8 @@ in for the missing job before the first release.
   visit), so a chat read again to no new message holds nothing behind it
   back; a first visit adopts the newest instant the providers answer and
   wakes nothing, since what stood before is history the roster shows and not
-  news. Those two reads are the only places a scheduled turn touches a
-  transcript, and neither is the pass's. Widening what the pass reads, who it
+  news. That incremental read is the only place a scheduled turn touches a
+  transcript, and it is not the pass's. Widening what the pass reads, who it
   runs for, how long a snapshot stands, what counts as a change, or what a
   turn carries is a product decision, not an implementation detail, and
   `PRIVACY.md` discloses the pass under "Scheduled observation of your

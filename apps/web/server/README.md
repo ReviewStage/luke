@@ -1591,13 +1591,13 @@ what names the chats a provider may be asked about, and it is never diffed.
 The opener keeps one instant per account, `transcript_mark`, the point up to
 which every change has been handed to the brain. Each visit it asks each
 cloud provider in the snapshot, through the provider's `transcriptChanges`
-read — for Conductor one fixed document over the documented read-only query
-endpoint, `SELECT session_id, transcript_updated_at FROM
-session_transcripts_view WHERE session_id IN (<the snapshot's ids>) AND
-transcript_updated_at > '<the mark>' ORDER BY transcript_updated_at ASC`,
-the ids each a UUID the roster reported and the mark an ISO instant this
-build serialised itself, and no message column named — which of those chats
-gained transcript since the mark. It takes the oldest under the bound, reads
+read — for Conductor the last-updated instant the pass already read from
+each chat's documented status endpoint, held as the observation's
+`lastActivityAt` and compared against the mark, so the read sends no request
+of its own and names no message — which of those chats moved since the mark.
+That instant is the session's activity rather than its transcript's, so a
+chat may be named with no new message; an empty delta opens no turn and
+moves its cursor all the same. It takes the oldest under the bound, reads
 what each gained since the cursor kept for it through the provider's own
 `transcriptSince`, cut from the front by whole lines to 20,000 characters,
 and hands eve one message per chat with words to carry: the

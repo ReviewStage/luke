@@ -109,7 +109,7 @@ export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPl
         readConductorTranscriptSince(pass, ends, reported, providerSessionId, cursor),
       conversation: ({ request, observation }) =>
         readConductorConversation(pass, ends, observation.providerSessionId, request),
-      transcriptChanges: (request) => readConductorTranscriptChanges(pass, reported, request),
+      transcriptChanges: (request) => readConductorTranscriptChanges(reported, request),
     },
   };
 }
