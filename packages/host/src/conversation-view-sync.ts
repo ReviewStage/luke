@@ -55,9 +55,14 @@ import { Result } from "effect";
  * of arrival.
  */
 
-/** How much of the Conversation one device keeps in memory and hands its windows: the newest turns, whole. */
+/**
+ * How much of the Conversation one device keeps in memory and hands its
+ * windows: the newest turns, whole. The desktop has no backward page for the
+ * main thread, so this bound needs to cover realistic multi-day use rather
+ * than silently cutting active history off after a few hundred turns.
+ */
 export const CONVERSATION_VIEW_BOUNDS = {
-  MAX_GROUPS: 200,
+  MAX_GROUPS: 1000,
 } as const;
 
 /** Where this device's read of each resource stands; absent before the first page of that resource. */
