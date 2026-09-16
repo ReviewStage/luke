@@ -22,15 +22,12 @@ import {
   insertEvent,
   insertMessage,
   insertProviderCursor,
-  insertToolSet,
-  insertToolSetIgnoringConflict,
   insertTurn,
   instantColumn,
   POSTGRES_ERROR,
   readConversationById,
   readEventsByMessage,
   readProviderCursorsByUser,
-  readToolSetsByHash,
   readTurnById,
   upsertProviderCursor,
 } from "./support/store-rows";
@@ -452,21 +449,6 @@ test("an event keeps its kind, device, and payload as written", async () => {
   assert.deepEqual(row.payload, { until: 1_700_000_000_000 });
   assert.equal(Number(row.seq), 1);
   assert.ok(instantColumn(row.created_at) instanceof Date);
-});
-
-test("a tool set is one row per hash however often it is written", async () => {
-  const toolSet = { hash: "tools-hash-1", schemas: [{ name: "read_transcript" }] };
-
-  await insertToolSet(database.run, toolSet);
-  await insertToolSetIgnoringConflict(database.run, toolSet);
-  await assertRefusedWithCode(
-    insertToolSet(database.run, toolSet),
-    POSTGRES_ERROR.UNIQUE_VIOLATION,
-  );
-
-  const toolSetRows = await readToolSetsByHash(database.run, toolSet.hash);
-  assert.equal(toolSetRows.length, 1);
-  assert.deepEqual(toolSetRows[0]?.schemas, toolSet.schemas);
 });
 
 test("an observed session keeps one cursor per account, advanced in place", async () => {

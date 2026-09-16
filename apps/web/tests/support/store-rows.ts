@@ -705,46 +705,6 @@ export function countRowsWhere(
   );
 }
 
-export interface ToolSetRow {
-  readonly hash: string;
-  readonly schemas: unknown;
-}
-
-export function insertToolSet(run: HostedStoreTestRun, row: ToolSetRow): Promise<void> {
-  const schemas = JSON.stringify(row.schemas);
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`insert into tool_sets (hash, schemas) values (${row.hash}, ${schemas}::jsonb)`;
-    }),
-  );
-}
-
-export function insertToolSetIgnoringConflict(
-  run: HostedStoreTestRun,
-  row: ToolSetRow,
-): Promise<void> {
-  const schemas = JSON.stringify(row.schemas);
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-      insert into tool_sets (hash, schemas) values (${row.hash}, ${schemas}::jsonb)
-      on conflict (hash) do nothing
-    `;
-    }),
-  );
-}
-
-export function readToolSetsByHash(run: HostedStoreTestRun, hash: string) {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select * from tool_sets where hash = ${hash}`;
-    }),
-  );
-}
-
 export interface ProviderCursorRow {
   readonly userId: string;
   readonly providerId: string;

@@ -1,7 +1,4 @@
 import { createHash } from "node:crypto";
-import { Effect, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
 
 /**
  * What a turn ran under, addressed by the SHA-256 of the bytes as the model
@@ -10,11 +7,10 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
  * hash on the next turn that runs under it. The hash is taken over exactly
  * what was offered, never over a normalized form: the schemas' key order is
  * part of what a model reads, and the goldens hold it still for the same
- * reason. The two are kept differently. The prompt is the developer's words,
- * embedding their workspace rows whole, so nothing of it is stored but its
- * fingerprint on the turn; the tool set is the build's own, identical for
- * every account and carrying nothing of anyone's, so it is stored whole,
- * once, under its hash.
+ * reason. Neither is stored: the turn row carries the prompt's hash and the
+ * tool set's and nothing else of either. The prompt is the developer's words,
+ * embedding their workspace rows whole; the tool set is the build's own,
+ * identical for every account, and read from the build that offered it.
  */
 
 /** One tool as the model is offered it: the name, the words, and the JSON Schema of its input. */
@@ -36,35 +32,4 @@ export function promptHashOf(text: string): string {
 /** The content address of a tool set: the hash of the offered declarations serialized in their offered order. */
 export function toolSetHashOf(schemas: readonly OfferedToolSchema[]): string {
   return sha256Hex(JSON.stringify(schemas));
-}
-
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
-const RecordToolSetSchema = Schema.Struct({
-  hash: Schema.String,
-  schemas: Schema.String,
-  createdAt: Schema.Date,
-});
-
-const insertToolSet = SqlSchema.void({
-  Request: RecordToolSetSchema,
-  execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into tool_sets (hash, schemas, created_at)
-        values (${write.hash}, ${write.schemas}::jsonb, ${write.createdAt})
-        on conflict (hash) do nothing
-      `,
-    ),
-});
-
-/** Writes the tool set where no row stands for its hash; answers the hash either way. */
-export function recordToolSet(
-  schemas: readonly OfferedToolSchema[],
-  now: Date,
-): Effect.Effect<string, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  const hash = toolSetHashOf(schemas);
-  return Effect.as(insertToolSet({ hash, schemas: JSON.stringify(schemas), createdAt: now }), hash);
 }

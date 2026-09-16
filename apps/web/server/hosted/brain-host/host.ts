@@ -25,6 +25,7 @@ import {
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
 import { askRecord } from "../store/asks.js";
+import { toolSetHashOf } from "../store/content-addressed.js";
 import { type ConversationTarget, promptHashOf, type StoreWriter } from "../store/index.js";
 import { offerBriefing } from "./announce.js";
 import { turnKindOf } from "./auth.js";
@@ -517,18 +518,13 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           ? BRAIN_HOST_MODEL_FIXTURE.SCRIPTED_MODEL_ID
           : seams.openAi()?.modelId;
         const turn = turnKindOf(session.auth.current);
-        // The tool set is recorded as each turn starts, from the same declarations
-        // the tools resolver hands eve for the same kind of turn, so the hash
-        // names what the model is offered and not a list kept beside it, and
-        // the row it names stands whatever happened to the table since.
+        // The tool set's hash is taken as each turn starts, from the same
+        // declarations the tools resolver hands eve for the same kind of turn,
+        // so the hash names what the model is offered and not a list kept
+        // beside it.
         const toolSetHash =
           event.type === "turn.started" && turn !== undefined
-            ? yield* seams
-                .store()
-                .toolSets.record(
-                  hostedToolDeclarations(BRAIN_HOST_TURN_KIND[turn].trigger),
-                  new Date(seams.now()),
-                )
+            ? toolSetHashOf(hostedToolDeclarations(BRAIN_HOST_TURN_KIND[turn].trigger))
             : undefined;
         const writer = yield* seams.writer();
         yield* relayOver(writer).handle(event, {
