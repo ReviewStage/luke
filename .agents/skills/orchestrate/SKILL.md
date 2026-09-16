@@ -53,10 +53,12 @@ Every brief must contain:
 
 1. **The task**: the PR's scope, acceptance criteria, and the plan or issue
    text it comes from. Say plainly what is out of scope.
-2. **Stacking**: the base branch, and the instruction to open the PR with
+2. **Stacking**: the base branch and the full chain of branches below it,
+   bottom to top, and the instruction to open the PR with
    `gh pr create --base <base-branch>` and then run
-   `gh stack link <lower-branch> <this-branch>` so GitHub records the stack.
-   For an independent PR, the base is `main` and no link is needed.
+   `gh stack link <bottom-branch> ... <base-branch> <this-branch>` with the
+   whole chain so GitHub records one stack however deep it goes. For an
+   independent PR, the base is `main` and no link is needed.
 3. **Babysit and merge**: watch CI and review comments, fix what fails, and
    merge the PR itself when checks are green, with no approval from the user.
    A stacked PR merges only after the PR below it has merged and this PR has
