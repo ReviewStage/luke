@@ -565,6 +565,8 @@ function sameLines(left: readonly LiveCaptionRow[], right: readonly LiveCaptionR
       line.rowId === other.rowId &&
       line.voiceSessionId === other.voiceSessionId &&
       line.settled === other.settled &&
+      line.startMs === other.startMs &&
+      line.endMs === other.endMs &&
       line.entry.kind === other.entry.kind &&
       line.entry.words === other.entry.words
     );

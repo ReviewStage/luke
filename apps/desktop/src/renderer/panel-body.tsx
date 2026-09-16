@@ -6,7 +6,6 @@ import {
 import { ProviderMark } from "@sidecar/panel";
 import type {
   ChildTranscriptSnapshot,
-  ConversationEntry,
   ConversationViewSnapshot,
   SessionApplicationId,
   SessionIdentity,
@@ -15,6 +14,7 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ChildrenSnapshot } from "#shared/messages/children";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { ConductorKeyGate, type ConductorKeyGateControl } from "./conductor-key-gate";
+import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationClearButton, ConversationPanel } from "./conversation-panel";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
@@ -219,7 +219,7 @@ interface PanelBodyProps {
   /** A session row's own press by identity, for the chip naming the session an action reached. */
   onOpenChat: (identity: SessionIdentity) => void;
   /** The lines still being said, drawn under that thread while their words grow. */
-  liveConversationEntries: readonly ConversationEntry[];
+  liveConversationEntries: readonly PlacedLiveEntry[];
   /** Opens the feedback composer on the draft a thumbs down offers, as the Conversation tab's own press. */
   onOfferRatingFeedback: (draft: string) => void;
   /** Whether a spoken turn is still owed its first words, so the thread holds its place. */

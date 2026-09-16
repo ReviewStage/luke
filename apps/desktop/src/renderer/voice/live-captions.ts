@@ -24,7 +24,9 @@ export interface LiveCaptionsOptions {
  * ledger the host keeps too, so the captions and the record agree on what
  * an utterance is. Each fragment is appended verbatim, overlap between the
  * speakers is allowed, and a row's id is stable from the moment it opens, so
- * a late fragment grows a row in place rather than moving it. A row settles
+ * a late fragment grows a row in place rather than moving it. Each row
+ * carries its span on the session's timeline as the ledger holds it, which is
+ * what the panel matches the record's row by. A row settles
  * once no fragment has joined it for the gap, measured on this window's
  * clock rather than the session's, since a fragment's arrival is what the
  * drawing follows. The row ids here are the window's own: the service mints
@@ -62,6 +64,8 @@ export class LiveCaptions {
       rows.push({
         rowId: utterance.rowId,
         entry,
+        startMs: utterance.startMs,
+        endMs: utterance.endMs,
         settled: now - arrivedAt >= UTTERANCE_GAP_MS,
       });
     }

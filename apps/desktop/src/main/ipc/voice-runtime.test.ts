@@ -142,7 +142,13 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
 }
 
 function line(rowId: string, words: string, settled: boolean): LiveConversationLine {
-  return { rowId, entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words }, settled };
+  return {
+    rowId,
+    entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words },
+    startMs: 0,
+    endMs: 1_000,
+    settled,
+  };
 }
 
 test("the five live session acts reach the host from the voice window alone", async () => {

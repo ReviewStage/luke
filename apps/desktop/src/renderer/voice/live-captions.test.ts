@@ -33,6 +33,8 @@ test("fragments group into one row per utterance, verbatim and in arrival order,
   assert.equal(f.latest()[0]?.entry.kind, CONVERSATION_ENTRY_KIND.ASK);
   assert.equal(f.latest()[0]?.entry.words, "what needs me");
   assert.equal(f.latest()[0]?.settled, false);
+  // The row's span is the ledger's: from the first fragment's start to the latest fragment's end.
+  assert.deepEqual([f.latest()[0]?.startMs, f.latest()[0]?.endMs], [0, 900]);
   // A gap wider than the utterance gap opens a new row rather than growing the first.
   const nextStartMs = 900 + UTTERANCE_GAP_MS + 1;
   f.captions.append(TRANSCRIPT_SPEAKER.USER, "and then?", nextStartMs, nextStartMs + 1_000);

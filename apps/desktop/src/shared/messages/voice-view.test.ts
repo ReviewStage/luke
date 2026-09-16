@@ -46,8 +46,15 @@ test("a view carrying a caption and its live lines, settled or not, is a voice v
         voiceStatus: LIVE_STATUS.SPEAKING,
         lukeCaptions: ["On my way."],
         liveConversationLines: [
-          { rowId: "row-1", entry: said, voiceSessionId: "vs_1", settled: true },
-          { rowId: "row-2", entry: line, settled: false },
+          {
+            rowId: "row-1",
+            entry: said,
+            startMs: 0,
+            endMs: 1_200,
+            voiceSessionId: "vs_1",
+            settled: true,
+          },
+          { rowId: "row-2", entry: line, startMs: 900, endMs: 1_400, settled: false },
         ],
       }),
     ),
@@ -62,7 +69,9 @@ test("a view carrying the developer's own caption is a voice view, and a malform
     ...IDLE_VOICE_VIEW,
     voiceStatus: LIVE_STATUS.LISTENING,
     developerCaptions: ["what needs me"],
-    liveConversationLines: [{ rowId: "row-1", entry: line, settled: false }],
+    liveConversationLines: [
+      { rowId: "row-1", entry: line, startMs: 0, endMs: 800, settled: false },
+    ],
   };
   assert.equal(isVoiceView(overWire(view)), true);
   // SAFETY: the guard under test exists to refuse a caption list that is one string, which the type forbids building.
@@ -70,7 +79,7 @@ test("a view carrying the developer's own caption is a voice view, and a malform
   assert.equal(isVoiceView(overWire(malformed)), false);
 });
 
-test("a live line refuses empty words, an unknown kind, a session id that is not a string, or a row without its id and settle", () => {
+test("a live line refuses empty words, an unknown kind, a span running backwards, a session id that is not a string, or a row without its id and settle", () => {
   assert.equal(
     isVoiceView(
       overWire({
@@ -79,6 +88,8 @@ test("a live line refuses empty words, an unknown kind, a session id that is not
           {
             rowId: "row-1",
             entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "words" },
+            startMs: 0,
+            endMs: 100,
             // SAFETY: the test hands the guard a session id of the wrong type, which the line type cannot spell.
             voiceSessionId: 7 as unknown as string,
             settled: false,
@@ -96,6 +107,25 @@ test("a live line refuses empty words, an unknown kind, a session id that is not
           {
             rowId: "row-1",
             entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "" },
+            startMs: 0,
+            endMs: 100,
+            settled: false,
+          },
+        ],
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    isVoiceView(
+      overWire({
+        ...IDLE_VOICE_VIEW,
+        liveConversationLines: [
+          {
+            rowId: "row-1",
+            entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "words" },
+            startMs: 900,
+            endMs: 400,
             settled: false,
           },
         ],
@@ -112,6 +142,8 @@ test("a live line refuses empty words, an unknown kind, a session id that is not
           {
             rowId: "row-1",
             entry: { kind: "not-a-kind" as "reply", words: "words" },
+            startMs: 0,
+            endMs: 100,
             settled: false,
           },
         ],

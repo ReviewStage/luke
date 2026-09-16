@@ -189,7 +189,7 @@ function row(
   words: string,
   settled = false,
 ): LiveCaptionRow {
-  return { rowId, entry: { kind, words }, settled };
+  return { rowId, entry: { kind, words }, startMs: 0, endMs: 1_000, settled };
 }
 
 test("the talk key's press opens a session by press when none stands and unmutes it once started; its release mutes once", async () => {
