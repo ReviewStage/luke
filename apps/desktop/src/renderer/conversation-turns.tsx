@@ -1,4 +1,9 @@
-import { BRAIN_INPUT_MARKER, CHILD_COMPLETION_FIELD } from "@sidecar/brain/input-items";
+import {
+  BRAIN_INPUT_MARKER,
+  CHILD_COMPLETION_FIELD,
+  ENVELOPE_SEPARATOR,
+  OBSERVED_MESSAGES_CUT,
+} from "@sidecar/brain/input-items";
 import type { ChildRead } from "@sidecar/hosted/reads-wire";
 import {
   ArchiveIcon,
@@ -42,7 +47,6 @@ import {
 } from "@sidecar/session";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
-  EXCESS_KEYS,
   isRecord,
   isWireString,
   OBSERVATION_SOURCE,
@@ -775,123 +779,92 @@ function userVoice(
 }
 
 /**
- * An observed-events note as the renderer reads it. The brain writes a wake
- * as its marker, an instant, and the events as JSON on the next line
- * (`wakeInputText`); only the fields a summary line names are read from each
- * event, and every other key rides in the record the fold prints whole. The
- * instant is read too, so a note that merely opens on the marker's words is
- * not mistaken for a wake. A note that does not hold to the shape is drawn as
+ * An observed-messages note as the renderer reads it. The brain writes the
+ * turn as its marker and an instant, then the envelope naming the chat —
+ * provider, workspace where the roster had one, title (or `chat <id>`, which
+ * the brain composes itself), and the instant its transcript last changed,
+ * between brackets and parted by one separator — then the cut line where the
+ * front was dropped, then one line per message (`observedMessagesText`). Both
+ * instants are read, so a note that merely opens on the marker's words is not
+ * mistaken for the turn. A note that does not hold to the shape is drawn as
  * the words it is.
  */
-const OBSERVED_EVENT = Schema.Struct({
-  provider_session_id: Schema.String,
-  session: Schema.optionalKey(
-    Schema.Struct({
-      title: Schema.optionalKey(Schema.String),
-      changes: Schema.optionalKey(Schema.Array(Schema.String)),
-    }),
-  ),
-  transcript_delta: Schema.optionalKey(Schema.Struct({ text: Schema.String })),
-});
-
-const OBSERVED_WAKE = Schema.Struct({
-  at: Schema.DateTimeUtcFromString,
-  events: Schema.Array(OBSERVED_EVENT),
-});
-
-type ObservedEvent = typeof OBSERVED_EVENT.Type;
-
-interface ObservedWake {
-  readonly events: readonly ObservedEvent[];
-  /** The wake as the brain wrote it, pretty-printed for the fold. */
-  readonly json: string;
+interface ObservedMessages {
+  /** The chat as the envelope names it. */
+  readonly title: string;
+  /** The lines the chat gained, the cut line among them where the brain wrote one. */
+  readonly lines: readonly string[];
+  /** How many of the lines are messages. */
+  readonly count: number;
 }
 
-function observedWakeOf(text: string): ObservedWake | undefined {
-  if (!text.startsWith(BRAIN_INPUT_MARKER.OBSERVED_EVENTS)) return undefined;
-  const newline = text.indexOf("\n");
-  if (newline === -1) return undefined;
-  const record = recordFromJsonLine(text.slice(newline + 1));
-  if (record === undefined) return undefined;
-  const at = text.slice(BRAIN_INPUT_MARKER.OBSERVED_EVENTS.length + 1, newline);
-  const read = readEither(OBSERVED_WAKE, { excess: EXCESS_KEYS.DROP })(
-    unparsedWire({ at, events: record.events }),
-  );
-  return Result.match(read, {
-    onSuccess: ({ events }) => ({ events, json: JSON.stringify(record, null, 2) }),
-    onFailure: () => undefined,
-  });
+/** The parts an envelope holds at the least: the provider, the chat's name, and its instant. */
+const ENVELOPE_PARTS_MINIMUM = 3;
+
+function isInstant(text: string): boolean {
+  return Result.isSuccess(readEither(Schema.DateTimeUtcFromString)(unparsedWire(text)));
 }
 
-/** The most transcript a summary line quotes; past it the line counts the characters instead. */
-const QUOTED_DELTA_CHARS = 80;
-
-/** How many characters of transcript before the count reads in thousands. */
-const THOUSAND = 1000;
-
-function transcriptSummary(text: string): string | undefined {
-  const words = text.trim().replace(/\s+/gu, " ");
-  if (words.length === 0) return undefined;
-  if (words.length <= QUOTED_DELTA_CHARS) return words;
-  const count =
-    text.length < THOUSAND ? `${text.length}` : `${(text.length / THOUSAND).toFixed(1)}k`;
-  return `+${count} chars of transcript`;
+/** The chat's name from the bracketed envelope, or nothing when the line is not one. */
+function envelopeTitle(line: string): string | undefined {
+  if (!line.startsWith("[") || !line.endsWith("]")) return undefined;
+  const parts = line.slice(1, -1).split(ENVELOPE_SEPARATOR);
+  // The workspace is the one part the brain may leave out, so the name is read
+  // from the end: a title that carries the separator itself reads short.
+  if (parts.length < ENVELOPE_PARTS_MINIMUM) return undefined;
+  const instant = parts.at(-1);
+  const title = parts.at(-2);
+  if (instant === undefined || title === undefined || !isInstant(instant)) return undefined;
+  return title;
 }
 
-/** How many characters of a session's id name it when the wake carries no title. */
-const SESSION_ID_CHARS = 8;
-
-/** One event's line: the session, what changed about it, and what its transcript gained. */
-function observedEventLine(event: ObservedEvent): string {
-  const title =
-    event.session?.title ?? `Session ${event.provider_session_id.slice(0, SESSION_ID_CHARS)}`;
-  const changes = event.session?.changes ?? [];
-  const delta =
-    event.transcript_delta === undefined
-      ? undefined
-      : transcriptSummary(event.transcript_delta.text);
-  return [
-    title,
-    ...(changes.length > 0 ? [changes.join(", ")] : []),
-    ...(delta ? [delta] : []),
-  ].join(" · ");
+function observedMessagesOf(text: string): ObservedMessages | undefined {
+  if (!text.startsWith(BRAIN_INPUT_MARKER.OBSERVED_MESSAGES)) return undefined;
+  const [marker, envelope, ...lines] = text.split("\n");
+  if (marker === undefined || envelope === undefined) return undefined;
+  if (!isInstant(marker.slice(BRAIN_INPUT_MARKER.OBSERVED_MESSAGES.length + 1))) return undefined;
+  const title = envelopeTitle(envelope);
+  if (title === undefined) return undefined;
+  const cut = lines[0] === OBSERVED_MESSAGES_CUT ? 1 : 0;
+  return { title, lines, count: lines.length - cut };
 }
 
-/** The line the wake's fold opens on. */
-const WAKE_FOLD_LABEL = "Raw wake";
+function messagesCount(count: number): string {
+  return count === 1 ? "1 new message" : `${count} new messages`;
+}
 
 /**
- * The wake that opened one of Luke's own turns, drawn as a note rather than
- * the JSON it is: one line per session the wake named, in the event row's
- * quiet voice, and under them the wake as the brain wrote it, behind a fold
- * drawn like the tool calls', closed until pressed, so what woke him stays
- * readable when the lines are not enough. It carries no copy control, as no
- * note of the brain's does.
+ * The messages a chat gained that opened one of Luke's own turns, drawn as a
+ * note rather than the lines they are: the chat's name and how many it
+ * gained, on the line of a fold drawn like the tool calls', closed until
+ * pressed, with the lines themselves preformatted behind it, so what woke
+ * him stays readable when the count is not enough. It carries no copy
+ * control, as no note of the brain's does.
  */
-function ObservedEventsRow({ wake, at }: { wake: ObservedWake; at: number }): React.JSX.Element {
+function ObservedMessagesRow({
+  observed,
+  at,
+}: {
+  observed: ObservedMessages;
+  at: number;
+}): React.JSX.Element {
   return (
     <li
       className="conversation-entry"
       data-speaker={VOICE.NOTE.speaker}
-      data-observed-events={wake.events.length}
+      data-observed-messages={observed.count}
     >
       <small className="visually-hidden">{VOICE.NOTE.label}</small>
       <div className="conversation-message">
         <span className="conversation-bubble">
-          <ol className="conversation-words conversation-observed">
-            {wake.events.map((event, index) => (
-              // The wake's events never reorder, so their places name them.
-              <li key={index}>{observedEventLine(event)}</li>
-            ))}
-          </ol>
-          <details className="conversation-wake-fold">
+          <details className="conversation-observed">
             <summary className="conversation-turn-summary">
               <ChevronIcon />
-              <span>{WAKE_FOLD_LABEL}</span>
+              <span>{`${observed.title} — ${messagesCount(observed.count)}`}</span>
             </summary>
             <div className="markdown">
               <pre>
-                <code>{wake.json}</code>
+                <code>{observed.lines.join("\n")}</code>
               </pre>
             </div>
           </details>
@@ -1048,12 +1021,12 @@ function messageRows(
   if (message.role === MESSAGE_ROLE.USER) {
     const voice = userVoice(message);
     const words = userWords(message);
-    // A wake is the brain's alone: the developer's words and the voice model's
-    // are drawn as they are, whatever they open with.
-    const wake =
-      message.metadata.author === MESSAGE_AUTHOR.BRAIN ? observedWakeOf(words) : undefined;
-    if (wake !== undefined) {
-      return [<ObservedEventsRow key={message.id} wake={wake} at={view.placedAt} />];
+    // An observed-messages turn is the brain's alone: the developer's words and
+    // the voice model's are drawn as they are, whatever they open with.
+    const observed =
+      message.metadata.author === MESSAGE_AUTHOR.BRAIN ? observedMessagesOf(words) : undefined;
+    if (observed !== undefined) {
+      return [<ObservedMessagesRow key={message.id} observed={observed} at={view.placedAt} />];
     }
     return [
       <BubbleRow

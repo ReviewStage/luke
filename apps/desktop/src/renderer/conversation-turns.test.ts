@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { BRAIN_WAKE_KIND } from "@sidecar/brain";
-import { BRAIN_INPUT_MARKER, wakeInputText } from "@sidecar/brain/input-items";
+import {
+  BRAIN_INPUT_MARKER,
+  OBSERVED_MESSAGES_CUT,
+  observedMessagesText,
+} from "@sidecar/brain/input-items";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
 import {
@@ -13,13 +16,11 @@ import {
   type ConversationViewTurnGroup,
   isStoredToolPart,
   MESSAGE_ROLE,
-  SESSION_STATUS,
   type SessionIdentity,
   selectConversationView,
   TOOL_PART_STATE,
 } from "@sidecar/session";
 import {
-  ACTION_RESULT_STATUS,
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -584,7 +585,10 @@ const USER_ROW_METADATA = {
     author: MESSAGE_AUTHOR.VOICE_MODEL,
     channel: MESSAGE_CHANNEL.VOICE,
   },
-  [MESSAGE_AUTHOR.BRAIN]: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ROSTER_LOOK },
+  [MESSAGE_AUTHOR.BRAIN]: {
+    author: MESSAGE_AUTHOR.BRAIN,
+    source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
+  },
 } as const;
 
 /** One user row on its own, as the view selects it, under whichever author wrote it. */
@@ -612,95 +616,84 @@ function userRowGroups(
   });
 }
 
-const WAKE_FOLD_OPENING = '<details class="conversation-wake-fold"';
+const OBSERVED_FOLD_OPENING = '<details class="conversation-observed"';
 
-const WAKE_PROVIDER = "conductor";
-
-const WAKE_TEXT = wakeInputText(
-  [
-    {
-      kind: BRAIN_WAKE_KIND.ROSTER,
-      identity: {
-        providerId: WAKE_PROVIDER,
-        providerSessionId: "c1d2e3f4-0000-4000-8000-000000000001",
-      },
-      atMs: FIXTURE_NOW - 60_000,
-      sessionSummary: {
-        title: "Fix the login redirect",
-        status: SESSION_STATUS.WORKING,
-        changes: ["appeared", `status: ${SESSION_STATUS.WAITING} → ${SESSION_STATUS.WORKING}`],
-      },
-      transcriptDelta: {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        truncated: false,
-        text: "x".repeat(1_234),
-      },
-    },
-    {
-      kind: BRAIN_WAKE_KIND.ROSTER,
-      identity: {
-        providerId: WAKE_PROVIDER,
-        providerSessionId: "a1b2c3d4-0000-4000-8000-000000000002",
-      },
-      atMs: FIXTURE_NOW - 60_000,
-      sessionSummary: { status: SESSION_STATUS.COMPLETE, changes: ["vanished"] },
-      transcriptDelta: {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        truncated: false,
-        text: "  Done: the redirect now\nkeeps the query string.  ",
-      },
-    },
-  ],
+const OBSERVED_TEXT = observedMessagesText(
+  {
+    providerName: "Conductor",
+    workspace: "luke",
+    title: "Fix the login redirect",
+    providerSessionId: "c1d2e3f4-0000-4000-8000-000000000001",
+    updatedAt: FIXTURE_NOW - 90_000,
+  },
+  ["agent: The redirect now keeps the query string.", "user: Ship it."],
+  true,
   FIXTURE_NOW - 60_000,
 );
 
-test("an observed-events note draws one line per event, and the wake's JSON stands pretty-printed behind a fold", () => {
-  const markup = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, WAKE_TEXT));
+test("an observed-messages note names the chat and counts its messages on a fold that holds the lines", () => {
+  const markup = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, OBSERVED_TEXT));
   assert.equal(count(markup, "data-speaker", "event"), 1);
-  assert.equal(count(markup, "data-observed-events", "2"), 1);
+  assert.equal(count(markup, "data-observed-messages", "2"), 1);
+  assert.equal(markup.split(OBSERVED_FOLD_OPENING).length - 1, 1);
+  assert.ok(markup.includes("<span>Fix the login redirect — 2 new messages</span>"));
+  // The cut line stands first among the lines and is not counted as a message.
   assert.ok(
     markup.includes(
-      "<li>Fix the login redirect · appeared, status: waiting → working · +1.2k chars of transcript</li>",
+      `<pre><code>${OBSERVED_MESSAGES_CUT}\nagent: The redirect now keeps the query string.\nuser: Ship it.</code></pre>`,
+    ),
+  );
+  // A chat the roster no longer holds is named as the brain named it, and one line is singular.
+  const unheld = render(
+    userRowGroups(
+      MESSAGE_AUTHOR.BRAIN,
+      observedMessagesText(
+        {
+          providerName: "Conductor",
+          providerSessionId: "a1b2c3d4-0000-4000-8000-000000000002",
+          updatedAt: FIXTURE_NOW - 90_000,
+        },
+        ["agent: Done."],
+        false,
+        FIXTURE_NOW - 60_000,
+      ),
     ),
   );
   assert.ok(
-    markup.includes(
-      "<li>Session a1b2c3d4 · vanished · Done: the redirect now keeps the query string.</li>",
-    ),
+    unheld.includes("<span>chat a1b2c3d4-0000-4000-8000-000000000002 — 1 new message</span>"),
   );
-  assert.equal(markup.split(WAKE_FOLD_OPENING).length - 1, 1);
-  assert.ok(
-    markup.includes(
-      "<pre><code>{\n  &quot;events&quot;: [\n    {\n      &quot;kind&quot;: &quot;roster&quot;,",
-    ),
-  );
-  assert.ok(
-    markup.includes(
-      "&quot;provider_session_id&quot;: &quot;c1d2e3f4-0000-4000-8000-000000000001&quot;",
-    ),
-  );
+  assert.ok(unheld.includes("<pre><code>agent: Done.</code></pre>"));
   // The note is the brain's, so it carries no copy control and no menu.
   assert.equal(count(markup, "class", "conversation-copy"), 0);
   assert.equal(count(markup, "class", "conversation-more-button"), 0);
 });
 
-test("a wake note the reader cannot hold to the shape is drawn verbatim, and only the brain's words are read as one", () => {
-  const malformed = `${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} ${new Date(FIXTURE_NOW).toISOString()}\n{"events": "none"}`;
-  const fallen = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, malformed));
-  assert.equal(count(fallen, "data-speaker", "event"), 1);
-  assert.equal(fallen.split(WAKE_FOLD_OPENING).length - 1, 0);
-  assert.equal(count(fallen, "data-observed-events", "0"), 0);
-  assert.ok(fallen.includes("&quot;events&quot;: &quot;none&quot;"));
-  const developer = render(userRowGroups(MESSAGE_AUTHOR.DEVELOPER, WAKE_TEXT));
+test("an observed-messages note the reader cannot hold to the shape is drawn verbatim, and only the brain's words are read as one", () => {
+  const instant = new Date(FIXTURE_NOW).toISOString();
+  for (const malformed of [
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}\nno envelope here\nagent: Done.`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}\n[Conductor · Fix the login redirect · not an instant]\nagent: Done.`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} of old\n[Conductor · Fix the login redirect · ${instant}]`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}`,
+  ]) {
+    const fallen = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, malformed));
+    assert.equal(count(fallen, "data-speaker", "event"), 1);
+    assert.equal(fallen.split(OBSERVED_FOLD_OPENING).length - 1, 0);
+    assert.ok(
+      fallen.includes("Fix the login redirect") ||
+        fallen.includes("no envelope here") ||
+        fallen.includes(instant),
+    );
+  }
+  const developer = render(userRowGroups(MESSAGE_AUTHOR.DEVELOPER, OBSERVED_TEXT));
   assert.equal(count(developer, "data-speaker", "you"), 1);
   assert.equal(count(developer, "data-speaker", "event"), 0);
-  assert.equal(developer.split(WAKE_FOLD_OPENING).length - 1, 0);
+  assert.equal(developer.split(OBSERVED_FOLD_OPENING).length - 1, 0);
   assert.equal(count(developer, "class", "conversation-copy"), 1);
-  // The voice model's row is a note too, but never a wake.
-  const spoken = render(userRowGroups(MESSAGE_AUTHOR.VOICE_MODEL, WAKE_TEXT));
+  // The voice model's row is a note too, but never an observed-messages turn.
+  const spoken = render(userRowGroups(MESSAGE_AUTHOR.VOICE_MODEL, OBSERVED_TEXT));
   assert.equal(count(spoken, "data-speaker", "event"), 1);
-  assert.equal(spoken.split(WAKE_FOLD_OPENING).length - 1, 0);
-  assert.equal(count(spoken, "data-observed-events", "2"), 0);
+  assert.equal(spoken.split(OBSERVED_FOLD_OPENING).length - 1, 0);
 });
 
 test("a turn that followed a long silence is dated over it, and the caller's rows close the one list", () => {

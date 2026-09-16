@@ -5,6 +5,7 @@ export {
   type ChildCompletionStatus,
   childCompletionInputText,
   childTaskInputText,
+  ENVELOPE_SEPARATOR,
   OBSERVED_MESSAGES_CUT,
   type ObservedMessagesEnvelope,
   observedMessagesText,
