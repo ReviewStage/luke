@@ -319,16 +319,25 @@ test("a child's completion leads Luke's words with a chip naming the child, pres
   const groups = fixtureChildCompletionTurns(COMPLETED_CHILD.id, COMPLETED_CHILD.label);
   const open = (childId: string) => void childId;
   const markup = renderCompletion(groups, { subagents: [COMPLETED_CHILD], onOpenChild: open });
-  // The turn is Luke's own judgment, and the chip stands before his words on it.
+  // The turn is Luke's own judgment: a read of his, then his words, and the
+  // chip stands before the words, past the message that only read.
   assert.equal(count(markup, "data-own-words", "true"), 1);
-  assert.equal(count(markup, "data-judgment", "own"), 1);
+  assert.equal(count(markup, "data-judgment", "own"), 2);
   assert.equal(markup.split(SUBAGENT_CHIP_BUTTON).length - 1, 1);
   assert.ok(markup.includes('aria-label="Open Sub-agent: Audit the release notes"'));
   assert.ok(markup.includes(">Sub-agent: Audit the release notes</button>"));
-  assert.ok(markup.indexOf("conversation-subagent-chip") < markup.indexOf("The audit found"));
-  // A child the list no longer names is the bare word; a thread with no press to hand is a name.
+  const chipAt = markup.indexOf("conversation-subagent-chip");
+  assert.ok(markup.indexOf("read_child_transcript") < chipAt);
+  assert.ok(chipAt < markup.indexOf("The audit found"));
+  // A child the list no longer holds is the bare word and a name, since its
+  // transcript would close as it opened; a thread with no press to hand is a name.
   const unlisted = renderCompletion(groups, { onOpenChild: open });
-  assert.ok(unlisted.includes(">Sub-agent</button>"));
+  assert.equal(unlisted.split(SUBAGENT_CHIP_BUTTON).length - 1, 0);
+  assert.ok(
+    unlisted.includes(
+      '<span class="conversation-action-chip conversation-subagent-chip">Sub-agent</span>',
+    ),
+  );
   const named = renderCompletion(groups, { subagents: [COMPLETED_CHILD] });
   assert.equal(named.split(SUBAGENT_CHIP_BUTTON).length - 1, 0);
   assert.ok(

@@ -426,7 +426,9 @@ const SUBAGENT_CHIP_LABEL = "Sub-agent";
  * The chip naming the sub-agent whose completion a turn answered, styled as
  * an action row's session chip and pressed the way the list's row is: the
  * press opens the child's transcript by the same act. A thread with nothing
- * to hand a press to draws the chip as a name.
+ * to hand a press to draws the chip as a name, and so does a child the list
+ * no longer holds, since the app closes a transcript of a child the list
+ * does not name the moment it opens.
  */
 function SubagentChip({
   childId,
@@ -440,7 +442,7 @@ function SubagentChip({
   const child = subagents.find((row) => row.id === childId);
   const text =
     child === undefined ? SUBAGENT_CHIP_LABEL : `${SUBAGENT_CHIP_LABEL}: ${subagentTitle(child)}`;
-  return onOpenChild === undefined ? (
+  return onOpenChild === undefined || child === undefined ? (
     <span className="conversation-action-chip conversation-subagent-chip">{text}</span>
   ) : (
     <button
@@ -1048,12 +1050,17 @@ export function ConversationTurns({
         const pending = turnPending(group.turn);
         const aloud = answeredAloud(group.turn);
         // A child's completion leads Luke's first words on it with the chip
-        // naming the child, on the first of his messages in the turn.
+        // naming the child: the first of his messages in the turn with words,
+        // since one that only called tools has no words to lead.
         const completedChild = completedChildOf(group);
         const led =
           completedChild === undefined
             ? undefined
-            : group.messages.find((message) => message.message.role === MESSAGE_ROLE.ASSISTANT);
+            : group.messages.find(
+                (message) =>
+                  message.message.role === MESSAGE_ROLE.ASSISTANT &&
+                  message.message.parts.some(isTextPart),
+              );
         // The ask a rated reply answered is the developer's latest words in
         // the same turn before it; a turn Luke opened himself answered none.
         let ask: string | undefined;

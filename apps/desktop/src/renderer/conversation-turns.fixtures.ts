@@ -598,8 +598,9 @@ export function fixtureConversationTurns(): readonly ConversationViewTurnGroup[]
 /**
  * A child-completion turn on its own, as the view selects it: the note the
  * service composes for a child's end under the brain's own marker, naming the
- * child in its data, then Luke's words on his own judgment. Apart from the
- * scenarios above, so the counts they assert stand.
+ * child in its data, then a message of Luke's that only read the child's
+ * transcript, then his words on his own judgment. Apart from the scenarios
+ * above, so the counts they assert stand.
  */
 export function fixtureChildCompletionTurns(
   childId: string,
@@ -635,13 +636,22 @@ export function fixtureChildCompletionTurns(
       {
         message: reply("2b000000-0000-4000-8000-000000000292", [
           { type: "step-start" },
+          call("read_child_transcript", { child_id: childId }, { messages: [] }),
+        ]),
+        seq: 2,
+        turnId: TURN.COMPLETION,
+        createdAt: AT.COMPLETION + 2_000,
+      },
+      {
+        message: reply("2b000000-0000-4000-8000-000000000293", [
+          { type: "step-start" },
           {
             type: "text",
             text: "The audit found two stale notes; nothing to say aloud.",
             state: "done",
           },
         ]),
-        seq: 2,
+        seq: 3,
         turnId: TURN.COMPLETION,
         createdAt: AT.COMPLETION + 5_000,
       },
