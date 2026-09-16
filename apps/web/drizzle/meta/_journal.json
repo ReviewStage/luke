@@ -253,6 +253,13 @@
       "when": 1789950000000,
       "tag": "0038_dead_asks_question_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790150000000,
+      "tag": "0042_dead_asks_question",
+      "breakpoints": true
     }
   ]
 }
