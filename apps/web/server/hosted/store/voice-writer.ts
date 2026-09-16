@@ -48,7 +48,7 @@ import {
  * which the same connection that sent the append learns the answer to.
  *
  * What is spoken becomes a message through one door, `upsertSpokenRow`,
- * called by the live session service for each utterance it writes: the row is named
+ * called by the live session service behind each fragment: the row is named
  * by the id the service's ledger minted when the utterance opened, which is
  * its client id for life, and the span the ledger holds it at, and the write
  * cuts the words from the segments already on record over that span. The

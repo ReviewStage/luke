@@ -24,8 +24,7 @@ import {
   rosterUpdate,
   SEED_ROLE,
   seedItemTokens,
-  UTTERANCE_GAP_MS,
-  UTTERANCE_SETTLE_MARGIN_MS,
+  TRANSCRIPT_SPEAKER,
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
@@ -48,10 +47,11 @@ import {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
-import type { DeveloperUtteranceRecord, LiveRecord, LukeUtteranceRecord } from "./live-record.js";
+import type { DeveloperUtteranceRecord, LiveRecord, SpokenRowUpsert } from "./live-record.js";
 import {
   ANTICIPATION_FACTS_PREFIX,
   LiveSessionService,
+  ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";
@@ -231,50 +231,65 @@ class AnticipatingBrain extends FakeBrain {
 }
 
 class FakeRecord implements LiveRecord {
+  /** Every row write in the order the record was handed them: a row grows as repeats of its id, each over the span it then had. */
+  readonly rows: SpokenRowUpsert[] = [];
+  /** The developer's utterances written under a delegation. */
   readonly developer: DeveloperUtteranceRecord[] = [];
-  readonly luke: LukeUtteranceRecord[] = [];
-  /** While set, developer writes wait here for the test to answer them. */
-  #held: ((written: boolean) => void)[] | undefined;
+  /** While set, the writes of the kinds named wait here for the test to answer them, oldest first. */
+  #held: { rows: boolean; answers: ((written: boolean) => void)[] } | undefined;
 
-  /** The next developer writes are held until `release` answers them. */
-  hold(): void {
-    this.#held = [];
+  /** The next delegated writes, and the row writes too where asked, are held until `release` answers them. */
+  hold(kinds: { rows?: boolean } = {}): void {
+    this.#held = { rows: kinds.rows ?? false, answers: [] };
   }
 
-  /** Answers the oldest held developer write; a write answered true is on the record. */
+  /** Answers the oldest held write; a write answered true is on the record. */
   release(written: boolean): void {
-    const held = this.#held?.shift();
-    assert.ok(held, "a developer write is held");
+    const held = this.#held?.answers.shift();
+    assert.ok(held, "a write is held");
     held(written);
   }
 
+  upsertSpokenRow(row: SpokenRowUpsert): Effect.Effect<boolean> {
+    return this.#write(this.#held?.rows === true, () => this.rows.push(row));
+  }
+
   writeDeveloperUtterance(record: DeveloperUtteranceRecord): Effect.Effect<boolean> {
+    return this.#write(this.#held !== undefined, () => this.developer.push(record));
+  }
+
+  #write(held: boolean, land: () => void): Effect.Effect<boolean> {
     return Effect.suspend(() => {
-      if (this.#held === undefined) {
-        this.developer.push(record);
+      if (!held) {
+        land();
         return Effect.succeed(true);
       }
       return Effect.map(
         Effect.promise(
           () =>
             new Promise<boolean>((resolve) => {
-              this.#held?.push(resolve);
+              this.#held?.answers.push(resolve);
             }),
         ),
         (written) => {
-          if (written) this.developer.push(record);
+          if (written) land();
           return written;
         },
       );
     });
   }
+}
 
-  writeLukeUtterance(record: LukeUtteranceRecord): Effect.Effect<boolean> {
-    return Effect.sync(() => {
-      this.luke.push(record);
-      return true;
-    });
-  }
+/** The rows as the tests read them: whose, and over what span; the words are the record's to cut. */
+function spans(rows: readonly SpokenRowUpsert[]) {
+  return rows.map((row) => [row.speaker, row.startMs, row.endMs]);
+}
+
+/** The row the brain was handed to read ahead of, which is what its facts are matched against. */
+function anticipatedRow(brain: AnticipatingBrain): string {
+  const rowId = brain.anticipations[0]?.rowId;
+  assert.ok(rowId, "an anticipation was handed over");
+  return rowId;
 }
 
 /**
@@ -429,13 +444,6 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
   });
 }
 
-/** The row the brain was handed to read ahead of, which is what its facts are matched against. */
-function anticipatedRow(brain: AnticipatingBrain): string {
-  const rowId = brain.anticipations[0]?.rowId;
-  assert.ok(rowId, "an anticipation was handed over");
-  return rowId;
-}
-
 function appends(sideband: FakeSideband, type: string) {
   return sideband.sent.filter((event) => event.type === type);
 }
@@ -586,13 +594,15 @@ it.effect(
           voiceSessionId: "sess-1",
         },
       );
-      // The settle timer finds the ask already on record and writes only Luke's line.
-      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+      // The delegation flushed both rows as they stood before the ask was composed on them; the
+      // debounce after it writes nothing more, since the developer's row is the ask's now.
+      assert.deepEqual(spans(f.record.rows), [
+        [TRANSCRIPT_SPEAKER.ASSISTANT, 0, 900],
+        [TRANSCRIPT_SPEAKER.USER, 1000, 2400],
+      ]);
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
       assert.equal(f.record.developer.length, 1);
-      assert.deepEqual(
-        f.record.luke.map((line) => [line.role, line.text, line.startMs, line.endMs]),
-        [[CONVERSATION_ENTRY_KIND.REPLY, "Hi there.", 0, 900]],
-      );
+      assert.equal(f.record.rows.length, 2);
     }),
 );
 
@@ -618,9 +628,12 @@ it.effect(
         f.record.developer.map((line) => [line.delegationId, line.text, line.startMs, line.endMs]),
         [["item_1", "Open the failing one.", 1000, 2600]],
       );
-      // The settle timer finds the row on record and writes it no second time.
-      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+      // The row's own write went out at the delegation, as the row then stood; the fragment that
+      // joined the claimed row grew it no further there, since the ask's write carries it.
+      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 1000, 2200]]);
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
       assert.equal(f.record.developer.length, 1);
+      assert.equal(f.record.rows.length, 1);
     }),
 );
 
@@ -1264,19 +1277,38 @@ it.effect(
 );
 
 it.effect(
-  "a line is recorded at the instant its utterance began, so a Clear's cutoff refuses what was begun before it",
+  "a row reaches the record within the debounce of its first fragment, grows with each later one under the same id, and is written by nothing while the speaker is silent",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
       yield* settle();
-      const began = f.clock.now;
       sideband.output("Two ", 0, 400);
-      yield* advanceClock(500);
-      sideband.output("sessions.", 400, 900);
-      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
-      assert.equal(f.record.luke.length, 1);
-      assert.equal(f.record.luke[0]?.recordedAt, began);
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS - 1);
+      assert.equal(f.record.rows.length, 0);
+      yield* advanceClock(1);
+      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.ASSISTANT, 0, 400]]);
+      const [first] = f.record.rows;
+      assert.ok(first);
+      // Two fragments inside one debounce are one write, over the span they grew the row to.
+      sideband.output("sessions", 400, 900);
+      sideband.output(" finished.", 900, 1400);
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
+      assert.deepEqual(
+        f.record.rows.map((row) => [row.rowId, row.startMs, row.endMs]),
+        [
+          [first.rowId, 0, 400],
+          [first.rowId, 0, 1400],
+        ],
+      );
+      // Silence arms nothing: no event is read into the gap, and the row owes the record nothing.
+      yield* advanceClock(10 * ROW_WRITE_DEBOUNCE_MS);
+      assert.equal(f.record.rows.length, 2);
+      // The next utterance opens under an id of its own.
+      sideband.output("Anything else?", 9000, 9800);
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
+      assert.equal(f.record.rows.length, 3);
+      assert.notEqual(f.record.rows[2]?.rowId, first.rowId);
     }),
 );
 
@@ -1332,7 +1364,7 @@ it.effect(
 );
 
 it.effect(
-  "both speakers' utterances reach the record after the gap and the settle margin, grouped, once",
+  "both speakers' rows reach the record behind the debounce, each grouped by the ledger under an id of its own, and a socket closing mid-sentence leaves the words said so far on the row",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1341,39 +1373,39 @@ it.effect(
       sideband.input("Hello", 0, 400);
       sideband.output("Hi.", 500, 900);
       sideband.input(" there", 400, 800);
-      yield* advanceClock(UTTERANCE_GAP_MS);
-      assert.deepEqual([f.record.developer.length, f.record.luke.length], [0, 0]);
-      yield* advanceClock(UTTERANCE_SETTLE_MARGIN_MS);
-      assert.deepEqual(
-        f.record.developer.map((line) => [line.text, line.delegationId, line.askContext]),
-        [["Hello there", null, undefined]],
-      );
-      assert.deepEqual(
-        f.record.luke.map((line) => line.text),
-        ["Hi."],
-      );
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS - 1);
+      assert.equal(f.record.rows.length, 0);
+      yield* advanceClock(1);
+      const first = [...f.record.rows].sort((left, right) => left.startMs - right.startMs);
+      assert.deepEqual(spans(first), [
+        [TRANSCRIPT_SPEAKER.USER, 0, 800],
+        [TRANSCRIPT_SPEAKER.ASSISTANT, 500, 900],
+      ]);
+      assert.notEqual(first[0]?.rowId, first[1]?.rowId);
+      assert.equal(f.record.developer.length, 0);
+      // The close does not wait out the debounce: the write put off is made at the release.
       sideband.input("Bye", 5000, 5300);
       sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 6);
       yield* settle();
-      assert.deepEqual(
-        f.record.developer.map((line) => line.text),
-        ["Hello there", "Bye"],
-      );
+      assert.deepEqual(spans(f.record.rows.slice(2)), [[TRANSCRIPT_SPEAKER.USER, 5000, 5300]]);
+      // Nothing armed outlives the session.
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
+      assert.equal(f.record.rows.length, 3);
     }),
 );
 
 it.effect(
-  "an utterance that settled before its delegation is written again under the delegation, with its run, and the record decides what the second write means",
+  "an utterance whose row is on record before its delegation is written again under the delegation, with its run, and the record decides what the second write means",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
       yield* settle();
       sideband.input("Open the failing one.", 1000, 2200);
-      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
-      const [line] = f.record.developer;
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
+      const [line] = f.record.rows;
       assert.ok(line);
-      assert.deepEqual([line.delegationId, line.runId], [null, undefined]);
+      assert.equal(f.record.developer.length, 0);
       f.record.hold();
       sideband.delegation("item_late", 5000);
       yield* settle();
@@ -1391,15 +1423,13 @@ it.effect(
       yield* settle();
       assert.deepEqual(
         f.record.developer.map((written) => [written.rowId, written.delegationId, written.runId]),
-        [
-          [line.rowId, null, undefined],
-          [line.rowId, "item_late", "run-1"],
-        ],
+        [[line.rowId, "item_late", "run-1"]],
       );
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      // The settle timer has nothing more to write for the row.
-      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
-      assert.equal(f.record.developer.length, 2);
+      // The row is the ask's now and its own write grows it no further.
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
+      assert.equal(f.record.developer.length, 1);
+      assert.equal(f.record.rows.length, 1);
     }),
 );
 
@@ -1504,7 +1534,7 @@ it.effect(
       yield* settle();
       sideband.input("Ship it.", 0, 800);
       yield* settle();
-      f.record.hold();
+      f.record.hold({ rows: true });
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 5);
       yield* settle();
       assert.equal(f.service.sessionStands(), false);
@@ -1514,10 +1544,7 @@ it.effect(
       assert.equal(stopping.pollUnsafe(), undefined);
       f.record.release(true);
       yield* Fiber.join(stopping);
-      assert.deepEqual(
-        f.record.developer.map((line) => line.text),
-        ["Ship it."],
-      );
+      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 0, 800]]);
     }),
 );
 
@@ -1531,7 +1558,7 @@ it.effect(
       yield* settle();
       sideband.input("Ship it.", 0, 800);
       yield* settle();
-      f.record.hold();
+      f.record.hold({ rows: true });
       sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 3);
       yield* settle();
       const ending = yield* Effect.forkChild(f.service.endSession());
@@ -1541,10 +1568,7 @@ it.effect(
       f.record.release(true);
       yield* Fiber.join(ending);
       assert.equal(brain.drops, 1);
-      assert.deepEqual(
-        f.record.developer.map((line) => line.text),
-        ["Ship it."],
-      );
+      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 0, 800]]);
     }),
 );
 

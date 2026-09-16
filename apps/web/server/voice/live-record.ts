@@ -2,14 +2,13 @@ import type { LiveRecord } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Queue, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { CONVERSATION_ENTRY_KIND } from "../core.js";
 import {
   STORE_WRITE_EFFECT,
   type VoiceTarget,
   type VoiceWriteResult,
   type VoiceWriter,
 } from "../hosted/store/index.js";
-import { LIVE_SERVER_EVENT, type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../live.js";
+import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
 
 /**
  * The hosted implementation of the live record: the voice writer over
@@ -17,13 +16,14 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../
  * the developer's spoken ask a message cut where the delegation places it,
  * and each speaker's utterance a row of its own, the developer's a user row
  * and Luke's an assistant row, upserted under the id the service's ledger
- * minted and cut from the segments over the span the service names, so the
- * Conversation keeps what was said whether or not the brain was consulted.
- * The service hands every server event here in arrival order and the writer
- * takes what it keeps of each; the two utterance doors are answered on the
- * same queue, after every delta that arrived ahead of the write has taken
- * its place, so a row is cut from segments already on record and never from
- * a grouping the service kept beside them.
+ * minted and grown as its fragments arrive, its words read from the segments
+ * over the span the ledger holds it at, so the Conversation keeps what was
+ * said whether or not the brain was consulted. The service hands every
+ * server event here in arrival order and the writer takes what it keeps of
+ * each; the upserts are answered on the same queue, after every delta that
+ * arrived ahead of the write has taken its place, so a row is read from
+ * segments already on record and never from a grouping the service kept
+ * beside them.
  *
  * A delegation is the one event not consumed as it arrives. The writer cuts
  * the ask from the developer's segments already on record, and the API may
@@ -34,8 +34,8 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../
  * has taken its place in the sequence, and cut over the span the service's
  * ledger grouped the utterance as, so a last word the offset fell short of
  * is the ask's. The service makes that write for every delegated ask,
- * whether or not the utterance had settled and been written undelegated
- * before, and awaits it ahead of the reply, so the write answers true only
+ * whether or not the utterance's own row was on record before, and awaits
+ * it ahead of the reply, so the write answers true only
  * when the ask is on record and the service speaks no reply to an ask the
  * record refused. The writer's own idempotency on the delegation id makes a
  * repeated write the same message.
@@ -127,20 +127,19 @@ export function hostedLiveRecord({
         }
         return consume(event);
       },
+      upsertSpokenRow: (row) =>
+        taken(
+          enqueue(
+            writer.upsertSpokenRow(target, {
+              rowId: row.rowId,
+              speaker: row.speaker,
+              startMs: row.startMs,
+              endMs: row.endMs,
+            }),
+          ),
+        ),
       writeDeveloperUtterance: (record) =>
         Effect.suspend(() => {
-          if (record.delegationId === null) {
-            return taken(
-              enqueue(
-                writer.upsertSpokenRow(target, {
-                  rowId: record.rowId,
-                  speaker: TRANSCRIPT_SPEAKER.USER,
-                  startMs: record.startMs,
-                  endMs: record.endMs,
-                }),
-              ),
-            );
-          }
           const delegation = held.get(record.delegationId);
           if (delegation === undefined) return Effect.succeed(false);
           // A write the store refused and one it died on are both an ask not
@@ -157,19 +156,6 @@ export function hostedLiveRecord({
             Effect.catchDefect(() => Effect.succeed(false)),
           );
         }),
-      writeLukeUtterance: (record) =>
-        record.role === CONVERSATION_ENTRY_KIND.REPLY
-          ? taken(
-              enqueue(
-                writer.upsertSpokenRow(target, {
-                  rowId: record.rowId,
-                  speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
-                  startMs: record.startMs,
-                  endMs: record.endMs,
-                }),
-              ),
-            )
-          : Effect.succeed(true),
       drained: () =>
         Effect.suspend(() =>
           last === undefined ? Effect.void : Effect.ignore(Deferred.await(last)),

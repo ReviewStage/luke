@@ -240,10 +240,11 @@ call reaches it. Both speakers' lines are written by the voice writer and
 arrive through the Conversation reads the phone already runs, so a spoken
 exchange on the phone appears in the Conversation on the phone and on a Mac
 signed into the same account. What the screen draws is both speakers'
-captions off the data channel's transcript deltas, grouped and settled on the
-desktop's bounds (`LiveCaptions`, the ledger's `UTTERANCE_GAP_MS` and
-`UTTERANCE_SETTLE_MARGIN_MS`, held equal by `tools/ios-parity`), rows stable
-from the moment they open; they stand only while the call does.
+captions off the data channel's transcript deltas, grouped on the desktop's
+gap (`LiveCaptions`, the ledger's `UTTERANCE_GAP_MS`, held equal by
+`tools/ios-parity`; the settle margin the phone still waits after it is the
+phone's own), rows stable from the moment they open; they stand only while the
+call does.
 
 - **Stop and idle.** The stop control, drawn while Luke speaks, sends the
   service's `session.stop` and mutes; the service intercepts the frame and

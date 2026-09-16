@@ -7,7 +7,6 @@ import {
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   UTTERANCE_GAP_MS,
-  UTTERANCE_SETTLE_MARGIN_MS,
 } from "./transcript.js";
 
 /** A ledger minting ids a test can read back: `row-1`, `row-2`, in the order the rows opened. */
@@ -195,7 +194,6 @@ test("an anticipation stands only once the developer has said something in the s
   assert.equal(anticipationOf(ledger.askContext(3_000)), undefined);
 });
 
-test("the prefetch debounce is shorter than the pause that settles an utterance, so a read can begin while the developer is still speaking", () => {
+test("the prefetch debounce is shorter than the gap that ends an utterance, so a read can begin while the developer is still speaking", () => {
   assert.ok(PREFETCH_DEBOUNCE_MS < UTTERANCE_GAP_MS);
-  assert.ok(PREFETCH_DEBOUNCE_MS < UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
 });

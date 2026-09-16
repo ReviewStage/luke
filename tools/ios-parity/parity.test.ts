@@ -60,7 +60,6 @@ import {
   RENDERER_SERVER_EVENTS,
   TRANSCRIPT_SPEAKER,
   UTTERANCE_GAP_MS,
-  UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import {
   CLOUD_AGENT_PROVIDER_ID,
@@ -385,17 +384,12 @@ test("LiveTranscriptSpeaker is TRANSCRIPT_SPEAKER", () => {
   );
 });
 
-test("the caption rows group and settle on the desktop's bounds", () => {
+test("the caption rows group on the desktop's gap", () => {
   const source = swift(`${KIT}/LiveCaptions.swift`);
   assert.equal(
     swiftStaticNumber(source, "utteranceGapMs"),
     UTTERANCE_GAP_MS,
     "a gap of the phone's own splits an utterance the record keeps whole",
-  );
-  assert.equal(
-    swiftStaticNumber(source, "utteranceSettleMarginMs"),
-    UTTERANCE_SETTLE_MARGIN_MS,
-    "a margin of the phone's own settles a row before or after the record does",
   );
 });
 
