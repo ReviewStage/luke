@@ -4,6 +4,8 @@
       "id": "3c000000-0000-4000-8000-000000000002",
       "providerId": "conductor",
       "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
+      "title": "Fix the checkout tests",
+      "workspace": "power-vacation",
       "status": "running",
       "acceptedAt": 1757505600000,
       "queuedAt": 1757505720000,

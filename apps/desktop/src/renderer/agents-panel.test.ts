@@ -96,11 +96,13 @@ const HELD_AGENT: AgentRead = {
   startedAt: NOW - 5 * MINUTE_MS,
 };
 
-/** An agent whose session the roster has let go: named by a slice of the session's id, marked by its provider. */
+/** An agent whose session the roster has let go: named by the title the service kept, marked by its provider. */
 const DEPARTED_AGENT: AgentRead = {
   id: AGENT_ID.DEPARTED,
   providerId: "conductor",
   providerSessionId: FIXTURE_SESSION.DEPARTED,
+  title: "Retire the legacy roster",
+  workspace: "legacy-roster",
   status: CHILD_STATUS.SETTLED,
   acceptedAt: NOW - 3 * 24 * 60 * MINUTE_MS,
   queuedAt: NOW - 3 * 24 * 60 * MINUTE_MS,
@@ -117,6 +119,11 @@ const QUEUED_AGENT: AgentRead = {
   acceptedAt: NOW - 5 * 24 * 60 * MINUTE_MS,
   queuedAt: NOW - 2 * MINUTE_MS,
 };
+
+/** The agent as a row the service opened before it kept a session's naming: without title or workspace. */
+function unnamed({ title: _title, workspace: _workspace, ...agent }: AgentRead): AgentRead {
+  return agent;
+}
 
 function panelProps(extra: Partial<PanelProps> = {}): PanelProps {
   return {
@@ -212,7 +219,7 @@ test("a cancelled child says so", () => {
   assert.ok(markup.includes(">Cancelled<"));
 });
 
-test("a per-workspace agent row is named from the roster by session identity, marked by its agent, and falls back to the session's id", () => {
+test("a per-workspace agent row is named from the roster by session identity, then by the title the service kept, then by the session's id, and marked by its agent", () => {
   const [agents] = sections(
     render({ agents: { settled: true, agents: [DEPARTED_AGENT, HELD_AGENT, QUEUED_AGENT] } }),
   );
@@ -222,7 +229,7 @@ test("a per-workspace agent row is named from the roster by session identity, ma
   assert.deepEqual(titles(agents), [
     FIXTURE_TITLE.UNOPENABLE,
     FIXTURE_TITLE.HELD,
-    "Session 8e3b4c36",
+    DEPARTED_AGENT.title,
   ]);
   const rows = [...agents.querySelectorAll(".agent-row")];
   assert.deepEqual(
@@ -235,9 +242,26 @@ test("a per-workspace agent row is named from the roster by session identity, ma
   );
   // Every agent row leads with a mark: the roster's agent while it holds the session, the provider once it has let go.
   assert.equal(agents.querySelectorAll(".agent-mark").length, 3);
-  // A roster that never held the session names it the same way.
-  const [alone] = sections(render({ roster: [], agents: { settled: true, agents: [HELD_AGENT] } }));
-  assert.deepEqual(titles(alone ?? document.createElement("div")), ["Session 6c1f2f14"]);
+  // The roster's own title comes first while it holds the session; a row the service never named falls back to the session's id.
+  const [alone] = sections(
+    render({
+      roster: [],
+      agents: {
+        settled: true,
+        agents: [HELD_AGENT, unnamed(DEPARTED_AGENT)],
+      },
+    }),
+  );
+  assert.deepEqual(titles(alone ?? document.createElement("div")), [
+    "Session 6c1f2f14",
+    "Session 8e3b4c36",
+  ]);
+  const [named] = sections(
+    render({
+      agents: { settled: true, agents: [{ ...HELD_AGENT, title: "Kept by the service" }] },
+    }),
+  );
+  assert.deepEqual(titles(named ?? document.createElement("div")), [FIXTURE_TITLE.HELD]);
 });
 
 test("each read section with nothing says so, and an unread one says nothing", () => {
@@ -278,7 +302,7 @@ test("pressing a row of either kind opens its transcript, named as the row is", 
     {
       conversationId: AGENT_ID.DEPARTED,
       kind: TRANSCRIPT_KIND.OBSERVED,
-      title: "Session 8e3b4c36",
+      title: DEPARTED_AGENT.title,
       status: CHILD_STATUS.SETTLED,
     },
     childTranscriptRow(BARE),

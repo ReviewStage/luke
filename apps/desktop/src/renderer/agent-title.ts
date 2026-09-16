@@ -9,7 +9,8 @@ import type { SessionView } from "./session-model";
  * One helper so the same child reads the same on every page. Beside it, what
  * the panel calls a per-workspace agent: the roster's own title for the
  * session, found by the identity the agents read or a turn group's source
- * named it under, the way the thread's chips name a session.
+ * named it under, the way the thread's chips name a session, and, once the
+ * roster has let the session go, the title the service kept for it.
  */
 
 /** How much of a child's id, or a session's, stands in for a name when nothing else does. */
@@ -25,10 +26,14 @@ export function agentSession(
   );
 }
 
-/** What a row calls a per-workspace agent: the roster's title for its session, or a slice of the session's id once the roster has let it go. */
-export function agentTitle(agent: SessionIdentity, roster: readonly SessionView[]): string {
+/** What a row calls a per-workspace agent: the roster's title for its session, else the title the service kept where the caller has it, else a slice of the session's id. */
+export function agentTitle(
+  agent: SessionIdentity & { readonly title?: string },
+  roster: readonly SessionView[],
+): string {
   return (
     agentSession(agent, roster)?.title ??
+    agent.title ??
     `Session ${agent.providerSessionId.slice(0, ID_EXCERPT_CHARS)}`
   );
 }

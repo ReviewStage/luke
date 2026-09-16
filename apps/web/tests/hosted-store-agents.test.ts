@@ -25,8 +25,12 @@ const at = (offset: number) => new Date(NOW + offset);
 
 let sessions = 0;
 
-/** An observed conversation for a session of its own, under a fixture identity. */
-async function agentOf(userId: string, createdAt: Date): Promise<string> {
+/** An observed conversation for a session of its own, under a fixture identity, named as the opener would name it where a naming is given. */
+async function agentOf(
+  userId: string,
+  createdAt: Date,
+  naming: { title?: string; workspace?: string } = {},
+): Promise<string> {
   sessions += 1;
   return insertConversation(database.run, {
     userId,
@@ -34,6 +38,7 @@ async function agentOf(userId: string, createdAt: Date): Promise<string> {
     providerId: "conductor",
     providerSessionId: `fixture-session-${sessions}`,
     createdAt,
+    ...naming,
   });
 }
 
@@ -63,7 +68,10 @@ function instantText(date: Date): string {
 test("agents are listed by the instant they last changed, latest first, bounded by the limit, each where its latest turn leaves it", async () => {
   const userId = await database.createUser();
   const early = await agentOf(userId, at(1));
-  const late = await agentOf(userId, at(2));
+  const late = await agentOf(userId, at(2), {
+    title: "Fix the checkout tests",
+    workspace: "power-vacation",
+  });
   const middle = await agentOf(userId, at(3));
 
   const earlyTurn = await turnOf(userId, early, {
@@ -95,6 +103,8 @@ test("agents are listed by the instant they last changed, latest first, bounded 
     providerId: "conductor",
     providerSessionId: `fixture-session-${sessions - 1}`,
     createdAt: at(2),
+    title: "Fix the checkout tests",
+    workspace: "power-vacation",
     status: CHILD_STATUS.FAILED,
     queuedAt: at(30),
     startedAt: at(31),
@@ -102,6 +112,8 @@ test("agents are listed by the instant they last changed, latest first, bounded 
     failure: "model",
   });
   assert.equal(listed[1]?.status, CHILD_STATUS.ACCEPTED);
+  // A row the opener never named carries no naming.
+  assert.deepEqual([listed[1]?.title, listed[1]?.workspace], [null, null]);
   assert.deepEqual(listed[1]?.queuedAt, at(20));
   assert.equal(listed[1]?.startedAt, null);
   assert.equal(listed[2]?.status, CHILD_STATUS.SETTLED);

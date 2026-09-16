@@ -260,6 +260,8 @@ const ObservedConversationRowSchema = Schema.Struct({
   id: Schema.String,
   providerSessionId: Schema.NullOr(Schema.String),
   runtimeSessionId: Schema.NullOr(Schema.String),
+  title: Schema.NullOr(Schema.String),
+  workspace: Schema.NullOr(Schema.String),
 }).pipe(
   Schema.encodeKeys({
     providerSessionId: "provider_session_id",
@@ -267,14 +269,14 @@ const ObservedConversationRowSchema = Schema.Struct({
   }),
 );
 
-async function observedConversations(
-  userId: string,
-): Promise<{ id: string; providerSessionId: string | null; runtimeSessionId: string | null }[]> {
+type ObservedConversationRow = typeof ObservedConversationRowSchema.Type;
+
+async function observedConversations(userId: string): Promise<ObservedConversationRow[]> {
   const rows = await database.run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       return yield* sql`
-        select id, provider_session_id, runtime_session_id from conversations
+        select id, provider_session_id, runtime_session_id, title, workspace from conversations
         where user_id = ${userId}
           and kind = ${CONVERSATION_KIND.OBSERVED}
           and deleted_at is null
@@ -343,6 +345,14 @@ test("two chats that gained messages become two turns, each the envelope and one
   assert.deepEqual(
     opened.map((row) => row.providerSessionId),
     ["s-1", "s-2"],
+  );
+  // Each row keeps what the roster calls its chat, for a device whose own roster no longer lists it.
+  assert.deepEqual(
+    opened.map((row) => [row.title, row.workspace]),
+    [
+      ["Chat s-1", "workspace-a-name"],
+      ["Chat s-2", "workspace-a-name"],
+    ],
   );
   assert.deepEqual(
     handed.map((turn) => turn.message.conversationId),

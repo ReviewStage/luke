@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  AGENTS_READ_BOUNDS,
   type AgentsAnswer,
   agentsAnswerSchema,
   CHILD_STATUS,
@@ -71,13 +72,19 @@ async function answered(response: Response): Promise<AgentsAnswer> {
   return read.success;
 }
 
-async function agentOf(userId: string, providerSessionId: string, createdAt: Date) {
+async function agentOf(
+  userId: string,
+  providerSessionId: string,
+  createdAt: Date,
+  naming: { title?: string; workspace?: string } = {},
+) {
   return insertConversation(database.run, {
     userId,
     kind: CONVERSATION_KIND.OBSERVED,
     providerId: PROVIDER,
     providerSessionId,
     createdAt,
+    ...naming,
   });
 }
 
@@ -121,7 +128,11 @@ test("agents are answered the one that changed last first, each by its session i
     startedAt: at(2_000),
     settledAt: at(60_000),
   });
-  const running = await agentOf(userId, SESSION.RUNNING, at(-1_800_000));
+  // The running agent's row was named by the opener, its title past the wire's bound and its workspace blank.
+  const running = await agentOf(userId, SESSION.RUNNING, at(-1_800_000), {
+    title: ` ${"Fix the checkout tests ".repeat(10)}`,
+    workspace: "  ",
+  });
   await insertTurn(database.run, {
     userId,
     conversationId: running,
@@ -154,11 +165,13 @@ test("agents are answered the one that changed last first, each by its session i
   const answer = await answered(
     await database.run(handleConversationAgents(options(userId, request()))),
   );
+  // The title travels trimmed and cut to the bound; a blank workspace, and a row opened before either was kept, travel neither.
   assert.deepEqual(answer.agents, [
     {
       id: running,
       providerId: PROVIDER,
       providerSessionId: SESSION.RUNNING,
+      title: "Fix the checkout tests ".repeat(10).slice(0, AGENTS_READ_BOUNDS.NAME_CHARS).trimEnd(),
       status: CHILD_STATUS.RUNNING,
       acceptedAt: NOW - 1_800_000,
       queuedAt: NOW + 120_000,

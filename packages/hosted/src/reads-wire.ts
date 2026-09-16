@@ -704,6 +704,8 @@ export const childrenAnswerSchema = EffectSchema.Struct({
 /** The bound of the agents read: the most agents one answer lists. */
 export const AGENTS_READ_BOUNDS = {
   MAX_AGENTS: 100,
+  /** How much of a session's title or workspace name an agent carries, in UTF-16 units. */
+  NAME_CHARS: 200,
 } as const;
 
 /**
@@ -712,15 +714,20 @@ export const AGENTS_READ_BOUNDS = {
  * brain's latest turn about it leaves it, on the children's status terms.
  * `acceptedAt` is the instant Luke began following the session; `queuedAt`
  * is the latest turn's queuing, and the other stamps are that turn's, each
- * absent until the turn reached it. No title,
- * branch, or path travels: a device names the row from its own roster by the
- * session identity. An agent is answered whole on every read, so a device
- * replaces the agent it holds by id rather than appending.
+ * absent until the turn reached it. `title` and `workspace` are the
+ * session's title and its workspace's name as the service's roster last
+ * showed them to the opener, each absent for a row opened before they were
+ * kept, so a device names the row from its own roster by the session
+ * identity while that roster lists the session and from these once it has
+ * let it go; no branch or path travels. An agent is answered whole on every
+ * read, so a device replaces the agent it holds by id rather than appending.
  */
 export interface AgentRead {
   readonly id: string;
   readonly providerId: string;
   readonly providerSessionId: string;
+  readonly title?: string;
+  readonly workspace?: string;
   readonly status: ChildStatus;
   readonly acceptedAt: number;
   readonly queuedAt: number;
@@ -729,9 +736,13 @@ export interface AgentRead {
   readonly failure?: string;
 }
 
+const agentNameSchema = trimmedText({ max: AGENTS_READ_BOUNDS.NAME_CHARS });
+
 const agentReadSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   ...sessionIdentitySchema.fields,
+  title: EffectSchema.optionalKey(agentNameSchema),
+  workspace: EffectSchema.optionalKey(agentNameSchema),
   status: EffectSchema.Literals(CHILD_STATUS_NAMES),
   acceptedAt: countedNumber,
   queuedAt: countedNumber,

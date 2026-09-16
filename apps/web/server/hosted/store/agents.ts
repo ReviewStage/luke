@@ -12,8 +12,10 @@ import { InstantColumnSchema } from "./database.js";
  * with no turn is a session nothing has been said of yet. Where an agent
  * stands is where its latest turn leaves it, on the children's terms: a
  * queued turn is accepted, a running turn is running, and otherwise the turn's
- * own settlement. The service joins no roster here: a device names the row
- * from its own roster by the session identity, as the thread's chips do.
+ * own settlement. The service joins no roster here: the row carries the
+ * session's title and workspace name as the opener last saw them, and a
+ * device names the row from its own roster by the session identity while
+ * that roster still lists the session, as the thread's chips do.
  */
 
 type AgentReadFailure = SqlError | Schema.SchemaError;
@@ -23,6 +25,9 @@ export interface AgentRecord {
   readonly providerId: string;
   readonly providerSessionId: string;
   readonly createdAt: Date;
+  /** The session's title and workspace name as the roster last showed them to the opener; unset for a row opened before they were kept. */
+  readonly title: string | null;
+  readonly workspace: string | null;
   readonly status: ChildStatus;
   /** The latest turn's queuing, and its other stamps, each unset until the turn reached it. */
   readonly queuedAt: Date;
@@ -51,6 +56,8 @@ const AgentRowSchema = Schema.Struct({
   providerId: Schema.String,
   providerSessionId: Schema.String,
   createdAt: InstantColumnSchema,
+  title: Schema.NullOr(Schema.String),
+  workspace: Schema.NullOr(Schema.String),
   turnStatus: Schema.Literals(Object.values(TURN_STATUS)),
   queuedAt: InstantColumnSchema,
   startedAt: Schema.NullOr(InstantColumnSchema),
@@ -118,6 +125,7 @@ const findAgents = SqlSchema.findAll({
     statement(
       (sql) => sql`
         select agent.id, agent.provider_id, agent.provider_session_id, agent.created_at,
+               agent.title, agent.workspace,
                latest.status as turn_status, latest.queued_at, latest.started_at,
                latest.settled_at, latest.failure
         ${agentsFrom(sql, request.userId, true)}

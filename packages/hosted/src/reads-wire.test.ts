@@ -511,6 +511,12 @@ test("the agents answer fixture reads each agent by its session identity where i
   assert.equal(running.providerSessionId, "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50");
   assert.equal(running.settledAt, undefined);
   assert.equal(running.failure, undefined);
+  // The title and workspace the service kept travel where it has them, and a row opened before it kept them carries neither.
+  assert.deepEqual(
+    [running.title, running.workspace],
+    ["Fix the checkout tests", "power-vacation"],
+  );
+  assert.deepEqual([settled.title, settled.workspace], [undefined, undefined]);
   assert.deepEqual(
     [settled.acceptedAt, settled.queuedAt, settled.startedAt, settled.settledAt],
     [1757505000000, 1757505300000, 1757505310000, 1757505400000],
@@ -530,6 +536,15 @@ test("the agents answer fixture reads each agent by its session identity where i
     undefined,
   );
   assert.equal(parseAnswer(agentsAnswerSchema, withFirst({ providerSessionId: " " })), undefined);
+  // A blank title, or one past the bound, is refused rather than carried.
+  assert.equal(parseAnswer(agentsAnswerSchema, withFirst({ title: " " })), undefined);
+  assert.equal(
+    parseAnswer(
+      agentsAnswerSchema,
+      withFirst({ workspace: "w".repeat(AGENTS_READ_BOUNDS.NAME_CHARS + 1) }),
+    ),
+    undefined,
+  );
   const { providerId: _dropped, ...unnamed } = first;
   assert.equal(parseAnswer(agentsAnswerSchema, { agents: [unnamed, ...rest] }), undefined);
   // Every agent holds a turn, so one without its queuing is refused too.

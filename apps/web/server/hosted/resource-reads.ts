@@ -652,12 +652,14 @@ export const handleBrainTurns = /* @__PURE__ */ Effect.fn("handleBrainTurns")(fu
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
-/** A settled text with its ends trimmed, cut to the wire's excerpt bound in the units the wire counts; nothing where nothing stands. */
-function taskExcerpt(task: string | null): string | undefined {
-  const trimmed = task?.trim();
+/** A settled text with its ends trimmed, cut to the wire's bound in the units the wire counts; nothing where nothing stands. */
+function excerpt(text: string | null, chars: number): string | undefined {
+  const trimmed = text?.trim();
   if (!trimmed) return undefined;
-  return trimmed.slice(0, CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS).trimEnd();
+  return trimmed.slice(0, chars).trimEnd();
 }
+
+const taskExcerpt = (task: string | null) => excerpt(task, CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS);
 
 /** One child as the wire carries it: the store's record with its instants as epoch milliseconds and each unset column left out. */
 function readChild(child: ChildRecord): ChildRead {
@@ -707,10 +709,14 @@ export const handleConversationChildren = /* @__PURE__ */ Effect.fn("handleConve
 
 /** One agent as the wire carries it: the store's record with its instants as epoch milliseconds and each unset column left out. */
 function readAgent(agent: AgentRecord): AgentRead {
+  const title = excerpt(agent.title, AGENTS_READ_BOUNDS.NAME_CHARS);
+  const workspace = excerpt(agent.workspace, AGENTS_READ_BOUNDS.NAME_CHARS);
   return {
     id: agent.id,
     providerId: agent.providerId,
     providerSessionId: agent.providerSessionId,
+    ...(title ? { title } : undefined),
+    ...(workspace ? { workspace } : undefined),
     status: agent.status,
     acceptedAt: agent.createdAt.getTime(),
     queuedAt: agent.queuedAt.getTime(),

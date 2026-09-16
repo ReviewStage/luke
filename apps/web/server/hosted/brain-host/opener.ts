@@ -12,6 +12,7 @@ import {
   type SessionIdentity,
 } from "../../core.js";
 import type { ConversationTarget, HostedStore } from "../store/index.js";
+import type { ObservedSessionNaming } from "../store/observed-conversations.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import type { EveSessions } from "./eve-sessions.js";
 import { handToEve, SESSION_OPENING } from "./handover.js";
@@ -185,6 +186,14 @@ function markAfter(
   return earlier.at(-1)?.updatedAt ?? from;
 }
 
+/** What the roster calls the chat now, for its row to keep; nothing where the roster no longer holds it, whose row keeps what it had. */
+function namingOf(roster: HostedRoster, chat: ChangedChat): ObservedSessionNaming | undefined {
+  const session = observedSession(roster, chat.identity);
+  if (session === undefined) return undefined;
+  const workspace = session.workspace?.name;
+  return { title: session.title, ...(workspace !== undefined ? { workspace } : undefined) };
+}
+
 /** What the envelope says of the chat: the roster's own words for it, or its id alone where the roster no longer holds it. */
 function envelopeOf(roster: HostedRoster, chat: ChangedChat): ObservedMessagesEnvelope {
   const session = observedSession(roster, chat.identity);
@@ -281,6 +290,7 @@ export const openObservationTurns = /* @__PURE__ */ Effect.fn("openObservationTu
       userId,
       chat.identity,
       seams.now(),
+      namingOf(seams.roster, chat),
     );
     if (conversationId === undefined) {
       seams.report(

@@ -19,6 +19,16 @@
             "type": "string",
             "minLength": 1
           },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "workspace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
           "status": {
             "type": "string",
             "enum": [
