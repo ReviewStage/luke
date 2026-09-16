@@ -5,6 +5,7 @@ import {
 } from "@sidecar/credentials/snapshot";
 import { ProviderMark } from "@sidecar/panel";
 import type {
+  ChildTranscriptSnapshot,
   ConversationEntry,
   ConversationViewSnapshot,
   SessionApplicationId,
@@ -64,6 +65,7 @@ import {
   type ConversationPage,
   SubagentsButton,
   SubagentsPanel,
+  SubagentTranscriptPanel,
 } from "./subagents-panel";
 import { updateAvailable, updateRow } from "./update-row";
 import { useMeasuredHeight } from "./use-measured-height";
@@ -224,13 +226,17 @@ interface PanelBodyProps {
   spokenAskPending: boolean;
   /** Clears that same thread on the service, for every Mac signed in to the account. */
   onClearConversationConversation: () => void;
-  /** Which of the Conversation tab's two pages is showing: the thread, or the sub-agents list. */
+  /** Which of the Conversation tab's three pages is showing: the thread, the sub-agents list, or one transcript. */
   conversationPage: ConversationPage;
   onConversationPageChange: (page: ConversationPage) => void;
-  /** The account's sub-agents as the document holds them, for the list page. */
+  /** The account's sub-agents as the document holds them, for the list page and the transcript's header. */
   subagents: ChildrenSnapshot;
-  /** Opens one sub-agent's transcript on the host, as the list page's row press. */
+  /** Opens one sub-agent's transcript on the host and turns to its page, as the list page's row press. */
   onOpenSubagent: (childId: string) => void;
+  /** The child the transcript page is of, held exactly while that page shows. */
+  transcriptChildId: string | undefined;
+  /** The one child's transcript the host holds open, as the document carries it. */
+  childTranscript: ChildTranscriptSnapshot | undefined;
   /** Reports someone being part-way through the session search, so the panel holds for them. */
   onFieldEngaged: (engaged: boolean) => void;
   /**
@@ -289,6 +295,8 @@ export function PanelBody({
   onConversationPageChange,
   subagents,
   onOpenSubagent,
+  transcriptChildId,
+  childTranscript,
   onFieldEngaged,
   offerOptions,
   optionsOpen,
@@ -370,9 +378,14 @@ export function PanelBody({
     : undefined;
   const conversationTab = tab === PANEL_TAB.CONVERSATION;
   const subagentsPage = conversationTab && conversationPage === CONVERSATION_PAGE.SUBAGENTS;
+  // The transcript page is of one child; a page with none to be of falls back to the thread.
+  const transcriptChild =
+    conversationTab && conversationPage === CONVERSATION_PAGE.TRANSCRIPT
+      ? transcriptChildId
+      : undefined;
+  const threadPage = conversationTab && !subagentsPage && transcriptChild === undefined;
   // Clear retires recorded turns, so only a thread holding some, and showing, offers it.
-  const offerConversationClear =
-    conversationTab && !subagentsPage && conversation.groups.length > 0;
+  const offerConversationClear = threadPage && conversation.groups.length > 0;
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the buttons beside it say
@@ -402,13 +415,15 @@ export function PanelBody({
               <ConversationClearButton onClear={onClearConversationConversation} />
             ) : null}
             {/* The turn to the sub-agents list and back, offered whenever the
-                tab is showing: an empty list has its own words to say. */}
+                tab is showing: an empty list has its own words to say. Lit on
+                the list and on a transcript alike, since both are the
+                sub-agents' pages; either press returns to the thread. */}
             {conversationTab ? (
               <SubagentsButton
-                open={subagentsPage}
+                open={!threadPage}
                 onToggle={() =>
                   onConversationPageChange(
-                    subagentsPage ? CONVERSATION_PAGE.THREAD : CONVERSATION_PAGE.SUBAGENTS,
+                    threadPage ? CONVERSATION_PAGE.SUBAGENTS : CONVERSATION_PAGE.THREAD,
                   )
                 }
               />
@@ -432,6 +447,16 @@ export function PanelBody({
           now={now}
           onOpenChild={onOpenSubagent}
           onBack={() => onConversationPageChange(CONVERSATION_PAGE.THREAD)}
+        />
+      ) : transcriptChild !== undefined ? (
+        <SubagentTranscriptPanel
+          childId={transcriptChild}
+          subagents={subagents}
+          transcript={childTranscript}
+          roster={roster}
+          now={now}
+          onOpenChat={onOpenChat}
+          onBack={() => onConversationPageChange(CONVERSATION_PAGE.SUBAGENTS)}
         />
       ) : conversationTab ? (
         <ConversationPanel
