@@ -626,21 +626,22 @@ const OBSERVED_TEXT = observedMessagesText(
     providerSessionId: "c1d2e3f4-0000-4000-8000-000000000001",
     updatedAt: FIXTURE_NOW - 90_000,
   },
-  ["agent: The redirect now keeps the query string.", "user: Ship it."],
+  ["agent: The redirect now keeps\nthe query string.", "user: Ship it."],
   true,
   FIXTURE_NOW - 60_000,
 );
 
-test("an observed-messages note names the chat and counts its messages on a fold that holds the lines", () => {
+test("an observed-messages note names the chat and counts its lines on a fold that holds them", () => {
   const markup = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, OBSERVED_TEXT));
   assert.equal(count(markup, "data-speaker", "event"), 1);
-  assert.equal(count(markup, "data-observed-messages", "2"), 1);
+  // Lines, not messages: the first message spans two, and the row keeps no boundary.
+  assert.equal(count(markup, "data-observed-messages", "3"), 1);
   assert.equal(markup.split(OBSERVED_FOLD_OPENING).length - 1, 1);
-  assert.ok(markup.includes("<span>Fix the login redirect — 2 new messages</span>"));
-  // The cut line stands first among the lines and is not counted as a message.
+  assert.ok(markup.includes("<span>Fix the login redirect — 3 new lines</span>"));
+  // The cut line stands first among the lines and is not counted.
   assert.ok(
     markup.includes(
-      `<pre><code>${OBSERVED_MESSAGES_CUT}\nagent: The redirect now keeps the query string.\nuser: Ship it.</code></pre>`,
+      `<pre><code>${OBSERVED_MESSAGES_CUT}\nagent: The redirect now keeps\nthe query string.\nuser: Ship it.</code></pre>`,
     ),
   );
   // A chat the roster no longer holds is named as the brain named it, and one line is singular.
@@ -659,9 +660,7 @@ test("an observed-messages note names the chat and counts its messages on a fold
       ),
     ),
   );
-  assert.ok(
-    unheld.includes("<span>chat a1b2c3d4-0000-4000-8000-000000000002 — 1 new message</span>"),
-  );
+  assert.ok(unheld.includes("<span>chat a1b2c3d4-0000-4000-8000-000000000002 — 1 new line</span>"));
   assert.ok(unheld.includes("<pre><code>agent: Done.</code></pre>"));
   // The note is the brain's, so it carries no copy control and no menu.
   assert.equal(count(markup, "class", "conversation-copy"), 0);
@@ -675,6 +674,8 @@ test("an observed-messages note the reader cannot hold to the shape is drawn ver
     `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}\n[Conductor · Fix the login redirect · not an instant]\nagent: Done.`,
     `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} of old\n[Conductor · Fix the login redirect · ${instant}]`,
     `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES}X ${instant}\n[Conductor · Fix the login redirect · ${instant}]`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}\n[Conductor · luke · Fix · the login redirect · ${instant}]`,
   ]) {
     const fallen = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, malformed));
     assert.equal(count(fallen, "data-speaker", "event"), 1);
