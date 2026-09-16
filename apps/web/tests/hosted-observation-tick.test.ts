@@ -67,8 +67,7 @@ interface Recorded {
 function tickOptions(
   overrides: Partial<ObservationTickOptions> = {},
   accounts: string[] = ["user-a", "user-b"],
-  outcome: ObservationTickOptions["observe"] = () =>
-    Effect.succeed({ complete: true }),
+  outcome: ObservationTickOptions["observe"] = () => Effect.succeed({ complete: true }),
   opening: (userId: string) => Effect.Effect<TurnOpeningOutcome> = () =>
     Effect.succeed(NOTHING_OPENED),
 ) {
@@ -263,8 +262,7 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
     const { options } = tickOptions(
       { passDeadlineMs: 20 },
       ["user-slow", "user-quick"],
-      (userId) =>
-        userId === "user-slow" ? Effect.never : Effect.succeed({ complete: true }),
+      (userId) => (userId === "user-slow" ? Effect.never : Effect.succeed({ complete: true })),
     );
 
     const fiber = yield* Effect.forkChild(
