@@ -840,10 +840,10 @@ it.effect(
         start_ms: 500,
         end_ms: 700,
       });
-      assert.deepEqual(
-        f.captions.at(-1)?.map((row) => row.rowId),
-        [1, 2],
-      );
+      // Two rows under ids of their own, minted by the window and read by nothing else.
+      const rowIds = f.captions.at(-1)?.map((row) => row.rowId) ?? [];
+      assert.equal(rowIds.length, 2);
+      assert.equal(new Set(rowIds).size, 2);
       // A pause in Luke's playback is held through; the status drops only after the hangover.
       f.call.reportRemoteAudioLevel(false);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);

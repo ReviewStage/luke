@@ -80,7 +80,7 @@ const VOICE_VIEW = {
   developerCaptions: undefined,
   liveConversationLines: [
     {
-      rowId: 1,
+      rowId: "row-1",
       entry: { kind: "reply", words: "Checkout is green.", recordedAt: 12 },
       settled: false,
     },

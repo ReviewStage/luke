@@ -132,16 +132,14 @@ export function streamingConversationEntry(
 
 /**
  * One line still being said, as the voice window reports it to the panel:
- * the ledger's row it grows on, stable from the moment the row opens, so a
- * later fragment grows the line in place; its words so far; and whether the
- * row has settled, meaning no fragment has joined it for the gap plus the
- * margin and the record is being written. A settled line is still reported,
- * because the panel keeps drawing it until the record shows it: the two-second
- * settle is when the service starts writing, not when the words are on
- * screen from the record.
+ * the ledger's row it grows on, an opaque id minted when the row opened and
+ * stable from then on, so a later fragment grows the line in place; its words
+ * so far; and whether the row has settled, meaning no fragment has joined it
+ * for the gap. A settled line is still reported, because the panel keeps
+ * drawing it until the record shows it.
  */
 export interface LiveConversationLine {
-  readonly rowId: number;
+  readonly rowId: string;
   readonly entry: ConversationEntry;
   readonly settled: boolean;
 }

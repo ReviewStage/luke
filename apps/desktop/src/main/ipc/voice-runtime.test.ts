@@ -141,7 +141,7 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
   };
 }
 
-function line(rowId: number, words: string, settled: boolean): LiveConversationLine {
+function line(rowId: string, words: string, settled: boolean): LiveConversationLine {
   return { rowId, entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words }, settled };
 }
 
@@ -243,7 +243,7 @@ test("the voice window's report is written to the document and asks for a read o
     ...IDLE_VOICE_VIEW,
     voiceStatus: "speaking",
     lukeSpeaking: true,
-    liveConversationLines: [line(1, "Two sessions", false)],
+    liveConversationLines: [line("row-1", "Two sessions", false)],
   };
   f.report(f.voiceSender, speaking);
   assert.deepEqual(
@@ -253,7 +253,7 @@ test("the voice window's report is written to the document and asks for a read o
   assert.equal(f.refreshes(), 0);
   const settled: VoiceView = {
     ...speaking,
-    liveConversationLines: [line(1, "Two sessions finished.", true)],
+    liveConversationLines: [line("row-1", "Two sessions finished.", true)],
   };
   f.report(f.voiceSender, settled);
   assert.equal(f.refreshes(), 1);

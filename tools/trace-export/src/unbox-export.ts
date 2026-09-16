@@ -15,6 +15,7 @@
  * expects — so one odd event costs itself, never the export.
  */
 
+import { randomUUID } from "node:crypto";
 import { hostedBrainToolCatalog } from "@sidecar/brain";
 import {
   TRACE_DIRECTION,
@@ -154,7 +155,12 @@ interface ExportState {
 }
 
 function newSession(): LiveSession {
-  return { ledger: new TranscriptLedger(), appends: [], seconds: 0 };
+  // The export's own row ids: read by nothing it renders, minted as the service mints the record's.
+  return {
+    ledger: new TranscriptLedger({ mintRowId: () => randomUUID() }),
+    appends: [],
+    seconds: 0,
+  };
 }
 
 function openSegment(

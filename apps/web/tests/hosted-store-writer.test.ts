@@ -1345,7 +1345,8 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
   assert.ok((await spokenLine("dl_1", 3000, 4000, "dl_1")).ok);
 
   const reply = await database.run(
-    writer.recordSpokenReply(target, {
+    writer.upsertSpokenRow(target, {
+      role: MESSAGE_ROLE.ASSISTANT,
       clientId: "reply-1",
       text: "Answered aloud.",
       metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL },
@@ -1354,14 +1355,16 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
   assert.ok(reply.ok);
   assert.equal(reply.effect, STORE_WRITE_EFFECT.WRITTEN);
   const again = await database.run(
-    writer.recordSpokenReply(target, {
+    writer.upsertSpokenRow(target, {
+      role: MESSAGE_ROLE.ASSISTANT,
       clientId: "reply-1",
       text: "Answered aloud.",
       metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL },
     }),
   );
+  // Told again under the same id, the row is grown in place rather than doubled.
   assert.ok(again.ok);
-  assert.deepEqual([again.id, again.effect], [reply.id, STORE_WRITE_EFFECT.REPEATED]);
+  assert.deepEqual([again.id, again.effect], [reply.id, STORE_WRITE_EFFECT.WRITTEN]);
   const rows = await storedMessages(target);
   assert.deepEqual(
     rows.map((row) => [row.clientId, row.role, row.turnId, row.finishedAt !== null]),
@@ -1411,7 +1414,8 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
   const target = await conversation();
   const spoken = (clientId: string, fromMs: number, toMs: number, delegationId?: string) =>
     database.run(
-      writer.recordSpokenReply(target, {
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.ASSISTANT,
         clientId,
         text: `said ${fromMs}`,
         metadata: {
@@ -1502,7 +1506,8 @@ test("the turn's answer closes the journal behind what landed while the turn ran
   const askId = randomUUID();
   const spoken = (clientId: string, fromMs: number) =>
     database.run(
-      writer.recordSpokenReply(target, {
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.ASSISTANT,
         clientId,
         text: `said ${fromMs}`,
         metadata: {
@@ -1593,7 +1598,8 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
   const askId = randomUUID();
   const spoken = (clientId: string, fromMs: number, readFrom?: string) =>
     database.run(
-      writer.recordSpokenReply(target, {
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.ASSISTANT,
         clientId,
         text: `said ${fromMs}`,
         metadata: {

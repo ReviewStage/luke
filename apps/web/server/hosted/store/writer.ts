@@ -235,20 +235,30 @@ interface UserMessageWrite {
 }
 
 /**
- * One of Luke's spoken utterances, as the voice writer cuts it from the
- * session's segments: a finished assistant row authored by the voice model,
- * written once per client id. Its metadata names the session and span it was
- * cut from and, where the developer's line before it was a delegation's, that
- * delegation; the store adds what it can read of what the words were read
+ * One speaker's spoken utterance as the voice writer cuts it from the
+ * session's segments now, under the client id the service's ledger minted
+ * for the row: the developer's as a user row, Luke's as an assistant row
+ * authored by the voice model. Written on first sight and grown in place
+ * after, its metadata names the session and span it was cut from and, for
+ * Luke's where the developer's line before it was a delegation's, that
+ * delegation; the store adds what it can read of what Luke's words were read
  * from — the journal of the delegation's settled turn, which then owns the
  * row, or the briefing whose `speech.spoken` fell inside the span — so a view
  * can fold that message's words behind the words actually said.
  */
-interface SpokenReplyWrite {
-  readonly clientId: string;
-  readonly text: string;
-  readonly metadata: AssistantMessageMetadata;
-}
+type SpokenRowWrite =
+  | {
+      readonly clientId: string;
+      readonly role: typeof MESSAGE_ROLE.USER;
+      readonly text: string;
+      readonly metadata: UserMessageMetadata;
+    }
+  | {
+      readonly clientId: string;
+      readonly role: typeof MESSAGE_ROLE.ASSISTANT;
+      readonly text: string;
+      readonly metadata: AssistantMessageMetadata;
+    };
 
 /**
  * The latest spoken developer line of one voice session that starts at or
@@ -386,11 +396,13 @@ export interface StoreWriter {
   attachAskLines(target: ConversationTarget, turnId: string): Write<AskLinesAttached>;
   /** The latest end, on the session's clock, of the spoken asks already written for one voice session; zero for none. */
   spokenAskEnd(target: ConversationTarget, end: SpokenAskEnd): Write<SpokenAskEndResult>;
-  /** Writes one of Luke's own spoken utterances as a finished assistant row under no turn, once per client id. */
-  recordSpokenReply(
-    target: ConversationTarget,
-    write: SpokenReplyWrite,
-  ): Write<UserMessageWriteResult>;
+  /**
+   * Writes one speaker's spoken utterance as a finished row, or grows the row
+   * standing under its client id: the parts, the metadata, the finish, and
+   * the revision move in place, so a device reading from its revision sees
+   * the row again as it now stands, where it stood.
+   */
+  upsertSpokenRow(target: ConversationTarget, write: SpokenRowWrite): Write<UserMessageWriteResult>;
   /** The latest developer line one voice session left ending at or before an instant, and whether a delegation owns it. */
   latestSpokenLine(target: ConversationTarget, query: SpokenLineQuery): Write<SpokenLineResult>;
   /**
@@ -1669,33 +1681,58 @@ const recordUserMessage = /* @__PURE__ */ Effect.fn("recordUserMessage")(functio
   return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
 
-const recordSpokenReply = /* @__PURE__ */ Effect.fn("recordSpokenReply")(function* (
+const upsertSpokenRow = /* @__PURE__ */ Effect.fn("upsertSpokenRow")(function* (
   context: WriterContext,
-  write: SpokenReplyWrite,
+  write: SpokenRowWrite,
 ): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
   const standing = yield* messageByClientId(context, write.clientId);
-  if (Option.isSome(standing)) {
-    return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
-  }
-  const source = yield* readAloudFrom(context, write.metadata);
-  const read = yield* admitted(context, {
-    id: write.clientId,
-    role: MESSAGE_ROLE.ASSISTANT,
-    metadata:
-      source.messageId === undefined
-        ? write.metadata
-        : { ...write.metadata, read_from: source.messageId },
-    parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
-  });
+  const parts = [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }];
+  // What Luke's words were read from is read again on every write, since the turn they answer may
+  // settle while he is still speaking; a source once found is kept where a later read finds none.
+  const source =
+    write.role === MESSAGE_ROLE.ASSISTANT
+      ? yield* readAloudFrom(context, write.metadata)
+      : NOTHING_READ;
+  const readFrom = source.messageId ?? readFromOf(standing);
+  const read = yield* admitted(
+    context,
+    write.role === MESSAGE_ROLE.ASSISTANT
+      ? {
+          id: write.clientId,
+          role: write.role,
+          metadata:
+            readFrom === undefined ? write.metadata : { ...write.metadata, read_from: readFrom },
+          parts,
+        }
+      : { id: write.clientId, role: write.role, metadata: write.metadata, parts },
+  );
   if (!read.ok) return read;
-  const { id } = yield* insertMessage(context, {
-    clientId: write.clientId,
-    turnId: source.turnId,
-    message: read.message,
+  if (Option.isNone(standing)) {
+    // TODO(LUKE-243): set placed_at to voice_sessions.started_at + from_ms once PR 1's column lands.
+    const { id } = yield* insertMessage(context, {
+      clientId: write.clientId,
+      turnId: source.turnId,
+      message: read.message,
+      finishedAt: context.now(),
+    });
+    return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+  }
+  yield* completeMessage({
+    id: standing.value.id,
+    conversationId: context.target.conversationId,
+    parts: read.message.parts,
+    metadata: read.message.role === MESSAGE_ROLE.SYSTEM ? null : read.message.metadata,
     finishedAt: context.now(),
   });
-  return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+  return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
+
+/** The message a standing spoken row was already read from, where its metadata names one. */
+function readFromOf(standing: Option.Option<MessageRow>): string | undefined {
+  if (Option.isNone(standing) || standing.value.metadata === null) return undefined;
+  const metadata = standing.value.metadata;
+  return "read_from" in metadata ? metadata.read_from : undefined;
+}
 
 /** What a spoken row was read from, and the turn that owns it: either may be nothing. */
 interface ReadAloudSource {
@@ -2091,8 +2128,8 @@ export function storeWriter({
       underConversation(target, (context) => attachAskLines(context, turnId)),
     spokenAskEnd: (target, end) =>
       underConversation(target, (context) => spokenAskEnd(context, end)),
-    recordSpokenReply: (target, write) =>
-      underConversation(target, (context) => recordSpokenReply(context, write)),
+    upsertSpokenRow: (target, write) =>
+      underConversation(target, (context) => upsertSpokenRow(context, write)),
     latestSpokenLine: (target, query) =>
       underConversation(target, (context) => latestSpokenLine(context, query)),
     adoptSpokenLine: (target, adoption) =>

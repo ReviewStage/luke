@@ -12,6 +12,7 @@ import {
   type LiveBrainSubmission,
   LiveSessionService,
   type LiveSessionSource,
+  ROW_WRITE_DEBOUNCE_MS,
   sidebandOverSocket,
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
@@ -20,7 +21,6 @@ import { Deferred, Effect, Layer, Schema, Scope } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
-  CONVERSATION_ENTRY_KIND,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -40,8 +40,7 @@ import {
   LIVE_CLIENT_EVENT,
   type LiveAppendEvent,
   type LiveClientEvent,
-  UTTERANCE_GAP_MS,
-  UTTERANCE_SETTLE_MARGIN_MS,
+  TRANSCRIPT_SPEAKER,
 } from "../server/live";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
@@ -63,7 +62,8 @@ import {
  * plan's split and the service's own rule that the record precedes the
  * speech: the developer's spoken ask is the one message, cut from the
  * segments the deltas wrote, and a reply is spoken only once that ask is on
- * record, while nothing Luke said becomes a message.
+ * record; each speaker's utterance is a row of its own under the id the
+ * service's ledger minted, on record behind the debounce and grown in place.
  */
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
@@ -101,7 +101,7 @@ async function target(registered = true): Promise<VoiceTarget> {
  * Waits a delay of the service's own out. The service keeps time on the
  * ambient `Clock`, which is the real one here — this suite runs on the store
  * runtime the rest of the function does, over a real database — so the wait is
- * real, with a margin for the turns the settled delay's own write takes.
+ * real, with a margin for the turns the delay's own write takes.
  */
 const ELAPSE_MARGIN_MS = 200;
 
@@ -242,6 +242,7 @@ const MessageRowSchema = Schema.Struct({
   role: Schema.String,
   parts: Schema.Unknown,
   metadata: Schema.Unknown,
+  revision: Schema.Unknown,
 });
 
 async function sessionRowId(liveSessionId: string): Promise<string> {
@@ -262,7 +263,9 @@ async function segments(liveSessionId: string) {
 
 async function messageRows(
   conversation: ConversationTarget,
-): Promise<{ clientId: string; role: string; parts: unknown; metadata: unknown }[]> {
+): Promise<
+  { clientId: string; role: string; parts: unknown; metadata: unknown; revision: number }[]
+> {
   const rows = await readMessagesByConversation(database.run, conversation.conversationId);
   return rows.map((row) => {
     const decoded = Schema.decodeUnknownSync(MessageRowSchema)(row);
@@ -271,8 +274,20 @@ async function messageRows(
       role: decoded.role,
       parts: decoded.parts,
       metadata: decoded.metadata,
+      // A row never written in place has no revision; the driver hands the column back as it will.
+      revision: Number(decoded.revision ?? 0),
     };
   });
+}
+
+/** The rows as the plan's tests compare them: everything but the revision, which only the in-place tests read. */
+function shownRows(rows: Awaited<ReturnType<typeof messageRows>>) {
+  return rows.map(({ revision: _revision, ...row }) => row);
+}
+
+/** The row a delegation owns, once the ask's write has landed under its id. */
+async function askRow(conversation: ConversationTarget, delegationId = "dl_1") {
+  return (await messageRows(conversation)).find((row) => row.clientId === delegationId);
 }
 
 const IGNORED = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED } as const;
@@ -292,7 +307,7 @@ test("a spoken ask is the one message, cut from the segments including a delta t
   // The ask on record is what says the service has the exchange the run's
   // events belong to: it composes the ask, hears the run's id, and writes the
   // line under the delegation, in that order.
-  await until(async () => (await messageRows(live.conversation)).length === 1, "the ask on record");
+  await until(async () => (await askRow(live.conversation)) !== undefined, "the ask on record");
   f.brain.reply("run-1", "Nothing yet.");
   await until(() => f.commentary().length === 1, "the reply to be spoken");
 
@@ -305,7 +320,17 @@ test("a spoken ask is the one message, cut from the segments including a delta t
     from_ms: 1000,
     to_ms: 2500,
   };
-  assert.deepEqual(await messageRows(live.conversation), [
+  // The delegation flushed both rows before the ask was composed: Luke's greeting stands as his own
+  // row, and the developer's row was adopted by the ask, its cut running past the flushed span.
+  const rows = await messageRows(live.conversation);
+  assert.deepEqual(
+    rows.map((row) => [row.role, row.parts]),
+    [
+      [MESSAGE_ROLE.ASSISTANT, [{ type: "text", text: "Hi there.", state: "done" }]],
+      [MESSAGE_ROLE.USER, [{ type: "text", text: "What needs me right now?", state: "done" }]],
+    ],
+  );
+  assert.deepEqual(shownRows(rows.slice(1)), [
     {
       clientId: "dl_1",
       role: MESSAGE_ROLE.USER,
@@ -325,15 +350,15 @@ test("a spoken ask is the one message, cut from the segments including a delta t
   assert.deepEqual(await Promise.all(f.observed), [IGNORED, WRITTEN, WRITTEN, IGNORED, WRITTEN]);
 });
 
-test("an utterance that settled before its delegation arrived is still the delegation's ask on record before its reply is spoken", async () => {
+test("an utterance whose row is on record before its delegation arrives is still the delegation's ask on record before its reply is spoken", async () => {
   const live = await target();
   const f = await stand(live);
   await f.open();
 
   f.socket.receive(heard("Open the failing one.", 1000, 2200));
   await Promise.all(f.observed);
-  // The settle timer writes the utterance with no delegation: the developer's line stands as a row of its own.
-  await elapse(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  // The row's own write puts the utterance on record with no delegation: the developer's line stands as a row of its own.
+  await elapse(ROW_WRITE_DEBOUNCE_MS);
   const settled = await messageRows(live.conversation);
   assert.deepEqual(
     settled.map((row) => [row.role, row.parts]),
@@ -359,8 +384,8 @@ test("an utterance that settled before its delegation arrived is still the deleg
   f.brain.reply("run-1", "Opening it.");
   await until(() => f.commentary().length === 1, "the reply to be spoken");
 
-  // The delegation adopted the settled line rather than cutting a second: one row, now under the
-  // delegation's id and naming it, with the span it settled at.
+  // The delegation adopted the line rather than cutting a second: one row, now under the
+  // delegation's id and naming it, with the span the cut ran to.
   const rows = await messageRows(live.conversation);
   assert.deepEqual(
     rows.map((row) => [row.clientId, row.role, row.parts]),
@@ -385,6 +410,42 @@ test("an utterance that settled before its delegation arrived is still the deleg
     [["dl_late", "Opening it."]],
   );
   assert.deepEqual(await Promise.all(f.observed), [IGNORED, WRITTEN, IGNORED]);
+});
+
+test("a row is on record within the debounce of its first fragment and grows in place with the next: the same id, the words so far, the span's end moved, and the revision bumped", async () => {
+  const live = await target();
+  const f = await stand(live);
+  await f.open();
+
+  f.socket.receive(heard("Open the", 1000, 1400));
+  await elapse(ROW_WRITE_DEBOUNCE_MS);
+  const [first] = await messageRows(live.conversation);
+  assert.ok(first);
+  assert.deepEqual(first.parts, [{ type: "text", text: "Open the", state: "done" }]);
+
+  f.socket.receive(heard(" failing one.", 1400, 2200));
+  await elapse(ROW_WRITE_DEBOUNCE_MS);
+  const rows = await messageRows(live.conversation);
+  const voiceSessionId = await sessionRowId(live.liveSessionId);
+  const metadata: UserMessageMetadata = {
+    author: MESSAGE_AUTHOR.DEVELOPER,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: voiceSessionId,
+    from_ms: 1000,
+    to_ms: 2200,
+  };
+  assert.deepEqual(shownRows(rows), [
+    {
+      clientId: first.clientId,
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: "Open the failing one.", state: "done" }],
+      metadata,
+    },
+  ]);
+  assert.ok((rows[0]?.revision ?? 0) > first.revision);
+  // Silence writes nothing more: the row stands as its last fragment left it.
+  await elapse(ROW_WRITE_DEBOUNCE_MS);
+  assert.deepEqual(await messageRows(live.conversation), rows);
 });
 
 test("a delegation delivered ahead of the words it is about is held, and is the ask on record once the service composes it on the words", async () => {
@@ -434,19 +495,18 @@ test("an ask the record refuses is answered all the same: nothing is said of the
   assert.deepEqual(await Promise.all(f.observed), [IGNORED, refused, IGNORED]);
 });
 
-test("the record door answers from the stream: an undelegated utterance and Luke's answer to it are rows cut from the segments, a delegation is held until its ask is written, a repeated write is the same message, and an unseen delegation is refused", async () => {
+test("the record door answers from the stream: the developer's row and Luke's answer to it are rows cut from the segments, a delegation is held until its ask is written, a repeated write is the same message, and an unseen delegation is refused", async () => {
   const live = await target();
   const scope = await database.run(Scope.make());
   const record = await database.run(
     Scope.provide(hostedLiveRecord({ writer, target: live }), scope),
   );
   const utterance = {
-    rowId: 1,
+    rowId: "row-1",
     voiceSessionId: live.liveSessionId,
     askContext: undefined,
     startMs: 0,
     endMs: 900,
-    recordedAt: NOW,
   };
 
   assert.deepEqual(
@@ -454,26 +514,20 @@ test("the record door answers from the stream: an undelegated utterance and Luke
     WRITTEN,
   );
   assert.deepEqual(await database.run(record.observe(said("Opening it.", 1200, 2000))), WRITTEN);
-  // The developer's settled utterance, undelegated, is a row cut from its segments.
+  // The developer's row, undelegated, is cut from its segments.
   assert.equal(
-    await database.run(
-      record.writeDeveloperUtterance({
-        ...utterance,
-        text: "Open the failing one.",
-        delegationId: null,
-      }),
-    ),
+    await database.run(record.upsertSpokenRow({ ...utterance, speaker: TRANSCRIPT_SPEAKER.USER })),
     true,
   );
   // Luke's answer to it is a row too, over its own span.
   assert.equal(
     await database.run(
-      record.writeLukeUtterance({
+      record.upsertSpokenRow({
         ...utterance,
+        rowId: "row-2",
+        speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
         startMs: 1200,
         endMs: 2000,
-        role: CONVERSATION_ENTRY_KIND.REPLY,
-        text: "Opening it.",
       }),
     ),
     true,
@@ -498,6 +552,7 @@ test("the record door answers from the stream: an undelegated utterance and Luke
   assert.equal((await messageRows(live.conversation)).length, 2);
   const ask = {
     ...utterance,
+    rowId: "row-3",
     startMs: 3000,
     endMs: 3800,
     text: "Now run it.",
@@ -537,7 +592,7 @@ test("a delegation placed ahead of the ask's last fragment, the fragment landing
     "the last fragment on record",
   );
   await database.run(Deferred.succeed(f.brain.answerWhen, undefined));
-  await until(async () => (await messageRows(live.conversation)).length === 1, "the ask on record");
+  await until(async () => (await askRow(live.conversation)) !== undefined, "the ask on record");
 
   const voiceSessionId = await sessionRowId(live.liveSessionId);
   const metadata: UserMessageMetadata = {
@@ -548,7 +603,7 @@ test("a delegation placed ahead of the ask's last fragment, the fragment landing
     from_ms: 1000,
     to_ms: 2600,
   };
-  assert.deepEqual(await messageRows(live.conversation), [
+  assert.deepEqual(shownRows(await messageRows(live.conversation)), [
     {
       clientId: "dl_1",
       role: MESSAGE_ROLE.USER,
@@ -556,7 +611,7 @@ test("a delegation placed ahead of the ask's last fragment, the fragment landing
       metadata,
     },
   ]);
-  // The settle timer finds the row on record and writes it no second time.
-  await elapse(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  // The row is the ask's now and is grown no further by its own write: one row.
+  await elapse(ROW_WRITE_DEBOUNCE_MS);
   assert.equal((await messageRows(live.conversation)).length, 1);
 });
