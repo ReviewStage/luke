@@ -1243,7 +1243,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // older ones asked about the same span and are answered by the same ask.
     const newest = session.retained[session.retained.length - 1];
     session.retained = [];
-    if (newest) this.#start(this.#compose(session, newest.id, newest.offsetMs));
+    if (!newest) return;
+    // The fragment that let the delegation compose was the first on its row, and its
+    // write is still put off: the row goes on record under the ledger's id ahead of
+    // the ask's write, as it does when the delegation follows the words.
+    this.#flushRows(session);
+    this.#start(this.#compose(session, newest.id, newest.offsetMs));
   }
 
   /**

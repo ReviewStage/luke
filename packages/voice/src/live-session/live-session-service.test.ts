@@ -651,10 +651,17 @@ it.effect(
       sideband.input("Open the failing one.", 500, 1400);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
+      // The row reached the record under the ledger's id ahead of the ask's write, as it
+      // does when the delegation follows the words rather than preceding them.
+      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 500, 1400]]);
       assert.equal(f.record.developer[0]?.delegationId, "item_early");
+      assert.equal(f.record.developer[0]?.rowId, f.record.rows[0]?.rowId);
       sideband.input(" Please.", 1400, 1700);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
+      // The row is the ask's now: the late fragment grows it here no further.
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
+      assert.equal(f.record.rows.length, 1);
     }),
 );
 
