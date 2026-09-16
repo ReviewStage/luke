@@ -661,15 +661,16 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
     }
     const requestedAgent = textArgument(fields, "agent");
     const spawnable = project.spawnableAgents;
-    const agent =
-      (spawnable === undefined || requestedAgent === undefined
+    const namedAgent =
+      spawnable === undefined || requestedAgent === undefined
         ? undefined
         : namedOnce(
             spawnable,
             requestedAgent,
             (agentKind) => agentKind,
             (name) => name.toLocaleLowerCase(),
-          )) ?? project.defaultAgent;
+          );
+    const agent = namedAgent ?? project.defaultAgent;
     if (spawnable && (!agent || !spawnable.includes(agent))) {
       return refuse(agent ? ACTION_REFUSAL.NO_PROJECT_AGENT : ACTION_REFUSAL.NAME_A_PROJECT_AGENT);
     }
@@ -713,7 +714,7 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
       if ("refusal" in resolved) return resolved.refusal;
       // Only an agent the ask itself named can contradict the model; the
       // project's default agent, filled in above, is no word of the developer's.
-      const askedAgent = requestedAgent === undefined ? undefined : (agent ?? requestedAgent);
+      const askedAgent = namedAgent ?? requestedAgent;
       if (
         askedAgent !== undefined &&
         askedAgent.toLocaleLowerCase() !== resolved.selection.agent.toLocaleLowerCase()

@@ -393,6 +393,36 @@ test("a creation's model is matched as it is said, and never re-decides the agen
       agentField,
     );
   }
+  // A project's own default agent is not the developer's word: it neither
+  // contradicts the model they named nor is it what a refusal names.
+  const defaulting = [{ ...OFFERED_PROJECT, defaultAgent: "claude" }];
+  assert.deepEqual(
+    await sessionToolAction(
+      messageCall(`{${identity},"agent":"codex","model":"gpt-5.4"}`, ACTION_TOOL.CREATE_WORKSPACE),
+      [],
+      defaulting,
+      conductorAgentModels,
+    ),
+    { ...created, agent: "claude", agentSelection: { agent: "codex", model: "gpt-5.4" } },
+  );
+  assert.deepEqual(
+    await sessionToolAction(
+      messageCall(`{${identity},"model":"gpt-5.4"}`, ACTION_TOOL.CREATE_WORKSPACE),
+      [],
+      defaulting,
+      conductorAgentModels,
+    ),
+    { ...created, agent: "claude", agentSelection: { agent: "codex", model: "gpt-5.4" } },
+  );
+  assert.deepEqual(
+    await sessionToolAction(
+      messageCall(`{${identity},"agent":"cursor","model":"gpt-5.4"}`, ACTION_TOOL.CREATE_WORKSPACE),
+      [],
+      defaulting,
+      conductorAgentModels,
+    ),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "A cursor agent runs no model by that name." },
+  );
 });
 
 test("an added agent may carry a model, only of the asked-for kind", async () => {
