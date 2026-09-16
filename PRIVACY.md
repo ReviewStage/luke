@@ -67,13 +67,17 @@ do: the actions on your coding agent sessions, the writes to his workspace
 files and the dated notes, and the search and reading of his notebook. It
 cannot speak to you or announce anything, and it cannot open a child of its
 own. When it finishes, its final reply is handed back to the parent as one
-turn there, and the parent decides what, if anything, you hear of it. What
+turn there, unless the parent asked for none, and the parent decides what, if
+anything, you hear of it. What
 the child said and each tool it called, with its input and its result, is
 stored as a conversation of your account, in the same rows described under
 "Your account" below and on the same terms: stored as written and readable by
-our own operators, marked deleted with the rest when you clear the
-conversation and removed thirty days later, and removed at once when you
-delete your account. Each of its turns counts against your daily review
+our own operators, and removed at once when you delete your account. A child
+of your own conversation is marked deleted with the rest when you clear the
+conversation and removed thirty days later; a child opened from a
+conversation Luke follows stands with the conversation it was opened from,
+which Clear does not reach, until you delete your account. Each of its turns
+counts against your daily review
 allowance like any turn of Luke's own.
 
 **Luke's workspace.** Luke's workspace is a small set of Markdown files — his

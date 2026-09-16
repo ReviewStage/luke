@@ -9,8 +9,9 @@ import { hostedStoreRoute } from "./store-route.js";
 
 /**
  * The ask routes as functions: the store route's bearer and store, the ask
- * record over the same ambient client, and eve reached on the deployment's
- * own origin as the account whose bearer the request carries. These routes sit beside the store routes rather than in the brain
+ * record over the same ambient client, and eve reached on the request's own
+ * origin, unless `LUKE_EVE_ORIGIN` names another, as the account whose bearer
+ * the request carries. These routes sit beside the store routes rather than in the brain
  * contract's group: that group is gated by the hosted tier's OpenAI key,
  * which must not gate a dispatch to eve.
  */
