@@ -14,6 +14,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
@@ -37,10 +38,10 @@ import {
 
 /**
  * A child's messages read over the real store and migrations: the
- * Conversation's own projection over the one child the query names, the
- * child standing where a main does in its page; behind the same gate as the
- * other reads, refusing a query that names no child, and not finding a child
- * that does not stand for the account.
+ * Conversation's own projection over the one child or observed conversation
+ * the query names, the conversation standing where a main does in its page;
+ * behind the same gate as the other reads, refusing a query that names no
+ * conversation, and not finding one that does not stand for the account.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -49,6 +50,10 @@ afterAll(() => database.close());
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED } as const;
 const BRAIN_REPLY = { author: MESSAGE_AUTHOR.BRAIN } as const;
+const ROSTER_LOOK = {
+  author: MESSAGE_AUTHOR.BRAIN,
+  source: OBSERVATION_SOURCE.ROSTER_LOOK,
+} as const;
 const SESSION_FIELDS = {
   provider_id: "conductor",
   provider_session_id: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
@@ -163,6 +168,62 @@ async function delegated(userId: string, main: string) {
   return { child, taskLine, turn, reply };
 }
 
+/** An observed conversation with the two rows a roster-diff turn leaves: the wake's line and the reply the turn wrote, each at `offset` from NOW. */
+async function observedAt(userId: string, offset: number) {
+  const observed = await insertConversation(database.run, {
+    userId,
+    kind: CONVERSATION_KIND.OBSERVED,
+    providerId: SESSION_FIELDS.provider_id,
+    providerSessionId: SESSION_FIELDS.provider_session_id,
+    createdAt: at(offset),
+    nextMessageSeq: 3,
+  });
+  const turn = await insertTurn(database.run, {
+    userId,
+    conversationId: observed,
+    origin: TURN_ORIGIN.ROSTER_DIFF,
+    status: TURN_STATUS.SETTLED,
+    queuedAt: at(offset),
+    startedAt: at(offset + 200),
+    settledAt: at(offset + 2_400),
+  });
+  const wake = await insertMessage(database.run, {
+    userId,
+    conversationId: observed,
+    seq: 1,
+    turnId: turn,
+    clientId: `${turn}-wake`,
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "Roster: the session moved to waiting." }],
+    metadata: ROSTER_LOOK,
+    createdAt: at(offset),
+    finishedAt: at(offset),
+  });
+  const reply = await insertMessage(database.run, {
+    userId,
+    conversationId: observed,
+    seq: 2,
+    turnId: turn,
+    clientId: turn,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      { type: "step-start" },
+      {
+        type: "tool-announce",
+        toolCallId: "call_3a0000000000000002",
+        state: "output-available",
+        input: { briefing: "The session is waiting on a permission prompt." },
+        output: {},
+      },
+      { type: "text", text: "Announced.", state: "done" },
+    ],
+    metadata: BRAIN_REPLY,
+    createdAt: at(offset + 2_000),
+    finishedAt: at(offset + 2_400),
+  });
+  return { observed, turn, wake, reply };
+}
+
 test("the gate order is method, bearer, then the query: a read naming no child or a cursor this build did not mint is refused", async () => {
   const userId = await database.createUser();
   const main = await insertConversation(database.run, { userId, createdAt: at(-3_600_000) });
@@ -207,10 +268,69 @@ test("a child that does not stand for the account is not found: an unknown id, a
     createdAt: at(-3_600_000),
   });
   const othersChild = await childOf(other, otherMain, { createdAt: at(0) });
+  const { observed: othersObserved } = await observedAt(other, 0);
+  const { observed: stampedObserved } = await observedAt(userId, 0);
+  await setConversationDeletedAt(database.run, stampedObserved, at(1_000));
 
-  for (const child of [randomUUID(), stamped, othersChild, main]) {
+  for (const child of [
+    randomUUID(),
+    stamped,
+    othersChild,
+    main,
+    otherMain,
+    othersObserved,
+    stampedObserved,
+  ]) {
     await refused(await read(userId, { child }), 404, HOSTED_API_ERROR.NOT_FOUND);
   }
+});
+
+test("an observed conversation pages as a main's page over itself, whole: the wake's line and the reply under their roster-diff turn, from before the standing main opened, where the Conversation's read shows nothing of them", async () => {
+  const userId = await database.createUser();
+  // The observed conversation and its rows precede the main a Clear opened, so the view's window cuts them.
+  const { observed, turn, wake, reply } = await observedAt(userId, -7_200_000);
+  const main = await insertConversation(database.run, { userId, createdAt: at(-3_600_000) });
+
+  const page = await answered(await read(userId, { child: observed }));
+  assert.deepEqual(page.conversations, [
+    { id: observed, kind: CONVERSATION_VIEW_SOURCE.MAIN, openedAt: NOW - 7_200_000 },
+  ]);
+  assert.deepEqual(
+    page.groups.map((group) => [
+      group.turnId,
+      group.conversationId,
+      group.source.kind,
+      group.turn?.origin,
+      group.messages.map((message) => message.message.id),
+    ]),
+    [[turn, observed, CONVERSATION_VIEW_SOURCE.MAIN, TURN_ORIGIN.ROSTER_DIFF, [wake, reply]]],
+  );
+  assert.deepEqual(
+    page.groups[0]?.messages.map((message) => message.tools.map((tool) => tool.toolName)),
+    [[], ["announce"]],
+  );
+  assert.deepEqual(Result.getOrUndefined(readEither(sequenceReadCursorSchema)(page.next)), {
+    positions: [{ conversationId: observed, seq: 2, revision: 0 }],
+  });
+  assert.equal(page.hasMore, false);
+
+  const conversation = await answered(
+    await database.run(
+      handleConversationMessages(
+        options(
+          userId,
+          new Request(`https://luke.test${HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES}`, {
+            headers: { authorization: "Bearer token-1" },
+          }),
+        ),
+      ),
+    ),
+  );
+  assert.deepEqual(
+    conversation.conversations.map((entry) => entry.id),
+    [main, observed],
+  );
+  assert.deepEqual(conversation.groups, []);
 });
 
 test("a child's page is a main's page over the one child: its task line in a group of its own, the child turn's reply under its turn, and a cursor that pages the child alone", async () => {

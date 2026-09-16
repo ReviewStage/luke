@@ -157,9 +157,9 @@ export class HostedConversationClient {
     );
   }
 
-  /** One child's messages behind the caller's cursor: the same page shape as `messages`, over the one child named. */
+  /** One child's or observed conversation's messages behind the caller's cursor: the same page shape as `messages`, over the one conversation named. */
   childMessages(
-    childId: string,
+    conversationId: string,
     page: ReadPageQuery = {},
   ): Effect.Effect<
     ConversationReadResult<ConversationMessagesAnswer>,
@@ -168,7 +168,7 @@ export class HostedConversationClient {
   > {
     return this.#readEffect(
       pagePath(HOSTED_SERVICE_PATH.CONVERSATION_CHILD_MESSAGES, page, {
-        [CHILD_MESSAGES_QUERY.CHILD]: childId,
+        [CHILD_MESSAGES_QUERY.CHILD]: conversationId,
       }),
       (payload) => Result.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
     );
