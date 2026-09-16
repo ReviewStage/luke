@@ -75,7 +75,6 @@ const DECLARED_TABLES = [
   "roster_diff",
   "roster_snapshot",
   "session",
-  "tool_sets",
   "turns",
   "user",
   "verification",

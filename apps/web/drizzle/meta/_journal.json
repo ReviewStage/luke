@@ -267,6 +267,13 @@
       "when": 1789950000000,
       "tag": "0038_turn_failure_detail",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1790000000000,
+      "tag": "0039_dead_tool_sets",
+      "breakpoints": true
     }
   ]
 }
