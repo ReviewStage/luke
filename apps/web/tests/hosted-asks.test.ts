@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
+import { db } from "../server/db/query";
+import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { ASK_REFUSAL, acceptAsk, askStanding, stopAsk } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
@@ -67,12 +69,10 @@ const IdRowSchema = Schema.Struct({ id: Schema.String });
 async function conversation(userId: string): Promise<string> {
   const row = await database.run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        insert into conversations (user_id, kind)
-        values (${userId}, ${CONVERSATION_KIND.MAIN})
-        returning id
-      `;
+      const rows = yield* db
+        .insert(conversations)
+        .values({ userId, kind: CONVERSATION_KIND.MAIN })
+        .returning({ id: conversations.id });
       return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
@@ -81,23 +81,20 @@ async function conversation(userId: string): Promise<string> {
 
 function setConversationRuntimeSessionId(conversationId: string, sessionId: string) {
   return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update conversations set runtime_session_id = ${sessionId} where id = ${conversationId}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .update(conversations)
+        .set({ runtimeSessionId: sessionId })
+        .where(eq(conversations.id, conversationId)),
+    ),
   );
 }
 
 function stampConversationDeletedAt(conversationId: string, deletedAt: Date) {
   return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update conversations set deleted_at = ${deletedAt} where id = ${conversationId}
-      `;
-    }),
+    Effect.asVoid(
+      db.update(conversations).set({ deletedAt }).where(eq(conversations.id, conversationId)),
+    ),
   );
 }
 

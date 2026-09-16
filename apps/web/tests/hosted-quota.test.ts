@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
+import { user } from "../server/db/auth-schema";
+import { db } from "../server/db/query";
+import { hostedUsage, introductionUsage } from "../server/db/usage-schema";
 import {
   HOSTED_DAILY_LIMIT,
   spendHostedMeter,
@@ -17,12 +19,8 @@ const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const openUser = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
   const userId = `user-${randomUUID()}`;
-  yield* sql`
-    insert into "user" (id, name, email)
-    values (${userId}, ${"Test User"}, ${`${userId}@luke.test`})
-  `;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
 });
 
@@ -61,12 +59,9 @@ it.layer(testSqlClient)("the quota meters over effect/unstable/sql", (it) => {
 
   it.effect("the hosted ceiling allows its last use and refuses the next", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
       const userId = yield* openUser;
       const day = utcDayKey(NOON_UTC);
-      yield* sql`
-        insert into hosted_usage (user_id, day, calls) values (${userId}, ${day}, ${HOSTED_DAILY_LIMIT - 1})
-      `;
+      yield* db.insert(hostedUsage).values({ userId, day, calls: HOSTED_DAILY_LIMIT - 1 });
 
       const atLimit = yield* spendHostedMeter({ userId, now: NOON_UTC });
       assert.equal(atLimit.allowed, true);
@@ -87,12 +82,10 @@ it.layer(testSqlClient)("the quota meters over effect/unstable/sql", (it) => {
 
   it.effect("a spent introduction ceiling refuses the next mint", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
       const day = NOON_UTC + DAY_MS;
-      const dayKey = utcDayKey(day);
-      yield* sql`
-        insert into introduction_usage (caller, day, mints) values (${"global"}, ${dayKey}, ${HOSTED_DAILY_LIMIT})
-      `;
+      yield* db
+        .insert(introductionUsage)
+        .values({ caller: "global", day: utcDayKey(day), mints: HOSTED_DAILY_LIMIT });
       const overLimit = yield* spendIntroductionMeter({ now: day });
       assert.equal(overLimit.allowed, false);
     }),

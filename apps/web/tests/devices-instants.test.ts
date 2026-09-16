@@ -3,10 +3,13 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
+import { and, eq, gt, gte } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
 import { z } from "zod";
+import { devices } from "../server/db/devices-schema";
+import { db } from "../server/db/query";
 import { InstantColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertDevice, readDevicesByUser } from "./support/store-rows";
@@ -197,20 +200,20 @@ test("a device's instants round-trip through the schema as points on the timelin
   );
 
   const stillHolding = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select id from devices where user_id = ${userId} and quiet_until > ${now}`;
-    }),
+    db
+      .select({ id: devices.id })
+      .from(devices)
+      .where(and(eq(devices.userId, userId), gt(devices.quietUntil, now))),
   );
   assert.deepEqual(
     stillHolding.map((row) => row.id),
     [holdingId],
   );
   const eligible = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select id from devices where user_id = ${userId} and last_seen_at >= ${now}`;
-    }),
+    db
+      .select({ id: devices.id })
+      .from(devices)
+      .where(and(eq(devices.userId, userId), gte(devices.lastSeenAt, now))),
   );
   assert.deepEqual(
     eligible.map((row) => row.id),

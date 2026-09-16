@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
+import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { user } from "../server/db/auth-schema";
+import { db } from "../server/db/query";
+import { voiceSessions } from "../server/db/voice-schema";
 import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { registerDevice } from "../server/hosted/device-store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
@@ -24,37 +27,32 @@ const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const record = voiceSessionRecord(() => NOW);
 
 const openUser = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
   const userId = `user-${randomUUID()}`;
-  yield* sql`
-    insert into "user" (id, name, email)
-    values (${userId}, ${"Test User"}, ${`${userId}@luke.test`})
-  `;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
 });
 
 /** The row as the suite reads it back, the instant column through the schema the two drivers agree on. */
 const VoiceSessionRowSchema = Schema.Struct({
   id: Schema.String,
-  user_id: Schema.String,
-  device_id: Schema.NullOr(Schema.String),
-  delegation_mode: Schema.String,
-  closed_at: Schema.NullOr(InstantColumnSchema),
-  close_reason: Schema.NullOr(Schema.String),
+  userId: Schema.String,
+  deviceId: Schema.NullOr(Schema.String),
+  delegationMode: Schema.String,
+  closedAt: Schema.NullOr(InstantColumnSchema),
+  closeReason: Schema.NullOr(Schema.String),
   usage: Schema.NullOr(Schema.Unknown),
 });
 const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
 
 const readVoiceSession = (liveSessionId: string) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const rows = yield* sql`select * from voice_sessions where live_session_id = ${liveSessionId}`;
-    return rows.map((row) => decodeVoiceSessionRow(row));
-  });
+  Effect.map(
+    db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)),
+    (rows) => rows.map((row) => decodeVoiceSessionRow(row)),
+  );
 
 /** The device the row names, which is null for a session that named none and for a claim the account did not hold. */
 const namedDevice = (liveSessionId: string) =>
-  Effect.map(readVoiceSession(liveSessionId), (rows) => rows[0]?.device_id);
+  Effect.map(readVoiceSession(liveSessionId), (rows) => rows[0]?.deviceId);
 
 it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it) => {
   it.effect(
@@ -76,9 +74,9 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         assert.equal(yield* record.owned({ userId: owner, sessionId: "live_never" }), false);
         assert.deepEqual(
           rows.map((row) => ({
-            userId: row.user_id,
-            delegationMode: row.delegation_mode,
-            closedAt: row.closed_at,
+            userId: row.userId,
+            delegationMode: row.delegationMode,
+            closedAt: row.closedAt,
             usage: row.usage,
           })),
           [
@@ -104,8 +102,8 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         yield* record.noteUsage({ sessionId: liveSessionId, seconds: 25 });
         const read = Effect.map(readVoiceSession(liveSessionId), (rows) =>
           rows.map((row) => ({
-            closedAt: row.closed_at,
-            closeReason: row.close_reason,
+            closedAt: row.closedAt,
+            closeReason: row.closeReason,
             usage: row.usage,
           })),
         );

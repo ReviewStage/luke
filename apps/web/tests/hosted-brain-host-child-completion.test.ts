@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
@@ -13,6 +14,8 @@ import {
   type WireRecord,
   wireRecord,
 } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -187,15 +190,14 @@ async function childOf(
 /** The stamp as either dialect hands the column back: a `Date` from Postgres, a string from PGlite. */
 const StampRowSchema = Schema.Struct({
   completionDeliveredAt: Schema.NullOr(InstantColumnSchema),
-}).pipe(Schema.encodeKeys({ completionDeliveredAt: "completion_delivered_at" }));
+});
 
 async function stampOf(child: ConversationTarget): Promise<number | null> {
   const rows = await database.run(
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) =>
-        sql`select completion_delivered_at from conversations where id = ${child.conversationId}`,
-    ),
+    db
+      .select({ completionDeliveredAt: conversations.completionDeliveredAt })
+      .from(conversations)
+      .where(eq(conversations.id, child.conversationId)),
   );
   const row = Schema.decodeUnknownSync(StampRowSchema)(rows[0]);
   return row.completionDeliveredAt === null ? null : row.completionDeliveredAt.getTime();
@@ -477,12 +479,11 @@ test("two children of one parent with no recorded session end together: the firs
   });
   // One parent for both: the second child is moved under the first's parent.
   await database.run(
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        update conversations set parent_conversation_id = ${first.parentId}
-        where id = ${second.child.conversationId}
-      `,
+    Effect.asVoid(
+      db
+        .update(conversations)
+        .set({ parentConversationId: first.parentId })
+        .where(eq(conversations.id, second.child.conversationId)),
     ),
   );
   const eve = fakeEve();
@@ -507,12 +508,12 @@ test("two children of one parent with no recorded session end together: the firs
   assert.equal(eve.sent[0]?.sessionId, OPENED_SESSION);
   assert.equal(eve.sent[0]?.message.conversationId, first.parentId);
   const parentRow = await database.run(
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`select runtime_session_id from conversations where id = ${first.parentId}`,
-    ),
+    db
+      .select({ runtimeSessionId: conversations.runtimeSessionId })
+      .from(conversations)
+      .where(eq(conversations.id, first.parentId)),
   );
-  assert.equal(parentRow[0]?.runtime_session_id, OPENED_SESSION);
+  assert.equal(parentRow[0]?.runtimeSessionId, OPENED_SESSION);
 });
 
 test("the send into the parent's recorded session holds no row lock: a second connection takes the parent's lock while eve is asked, and a session recorded while the send was refused is sent into rather than doubled", async () => {
@@ -556,12 +557,11 @@ test("the send into the parent's recorded session holds no row lock: a second co
       const sent = await rotating.eve(options).send(sessionId, message);
       if (sessionId !== PARENT_SESSION) return sent;
       await database.run(
-        Effect.flatMap(
-          SqlClient.SqlClient,
-          (sql) => sql`
-            update conversations set runtime_session_id = ${ROTATED_SESSION}
-            where id = ${rotated.parentId}
-          `,
+        Effect.asVoid(
+          db
+            .update(conversations)
+            .set({ runtimeSessionId: ROTATED_SESSION })
+            .where(eq(conversations.id, rotated.parentId)),
         ),
       );
       return { outcome: EVE_SEND_OUTCOME.RETIRED };
@@ -590,12 +590,11 @@ test("a session recorded while the send was refused, and retired too before the 
       await eve.eve(options).send(sessionId, message);
       if (sessionId === PARENT_SESSION) {
         await database.run(
-          Effect.flatMap(
-            SqlClient.SqlClient,
-            (sql) => sql`
-              update conversations set runtime_session_id = ${ROTATED_SESSION}
-              where id = ${parentId}
-            `,
+          Effect.asVoid(
+            db
+              .update(conversations)
+              .set({ runtimeSessionId: ROTATED_SESSION })
+              .where(eq(conversations.id, parentId)),
           ),
         );
       }
@@ -630,10 +629,11 @@ test("a parent cleared while eve was refusing the send no longer stands when a s
     send: async (sessionId, message) => {
       await eve.eve(options).send(sessionId, message);
       await database.run(
-        Effect.flatMap(
-          SqlClient.SqlClient,
-          (sql) =>
-            sql`update conversations set deleted_at = ${new Date(NOW)} where id = ${parentId}`,
+        Effect.asVoid(
+          db
+            .update(conversations)
+            .set({ deletedAt: new Date(NOW) })
+            .where(eq(conversations.id, parentId)),
         ),
       );
       return { outcome: EVE_SEND_OUTCOME.RETIRED };

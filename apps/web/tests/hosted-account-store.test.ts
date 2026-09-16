@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { count, eq } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { user } from "../server/db/auth-schema";
+import { accountPreference, accountWorkspacePreference } from "../server/db/preferences-schema";
+import { db } from "../server/db/query";
+import { hostedUsage } from "../server/db/usage-schema";
 import {
   deleteAccount,
   readAccountPreferences,
@@ -23,29 +28,25 @@ import { testSqlClient } from "./support/sql-client";
  */
 
 const openUser = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
   const userId = `user-${randomUUID()}`;
-  yield* sql`
-    insert into "user" (id, name, email)
-    values (${userId}, ${"Test User"}, ${`${userId}@luke.test`})
-  `;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
 });
 
+/** The account's own rows in the table one owning column belongs to. */
+const rowsOwnedBy = (column: PgColumn, userId: string) =>
+  Effect.map(
+    db.select({ rows: count() }).from(column.table).where(eq(column, userId)),
+    (rows) => rows[0]?.rows ?? 0,
+  );
+
+/** How many of the account's rows stand in each table the delete reaches. */
 const countRows = (userId: string) =>
   Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const preferences = yield* sql`
-      select user_id from account_preference where user_id = ${userId}
-    `;
-    const workspaces = yield* sql`
-      select provider_id from account_workspace_preference where user_id = ${userId}
-    `;
-    const usage = yield* sql`select day from hosted_usage where user_id = ${userId}`;
     return {
-      preferences: preferences.length,
-      workspaces: workspaces.length,
-      usage: usage.length,
+      preferences: yield* rowsOwnedBy(accountPreference.userId, userId),
+      workspaces: yield* rowsOwnedBy(accountWorkspacePreference.userId, userId),
+      usage: yield* rowsOwnedBy(hostedUsage.userId, userId),
     };
   });
 
@@ -108,12 +109,8 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
 
   it.effect("a value the vocabulary does not name is left out of the snapshot", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
       const userId = yield* openUser;
-      yield* sql`
-        insert into account_preference (user_id, voice)
-        values (${userId}, ${"not-a-voice"})
-      `;
+      yield* db.insert(accountPreference).values({ userId, voice: "not-a-voice" });
       const read = yield* readAccountPreferences(userId);
       assert.deepEqual(read?.preferences, {});
     }),
@@ -121,7 +118,6 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
 
   it.effect("the delete takes the account's dependent rows and leaves another's standing", () =>
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
       const erased = yield* openUser;
       const kept = yield* openUser;
       for (const userId of [erased, kept]) {
@@ -129,14 +125,12 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
           voice: "cedar",
           workspaceProjectDefaults: { conductor: "project-a" },
         });
-        yield* sql`
-          insert into hosted_usage (user_id, day, calls) values (${userId}, ${"2099-01-01"}, ${3})
-        `;
+        yield* db.insert(hostedUsage).values({ userId, day: "2099-01-01", calls: 3 });
       }
 
       yield* deleteAccount(erased);
 
-      const remaining = yield* sql`select id from "user" where id = ${erased}`;
+      const remaining = yield* db.select({ id: user.id }).from(user).where(eq(user.id, erased));
       assert.equal(remaining.length, 0);
       assert.deepEqual(yield* countRows(erased), {
         preferences: 0,

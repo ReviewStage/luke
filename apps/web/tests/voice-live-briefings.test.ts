@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { eq } from "drizzle-orm";
 import { Effect, Exit, Schema, Scope } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -11,7 +11,10 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
 } from "../server/core";
+import { db } from "../server/db/query";
+import { events } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
+import { voiceSessions } from "../server/db/voice-schema";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
@@ -133,18 +136,17 @@ async function offered(target: ConversationTarget, briefing: string): Promise<st
 
 async function speechEventsOf(messageId: string) {
   const rows = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select kind, device_id from events where message_id = ${messageId} order by seq
-      `;
-    }),
+    db
+      .select({ kind: events.kind, deviceId: events.deviceId })
+      .from(events)
+      .where(eq(events.messageId, messageId))
+      .orderBy(events.seq),
   );
-  return rows.map((row) => [row.kind, row.device_id]);
+  return rows.map((row) => [row.kind, row.deviceId]);
 }
 
 const VoiceSessionDeviceRowSchema = Schema.Struct({
-  device_id: Schema.NullOr(Schema.String),
+  deviceId: Schema.NullOr(Schema.String),
 });
 
 interface Stand {
@@ -173,12 +175,12 @@ async function stand(
         offers: database.store.speech,
         tools: CATALOG_TOOL_SET,
         deviceId: Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          const [row] = yield* sql`
-            select device_id from voice_sessions where live_session_id = ${liveSessionId}
-          `;
+          const [row] = yield* db
+            .select({ deviceId: voiceSessions.deviceId })
+            .from(voiceSessions)
+            .where(eq(voiceSessions.liveSessionId, liveSessionId));
           if (row === undefined) return undefined;
-          return Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).device_id ?? undefined;
+          return Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).deviceId ?? undefined;
         }),
         deliver: (delivery) => deliveries.push(delivery),
         now,

@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { CLOUD_AGENT_PROVIDER_ID } from "../server/core";
+import { user } from "../server/db/auth-schema";
+import { devices } from "../server/db/devices-schema";
+import { db } from "../server/db/query";
+import { observationPass } from "../server/db/roster-schema";
+import { providerKey } from "../server/db/vault-schema";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -30,41 +34,29 @@ const NOW = new Date("2026-09-09T12:00:00.000Z");
 
 const openUser = (name: string) =>
   Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
     const userId = `user-${randomUUID()}`;
-    yield* sql`
-      insert into "user" (id, name, email)
-      values (${userId}, ${name}, ${`${userId}@luke.test`})
-    `;
+    yield* db.insert(user).values({ id: userId, name, email: `${userId}@luke.test` });
     return userId;
   });
 
 const insertProviderKey = (userId: string) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
-      insert into provider_key (user_id, provider_id, ciphertext)
-      values (${userId}, ${PROVIDER_ID}, ${"ciphertext"})
-    `;
-  });
+  Effect.asVoid(
+    db.insert(providerKey).values({ userId, providerId: PROVIDER_ID, ciphertext: "ciphertext" }),
+  );
 
 const insertDevice = (userId: string, lastSeenAt: Date) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
-      insert into devices (id, user_id, installation_id, platform, last_seen_at)
-      values (${`device-${randomUUID()}`}, ${userId}, ${`install-${randomUUID()}`}, ${"mac"}, ${lastSeenAt})
-    `;
-  });
+  Effect.asVoid(
+    db.insert(devices).values({
+      id: `device-${randomUUID()}`,
+      userId,
+      installationId: `install-${randomUUID()}`,
+      platform: "mac",
+      lastSeenAt,
+    }),
+  );
 
 const insertObservationPass = (userId: string, attemptedAt: Date) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
-      insert into observation_pass (user_id, attempted_at)
-      values (${userId}, ${attemptedAt.getTime()})
-    `;
-  });
+  Effect.asVoid(db.insert(observationPass).values({ userId, attemptedAt: attemptedAt.getTime() }));
 
 it.layer(testSqlClient)("observation-app's own queries over effect/unstable/sql", (it) => {
   it.effect("reads the signed-in user's own name and email", () =>
