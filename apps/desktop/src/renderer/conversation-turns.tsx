@@ -880,7 +880,8 @@ function ObservedEventsRow({ wake, at }: { wake: ObservedWake; at: number }): Re
         <span className="conversation-bubble">
           <ol className="conversation-words conversation-observed">
             {wake.events.map((event, index) => (
-              <li key={`${event.provider_session_id}:${index}`}>{observedEventLine(event)}</li>
+              // The wake's events never reorder, so their places name them.
+              <li key={index}>{observedEventLine(event)}</li>
             ))}
           </ol>
           <details className="conversation-wake-fold">
@@ -1047,8 +1048,10 @@ function messageRows(
   if (message.role === MESSAGE_ROLE.USER) {
     const voice = userVoice(message);
     const words = userWords(message);
-    // The brain's own wake note is drawn structured; the developer's words never are.
-    const wake = voice === VOICE.NOTE ? observedWakeOf(words) : undefined;
+    // A wake is the brain's alone: the developer's words and the voice model's
+    // are drawn as they are, whatever they open with.
+    const wake =
+      message.metadata.author === MESSAGE_AUTHOR.BRAIN ? observedWakeOf(words) : undefined;
     if (wake !== undefined) {
       return [<ObservedEventsRow key={message.id} wake={wake} at={view.placedAt} />];
     }

@@ -13,6 +13,7 @@ import {
   type ConversationViewTurnGroup,
   isStoredToolPart,
   MESSAGE_ROLE,
+  SESSION_STATUS,
   type SessionIdentity,
   selectConversationView,
   TOOL_PART_STATE,
@@ -576,9 +577,19 @@ test("a developer's row is a sent bubble with a copy control, and a note the bra
   assert.equal(count(note, "class", "conversation-more-button"), 0);
 });
 
+/** The metadata each author's user row carries: a typed ask, a spoken one, or the brain's note. */
+const USER_ROW_METADATA = {
+  [MESSAGE_AUTHOR.DEVELOPER]: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+  [MESSAGE_AUTHOR.VOICE_MODEL]: {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+  },
+  [MESSAGE_AUTHOR.BRAIN]: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ROSTER_LOOK },
+} as const;
+
 /** One user row on its own, as the view selects it, under whichever author wrote it. */
 function userRowGroups(
-  author: typeof MESSAGE_AUTHOR.DEVELOPER | typeof MESSAGE_AUTHOR.BRAIN,
+  author: keyof typeof USER_ROW_METADATA,
   text: string,
 ): readonly ConversationViewTurnGroup[] {
   return selectConversationView({
@@ -589,10 +600,7 @@ function userRowGroups(
         message: {
           id: "2b000000-0000-4000-8000-000000000902",
           role: MESSAGE_ROLE.USER,
-          metadata:
-            author === MESSAGE_AUTHOR.DEVELOPER
-              ? { author, channel: MESSAGE_CHANNEL.TYPED }
-              : { author, source: OBSERVATION_SOURCE.ROSTER_LOOK },
+          metadata: USER_ROW_METADATA[author],
           parts: [{ type: "text", text }],
         },
         seq: 1,
@@ -606,19 +614,21 @@ function userRowGroups(
 
 const WAKE_FOLD_OPENING = '<details class="conversation-wake-fold"';
 
+const WAKE_PROVIDER = "conductor";
+
 const WAKE_TEXT = wakeInputText(
   [
     {
       kind: BRAIN_WAKE_KIND.ROSTER,
       identity: {
-        providerId: "conductor",
+        providerId: WAKE_PROVIDER,
         providerSessionId: "c1d2e3f4-0000-4000-8000-000000000001",
       },
       atMs: FIXTURE_NOW - 60_000,
       sessionSummary: {
         title: "Fix the login redirect",
-        status: "working",
-        changes: ["appeared", "status: waiting → working"],
+        status: SESSION_STATUS.WORKING,
+        changes: ["appeared", `status: ${SESSION_STATUS.WAITING} → ${SESSION_STATUS.WORKING}`],
       },
       transcriptDelta: {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -629,11 +639,11 @@ const WAKE_TEXT = wakeInputText(
     {
       kind: BRAIN_WAKE_KIND.ROSTER,
       identity: {
-        providerId: "conductor",
+        providerId: WAKE_PROVIDER,
         providerSessionId: "a1b2c3d4-0000-4000-8000-000000000002",
       },
       atMs: FIXTURE_NOW - 60_000,
-      sessionSummary: { status: "completed", changes: ["vanished"] },
+      sessionSummary: { status: SESSION_STATUS.COMPLETE, changes: ["vanished"] },
       transcriptDelta: {
         status: ACTION_RESULT_STATUS.ACCEPTED,
         truncated: false,
@@ -674,7 +684,7 @@ test("an observed-events note draws one line per event, and the wake's JSON stan
   assert.equal(count(markup, "class", "conversation-more-button"), 0);
 });
 
-test("a wake note the reader cannot hold to the shape is drawn verbatim, and the developer's words never fold", () => {
+test("a wake note the reader cannot hold to the shape is drawn verbatim, and only the brain's words are read as one", () => {
   const malformed = `${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} ${new Date(FIXTURE_NOW).toISOString()}\n{"events": "none"}`;
   const fallen = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, malformed));
   assert.equal(count(fallen, "data-speaker", "event"), 1);
@@ -686,6 +696,11 @@ test("a wake note the reader cannot hold to the shape is drawn verbatim, and the
   assert.equal(count(developer, "data-speaker", "event"), 0);
   assert.equal(developer.split(WAKE_FOLD_OPENING).length - 1, 0);
   assert.equal(count(developer, "class", "conversation-copy"), 1);
+  // The voice model's row is a note too, but never a wake.
+  const spoken = render(userRowGroups(MESSAGE_AUTHOR.VOICE_MODEL, WAKE_TEXT));
+  assert.equal(count(spoken, "data-speaker", "event"), 1);
+  assert.equal(spoken.split(WAKE_FOLD_OPENING).length - 1, 0);
+  assert.equal(count(spoken, "data-observed-events", "2"), 0);
 });
 
 test("a turn that followed a long silence is dated over it, and the caller's rows close the one list", () => {
