@@ -429,6 +429,13 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
   });
 }
 
+/** The row the brain was handed to read ahead of, which is what its facts are matched against. */
+function anticipatedRow(brain: AnticipatingBrain): string {
+  const rowId = brain.anticipations[0]?.rowId;
+  assert.ok(rowId, "an anticipation was handed over");
+  return rowId;
+}
+
 function appends(sideband: FakeSideband, type: string) {
   return sideband.sent.filter((event) => event.type === type);
 }
@@ -1364,10 +1371,9 @@ it.effect(
       yield* settle();
       sideband.input("Open the failing one.", 1000, 2200);
       yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
-      assert.deepEqual(
-        f.record.developer.map((line) => [line.rowId, line.delegationId, line.runId]),
-        [[1, null, undefined]],
-      );
+      const [line] = f.record.developer;
+      assert.ok(line);
+      assert.deepEqual([line.delegationId, line.runId], [null, undefined]);
       f.record.hold();
       sideband.delegation("item_late", 5000);
       yield* settle();
@@ -1384,10 +1390,10 @@ it.effect(
       f.record.release(true);
       yield* settle();
       assert.deepEqual(
-        f.record.developer.map((line) => [line.rowId, line.delegationId, line.runId]),
+        f.record.developer.map((written) => [written.rowId, written.delegationId, written.runId]),
         [
-          [1, null, undefined],
-          [1, "item_late", "run-1"],
+          [line.rowId, null, undefined],
+          [line.rowId, "item_late", "run-1"],
         ],
       );
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
@@ -2070,8 +2076,10 @@ it.effect(
       yield* advanceClock(PREFETCH_DEBOUNCE_MS - 1);
       assert.equal(brain.anticipations.length, 0);
       yield* advanceClock(1);
+      const [first] = brain.anticipations;
+      assert.ok(first);
       assert.deepEqual(brain.anticipations, [
-        { rowId: 1, partialAsk: "What is abc", recentTurns: "Developer: What is abc" },
+        { rowId: first.rowId, partialAsk: "What is abc", recentTurns: "Developer: What is abc" },
       ]);
       // The same words again plan nothing new; more words plan again under the same row.
       yield* advanceClock(PREFETCH_DEBOUNCE_MS * 3);
@@ -2079,7 +2087,7 @@ it.effect(
       sideband.input(" doing", 1500, 1900);
       yield* advanceClock(PREFETCH_DEBOUNCE_MS);
       assert.equal(brain.anticipations.length, 2);
-      assert.equal(brain.anticipations[1]?.rowId, 1);
+      assert.equal(brain.anticipations[1]?.rowId, first.rowId);
       assert.equal(brain.anticipations[1]?.partialAsk, "What is abc doing");
       assert.deepEqual(
         f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.ANTICIPATED).length,
@@ -2129,8 +2137,8 @@ it.effect(
       yield* advanceClock(LIVE_IDLE_WINDOW_MS);
       sideband.input("What is abc doing", 1000, 1800);
       yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      brain.facts({ rowId: 1, text: "abc finished the tests." });
-      brain.facts({ rowId: 1, text: "abc finished the tests, again." });
+      brain.facts({ rowId: anticipatedRow(brain), text: "abc finished the tests." });
+      brain.facts({ rowId: anticipatedRow(brain), text: "abc finished the tests, again." });
       yield* settle();
       const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
       assert.equal(thinking.length, 1);
@@ -2168,8 +2176,8 @@ it.effect(
       yield* advanceClock(PREFETCH_DEBOUNCE_MS);
       sideband.input(" abc doing", 1300, 1800);
       yield* settle();
-      brain.facts({ rowId: 1, text: "stale" });
-      brain.facts({ rowId: 9, text: "unknown row" });
+      brain.facts({ rowId: anticipatedRow(brain), text: "stale" });
+      brain.facts({ rowId: "row-never-opened", text: "unknown row" });
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
       assert.equal(
@@ -2177,7 +2185,7 @@ it.effect(
         2,
       );
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 12);
-      brain.facts({ rowId: 1, text: "too late" });
+      brain.facts({ rowId: anticipatedRow(brain), text: "too late" });
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
     }),
@@ -2201,7 +2209,7 @@ it.effect(
       sideband.input(" doing", 1500, 1900);
       yield* advanceClock(PREFETCH_DEBOUNCE_MS);
       assert.equal(brain.anticipations.length, 1);
-      brain.facts({ rowId: 1, text: "abc finished the tests." });
+      brain.facts({ rowId: anticipatedRow(brain), text: "abc finished the tests." });
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
       assert.equal(
@@ -2212,7 +2220,7 @@ it.effect(
       sideband.input("And def?", 7000, 7400);
       yield* advanceClock(PREFETCH_DEBOUNCE_MS);
       assert.equal(brain.anticipations.length, 2);
-      assert.equal(brain.anticipations[1]?.rowId, 2);
+      assert.notEqual(brain.anticipations[1]?.rowId, anticipatedRow(brain));
     }),
 );
 

@@ -77,7 +77,7 @@ export type LiveBrainSubmission =
  * back; nothing is promised, and the next words supersede it.
  */
 export interface LiveBrainAnticipation {
-  rowId: number;
+  rowId: string;
   /** The developer's words so far, trimmed. */
   partialAsk: string;
   /** Both speakers' recent lines, role-labelled, the same span a delegation would be composed from. */
@@ -86,7 +86,7 @@ export interface LiveBrainAnticipation {
 
 /** A few factual sentences the brain read ahead for the anticipation named, for the session to be handed as data. */
 export interface LiveBrainAnticipationFacts {
-  rowId: number;
+  rowId: string;
   text: string;
 }
 

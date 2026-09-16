@@ -7,7 +7,10 @@
  * grouping the guide says to keep revisable, which it is, since a late
  * fragment joins the utterance its timestamps place it in. The groups draw
  * the captions, compose a delegation's ask from the transcript since the
- * previous one, and become the Conversation's lines once they settle.
+ * previous one, and become the Conversation's lines: each opens under an
+ * opaque id the ledger mints, which is the row's for life on screen and on
+ * record. The ledger is the one authority on where an utterance begins and
+ * ends; nothing derives an id from text, time, or a fragment's position.
  */
 
 export const TRANSCRIPT_SPEAKER = {
@@ -64,8 +67,8 @@ interface TranscriptFragment {
 }
 
 export interface TranscriptUtterance {
-  /** Assigned once when the utterance begins and never moved, so a caption row stays where it was drawn. */
-  rowId: number;
+  /** Minted once when the utterance begins and never moved: the row's id on record and on screen alike. */
+  rowId: string;
   speaker: TranscriptSpeaker;
   /** The fragments' text concatenated exactly as received, in arrival order. */
   text: string;
@@ -92,7 +95,7 @@ interface AskContext {
  * matched against.
  */
 interface Anticipation {
-  rowId: number;
+  rowId: string;
   text: string;
   context: AskContext;
 }
@@ -105,7 +108,7 @@ export function anticipationOf(context: AskContext): Anticipation | undefined {
 }
 
 interface Group {
-  rowId: number;
+  rowId: string;
   speaker: TranscriptSpeaker;
   fragments: TranscriptFragment[];
   startMs: number;
@@ -122,17 +125,27 @@ function utteranceOf(group: Group): TranscriptUtterance {
   };
 }
 
+/** How a ledger is built: with the one factory every row id it mints comes from. */
+export interface TranscriptLedgerOptions {
+  /** Mints an opaque id for a row as its utterance opens; the caller's own UUID source. */
+  mintRowId: () => string;
+}
+
 export class TranscriptLedger {
   private readonly groups: Group[] = [];
-  private nextRowId = 1;
+  private readonly mintRowId: () => string;
   private latestEndMs: number | undefined;
+
+  constructor(options: TranscriptLedgerOptions) {
+    this.mintRowId = options.mintRowId;
+  }
 
   /**
    * Records one fragment. It joins the utterance of the same speaker whose
    * span it falls within or touches within the gap, wherever that utterance
    * sits, so a fragment delivered late still lands in the group its timing
-   * says it belongs to; otherwise it begins a new utterance with the next
-   * row id. A fragment with an end before its start is refused.
+   * says it belongs to; otherwise it begins a new utterance under a freshly
+   * minted row id. A fragment with an end before its start is refused.
    */
   append(fragment: TranscriptFragment): TranscriptUtterance | undefined {
     if (
@@ -172,18 +185,23 @@ export class TranscriptLedger {
 
   private openGroup(fragment: TranscriptFragment): Group {
     const group: Group = {
-      rowId: this.nextRowId,
+      rowId: this.mintRowId(),
       speaker: fragment.speaker,
       fragments: [],
       startMs: fragment.startMs,
       endMs: fragment.endMs,
     };
-    this.nextRowId += 1;
     this.groups.push(group);
     return group;
   }
 
-  /** One speaker's utterances, or both speakers' when none is named, ordered by where they start. */
+  /** One utterance by its row, as the ledger holds it now, or nothing for a row it never opened. */
+  row(rowId: string): TranscriptUtterance | undefined {
+    const group = this.groups.find((candidate) => candidate.rowId === rowId);
+    return group === undefined ? undefined : utteranceOf(group);
+  }
+
+  /** One speaker's utterances, or both speakers' when none is named, ordered by where they start; two starting together keep the order they opened in, since the sort is stable. */
   utterances(
     speaker?: TranscriptSpeaker,
     query: UtteranceQuery = {},
@@ -192,7 +210,7 @@ export class TranscriptLedger {
     return this.groups
       .filter((group) => speaker === undefined || group.speaker === speaker)
       .filter((group) => group.endMs > since)
-      .sort((left, right) => left.startMs - right.startMs || left.rowId - right.rowId)
+      .sort((left, right) => left.startMs - right.startMs)
       .map(utteranceOf);
   }
 

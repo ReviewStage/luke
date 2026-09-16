@@ -46,8 +46,8 @@ test("a view carrying a caption and its live lines, settled or not, is a voice v
         voiceStatus: LIVE_STATUS.SPEAKING,
         lukeCaptions: ["On my way."],
         liveConversationLines: [
-          { rowId: 1, entry: said, settled: true },
-          { rowId: 2, entry: line, settled: false },
+          { rowId: "row-1", entry: said, settled: true },
+          { rowId: "row-2", entry: line, settled: false },
         ],
       }),
     ),
@@ -62,7 +62,7 @@ test("a view carrying the developer's own caption is a voice view, and a malform
     ...IDLE_VOICE_VIEW,
     voiceStatus: LIVE_STATUS.LISTENING,
     developerCaptions: ["what needs me"],
-    liveConversationLines: [{ rowId: 1, entry: line, settled: false }],
+    liveConversationLines: [{ rowId: "row-1", entry: line, settled: false }],
   };
   assert.equal(isVoiceView(overWire(view)), true);
   // SAFETY: the guard under test exists to refuse a caption list that is one string, which the type forbids building.
@@ -76,7 +76,11 @@ test("a live line refuses empty words, an unknown kind, or a row without its id 
       overWire({
         ...IDLE_VOICE_VIEW,
         liveConversationLines: [
-          { rowId: 1, entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "" }, settled: false },
+          {
+            rowId: "row-1",
+            entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "" },
+            settled: false,
+          },
         ],
       }),
     ),
@@ -88,7 +92,11 @@ test("a live line refuses empty words, an unknown kind, or a row without its id 
         ...IDLE_VOICE_VIEW,
         liveConversationLines: [
           // SAFETY: the test hands the guard a kind it must refuse, which the view type cannot spell.
-          { rowId: 1, entry: { kind: "not-a-kind" as "reply", words: "words" }, settled: false },
+          {
+            rowId: "row-1",
+            entry: { kind: "not-a-kind" as "reply", words: "words" },
+            settled: false,
+          },
         ],
       }),
     ),

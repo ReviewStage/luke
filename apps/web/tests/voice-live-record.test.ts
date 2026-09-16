@@ -441,7 +441,7 @@ test("the record door answers from the stream: an undelegated utterance and Luke
     Scope.provide(hostedLiveRecord({ writer, target: live }), scope),
   );
   const utterance = {
-    rowId: 1,
+    rowId: "row-1",
     voiceSessionId: live.liveSessionId,
     askContext: undefined,
     startMs: 0,

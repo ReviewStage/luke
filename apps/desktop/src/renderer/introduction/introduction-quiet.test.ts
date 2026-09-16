@@ -9,12 +9,14 @@ const START = 1_800_000_000_000;
 
 function ledgerRows() {
   let now = START;
+  let minted = 0;
   let rows: readonly LiveCaptionRow[] = [];
   const captions = new LiveCaptions({
     onRows: (next) => {
       rows = next;
     },
     now: () => now,
+    mintRowId: () => `row-${++minted}`,
   });
   return {
     captions,
