@@ -630,7 +630,6 @@ it.effect(
         conversationId: main,
         clientId: delegationId,
         origin: ASK_ORIGIN.SPOKEN,
-        question: "what needs me?",
         createdAt: new Date(NOW),
       });
       // The voice writer's cut of the transcript lands while the ask still waits for its turn.
@@ -700,7 +699,6 @@ it.effect(
         conversationId: main,
         clientId: delegationId,
         origin: ASK_ORIGIN.SPOKEN,
-        question: "what needs me?",
         createdAt: new Date(NOW),
       });
       // The voice writer's cut lands before the ask learned its turn, so it stands unattached.

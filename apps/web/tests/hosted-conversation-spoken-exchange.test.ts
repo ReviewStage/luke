@@ -380,7 +380,6 @@ it.effect(
           conversationId,
           clientId: delegationId,
           origin: ASK_ORIGIN.SPOKEN,
-          question: `fixture ask ${exchange}`,
           createdAt: new Date(now()),
         });
         await holds(`${exchange}: ask recorded`, settled);
@@ -441,7 +440,6 @@ it.effect(
         conversationId,
         clientId: "dl_3",
         origin: ASK_ORIGIN.SPOKEN,
-        question: "fixture ask 3",
         createdAt: new Date(now()),
       });
       const late = new Stream(randomUUID());

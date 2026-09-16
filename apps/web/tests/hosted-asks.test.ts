@@ -107,7 +107,6 @@ function write(userId: string, conversationId: string, clientId = randomUUID()) 
     conversationId,
     clientId,
     origin: ASK_ORIGIN.TYPED,
-    question: "what changed?",
     createdAt: new Date(NOW),
   };
 }

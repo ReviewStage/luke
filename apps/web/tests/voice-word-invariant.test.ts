@@ -150,7 +150,6 @@ class TurnOpeningBrain implements LiveBrain {
         conversationId: this.#conversation.conversationId,
         clientId: ask.submissionId,
         origin: ASK_ORIGIN.SPOKEN,
-        question: ask.question,
         createdAt: new Date(NOW),
       });
       yield* store.consume(this.#conversation, {
