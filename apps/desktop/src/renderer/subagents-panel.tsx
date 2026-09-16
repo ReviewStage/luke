@@ -99,7 +99,7 @@ function agentTranscriptRow(agent: AgentRead, roster: readonly SessionView[]): T
 }
 
 /**
- * The control that turns the Conversation tab to its sub-agents and back,
+ * The control that turns the Conversation tab to its Agents page and back,
  * seated beside the tab bar the way Clear is. Lit while the list is showing,
  * on the search button's own terms, so the control and its effect cannot be
  * read apart.
@@ -119,7 +119,7 @@ export function SubagentsButton({
       aria-expanded={open}
       onClick={onToggle}
     >
-      Sub-agents
+      Agents
     </button>
   );
 }
@@ -202,7 +202,7 @@ export function SubagentsPanel({
         <button type="button" className="subagents-back" onClick={onBack}>
           ‹ Conversation
         </button>
-        <h2 className="subagents-title">Sub-agents</h2>
+        <h2 className="subagents-title">Agents</h2>
       </header>
       <div className="subagents-sections">
         <SubagentsSection
@@ -291,7 +291,7 @@ export function SubagentTranscriptPanel({
   now: number;
   /** A session row's own press by identity, for the chip naming the session an action reached. */
   onOpenChat: (identity: SessionIdentity) => void;
-  /** Returns the tab to the sub-agents list. */
+  /** Returns the tab to the Agents list. */
   onBack: () => void;
 }): React.JSX.Element {
   // A transcript still standing for another conversation, or for this one
@@ -310,7 +310,7 @@ export function SubagentTranscriptPanel({
     >
       <header className="subagents-header">
         <button type="button" className="subagents-back" onClick={onBack}>
-          ‹ Sub-agents
+          ‹ Agents
         </button>
         <h2 className="subagents-title subagent-transcript-title">{open.title}</h2>
         <span className="subagent-status" data-status={open.status}>

@@ -155,7 +155,7 @@ test("the list is mounted under the thread's own root, ids and blocked class ali
   assert.ok(markup.includes('id="panel-view-conversation"'));
   assert.ok(markup.includes('aria-labelledby="panel-tab-conversation"'));
   assert.ok(markup.includes("‹ Conversation"));
-  assert.ok(markup.includes('<h2 class="subagents-title">Sub-agents</h2>'));
+  assert.ok(markup.includes('<h2 class="subagents-title">Agents</h2>'));
   const headings = sections(markup).map(
     (section) => section.querySelector(".subagents-section-title")?.textContent,
   );
@@ -315,7 +315,7 @@ test("the transcript page stands under the thread's own root and names the way b
   const markup = renderTranscript();
   assert.ok(markup.includes('class="conversation-view ph-no-capture"'));
   assert.ok(markup.includes('id="panel-view-conversation"'));
-  assert.ok(markup.includes("‹ Sub-agents"));
+  assert.ok(markup.includes("‹ Agents"));
   assert.ok(markup.includes(">Audit the release notes</h2>"));
   assert.ok(markup.includes(">Running</span>"));
   // An agent's page wears the row's words the same way, looked up nowhere.
