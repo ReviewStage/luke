@@ -33,6 +33,10 @@
             "type": "number",
             "minimum": 0
           },
+          "queuedAt": {
+            "type": "number",
+            "minimum": 0
+          },
           "startedAt": {
             "type": "number",
             "minimum": 0
@@ -51,7 +55,8 @@
           "providerId",
           "providerSessionId",
           "status",
-          "acceptedAt"
+          "acceptedAt",
+          "queuedAt"
         ],
         "additionalProperties": false
       },

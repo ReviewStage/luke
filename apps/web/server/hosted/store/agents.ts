@@ -24,7 +24,8 @@ export interface AgentRecord {
   readonly providerSessionId: string;
   readonly createdAt: Date;
   readonly status: ChildStatus;
-  /** The latest turn's stamps, each unset until the turn reached it. */
+  /** The latest turn's queuing, and its other stamps, each unset until the turn reached it. */
+  readonly queuedAt: Date;
   readonly startedAt: Date | null;
   readonly settledAt: Date | null;
   readonly failure: string | null;
@@ -51,6 +52,7 @@ const AgentRowSchema = Schema.Struct({
   providerSessionId: Schema.String,
   createdAt: InstantColumnSchema,
   turnStatus: Schema.Literals(Object.values(TURN_STATUS)),
+  queuedAt: InstantColumnSchema,
   startedAt: Schema.NullOr(InstantColumnSchema),
   settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
@@ -60,6 +62,7 @@ const AgentRowSchema = Schema.Struct({
     providerSessionId: "provider_session_id",
     createdAt: "created_at",
     turnStatus: "turn_status",
+    queuedAt: "queued_at",
     startedAt: "started_at",
     settledAt: "settled_at",
   }),
@@ -93,21 +96,6 @@ const agentsFrom = (sql: SqlClient.SqlClient, userId: string, standing: boolean)
     ])}
   `;
 
-const findAgents = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, limit: Schema.Number }),
-  Result: AgentRowSchema,
-  execute: (request) =>
-    statement(
-      (sql) => sql`
-        select agent.id, agent.provider_id, agent.provider_session_id, agent.created_at,
-               latest.status as turn_status, latest.started_at, latest.settled_at, latest.failure
-        ${agentsFrom(sql, request.userId, true)}
-        order by latest.queued_at desc, agent.id desc
-        limit ${request.limit}
-      `,
-    ),
-});
-
 /**
  * The instant an agent last changed: its latest turn queued, started, or
  * settled, or its row stamped, whichever is latest. Each stamp not reached
@@ -118,6 +106,22 @@ const AGENT_CHANGED_AT_SQL =
   "coalesce(latest.settled_at, latest.queued_at), coalesce(agent.deleted_at, latest.queued_at))";
 
 const agentChangedAt = (sql: SqlClient.SqlClient) => sql.literal(AGENT_CHANGED_AT_SQL);
+
+const findAgents = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, limit: Schema.Number }),
+  Result: AgentRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select agent.id, agent.provider_id, agent.provider_session_id, agent.created_at,
+               latest.status as turn_status, latest.queued_at, latest.started_at,
+               latest.settled_at, latest.failure
+        ${agentsFrom(sql, request.userId, true)}
+        order by ${agentChangedAt(sql)} desc, agent.id desc
+        limit ${request.limit}
+      `,
+    ),
+});
 
 // Rendered as the turn cursor's instant is: the UTC wall clock with the zone
 // spelled here, so the text is a property of the query rather than of the
@@ -149,7 +153,7 @@ function toAgentRecord({ turnStatus, ...row }: AgentRow): AgentRecord {
   return { ...row, status: agentStatus(turnStatus) };
 }
 
-/** The account's standing agents that hold a turn, the one with the latest turn first and at most `limit` of them. */
+/** The account's standing agents that hold a turn, the one that changed last first, on the head's own terms, and at most `limit` of them. */
 export function listAgents(
   userId: string,
   limit: number,

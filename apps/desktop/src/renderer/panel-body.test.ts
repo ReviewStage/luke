@@ -193,6 +193,7 @@ const AGENT: AgentRead = {
   providerSessionId: "9f4c5d47-2d3e-4f50-b162-3d4e5f6a7b83",
   status: CHILD_STATUS.RUNNING,
   acceptedAt: NOW - 120_000,
+  queuedAt: NOW - 90_000,
   startedAt: NOW - 60_000,
 };
 

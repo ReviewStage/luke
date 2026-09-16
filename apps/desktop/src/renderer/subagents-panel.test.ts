@@ -41,6 +41,7 @@ const CHILD_ID = {
 const AGENT_ID = {
   HELD: "eeeeeeee-5555-4000-8000-000000000005",
   DEPARTED: "ffffffff-6666-4000-8000-000000000006",
+  QUEUED: "abababab-7777-4000-8000-000000000007",
 } as const;
 
 const LABELLED: ChildRead = {
@@ -91,6 +92,7 @@ const HELD_AGENT: AgentRead = {
   providerSessionId: FIXTURE_SESSION.HELD,
   status: CHILD_STATUS.RUNNING,
   acceptedAt: NOW - 40 * MINUTE_MS,
+  queuedAt: NOW - 6 * MINUTE_MS,
   startedAt: NOW - 5 * MINUTE_MS,
 };
 
@@ -101,8 +103,19 @@ const DEPARTED_AGENT: AgentRead = {
   providerSessionId: FIXTURE_SESSION.DEPARTED,
   status: CHILD_STATUS.SETTLED,
   acceptedAt: NOW - 3 * 24 * 60 * MINUTE_MS,
+  queuedAt: NOW - 3 * 24 * 60 * MINUTE_MS,
   startedAt: NOW - 3 * 24 * 60 * MINUTE_MS,
   settledAt: NOW - 3 * 60 * MINUTE_MS,
+};
+
+/** An agent followed for days whose latest turn was queued a moment ago and has not started: its age is the queuing's. */
+const QUEUED_AGENT: AgentRead = {
+  id: AGENT_ID.QUEUED,
+  providerId: "conductor",
+  providerSessionId: FIXTURE_SESSION.UNOPENABLE,
+  status: CHILD_STATUS.ACCEPTED,
+  acceptedAt: NOW - 5 * 24 * 60 * MINUTE_MS,
+  queuedAt: NOW - 2 * MINUTE_MS,
 };
 
 function panelProps(extra: Partial<PanelProps> = {}): PanelProps {
@@ -162,14 +175,21 @@ test("the list is mounted under the thread's own root, ids and blocked class ali
   assert.deepEqual(headings, ["Per-workspace agents", "Sub-agents"]);
 });
 
-test("sub-agent rows are newest first and each is named by its label, its task without the marker, or its id", () => {
-  const [, subagents] = sections(renderChildren([TASKED, LABELLED, BARE]));
+test("sub-agent rows are ordered by the instant they last moved, newest first, and each is named by its label, its task without the marker, or its id", () => {
+  // The oldest-accepted child settled a minute ago, so it leads: order follows the age the row wears, not the acceptance.
+  const revived = { ...OBSERVED, settledAt: NOW - MINUTE_MS };
+  const [, subagents] = sections(renderChildren([TASKED, LABELLED, revived, BARE]));
   assert.ok(subagents);
   assert.deepEqual(titles(subagents), [
+    "Summarise the failing test.",
     "Child cccccccc",
     "Audit the release notes",
     "Rename the roster helper.",
   ]);
+  assert.deepEqual(
+    [...subagents.querySelectorAll(".subagent-age")].map((node) => node.textContent),
+    ["1m", "10m", "25m", "2h"],
+  );
   assert.ok(!subagents.textContent?.includes("[subagent task]"));
 });
 
@@ -194,22 +214,27 @@ test("a cancelled child says so", () => {
 
 test("a per-workspace agent row is named from the roster by session identity, marked by its agent, and falls back to the session's id", () => {
   const [agents] = sections(
-    render({ agents: { settled: true, agents: [HELD_AGENT, DEPARTED_AGENT] } }),
+    render({ agents: { settled: true, agents: [DEPARTED_AGENT, HELD_AGENT, QUEUED_AGENT] } }),
   );
   assert.ok(agents);
-  // The service's order is kept: it lists the latest turn first.
-  assert.deepEqual(titles(agents), [FIXTURE_TITLE.HELD, "Session 8e3b4c36"]);
+  // Rows are ordered by the instant they last moved, whatever order the service listed them in, and a
+  // queued turn's row wears the age of its queuing rather than of the days-old session it was opened for.
+  assert.deepEqual(titles(agents), [
+    FIXTURE_TITLE.UNOPENABLE,
+    FIXTURE_TITLE.HELD,
+    "Session 8e3b4c36",
+  ]);
   const rows = [...agents.querySelectorAll(".subagent-row")];
   assert.deepEqual(
     rows.map((row) => row.querySelector(".subagent-status")?.textContent),
-    ["Running", "Done"],
+    ["Waiting", "Running", "Done"],
   );
   assert.deepEqual(
     rows.map((row) => row.querySelector(".subagent-age")?.textContent),
-    ["5m", "3h"],
+    ["2m", "5m", "3h"],
   );
   // Every agent row leads with a mark: the roster's agent while it holds the session, the provider once it has let go.
-  assert.equal(agents.querySelectorAll(".subagent-mark").length, 2);
+  assert.equal(agents.querySelectorAll(".subagent-mark").length, 3);
   // A roster that never held the session names it the same way.
   const [alone] = sections(render({ roster: [], agents: { settled: true, agents: [HELD_AGENT] } }));
   assert.deepEqual(titles(alone ?? document.createElement("div")), ["Session 6c1f2f14"]);

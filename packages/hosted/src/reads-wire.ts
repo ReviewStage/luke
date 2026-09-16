@@ -710,8 +710,9 @@ export const AGENTS_READ_BOUNDS = {
  * One agent as the agents read answers it: a coding-agent session Luke
  * follows, named by the provider and the session's id there, where the
  * brain's latest turn about it leaves it, on the children's status terms.
- * `acceptedAt` is the instant Luke began following the session; the stamps
- * are the latest turn's, each absent until the turn reached it. No title,
+ * `acceptedAt` is the instant Luke began following the session; `queuedAt`
+ * is the latest turn's queuing, and the other stamps are that turn's, each
+ * absent until the turn reached it. No title,
  * branch, or path travels: a device names the row from its own roster by the
  * session identity. An agent is answered whole on every read, so a device
  * replaces the agent it holds by id rather than appending.
@@ -722,6 +723,7 @@ export interface AgentRead {
   readonly providerSessionId: string;
   readonly status: ChildStatus;
   readonly acceptedAt: number;
+  readonly queuedAt: number;
   readonly startedAt?: number;
   readonly settledAt?: number;
   readonly failure?: string;
@@ -732,6 +734,7 @@ const agentReadSchema = EffectSchema.Struct({
   ...sessionIdentitySchema.fields,
   status: EffectSchema.Literals(CHILD_STATUS_NAMES),
   acceptedAt: countedNumber,
+  queuedAt: countedNumber,
   startedAt: EffectSchema.optionalKey(countedNumber),
   settledAt: EffectSchema.optionalKey(countedNumber),
   failure: EffectSchema.optionalKey(trimmedText()),
@@ -739,9 +742,10 @@ const agentReadSchema = EffectSchema.Struct({
 
 /**
  * The agents endpoint's answer: the account's standing agents that hold a
- * turn, the one whose turn was queued last first, at most `MAX_AGENTS` of
- * them and no cursor, since an agent's status changes in place and the list
- * is short. The change signal's `agents` head says when to read it again.
+ * turn, the one that changed last first on the `agents` head's own terms
+ * (its latest turn queued, started, or settled), at most `MAX_AGENTS` of them
+ * and no cursor, since an agent's status changes in place and the list is
+ * short. The change signal's `agents` head says when to read it again.
  */
 export interface AgentsAnswer {
   readonly agents: readonly AgentRead[];
