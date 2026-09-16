@@ -1,6 +1,10 @@
+import { and, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../db/query.js";
+import { providerKey } from "../db/vault-schema.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
@@ -16,10 +20,6 @@ type VaultKeyFailure = SqlError | Schema.SchemaError;
 /** What a vault seam answers: an effect over the ambient client, composed into the request that read or wrote it. */
 export type VaultKeyEffect<A> = Effect.Effect<A, VaultKeyFailure, SqlClient.SqlClient>;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const KeySchema = Schema.Struct({ userId: Schema.String, providerId: Schema.String });
 
 const CiphertextRowSchema = Schema.Struct({ ciphertext: Schema.String });
@@ -28,13 +28,11 @@ const findKey = SqlSchema.findOneOption({
   Request: KeySchema,
   Result: CiphertextRowSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select ciphertext from provider_key
-        where user_id = ${key.userId} and provider_id = ${key.providerId}
-        limit 1
-      `,
-    ),
+    db
+      .select({ ciphertext: providerKey.ciphertext })
+      .from(providerKey)
+      .where(and(eq(providerKey.userId, key.userId), eq(providerKey.providerId, key.providerId)))
+      .limit(1),
 });
 
 /** The encrypted key row for this user and provider, or undefined if none stored. */
@@ -48,15 +46,16 @@ export function readVaultKey(
 const StoredKeyRowSchema = Schema.Struct({
   providerId: Schema.String,
   ciphertext: Schema.String,
-}).pipe(Schema.encodeKeys({ providerId: "provider_id" }));
+});
 
 const findKeysForDecryption = SqlSchema.findAll({
   Request: Schema.String,
   Result: StoredKeyRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`select provider_id, ciphertext from provider_key where user_id = ${userId}`,
-    ),
+    db
+      .select({ providerId: providerKey.providerId, ciphertext: providerKey.ciphertext })
+      .from(providerKey)
+      .where(eq(providerKey.userId, userId)),
 });
 
 /** Every vault key row the user has stored, for decryption in the handler. */
@@ -73,15 +72,16 @@ export function readStoredVaultKeys(
 const KeyListingRowSchema = Schema.Struct({
   providerId: Schema.String,
   updatedAt: InstantColumnSchema,
-}).pipe(Schema.encodeKeys({ providerId: "provider_id", updatedAt: "updated_at" }));
+});
 
 const findKeyListing = SqlSchema.findAll({
   Request: Schema.String,
   Result: KeyListingRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`select provider_id, updated_at from provider_key where user_id = ${userId}`,
-    ),
+    db
+      .select({ providerId: providerKey.providerId, updatedAt: providerKey.updatedAt })
+      .from(providerKey)
+      .where(eq(providerKey.userId, userId)),
 });
 
 /** What is stored — provider ids and timestamps, never ciphertext. */
@@ -98,17 +98,26 @@ const StoreKeySchema = Schema.Struct({
   updatedAt: Schema.Date,
 });
 
+/**
+ * Note that the conflicting update sets the values the insert carried rather
+ * than reading them back out of `excluded`, because a single-row insert's
+ * `excluded` row is exactly those values.
+ */
 const upsertKey = SqlSchema.void({
   Request: StoreKeySchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into provider_key (user_id, provider_id, ciphertext, updated_at)
-        values (${write.userId}, ${write.providerId}, ${write.ciphertext}, ${write.updatedAt})
-        on conflict (user_id, provider_id) do update
-          set ciphertext = excluded.ciphertext, updated_at = excluded.updated_at
-      `,
-    ),
+    db
+      .insert(providerKey)
+      .values({
+        userId: write.userId,
+        providerId: write.providerId,
+        ciphertext: write.ciphertext,
+        updatedAt: write.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [providerKey.userId, providerKey.providerId],
+        set: { ciphertext: write.ciphertext, updatedAt: write.updatedAt },
+      }),
 });
 
 /** Stores a provider's ciphertext, replacing any already stored for the pair. */
@@ -120,21 +129,16 @@ export function storeVaultKey(
   return upsertKey({ userId, providerId, ciphertext, updatedAt: new Date() });
 }
 
-const UserIdRowSchema = Schema.Struct({
-  userId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id" }));
+const UserIdRowSchema = Schema.Struct({ userId: Schema.String });
 
 const deleteKeyRow = SqlSchema.findAll({
   Request: KeySchema,
   Result: UserIdRowSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        delete from provider_key
-        where user_id = ${key.userId} and provider_id = ${key.providerId}
-        returning user_id
-      `,
-    ),
+    db
+      .delete(providerKey)
+      .where(and(eq(providerKey.userId, key.userId), eq(providerKey.providerId, key.providerId)))
+      .returning({ userId: providerKey.userId }),
 });
 
 /** Deletes the stored key, answering whether one went. */

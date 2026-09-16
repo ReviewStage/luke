@@ -1,6 +1,10 @@
+import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { user } from "../../db/auth-schema.js";
+import { db } from "../../db/query.js";
+import { conversations } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 
 /**
@@ -22,27 +26,31 @@ import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 /** How the open fails: the driver's own refusal, or a row the schema refused. */
 type StandingMainFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** Postgres reserves the word `user`, so the identity table's name is quoted wherever it is written by hand. */
+/**
+ * Takes the account's user row lock for the transaction, which is what holds
+ * a first ask and a Clear on an account with no main one after the other. The
+ * lock is the whole of this statement, so it stands inside the transaction
+ * below and nowhere else.
+ */
 const lockUser = (userId: string) =>
-  statement((sql) => sql`select id from "user" where id = ${userId} for update`);
+  db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
 
 const findStandingMain = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: IdRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select id
-        from conversations
-        where user_id = ${userId} and kind = ${CONVERSATION_KIND.MAIN} and deleted_at is null
-      `,
-    ),
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.kind, CONVERSATION_KIND.MAIN),
+          isNull(conversations.deletedAt),
+        ),
+      ),
 });
 
 const OpenMainSchema = Schema.Struct({ userId: Schema.String, now: Schema.Date });
@@ -51,13 +59,15 @@ const openMain = SqlSchema.findOneOption({
   Request: OpenMainSchema,
   Result: IdRowSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into conversations (user_id, kind, created_at, last_activity_at)
-        values (${write.userId}, ${CONVERSATION_KIND.MAIN}, ${write.now}, ${write.now})
-        returning id
-      `,
-    ),
+    db
+      .insert(conversations)
+      .values({
+        userId: write.userId,
+        kind: CONVERSATION_KIND.MAIN,
+        createdAt: write.now,
+        lastActivityAt: write.now,
+      })
+      .returning({ id: conversations.id }),
 });
 
 /** The id of the account's standing main, opened now where none stood. */
@@ -65,8 +75,8 @@ export function standingMain(
   userId: string,
   now: Date,
 ): Effect.Effect<string, StandingMainFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
         yield* lockUser(userId);
         const standing = yield* findStandingMain(userId);

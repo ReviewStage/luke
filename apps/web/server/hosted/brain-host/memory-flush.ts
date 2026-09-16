@@ -18,8 +18,10 @@ import {
   type ToolSet,
   tool,
 } from "ai";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Data, Duration, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_RESULT_STATUS,
@@ -37,6 +39,8 @@ import {
   type WorkspaceToolContext,
   type WorkspaceToolModule,
 } from "../../core.js";
+import { db } from "../../db/query.js";
+import { conversations } from "../../db/storage-schema.js";
 import type { ConversationTarget } from "../store/index.js";
 
 /**
@@ -315,11 +319,16 @@ const housekeepingTurn = /* @__PURE__ */ Effect.fn("housekeepingTurn")(function*
   return failedHousekeeping(refusal ?? MEMORY_FLUSH_REFUSAL.NOTHING_LANDED);
 });
 
-/** A statement over the ambient client, so the queries below read as the queries they are. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const ClaimedRowSchema = Schema.Struct({ id: Schema.String });
+
+/**
+ * The row has not already claimed this cycle. `is distinct from` is what
+ * makes a row that has claimed nothing at all — a null column — count as
+ * unclaimed, which an equality would not; the builder has no operator for it,
+ * so it is a fragment inside the one rendered statement.
+ */
+const UNCLAIMED_CYCLE = (operationId: string) =>
+  sql`${conversations.memoryFlushOperationId} is distinct from ${operationId}`;
 
 /**
  * Claims the compaction cycle for this flush: the row takes the operation id
@@ -337,19 +346,22 @@ const claimFlushCycle = SqlSchema.findOneOption({
   }),
   Result: ClaimedRowSchema,
   execute: (claim) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set memory_flush_operation_id = ${claim.operationId},
-            memory_flush_outcome = null,
-            memory_flushed_at = ${claim.now}
-        where id = ${claim.conversationId}
-          and user_id = ${claim.userId}
-          and deleted_at is null
-          and memory_flush_operation_id is distinct from ${claim.operationId}
-        returning id
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({
+        memoryFlushOperationId: claim.operationId,
+        memoryFlushOutcome: null,
+        memoryFlushedAt: claim.now,
+      })
+      .where(
+        and(
+          eq(conversations.id, claim.conversationId),
+          eq(conversations.userId, claim.userId),
+          isNull(conversations.deletedAt),
+          UNCLAIMED_CYCLE(claim.operationId),
+        ),
+      )
+      .returning({ id: conversations.id }),
 });
 
 const recordFlushOutcome = SqlSchema.void({
@@ -360,13 +372,15 @@ const recordFlushOutcome = SqlSchema.void({
     now: Schema.Date,
   }),
   execute: (record) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set memory_flush_outcome = ${record.outcome}, memory_flushed_at = ${record.now}
-        where id = ${record.conversationId} and memory_flush_operation_id = ${record.operationId}
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({ memoryFlushOutcome: record.outcome, memoryFlushedAt: record.now })
+      .where(
+        and(
+          eq(conversations.id, record.conversationId),
+          eq(conversations.memoryFlushOperationId, record.operationId),
+        ),
+      ),
 });
 
 /**

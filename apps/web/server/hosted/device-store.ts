@@ -1,6 +1,9 @@
+import { and, eq, ne } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { devices } from "../db/devices-schema.js";
+import { db } from "../db/query.js";
 import type { DeviceSeams } from "./devices.js";
 
 /**
@@ -17,13 +20,12 @@ import type { DeviceSeams } from "./devices.js";
 
 type DeviceFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const DeviceIdRowSchema = Schema.Struct({ id: Schema.String });
 
 const PushAddressSchema = Schema.Struct({ token: Schema.String, environment: Schema.String });
+
+/** The push columns as a row loses them, which is what an eviction and a cleared report both write. */
+const NO_PUSH_ADDRESS = { pushToken: null, pushEnvironment: null } as const;
 
 const RegisterWriteSchema = Schema.Struct({
   id: Schema.String,
@@ -34,46 +36,82 @@ const RegisterWriteSchema = Schema.Struct({
   push: Schema.UndefinedOr(PushAddressSchema),
 });
 
+type RegisterWrite = Schema.Schema.Type<typeof RegisterWriteSchema>;
+
+/**
+ * What a registration writes on the row the installation already has: the
+ * account and platform it now reports, its presence cleared because a
+ * registration reports none of its own, and the push address only where it
+ * named one — a registration that named none leaves the row's alone.
+ */
+interface RegisteredColumns {
+  userId: string;
+  platform: string;
+  lastSeenAt: Date;
+  activeUntil: null;
+  quietUntil: null;
+  updatedAt: Date;
+  pushToken?: string;
+  pushEnvironment?: string;
+}
+
+function registeredColumns(write: RegisterWrite): RegisteredColumns {
+  const columns: RegisteredColumns = {
+    userId: write.userId,
+    platform: write.platform,
+    lastSeenAt: write.now,
+    activeUntil: null,
+    quietUntil: null,
+    updatedAt: write.now,
+  };
+  if (write.push) {
+    columns.pushToken = write.push.token;
+    columns.pushEnvironment = write.push.environment;
+  }
+  return columns;
+}
+
 const upsertDeviceRow = SqlSchema.findOneOption({
   Request: RegisterWriteSchema,
   Result: DeviceIdRowSchema,
   execute: (write) =>
-    statement((sql) =>
-      sql.withTransaction(
+    Effect.flatMap(SqlClient.SqlClient, (client) =>
+      client.withTransaction(
         Effect.gen(function* () {
           if (write.push) {
-            yield* sql`
-              update devices
-              set push_token = null, push_environment = null, updated_at = ${write.now}
-              where push_token = ${write.push.token} and installation_id <> ${write.installationId}
-            `;
+            yield* db
+              .update(devices)
+              .set({ ...NO_PUSH_ADDRESS, updatedAt: write.now })
+              .where(
+                and(
+                  eq(devices.pushToken, write.push.token),
+                  ne(devices.installationId, write.installationId),
+                ),
+              );
           }
-          return yield* sql`
-            insert into devices (
-              id, user_id, installation_id, platform, last_seen_at,
-              active_until, quiet_until, push_token, push_environment, created_at, updated_at
-            )
-            values (
-              ${write.id}, ${write.userId}, ${write.installationId}, ${write.platform}, ${write.now},
-              null, null, ${write.push?.token ?? null}, ${write.push?.environment ?? null}, ${write.now}, ${write.now}
-            )
-            on conflict (installation_id) do update
-              set ${sql.csv([
-                "user_id = excluded.user_id",
-                "platform = excluded.platform",
-                "last_seen_at = excluded.last_seen_at",
-                "active_until = null",
-                "quiet_until = null",
-                "updated_at = excluded.updated_at",
-                ...(write.push
-                  ? [
-                      "push_token = excluded.push_token",
-                      "push_environment = excluded.push_environment",
-                    ]
-                  : []),
-              ])}
-            returning id
-          `;
+          // Note that the conflicting update sets the values the insert
+          // carried rather than reading them back out of `excluded`, because
+          // a single-row insert's `excluded` row is exactly those values.
+          return yield* db
+            .insert(devices)
+            .values({
+              id: write.id,
+              userId: write.userId,
+              installationId: write.installationId,
+              platform: write.platform,
+              lastSeenAt: write.now,
+              activeUntil: null,
+              quietUntil: null,
+              pushToken: write.push?.token ?? null,
+              pushEnvironment: write.push?.environment ?? null,
+              createdAt: write.now,
+              updatedAt: write.now,
+            })
+            .onConflictDoUpdate({
+              target: devices.installationId,
+              set: registeredColumns(write),
+            })
+            .returning({ id: devices.id });
         }),
       ),
     ),
@@ -111,12 +149,11 @@ export const findHeldDevice = SqlSchema.findOneOption({
   Request: HeldDeviceSchema,
   Result: HeldDeviceRowSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select id, platform from devices
-        where user_id = ${key.userId} and id = ${key.deviceId} limit 1
-      `,
-    ),
+    db
+      .select({ id: devices.id, platform: devices.platform })
+      .from(devices)
+      .where(and(eq(devices.userId, key.userId), eq(devices.id, key.deviceId)))
+      .limit(1),
 });
 
 const TouchWriteSchema = Schema.Struct({
@@ -128,40 +165,58 @@ const TouchWriteSchema = Schema.Struct({
   push: Schema.NullishOr(PushAddressSchema),
 });
 
+type TouchWrite = Schema.Schema.Type<typeof TouchWriteSchema>;
+
+/**
+ * What a heartbeat writes on the row: the instant it was seen, and whichever
+ * of its three reports it carried. A column the heartbeat said nothing of is
+ * absent here rather than written back, so a report that carries one instant
+ * cannot blank the other, and one that named no push address leaves the row's
+ * standing.
+ */
+interface TouchedColumns {
+  lastSeenAt: Date;
+  updatedAt: Date;
+  activeUntil?: Date | null;
+  quietUntil?: Date | null;
+  pushToken?: string | null;
+  pushEnvironment?: string | null;
+}
+
+function touchedColumns(write: TouchWrite): TouchedColumns {
+  const columns: TouchedColumns = { lastSeenAt: write.now, updatedAt: write.now };
+  if (write.activeUntil !== undefined) columns.activeUntil = write.activeUntil;
+  if (write.quietUntil !== undefined) columns.quietUntil = write.quietUntil;
+  if (write.push === null) {
+    columns.pushToken = null;
+    columns.pushEnvironment = null;
+  } else if (write.push !== undefined) {
+    columns.pushToken = write.push.token;
+    columns.pushEnvironment = write.push.environment;
+  }
+  return columns;
+}
+
 const touchDeviceRow = SqlSchema.findAll({
   Request: TouchWriteSchema,
   Result: DeviceIdRowSchema,
   execute: (write) =>
-    Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      sql.withTransaction(
+    Effect.flatMap(SqlClient.SqlClient, (client) =>
+      client.withTransaction(
         Effect.gen(function* () {
           const held = yield* findHeldDevice({ userId: write.userId, deviceId: write.deviceId });
           if (Option.isNone(held)) return [];
           if (write.push) {
-            yield* sql`
-              update devices
-              set push_token = null, push_environment = null, updated_at = ${write.now}
-              where push_token = ${write.push.token} and id <> ${write.deviceId}
-            `;
+            yield* db
+              .update(devices)
+              .set({ ...NO_PUSH_ADDRESS, updatedAt: write.now })
+              .where(and(eq(devices.pushToken, write.push.token), ne(devices.id, write.deviceId)));
           }
-          const clauses = [sql`last_seen_at = ${write.now}`, sql`updated_at = ${write.now}`];
-          if (write.activeUntil !== undefined)
-            clauses.push(sql`active_until = ${write.activeUntil}`);
-          if (write.quietUntil !== undefined) clauses.push(sql`quiet_until = ${write.quietUntil}`);
-          if (write.push === null) {
-            clauses.push(sql`push_token = null`, sql`push_environment = null`);
-          } else if (write.push !== undefined) {
-            clauses.push(
-              sql`push_token = ${write.push.token}`,
-              sql`push_environment = ${write.push.environment}`,
-            );
-          }
-          return yield* sql`
-            update devices
-            set ${sql.csv(clauses)}
-            where user_id = ${write.userId} and id = ${write.deviceId}
-            returning id
-          `;
+          return yield* db
+            .update(devices)
+            .set(touchedColumns(write))
+            .where(and(eq(devices.userId, write.userId), eq(devices.id, write.deviceId)))
+            .returning({ id: devices.id });
         }),
       ),
     ),
@@ -185,11 +240,10 @@ const deleteDeviceRow = SqlSchema.findAll({
   Request: ForgetDeviceSchema,
   Result: DeviceIdRowSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        delete from devices where user_id = ${key.userId} and id = ${key.deviceId} returning id
-      `,
-    ),
+    db
+      .delete(devices)
+      .where(and(eq(devices.userId, key.userId), eq(devices.id, key.deviceId)))
+      .returning({ id: devices.id }),
 });
 
 /** Deletes the row only where this account holds it; answers whether one went. */

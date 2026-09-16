@@ -1,3 +1,4 @@
+import { and, eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -13,6 +14,8 @@ import {
   type SessionProviderPlugin,
   type WireRecord,
 } from "../../core.js";
+import { db } from "../../db/query.js";
+import { providerCursors } from "../../db/storage-schema.js";
 import { BRAIN_HOST } from "./bounds.js";
 import { type HostedRoster, observedSession } from "./roster.js";
 
@@ -93,10 +96,6 @@ export function boundedLines(lines: readonly string[]): BoundedLines {
   return { lines: lines.slice(dropped), dropped: dropped > 0 };
 }
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const CursorKeySchema = Schema.Struct({
   userId: Schema.String,
   providerId: Schema.String,
@@ -109,15 +108,16 @@ const findCursor = SqlSchema.findOneOption({
   Request: CursorKeySchema,
   Result: CursorRowSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select cursor
-        from provider_cursors
-        where user_id = ${key.userId}
-          and provider_id = ${key.providerId}
-          and provider_session_id = ${key.providerSessionId}
-      `,
-    ),
+    db
+      .select({ cursor: providerCursors.cursor })
+      .from(providerCursors)
+      .where(
+        and(
+          eq(providerCursors.userId, key.userId),
+          eq(providerCursors.providerId, key.providerId),
+          eq(providerCursors.providerSessionId, key.providerSessionId),
+        ),
+      ),
 });
 
 const NOT_OBSERVED = {
@@ -137,28 +137,47 @@ const CursorKeepSchema = Schema.Struct({
   cursor: Schema.String,
   /** The bookmark the read began from; null where none was kept, which lets the insert land only where none has been kept since. */
   from: Schema.NullOr(Schema.String),
-  updatedAt: Schema.String,
+  updatedAt: Schema.Date,
 });
+
+/**
+ * The standing row still holds the bookmark the read began from, which is
+ * what the conflicting update is conditioned on. A read that began from none
+ * compares to null, which is true of no row, so it moves no row another
+ * reader has since kept; the builder's own `eq` takes no null, so the
+ * comparison is a fragment inside the one rendered statement.
+ */
+const STILL_HOLDING = (from: string | null) => sql`${providerCursors.cursor} = ${from}`;
 
 /**
  * The upsert as one statement: a new row lands where none stands, and a
  * standing row moves only while it still holds the bookmark the read began
  * from — a null `from` compares to nothing, so a read that began from no
- * bookmark moves no row another reader has since kept.
+ * bookmark moves no row another reader has since kept. The conflicting
+ * update sets the values the insert carried, a single-row insert's
+ * `excluded` row being exactly those values.
  */
 const keepCursorRow = SqlSchema.void({
   Request: CursorKeepSchema,
   execute: (write) =>
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        insert into provider_cursors (user_id, provider_id, provider_session_id, cursor, updated_at)
-        values (${write.userId}, ${write.providerId}, ${write.providerSessionId}, ${write.cursor}, ${write.updatedAt}::timestamptz)
-        on conflict (user_id, provider_id, provider_session_id) do update
-          set cursor = excluded.cursor, updated_at = excluded.updated_at
-          where provider_cursors.cursor = ${write.from}
-      `,
-    ),
+    db
+      .insert(providerCursors)
+      .values({
+        userId: write.userId,
+        providerId: write.providerId,
+        providerSessionId: write.providerSessionId,
+        cursor: write.cursor,
+        updatedAt: write.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [
+          providerCursors.userId,
+          providerCursors.providerId,
+          providerCursors.providerSessionId,
+        ],
+        set: { cursor: write.cursor, updatedAt: write.updatedAt },
+        setWhere: STILL_HOLDING(write.from),
+      }),
 });
 
 /**
@@ -185,7 +204,7 @@ export function keepTranscriptCursor(
     providerSessionId: identity.providerSessionId,
     cursor,
     from: from ?? null,
-    updatedAt: now.toISOString(),
+    updatedAt: now,
   });
 }
 

@@ -11,18 +11,20 @@
  * door is what keeps the tick's bundle free of it.
  */
 
+import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../../db/query.js";
+import { conversations } from "../../db/storage-schema.js";
 import type { ConversationTarget } from "../store/index.js";
 
 const StandingSessionSchema = Schema.Struct({
   runtimeSessionId: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ runtimeSessionId: "runtime_session_id" }));
+});
 
-const OwnerRowSchema = Schema.Struct({
-  userId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id" }));
+const OwnerRowSchema = Schema.Struct({ userId: Schema.String });
 
 const ClaimSchema = Schema.Struct({
   userId: Schema.String,
@@ -35,70 +37,72 @@ const findStandingSession = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: StandingSessionSchema,
   execute: (target) =>
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        select runtime_session_id
-        from conversations
-        where id = ${target.conversationId} and user_id = ${target.userId} and deleted_at is null
-      `,
-    ),
+    db
+      .select({ runtimeSessionId: conversations.runtimeSessionId })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, target.conversationId),
+          eq(conversations.userId, target.userId),
+          isNull(conversations.deletedAt),
+        ),
+      ),
 });
 
 const findConversationOwner = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OwnerRowSchema,
   execute: (conversationId) =>
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        select user_id
-        from conversations
-        where id = ${conversationId} and deleted_at is null
-      `,
-    ),
+    db
+      .select({ userId: conversations.userId })
+      .from(conversations)
+      .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))),
 });
 
 const claimSession = SqlSchema.void({
   Request: ClaimSchema,
   execute: (claim) =>
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        update conversations
-        set runtime_session_id = ${claim.runtimeSessionId}, last_activity_at = ${claim.now}
-        where id = ${claim.conversationId}
-          and user_id = ${claim.userId}
-          and deleted_at is null
-          and (runtime_session_id is null or runtime_session_id < ${claim.runtimeSessionId})
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({ runtimeSessionId: claim.runtimeSessionId, lastActivityAt: claim.now })
+      .where(
+        and(
+          eq(conversations.id, claim.conversationId),
+          eq(conversations.userId, claim.userId),
+          isNull(conversations.deletedAt),
+          or(
+            isNull(conversations.runtimeSessionId),
+            lt(conversations.runtimeSessionId, claim.runtimeSessionId),
+          ),
+        ),
+      ),
 });
 
 const findRecordedSession = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: StandingSessionSchema,
   execute: (conversationId) =>
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        select runtime_session_id from conversations where id = ${conversationId}
-      `,
-    ),
+    db
+      .select({ runtimeSessionId: conversations.runtimeSessionId })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId)),
 });
 
 const lockRow = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (target) =>
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        select id from conversations
-        where id = ${target.conversationId} and user_id = ${target.userId} and deleted_at is null
-        for update
-      `,
-    ),
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, target.conversationId),
+          eq(conversations.userId, target.userId),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .for("update"),
 });
 
 /** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
