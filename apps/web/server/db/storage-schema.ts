@@ -67,6 +67,15 @@ export const conversations = pgTable(
     /** The observed session's provider and its id there; set on an observed conversation and on no other kind. */
     providerId: text("provider_id"),
     providerSessionId: text("provider_session_id"),
+    /**
+     * What the roster last called the observed session, and the name of the
+     * workspace holding it: written on the open and refreshed on a wake where
+     * either moved, so the Agents page can name a session Conductor no longer
+     * lists. Null on every other kind, on a row opened before migration 0043
+     * kept them, and where the roster reports no name.
+     */
+    title: text("title"),
+    workspace: text("workspace"),
     /** The conversation a child was delegated from; a child goes with its parent. */
     parentConversationId: uuid("parent_conversation_id").references(
       (): AnyPgColumn => conversations.id,
@@ -266,7 +275,14 @@ export const asks = pgTable(
     /** The client's own id for the ask: the idempotency key, unique in its conversation. */
     clientId: text("client_id").notNull(),
     origin: text("origin").$type<TurnOrigin>().notNull(),
-    question: text("question").notNull(),
+    /**
+     * Dead: write-only from the day it was introduced, read by no statement
+     * and carried by no record a caller sees. Nothing writes it any more, and
+     * migration 0044 dropped its `NOT NULL` so the build that stopped naming
+     * it and the build that still did could both insert across one deploy; a
+     * later migration drops the column itself and this line with it.
+     */
+    question: text("question"),
     /** The eve session the ask was handed to, once eve accepted it. */
     sessionId: text("session_id"),
     /** The delivery eve named for a follow-up; an ask that opened its session has none, its turn is the session's first. */
