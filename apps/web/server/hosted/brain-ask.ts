@@ -305,7 +305,6 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
     conversationId,
     clientId,
     origin,
-    question,
     createdAt: now,
   });
   const accepted: AskOutcome = {

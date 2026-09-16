@@ -40,7 +40,6 @@ interface AskWrite {
   readonly conversationId: string;
   readonly clientId: string;
   readonly origin: AskOrigin;
-  readonly question: string;
   readonly createdAt: Date;
 }
 
@@ -153,7 +152,6 @@ const AskWriteSchema = Schema.Struct({
   conversationId: Schema.String,
   clientId: Schema.String,
   origin: Schema.Literals(Object.values(ASK_ORIGIN)),
-  question: Schema.String,
   createdAt: Schema.Date,
 });
 
@@ -163,8 +161,8 @@ const insertAsk = SqlSchema.void({
   execute: (ask) =>
     statement(
       (sql) => sql`
-        insert into asks (user_id, conversation_id, client_id, origin, question, created_at)
-        values (${ask.userId}, ${ask.conversationId}, ${ask.clientId}, ${ask.origin}, ${ask.question}, ${ask.createdAt})
+        insert into asks (user_id, conversation_id, client_id, origin, created_at)
+        values (${ask.userId}, ${ask.conversationId}, ${ask.clientId}, ${ask.origin}, ${ask.createdAt})
         on conflict (conversation_id, client_id) do nothing
       `,
     ),

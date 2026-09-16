@@ -1466,7 +1466,6 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
         conversationId: target.conversationId,
         clientId,
         origin: "spoken",
-        question: "Open the failing one.",
         createdAt: new Date(NOW),
       }),
     );
@@ -1557,7 +1556,6 @@ test("the turn's answer closes the journal behind what landed while the turn ran
       conversationId: target.conversationId,
       clientId: askId,
       origin: "spoken",
-      question: "What is the fixture session doing?",
       createdAt: new Date(NOW),
     }),
   );
@@ -1650,7 +1648,6 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
       conversationId: target.conversationId,
       clientId: askId,
       origin: "spoken",
-      question: "What is the fixture session doing?",
       createdAt: new Date(NOW),
     }),
   );
@@ -1811,7 +1808,6 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
       conversationId: target.conversationId,
       clientId: "dl_1",
       origin: "spoken",
-      question: "Open the failing one. Please.",
       createdAt: new Date(NOW),
     }),
   );
