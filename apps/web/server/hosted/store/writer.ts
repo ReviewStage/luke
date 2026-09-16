@@ -32,6 +32,7 @@ import {
   type SchemaPath,
   type SchemaRefusal,
   type SpeechEventKind,
+  type SpokenAskMetadata,
   STEP_START_PART,
   type StoredMessageMetadata,
   type StoredToolPart,
@@ -253,7 +254,7 @@ type SpokenRowWrite =
       readonly clientId: string;
       readonly role: typeof MESSAGE_ROLE.USER;
       readonly text: string;
-      readonly metadata: UserMessageMetadata;
+      readonly metadata: SpokenAskMetadata;
     }
   | {
       readonly clientId: string;
@@ -306,10 +307,26 @@ type SpokenLineAdoptionResult =
   | typeof NO_CONVERSATION
   | Refused<typeof STORE_WRITE_REFUSAL.NO_MESSAGE>;
 
-/** What the relay's attach did for one turn: the user rows it took into the turn, by id; or the conversation no longer stands. */
+/** What an attach did: the rows it gave the turn or the delegation, by id; or the conversation no longer stands. */
 type AskLinesAttached =
   | { readonly ok: true; readonly attached: readonly string[] }
   | typeof NO_CONVERSATION;
+
+/**
+ * The developer's rows a delegation is about, by the client ids the service's
+ * ledger minted for them, and the delegation itself. The service decides
+ * which rows those are from the ledger's own boundaries; the store gives them
+ * the delegation and re-cuts nothing.
+ */
+interface SpokenAskAttach {
+  readonly delegationId: string;
+  readonly rowIds: readonly string[];
+}
+
+/** What attaching a spoken ask did: the rows now the delegation's, by id; or a row the vocabulary refused with the delegation on it. */
+type SpokenAskAttached =
+  | AskLinesAttached
+  | Extract<StoreWriteResult, { ok: false; refusal: typeof STORE_WRITE_REFUSAL.MESSAGE_REFUSED }>;
 
 /** Where the developer's earlier spoken asks on one voice session end, for the next to be cut from. */
 interface SpokenAskEnd {
@@ -396,6 +413,22 @@ export interface StoreWriter {
    * so a row being written meanwhile is seen once it lands, never missed.
    */
   attachAskLines(target: ConversationTarget, turnId: string): Write<AskLinesAttached>;
+  /**
+   * Gives the developer's rows a delegation is about that delegation: each
+   * row standing under one of the client ids that no delegation owns yet
+   * takes the delegation's id into its metadata in place, at a bumped
+   * revision, so a device reading from its revision sees the row again where
+   * it stands; and where the ask has already learned its turn, the rows are
+   * taken into it in the order they stand, ahead of the turn's work, as
+   * `attachAskLines` takes them at the received message otherwise. Nothing is
+   * re-keyed: a row's client id stays the ledger's for life, and a row a
+   * delegation already owns keeps that one. A delegation told twice attaches
+   * once and answers the same rows. The amended row is held to the stored
+   * message vocabulary before it lands, as every write here is, so a
+   * delegation id the vocabulary refuses is a refusal and never an
+   * unreadable row.
+   */
+  attachSpokenAsk(target: ConversationTarget, attach: SpokenAskAttach): Write<SpokenAskAttached>;
   /** The latest end, on the session's clock, of the spoken asks already written for one voice session; zero for none. */
   spokenAskEnd(target: ConversationTarget, end: SpokenAskEnd): Write<SpokenAskEndResult>;
   /**
@@ -751,7 +784,7 @@ const insertMessageRow = SqlSchema.findOneOption({
  * revision and stamps the row with where it moved to, in the one statement,
  * so the change signal's head moves with the write and a messages read
  * asked from an earlier revision answers exactly the rows written since.
- * The three writes below are the only ones that change a row after it is
+ * The four writes below are the only ones that change a row after it is
  * numbered; a move gives a row a fresh sequence, which the sequence counter
  * already announces.
  */
@@ -817,6 +850,25 @@ const completeMessage = SqlSchema.void({
         set parts = ${row.parts}::jsonb,
             metadata = ${row.metadata}::jsonb,
             finished_at = ${row.finishedAt},
+            revision = (select journal_revision from bumped)
+        where id = ${row.id}
+      `,
+    ),
+});
+
+/** A developer's row taking the delegation it is about into its metadata, in place: its words and its place stand, its revision moves. */
+const delegateSpokenRow = SqlSchema.void({
+  Request: Schema.Struct({
+    id: Schema.String,
+    conversationId: Schema.String,
+    metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
+  }),
+  execute: (row) =>
+    statement(
+      (sql) => sql`
+        ${bumpedRevision(sql, row.conversationId)}
+        update messages
+        set metadata = ${row.metadata}::jsonb,
             revision = (select journal_revision from bumped)
         where id = ${row.id}
       `,
@@ -1748,6 +1800,9 @@ const upsertSpokenRow = /* @__PURE__ */ Effect.fn("upsertSpokenRow")(function* (
       ? yield* readAloudFrom(context, write.metadata)
       : NOTHING_READ;
   const readFrom = source.messageId ?? readFromOf(standing);
+  // A developer's row keeps the delegation that attached it: the write names the row's words and
+  // span as the ledger holds them, and the delegation is the store's to remember across writes.
+  const delegationId = write.role === MESSAGE_ROLE.USER ? delegationOf(standing) : undefined;
   const read = yield* admitted(
     context,
     write.role === MESSAGE_ROLE.ASSISTANT
@@ -1758,7 +1813,15 @@ const upsertSpokenRow = /* @__PURE__ */ Effect.fn("upsertSpokenRow")(function* (
             readFrom === undefined ? write.metadata : { ...write.metadata, read_from: readFrom },
           parts,
         }
-      : { id: write.clientId, role: write.role, metadata: write.metadata, parts },
+      : {
+          id: write.clientId,
+          role: write.role,
+          metadata:
+            delegationId === undefined
+              ? write.metadata
+              : { ...write.metadata, delegation_id: delegationId },
+          parts,
+        },
   );
   if (!read.ok) return read;
   if (Option.isNone(standing)) {
@@ -1785,6 +1848,13 @@ function readFromOf(standing: Option.Option<MessageRow>): string | undefined {
   if (Option.isNone(standing) || standing.value.metadata === null) return undefined;
   const metadata = standing.value.metadata;
   return "read_from" in metadata ? metadata.read_from : undefined;
+}
+
+/** The delegation a standing developer's row was attached to, where its metadata names one. */
+function delegationOf(standing: Option.Option<MessageRow>): string | undefined {
+  if (Option.isNone(standing) || standing.value.metadata === null) return undefined;
+  const metadata = standing.value.metadata;
+  return "delegation_id" in metadata ? metadata.delegation_id : undefined;
 }
 
 /** What a spoken row was read from, and the turn that owns it: either may be nothing. */
@@ -2089,6 +2159,92 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("attachAskLines")(function* (
 });
 
 /**
+ * The developer's rows a delegation is about, in the order they stand: those
+ * under the client ids named that no delegation owns yet, and those already
+ * this delegation's, so a delegation told twice finds its own rows and none
+ * of another's. The ids are the ledger's, so a row is matched by the one
+ * name it has for life.
+ */
+const findSpokenRowsToAttach = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    delegationId: Schema.String,
+    clientIds: Schema.Array(Schema.String),
+  }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    clientId: Schema.String,
+    turnId: Schema.NullOr(Schema.String),
+    delegationId: Schema.NullOr(Schema.String),
+    parts: StoredPartsColumnSchema,
+    metadata: Schema.NullOr(MessageMetadataColumnSchema),
+  }).pipe(
+    Schema.encodeKeys({ clientId: "client_id", turnId: "turn_id", delegationId: "delegation_id" }),
+  ),
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select id, client_id, turn_id, metadata ->> 'delegation_id' as delegation_id, parts, metadata
+        from messages
+        where conversation_id = ${key.conversationId}
+          and role = ${MESSAGE_ROLE.USER}
+          and ${sql.in("client_id", key.clientIds)}
+          and (
+            metadata ->> 'delegation_id' is null
+            or metadata ->> 'delegation_id' = ${key.delegationId}
+          )
+        order by seq asc
+      `,
+    ),
+});
+
+const attachSpokenAsk = /* @__PURE__ */ Effect.fn("attachSpokenAsk")(function* (
+  context: WriterContext,
+  attach: SpokenAskAttach,
+): Effect.fn.Return<SpokenAskAttached, WriteFailure, SqlClient.SqlClient> {
+  if (attach.rowIds.length === 0) return { ok: true, attached: [] };
+  const rows = yield* findSpokenRowsToAttach({
+    conversationId: context.target.conversationId,
+    delegationId: attach.delegationId,
+    clientIds: attach.rowIds,
+  });
+  const turnId = yield* askTurnOf({
+    conversationId: context.target.conversationId,
+    clientId: attach.delegationId,
+  });
+  const attached: string[] = [];
+  let lastSeq: number | undefined;
+  for (const row of rows) {
+    if (row.delegationId === null) {
+      // The row with the delegation on it is held to the vocabulary before it lands, as a read
+      // would hold it: a delegation id the vocabulary refuses is refused here, not stored.
+      const read = yield* admitted(context, {
+        id: row.clientId,
+        role: MESSAGE_ROLE.USER,
+        metadata: { ...row.metadata, delegation_id: attach.delegationId },
+        parts: row.parts,
+      });
+      if (!read.ok) return read;
+      yield* delegateSpokenRow({
+        id: row.id,
+        conversationId: context.target.conversationId,
+        metadata: read.message.role === MESSAGE_ROLE.SYSTEM ? null : read.message.metadata,
+      });
+    }
+    // Where the ask has learned its turn, a row still outside it moves in at a fresh place, as at
+    // the received message; a row already in a turn keeps its place.
+    if (turnId !== undefined && row.turnId === null) {
+      lastSeq = yield* takeLineIntoTurn(context, turnId, row.id);
+    }
+    attached.push(row.id);
+  }
+  if (turnId !== undefined && lastSeq !== undefined) {
+    yield* moveTurnWorkAfter(context, turnId, lastSeq);
+  }
+  return { ok: true, attached };
+});
+
+/**
  * One event about a message. A claim is the one kind the schema makes
  * exclusive, and under the conversation's lock the check for a standing claim
  * holds when the insert runs, so the second claimant is answered by name and
@@ -2179,6 +2335,8 @@ export function storeWriter({
       underConversation(target, (context) => recordUserMessage(context, message)),
     attachAskLines: (target, turnId) =>
       underConversation(target, (context) => attachAskLines(context, turnId)),
+    attachSpokenAsk: (target, attach) =>
+      underConversation(target, (context) => attachSpokenAsk(context, attach)),
     spokenAskEnd: (target, end) =>
       underConversation(target, (context) => spokenAskEnd(context, end)),
     upsertSpokenRow: (target, write) =>

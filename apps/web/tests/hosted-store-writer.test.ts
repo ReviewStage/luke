@@ -1838,3 +1838,159 @@ test("adopting a spoken line re-keys it to the delegation, names the delegation 
     { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE },
   );
 });
+
+test("attaching a spoken ask gives the developer's rows the delegation in place and keeps their ids; a row keeps the delegation as it grows; the turn takes the rows in order once known; a row another delegation owns is left alone", async () => {
+  const target = await conversation();
+  const SPOKEN = {
+    author: MESSAGE_AUTHOR.DEVELOPER,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: "vs_fixture_4",
+  } as const;
+  const developerRow = (clientId: string, text: string, fromMs: number, toMs: number) =>
+    database.run(
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.USER,
+        clientId,
+        text,
+        metadata: { ...SPOKEN, from_ms: fromMs, to_ms: toMs },
+      }),
+    );
+  assert.ok((await developerRow("row-a", "Open the failing", 1000, 2200)).ok);
+  assert.ok((await developerRow("row-b", "one.", 6000, 6400)).ok);
+  assert.ok(
+    (
+      await database.run(
+        writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.ASSISTANT,
+          clientId: "luke-a",
+          text: "Mm-hmm.",
+          metadata: { ...SPOKEN, author: MESSAGE_AUTHOR.VOICE_MODEL, from_ms: 3000, to_ms: 3400 },
+        }),
+      )
+    ).ok,
+  );
+  const before = await storedMessages(target);
+  const revisionBefore = await journalRevision(target);
+
+  // No turn known yet: each row takes the delegation into its metadata where it stands, at a bumped revision.
+  const attached = await database.run(
+    writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: ["row-a", "row-b"] }),
+  );
+  assert.ok(attached.ok);
+  assert.deepEqual(attached.attached, [before[0]?.id, before[1]?.id]);
+  const delegated = await storedMessages(target);
+  assert.deepEqual(
+    delegated.map((row) => [row.id, row.clientId, row.seq, row.turnId, row.metadata]),
+    [
+      [
+        before[0]?.id,
+        "row-a",
+        before[0]?.seq,
+        null,
+        { ...SPOKEN, from_ms: 1000, to_ms: 2200, delegation_id: "dl_1" },
+      ],
+      [
+        before[1]?.id,
+        "row-b",
+        before[1]?.seq,
+        null,
+        { ...SPOKEN, from_ms: 6000, to_ms: 6400, delegation_id: "dl_1" },
+      ],
+      [before[2]?.id, "luke-a", before[2]?.seq, null, before[2]?.metadata],
+    ],
+  );
+  assert.ok((delegated[0]?.revision ?? 0) > (before[0]?.revision ?? 0));
+  assert.ok(((await journalRevision(target)) ?? 0) > (revisionBefore ?? 0));
+  // Told twice, the same rows are the delegation's; nothing moves.
+  const twice = await database.run(
+    writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: ["row-a", "row-b"] }),
+  );
+  assert.ok(twice.ok);
+  assert.deepEqual(twice.attached, attached.attached);
+  assert.deepEqual(
+    (await storedMessages(target)).map((row) => [row.seq, row.revision]),
+    delegated.map((row) => [row.seq, row.revision]),
+  );
+  // A row keeps growing under its own id after the handover, and keeps the delegation as it grows.
+  assert.ok((await developerRow("row-b", "one. Please.", 6000, 7100)).ok);
+  const grown = (await storedMessages(target))[1];
+  assert.deepEqual(
+    [grown?.id, grown?.clientId, grown?.parts, grown?.metadata],
+    [
+      before[1]?.id,
+      "row-b",
+      [{ type: "text", text: "one. Please.", state: "done" }],
+      { ...SPOKEN, from_ms: 6000, to_ms: 7100, delegation_id: "dl_1" },
+    ],
+  );
+  // Another delegation naming the same row finds nothing of its own to take.
+  const other = await database.run(
+    writer.attachSpokenAsk(target, { delegationId: "dl_2", rowIds: ["row-a"] }),
+  );
+  assert.ok(other.ok);
+  assert.deepEqual(other.attached, []);
+  assert.deepEqual((await storedMessages(target))[0]?.metadata, {
+    ...SPOKEN,
+    from_ms: 1000,
+    to_ms: 2200,
+    delegation_id: "dl_1",
+  });
+
+  // The ask learns its turn, whose first step already opened its journal: attaching now takes the
+  // rows into the turn in the order they stood, at fresh places ahead of the journal, which moves behind.
+  const asks = askRecord();
+  const ask = await database.run(
+    asks.record({
+      userId: target.userId,
+      conversationId: target.conversationId,
+      clientId: "dl_1",
+      origin: "spoken",
+      question: "Open the failing one. Please.",
+      createdAt: new Date(NOW),
+    }),
+  );
+  const stream = new Stream();
+  await feed(target, [stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK)]);
+  await database.run(
+    asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_4", turnId: stream.turnId })),
+  );
+  await feed(target, [stream.step(1)]);
+  const journal = (await storedMessages(target)).find((row) => row.clientId === stream.turnId);
+  assert.ok(journal);
+  const taken = await database.run(
+    writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: ["row-a", "row-b"] }),
+  );
+  assert.ok(taken.ok);
+  assert.deepEqual(taken.attached, attached.attached);
+  const after = await storedMessages(target);
+  assert.deepEqual(
+    after.map((row) => [row.id, row.clientId, row.turnId]),
+    [
+      [before[2]?.id, "luke-a", null],
+      [before[0]?.id, "row-a", stream.turnId],
+      [before[1]?.id, "row-b", stream.turnId],
+      [journal.id, stream.turnId, stream.turnId],
+    ],
+  );
+  assert.ok((after[1]?.seq ?? 0) > (journal.seq ?? 0));
+  assert.ok((after[3]?.seq ?? 0) > (after[2]?.seq ?? 0));
+  // Attaching nothing is nothing.
+  assert.deepEqual(
+    await database.run(writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: [] })),
+    { ok: true, attached: [] },
+  );
+  // A delegation id the vocabulary refuses is a refusal, and the row stands as it was: the stream
+  // admits any opaque delegation id, and a row it cannot be read back with is never written.
+  assert.ok((await developerRow("row-c", "And this.", 9000, 9400)).ok);
+  const standing = (await storedMessages(target)).find((row) => row.clientId === "row-c");
+  const refused = await database.run(
+    writer.attachSpokenAsk(target, { delegationId: "x".repeat(129), rowIds: ["row-c"] }),
+  );
+  assert.equal(refused.ok, false);
+  if (refused.ok) return;
+  assert.equal(refused.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
+  assert.deepEqual(
+    (await storedMessages(target)).find((row) => row.clientId === "row-c"),
+    standing,
+  );
+});
