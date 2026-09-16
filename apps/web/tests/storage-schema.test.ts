@@ -267,7 +267,7 @@ test("deleting a parent conversation takes its descendants, their turns, and the
     kind: CONVERSATION_KIND.CHILD,
     parentConversationId: child,
   });
-  const bystander = await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  const bystander = await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
   await insertTestMessage(userId, bystander, { turnId: await insertTestTurn(userId, bystander) });
 
   await database.run(
@@ -291,7 +291,7 @@ test("deleting a parent conversation takes its descendants, their turns, and the
 test("a message's client id is unique within its conversation and free in another", async () => {
   const userId = await database.createUser();
   const first = await insertTestConversation(userId);
-  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
   await insertTestMessage(userId, first, { clientId: "ask-1" });
 
   await assertRefusedWithCode(
@@ -307,7 +307,7 @@ test("a message's client id is unique within its conversation and free in anothe
 test("a message's sequence is unique within its conversation and free in another", async () => {
   const userId = await database.createUser();
   const first = await insertTestConversation(userId);
-  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
   await insertTestMessage(userId, first, { clientId: "ask-1", seq: 7 });
 
   await assertRefusedWithCode(
@@ -336,8 +336,8 @@ test("an observed session has one conversation per account, and unobserved kinds
   );
   await insertTestConversation(other, observed);
   await insertTestConversation(userId, { ...observed, providerSessionId: "session-2" });
-  await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
-  await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
+  await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
 
   assert.equal(await countRowsWhere(database.run, "conversations", "user_id", userId), 4);
   assert.equal(await countRowsWhere(database.run, "conversations", "user_id", other), 1);
@@ -455,7 +455,7 @@ test("the claim binds one message alone: other kinds on it and claims on other m
 test("an event's sequence is unique within its conversation and free in another", async () => {
   const userId = await database.createUser();
   const first = await insertTestConversation(userId);
-  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.THREAD });
+  const second = await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
   const firstMessage = await insertTestMessage(userId, first);
   const secondMessage = await insertTestMessage(userId, second);
   await insertTestEvent(userId, first, firstMessage, { seq: 7 });

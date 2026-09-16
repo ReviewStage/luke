@@ -184,7 +184,7 @@ test("a stamped child, another account's child, a row of another kind, and a chi
   const elsewhere = await childOf(other, await parentOf(other), { createdAt: at(4) });
   await insertConversation(database.run, {
     userId,
-    kind: CONVERSATION_KIND.THREAD,
+    kind: CONVERSATION_KIND.OBSERVED,
     parentConversationId: parent,
     createdAt: at(5),
   });
@@ -204,7 +204,7 @@ test("a stamped child, another account's child, a row of another kind, and a chi
   assert.equal(await child(other, standing), undefined);
 });
 
-test("a child opens under a main or an observed parent, and under no thread or child, however the parent stands", async () => {
+test("a child opens under a main or an observed parent, and under no child, however the parent stands", async () => {
   const userId = await database.createUser();
   const opened = async (parentConversationId: string, now: Date) => {
     const spawnedByMessageId = await insertMessage(database.run, {
@@ -235,14 +235,7 @@ test("a child opens under a main or an observed parent, and under no thread or c
   assert.equal((await child(userId, underMain))?.parentKind, CONVERSATION_KIND.MAIN);
   assert.equal((await child(userId, underObserved))?.parentKind, CONVERSATION_KIND.OBSERVED);
 
-  // A thread delegates nothing and a child cannot open a child of its own: the insert refuses each as a parent.
-  const thread = await insertConversation(database.run, {
-    userId,
-    kind: CONVERSATION_KIND.THREAD,
-    parentConversationId: main,
-    createdAt: at(0),
-  });
-  assert.equal(await opened(thread, at(3)), undefined);
+  // A child cannot open a child of its own, and a child is the only kind no parent list holds: the insert refuses it.
   assert.equal(await opened(underMain, at(4)), undefined);
   assert.deepEqual(ids(await database.run(database.store.directory.children(userId, 10))), [
     underObserved,
