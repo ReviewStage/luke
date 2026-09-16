@@ -256,16 +256,14 @@ export function useVoiceView(): VoiceViewState {
   });
   useEffect(() => () => strip.stop(), [strip]);
 
-  // The lines drawn ahead of the record, each until a row of the call stands
-  // for it. The fold runs on each report and on each read, since the first
-  // read to land while a call stands is what tells the call's session from
-  // the last call's; no clock re-reads it.
+  // The lines drawn ahead of the record, each until a row of its own session
+  // stands for it. The fold runs on each report; no clock re-reads it.
   const lines = view.liveConversationLines;
   const conversation = state?.conversation ?? UNREAD_CONVERSATION;
   const [hold, setHold] = useState(NO_LIVE_LINES);
   useEffect(() => {
-    setHold((standing) => foldLiveLines(standing, lines, conversation));
-  }, [lines, conversation]);
+    setHold((standing) => foldLiveLines(standing, lines));
+  }, [lines]);
   const liveConversationEntries = useMemo(
     () => shownLiveEntries(hold, conversation),
     [hold, conversation],
