@@ -48,9 +48,12 @@ test("a gap past the threshold starts a new utterance with the next row id", () 
 test("a gap of exactly the threshold still joins", () => {
   const ledger = new TranscriptLedger();
   ledger.append(user("A", 0, 500));
-  ledger.append(user("B", 500 + UTTERANCE_GAP_MS, 3_000));
+  const secondStartMs = 500 + UTTERANCE_GAP_MS;
+  ledger.append(user("B", secondStartMs, secondStartMs + 1_000));
 
-  assert.equal(ledger.utterances(TRANSCRIPT_SPEAKER.USER).length, 1);
+  const utterances = ledger.utterances(TRANSCRIPT_SPEAKER.USER);
+  assert.equal(utterances.length, 1);
+  assert.equal(utterances[0]?.text, "AB");
 });
 
 test("the two speakers group independently and may overlap", () => {
