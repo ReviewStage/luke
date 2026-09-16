@@ -10,7 +10,7 @@ import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
-import type { ChildrenSnapshot } from "./children";
+import type { AgentsSnapshot, ChildrenSnapshot } from "./children";
 import {
   type DisplayDiagnostic,
   type SessionReplayBootstrap,
@@ -159,7 +159,9 @@ export interface AppState {
   conversation: AppConversationSlice;
   /** The account's children as the host's read lists them, the same on every Mac signed in to the account. */
   children: ChildrenSnapshot;
-  /** The one child's transcript the host holds open for this Mac; nothing while none is. */
+  /** The account's agents, the observed sessions holding a turn, as the host's read lists them. */
+  agents: AgentsSnapshot;
+  /** The one transcript the host holds open for this Mac, a child's or an observed session's; nothing while none is. */
   childTranscript: ChildTranscriptSnapshot | undefined;
   announcements: { held: boolean };
   /** The onboarding gates the host says stand: the key step ahead of the calendar's, both after the introduction. */

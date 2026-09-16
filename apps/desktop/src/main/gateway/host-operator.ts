@@ -49,12 +49,15 @@ import {
   isWireBoolean,
   isWireString,
   type RatingWord,
+  type TranscriptKind,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
 import {
+  type AgentsSnapshot,
+  agentsSnapshotSchema,
   type ChildrenSnapshot,
   childrenSnapshotSchema,
   childTranscriptSnapshotSchema,
@@ -80,7 +83,8 @@ export interface HostBootstrap {
   announcementsHeld: boolean;
   conversationView: ConversationViewSnapshot;
   children: ChildrenSnapshot;
-  /** The one child's transcript the host holds open, absent while none is. */
+  agents: AgentsSnapshot;
+  /** The one transcript the host holds open, a child's or an agent's, absent while none is. */
   childTranscript?: ChildTranscriptSnapshot;
   workspaceProjects: readonly ObservedWorkspaceProject[];
   calendars: readonly ObservedAccountCalendars[];
@@ -105,7 +109,7 @@ interface HostSessionReplay {
   accountId?: string;
 }
 
-/** The open child's transcript as the host last told it; no transcript says none is open any more. */
+/** The open transcript as the host last told it; no transcript says none is open any more. */
 interface HostChildTranscript {
   transcript: ChildTranscriptSnapshot | undefined;
 }
@@ -190,8 +194,8 @@ export interface HostOperator {
   clearConversation(): Effect.Effect<boolean>;
   /** A read of the Conversation now: a spoken line settled and the record is being written, so the poll should not wait its cadence out. */
   refreshConversation(): Effect.Effect<void>;
-  /** One child's transcript held open on the host, read to its end and again as the children head moves; answers whether the host took it. */
-  openChildTranscript(childId: string): Effect.Effect<boolean>;
+  /** One transcript held open on the host, read to its end and again as its list's head moves; answers whether the host took it. */
+  openChildTranscript(conversationId: string, kind: TranscriptKind): Effect.Effect<boolean>;
   closeChildTranscript(): Effect.Effect<void>;
   /** Luke's notebook as the service holds it, for the Settings page that shows what he has saved; nothing when the host could not read it. */
   readNotebook(): Effect.Effect<NotebookReadResult | undefined>;
@@ -228,6 +232,7 @@ export interface HostOperator {
   onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
   onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
   onChildrenChanged(listener: (children: ChildrenSnapshot) => void): () => void;
+  onAgentsChanged(listener: (agents: AgentsSnapshot) => void): () => void;
   onChildTranscriptChanged(listener: (change: HostChildTranscript) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onIntroductionChanged(listener: (owed: boolean) => void): () => void;
@@ -492,9 +497,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (answer) => record(answer)?.cleared === true,
       ),
     refreshConversation: () => fire(client.call(GATEWAY_METHOD.CONVERSATION_REFRESH)),
-    openChildTranscript: (childId) =>
+    openChildTranscript: (conversationId, kind) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { childId }),
+        client.call(GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { conversationId, kind }),
         (answer) => record(answer)?.opened === true,
       ),
     closeChildTranscript: () =>
@@ -603,6 +608,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           Result.getOrUndefined(
             readEither(childrenSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    onAgentsChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.AGENTS_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(agentsSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),

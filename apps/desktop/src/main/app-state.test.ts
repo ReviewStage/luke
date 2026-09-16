@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { runModeFor } from "@sidecar/host";
+import { TRANSCRIPT_KIND } from "@sidecar/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
@@ -191,7 +192,13 @@ const BOOT: HostBootstrap = {
   announcementsHeld: false,
   conversationView: { groups: [], settled: true },
   children: { settled: true, children: [] },
-  childTranscript: { childId: "5e000000-0000-4000-8000-000000000001", groups: [], settled: true },
+  agents: { settled: true, agents: [] },
+  childTranscript: {
+    conversationId: "5e000000-0000-4000-8000-000000000001",
+    kind: TRANSCRIPT_KIND.CHILD,
+    groups: [],
+    settled: true,
+  },
   workspaceProjects: [],
   calendars: [],
   calendarOnboardingOwed: false,
@@ -210,7 +217,8 @@ test("a host bootstrap lands in the document as the host answered it", () => {
   assert.equal(held.sessions.settled, false);
   assert.deepEqual(held.conversation, { groups: [], settled: true });
   assert.deepEqual(held.children, { settled: true, children: [] });
-  assert.equal(held.childTranscript?.childId, "5e000000-0000-4000-8000-000000000001");
+  assert.deepEqual(held.agents, { settled: true, agents: [] });
+  assert.equal(held.childTranscript?.conversationId, "5e000000-0000-4000-8000-000000000001");
   // A later bootstrap with no transcript open is the host having let it go.
   const { childTranscript: _open, ...closed } = BOOT;
   app.update(bootstrapPatch(app.snapshot(), closed));

@@ -1,3 +1,4 @@
+import { TRANSCRIPT_KIND } from "@sidecar/wire";
 import { ACT_KIND, type Act, type ActKind } from "#shared/messages/acts";
 
 const IDENTITY = { providerId: "claude-code", providerSessionId: "session-a" };
@@ -77,7 +78,10 @@ export const ONE_ACT_OF_EACH_KIND = {
   },
   [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: {
     kind: ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT,
-    payload: { childId: "5e000000-0000-4000-8000-000000000001" },
+    payload: {
+      conversationId: "5e000000-0000-4000-8000-000000000001",
+      kind: TRANSCRIPT_KIND.CHILD,
+    },
   },
   [ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: {
     kind: ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT,

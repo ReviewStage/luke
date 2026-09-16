@@ -145,15 +145,15 @@ export function registerDesktopIpc(services: DesktopServices): void {
       }
       return operator.host.rateConversationMessage(messageId, rating);
     },
-    // A child's transcript is a view of the Conversation tab, and a tab exists
-    // only on a panel; the hidden voice window and the introduction's takeover
-    // draw none, so they are refused before the host is reached. Which child
-    // stands and what its transcript holds are the host's to decide.
-    [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: ({ childId }, sender) => {
+    // A transcript is a view of the Conversation tab, and a tab exists only
+    // on a panel; the hidden voice window and the introduction's takeover
+    // draw none, so they are refused before the host is reached. Whether the
+    // conversation stands and what its transcript holds are the host's to decide.
+    [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: ({ conversationId, kind }, sender) => {
       if (!sender.panel || sender.introduction) {
         throw new ActRefused(ACT[ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT].refusal);
       }
-      return operator.host.openChildTranscript(childId);
+      return operator.host.openChildTranscript(conversationId, kind);
     },
     [ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: (_payload, sender) => {
       if (!sender.panel || sender.introduction) {

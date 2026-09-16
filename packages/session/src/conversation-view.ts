@@ -26,6 +26,7 @@ import {
   type RatingEventPayload,
   type StandingRating,
   standingRating,
+  type TranscriptKind,
   type TurnOrigin,
   type TurnStatus,
   UNKNOWN_ACTION_STATUS,
@@ -240,14 +241,16 @@ export interface ConversationViewSnapshot {
 }
 
 /**
- * One child's transcript as a device holds it while the child is open: the
- * child by its id, its turn groups in the same shape the Conversation's are,
- * so whatever draws the Conversation draws this unchanged, whether a read
- * has landed, and the row the latest read could not read back. At most one
- * child is open on a device at a time; a closed one is no snapshot at all.
+ * One conversation's transcript as a device holds it while it is open: the
+ * conversation by its id and kind, a child's or an observed session's, its
+ * turn groups in the same shape the Conversation's are, so whatever draws the
+ * Conversation draws this unchanged, whether a read has landed, and the row
+ * the latest read could not read back. At most one transcript is open on a
+ * device at a time; a closed one is no snapshot at all.
  */
 export interface ChildTranscriptSnapshot extends ConversationViewSnapshot {
-  readonly childId: string;
+  readonly conversationId: string;
+  readonly kind: TranscriptKind;
 }
 
 function toolKindOf(

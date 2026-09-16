@@ -1,5 +1,5 @@
-import { childrenAnswerSchema } from "@sidecar/hosted/reads-wire";
-import { WireValueSchema } from "@sidecar/wire";
+import { agentsAnswerSchema, childrenAnswerSchema } from "@sidecar/hosted/reads-wire";
+import { TRANSCRIPT_KIND, WireValueSchema } from "@sidecar/wire";
 import { Schema as EffectSchema } from "effect";
 
 /**
@@ -16,16 +16,26 @@ export const childrenSnapshotSchema = EffectSchema.Struct({
 
 export type ChildrenSnapshot = typeof childrenSnapshotSchema.Type;
 
+/** The account's agents on the same terms: the observed sessions holding a turn, under the agents read's own schema. */
+export const agentsSnapshotSchema = EffectSchema.Struct({
+  settled: EffectSchema.Boolean,
+  agents: agentsAnswerSchema.fields.agents,
+});
+
+export type AgentsSnapshot = typeof agentsSnapshotSchema.Type;
+
 /**
- * The open child's transcript as the host composes it: the child, whether a
- * read has landed, the row a read could not read back, and its turn groups.
- * The groups are the Conversation's own shape — stored rows the host already
- * held to the brain catalog's registry — which has no schema of its own on
- * this side of the boundary, so they cross as the Conversation snapshot's do:
- * admitted here as wire records, and read where they are drawn.
+ * The open transcript as the host composes it: the conversation by id and
+ * kind, a child's or an observed session's, whether a read has landed, the
+ * row a read could not read back, and its turn groups. The groups are the
+ * Conversation's own shape — stored rows the host already held to the brain
+ * catalog's registry — which has no schema of its own on this side of the
+ * boundary, so they cross as the Conversation snapshot's do: admitted here as
+ * wire records, and read where they are drawn.
  */
 export const childTranscriptSnapshotSchema = EffectSchema.Struct({
-  childId: EffectSchema.NonEmptyString,
+  conversationId: EffectSchema.NonEmptyString,
+  kind: EffectSchema.Literals(Object.values(TRANSCRIPT_KIND)),
   settled: EffectSchema.Boolean,
   groups: EffectSchema.Array(EffectSchema.Record(EffectSchema.String, WireValueSchema)),
   unreadable: EffectSchema.optionalKey(

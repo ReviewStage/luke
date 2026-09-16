@@ -13,6 +13,8 @@ import {
   type GatewayMethod,
 } from "@sidecar/gateway";
 import {
+  type AgentRead,
+  type AgentsAnswer,
   type BrainTurnsAnswer,
   CHILD_STATUS,
   type ChangesAnswer,
@@ -41,6 +43,7 @@ import {
   MESSAGE_RATING,
   MESSAGE_ROLE,
   RATING_WORD,
+  TRANSCRIPT_KIND,
   TURN_ORIGIN,
   TURN_STATUS,
   type WireRecord,
@@ -49,6 +52,7 @@ import {
 import { Cause, Effect, Exit } from "effect";
 import { test } from "vitest";
 import {
+  type AgentsSnapshot,
   type ChildrenSnapshot,
   type ConversationHeadsClient,
   type ConversationReadsClient,
@@ -63,6 +67,7 @@ const REPLY = "2b000000-0000-4000-8000-000000000002";
 const RATING_EVENT = "4d000000-0000-4000-8000-000000000001";
 const CHILD = "5e000000-0000-4000-8000-000000000001";
 const OTHER_CHILD = "5e000000-0000-4000-8000-000000000002";
+const AGENT = "6f000000-0000-4000-8000-000000000001";
 const NOW = 1_757_505_600_000;
 
 const CHILD_ROW: ChildRead = {
@@ -74,6 +79,16 @@ const CHILD_ROW: ChildRead = {
   status: CHILD_STATUS.RUNNING,
   acceptedAt: NOW,
   startedAt: NOW + 1,
+};
+
+const AGENT_ROW: AgentRead = {
+  id: AGENT,
+  providerId: "conductor",
+  providerSessionId: "session-a",
+  status: CHILD_STATUS.SETTLED,
+  acceptedAt: NOW,
+  startedAt: NOW + 1,
+  settledAt: NOW + 2,
 };
 
 const EMPTY_EVENTS: ConversationEventsAnswer = { events: [], next: "events-head", hasMore: false };
@@ -144,6 +159,7 @@ interface FakeClient extends ConversationReadsClient, ConversationHeadsClient {
   /** A gate a messages read waits at before answering, so a test can hold a poll open. */
   messagesGate: Promise<void>;
   childrenAnswer: ConversationReadResult<ChildrenAnswer>;
+  agentsAnswer: ConversationReadResult<AgentsAnswer>;
   /** A child's pages in the order they are answered; the last stands for every read after it. */
   childMessagesAnswers: ConversationReadResult<ConversationMessagesAnswer>[];
   clearAnswer: { opened: string; openedAt: number; cleared: number } | undefined;
@@ -160,6 +176,7 @@ function fakeClient(): FakeClient {
     messagesAnswer: ok(messagesAnswer("hello")),
     messagesGate: Promise.resolve(),
     childrenAnswer: ok({ children: [] }),
+    agentsAnswer: ok({ agents: [] }),
     childMessagesAnswers: [ok(childPage("child-page-2", true)), ok(childPage("child-end", false))],
     clearAnswer: { opened: "3c000000-0000-4000-8000-000000000009", openedAt: NOW + 1, cleared: 1 },
     notebookAnswer: {
@@ -202,6 +219,11 @@ function fakeClient(): FakeClient {
       Effect.sync(() => {
         client.calls.push("children");
         return client.childrenAnswer;
+      }),
+    agents: () =>
+      Effect.sync(() => {
+        client.calls.push("agents");
+        return client.agentsAnswer;
       }),
     turns: (page: ReadPageQuery = {}) =>
       Effect.sync(() => {
@@ -264,6 +286,14 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
         // SAFETY: the composer carries its own snapshot; the test reads it back as the domain type.
         return event.payload as unknown as ChildrenSnapshot;
       });
+  const agentsViews = () =>
+    emitted
+      .filter((event) => event.kind === GATEWAY_EVENT.AGENTS_CHANGED)
+      .map((event) => {
+        assert.ok(isRecord(event.payload));
+        // SAFETY: the composer carries its own snapshot; the test reads it back as the domain type.
+        return event.payload as unknown as AgentsSnapshot;
+      });
   /** Every transcript told: the snapshot, or an empty record where the clients were told none is open. */
   const transcriptViews = () =>
     emitted
@@ -280,6 +310,7 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
     reports,
     views,
     childrenViews,
+    agentsViews,
     transcriptViews,
     counted,
     refreshes: () => refreshes,
@@ -347,7 +378,7 @@ test("a refresh asked for by a method runs a pass now and answers once it has, a
       ),
     );
   assert.deepEqual(await refresh(), {});
-  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children"]);
+  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children", "agents"]);
   assert.equal(views().length, 1);
 
   const closed = harness({ active: false });
@@ -373,7 +404,7 @@ test("without a device row a poll reads every resource, and tells every client o
   const { composer, client, views } = harness();
   assert.deepEqual(composer.snapshot(), { groups: [], settled: false });
   await Effect.runPromise(composer.loop.refresh);
-  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children"]);
+  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children", "agents"]);
   assert.equal(views().length, 1);
   const [view] = views();
   assert.equal(view?.settled, true);
@@ -382,11 +413,12 @@ test("without a device row a poll reads every resource, and tells every client o
   // The same answers again move nothing, and nothing is told.
   await Effect.runPromise(composer.loop.refresh);
   assert.equal(views().length, 1);
-  assert.deepEqual(client.calls.slice(4), [
+  assert.deepEqual(client.calls.slice(5), [
     "messages:messages-head",
     "events:events-head",
     "turns:",
     "children",
+    "agents",
   ]);
 });
 
@@ -397,7 +429,13 @@ test("with a device row the change signal decides which resources are read", asy
   // Nothing held yet, so each head differs from the cursor and is read once; an
   // account with no turn has no turns head, and nothing is read for it; the
   // children list is read once so a signal naming no child still settles it.
-  assert.deepEqual(client.calls, [`changes:${DEVICE}`, "messages:", "events:", "children"]);
+  assert.deepEqual(client.calls, [
+    `changes:${DEVICE}`,
+    "messages:",
+    "events:",
+    "children",
+    "agents",
+  ]);
   client.calls.length = 0;
   await Effect.runPromise(composer.loop.refresh);
   // Every cursor now equals its head: only the signal travels.
@@ -521,7 +559,7 @@ test("a page this build's registry refuses is named on the snapshot like a row t
   assert.deepEqual(composer.snapshot().unreadable, { conversationId: MAIN, seq: 3 });
   assert.deepEqual(views().at(-1)?.unreadable, { conversationId: MAIN, seq: 3 });
   // One read, not a walk: the cursor did not pass the row and no page after it was asked for.
-  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children"]);
+  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children", "agents"]);
   assert.equal(reports.length, 1);
 });
 
@@ -932,7 +970,8 @@ test("an opened child's transcript is read to its end at once, read again from i
   client.calls.length = 0;
   assert.deepEqual(
     await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-      childId: CHILD,
+      conversationId: CHILD,
+      kind: TRANSCRIPT_KIND.CHILD,
     }),
     { opened: true },
   );
@@ -943,8 +982,13 @@ test("an opened child's transcript is read to its end at once, read again from i
   );
   // The clients were told at once that it is open and empty, then what it holds.
   const [opened, filled] = transcriptViews();
-  assert.deepEqual(opened, { childId: CHILD, groups: [], settled: false });
-  assert.equal(filled?.childId, CHILD);
+  assert.deepEqual(opened, {
+    conversationId: CHILD,
+    kind: TRANSCRIPT_KIND.CHILD,
+    groups: [],
+    settled: false,
+  });
+  assert.equal(filled?.conversationId, CHILD);
   assert.equal(filled?.settled, true);
   assert.equal(filled?.groups.length, 1);
   assert.equal(filled?.groups[0]?.turnId, TURN);
@@ -1001,22 +1045,25 @@ test("opening another child replaces the one open, a page out for the replaced c
   client.changesAnswer = { seen: true, messages: "messages-head", events: "events-head" };
   await Effect.runPromise(composer.loop.refresh);
   await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-    childId: CHILD,
+    conversationId: CHILD,
+    kind: TRANSCRIPT_KIND.CHILD,
   });
-  assert.equal(composer.childTranscriptSnapshot()?.childId, CHILD);
+  assert.equal(composer.childTranscriptSnapshot()?.conversationId, CHILD);
   // The same child again is already open: nothing is re-read.
   client.calls.length = 0;
   await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-    childId: CHILD,
+    conversationId: CHILD,
+    kind: TRANSCRIPT_KIND.CHILD,
   });
   assert.deepEqual(client.calls, [`changes:${DEVICE}`]);
 
   client.childMessagesAnswers = [ok(childPage("other-end", false))];
   await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-    childId: OTHER_CHILD,
+    conversationId: OTHER_CHILD,
+    kind: TRANSCRIPT_KIND.CHILD,
   });
-  assert.equal(composer.childTranscriptSnapshot()?.childId, OTHER_CHILD);
-  assert.deepEqual(transcriptViews().at(-1)?.childId, OTHER_CHILD);
+  assert.equal(composer.childTranscriptSnapshot()?.conversationId, OTHER_CHILD);
+  assert.deepEqual(transcriptViews().at(-1)?.conversationId, OTHER_CHILD);
   assert.ok(client.calls.includes(`childMessages:${OTHER_CHILD}:`));
 
   // A pass out for the first child lands after the second opened: its page is nobody's.
@@ -1035,7 +1082,8 @@ test("opening another child replaces the one open, a page out for the replaced c
   const closed = harness({ active: false });
   assert.deepEqual(
     await callMethod(closed.composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-      childId: CHILD,
+      conversationId: CHILD,
+      kind: TRANSCRIPT_KIND.CHILD,
     }),
     { opened: false },
   );
@@ -1056,9 +1104,10 @@ test("a Clear closes the open transcript at once, and a list that no longer name
   client.childrenAnswer = ok({ children: [CHILD_ROW] });
   await Effect.runPromise(composer.loop.refresh);
   await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-    childId: CHILD,
+    conversationId: CHILD,
+    kind: TRANSCRIPT_KIND.CHILD,
   });
-  assert.equal(composer.childTranscriptSnapshot()?.childId, CHILD);
+  assert.equal(composer.childTranscriptSnapshot()?.conversationId, CHILD);
   // The Clear stamps the child; the transcript is dropped on the answer, before any read.
   client.messagesAnswer = { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
   assert.equal(await clear(composer), true);
@@ -1070,9 +1119,10 @@ test("a Clear closes the open transcript at once, and a list that no longer name
   client.messagesAnswer = ok(messagesAnswer("hello"));
   client.childMessagesAnswers = [ok(childPage("child-end", false))];
   await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-    childId: CHILD,
+    conversationId: CHILD,
+    kind: TRANSCRIPT_KIND.CHILD,
   });
-  assert.equal(composer.childTranscriptSnapshot()?.childId, CHILD);
+  assert.equal(composer.childTranscriptSnapshot()?.conversationId, CHILD);
   client.changesAnswer = { ...client.changesAnswer, children: "children-2" };
   client.childrenAnswer = ok({ children: [] });
   client.calls.length = 0;
@@ -1082,22 +1132,175 @@ test("a Clear closes the open transcript at once, and a list that no longer name
   assert.deepEqual(transcriptViews().at(-1), {});
 });
 
-test("a reset drops the children and the open transcript and tells every client", async () => {
-  const { composer, client, childrenViews, transcriptViews } = harness({ deviceId: DEVICE });
+test("the agents list is read once before any head is held, then only when the agents head moves, and told as its own snapshot when it differs", async () => {
+  const { composer, client, agentsViews } = harness({ deviceId: DEVICE });
+  client.changesAnswer = { seen: true, messages: "messages-head", events: "events-head" };
+  assert.deepEqual(composer.agentsSnapshot(), { settled: false, agents: [] });
+  await Effect.runPromise(composer.loop.refresh);
+  // A signal naming no agent still settles the list, once.
+  assert.ok(client.calls.includes("agents"));
+  assert.deepEqual(agentsViews(), [{ settled: true, agents: [] }]);
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`]);
+
+  // The agents head moves alone: the agents list is read, and not the children's.
+  client.changesAnswer = { ...client.changesAnswer, agents: "agents-1" };
+  client.agentsAnswer = ok({ agents: [AGENT_ROW] });
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`, "agents"]);
+  assert.deepEqual(agentsViews().at(-1), { settled: true, agents: [AGENT_ROW] });
+  assert.deepEqual(composer.agentsSnapshot(), { settled: true, agents: [AGENT_ROW] });
+
+  // A moved head that answers the same list tells nobody; a read that did
+  // not land leaves the head where it was, so the next poll asks again.
+  client.changesAnswer = { ...client.changesAnswer, agents: "agents-2" };
+  await Effect.runPromise(composer.loop.refresh);
+  assert.equal(agentsViews().length, 2);
+  client.changesAnswer = { ...client.changesAnswer, agents: "agents-3" };
+  client.agentsAnswer = { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
+  await Effect.runPromise(composer.loop.refresh);
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`, "agents"]);
+});
+
+test("an observed transcript is paged from the same read, follows the agents head and not the children's, and closes when the agents list no longer names it", async () => {
+  const { composer, client, transcriptViews } = harness({ deviceId: DEVICE });
   client.changesAnswer = {
     seen: true,
     messages: "messages-head",
     events: "events-head",
     children: "children-1",
+    agents: "agents-1",
   };
-  client.childrenAnswer = ok({ children: [CHILD_ROW] });
+  client.agentsAnswer = ok({ agents: [AGENT_ROW] });
+  client.childMessagesAnswers = [ok(childPage("agent-end", false))];
+  await Effect.runPromise(composer.loop.refresh);
+
+  client.calls.length = 0;
+  assert.deepEqual(
+    await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
+      conversationId: AGENT,
+      kind: TRANSCRIPT_KIND.OBSERVED,
+    }),
+    { opened: true },
+  );
+  assert.deepEqual(
+    client.calls.filter((call) => call.startsWith("childMessages:")),
+    [`childMessages:${AGENT}:`],
+  );
+  assert.deepEqual(transcriptViews()[0], {
+    conversationId: AGENT,
+    kind: TRANSCRIPT_KIND.OBSERVED,
+    groups: [],
+    settled: false,
+  });
+  assert.equal(composer.childTranscriptSnapshot()?.kind, TRANSCRIPT_KIND.OBSERVED);
+  assert.equal(composer.childTranscriptSnapshot()?.groups.length, 1);
+
+  // The children head moving reads the children list and nothing of this transcript.
+  client.changesAnswer = { ...client.changesAnswer, children: "children-2" };
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`, "children"]);
+
+  // The agents head moving reads the list and the transcript again, from where it stood.
+  client.changesAnswer = { ...client.changesAnswer, agents: "agents-2" };
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [
+    `changes:${DEVICE}`,
+    "agents",
+    `childMessages:${AGENT}:agent-end`,
+  ]);
+
+  // The children list letting go of every child closes nothing of it; the
+  // agents list no longer naming it does.
+  client.changesAnswer = { ...client.changesAnswer, children: "children-3" };
+  client.childrenAnswer = ok({ children: [] });
+  await Effect.runPromise(composer.loop.refresh);
+  assert.equal(composer.childTranscriptSnapshot()?.conversationId, AGENT);
+  client.changesAnswer = { ...client.changesAnswer, agents: "agents-3" };
+  client.agentsAnswer = ok({ agents: [] });
+  await Effect.runPromise(composer.loop.refresh);
+  assert.equal(composer.childTranscriptSnapshot(), undefined);
+  assert.deepEqual(transcriptViews().at(-1), {});
+});
+
+test("a Clear leaves an observed transcript open, and the same conversation named under another kind is another open", async () => {
+  const { composer, client, transcriptViews } = harness({ deviceId: DEVICE });
+  client.changesAnswer = {
+    seen: true,
+    messages: "messages-head",
+    events: "events-head",
+    children: "children-1",
+    agents: "agents-1",
+  };
+  client.agentsAnswer = ok({ agents: [AGENT_ROW] });
+  client.childMessagesAnswers = [ok(childPage("agent-end", false))];
   await Effect.runPromise(composer.loop.refresh);
   await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-    childId: CHILD,
+    conversationId: AGENT,
+    kind: TRANSCRIPT_KIND.OBSERVED,
+  });
+  const told = transcriptViews().length;
+  // A Clear stamps no observed conversation, so the transcript stands where a child's would have gone.
+  assert.equal(await clear(composer), true);
+  assert.equal(composer.childTranscriptSnapshot()?.conversationId, AGENT);
+  assert.equal(composer.childTranscriptSnapshot()?.kind, TRANSCRIPT_KIND.OBSERVED);
+  assert.equal(transcriptViews().length, told);
+
+  // The same id opened as a child is another open: the picture is replaced,
+  // the clients are told the new kind, and the children head is what re-reads it now.
+  client.calls.length = 0;
+  await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
+    conversationId: AGENT,
+    kind: TRANSCRIPT_KIND.CHILD,
+  });
+  assert.equal(composer.childTranscriptSnapshot()?.kind, TRANSCRIPT_KIND.CHILD);
+  assert.deepEqual(transcriptViews().at(-1)?.kind, TRANSCRIPT_KIND.CHILD);
+  assert.ok(client.calls.includes(`childMessages:${AGENT}:`));
+  client.changesAnswer = { ...client.changesAnswer, agents: "agents-2" };
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`, "agents"]);
+  // The children list names it under the id it was opened as, so the children head moving reads it again.
+  client.changesAnswer = { ...client.changesAnswer, children: "children-2" };
+  client.childrenAnswer = ok({ children: [{ ...CHILD_ROW, id: AGENT }] });
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [
+    `changes:${DEVICE}`,
+    "children",
+    `childMessages:${AGENT}:agent-end`,
+  ]);
+});
+
+test("a reset drops the children, the agents, and the open transcript and tells every client", async () => {
+  const { composer, client, childrenViews, agentsViews, transcriptViews } = harness({
+    deviceId: DEVICE,
+  });
+  client.changesAnswer = {
+    seen: true,
+    messages: "messages-head",
+    events: "events-head",
+    children: "children-1",
+    agents: "agents-1",
+  };
+  client.childrenAnswer = ok({ children: [CHILD_ROW] });
+  client.agentsAnswer = ok({ agents: [AGENT_ROW] });
+  await Effect.runPromise(composer.loop.refresh);
+  await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
+    conversationId: CHILD,
+    kind: TRANSCRIPT_KIND.CHILD,
   });
   composer.reset();
   assert.deepEqual(childrenViews().at(-1), { settled: false, children: [] });
+  assert.deepEqual(agentsViews().at(-1), { settled: false, agents: [] });
   assert.deepEqual(transcriptViews().at(-1), {});
   assert.deepEqual(composer.childrenSnapshot(), { settled: false, children: [] });
+  assert.deepEqual(composer.agentsSnapshot(), { settled: false, agents: [] });
   assert.equal(composer.childTranscriptSnapshot(), undefined);
 });

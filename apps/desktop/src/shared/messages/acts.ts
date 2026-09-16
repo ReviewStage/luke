@@ -121,11 +121,11 @@ export const ACT_KIND = {
    */
   CONVERSATION_RATE_MESSAGE: "conversation.rateMessage",
   /**
-   * One child's transcript held open on this Mac: the panel asks the host to
-   * read it to its end and again whenever the children head moves, and to
-   * stop when it lets go of it. One at a time, and the transcript arrives on
-   * the document rather than as the answer; the open answers whether the
-   * host took it.
+   * One transcript held open on this Mac, a child's or an observed session's:
+   * the panel asks the host to read it to its end and again whenever its
+   * list's head moves, and to stop when it lets go of it. One at a time, and
+   * the transcript arrives on the document rather than as the answer; the
+   * open answers whether the host took it.
    */
   CONVERSATION_OPEN_CHILD_TRANSCRIPT: "conversation.openChildTranscript",
   CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",

@@ -73,7 +73,7 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("wireGateway")(function* (
   });
 
   // What the host tells its clients: the Conversation as its reads of the
-  // service compose it, the children beside it, and the one child's
+  // service compose it, the children and agents beside it, and the one
   // transcript held open, each written to the document every window is told
   // from. The subscriptions are the scope's, as the client's own is, so the
   // close that ends one ends them all.
@@ -83,6 +83,9 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("wireGateway")(function* (
     }),
     host.onChildrenChanged((children) => {
       state.update({ children });
+    }),
+    host.onAgentsChanged((agents) => {
+      state.update({ agents });
     }),
     host.onChildTranscriptChanged(({ transcript }) => {
       state.update({ childTranscript: transcript });

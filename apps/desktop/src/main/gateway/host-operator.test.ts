@@ -13,7 +13,7 @@ import {
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, TRANSCRIPT_KIND } from "@sidecar/wire";
 import { Effect } from "effect";
 import { appSettingsWire } from "../../testing/spoken-setting-bridge";
 import { createHostOperator } from "./host-operator";
@@ -140,19 +140,22 @@ it.effect("every clearable plain setting crosses the wire when cleared", () =>
 );
 
 it.effect(
-  "opening a child transcript travels as a keyed mutation naming the child, and the close carries nothing",
+  "opening a transcript travels as a keyed mutation naming the conversation and its kind, and the close carries nothing",
   () =>
     Effect.gen(function* () {
       const { transport, requests } = recordingTransport();
       const operator = yield* operatorOver(transport);
 
       // The transport above answers a settings write, which is no open; the operator reads that as the host not taking it.
-      assert.equal(yield* operator.openChildTranscript("child-1"), false);
+      assert.equal(yield* operator.openChildTranscript("agent-1", TRANSCRIPT_KIND.OBSERVED), false);
       yield* operator.closeChildTranscript();
 
       const [opened, closed] = requests;
       assert.equal(opened?.method, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT);
-      assert.deepEqual(crossesTheWire(opened)?.params, { childId: "child-1" });
+      assert.deepEqual(crossesTheWire(opened)?.params, {
+        conversationId: "agent-1",
+        kind: TRANSCRIPT_KIND.OBSERVED,
+      });
       assert.ok(opened?.idempotencyKey);
       assert.equal(closed?.method, GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT);
       assert.deepEqual(crossesTheWire(closed)?.params, {});

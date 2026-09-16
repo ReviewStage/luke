@@ -56,7 +56,12 @@ import {
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
-import { CONVERSATION_PAGE, type ConversationPage } from "./subagents-panel";
+import {
+  CONVERSATION_PAGE,
+  type ConversationPage,
+  type TranscriptRow,
+  transcriptListed,
+} from "./subagents-panel";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { useConnections } from "./use-connections";
@@ -149,13 +154,13 @@ export function App(): React.JSX.Element {
   // tab change, unwound by Escape before the tab is left.
   const [conversationPage, setConversationPage, conversationPageNow] =
     useStateWithRef<ConversationPage>(CONVERSATION_PAGE.THREAD);
-  /** The child the transcript page is of, held exactly while that page shows. */
-  const [transcriptChildId, setTranscriptChildId] = useState<string | undefined>(undefined);
+  /** The row the transcript page is of, held exactly while that page shows. */
+  const [transcriptOpen, setTranscriptOpen] = useState<TranscriptRow | undefined>(undefined);
   /**
-   * The one way the page moves. The transcript page holds a child's transcript
-   * open on the host, so leaving it, by the back control, the button, Escape,
-   * or a tab change, lets go of it: the host stops paging a transcript nobody
-   * is looking at, and the document drops it.
+   * The one way the page moves. The transcript page holds a transcript open
+   * on the host, so leaving it, by the back control, the button, Escape, or a
+   * tab change, lets go of it: the host stops paging a transcript nobody is
+   * looking at, and the document drops it.
    */
   const changeConversationPage = useCallback(
     (next: ConversationPage) => {
@@ -164,30 +169,34 @@ export function App(): React.JSX.Element {
         next !== CONVERSATION_PAGE.TRANSCRIPT
       ) {
         tell(ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT);
-        setTranscriptChildId(undefined);
+        setTranscriptOpen(undefined);
       }
       setConversationPage(next);
     },
     [conversationPageNow, setConversationPage, tell],
   );
-  /** A row's press on the list: the host holds the child's transcript open, and the page turns to it. */
-  const openSubagent = useCallback(
-    (childId: string) => {
-      setTranscriptChildId(childId);
-      tell(ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { childId });
+  /** A row's press on the list, or a chip's in the thread: the host holds the transcript open, and the page turns to it. */
+  const openTranscript = useCallback(
+    (row: TranscriptRow) => {
+      setTranscriptOpen(row);
+      tell(ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
+        conversationId: row.conversationId,
+        kind: row.kind,
+      });
       setConversationPage(CONVERSATION_PAGE.TRANSCRIPT);
     },
     [setConversationPage, tell],
   );
-  // The host closes an open child the list no longer names, stamped by a
-  // Clear on any Mac or fallen past the list's bound; the page follows it
+  // The host closes an open transcript its list no longer names, stamped by
+  // a Clear on any Mac or fallen past the list's bound; the page follows it
   // back to the list rather than standing over a transcript nothing fills.
   const subagents = state?.children;
+  const agents = state?.agents;
   useEffect(() => {
-    if (transcriptChildId === undefined || subagents === undefined || !subagents.settled) return;
-    if (subagents.children.some((child) => child.id === transcriptChildId)) return;
+    if (transcriptOpen === undefined || subagents === undefined || agents === undefined) return;
+    if (transcriptListed(transcriptOpen, subagents, agents) !== false) return;
     changeConversationPage(CONVERSATION_PAGE.SUBAGENTS);
-  }, [changeConversationPage, subagents, transcriptChildId]);
+  }, [agents, changeConversationPage, subagents, transcriptOpen]);
   // The settings search's field, on the sessions search's own terms: the
   // magnifier beside the tab bar answers for it, and its query lives with the
   // field in the settings panel — closing here is what lets that query go.
@@ -978,8 +987,9 @@ export function App(): React.JSX.Element {
             conversationPage={conversationPage}
             onConversationPageChange={changeConversationPage}
             subagents={state.children}
-            onOpenSubagent={openSubagent}
-            transcriptChildId={transcriptChildId}
+            agents={state.agents}
+            onOpenTranscript={openTranscript}
+            transcriptOpen={transcriptOpen}
             childTranscript={state.childTranscript}
             onFieldEngaged={changeAskEngagement}
             offerOptions={sessions.offerOptions}
