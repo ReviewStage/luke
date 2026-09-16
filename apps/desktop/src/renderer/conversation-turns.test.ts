@@ -554,7 +554,7 @@ test("a source chip is a name wherever the agents list cannot lead to the agent,
   }
 });
 
-test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {
+test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble whatever became of its offer", () => {
   const groups = fixtureConversationTurns();
   const markup = render(groups, OPEN);
   // Main's turn carries its thought; the observed turn's crosses cut to its announcement.
@@ -562,7 +562,6 @@ test("a reasoning part folds to a line on Luke's side, and an announcement is hi
   // The reasoning row and the brain's written row open on the same one word, for now.
   const reasoning = entries(markup).find((row) => row.includes('data-reasoning="true"'));
   assert.ok(reasoning?.includes("Thinking"));
-  assert.equal(count(markup, "data-unspoken", "true"), 0);
 
   const announced = FIXTURE_INPUT.observed[0]?.messages[0];
   assert.ok(announced);
@@ -574,8 +573,10 @@ test("a reasoning part folds to a line on Luke's side, and an announcement is hi
       { messageId: announced.message.id, kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, seq: 2 },
     ],
   });
+  // A lapsed offer draws the same bubble as a heard one: the record keeps the mark, the panel says nothing of it.
   const unheard = render(expired, OPEN);
-  assert.equal(count(unheard, "data-unspoken", "true"), 1);
+  assert.ok(!unheard.includes("unspoken"));
+  assert.ok(!unheard.includes("Not spoken"));
   assert.equal(count(unheard, "data-speaker", "luke"), 1);
   assert.equal(count(unheard, "data-reasoning", "true"), 0);
 });

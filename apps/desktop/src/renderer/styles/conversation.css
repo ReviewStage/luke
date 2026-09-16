@@ -890,16 +890,6 @@ button.conversation-action-chip:focus-visible {
   left: calc(100% + 4px);
 }
 
-/* An announcement nobody heard says so beside its words, so a briefing that
-   lapsed unclaimed is never read as one that was spoken. */
-.conversation-unspoken {
-  align-self: flex-start;
-  padding: 0 10px 6px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-weight: 620;
-}
-
 /* Luke's thinking — the model's reasoning, or the brain's written words in a
    turn his voice answered — folded under a line drawn like a fold of tool
    calls: the chevron, his brain for a mark, one word. It reads from his edge
