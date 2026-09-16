@@ -462,7 +462,9 @@ export function PanelBody({
         <ConversationPanel
           view={conversation}
           roster={roster}
+          subagents={subagents.children}
           onOpenChat={onOpenChat}
+          onOpenChild={onOpenSubagent}
           onOfferRatingFeedback={onOfferRatingFeedback}
           live={liveConversationEntries}
           spokenAskPending={spokenAskPending}

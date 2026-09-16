@@ -8,6 +8,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { UPDATE_STATUS } from "#shared/messages/update";
+import { fixtureChildCompletionTurns } from "./conversation-turns.fixtures";
 import { PanelBody } from "./panel-body";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { SESSION_SORT } from "./session-model";
@@ -178,6 +179,24 @@ const CHILD: ChildRead = {
   acceptedAt: NOW - 60_000,
   settledAt: NOW,
 };
+
+test("a completion's chip in the thread opens the child exactly as the list's row does", () => {
+  const opened: string[] = [];
+  const mounted = mount(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, () => undefined, {
+      conversation: { groups: fixtureChildCompletionTurns(CHILD.id, CHILD.label), settled: true },
+      subagents: { settled: true, children: [CHILD] },
+      onOpenSubagent: (childId) => opened.push(childId),
+    }),
+  );
+  const chip = mounted.container.querySelector(".conversation-subagent-chip");
+  assert.ok(chip instanceof HTMLButtonElement);
+  assert.equal(chip.textContent, "Sub-agent: Audit the release notes");
+  act(() => {
+    chip.click();
+  });
+  assert.deepEqual(opened, [CHILD.id]);
+});
 
 test("a row's press opens the child, and the transcript page draws in the thread's place with the way back to the list", () => {
   const asked: ConversationPage[] = [];
