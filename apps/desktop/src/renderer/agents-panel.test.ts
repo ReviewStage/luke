@@ -443,22 +443,25 @@ test("the transcript opens at its tail, jumps again only when it gains a turn or
   metrics.scrollTop = 40;
   render({ transcript: { ...child, settled: true, groups: [...SINGLE_TURN] } });
   assert.equal(metrics.scrollTop, 40);
-  // A turn gained jumps to the tail again.
+  // A turn gained jumps to the tail again; one lost does not.
+  const turns = fixtureConversationTurns();
   metrics.scrollHeight = 900;
-  render({ transcript: { ...child, settled: true, groups: fixtureConversationTurns() } });
+  render({ transcript: { ...child, settled: true, groups: turns } });
   assert.equal(metrics.scrollTop, 900);
-  // Another row opened with as many turns jumps anew, once its own read lands.
   metrics.scrollTop = 40;
-  render({
-    open: OPEN_AGENT,
-    transcript: { ...child, settled: true, groups: fixtureConversationTurns() },
-  });
+  render({ transcript: { ...child, settled: true, groups: SINGLE_TURN } });
   assert.equal(metrics.scrollTop, 40);
+  // The same conversation opened under the other kind is another row, and
+  // jumps anew with as many turns; so does another conversation, each once
+  // its own read lands and not while the replaced transcript still stands.
+  const asAgent = { ...OPEN_CHILD, kind: TRANSCRIPT_KIND.OBSERVED };
+  render({ open: asAgent, transcript: { ...child, settled: true, groups: SINGLE_TURN } });
+  assert.equal(metrics.scrollTop, 40);
+  render({ open: asAgent, transcript: { ...asAgent, settled: true, groups: SINGLE_TURN } });
+  assert.equal(metrics.scrollTop, 900);
+  metrics.scrollTop = 40;
   const agent = { conversationId: OPEN_AGENT.conversationId, kind: TRANSCRIPT_KIND.OBSERVED };
-  render({
-    open: OPEN_AGENT,
-    transcript: { ...agent, settled: true, groups: fixtureConversationTurns() },
-  });
+  render({ open: OPEN_AGENT, transcript: { ...agent, settled: true, groups: SINGLE_TURN } });
   assert.equal(metrics.scrollTop, 900);
   act(() => {
     root.unmount();

@@ -317,15 +317,21 @@ export function AgentTranscriptPanel({
       : undefined;
   const groups = own?.groups ?? [];
   const scroller = useRef<HTMLDivElement | null>(null);
+  const shown = useRef<{ row: TranscriptRow; count: number } | undefined>(undefined);
 
   // Keyed on the row and the count rather than the snapshot: a re-read that
   // hands back the same turns as a new array must not move a reader who
-  // scrolled up, while another row opened with as many turns jumps anew.
+  // scrolled up, nor may one that hands back fewer, while another row opened
+  // with as many turns jumps anew.
   useLayoutEffect(() => {
+    const last = shown.current;
+    shown.current = { row: open, count: groups.length };
+    const sameRow = last?.row.conversationId === open.conversationId && last.row.kind === open.kind;
+    if (sameRow && groups.length <= last.count) return;
     const element = scroller.current;
     if (!element || groups.length === 0) return;
     element.scrollTop = element.scrollHeight;
-  }, [open.conversationId, open.kind, groups.length]);
+  }, [open, groups.length]);
 
   return (
     <section
