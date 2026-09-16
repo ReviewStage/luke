@@ -277,8 +277,8 @@ interface SpokenLineQuery {
 interface SpokenLineFound {
   readonly id: string;
   readonly clientId: string;
-  /** Whether a delegation already owns the line. */
-  readonly delegated: boolean;
+  /** The delegation that owns the line, where one does; the line's own id says nothing of it. */
+  readonly delegationId: string | undefined;
   /** Where the line starts and ends on the session's clock. */
   readonly fromMs: number;
   readonly toMs: number;
@@ -318,7 +318,7 @@ type AskLinesAttached =
  * which rows those are from the ledger's own boundaries; the store gives them
  * the delegation and re-cuts nothing.
  */
-interface SpokenAskAttach {
+export interface SpokenAskAttach {
   readonly delegationId: string;
   readonly rowIds: readonly string[];
 }
@@ -438,7 +438,7 @@ export interface StoreWriter {
    * the row again as it now stands, where it stood.
    */
   upsertSpokenRow(target: ConversationTarget, write: SpokenRowWrite): Write<UserMessageWriteResult>;
-  /** The latest developer line one voice session left ending at or before an instant, and whether a delegation owns it. */
+  /** The latest developer line one voice session left starting at or before an instant, and the delegation that owns it where one does. */
   latestSpokenLine(target: ConversationTarget, query: SpokenLineQuery): Write<SpokenLineResult>;
   /**
    * Places a spoken line that settled undelegated under the delegation that
@@ -1936,7 +1936,7 @@ function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write
         onSome: (row) => ({
           id: row.id,
           clientId: row.clientId,
-          delegated: row.delegationId !== null,
+          delegationId: row.delegationId ?? undefined,
           fromMs: row.fromMs,
           toMs: row.toMs,
         }),

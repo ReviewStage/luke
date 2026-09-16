@@ -1327,7 +1327,7 @@ test("a queued turn the opener has handed to eve is removed; one eve has started
   assert.equal((await storedTurn(named.turnId))?.status, TURN_STATUS.QUEUED);
 });
 
-test("a spoken reply is a finished assistant row under no turn, once per client id; the latest spoken line is found by its span and says whether a delegation owns it", async () => {
+test("a spoken reply is a finished assistant row under no turn, once per client id; the latest spoken line is found by its span and names the delegation that owns it", async () => {
   const target = await conversation();
   const spokenLine = (clientId: string, fromMs: number, toMs: number, delegationId?: string) =>
     database.run(
@@ -1385,7 +1385,7 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
     }),
   );
   assert.ok(ownLine.ok);
-  assert.deepEqual([ownLine.line?.clientId, ownLine.line?.delegated], ["line-1", false]);
+  assert.deepEqual([ownLine.line?.clientId, ownLine.line?.delegationId], ["line-1", undefined]);
   // Found by where it starts: a delegation's offset may fall inside the line it is about.
   const delegatedLine = await database.run(
     writer.latestSpokenLine(target, {
@@ -1394,7 +1394,10 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
     }),
   );
   assert.ok(delegatedLine.ok);
-  assert.deepEqual([delegatedLine.line?.clientId, delegatedLine.line?.delegated], ["dl_1", true]);
+  assert.deepEqual(
+    [delegatedLine.line?.clientId, delegatedLine.line?.delegationId],
+    ["dl_1", "dl_1"],
+  );
   const none = await database.run(
     writer.latestSpokenLine(target, {
       voiceSessionId: "vs_fixture_1",

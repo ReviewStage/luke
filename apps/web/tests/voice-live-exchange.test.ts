@@ -69,6 +69,13 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
+
+const DelegatedMetadataSchema = Schema.Struct({ delegation_id: Schema.String });
+
+/** The delegation a row's metadata names, where it names one. */
+function delegationOf(row: { readonly metadata: unknown }): string | undefined {
+  return Schema.is(DelegatedMetadataSchema)(row.metadata) ? row.metadata.delegation_id : undefined;
+}
 const KEYS = payloadKeyRing(TEST_PAYLOAD_SECRET);
 /** Where every acknowledged append ends on the session's clock; the voice that follows begins past it. */
 const APPEND_END_MS = 1_000;
@@ -315,11 +322,12 @@ it.effect(
       );
       const rows = await readMessagesByConversationTyped(database.run, target.conversationId);
       // One user row stands for one spoken ask: the developer's words as the session transcribed
-      // them, under the delegation's id, which is the ask's id too, and tied to the turn the ask
-      // ran. The question as eve received it is on the ask's record, never a second line.
+      // them, under the id the service's ledger minted, naming the delegation that is the ask's
+      // id, and tied to the turn the ask ran. The question as eve received it is on the ask's
+      // record, never a second line.
       const userRows = rows
         .filter((row) => row.role === MESSAGE_ROLE.USER)
-        .map((row) => [row.clientId, row.turnId]);
+        .map((row) => [delegationOf(row), row.turnId]);
       assert.deepEqual(userRows, [["dl_1", hostTurnId(recorded, FIRST_EVE_TURN)]]);
       const [session] = await readVoiceSessionByLiveSessionId(database.run, f.liveSessionId);
       assert.ok(session);
