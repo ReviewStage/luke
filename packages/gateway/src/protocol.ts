@@ -60,6 +60,7 @@ const GATEWAY_METHODS = {
   /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
   CONVERSATION_REFRESH: { name: "conversation.refresh", mutates: false },
   /** One transcript held open on this device, a child's or an observed session's: read to its end now and again whenever its list's head moves, until closed. */
+  // Named for the child's transcript still, an observed session's opening through the same method; kept so the protocol goldens stay put.
   CONVERSATION_OPEN_CHILD_TRANSCRIPT: { name: "conversation.openChildTranscript", mutates: true },
   CONVERSATION_CLOSE_CHILD_TRANSCRIPT: { name: "conversation.closeChildTranscript", mutates: true },
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
@@ -658,6 +659,7 @@ export const GATEWAY_EVENT = {
   /** The account's agents as the service's read lists them, whole, whenever a poll moved the list. */
   AGENTS_CHANGED: "agents.changed",
   /** The open transcript, whole, whenever a poll moved it; an empty payload says none is open. */
+  // Named for the child's transcript still, whichever kind is open; kept so the protocol goldens stay put.
   CHILD_TRANSCRIPT_CHANGED: "childTranscript.changed",
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",

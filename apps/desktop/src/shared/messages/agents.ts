@@ -1,3 +1,10 @@
+/**
+ * What the Agents page is told from, for the document every window reads:
+ * the account's children, its agents, and the one transcript the host holds
+ * open. The lists cross under the schemas the service's own answers are read
+ * through; the transcript's groups cross as wire records, read where drawn.
+ */
+
 import { agentsAnswerSchema, childrenAnswerSchema } from "@sidecar/hosted/reads-wire";
 import { TRANSCRIPT_KIND, WireValueSchema } from "@sidecar/wire";
 import { Schema as EffectSchema } from "effect";
@@ -33,7 +40,7 @@ export type AgentsSnapshot = typeof agentsSnapshotSchema.Type;
  * boundary, so they cross as the Conversation snapshot's do: admitted here as
  * wire records, and read where they are drawn.
  */
-export const childTranscriptSnapshotSchema = EffectSchema.Struct({
+export const transcriptSnapshotSchema = EffectSchema.Struct({
   conversationId: EffectSchema.NonEmptyString,
   kind: EffectSchema.Literals(Object.values(TRANSCRIPT_KIND)),
   settled: EffectSchema.Boolean,

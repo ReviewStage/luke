@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { ActHandle } from "./act";
-import { CONVERSATION_PAGE, type ConversationPage, type TranscriptRow } from "./subagents-panel";
+import { CONVERSATION_PAGE, type ConversationPage, type TranscriptRow } from "./agents-panel";
 import { useStateWithRef } from "./use-state-with-ref";
 
 /**

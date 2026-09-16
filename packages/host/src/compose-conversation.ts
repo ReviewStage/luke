@@ -30,10 +30,10 @@ import {
 } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
 import type {
-  ChildTranscriptSnapshot,
   ConversationViewMessage,
   ConversationViewSnapshot,
   StoredToolPart,
+  TranscriptSnapshot,
   UnreadableRow,
 } from "@sidecar/session";
 import { isStoredToolPart } from "@sidecar/session";
@@ -103,8 +103,8 @@ export interface ConversationComposer extends Composer {
   childrenSnapshot: () => ChildrenSnapshot;
   /** The agents as this device holds them now, for the bootstrap. */
   agentsSnapshot: () => AgentsSnapshot;
-  /** The open transcript as this device holds it now, for the bootstrap; nothing while none is open. */
-  childTranscriptSnapshot: () => ChildTranscriptSnapshot | undefined;
+  /** The open transcript as this device holds it now, for the bootstrap; nothing while none is open. Named for the child's transcript still, kept so the `childTranscript` slice name stays put. */
+  childTranscriptSnapshot: () => TranscriptSnapshot | undefined;
   /** Drops everything held, for a sign-out, and tells every client the thread is gone. */
   reset: () => void;
 }
@@ -217,14 +217,14 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   let publishedAgents = agentsRevision;
 
   /** The one transcript open on this device, with a picture of its own kept the way the Conversation's is. */
-  interface OpenChild {
+  interface OpenTranscript {
     readonly conversationId: string;
     readonly kind: TranscriptKind;
     readonly sync: ConversationViewSync;
     /** Whether the last walk reached the transcript's end; one cut short by the bound or a read that did not land is resumed next poll. */
     caughtUp: boolean;
   }
-  let openChild: OpenChild | undefined;
+  let openTranscript: OpenTranscript | undefined;
   /** What the clients were last told of the transcript: which conversation, of which kind, at which revision; nothing while they were told none is open. */
   let publishedTranscript:
     | { readonly conversationId: string; readonly kind: TranscriptKind; readonly revision: number }
@@ -265,21 +265,21 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     kernel.emit(GATEWAY_EVENT.AGENTS_CHANGED, carried(agentsSnapshot()));
   }
 
-  function childTranscriptSnapshot(): ChildTranscriptSnapshot | undefined {
-    if (openChild === undefined) return undefined;
-    const { conversationId, kind } = openChild;
-    return { conversationId, kind, ...openChild.sync.snapshot() };
+  function childTranscriptSnapshot(): TranscriptSnapshot | undefined {
+    if (openTranscript === undefined) return undefined;
+    const { conversationId, kind } = openTranscript;
+    return { conversationId, kind, ...openTranscript.sync.snapshot() };
   }
 
-  /** Tells every client the transcript as it stands, or that none is open, when either differs from what they were last told. */
+  /** Tells every client the transcript as it stands, or that none is open, when either differs from what they were last told; the event keeps its `childTranscript` name so the protocol goldens stay put. */
   function publishChildTranscript(): void {
     const standing =
-      openChild === undefined
+      openTranscript === undefined
         ? undefined
         : {
-            conversationId: openChild.conversationId,
-            kind: openChild.kind,
-            revision: openChild.sync.revision,
+            conversationId: openTranscript.conversationId,
+            kind: openTranscript.kind,
+            revision: openTranscript.sync.revision,
           };
     if (isDeepStrictEqual(standing, publishedTranscript)) return;
     publishedTranscript = standing;
@@ -297,7 +297,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * instants alone, so a transcript followed by its head would show a running
    * turn's first page and nothing more until it settled.
    */
-  function transcriptUnderWay(held: OpenChild): boolean {
+  function transcriptUnderWay(held: OpenTranscript): boolean {
     const rows: readonly { readonly id: string; readonly status: ChildStatus }[] =
       held.kind === TRANSCRIPT_KIND.CHILD ? children.children : agents.agents;
     const status = rows.find((row) => row.id === held.conversationId)?.status;
@@ -311,9 +311,9 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * could open it again.
    */
   function closeUnlistedTranscript(kind: TranscriptKind, listed: readonly { id: string }[]): void {
-    if (openChild?.kind !== kind) return;
-    const { conversationId } = openChild;
-    if (!listed.some((row) => row.id === conversationId)) openChild = undefined;
+    if (openTranscript?.kind !== kind) return;
+    const { conversationId } = openTranscript;
+    if (!listed.some((row) => row.id === conversationId)) openTranscript = undefined;
   }
 
   /**
@@ -533,7 +533,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * another opened in its place, is dropped: the picture it was for is
    * nobody's to publish.
    */
-  const pageChild = (generation: number, held: OpenChild) =>
+  const pageTranscript = (generation: number, held: OpenTranscript) =>
     pageResource(
       generation,
       held.sync,
@@ -542,7 +542,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       (answer, epoch) =>
         Effect.gen(function* () {
           const read = yield* readPage(answer);
-          if (!loop.isCurrent(generation) || openChild !== held) return false;
+          if (!loop.isCurrent(generation) || openTranscript !== held) return false;
           if ("unreadable" in read) {
             if (held.sync.clearEpoch === epoch) held.sync.markUnreadable(read.unreadable);
             return false;
@@ -583,10 +583,10 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     // last walk was cut short, has more to read whatever the head did, and one
     // whose turn is still under way is read on every poll, since the rows
     // that turn writes move no head.
-    const held = openChild;
+    const held = openTranscript;
     const listRead = held?.kind === TRANSCRIPT_KIND.CHILD ? readChildren : readAgents;
     if (held !== undefined && (listRead || !held.caughtUp || transcriptUnderWay(held))) {
-      held.caughtUp = yield* pageChild(generation, held);
+      held.caughtUp = yield* pageTranscript(generation, held);
     }
     if (!loop.isCurrent(generation)) return;
     publish();
@@ -643,7 +643,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     agents = { settled: false, agents: [] };
     agentsHead = undefined;
     agentsRevision += 1;
-    openChild = undefined;
+    openTranscript = undefined;
     publish();
     publishChildren();
     publishAgents();
@@ -673,7 +673,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         // conversation. The pass that follows moves the cursors onto the new
         // main and reads the children list the stamps moved the head of.
         sync.applyClear(answer.openedAt);
-        if (openChild?.kind === TRANSCRIPT_KIND.CHILD) openChild = undefined;
+        if (openTranscript?.kind === TRANSCRIPT_KIND.CHILD) openTranscript = undefined;
         publish();
         publishChildTranscript();
         yield* pollAfter;
@@ -697,8 +697,8 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         if (!gate()) return { opened: false };
         const { conversationId, kind } = read.success;
         // The same conversation named under another kind is another open: it follows another list.
-        if (openChild?.conversationId !== conversationId || openChild.kind !== kind) {
-          openChild = {
+        if (openTranscript?.conversationId !== conversationId || openTranscript.kind !== kind) {
+          openTranscript = {
             conversationId,
             kind,
             sync: new ConversationViewSync(),
@@ -711,7 +711,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       }),
     [GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: () =>
       Effect.sync(() => {
-        openChild = undefined;
+        openTranscript = undefined;
         publishChildTranscript();
         return {};
       }),

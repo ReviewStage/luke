@@ -11,7 +11,7 @@ import type { SessionView } from "./session-model";
 /** What a reader is told when the service named a row this build could not read back; the thread stands as last read. */
 const UNREADABLE_NOTICE = "Part of the conversation could not be read.";
 
-/** The one thing said about a read the service refused, under the thread and under a sub-agent's transcript alike. */
+/** The one thing said about a read the service refused, under the thread and under an open transcript alike. */
 export function ConversationUnreadableNotice(): React.JSX.Element {
   return (
     <p className="conversation-notice" role="status">

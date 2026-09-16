@@ -32,9 +32,9 @@ import {
   type ReadPageQuery,
 } from "@sidecar/hosted";
 import {
-  type ChildTranscriptSnapshot,
   CONVERSATION_VIEW_SOURCE,
   type ConversationViewSnapshot,
+  type TranscriptSnapshot,
 } from "@sidecar/session";
 import {
   isRecord,
@@ -309,7 +309,7 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
       .map((event) => {
         assert.ok(isRecord(event.payload));
         // SAFETY: the composer carries its own snapshot; the test reads it back as the domain type.
-        return event.payload as unknown as ChildTranscriptSnapshot | Record<string, never>;
+        return event.payload as unknown as TranscriptSnapshot | Record<string, never>;
       });
   return {
     composer,

@@ -28,6 +28,7 @@ import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state"
 import type { DisplayDiagnostic } from "#shared/messages/session";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
+import { CONVERSATION_PAGE, transcriptListed } from "./agents-panel";
 import type { CalendarGateControl } from "./calendar-gate";
 import type { ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
@@ -56,7 +57,6 @@ import {
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
-import { CONVERSATION_PAGE, transcriptListed } from "./subagents-panel";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { useConnections } from "./use-connections";
@@ -156,7 +156,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (transcriptOpen === undefined || subagents === undefined || agents === undefined) return;
     if (transcriptListed(transcriptOpen, subagents, agents) !== false) return;
-    changeConversationPage(CONVERSATION_PAGE.SUBAGENTS);
+    changeConversationPage(CONVERSATION_PAGE.AGENTS);
   }, [agents, changeConversationPage, subagents, transcriptOpen]);
   // The settings search's field, on the sessions search's own terms: the
   // magnifier beside the tab bar answers for it, and its query lives with the
@@ -709,7 +709,7 @@ export function App(): React.JSX.Element {
         tab === PANEL_TAB.CONVERSATION &&
         conversationPage === CONVERSATION_PAGE.TRANSCRIPT
       ) {
-        changeConversationPage(CONVERSATION_PAGE.SUBAGENTS);
+        changeConversationPage(CONVERSATION_PAGE.AGENTS);
       } else if (tab === PANEL_TAB.CONVERSATION && conversationPage !== CONVERSATION_PAGE.THREAD) {
         changeConversationPage(CONVERSATION_PAGE.THREAD);
       } else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.SESSIONS);

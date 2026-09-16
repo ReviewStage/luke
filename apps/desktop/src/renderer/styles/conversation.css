@@ -20,7 +20,7 @@
 
 .conversation-clear,
 .conversation-clear-cancel,
-.conversation-subagents {
+.conversation-agents {
   min-height: 28px;
   padding: 0 9px;
   border-radius: 9px;
@@ -35,8 +35,8 @@
 
 .conversation-clear:hover,
 .conversation-clear-cancel:hover,
-.conversation-subagents:hover,
-.conversation-subagents[data-active="true"] {
+.conversation-agents:hover,
+.conversation-agents[data-active="true"] {
   background: var(--raised);
   color: var(--text-primary);
 }
@@ -427,10 +427,10 @@
   font-size: 12px;
 }
 
-/* The sub-agents page: one header line naming the way back and the page, then
-   a list of rows on the session rows' own terms, so a child reads as a thing
-   with a status and an age rather than as a line of the thread. */
-.subagents-header {
+/* The Agents page: one header line naming the way back and the page, then
+   a list of rows on the session rows' own terms, so an agent or a child reads
+   as a thing with a status and an age rather than as a line of the thread. */
+.agents-header {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -438,7 +438,7 @@
   padding: 4px 12px;
 }
 
-.subagents-back {
+.agents-back {
   min-height: 28px;
   padding: 0 6px;
   border-radius: 9px;
@@ -448,12 +448,12 @@
   font-weight: 620;
 }
 
-.subagents-back:hover {
+.agents-back:hover {
   background: var(--raised);
   color: var(--text-primary);
 }
 
-.subagents-title {
+.agents-title {
   margin: 0;
   color: var(--text-primary);
   font-size: 12px;
@@ -462,7 +462,7 @@
 
 /* The two sections share one scroller, so a long list of agents and a long
    list of sub-agents read as one page rather than two rooms. */
-.subagents-sections {
+.agents-sections {
   display: flex;
   min-height: 0;
   flex: 1;
@@ -472,7 +472,7 @@
   overflow-y: auto;
 }
 
-.subagents-section-title {
+.agents-section-title {
   margin: 0 0 6px;
   color: var(--text-secondary);
   font-size: 10.5px;
@@ -481,14 +481,14 @@
   text-transform: uppercase;
 }
 
-.subagents-section-empty {
+.agents-section-empty {
   margin: 0;
   padding: 2px 0;
   color: var(--text-secondary);
   font-size: 10.5px;
 }
 
-.subagents-list {
+.agents-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -497,7 +497,7 @@
   list-style: none;
 }
 
-.subagent-row {
+.agent-row {
   display: flex;
   width: 100%;
   flex-direction: column;
@@ -511,11 +511,11 @@
   text-align: left;
 }
 
-.subagent-row:hover {
+.agent-row:hover {
   background: var(--raised);
 }
 
-.subagent-title {
+.agent-title {
   display: flex;
   max-width: 100%;
   align-items: center;
@@ -523,30 +523,30 @@
   font-size: 11.5px;
 }
 
-.subagent-name {
+.agent-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.subagent-mark {
+.agent-mark {
   width: 10px;
   height: 10px;
   flex: 0 0 auto;
 }
 
-.subagent-meta {
+.agent-meta {
   display: flex;
   gap: 8px;
   color: var(--text-secondary);
   font-size: 10.5px;
 }
 
-/* The transcript page's header names one child, whose task may run long: the
+/* The transcript page's header names one conversation, whose title may run long: the
    title takes the line's slack and ends on an ellipsis, with the status word
    held whole beside it in the row's own quiet voice. */
-.subagent-transcript-title {
+.agent-transcript-title {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -554,7 +554,7 @@
   white-space: nowrap;
 }
 
-.subagents-header > .subagent-status {
+.agents-header > .agent-status {
   flex: 0 0 auto;
   color: var(--text-secondary);
   font-size: 10.5px;
