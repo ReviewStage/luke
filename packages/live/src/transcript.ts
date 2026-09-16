@@ -118,19 +118,27 @@ function utteranceOf(group: Group): TranscriptUtterance {
   };
 }
 
-/** How a ledger is built: with the one factory every row id it mints comes from. */
+/** How a ledger is built: with the one factory every row id it mints comes from, and the gap it groups by. */
 export interface TranscriptLedgerOptions {
   /** Mints an opaque id for a row as its utterance opens; the caller's own UUID source. */
   mintRowId: () => string;
+  /**
+   * The silence between two of one speaker's fragments that starts a new
+   * utterance: `UTTERANCE_GAP_MS` unless named, which only a test holding the
+   * record's word invariant at another threshold does.
+   */
+  gapMs?: number;
 }
 
 export class TranscriptLedger {
   private readonly groups: Group[] = [];
   private readonly mintRowId: () => string;
+  private readonly gapMs: number;
   private latestEndMs: number | undefined;
 
   constructor(options: TranscriptLedgerOptions) {
     this.mintRowId = options.mintRowId;
+    this.gapMs = options.gapMs ?? UTTERANCE_GAP_MS;
   }
 
   /**
@@ -168,7 +176,7 @@ export class TranscriptLedger {
           : fragment.endMs < group.startMs
             ? group.startMs - fragment.endMs
             : 0;
-      if (distance <= UTTERANCE_GAP_MS && distance < nearestDistance) {
+      if (distance <= this.gapMs && distance < nearestDistance) {
         nearest = group;
         nearestDistance = distance;
       }
