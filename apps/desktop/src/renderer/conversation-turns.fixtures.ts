@@ -646,6 +646,7 @@ export function fixtureChildCompletionTurns(
         seq: 1,
         turnId: TURN.COMPLETION,
         createdAt: AT.COMPLETION,
+        placedAt: AT.COMPLETION,
       },
       {
         message: reply("2b000000-0000-4000-8000-000000000292", [
@@ -655,6 +656,7 @@ export function fixtureChildCompletionTurns(
         seq: 2,
         turnId: TURN.COMPLETION,
         createdAt: AT.COMPLETION + 2_000,
+        placedAt: AT.COMPLETION + 2_000,
       },
       {
         message: reply("2b000000-0000-4000-8000-000000000293", [
@@ -668,6 +670,7 @@ export function fixtureChildCompletionTurns(
         seq: 3,
         turnId: TURN.COMPLETION,
         createdAt: AT.COMPLETION + 5_000,
+        placedAt: AT.COMPLETION + 5_000,
       },
     ],
     observed: [],
