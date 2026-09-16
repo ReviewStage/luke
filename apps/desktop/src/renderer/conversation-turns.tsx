@@ -411,7 +411,7 @@ const SOURCE_CHIP_CLASS = `${CHIP_CLASS} conversation-source-chip`;
  * names, and the host answers with the address the provider reported — or
  * refuses, for a session that reported none. Every other chip is a name.
  */
-function SessionChip({
+export function SessionChip({
   chip,
   onOpenChat,
   className = CHIP_CLASS,

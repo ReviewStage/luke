@@ -229,9 +229,11 @@ test("a row's press opens the child or the agent, and the transcript page draws 
   const rows = mounted.container.querySelectorAll(".agent-row");
   assert.equal(rows.length, 2);
   for (const row of rows) {
-    assert.ok(row instanceof HTMLButtonElement);
+    // A sub-agent row is its own button; an agent row's transcript press is the line beneath its chip.
+    const press = row instanceof HTMLButtonElement ? row : row.querySelector(".agent-open");
+    assert.ok(press instanceof HTMLButtonElement);
     act(() => {
-      row.click();
+      press.click();
     });
   }
   // The press names the row to the app, which opens it on the host and turns the page itself.
@@ -241,6 +243,7 @@ test("a row's press opens the child or the agent, and the transcript page draws 
       kind: TRANSCRIPT_KIND.OBSERVED,
       title: "Session 9f4c5d47",
       status: CHILD_STATUS.RUNNING,
+      session: { providerId: AGENT.providerId, providerSessionId: AGENT.providerSessionId },
     },
     childTranscriptRow(CHILD),
   ]);
