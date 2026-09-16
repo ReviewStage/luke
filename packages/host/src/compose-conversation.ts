@@ -17,7 +17,9 @@ import {
 } from "@sidecar/gateway";
 import {
   type AgentRead,
+  CHILD_STATUS,
   type ChildRead,
+  type ChildStatus,
   CONVERSATION_RATE_REFUSAL,
   CONVERSATION_READ_FAILURE,
   type ConversationMessagesAnswer,
@@ -286,6 +288,20 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       GATEWAY_EVENT.CHILD_TRANSCRIPT_CHANGED,
       carried(transcript === undefined ? {} : transcript),
     );
+  }
+
+  /**
+   * Whether the open transcript's own list row holds a turn still under way.
+   * The rows a running turn writes move no head, since the `children` and
+   * `agents` heads move on a turn's queued, started, settled, and deleted
+   * instants alone, so a transcript followed by its head would show a running
+   * turn's first page and nothing more until it settled.
+   */
+  function transcriptUnderWay(held: OpenChild): boolean {
+    const rows: readonly { readonly id: string; readonly status: ChildStatus }[] =
+      held.kind === TRANSCRIPT_KIND.CHILD ? children.children : agents.agents;
+    const status = rows.find((row) => row.id === held.conversationId)?.status;
+    return status === CHILD_STATUS.ACCEPTED || status === CHILD_STATUS.RUNNING;
   }
 
   /**
@@ -564,10 +580,12 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     if (readAgents) yield* readAgentsList(generation, signal?.agents);
     // The open transcript follows the list of its kind, since the
     // conversation's turns move the same head; one just opened, or one whose
-    // last walk was cut short, has more to read whatever the head did.
+    // last walk was cut short, has more to read whatever the head did, and one
+    // whose turn is still under way is read on every poll, since the rows
+    // that turn writes move no head.
     const held = openChild;
     const listRead = held?.kind === TRANSCRIPT_KIND.CHILD ? readChildren : readAgents;
-    if (held !== undefined && (listRead || !held.caughtUp)) {
+    if (held !== undefined && (listRead || !held.caughtUp || transcriptUnderWay(held))) {
       held.caughtUp = yield* pageChild(generation, held);
     }
     if (!loop.isCurrent(generation)) return;
@@ -667,7 +685,9 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     // open, and a page still out for the replaced one is dropped when it
     // lands. The clients are told at once that it is open and empty, and the
     // pass asked for here fills it; behind a closed gate nothing could be
-    // read, so nothing is held.
+    // read, so nothing is held. Note that this handler and the close below
+    // each move the open slot before their first `yield*`, because a client
+    // that tells a close and then an open relies on them landing in that order.
     [GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: (params) =>
       Effect.gen(function* () {
         const read = readEither(conversationOpenChildTranscriptParamsSchema)(unparsedWire(params));

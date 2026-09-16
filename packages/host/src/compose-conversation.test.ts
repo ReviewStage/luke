@@ -81,6 +81,13 @@ const CHILD_ROW: ChildRead = {
   startedAt: NOW + 1,
 };
 
+/** The same child once its turn has settled: its rows stand still, so its transcript follows the head alone. */
+const SETTLED_CHILD_ROW: ChildRead = {
+  ...CHILD_ROW,
+  status: CHILD_STATUS.SETTLED,
+  settledAt: NOW + 2,
+};
+
 const AGENT_ROW: AgentRead = {
   id: AGENT,
   providerId: "conductor",
@@ -962,7 +969,7 @@ test("an opened child's transcript is read to its end at once, read again from i
     events: "events-head",
     children: "children-1",
   };
-  client.childrenAnswer = ok({ children: [CHILD_ROW] });
+  client.childrenAnswer = ok({ children: [SETTLED_CHILD_ROW] });
   await Effect.runPromise(composer.loop.refresh);
   assert.equal(composer.childTranscriptSnapshot(), undefined);
   assert.deepEqual(transcriptViews(), []);
@@ -1038,6 +1045,68 @@ test("an opened child's transcript is read to its end at once, read again from i
   client.calls.length = 0;
   await Effect.runPromise(composer.loop.refresh);
   assert.deepEqual(client.calls, [`changes:${DEVICE}`, "children"]);
+});
+
+test("an open transcript whose turn is under way is read on every poll, and follows the head alone once the turn settles", async () => {
+  const { composer, client, transcriptViews } = harness({ deviceId: DEVICE });
+  client.changesAnswer = {
+    seen: true,
+    messages: "messages-head",
+    events: "events-head",
+    children: "children-1",
+    agents: "agents-1",
+  };
+  client.childrenAnswer = ok({ children: [CHILD_ROW] });
+  client.agentsAnswer = ok({ agents: [AGENT_ROW] });
+  client.childMessagesAnswers = [ok(childPage("child-end", false))];
+  await Effect.runPromise(composer.loop.refresh);
+  await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
+    conversationId: CHILD,
+    kind: TRANSCRIPT_KIND.CHILD,
+  });
+  const told = transcriptViews().length;
+
+  // The rows a running turn writes move no head, so a poll under an unchanged
+  // signal still reads the transcript from where it stood; the same page
+  // again moves nothing, and nobody is told.
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`, `childMessages:${CHILD}:child-end`]);
+  assert.equal(transcriptViews().length, told);
+
+  // The turn settles: the head moves with it, the list and the transcript are
+  // read once more, and the poll after reads nothing of a settled row.
+  client.changesAnswer = { ...client.changesAnswer, children: "children-2" };
+  client.childrenAnswer = ok({ children: [SETTLED_CHILD_ROW] });
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [
+    `changes:${DEVICE}`,
+    "children",
+    `childMessages:${CHILD}:child-end`,
+  ]);
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`]);
+
+  // An observed session's transcript is followed by its own list's row, on
+  // the same terms: a queued turn, accepted and not yet running, counts as
+  // under way.
+  client.childMessagesAnswers = [ok(childPage("agent-end", false))];
+  await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
+    conversationId: AGENT,
+    kind: TRANSCRIPT_KIND.OBSERVED,
+  });
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`]);
+  client.changesAnswer = { ...client.changesAnswer, agents: "agents-2" };
+  const { startedAt: _started, settledAt: _settled, ...queued } = AGENT_ROW;
+  client.agentsAnswer = ok({ agents: [{ ...queued, status: CHILD_STATUS.ACCEPTED }] });
+  await Effect.runPromise(composer.loop.refresh);
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`, `childMessages:${AGENT}:agent-end`]);
 });
 
 test("opening another child replaces the one open, a page out for the replaced child is dropped, and a closed gate holds nothing", async () => {

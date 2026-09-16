@@ -56,15 +56,11 @@ import {
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
-import {
-  CONVERSATION_PAGE,
-  type ConversationPage,
-  type TranscriptRow,
-  transcriptListed,
-} from "./subagents-panel";
+import { CONVERSATION_PAGE, transcriptListed } from "./subagents-panel";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { useConnections } from "./use-connections";
+import { useConversationPage } from "./use-conversation-page";
 import { useFeedbackComposer } from "./use-feedback-composer";
 import { useMeasuredHeight } from "./use-measured-height";
 import type { PanelEntrySurface } from "./use-panel-entry";
@@ -150,43 +146,8 @@ export function App(): React.JSX.Element {
   const display = state?.window.display;
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
-  // The Conversation tab's page, on the settings page's own terms: reset by a
-  // tab change, unwound by Escape before the tab is left.
-  const [conversationPage, setConversationPage, conversationPageNow] =
-    useStateWithRef<ConversationPage>(CONVERSATION_PAGE.THREAD);
-  /** The row the transcript page is of, held exactly while that page shows. */
-  const [transcriptOpen, setTranscriptOpen] = useState<TranscriptRow | undefined>(undefined);
-  /**
-   * The one way the page moves. The transcript page holds a transcript open
-   * on the host, so leaving it, by the back control, the button, Escape, or a
-   * tab change, lets go of it: the host stops paging a transcript nobody is
-   * looking at, and the document drops it.
-   */
-  const changeConversationPage = useCallback(
-    (next: ConversationPage) => {
-      if (
-        conversationPageNow() === CONVERSATION_PAGE.TRANSCRIPT &&
-        next !== CONVERSATION_PAGE.TRANSCRIPT
-      ) {
-        tell(ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT);
-        setTranscriptOpen(undefined);
-      }
-      setConversationPage(next);
-    },
-    [conversationPageNow, setConversationPage, tell],
-  );
-  /** A row's press on the list, or a chip's in the thread: the host holds the transcript open, and the page turns to it. */
-  const openTranscript = useCallback(
-    (row: TranscriptRow) => {
-      setTranscriptOpen(row);
-      tell(ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
-        conversationId: row.conversationId,
-        kind: row.kind,
-      });
-      setConversationPage(CONVERSATION_PAGE.TRANSCRIPT);
-    },
-    [setConversationPage, tell],
-  );
+  const { conversationPage, transcriptOpen, changeConversationPage, openTranscript } =
+    useConversationPage(tell);
   // The host closes an open transcript its list no longer names, stamped by
   // a Clear on any Mac or fallen past the list's bound; the page follows it
   // back to the list rather than standing over a transcript nothing fills.
