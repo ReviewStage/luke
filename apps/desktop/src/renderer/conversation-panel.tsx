@@ -1,66 +1,12 @@
 import type { ChildRead } from "@sidecar/hosted/reads-wire";
 import { ChevronIcon } from "@sidecar/panel";
-import {
-  CONVERSATION_ENTRY_KIND,
-  type ConversationEntry,
-  type ConversationEntryKind,
-  type ConversationViewSnapshot,
-  type SessionIdentity,
-} from "@sidecar/session";
+import type { ConversationViewSnapshot, SessionIdentity } from "@sidecar/session";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  CONVERSATION_ENTRY_SPEAKER,
-  type ConversationEntrySpeaker,
-  ConversationListeningRow,
-} from "./conversation-rows";
+import type { PlacedLiveEntry } from "./conversation-live-lines";
+import { ConversationListeningRow } from "./conversation-rows";
 import { ConversationTurns } from "./conversation-turns";
-import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
-
-interface ConversationEntryPresentation {
-  speaker: ConversationEntrySpeaker;
-  label: string;
-}
-
-/** The user-facing voice for each kind of line still being said, before the record it settles into arrives. */
-function conversationEntryPresentation(kind: ConversationEntryKind): ConversationEntryPresentation {
-  switch (kind) {
-    case CONVERSATION_ENTRY_KIND.ASK:
-      return { speaker: CONVERSATION_ENTRY_SPEAKER.YOU, label: "You" };
-    case CONVERSATION_ENTRY_KIND.REPLY:
-    case CONVERSATION_ENTRY_KIND.ANNOUNCEMENT:
-    // An action Luke took on his own judgment is drawn as his own line, never as
-    // the developer's request; the attribution lives in the stored kind.
-    case CONVERSATION_ENTRY_KIND.OWN_ACTION:
-      return { speaker: CONVERSATION_ENTRY_SPEAKER.LUKE, label: "Luke" };
-    case CONVERSATION_ENTRY_KIND.ACTION:
-      return { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "At your request" };
-  }
-}
-
-/**
- * A line still being said, drawn as the bubble it will settle into: words
- * growing, no timestamp, and no copy, because copying half a sentence would
- * copy half a sentence. The settled line arrives from the service as a
- * stored message and is drawn by the turn renderer above it; this bubble is
- * drawn until then, whatever clock the row settled on
- * (`conversation-live-lines.ts`), so the words never leave the screen between
- * the settle and the read.
- */
-function ConversationStreamingRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
-  const presentation = conversationEntryPresentation(entry.kind);
-  return (
-    <li className="conversation-entry" data-speaker={presentation.speaker} data-streaming="true">
-      <small className="visually-hidden">{presentation.label}</small>
-      <div className="conversation-message">
-        <span className="conversation-bubble">
-          <MarkdownMessage words={entry.words} className="conversation-words" />
-        </span>
-      </div>
-    </li>
-  );
-}
 
 /** What a reader is told when the service named a row this build could not read back; the thread stands as last read. */
 const UNREADABLE_NOTICE = "Part of the conversation could not be read.";
@@ -198,10 +144,11 @@ export function ConversationPanel({
    */
   now: number;
   /**
-   * The lines still being said, drawn under the settled thread as the same
-   * bubbles they will settle into — words growing, no timestamp, no copy.
+   * The lines still being said, drawn among the settled thread as the same
+   * bubbles they will settle into — words growing, no timestamp, no copy —
+   * each where its row will land once the record has told where that is.
    */
-  live?: readonly ConversationEntry[];
+  live?: readonly PlacedLiveEntry[];
   /**
    * Whether a spoken turn is still owed its first words — being listened to,
    * or committed with its transcription not yet streaming — so the thread
@@ -262,14 +209,8 @@ export function ConversationPanel({
                 {...(onOpenChat ? { onOpenChat } : undefined)}
                 {...(onOpenChild ? { onOpenChild } : undefined)}
                 {...(onOfferRatingFeedback ? { onOfferRatingFeedback } : undefined)}
+                live={live}
               >
-                {/* A line still being said has no durable id, and its words change
-                    on every delta — a key made of either would remount the bubble
-                    mid-sentence, while its position holds still for exactly as
-                    long as the line does. */}
-                {live.map((entry, index) => (
-                  <ConversationStreamingRow key={`live:${entry.kind}:${index}`} entry={entry} />
-                ))}
                 {/* After the lines still being said: the newest spoken turn's
                     place, held while its first words are still on the service's
                     clock. */}

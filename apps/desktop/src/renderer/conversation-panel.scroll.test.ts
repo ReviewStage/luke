@@ -189,7 +189,12 @@ test("scrolling up pauses automatic scrolling until the jump-to-bottom control i
   metrics.set({ scrollHeight: 480 });
   mounted.render({
     ...BASE_PROPS,
-    live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Still working through it." }],
+    live: [
+      {
+        entry: { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Still working through it." },
+        at: undefined,
+      },
+    ],
   });
   assert.equal(metrics.state.scrollTop, 160);
   assert.ok(jumpButton(mounted.container));

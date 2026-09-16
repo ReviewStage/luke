@@ -22,7 +22,10 @@ import {
   WingFace,
 } from "@sidecar/panel";
 import {
+  CONVERSATION_ENTRY_KIND,
   CONVERSATION_VIEW_TOOL_KIND,
+  type ConversationEntry,
+  type ConversationEntryKind,
   type ConversationViewMessage,
   type ConversationViewToolPart,
   type ConversationViewTurn,
@@ -50,6 +53,7 @@ import {
 } from "@sidecar/wire";
 import { useState } from "react";
 import { ConversationCopyButton } from "./conversation-copy";
+import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationMessageMenu } from "./conversation-menu";
 import { ConversationRatingControl, type RatedMessageDraft } from "./conversation-rating";
 import {
@@ -983,6 +987,67 @@ function messageRows(
   ];
 }
 
+/** The user-facing voice for each kind of line still being said, before the record it settles into arrives. */
+function liveEntryVoice(kind: ConversationEntryKind): RowVoice {
+  switch (kind) {
+    case CONVERSATION_ENTRY_KIND.ASK:
+      return VOICE.YOU;
+    case CONVERSATION_ENTRY_KIND.REPLY:
+    case CONVERSATION_ENTRY_KIND.ANNOUNCEMENT:
+    // An action Luke took on his own judgment is drawn as his own line, never as
+    // the developer's request; the attribution lives in the stored kind.
+    case CONVERSATION_ENTRY_KIND.OWN_ACTION:
+      return VOICE.LUKE;
+    case CONVERSATION_ENTRY_KIND.ACTION:
+      return { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "At your request" };
+  }
+}
+
+/**
+ * A line still being said, drawn as the bubble it will settle into: words
+ * growing, no timestamp, and no copy, because copying half a sentence would
+ * copy half a sentence. The settled line arrives from the service as a
+ * stored message and is drawn by the turn renderer; this bubble is drawn
+ * until a row of the call stands for it (`conversation-live-lines.ts`), so
+ * the words never leave the screen between the saying and the read.
+ */
+function ConversationStreamingRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
+  const voice = liveEntryVoice(entry.kind);
+  return (
+    <li className="conversation-entry" data-speaker={voice.speaker} data-streaming="true">
+      <small className="visually-hidden">{voice.label}</small>
+      <div className="conversation-message">
+        <span className="conversation-bubble">
+          <MarkdownMessage words={entry.words} className="conversation-words" />
+        </span>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The lines still being said in the order their rows will land: by instant
+ * where one is known, and after every dated line, in the order reported,
+ * where none is. A line has no durable id and its words change on every
+ * delta, so its key is its place in the report, which holds still for
+ * exactly as long as the line does.
+ */
+function placedLiveRows(
+  live: readonly PlacedLiveEntry[],
+): { at: number | undefined; row: React.JSX.Element }[] {
+  return live
+    .map((line, index) => ({
+      at: line.at,
+      row: <ConversationStreamingRow key={`live:${line.entry.kind}:${index}`} entry={line.entry} />,
+    }))
+    .sort((left, right) => {
+      if (left.at === undefined || right.at === undefined) {
+        return Number(left.at === undefined) - Number(right.at === undefined);
+      }
+      return left.at - right.at;
+    });
+}
+
 /** When a turn's rows begin and end: where its earliest and latest messages are placed, which is what dates the silence around it. */
 function groupSpan(group: ConversationViewTurnGroup) {
   const instants = group.messages.map((message) => message.placedAt);
@@ -994,10 +1059,12 @@ function groupSpan(group: ConversationViewTurnGroup) {
  * assistant message that carried tool calls opens with them — one as a row,
  * more as one fold — before the words that followed. A turn still running ends in Luke's wait,
  * driven by the turn row's own status and nothing else. A turn that followed
- * a long silence is dated over it, and whatever the caller hands in as
- * children — the lines still being said, the developer's place, a wait no
- * stored turn carries yet — closes the list, so the thread is one list under
- * one snap point.
+ * a long silence is dated over it. A line still being said is drawn where
+ * its row will land, ahead of the first turn placed after it, or after the
+ * last turn where no instant is known for it yet; and whatever the caller
+ * hands in as children — the developer's place, a wait no stored turn
+ * carries yet — closes the list, so the thread is one list under one snap
+ * point.
  */
 export function ConversationTurns({
   groups,
@@ -1007,6 +1074,7 @@ export function ConversationTurns({
   onOpenChild,
   onOfferRatingFeedback,
   now,
+  live = [],
   children,
 }: {
   groups: readonly ConversationViewTurnGroup[];
@@ -1027,11 +1095,27 @@ export function ConversationTurns({
   onOfferRatingFeedback?: (draft: string) => void;
   /** The instant a running turn's wait is read against; passed down because only the app knows which clock is honest. */
   now: number;
+  /** The lines still being said, each with the instant its row will be placed at where the record has told one. */
+  live?: readonly PlacedLiveEntry[];
   /** Rows drawn after the last turn, inside the same list. */
   children?: React.ReactNode;
 }): React.JSX.Element {
   let previousAt: number | undefined;
   const readings = readingsOf(groups);
+  // The lines still being said are dealt out ahead of each turn placed after
+  // them, so a line whose row is not yet on record stands where the row will.
+  const liveRows = placedLiveRows(live);
+  let nextLive = 0;
+  const liveBefore = (instant: number | undefined): React.JSX.Element[] => {
+    const rows: React.JSX.Element[] = [];
+    for (; nextLive < liveRows.length; nextLive += 1) {
+      const line = liveRows[nextLive];
+      if (line === undefined) break;
+      if (instant !== undefined && (line.at === undefined || line.at >= instant)) break;
+      rows.push(line.row);
+    }
+    return rows;
+  };
   // The wait is the thread's last object or nothing: a turn still running is
   // the newest one, since eve runs a conversation's turns one at a time and
   // in order, so a pending row above a settled reply is a record eve never
@@ -1095,6 +1179,7 @@ export function ConversationTurns({
           return rows;
         });
         return [
+          ...liveBefore(span.first),
           ...(dated
             ? [
                 <ConversationTimeBreak
@@ -1114,6 +1199,7 @@ export function ConversationTurns({
           now={now}
         />
       ) : null}
+      {liveBefore(undefined)}
       {children}
     </ol>
   );

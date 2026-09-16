@@ -6,6 +6,7 @@ import {
   isRecord,
   isUnitLevel,
   isWireBoolean,
+  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -40,8 +41,9 @@ export interface VoiceView extends VoiceSpeakers {
   /**
    * Both speakers' rows of the standing call, each the ledger's row id, its
    * line as `streamingConversationEntry` builds it — a kind and words, and no
-   * timestamp, because a line still growing has not happened yet — and
-   * whether it has settled. A settled row is still reported: the panel keeps
+   * timestamp, because a line still growing has not happened yet — its span
+   * on the session's timeline, and whether it has settled. A settled row is
+   * still reported: the panel keeps
    * drawing it until the record shows it. The line is read under the unstrict
    * parse — the strict one refuses every unstamped line, which would drop the
    * whole report at exactly the edges that carry a caption.
@@ -156,8 +158,21 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   return Array.isArray(lines) && lines.every(isLiveConversationLine);
 }
 
+/** A span on the session's timeline: two finite offsets, running forward or coming together. */
+function isSessionSpan(startMs: UnparsedWireValue, endMs: UnparsedWireValue): boolean {
+  return (
+    isWireNumber(startMs) &&
+    isWireNumber(endMs) &&
+    Number.isFinite(startMs) &&
+    Number.isFinite(endMs) &&
+    startMs >= 0 &&
+    startMs <= endMs
+  );
+}
+
 function isLiveConversationLine(value: UnparsedWireValue): boolean {
   if (!isRecord(value) || !isWireString(value.rowId) || !isWireBoolean(value.settled)) return false;
+  if (!isSessionSpan(value.startMs, value.endMs)) return false;
   if (!isOptionalWireString(value.voiceSessionId)) return false;
   const streaming = storedConversationEntry(value.entry, { strict: false });
   return streaming !== undefined && streaming.words.length > 0;

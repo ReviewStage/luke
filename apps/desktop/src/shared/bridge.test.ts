@@ -82,6 +82,8 @@ const VOICE_VIEW = {
     {
       rowId: "row-1",
       entry: { kind: "reply", words: "Checkout is green.", recordedAt: 12 },
+      startMs: 0,
+      endMs: 1_200,
       settled: false,
     },
   ],

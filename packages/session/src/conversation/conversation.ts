@@ -134,13 +134,18 @@ export function streamingConversationEntry(
  * One line still being said, as the voice window reports it to the panel:
  * the ledger's row it grows on, an opaque id minted when the row opened and
  * stable from then on, so a later fragment grows the line in place; its words
- * so far; and whether the row has settled, meaning no fragment has joined it
- * for the gap. A settled line is still reported, because the panel keeps
- * drawing it until the record shows it.
+ * so far; the span it stands in on the session's own timeline, milliseconds
+ * from the session's start, which is what the panel matches against the
+ * record's row of the same words, since the two ledgers mint their ids apart
+ * and their words may differ by a fragment; and whether the row has settled,
+ * meaning no fragment has joined it for the gap. A settled line is still
+ * reported, because the panel keeps drawing it until the record shows it.
  */
 export interface LiveConversationLine {
   readonly rowId: string;
   readonly entry: ConversationEntry;
+  readonly startMs: number;
+  readonly endMs: number;
   /**
    * The store's id for the voice session the line is said on, the one its
    * row on record names as its `voice_session_id`; absent for a session no

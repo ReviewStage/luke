@@ -1,6 +1,6 @@
-import type { ConversationEntry, ConversationViewSnapshot } from "@sidecar/session";
+import type { ConversationViewSnapshot } from "@sidecar/session";
 import { NoticeStrip } from "@sidecar/voice/orchestrator";
-import { Duration, Effect } from "effect";
+import { Effect } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
@@ -17,8 +17,8 @@ import {
 import { useAct } from "./act";
 import {
   foldLiveLines,
-  liveLinesExpireAt,
   NO_LIVE_LINES,
+  type PlacedLiveEntry,
   shownLiveEntries,
 } from "./conversation-live-lines";
 import { rendererServicesNow } from "./renderer-runtime";
@@ -198,7 +198,7 @@ interface VoiceViewState {
    * as reported, those that left the report while the record catches up, and
    * none the record already shows (`conversation-live-lines.ts`).
    */
-  liveConversationEntries: readonly ConversationEntry[];
+  liveConversationEntries: readonly PlacedLiveEntry[];
   /** Whether Luke is speaking — his reply under way — as of the last report. */
   speaking: boolean;
   /** Whether the developer's microphone is being heard, which can stand with {@link speaking}. */
@@ -256,29 +256,14 @@ export function useVoiceView(): VoiceViewState {
   });
   useEffect(() => () => strip.stop(), [strip]);
 
-  // The lines drawn ahead of the record, held across the gap between a row
-  // settling and the record showing it. The fold runs on each report; the
-  // one clock here re-reads the hold when its oldest held line is due to go,
-  // on the same services the strip's clocks run under.
+  // The lines drawn ahead of the record, each until a row of its own session
+  // stands for it. The fold runs on each report; no clock re-reads it.
   const lines = view.liveConversationLines;
+  const conversation = state?.conversation ?? UNREAD_CONVERSATION;
   const [hold, setHold] = useState(NO_LIVE_LINES);
   useEffect(() => {
-    setHold((standing) => foldLiveLines(standing, lines, Date.now()));
+    setHold((standing) => foldLiveLines(standing, lines));
   }, [lines]);
-  const expiresAt = liveLinesExpireAt(hold);
-  useEffect(() => {
-    if (expiresAt === undefined) return;
-    const fiber = Effect.runForkWith(rendererServicesNow())(
-      Effect.andThen(
-        Effect.sleep(Duration.millis(Math.max(0, expiresAt - Date.now()))),
-        Effect.sync(() => {
-          setHold((standing) => foldLiveLines(standing, standing.lines, Date.now()));
-        }),
-      ),
-    );
-    return () => fiber.interruptUnsafe();
-  }, [expiresAt]);
-  const conversation = state?.conversation ?? UNREAD_CONVERSATION;
   const liveConversationEntries = useMemo(
     () => shownLiveEntries(hold, conversation),
     [hold, conversation],

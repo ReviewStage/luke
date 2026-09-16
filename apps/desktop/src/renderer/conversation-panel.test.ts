@@ -60,7 +60,12 @@ test("the stored turns are mounted inside the one subtree the session recording 
 test("a line still being said joins the same list as the stored turns, without a stamp or a copy", () => {
   const settled = render(SINGLE_TURN);
   const streaming = render(SINGLE_TURN, {
-    live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" }],
+    live: [
+      {
+        entry: { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" },
+        at: undefined,
+      },
+    ],
   });
   assert.equal(count(streaming, '<ol class="conversation-list">'), 1);
   assert.equal(count(streaming, 'data-streaming="true"'), 1);
@@ -83,6 +88,27 @@ test("a line still being said joins the same list as the stored turns, without a
       streaming.lastIndexOf('class="conversation-time"'),
   );
   assert.ok(streaming.lastIndexOf('data-streaming="true"') < streaming.lastIndexOf("</ol>"));
+});
+
+test("a line still being said stands where its row will land: ahead of the turns placed after its instant, and after the last turn when no instant is known", () => {
+  const [firstTurn, secondTurn] = fixtureConversationTurns();
+  assert.ok(firstTurn && secondTurn);
+  const secondAt = Math.min(...secondTurn.messages.map((message) => message.placedAt));
+  const markup = render([firstTurn, secondTurn], {
+    live: [
+      { entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Placed later" }, at: undefined },
+      { entry: { kind: CONVERSATION_ENTRY_KIND.ASK, words: "Placed between" }, at: secondAt - 1 },
+    ],
+  });
+  const entries = [...markup.matchAll(/class="conversation-entry/g)].map((match) => match.index);
+  const between = markup.indexOf("Placed between");
+  const later = markup.indexOf("Placed later");
+  assert.ok(between >= 0 && later >= 0);
+  // The one with an instant is drawn after exactly the first turn's rows; the one without is the last row of the thread.
+  const firstTurnRows = count(render([firstTurn]), 'class="conversation-entry');
+  assert.equal(entries.filter((index) => index < between).length, firstTurnRows + 1);
+  assert.equal(entries.at(-1), entries.filter((index) => index < later).at(-1));
+  assert.ok(later < markup.lastIndexOf("</ol>"));
 });
 
 test("the thread draws no text input, empty or not: Luke is voice only", () => {

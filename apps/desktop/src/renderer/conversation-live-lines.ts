@@ -2,102 +2,66 @@ import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
+  type ConversationViewMessage,
   type ConversationViewSnapshot,
   type LiveConversationLine,
 } from "@sidecar/session";
-import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import { MESSAGE_ROLE, type MessageRole } from "@sidecar/wire";
 
 /**
  * The hand-off from a line still being said to the record of it. The voice
- * window reports every row of the standing call, settled or not; the service
- * writes a row once it settles; and this device reads the record on a poll.
- * Between the settle and the read the words are on neither feed unless
- * something holds them, and a row that leaves the report with the call —
- * the session closing, the voice window going — has the same gap at its
- * end. So a line is drawn until the record shows it: a reported line is
- * drawn as long as it is reported and not yet on record; a line that left
- * the report is held for {@link LIVE_LINE_HOLD_MS} more, or until the record
- * shows it, whichever is first; and a line the record holds is not drawn
- * twice. Nothing here decides on a clock what the record decides by
- * arriving; the clocks only bound a line whose record never comes — a write
- * the service refused, words it cut into a different row than the ledger's,
- * a session standing open long after the words — since a line drawn with no
- * row behind it has no time, no copy, and no rating, and stands under every
- * row that lands after it: a settled line still reported is let go
- * {@link LIVE_LINE_SETTLED_HOLD_MS} after it settled.
+ * window reports every row of the standing call, settled or not, with the
+ * span each stands in on the session's timeline and the store's id for the
+ * session; the service writes each row behind its fragments and flushes
+ * what is left when the call closes; and this device reads the record on a
+ * poll. A reported line is drawn until the record holds a row of the same
+ * speaker, on the same voice session, whose span overlaps the line's, and
+ * then the row is drawn and the line is not. The words are matched by
+ * nothing: the two ledgers group the same fragments, so a row a fragment
+ * short of the caption still stands for it, and the same word said twice is
+ * two spans. Another session's rows, an earlier call's or another device's
+ * on the same account, stand for nothing here, whatever their spans. No
+ * clock bounds a line: a line whose row never comes is drawn for as long as
+ * the call reports it, and the call's report ending drops every line with
+ * it, since the close flushed whatever was owed.
+ *
+ * Where a line will land is where its row will be placed: the session's
+ * start on the service's clock, read off any row of the session as its
+ * place less its offset, plus the line's own offset. A session with no row
+ * on record yet has no start to read, and its lines close the thread.
  *
  * Pure over what it is handed, so the panel's hook keeps the state and the
  * test drives it by hand.
  */
 
-/** How long a line that left the voice window's report is still drawn while the record catches up. */
-export const LIVE_LINE_HOLD_MS = 15_000;
-
-/**
- * How long a settled line the report still carries is drawn without a row
- * behind it. The service writes a row as the line settles and this device
- * polls at once, so a record that has not shown the line by then is not
- * coming for it, and a line with no row is not left standing under the rows
- * that do land.
- */
-export const LIVE_LINE_SETTLED_HOLD_MS = 30_000;
-
-/**
- * How far before the call's first reported line a stored row may have been
- * created and still be read as this call's. The record's instants are the
- * service's clock and the call's is this Mac's, and a row is written only
- * after its words were heard here, so the slack stands for skew alone.
- */
-export const LIVE_LINE_RECORD_SLACK_MS = 120_000;
-
-/** A line that left the report, and when it did on this device's clock. */
-interface HeldLiveLine {
-  readonly entry: ConversationEntry;
-  readonly since: number;
-}
-
-interface LiveLineHold {
+export interface LiveLineHold {
   /** The voice window's last report. */
   readonly lines: readonly LiveConversationLine[];
-  /** When the standing call's first line was reported; nothing while no line stands or is held. */
-  readonly openedAt: number | undefined;
-  /** The lines that left the report and are still drawn, oldest first. */
-  readonly held: readonly HeldLiveLine[];
-  /** When each reported row was first seen settled, by row id, for the bound on a settled line the record never shows. */
-  readonly settledAt: ReadonlyMap<string, number>;
-  /**
-   * The lines drawn ahead of the record as of the last fold: the held lines,
-   * then the reported ones still inside their bound. What the record already
-   * shows is taken off at drawing time, since the record moves on its own.
-   */
-  readonly entries: readonly ConversationEntry[];
-  /**
-   * The next instant a drawn line is let go on the clock — the oldest held
-   * line's bound, or the oldest drawn settled line's — for the clock that
-   * re-reads the hold; nothing while no drawn line stands under a bound. A
-   * line already let go names no bound, so the clock re-arms for the next.
-   */
-  readonly expiresAt: number | undefined;
 }
 
-export const NO_LIVE_LINES: LiveLineHold = {
-  lines: [],
-  openedAt: undefined,
-  held: [],
-  settledAt: new Map(),
-  entries: [],
-  expiresAt: undefined,
-};
+export const NO_LIVE_LINES: LiveLineHold = { lines: [] };
 
-/** Whether `next` is `previous` grown: the same kind, and the words so far a prefix of the words now. */
-function continues(previous: ConversationEntry, next: ConversationEntry): boolean {
-  return previous.kind === next.kind && next.words.startsWith(previous.words);
+/** One line drawn ahead of the record, and where on the thread its row will land. */
+export interface PlacedLiveEntry {
+  readonly entry: ConversationEntry;
+  /**
+   * The instant the row will be placed at, on the service's clock: the
+   * session's start plus the line's offset into it. Nothing while no row of
+   * the session is on record to read the start from, in which case the line
+   * is drawn after everything recorded, which is where a line of a session
+   * with nothing on record yet belongs.
+   */
+  readonly at: number | undefined;
 }
 
-/** Whether the two are one row of one call: the same id, and the words grown rather than replaced by another call's row 1. */
-function sameRow(previous: LiveConversationLine, next: LiveConversationLine): boolean {
-  return previous.rowId === next.rowId && continues(previous.entry, next.entry);
+/** One voice row of the record as the lines are matched against it: whose it is, which session, and the span it was cut from. */
+interface RecordedSpan {
+  readonly role: MessageRole;
+  readonly sessionId: string;
+  /** Where the session started on the service's clock: the row's place, less its offset into the session. */
+  readonly sessionStart: number;
+  readonly fromMs: number;
+  readonly toMs: number;
 }
 
 function sameLines(
@@ -110,88 +74,14 @@ function sameLines(
     return (
       other !== undefined &&
       line.rowId === other.rowId &&
+      line.voiceSessionId === other.voiceSessionId &&
       line.settled === other.settled &&
+      line.startMs === other.startMs &&
+      line.endMs === other.endMs &&
       line.entry.kind === other.entry.kind &&
       line.entry.words === other.entry.words
     );
   });
-}
-
-function sameEntries(left: readonly ConversationEntry[], right: readonly ConversationEntry[]) {
-  if (left.length !== right.length) return false;
-  return left.every((entry, index) => {
-    const other = right[index];
-    return other !== undefined && entry.kind === other.kind && entry.words === other.words;
-  });
-}
-
-/** Whether a settled line the report still carries is still inside its bound, by when it was first seen settled. */
-function settledLineDrawn(
-  line: LiveConversationLine,
-  settledAt: ReadonlyMap<string, number>,
-  now: number,
-): boolean {
-  const since = settledAt.get(line.rowId);
-  return since === undefined || now - since < LIVE_LINE_SETTLED_HOLD_MS;
-}
-
-/**
- * Takes the voice window's next report into the hold: a row the report no
- * longer carries is held from now, a held line the report carries again is
- * let go for the reported one, a held line past its bound is let go, a row
- * first seen settled is stamped, and a settled row past its own bound leaves
- * the drawn lines. Answers the same hold where nothing moved, so a report
- * that changed nothing here redraws nothing.
- */
-export function foldLiveLines(
-  hold: LiveLineHold,
-  lines: readonly LiveConversationLine[],
-  now: number,
-): LiveLineHold {
-  const left = hold.lines
-    .filter((previous) => !lines.some((line) => sameRow(previous, line)))
-    .map((line): HeldLiveLine => ({ entry: line.entry, since: now }));
-  const kept = hold.held.filter(
-    (held) =>
-      now - held.since < LIVE_LINE_HOLD_MS &&
-      !lines.some((line) => continues(held.entry, line.entry)),
-  );
-  const held =
-    left.length === 0 && kept.length === hold.held.length ? hold.held : [...kept, ...left];
-  const openedAt =
-    lines.length > 0 ? (hold.openedAt ?? now) : held.length > 0 ? hold.openedAt : undefined;
-  const settledAt = new Map<string, number>();
-  for (const line of lines) {
-    if (!line.settled) continue;
-    const previous = hold.lines.find((standing) => sameRow(standing, line));
-    const since = previous?.settled ? hold.settledAt.get(line.rowId) : undefined;
-    settledAt.set(line.rowId, since ?? now);
-  }
-  const drawn = lines.filter((line) => settledLineDrawn(line, settledAt, now));
-  const entries = [...held.map((line) => line.entry), ...drawn.map((line) => line.entry)];
-  const bounds = [
-    ...held.map((line) => line.since + LIVE_LINE_HOLD_MS),
-    ...drawn.flatMap((line) => {
-      const since = settledAt.get(line.rowId);
-      return since === undefined ? [] : [since + LIVE_LINE_SETTLED_HOLD_MS];
-    }),
-  ];
-  const expiresAt = bounds.length === 0 ? undefined : Math.min(...bounds);
-  if (
-    held === hold.held &&
-    openedAt === hold.openedAt &&
-    expiresAt === hold.expiresAt &&
-    sameLines(hold.lines, lines) &&
-    sameEntries(hold.entries, entries)
-  ) {
-    return hold;
-  }
-  return { lines, openedAt, held, settledAt, entries, expiresAt };
-}
-
-/** The hold's next bound, for the clock that re-reads it; nothing while no drawn line stands under one. */
-export function liveLinesExpireAt(hold: LiveLineHold): number | undefined {
-  return hold.expiresAt;
 }
 
 /** The stored role a spoken kind is written as; the two kinds a live line can be, and nothing for the rest. */
@@ -206,114 +96,82 @@ function roleOfKind(kind: ConversationEntryKind): MessageRole | undefined {
   }
 }
 
-type StoredPart = StoredUIMessage["parts"][number];
-
 /**
- * The one part type whose words a spoken line can be, as the SDK spells it.
- * Restated against the SDK's own type rather than imported at run time, as
- * the turn renderer does, because the session barrel reaches the SDK for its
- * types alone.
+ * A stored row as a span of a voice session, or nothing for a row that was
+ * not cut from one: a typed ask, a note, a written reply, a system row. The
+ * two speaking roles carry the voice fields under their own metadata shapes,
+ * so each is read under its role.
  */
-const UI_PART_TYPE = {
-  TEXT: "text",
-} as const satisfies Record<string, StoredPart["type"]>;
-
-type TextPart = Extract<StoredPart, { type: typeof UI_PART_TYPE.TEXT }>;
-
-function isTextPart(part: StoredPart): part is TextPart {
-  return part.type === UI_PART_TYPE.TEXT;
+function recordedSpanOf(view: ConversationViewMessage): RecordedSpan | undefined {
+  const { message } = view;
+  if (message.role !== MESSAGE_ROLE.USER && message.role !== MESSAGE_ROLE.ASSISTANT) {
+    return undefined;
+  }
+  const { metadata } = message;
+  if (!("voice_session_id" in metadata)) return undefined;
+  const sessionId = metadata.voice_session_id;
+  const fromMs = metadata.from_ms;
+  const toMs = metadata.to_ms;
+  if (sessionId === undefined || fromMs === undefined || toMs === undefined) return undefined;
+  return {
+    role: message.role,
+    sessionId,
+    sessionStart: view.placedAt - fromMs,
+    fromMs,
+    toMs,
+  };
 }
 
-/**
- * Words as they compare between the transcript and the record: each word its
- * letters and digits alone, lower-cased, one space between words. A spoken
- * row is cut from the same transcript the line was drawn from, so the two
- * differ at most in the ends the ledger trimmed; the spaces stay so a match
- * lands on whole words, and a short line is never found inside a longer word
- * of another row.
- */
-function comparable(words: string): string {
-  return words
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word.length > 0)
-    .join(" ");
-}
-
-/**
- * One row of the record as the lines are matched against it: its words with
- * a space at either end, so every word boundary is a space, and how far along
- * them the lines matched so far reach.
- */
-interface RecordedWords {
-  readonly role: MessageRole;
-  readonly words: string;
-  covered: number;
-}
-
-/** The record's rows created at or after an instant, in the view's order, each as its comparable words. */
-function recordedSince(view: ConversationViewSnapshot, since: number): RecordedWords[] {
-  const rows: RecordedWords[] = [];
+function recordedSpans(view: ConversationViewSnapshot): RecordedSpan[] {
+  const spans: RecordedSpan[] = [];
   for (const group of view.groups) {
     for (const message of group.messages) {
-      if (message.createdAt < since) continue;
-      const words = comparable(
-        message.message.parts
-          .filter(isTextPart)
-          .map((part) => part.text)
-          .join("\n"),
-      );
-      if (words.length > 0) {
-        rows.push({ role: message.message.role, words: ` ${words} `, covered: 0 });
-      }
+      const span = recordedSpanOf(message);
+      if (span) spans.push(span);
     }
   }
-  return rows;
+  return spans;
+}
+
+/** Whether a row's span and a line's share an instant, the ends included, since a fragment's end is the next one's start. */
+function overlaps(row: RecordedSpan, line: LiveConversationLine): boolean {
+  return row.fromMs <= line.endMs && line.startMs <= row.toMs;
 }
 
 /**
- * Whether the row's words, past what earlier lines covered, cover a spoken
- * line's whole words, and takes them if so: the line inside what is left —
- * one utterance of an ask the delegation cut wider — or what is left the
- * first words of the line, where a
- * cut ended inside the utterance and the rest went to the next ask. Walking
- * the row forward is what lets one wide row cover each utterance inside it
- * once, and keeps one short row from covering the same word said twice.
+ * Takes the voice window's next report into the hold. A report with no line
+ * ends the call here, whatever was drawn: a line with no row by then had its
+ * row flushed at the close or is not getting one. Answers the same hold
+ * where nothing moved, so a report that changed nothing here redraws nothing.
  */
-function takes(row: RecordedWords, spoken: string): boolean {
-  const needle = ` ${spoken} `;
-  const at = row.words.indexOf(needle, row.covered);
-  if (at !== -1) {
-    // The trailing space stays uncovered: it is the next word's leading one.
-    row.covered = at + needle.length - 1;
-    return true;
-  }
-  const rest = row.words.slice(row.covered).trim();
-  if (rest.length > 0 && (spoken === rest || spoken.startsWith(`${rest} `))) {
-    row.covered = row.words.length;
-    return true;
-  }
-  return false;
+export function foldLiveLines(
+  hold: LiveLineHold,
+  lines: readonly LiveConversationLine[],
+): LiveLineHold {
+  if (lines.length === 0) return NO_LIVE_LINES;
+  return sameLines(hold.lines, lines) ? hold : { lines };
 }
 
 /**
- * The lines the Conversation tab draws ahead of the record: the hold's drawn
- * lines less every line a row of this call already shows. Lines are matched
- * oldest first against the rows in the view's order, each row's words walked
- * forward as its lines are found, so the developer saying the same word
- * twice is two lines until the record holds the word twice.
+ * The lines the Conversation tab draws ahead of the record, each where its
+ * row will land: the reported lines less every one a row of its own session
+ * already stands for, by speaker and span. A line reported under no session,
+ * from a call no account holds, has no row coming and is drawn while it is
+ * reported.
  */
 export function shownLiveEntries(
   hold: LiveLineHold,
   view: ConversationViewSnapshot,
-): readonly ConversationEntry[] {
-  if (hold.openedAt === undefined) return hold.entries;
-  const recorded = recordedSince(view, hold.openedAt - LIVE_LINE_RECORD_SLACK_MS);
-  return hold.entries.filter((entry) => {
-    const role = roleOfKind(entry.kind);
-    if (role === undefined) return true;
-    const spoken = comparable(entry.words);
-    if (spoken.length === 0) return false;
-    return !recorded.some((row) => row.role === role && takes(row, spoken));
+): readonly PlacedLiveEntry[] {
+  if (hold.lines.length === 0) return [];
+  const spans = recordedSpans(view);
+  return hold.lines.flatMap((line): PlacedLiveEntry[] => {
+    const rows = spans.filter((span) => span.sessionId === line.voiceSessionId);
+    const role = roleOfKind(line.entry.kind);
+    if (role !== undefined && rows.some((row) => row.role === role && overlaps(row, line))) {
+      return [];
+    }
+    const start = rows[0]?.sessionStart;
+    return [{ entry: line.entry, at: start === undefined ? undefined : start + line.startMs }];
   });
 }
