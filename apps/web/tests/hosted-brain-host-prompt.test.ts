@@ -25,8 +25,8 @@ import { insertConversation, readTurnById, readTurnsByConversation } from "./sup
 
 /**
  * What a turn ran under, on its row: the hash of the prompt the session
- * composed, which is all the record keeps of the prompt, and the tool set the
- * turn was offered, stored once by content and named by hash, through the
+ * composed, which is all the record keeps of the prompt, and the hash of the
+ * tool set the turn was offered, through the
  * same host functions the eve project's authored files call, over the real
  * migrations on PGlite. The interesting case is the
  * second: a workspace file edited between two sessions yields a new hash on
@@ -207,15 +207,6 @@ async function tablesNamed(name: string): Promise<readonly string[]> {
   return rows.map((row) => Schema.decodeUnknownSync(TableNameRowSchema)(row).name);
 }
 
-async function toolSetRows(hash: string) {
-  return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select * from tool_sets where hash = ${hash}`;
-    }),
-  );
-}
-
 test("two sessions composed over unchanged workspace rows carry one prompt hash, the hash of the prompt as sent, and the prompt is stored nowhere", async () => {
   const host = brainHost(seams);
   const target = await ownedConversation();
@@ -291,9 +282,6 @@ test("two turns of one session record the session's prompt hash and one tool set
     rows.map((row) => row.toolSetHash),
     [expected, expected],
   );
-  const stored = await toolSetRows(expected);
-  assert.equal(stored.length, 1);
-  assert.deepEqual(stored[0]?.schemas, offered);
 });
 
 test("an observation turn is offered another tool set and records another hash, and a session that composed no prompt records none", async () => {
@@ -326,5 +314,4 @@ test("an observation turn is offered another tool set and records another hash, 
   );
   assert.equal(observationRow.promptHash, null);
   assert.equal(typedRow.promptHash, typedPrompt.hash);
-  assert.equal((await toolSetRows(observationRow.toolSetHash)).length, 1);
 });

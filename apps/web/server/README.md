@@ -1210,9 +1210,11 @@ account's next turn writes again.
 The conversation tables — `conversations`, `messages`, `turns`, `events`,
 `tool_sets`, and `provider_cursors` — are the shape `plan/storage-plan.md` on the
 `orchestration/storage-plan` branch settles on, less the `prompts` table it
-drew: a turn keeps the composed prompt's hash and nothing else of it, because
-the prompt embeds the developer's notebook and nothing replays it, while a
-tool set is the build's own and is kept whole under its hash. A conversation row names its
+drew: a turn keeps the composed prompt's hash and the tool set's and nothing
+else of either, because the prompt embeds the developer's notebook and nothing
+replays it, and the tool set is the build's own and read from the build that
+offered it; the `tool_sets` table stands written by nothing until the migration
+that drops it. A conversation row names its
 kind (main, observed, child, or thread), the provider session it observes,
 the parent and spawning message a child came from, the runtime's own session
 id, its soft-delete instant, and the two counters that number its messages
@@ -1254,9 +1256,9 @@ opener's, not yet built); and `speech.expired` with the reason `due` on an
 offer past its own instant with no hold over it. The Conversation view marks
 an announcement unspoken when the latest speech event on its message is
 `speech.expired`. A prompt and a tool set are
-content-addressed, the hash of the text or the schemas as the key, so the same
-prompt written by every turn is one row a turn's hash names without a foreign
-key. A provider cursor is where the observation of one provider session last
+content-addressed, the hash of the text or the schemas as the key, and the
+turn row carries that hash and nothing else of either, naming no row and
+holding no foreign key. A provider cursor is where the observation of one provider session last
 reached, one row per session per account, advanced in the same transaction as
 the observation message it produced and referenced by no message. Nothing in
 these tables is sealed: the content is readable by an operator, and the read

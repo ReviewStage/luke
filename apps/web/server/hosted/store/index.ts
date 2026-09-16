@@ -10,7 +10,6 @@ import {
   listChildren,
   readChild,
 } from "./children.js";
-import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import {
   eventsForMessages,
@@ -168,15 +167,6 @@ export interface HostedStore {
     /** The newest rating on one of the caller's messages, or nothing; ratings are written through `rateMessage` over the store writer. */
     latest(userId: string, messageId: string): HostedStoreEffect<StoredRatingRecord | undefined>;
   };
-  /**
-   * The tool set a turn was offered, written once under the hash of what the
-   * model saw, which is what a turn row names. The prompt has no table: the
-   * turn row carries its hash and nothing else of it is kept.
-   */
-  toolSets: {
-    /** Writes the offered declarations where no row stands for their hash; answers the hash. */
-    record(schemas: readonly OfferedToolSchema[], now: Date): HostedStoreEffect<string>;
-  };
   workspace: {
     read(userId: string, path: string): HostedStoreEffect<WorkspaceFileRecord | undefined>;
     write(userId: string, path: string, content: string, now: number): HostedStoreEffect<void>;
@@ -293,9 +283,6 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
     },
     ratings: {
       latest: (userId, messageId) => latestMessageRating(userId, messageId),
-    },
-    toolSets: {
-      record: (schemas, now) => recordToolSet(schemas, now),
     },
     workspace: {
       read: (userId, path) => Effect.map(readWorkspaceFile(userId, path), Option.getOrUndefined),

@@ -25,11 +25,7 @@ import { hostedToolDeclarations } from "../../server/hosted/brain-host/tools";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption";
 import { hostedStore } from "../../server/hosted/store";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
-import {
-  readMessagesByConversationTyped,
-  readToolSetsByHash,
-  readTurnById,
-} from "../../tests/support/store-rows";
+import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
 import { SCRIPTED_FACT } from "../scripted-model";
 
 /**
@@ -173,14 +169,11 @@ export default defineEval({
       assert.equal(turn.origin, TURN_ORIGIN.TYPED);
       assert.equal(turn.status, TURN_STATUS.SETTLED);
       // What the turn ran under, carried from the session's start through eve's
-      // durable state to the turn row: the prompt's fingerprint, which names no
-      // row because nothing of the prompt is kept, and the tool set's hash,
-      // which names the row holding the schemas the model saw.
+      // durable state to the turn row: the prompt's fingerprint and the tool
+      // set's, neither naming a row, since nothing of either is kept.
       assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
       assert.ok(turn.toolSetHash);
       assert.equal(turn.toolSetHash, toolSetHashOf(hostedToolDeclarations(BRAIN_TURN_TRIGGER.ASK)));
-      const toolSetRows = await readToolSetsByHash(run, turn.toolSetHash);
-      assert.equal(toolSetRows.length, 1);
 
       const messageRows = await readMessagesByTurn(run, conversation.id, turnId);
       assert.deepEqual(
