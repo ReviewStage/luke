@@ -55,7 +55,7 @@ in for the missing job before the first release.
   `apps/web/server/observation-app.ts`), at most 200 accounts a tick, least
   recently attempted first, four at a time inside a 50-second budget with a
   25-second deadline per account; and every tick begins by dropping the
-  snapshot, the brain's bookmark, and the pass record of every account no
+  snapshot, the brain's transcript mark, and the pass record of every account no
   longer eligible, so a deleted key or a week's silence ends the observation
   and empties what it kept. One account's pass is the same
   read-only fan-out the on-demand endpoint runs, on a plugin built for that
@@ -65,46 +65,45 @@ in for the missing job before the first release.
   every provider answered whole replaces the account's one `roster_snapshot`
   row, sealed under the same server-only secret as the keys and stamped with a
   fingerprint of the key it was observed under, so a snapshot observed under
-  another key is neither served, admitted against, nor diffed from; a pass any
+  another key is neither served nor admitted against; a pass any
   provider refused, rate limited, or failed leaves the previous snapshot
   standing and is recorded as failed. Nothing in the pass decides anything: no
-  model runs in it, and nothing leaves it. What the snapshot is kept for is the
-  opener (`apps/web/server/hosted/brain-host/opener.ts`), which runs for the
-  same account right after its pass and under the same deadline: it derives
-  what changed by diffing the snapshot the pass just wrote against the bookmark
-  it last kept level with a snapshot (`roster_consumed`), and hands the hosted
-  brain one observation turn per session the diff named, at most eight turns an
-  account a tick with a hold's releases counted among them, as the deployment
-  acting for that one account under the tick's own secret
-  (`EVE_CALLER.DEPLOYMENT`), so the account named to the brain is only ever one
-  this tick enumerated, and nothing but such a diff, a hold's release, or a
-  settled child's undelivered completion opens a scheduled turn (the sweep in
-  `child-completion.ts` hands a child whose spawn expected a completion, whose
-  `completion_delivered_at` is null, and whose latest turn is terminal to its
-  parent as one `child-completion` turn, at most eight an account a tick, and
-  only where the relay's attempt left the row unstamped, a refused send being
-  retried nowhere). A visit that could not hand its change over leaves the
-  bookmark where it was, and the next visit derives the same change again,
-  wider by whatever moved since, until the two rows stand more than five
-  minutes apart on their own instants (`OBSERVATION_TICK.STALE_GAP_MS`), which
-  means no visit has caught the brain up for that long (a paused cron, a deploy
-  gap, a rotated secret, a provider refusing every pass, or the brain refusing
-  every turn): the visit then reseeds the bookmark from the snapshot as it
-  stands, wakes nothing from the gap, and counts the reseed in the tick's
-  answer as `turns.reseeded`, because what changed in between is history the
-  roster already shows and not news. A visit with nothing to wake keeps the
-  bookmark level with the snapshot all the same, so an idle roster never reads
-  as a gap, and the next change under a reseeded bookmark wakes as usual. The
-  wake carries the session as the snapshot holds it and its change in words
-  rendered as data, and, for a chat the diff named, what its transcript gained
-  since the cursor kept for it, read through the provider's documented
+  model runs in it, and nothing leaves it. The snapshot is never diffed: it is
+  what the Mac panel, the on-demand observe endpoint, and the brain's
+  `list_sessions` show, and what names the chats the opener may ask about.
+  The opener (`apps/web/server/hosted/brain-host/opener.ts`) runs for the
+  same account right after its pass and under the same deadline, and what
+  wakes it is a chat gaining messages, not the roster moving: for each cloud
+  provider in the snapshot it asks, through the provider's documented
+  read-only query (`transcriptChanges`, Conductor's
+  `session_transcripts_view.transcript_updated_at`, one fixed document over
+  the snapshot's own chat ids and carrying no message body), which of those
+  chats gained transcript since the account's mark (`transcript_mark`, one
+  instant per account), takes the oldest under the bound of eight turns an
+  account a tick with a hold's releases counted among them, reads what each
+  gained since the cursor kept for it through the provider's documented
   incremental read (Conductor's `transcriptSince`) under the same synced key,
-  cut from the front to 20,000 characters (`BRAIN_HOST.TRANSCRIPT_DELTA_CHARS`),
-  its cursor advanced only past one the provider handed back and only once the
-  brain has accepted the turn. That read is the one place a scheduled turn
-  reads a message; the pass itself never does. Widening what the pass reads,
-  who it runs for, how long a snapshot stands, how wide a gap still wakes, or
-  what a wake carries is a product decision, not an implementation detail, and
+  cut from the front by whole lines to 20,000 characters
+  (`BRAIN_HOST.TRANSCRIPT_DELTA_CHARS`), and hands the hosted brain one
+  `[observed messages]` turn per chat with words to carry: an envelope naming
+  the provider, workspace, chat title, and instant from the snapshot, then
+  the messages one line each under the speaker's name, rendered as data. A
+  delta with no attributed message opens no turn and moves its cursor all the
+  same. Every turn goes as the deployment acting for that one account under
+  the tick's own secret (`EVE_CALLER.DEPLOYMENT`), so the account named to
+  the brain is only ever one this tick enumerated, and nothing but such a
+  change or a hold's release opens a scheduled turn. The cursors and the mark
+  move in one transaction, each a compare-and-set over what the visit read,
+  and only once the brain has accepted every turn; a turn the brain refused,
+  or a transcript the provider would not answer, ends the visit with nothing
+  committed and the next tick reads the same changes again. The mark stops
+  strictly before the first chat the bound held back, so a chat is never
+  jumped; a first visit adopts the newest instant the providers answer and
+  wakes nothing, since what stood before is history the roster shows and not
+  news. Those two reads are the only places a scheduled turn touches a
+  transcript, and neither is the pass's. Widening what the pass reads, who it
+  runs for, how long a snapshot stands, what counts as a change, or what a
+  turn carries is a product decision, not an implementation detail, and
   `PRIVACY.md` discloses the pass under "Scheduled observation of your
   Conductor sessions".
 - Luke's words leave his own service unbidden in one place, and it is the
