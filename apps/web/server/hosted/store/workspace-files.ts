@@ -1,7 +1,11 @@
+import { and, asc, eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { DAILY_NOTES_DIRECTORY } from "../../core.js";
+import { user } from "../../db/auth-schema.js";
+import { db } from "../../db/query.js";
+import { workspaceFile } from "../../db/workspace-schema.js";
 import { EpochMillisColumnSchema } from "./database.js";
 
 /**
@@ -11,11 +15,36 @@ import { EpochMillisColumnSchema } from "./database.js";
  * contents are stored in the clear, written whole and rewritten whole, the
  * way the desktop's workspace files land through a rename.
  *
- * The first module here on `effect/unstable/sql`: every read and write below is an
- * `Effect<A, SqlError | SchemaError, SqlClient>`, the statement is the client's
- * own tagged template, and the row a statement answers is decoded by a
- * `Schema` rather than trusted. The rule about a path is that schema too, so
- * one declaration both refuses the path and names the refusal.
+ * The first module here on the Drizzle query builder, and the shape the rest
+ * are converted into. Every read and write below is still an
+ * `Effect<A, SqlError | SchemaError, SqlClient>`: the statement is a builder
+ * over the table `db/workspace-schema.ts` declares, yielded as the Effect the
+ * bridge (`db/drizzle.ts`) made it, which runs it on the `SqlClient` the
+ * asking fiber already carries. Four things follow from that, each a decision
+ * the next module copies:
+ *
+ * - The handle is the shared `db`, imported and never built here, and the
+ *   tables are named imports from their own schema module, so a column
+ *   renamed under `db/` is a type error here rather than a statement that
+ *   still parses.
+ * - A row is still decoded by a `Schema` rather than trusted: the builder
+ *   hands back the statement's rows, not a guarantee about them, and
+ *   `EpochMillisColumnSchema` is still what reconciles `pg` reading an
+ *   `int8` as a string against PGlite reading it as a number. What the
+ *   builder does remove is the wire-key mapping — a projection names its own
+ *   fields, so the result schema is spelled in the same words the rest of the
+ *   module is and no `Schema.encodeKeys` stands between them.
+ * - Where Postgres has something the builder cannot spell, the fragment is
+ *   Drizzle's own `sql` inside the builder — still one rendered statement
+ *   with its parameters bound by Drizzle — and it is named as a constant, so
+ *   the query reads as the query it is.
+ * - A transaction and a row lock are unchanged: the ambient client's own
+ *   `withTransaction`, and the lock a `.for("update")` select inside it. The
+ *   bridge reads the client from the running fiber, which is what puts a
+ *   bridged statement inside the transaction rather than beside it.
+ *
+ * The rule about a path is a `Schema` too, so one declaration both refuses
+ * the path and names the refusal, and no builder is ever rendered for one.
  */
 
 /**
@@ -24,10 +53,6 @@ import { EpochMillisColumnSchema } from "./database.js";
  * database's own answer.
  */
 type WorkspaceFileFailure = SqlError | Schema.SchemaError;
-
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
 
 const PATH_SEPARATOR = "/";
 
@@ -64,6 +89,17 @@ const FileWriteSchema = Schema.Struct({
 /** The dated notes' prefix, the one prefix a listing is asked under. */
 const DAILY_NOTES_PREFIX = `${DAILY_NOTES_DIRECTORY}/`;
 
+/** The dated notes and nothing else, which is the one predicate the builder has no operator for. */
+const UNDER_DAILY_NOTES = sql`starts_with(${workspaceFile.path}, ${DAILY_NOTES_PREFIX})`;
+
+/**
+ * The dated notes newest first, which is their paths in descending byte
+ * order since a note is named by its day; the collation is fixed so the two
+ * dialects the tests run over, and a deployment's own, order one way. There
+ * is no builder spelling for a collation, so the ordering is a fragment.
+ */
+const NEWEST_DAY_FIRST = sql`${workspaceFile.path} collate "C" desc`;
+
 const DailyNotesRequestSchema = Schema.Struct({
   userId: Schema.String,
   limit: Schema.Number,
@@ -75,24 +111,19 @@ const DailyNoteRowSchema = Schema.Struct({
   content: Schema.String,
 });
 
-/** The row as `workspace_file` holds it. */
+/** The row as `workspace_file` holds it, in the fields the projection below names. */
 const WorkspaceFileRowSchema = Schema.Struct({
   path: Schema.String,
   content: Schema.String,
   createdAt: EpochMillisColumnSchema,
   updatedAt: EpochMillisColumnSchema,
-}).pipe(
-  Schema.encodeKeys({
-    createdAt: "created_at",
-    updatedAt: "updated_at",
-  }),
-);
+});
 
 /** What a listing row carries: the path and when it last changed, never a word of the file. */
 const WorkspaceFileListingSchema = Schema.Struct({
   path: Schema.String,
   updatedAt: EpochMillisColumnSchema,
-}).pipe(Schema.encodeKeys({ updatedAt: "updated_at" }));
+});
 
 /** The path a write landed on, which is how a conditional write answers whether it did. */
 const WrittenPathSchema = Schema.Struct({ path: Schema.String });
@@ -112,83 +143,89 @@ export interface WorkspaceFileRecord {
   readonly updatedAt: number;
 }
 
+/** The whole row of one file, keyed by the account it belongs to and its path. */
 const findFile = SqlSchema.findOneOption({
   Request: FileKeySchema,
   Result: WorkspaceFileRowSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select path, content, created_at, updated_at
-        from workspace_file
-        where user_id = ${key.userId} and path = ${key.path}
-      `,
-    ),
+    db
+      .select({
+        path: workspaceFile.path,
+        content: workspaceFile.content,
+        createdAt: workspaceFile.createdAt,
+        updatedAt: workspaceFile.updatedAt,
+      })
+      .from(workspaceFile)
+      .where(and(eq(workspaceFile.userId, key.userId), eq(workspaceFile.path, key.path))),
 });
 
+/**
+ * Note that the conflicting update sets the values the insert carried rather
+ * than reading them back out of `excluded`, because a single-row insert's
+ * `excluded` row is exactly those values and naming the columns in SQL text
+ * is what a renamed column would slip through.
+ */
 const upsertFile = SqlSchema.void({
   Request: FileWriteSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into workspace_file (user_id, path, content, created_at, updated_at)
-        values (${write.userId}, ${write.path}, ${write.content}, ${write.now}, ${write.now})
-        on conflict (user_id, path) do update
-          set content = excluded.content, updated_at = excluded.updated_at
-      `,
-    ),
+    db
+      .insert(workspaceFile)
+      .values({
+        userId: write.userId,
+        path: write.path,
+        content: write.content,
+        createdAt: write.now,
+        updatedAt: write.now,
+      })
+      .onConflictDoUpdate({
+        target: [workspaceFile.userId, workspaceFile.path],
+        set: { content: write.content, updatedAt: write.now },
+      }),
 });
 
 const insertFile = SqlSchema.findAll({
   Request: FileWriteSchema,
   Result: WrittenPathSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into workspace_file (user_id, path, content, created_at, updated_at)
-        values (${write.userId}, ${write.path}, ${write.content}, ${write.now}, ${write.now})
-        on conflict (user_id, path) do nothing
-        returning path
-      `,
-    ),
+    db
+      .insert(workspaceFile)
+      .values({
+        userId: write.userId,
+        path: write.path,
+        content: write.content,
+        createdAt: write.now,
+        updatedAt: write.now,
+      })
+      .onConflictDoNothing({ target: [workspaceFile.userId, workspaceFile.path] })
+      .returning({ path: workspaceFile.path }),
 });
 
 const findFiles = SqlSchema.findAll({
   Request: Schema.String,
   Result: WorkspaceFileListingSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select path, updated_at
-        from workspace_file
-        where user_id = ${userId}
-        order by path asc
-      `,
-    ),
+    db
+      .select({ path: workspaceFile.path, updatedAt: workspaceFile.updatedAt })
+      .from(workspaceFile)
+      .where(eq(workspaceFile.userId, userId))
+      .orderBy(asc(workspaceFile.path)),
 });
 
-/**
- * The dated notes newest first, which is their paths in descending byte
- * order since a note is named by its day; the collation is fixed so the two
- * dialects the tests run over, and a deployment's own, order one way.
- */
 const findDailyNotes = SqlSchema.findAll({
   Request: DailyNotesRequestSchema,
   Result: DailyNoteRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select path, content
-        from workspace_file
-        where user_id = ${request.userId} and starts_with(path, ${DAILY_NOTES_PREFIX})
-        order by path collate "C" desc
-        limit ${request.limit}
-      `,
-    ),
+    db
+      .select({ path: workspaceFile.path, content: workspaceFile.content })
+      .from(workspaceFile)
+      .where(and(eq(workspaceFile.userId, request.userId), UNDER_DAILY_NOTES))
+      .orderBy(NEWEST_DAY_FIRST)
+      .limit(request.limit),
 });
 
 /** Takes the user's row lock for the transaction, so two revisions of one account's files run one after the other. */
 const lockUser = (userId: string) =>
-  statement((sql) => sql`select id from "user" where id = ${userId} for update`);
+  db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
 
 export function readWorkspaceFile(
   userId: string,
@@ -228,8 +265,8 @@ export function reviseWorkspaceFile(
   revise: (existing: string | undefined) => string | undefined,
   now: number,
 ): Effect.Effect<string | undefined, WorkspaceFileFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
         yield* lockUser(userId);
         const standing = yield* readWorkspaceFile(userId, path);

@@ -17,9 +17,11 @@ import { testSqlClient } from "./support/sql-client";
  * The first store module read as what it now is: effects over the ambient
  * `SqlClient`, on whichever dialect this run stands over. `hosted-store.test.ts`
  * holds the same behaviour through the promise door the routes hold; these are
- * the two things only the effect surface can state — that the instants decode
- * to numbers whichever driver read the `bigint`, and that a path outside the
- * workspace fails the effect rather than reaching a statement.
+ * the three things only the effect surface can state — that the instants decode
+ * to numbers whichever driver read the `bigint`, that a path outside the
+ * workspace fails the effect rather than reaching a statement, and that a
+ * revision's statements are inside its own transaction, which is what the
+ * module's statements being Drizzle builders now rests on.
  *
  * Synthetic fixtures: no real path or note anywhere.
  */
@@ -39,6 +41,26 @@ const openUser = Effect.gen(function* () {
   `;
   return userId;
 });
+
+/**
+ * The client with every transaction failing after its body ran, and nothing
+ * else changed: a proxy over the real one, since the client is a callable
+ * with its statements as properties. A write made outside the transaction is
+ * committed by the real client and seen by the test.
+ */
+function transactionsFailingAfter(sql: SqlClient.SqlClient): SqlClient.SqlClient {
+  const failing: SqlClient.SqlClient["withTransaction"] = (body) =>
+    sql.withTransaction(
+      Effect.flatMap(body, () => Effect.die(new Error("the connection dropped before commit"))),
+    );
+  return new Proxy(sql, {
+    // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a call the proxy does not interpret
+    apply: (target, receiver, args) => Reflect.apply(target, receiver, args),
+    get: (target, property, receiver) =>
+      // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a property the proxy does not interpret
+      property === "withTransaction" ? failing : Reflect.get(target, property, receiver),
+  });
+}
 
 it.layer(testSqlClient)("the workspace files over effect/unstable/sql", (it) => {
   it.effect("seeds once, writes whole, and answers the instants as numbers", () =>
@@ -144,6 +166,25 @@ it.layer(testSqlClient)("the workspace files over effect/unstable/sql", (it) => 
         );
         assert.equal(Exit.isFailure(outside), true);
       }),
+  );
+
+  it.effect("a revision's lock and write are inside its own transaction and undone with it", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const sql = yield* SqlClient.SqlClient;
+      const ended = yield* Effect.exit(
+        Effect.provideService(
+          reviseWorkspaceFile(userId, NOTE_PATH, () => "- inside", NOW),
+          SqlClient.SqlClient,
+          transactionsFailingAfter(sql),
+        ),
+      );
+      assert.equal(Exit.isFailure(ended), true);
+      // Nothing stands: the bridged lock and upsert ran on the transaction's
+      // own connection rather than beside it, so they were undone with it.
+      assert.equal(Option.isNone(yield* readWorkspaceFile(userId, NOTE_PATH)), true);
+      assert.deepEqual([...(yield* listWorkspaceFiles(userId))], []);
+    }),
   );
 
   it.effect("fails a path outside the workspace and writes nothing for it", () =>
