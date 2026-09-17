@@ -1,5 +1,5 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { Effect, Predicate } from "effect";
+import { Data, Effect, Predicate } from "effect";
 import type { WebContents } from "electron";
 import {
   ACT,
@@ -10,6 +10,7 @@ import {
   type ActPayload,
   type ActResultFor,
 } from "#shared/messages/acts";
+import type { HostUnreachableRefusal } from "./gateway/host-operator";
 
 /**
  * Who is asking, as this process alone can tell: which window sent the act,
@@ -37,7 +38,14 @@ export interface ActSender {
  * reason worth saying; every other throw is answered with the kind's fixed
  * sentence instead, so nothing an exception happened to carry crosses back.
  */
-export class ActRefused extends Error {}
+export class ActRefused extends Data.TaggedError("ActRefused")<{ readonly message: string }> {}
+
+/**
+ * Every failure a row's effect may end in: the row's own refusal, worded, or
+ * a host that could not be reached, which the kind's fixed sentence answers
+ * for. Anything else a row ends in is a defect, and answered the same way.
+ */
+type ActRowFailure = ActRefused | HostUnreachableRefusal;
 
 /**
  * What one kind does. The payload is the one its own schema admitted, and the
@@ -47,7 +55,10 @@ export class ActRefused extends Error {}
 type ActRow<Kind extends ActKind> = (
   payload: ActPayload<Kind>,
   sender: ActSender,
-) => ActResultFor<Kind> | Promise<ActResultFor<Kind>> | Effect.Effect<ActResultFor<Kind>, Error>;
+) =>
+  | ActResultFor<Kind>
+  | Promise<ActResultFor<Kind>>
+  | Effect.Effect<ActResultFor<Kind>, ActRowFailure>;
 
 /**
  * Every kind's row, total by construction: a kind added to the vocabulary
@@ -67,11 +78,22 @@ export interface ActRouter {
 type AnyActPayload = ActPayload<ActKind>;
 
 /** The erased row shape the dispatch below calls; the kind's own types are checked by `ActRows`. */
-// oxlint-disable-next-line anti-slop/no-unknown-returns -- This is the erased callable shape of one act's row.
-type ErasedRow = (payload: AnyActPayload, sender: ActSender) => unknown;
+type ErasedRow = (payload: AnyActPayload, sender: ActSender) => ReturnType<ActRow<ActKind>>;
 
 function refused(reason: string): ActOutcome {
   return { status: ACT_OUTCOME_STATUS.REFUSED, reason };
+}
+
+/**
+ * A row's throw, or its promise's rejection, sorted: the row's own refusal is
+ * a failure the window hears worded, and anything else is the defect it is.
+ */
+function thrown<Answer>(
+  attempt: Effect.Effect<Answer, unknown>,
+): Effect.Effect<Answer, ActRefused> {
+  return Effect.catch(attempt, (error) =>
+    error instanceof ActRefused ? Effect.fail(error) : Effect.die(error),
+  );
 }
 
 /**
@@ -98,28 +120,29 @@ export function createActRouter(rows: ActRows): ActRouter {
     return Effect.gen(function* () {
       // SAFETY: ActRows types every row by its own kind; the erasure is the
       // union index this dispatch is, and the answer is guarded below.
-      const answer = yield* Effect.try({
-        try: () => (rows[act.kind] as ErasedRow)(read.value, sender),
-        catch: (error) => error,
-      });
+      const answer = yield* thrown(
+        Effect.try({
+          try: () => (rows[act.kind] as ErasedRow)(read.value, sender),
+          catch: (error) => error,
+        }),
+      );
       // A row that answered an effect is run here, on the runtime the bridge
       // handed this router; a promise is awaited, and a value is the answer.
-      // SAFETY: `ActRows` types every row's effect as one needing nothing of
-      // its environment, which is the channel the guard below erases.
       const value = yield* Effect.isEffect(answer)
-        ? (answer as Effect.Effect<unknown, unknown>)
+        ? answer
         : Predicate.isPromiseLike(answer)
-          ? Effect.tryPromise({ try: () => Promise.resolve(answer), catch: (error) => error })
+          ? thrown(
+              Effect.tryPromise({ try: () => Promise.resolve(answer), catch: (error) => error }),
+            )
           : Effect.succeed(answer);
       if (declared.result(value) === false) return refused(declared.refusal);
-      // SAFETY: the kind's own result guard admitted this value.
-      return { status: ACT_OUTCOME_STATUS.DONE, value: value as ActResultFor<ActKind> };
+      return { status: ACT_OUTCOME_STATUS.DONE, value };
     }).pipe(
-      Effect.catch((error) =>
-        Effect.succeed(refused(error instanceof ActRefused ? error.message : declared.refusal)),
-      ),
-      // A row's effect that died carries no more to the window than a row that
-      // threw: the kind's own sentence, and never what the defect held.
+      Effect.catchTag("ActRefused", (error) => Effect.succeed(refused(error.message))),
+      // A host the row could not reach, and a row's effect that died, carry
+      // no more to the window than a row that threw: the kind's own sentence,
+      // and never what the failure or the defect held.
+      Effect.catch(() => Effect.succeed(refused(declared.refusal))),
       Effect.catchDefect(() => Effect.succeed(refused(declared.refusal))),
     );
   }

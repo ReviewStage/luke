@@ -242,9 +242,9 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   let lastFailure: AdapterFailureKind | undefined;
   let collectPass = 0;
 
-  const provideClient = <Answer, Error>(
-    effect: Effect.Effect<Answer, Error, HttpClient.HttpClient>,
-  ): Effect.Effect<Answer, Error> => Effect.provide(effect, client);
+  const provideClient = <Answer, Failure extends AdapterFailure>(
+    effect: Effect.Effect<Answer, Failure, HttpClient.HttpClient>,
+  ): Effect.Effect<Answer, Failure> => Effect.provide(effect, client);
 
   /**
    * One observer must never abort the shared refresh pass, so a settings read
@@ -309,15 +309,18 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     const name = provider.displayName;
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       return Effect.succeed(
-        new AdapterFailure(ADAPTER_FAILURE.UNAUTHORIZED, `${name} rejected the configured API key`),
+        new AdapterFailure({
+          failure: ADAPTER_FAILURE.UNAUTHORIZED,
+          message: `${name} rejected the configured API key`,
+        }),
       );
     }
     if (response.status < OK_STATUS.FIRST || response.status >= OK_STATUS.PAST) {
       return Effect.succeed(
-        new AdapterFailure(
-          ADAPTER_FAILURE.TRANSIENT,
-          `${name} responded with status ${response.status}`,
-        ),
+        new AdapterFailure({
+          failure: ADAPTER_FAILURE.TRANSIENT,
+          message: `${name} responded with status ${response.status}`,
+        }),
       );
     }
     return Effect.catch(
@@ -325,12 +328,18 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         const record = wireRecord(unparsedWire(body));
         return (
           record ??
-          new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} returned an unexpected response`)
+          new AdapterFailure({
+            failure: ADAPTER_FAILURE.TRANSIENT,
+            message: `${name} returned an unexpected response`,
+          })
         );
       }),
       () =>
         Effect.succeed(
-          new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${name} returned an unreadable response`),
+          new AdapterFailure({
+            failure: ADAPTER_FAILURE.TRANSIENT,
+            message: `${name} returned an unreadable response`,
+          }),
         ),
     );
   };
@@ -353,7 +362,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     timeoutMs: number,
   ): Effect.Effect<Answered, RateLimitedRead, HttpClient.HttpClient> => {
     const transient = () =>
-      new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${provider.displayName} request failed`);
+      new AdapterFailure({
+        failure: ADAPTER_FAILURE.TRANSIENT,
+        message: `${provider.displayName} request failed`,
+      });
     return Effect.flatMap(
       Effect.result(HttpClient.execute(sent(apiKey, url(segments, query), document))),
       (answer): Effect.Effect<Answered, RateLimitedRead> => {
@@ -397,7 +409,12 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       cadence,
     ).pipe(
       Effect.catchTag("RateLimitedRead", () =>
-        Effect.fail(new AdapterFailure(ADAPTER_FAILURE.RATE_LIMITED, `${name} is rate limiting`)),
+        Effect.fail(
+          new AdapterFailure({
+            failure: ADAPTER_FAILURE.RATE_LIMITED,
+            message: `${name} is rate limiting`,
+          }),
+        ),
       ),
     );
     if (answered instanceof AdapterFailure) return yield* Effect.fail(answered);
@@ -408,10 +425,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     pass === collectPass
       ? Effect.void
       : Effect.fail(
-          new AdapterFailure(
-            ADAPTER_FAILURE.TRANSIENT,
-            `${provider.displayName} pass was superseded`,
-          ),
+          new AdapterFailure({
+            failure: ADAPTER_FAILURE.TRANSIENT,
+            message: `${provider.displayName} pass was superseded`,
+          }),
         );
 
   /**
@@ -643,10 +660,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         const apiKey = credential;
         if (!apiKey) {
           return yield* Effect.fail(
-            new AdapterFailure(
-              ADAPTER_FAILURE.TRANSIENT,
-              `${provider.displayName} has no credential to read with`,
-            ),
+            new AdapterFailure({
+              failure: ADAPTER_FAILURE.TRANSIENT,
+              message: `${provider.displayName} has no credential to read with`,
+            }),
           );
         }
         const body = yield* provideClient(
@@ -654,10 +671,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         );
         if (epoch !== credentialEpoch) {
           return yield* Effect.fail(
-            new AdapterFailure(
-              ADAPTER_FAILURE.TRANSIENT,
-              `${provider.displayName} read outlived its credential`,
-            ),
+            new AdapterFailure({
+              failure: ADAPTER_FAILURE.TRANSIENT,
+              message: `${provider.displayName} read outlived its credential`,
+            }),
           );
         }
         apply(body);

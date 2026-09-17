@@ -25,15 +25,20 @@ test("a rate limit ends the pass without clearing it, and one resource's transie
   assert.equal(
     await Effect.runPromise(
       tolerateItemFailureEffect(
-        Effect.fail(new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, "one status read failed")),
+        Effect.fail(
+          new AdapterFailure({
+            failure: ADAPTER_FAILURE.TRANSIENT,
+            message: "one status read failed",
+          }),
+        ),
       ),
     ),
     undefined,
   );
-  const rateLimited = new AdapterFailure(
-    ADAPTER_FAILURE.RATE_LIMITED,
-    "the provider is rate limiting",
-  );
+  const rateLimited = new AdapterFailure({
+    failure: ADAPTER_FAILURE.RATE_LIMITED,
+    message: "the provider is rate limiting",
+  });
   const exit = await Effect.runPromiseExit(tolerateItemFailureEffect(Effect.fail(rateLimited)));
   assert.equal(Exit.isFailure(exit), true);
   const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
@@ -53,10 +58,12 @@ test("every failure kind has an answer, so a new one cannot arrive undecided", (
   ]);
 });
 
-test("a failure carries its kind and stays an error", () => {
-  const failure = new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, "the provider did not answer");
-  assert.ok(failure instanceof Error);
-  assert.equal(failure.name, "AdapterFailure");
+test("a failure carries its kind under its own tag", () => {
+  const failure = new AdapterFailure({
+    failure: ADAPTER_FAILURE.TRANSIENT,
+    message: "the provider did not answer",
+  });
+  assert.equal(failure._tag, "AdapterFailure");
   assert.equal(failure.failure, ADAPTER_FAILURE.TRANSIENT);
   assert.equal(failure.message, "the provider did not answer");
 });

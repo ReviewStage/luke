@@ -64,7 +64,7 @@ export function windowSurfaceActRows(
    */
   const panelDisplay = (sender: ActSender, kind: WindowSurfaceActKind): number => {
     const displayId = sender.panel ? panels.displayIdFor(sender.sender) : undefined;
-    if (displayId === undefined) throw new ActRefused(ACT[kind].refusal);
+    if (displayId === undefined) throw new ActRefused({ message: ACT[kind].refusal });
     return displayId;
   };
   return {

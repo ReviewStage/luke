@@ -23,7 +23,7 @@ function manager(options: {
   stored?: StoredAccount;
   revoke?: (token: string) => Effect.Effect<void, Error>;
   exchangeCode?: () => Effect.Effect<{ accessToken: string; refreshToken: string }, Error>;
-  onSignOut?: (account: StoredAccount) => Effect.Effect<void, Error>;
+  onSignOut?: (account: StoredAccount) => Effect.Effect<void>;
   client?: AccountClient;
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
@@ -134,7 +134,9 @@ it.effect(
                 subject.stored() === undefined ? "cleared" : "standing"
               }`,
             );
-            return yield* Effect.fail(new Error("service unreachable"));
+            // The release answers no typed failure; what a service that could
+            // not be reached leaves behind is the defect its own door raised.
+            return yield* Effect.die(new Error("service unreachable"));
           }),
       });
       subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });

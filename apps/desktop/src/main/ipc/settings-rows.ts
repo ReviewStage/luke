@@ -5,8 +5,8 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, type SettingUpdatePayload } from "#shared/messages/acts";
-import type { ActRows } from "../act-router";
-import type { HostOperator } from "../gateway/host-operator";
+import { ActRefused, type ActRows } from "../act-router";
+import type { HostOperator, HostUnreachableRefusal } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
 import type { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
@@ -66,24 +66,24 @@ interface SettingsWriter {
    */
   write(
     kind: SettingsActKind,
-    save: Effect.Effect<SettingsUpdateResult, Error>,
+    save: Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>,
     apply?: (result: SettingsUpdateResult) => Effect.Effect<void, unknown>,
-  ): Effect.Effect<SettingsUpdateResult, Error>;
+  ): Effect.Effect<SettingsUpdateResult, ActRefused>;
   /** A refusal decided here rather than by the host: the settings as they stand, and why. */
-  refuse(reason: string): Effect.Effect<SettingsUpdateResult, Error>;
+  refuse(reason: string): Effect.Effect<SettingsUpdateResult, ActRefused>;
 }
 
 function settingsWriter(
   dependencies: Pick<SettingsRowsDependencies, "host" | "lastSettings">,
 ): SettingsWriter {
-  const refuse = (reason: string): Effect.Effect<SettingsUpdateResult, Error> =>
+  const refuse = (reason: string): Effect.Effect<SettingsUpdateResult, ActRefused> =>
     Effect.suspend(() => {
       const held = dependencies.lastSettings();
       return held ? Effect.succeedSome(held) : dependencies.host.settingsSnapshot();
     }).pipe(
       Effect.flatMap(
         Option.match({
-          onNone: () => Effect.fail(new Error(reason)),
+          onNone: () => Effect.fail(new ActRefused({ message: reason })),
           onSome: (settings) =>
             Effect.succeed<SettingsUpdateResult>({
               status: ACTION_RESULT_STATUS.REJECTED,

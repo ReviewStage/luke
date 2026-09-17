@@ -1,4 +1,14 @@
-import type { Effect } from "effect";
+import { Data, type Effect } from "effect";
+
+/**
+ * A refresh the account lifecycle could not complete, worded by whoever owns
+ * the credential. A call that asked for one reads nothing off it but its
+ * presence: the retry runs on whatever token stands, and a second refusal is
+ * what gets reported.
+ */
+export class AccountRefreshFailed extends Data.TaggedError("AccountRefreshFailed")<{
+  readonly message: string;
+}> {}
 /**
  * Who a call to Luke's own service is on behalf of. Every client that speaks
  * to the service on the signed-in account — the brain's transports, the voice
@@ -16,7 +26,7 @@ export interface AccountToken {
    * the call retries once with whatever the refresh produced, and only a
    * second refusal is reported.
    */
-  refreshAccount: () => Effect.Effect<void, unknown>;
+  refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
   /**
    * Who the token answers for, as an opaque identity, for the one comparison
    * a refreshed token needs: a sign-out and sign-in between an attempt and

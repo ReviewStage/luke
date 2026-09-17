@@ -70,7 +70,7 @@ export function sessionActRows(
       Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal }),
     );
   const fromRow = (sender: ActSender): void => {
-    if (!sender.panel || sender.introduction) throw new ActRefused(ROW_WRITE_REFUSAL);
+    if (!sender.panel || sender.introduction) throw new ActRefused({ message: ROW_WRITE_REFUSAL });
   };
   const written = (
     write: Effect.Effect<SessionWriteResult>,

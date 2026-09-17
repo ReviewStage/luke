@@ -8,7 +8,7 @@ export {
   fixedBearer,
   NO_CREDENTIAL,
 } from "./account-call.js";
-export type { AccountToken } from "./account-token.js";
+export { AccountRefreshFailed, type AccountToken } from "./account-token.js";
 export {
   HOSTED_ACTION_FAILURE,
   HostedActionClient,

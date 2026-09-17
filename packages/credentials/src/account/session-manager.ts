@@ -1,5 +1,5 @@
 import { singleFlightEffect } from "@sidecar/runtime/effect";
-import { Cause, Effect, Fiber, PubSub, Result, type Scope, Stream } from "effect";
+import { Cause, Data, Effect, Fiber, PubSub, Result, type Scope, Stream } from "effect";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackConsent,
@@ -11,6 +11,7 @@ import { LOOPBACK_CONNECTION_SOURCE, type LoopbackConnectionSource } from "../lo
 import {
   ACCOUNT_FAILURE_ACTION,
   type AccountClient,
+  type AccountClientFailure,
   type AccountIdentity,
   accessTokenNeedsRefresh,
   accountFailureAction,
@@ -56,6 +57,19 @@ interface AccountSessionStore {
   clearAccount(): Effect.Effect<AccountSnapshot>;
 }
 
+/** A sign-in the developer withdrew, or a later attempt took the generation from: an ordinary end, never reported. */
+class SignInCancelled extends Data.TaggedError("SignInCancelled") {}
+
+/** A sign-in that could not be completed, worded as the consent's own reason; the panel reports it. */
+export class SignInFailed extends Data.TaggedError("SignInFailed")<{
+  readonly message: string;
+}> {}
+
+/** A deletion asked for with no stored credential to make it under. */
+export class NoStoredAccount extends Data.TaggedError("NoStoredAccount")<{
+  readonly message: string;
+}> {}
+
 /**
  * A step of the sign-out whose failure is written down and never held against
  * the sign-out itself: an account that could not tell the service it was
@@ -87,7 +101,7 @@ interface AccountSessionManagerOptions {
    * service (its device row) is told to let go while the token still stands
    * to say so. A failure here never holds up the sign-out.
    */
-  onSignOut?: (account: StoredAccount) => Effect.Effect<void, Error>;
+  onSignOut?: (account: StoredAccount) => Effect.Effect<void>;
 }
 
 export class AccountSessionManager {
@@ -105,7 +119,7 @@ export class AccountSessionManager {
 
   readonly #options: AccountSessionManagerOptions;
   /** One refresh however many callers ask for it at once; every ask joins the flight already under way. */
-  readonly refreshOnce: () => Effect.Effect<void, unknown>;
+  readonly refreshOnce: () => Effect.Effect<void>;
   readonly #changesPubSub: PubSub.PubSub<AccountSnapshot>;
   /**
    * Every snapshot this session settles on, in order, as the subscription a
@@ -117,7 +131,7 @@ export class AccountSessionManager {
   readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>;
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
-  #signInRunning: Fiber.Fiber<AccountSnapshot, Error> | undefined;
+  #signInRunning: Fiber.Fiber<AccountSnapshot, SignInFailed> | undefined;
   #cancelSignIn: (() => void) | undefined;
 
   private constructor(
@@ -189,11 +203,14 @@ export class AccountSessionManager {
     });
   }
 
-  deleteEverywhere(): Effect.Effect<AccountSnapshot, Error> {
+  deleteEverywhere(): Effect.Effect<AccountSnapshot, NoStoredAccount | AccountClientFailure> {
     return Effect.gen({ self: this }, function* () {
       const stored = yield* this.#options.store.readAccount();
-      if (!stored)
-        return yield* Effect.fail(new Error("No stored account credential to delete with"));
+      if (!stored) {
+        return yield* Effect.fail(
+          new NoStoredAccount({ message: "No stored account credential to delete with" }),
+        );
+      }
       const deleted = yield* Effect.result(this.#deleteHosted(stored.accessToken));
       if (Result.isFailure(deleted)) {
         if (!accessTokenNeedsRefresh(deleted.failure)) return yield* Effect.fail(deleted.failure);
@@ -255,7 +272,7 @@ export class AccountSessionManager {
    * for the developer's own press rather than ending it, exactly as the held
    * promise it replaces did.
    */
-  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, Error> {
+  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, SignInFailed> {
     // The decision, the fork, and the store of the fiber are one
     // uninterruptible step, the same guarantee `singleFlightEffect`'s own
     // semaphore states: a second ask landing between them would start a second
@@ -282,7 +299,7 @@ export class AccountSessionManager {
   #trip(
     consent: LoopbackConsent<AccountSnapshot>,
     generation: number,
-  ): Effect.Effect<AccountSnapshot, Error> {
+  ): Effect.Effect<AccountSnapshot, SignInFailed> {
     return Effect.gen({ self: this }, function* () {
       const outcome = yield* Effect.scoped(consent.signInEffect());
       if (!("reason" in outcome)) {
@@ -294,7 +311,7 @@ export class AccountSessionManager {
       // taking the generation out from under this one — is an ordinary end.
       // Anything else is a failure the panel has to be able to report.
       if (outcome.reason === LOOPBACK_CONSENT_CANCELLED) return this.#account;
-      return yield* Effect.fail(new Error(outcome.reason));
+      return yield* Effect.fail(new SignInFailed({ message: outcome.reason }));
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => {
@@ -349,19 +366,22 @@ export class AccountSessionManager {
         Effect.gen({ self: this }, function* () {
           const identity = yield* this.#options.client.userInfo(tokens.accessToken, provider);
           if (!(yield* this.#storeCurrent(generation, { ...tokens, ...identity }))) {
-            return yield* Effect.fail(new Error(LOOPBACK_CONSENT_CANCELLED));
+            return yield* Effect.fail(new SignInCancelled());
           }
           yield* this.#options.startCapabilities;
-          if (!this.#isCurrent(generation)) {
-            return yield* Effect.fail(new Error(LOOPBACK_CONSENT_CANCELLED));
-          }
+          if (!this.#isCurrent(generation)) return yield* Effect.fail(new SignInCancelled());
           return this.#account;
         }),
       revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
       onRevokeFailure: (error) => {
         process.stderr.write(`Rejected account token revocation failed: ${error.message}\n`);
       },
-    }).pipe(Effect.catch((error) => Effect.succeed({ reason: error.message })));
+    }).pipe(
+      Effect.catchTag("SignInCancelled", () =>
+        Effect.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }),
+      ),
+      Effect.catch((error) => Effect.succeed({ reason: error.message })),
+    );
   }
 
   #storeCurrent(generation: number, stored: StoredAccount): Effect.Effect<boolean> {
@@ -379,7 +399,7 @@ export class AccountSessionManager {
     return generation === this.#generation;
   }
 
-  #deleteHosted(accessToken: string): Effect.Effect<void, Error> {
+  #deleteHosted(accessToken: string): Effect.Effect<void, AccountClientFailure> {
     return deleteHostedAccount({
       serviceBaseUrl: this.#options.hostedServiceBaseUrl,
       accessToken,
