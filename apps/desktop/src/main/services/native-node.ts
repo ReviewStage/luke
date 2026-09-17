@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { systemPreferences } from "electron";
 import type { AppAudioSlice } from "#shared/messages/app-state";
 import {
@@ -19,6 +20,11 @@ import {
 } from "../native/output-volume";
 import type { DesktopConfig } from "./desktop-config";
 import type { DesktopService } from "./service";
+
+/** Electron's media-access status word, read as one this build names; Electron documents no other. */
+const readMicrophoneStatusWord = Schema.decodeUnknownSync(
+  Schema.Literals(Object.values(MICROPHONE_STATUS)),
+);
 
 /** The capabilities this node offers the host by name; a capability no node offers is a typed refusal there. */
 export interface NativeNodeCapabilities {
@@ -82,8 +88,7 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
 
   function readMicrophoneStatus(): MicrophoneStatus {
     if (config.platform !== "darwin") return MICROPHONE_STATUS.GRANTED;
-    // SAFETY: MicrophoneStatus mirrors Electron's documented media-access status union.
-    return systemPreferences.getMediaAccessStatus("microphone") as MicrophoneStatus;
+    return readMicrophoneStatusWord(systemPreferences.getMediaAccessStatus("microphone"));
   }
 
   function refreshMicrophoneStatus(): MicrophoneStatus {

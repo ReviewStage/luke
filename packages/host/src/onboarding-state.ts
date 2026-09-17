@@ -1,5 +1,6 @@
 import { type Context, Effect, Schema } from "effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import { jsonStateFileEffect } from "./effect/json-state-file.js";
 import { Reporter, StateRoot } from "./effect/seams.js";
 
@@ -81,10 +82,10 @@ export interface OnboardingStateRecord {
 export function onboardingStateRecord(
   stateRoot: string,
   report: (message: string) => void,
-  fileSystem: Context.Context<FileSystem.FileSystem>,
+  fileSystem: Context.Context<FileSystem.FileSystem | Path.Path>,
 ): OnboardingStateRecord {
   const provided = <A>(
-    effect: Effect.Effect<A, never, FileSystem.FileSystem | StateRoot | Reporter>,
+    effect: Effect.Effect<A, never, FileSystem.FileSystem | Path.Path | StateRoot | Reporter>,
   ): Effect.Effect<A> =>
     effect.pipe(
       Effect.provideService(StateRoot, stateRoot),

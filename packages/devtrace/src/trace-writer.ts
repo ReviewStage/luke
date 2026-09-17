@@ -1,6 +1,5 @@
-import path from "node:path";
 import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
-import { Cause, Deferred, Effect, type Scope } from "effect";
+import { Cause, Deferred, Effect, Path, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
@@ -102,12 +101,15 @@ export class AgentTraceWriter {
     ),
   );
 
-  private constructor(options: AgentTraceWriterOptions, work: SerialQueue<FileSystem.FileSystem>) {
+  private constructor(
+    options: AgentTraceWriterOptions,
+    file: string,
+    now: () => Date,
+    work: SerialQueue<FileSystem.FileSystem>,
+  ) {
     this.#directory = options.directory;
-    const now = options.now ?? (() => new Date());
     this.#report = options.report ?? reportToStderr;
-    const stamp = now().toISOString().replace(/[:.]/gu, "-");
-    this.file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
+    this.file = file;
     this.#now = now;
     this.#work = work;
   }
@@ -115,8 +117,12 @@ export class AgentTraceWriter {
   /** One writer, with the fiber that carries its lines to disk forked into the caller's scope. */
   static make(
     options: AgentTraceWriterOptions,
-  ): Effect.Effect<AgentTraceWriter, never, Scope.Scope | FileSystem.FileSystem> {
+  ): Effect.Effect<AgentTraceWriter, never, Scope.Scope | FileSystem.FileSystem | Path.Path> {
     return Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const now = options.now ?? (() => new Date());
+      const stamp = now().toISOString().replace(/[:.]/gu, "-");
+      const file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
       const report = options.report ?? reportToStderr;
       // Only a write's own failure is caught by the write; a line that dies
       // is one more way the trace could not be written, said the same way.
@@ -126,7 +132,7 @@ export class AgentTraceWriter {
             report(`Agent trace could not be written: ${String(Cause.squash(cause))}\n`),
           ),
       });
-      return new AgentTraceWriter({ ...options, report }, work);
+      return new AgentTraceWriter({ ...options, report }, file, now, work);
     });
   }
 

@@ -15,10 +15,8 @@
  * does.
  */
 
-import path from "node:path";
-
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { Effect, FileSystem, Result, Schema } from "effect";
+import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import { Reporter, StateRoot } from "./seams.js";
 
 export interface JsonStateFileEffectOptions<A, I> {
@@ -30,14 +28,14 @@ export interface JsonStateFileEffectOptions<A, I> {
 
 export interface JsonStateFileEffect<A> {
   /** The stored record, or nothing. Reads the file on every call. */
-  readonly read: Effect.Effect<A | undefined, never, FileSystem.FileSystem | StateRoot>;
+  readonly read: Effect.Effect<A | undefined, never, FileSystem.FileSystem | Path.Path | StateRoot>;
   /**
    * Persists `mutate`'s answer over whatever is on disk at this moment,
    * rather than over a record read earlier, and answers what was persisted.
    */
   readonly update: (
     mutate: (current: A | undefined) => A,
-  ) => Effect.Effect<A, never, FileSystem.FileSystem | StateRoot | Reporter>;
+  ) => Effect.Effect<A, never, FileSystem.FileSystem | Path.Path | StateRoot | Reporter>;
 }
 
 export function jsonStateFileEffect<A extends object, I>(
@@ -45,7 +43,9 @@ export function jsonStateFileEffect<A extends object, I>(
 ): JsonStateFileEffect<A> {
   const decode = Schema.decodeUnknownResult(options.schema);
   const encode = Schema.encodeSync(options.schema);
-  const filePath = Effect.map(StateRoot, (stateRoot) => path.join(stateRoot, options.fileName));
+  const filePath = Effect.map(Effect.all([StateRoot, Path.Path]), ([stateRoot, path]) =>
+    path.join(stateRoot, options.fileName),
+  );
 
   const read: JsonStateFileEffect<A>["read"] = Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -62,7 +62,7 @@ export function jsonStateFileEffect<A extends object, I>(
 
   const update: JsonStateFileEffect<A>["update"] = /* @__PURE__ */ Effect.fnUntraced(function* (
     mutate: (current: A | undefined) => A,
-  ): Effect.fn.Return<A, never, FileSystem.FileSystem | StateRoot | Reporter> {
+  ): Effect.fn.Return<A, never, FileSystem.FileSystem | Path.Path | StateRoot | Reporter> {
     const current = yield* read;
     const next = mutate(current);
     const fs = yield* FileSystem.FileSystem;

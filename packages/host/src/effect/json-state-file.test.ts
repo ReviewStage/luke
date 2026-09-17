@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { NodeFileSystem } from "@effect/platform-node";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { Effect, Layer, Schema } from "effect";
@@ -16,6 +16,7 @@ const RecordSchema = Schema.Struct({
 const layers = (stateRoot: string, report: (message: string) => void) =>
   Layer.mergeAll(
     NodeFileSystem.layer,
+    NodePath.layer,
     Layer.succeed(StateRoot, stateRoot),
     Layer.succeed(Reporter, { report }),
   );

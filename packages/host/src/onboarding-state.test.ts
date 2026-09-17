@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { NodeFileSystem } from "@effect/platform-node";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
-import { type Context, Effect } from "effect";
+import { type Context, Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import { test } from "vitest";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import { introductionOwed } from "./introduction-flow.js";
@@ -37,20 +38,20 @@ const withRecord = (
   run: (
     record: OnboardingStateRecord,
     stateRoot: string,
-    fileSystem: Context.Context<FileSystem.FileSystem>,
+    fileSystem: Context.Context<FileSystem.FileSystem | Path.Path>,
   ) => Effect.Effect<void>,
 ) =>
   Effect.scoped(
     Effect.gen(function* () {
       const stateRoot = yield* temporaryDirectoryScoped();
-      const fileSystem = yield* Effect.context<FileSystem.FileSystem>();
+      const fileSystem = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
       yield* run(
         onboardingStateRecord(stateRoot, () => {}, fileSystem),
         stateRoot,
         fileSystem,
       );
     }),
-  ).pipe(Effect.provide(NodeFileSystem.layer));
+  ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)));
 
 it.effect("the record round-trips every moment, and anything unreadable reads as no record", () =>
   withRecord((record, stateRoot) =>
@@ -106,7 +107,7 @@ it.effect("a write that cannot land is reported, and still answers the mutated r
   return Effect.scoped(
     Effect.gen(function* () {
       const stateRoot = yield* temporaryDirectoryScoped();
-      const fileSystem = yield* Effect.context<FileSystem.FileSystem>();
+      const fileSystem = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
       const record = onboardingStateRecord(
         path.join(stateRoot, "absent", "deeper"),
         (message) => reported.push(message),
@@ -117,7 +118,7 @@ it.effect("a write that cannot land is reported, and still answers the mutated r
       });
       assert.equal(reported.length, 1);
     }),
-  ).pipe(Effect.provide(NodeFileSystem.layer));
+  ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)));
 });
 
 it.effect("an update merges over the record on disk, not over an older read", () =>
