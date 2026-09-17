@@ -16,6 +16,7 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { runTest } from "@sidecar/wire/testing";
 import { type ToolSet, tool } from "ai";
 import { Result } from "effect";
 import { test } from "vitest";
@@ -96,20 +97,25 @@ async function replyWithToolPart(part: WireRecord): Promise<WireRecord> {
 }
 
 test("no rows read back as no messages", async () => {
-  assert.deepEqual(await readStoredUIMessages([], TOOLS), { ok: true, value: [] });
+  assert.deepEqual(await runTest(readStoredUIMessages([], TOOLS)), { ok: true, value: [] });
 });
 
 test("each fixture round-trips through the wrapper unchanged", async () => {
   for (const name of Object.values(FIXTURE)) {
     const message = await fixture(name);
-    assert.deepEqual(await readStoredUIMessages([message], TOOLS), { ok: true, value: [message] });
+    assert.deepEqual(await runTest(readStoredUIMessages([message], TOOLS)), {
+      ok: true,
+      value: [message],
+    });
   }
 });
 
 test("a row is typed by its role, and its tool parts are told by their state", async () => {
-  const read = await readStoredUIMessages(
-    [await fixture(FIXTURE.SPOKEN_ASK), await fixture(FIXTURE.REPLY_WITH_TOOL_PART)],
-    TOOLS,
+  const read = await runTest(
+    readStoredUIMessages(
+      [await fixture(FIXTURE.SPOKEN_ASK), await fixture(FIXTURE.REPLY_WITH_TOOL_PART)],
+      TOOLS,
+    ),
   );
   assert.equal(read.ok, true);
   if (!read.ok) return;
@@ -129,7 +135,7 @@ test("a row is typed by its role, and its tool parts are told by their state", a
 test("a brain-authored user row reads back under each source the vocabulary names, and a source it does not name is refused", async () => {
   for (const [source, name] of Object.entries(BRAIN_SOURCE_FIXTURES)) {
     const message = await fixture(name);
-    const read = await readStoredUIMessages([message], TOOLS);
+    const read = await runTest(readStoredUIMessages([message], TOOLS));
     assert.ok(read.ok);
     const [stored] = read.value;
     assert.equal(stored?.role, MESSAGE_ROLE.USER);
@@ -139,7 +145,7 @@ test("a brain-authored user row reads back under each source the vocabulary name
     author: MESSAGE_AUTHOR.BRAIN,
     source: "bulletin",
   });
-  const read = await readStoredUIMessages([unnamed], TOOLS);
+  const read = await runTest(readStoredUIMessages([unnamed], TOOLS));
   assert.equal(refusalOf(read), SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(pathOf(read), [0, "metadata"]);
 });
@@ -147,27 +153,36 @@ test("a brain-authored user row reads back under each source the vocabulary name
 test("a message with metadata the vocabulary does not name is refused at the metadata", async () => {
   const spokenAsk = await fixture(FIXTURE.SPOKEN_ASK);
   const extra = withMetadata(spokenAsk, { ...wireRecord(spokenAsk.metadata), mood: "cheerful" });
-  const read = await readStoredUIMessages([extra], TOOLS);
+  const read = await runTest(readStoredUIMessages([extra], TOOLS));
   assert.equal(refusalOf(read), SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(pathOf(read), [0, "metadata"]);
   const compaction = await fixture(FIXTURE.COMPACTION);
   const decorated = withMetadata(compaction, { author: MESSAGE_AUTHOR.BRAIN, mood: "cheerful" });
-  assert.deepEqual(pathOf(await readStoredUIMessages([decorated], TOOLS)), [0, "metadata", "mood"]);
+  assert.deepEqual(pathOf(await runTest(readStoredUIMessages([decorated], TOOLS))), [
+    0,
+    "metadata",
+    "mood",
+  ]);
 });
 
 test("a role's metadata is held to that role's schema", async () => {
   const spokenAsk = await fixture(FIXTURE.SPOKEN_ASK);
   const compaction = await fixture(FIXTURE.COMPACTION);
   const childAsUser = withMetadata(spokenAsk, { author: MESSAGE_AUTHOR.CHILD, channel: "typed" });
-  assert.deepEqual(pathOf(await readStoredUIMessages([childAsUser], TOOLS)), [0, "metadata"]);
-  const developerAsAssistant = withMetadata(compaction, { author: MESSAGE_AUTHOR.DEVELOPER });
-  assert.deepEqual(pathOf(await readStoredUIMessages([spokenAsk, developerAsAssistant], TOOLS)), [
-    1,
+  assert.deepEqual(pathOf(await runTest(readStoredUIMessages([childAsUser], TOOLS))), [
+    0,
     "metadata",
-    "author",
   ]);
+  const developerAsAssistant = withMetadata(compaction, { author: MESSAGE_AUTHOR.DEVELOPER });
+  assert.deepEqual(
+    pathOf(await runTest(readStoredUIMessages([spokenAsk, developerAsAssistant], TOOLS))),
+    [1, "metadata", "author"],
+  );
   const unwritten = withMetadata(compaction, undefined);
-  assert.deepEqual(pathOf(await readStoredUIMessages([unwritten], TOOLS)), [0, "metadata"]);
+  assert.deepEqual(pathOf(await runTest(readStoredUIMessages([unwritten], TOOLS))), [
+    0,
+    "metadata",
+  ]);
 });
 
 test("a system message carries no metadata", async () => {
@@ -176,14 +191,17 @@ test("a system message carries no metadata", async () => {
     role: MESSAGE_ROLE.SYSTEM,
     parts: [{ type: "text", text: "Be brief." }],
   };
-  assert.deepEqual(await readStoredUIMessages([bare], TOOLS), { ok: true, value: [bare] });
+  assert.deepEqual(await runTest(readStoredUIMessages([bare], TOOLS)), { ok: true, value: [bare] });
   const decorated = withMetadata(bare, { author: MESSAGE_AUTHOR.BRAIN });
-  assert.deepEqual(pathOf(await readStoredUIMessages([decorated], TOOLS)), [0, "metadata"]);
+  assert.deepEqual(pathOf(await runTest(readStoredUIMessages([decorated], TOOLS))), [
+    0,
+    "metadata",
+  ]);
 });
 
 test("a tool part naming a tool the registry does not hold is refused, whatever its state", async () => {
   const reply = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
-  const readAnswered = await readStoredUIMessages([reply], {});
+  const readAnswered = await runTest(readStoredUIMessages([reply], {}));
   assert.equal(refusalOf(readAnswered), SCHEMA_REFUSAL.NOT_REGISTERED);
   assert.deepEqual(pathOf(readAnswered), [0, "parts", 2, "type"]);
   const pending = await replyWithToolPart({
@@ -192,7 +210,7 @@ test("a tool part naming a tool the registry does not hold is refused, whatever 
     state: TOOL_PART_STATE.INPUT_AVAILABLE,
     input: {},
   });
-  const readPending = await readStoredUIMessages([pending], TOOLS);
+  const readPending = await runTest(readStoredUIMessages([pending], TOOLS));
   assert.equal(refusalOf(readPending), SCHEMA_REFUSAL.NOT_REGISTERED);
   assert.deepEqual(pathOf(readPending), [0, "parts", 0, "type"]);
 });
@@ -201,7 +219,7 @@ test("a stored-row read drops a tool part naming a tool the registry has retired
   const reply = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
   const replyParts = reply.parts;
   assert.ok(Array.isArray(replyParts));
-  const read = await readStoredUIMessages([reply], {}, UNREGISTERED_TOOL_PART.DROP);
+  const read = await runTest(readStoredUIMessages([reply], {}, UNREGISTERED_TOOL_PART.DROP));
   assert.equal(read.ok, true);
   if (!read.ok) return;
   const [stored] = read.value;
@@ -222,10 +240,14 @@ test("a stored-row read drops a tool part naming a tool the registry has retired
       ...replyParts,
     ],
   };
-  const readMixed = await readStoredUIMessages([mixed], TOOLS, UNREGISTERED_TOOL_PART.DROP);
+  const readMixed = await runTest(
+    readStoredUIMessages([mixed], TOOLS, UNREGISTERED_TOOL_PART.DROP),
+  );
   assert.deepEqual(readMixed, { ok: true, value: [reply] });
   // The Either entry point takes the same word.
-  const either = await readStoredUIMessagesEither([mixed], TOOLS, UNREGISTERED_TOOL_PART.DROP);
+  const either = await runTest(
+    readStoredUIMessagesEither([mixed], TOOLS, UNREGISTERED_TOOL_PART.DROP),
+  );
   assert.ok(Result.isSuccess(either));
   assert.deepEqual(either.success, [reply]);
 });
@@ -239,7 +261,9 @@ test("dropping is only for a retired tool: a registered tool's refused input and
     output: { lines: [] },
   });
   assert.equal(
-    refusalOf(await readStoredUIMessages([wrongInput], TOOLS, UNREGISTERED_TOOL_PART.DROP)),
+    refusalOf(
+      await runTest(readStoredUIMessages([wrongInput], TOOLS, UNREGISTERED_TOOL_PART.DROP)),
+    ),
     SCHEMA_REFUSAL.MALFORMED,
   );
   const dynamic = await replyWithToolPart({
@@ -250,12 +274,17 @@ test("dropping is only for a retired tool: a registered tool's refused input and
     input: {},
     output: {},
   });
-  const readDynamic = await readStoredUIMessages([dynamic], TOOLS, UNREGISTERED_TOOL_PART.DROP);
+  const readDynamic = await runTest(
+    readStoredUIMessages([dynamic], TOOLS, UNREGISTERED_TOOL_PART.DROP),
+  );
   assert.equal(refusalOf(readDynamic), SCHEMA_REFUSAL.NOT_REGISTERED);
   assert.deepEqual(pathOf(readDynamic), [0, "parts", 0, "type"]);
   // The default is the write door's: refuse.
   const reply = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
-  assert.equal(refusalOf(await readStoredUIMessages([reply], {})), SCHEMA_REFUSAL.NOT_REGISTERED);
+  assert.equal(
+    refusalOf(await runTest(readStoredUIMessages([reply], {}))),
+    SCHEMA_REFUSAL.NOT_REGISTERED,
+  );
 });
 
 test("a dynamic tool part is refused: a stored row names a registered tool or none", async () => {
@@ -267,7 +296,7 @@ test("a dynamic tool part is refused: a stored row names a registered tool or no
     input: {},
     output: {},
   });
-  const read = await readStoredUIMessages([dynamic], TOOLS);
+  const read = await runTest(readStoredUIMessages([dynamic], TOOLS));
   assert.equal(refusalOf(read), SCHEMA_REFUSAL.NOT_REGISTERED);
   assert.deepEqual(pathOf(read), [0, "parts", 0, "type"]);
 });
@@ -281,7 +310,7 @@ test("a registered tool's input is held to its schema in every state, including 
     output: { lines: [] },
   });
   assert.equal(
-    refusalOf(await readStoredUIMessages([wrongInput], TOOLS)),
+    refusalOf(await runTest(readStoredUIMessages([wrongInput], TOOLS))),
     SCHEMA_REFUSAL.MALFORMED,
   );
   const emptyInput = await replyWithToolPart({
@@ -291,7 +320,7 @@ test("a registered tool's input is held to its schema in every state, including 
     input: {},
     output: { lines: [] },
   });
-  const readEmpty = await readStoredUIMessages([emptyInput], TOOLS);
+  const readEmpty = await runTest(readStoredUIMessages([emptyInput], TOOLS));
   assert.equal(refusalOf(readEmpty), SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(pathOf(readEmpty), [0, "parts", 0, "input"]);
   const failedWithRefusedInput = await replyWithToolPart({
@@ -301,7 +330,7 @@ test("a registered tool's input is held to its schema in every state, including 
     input: { providerId: 7 },
     errorText: "refused",
   });
-  const readFailed = await readStoredUIMessages([failedWithRefusedInput], TOOLS);
+  const readFailed = await runTest(readStoredUIMessages([failedWithRefusedInput], TOOLS));
   assert.equal(refusalOf(readFailed), SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(pathOf(readFailed), [0, "parts", 0, "input"]);
 });
@@ -314,7 +343,7 @@ test("a tool part in an SDK state the store never writes is refused at its state
     input: TOOL_INPUT,
     approval: { id: "approval_1" },
   });
-  const readAwaiting = await readStoredUIMessages([awaitingApproval], TOOLS);
+  const readAwaiting = await runTest(readStoredUIMessages([awaitingApproval], TOOLS));
   assert.equal(refusalOf(readAwaiting), SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(pathOf(readAwaiting), [0, "parts", 0, "state"]);
   const denied = await replyWithToolPart({
@@ -324,7 +353,7 @@ test("a tool part in an SDK state the store never writes is refused at its state
     input: TOOL_INPUT,
     approval: { id: "approval_2", approved: false },
   });
-  const readDenied = await readStoredUIMessages([denied], TOOLS);
+  const readDenied = await runTest(readStoredUIMessages([denied], TOOLS));
   assert.equal(refusalOf(readDenied), SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(pathOf(readDenied), [0, "parts", 0, "state"]);
 });
@@ -346,7 +375,7 @@ test("the pending and failed journal states are admitted", async () => {
     })),
     id: "failed_1",
   };
-  const read = await readStoredUIMessages([pending, failed], TOOLS);
+  const read = await runTest(readStoredUIMessages([pending, failed], TOOLS));
   assert.equal(read.ok, true);
   if (!read.ok) return;
   assert.deepEqual(
@@ -358,21 +387,29 @@ test("the pending and failed journal states are admitted", async () => {
 });
 
 test("what is not a list of rows, or not a row, is malformed", async () => {
-  assert.equal(refusalOf(await readStoredUIMessages({ id: "x" }, TOOLS)), SCHEMA_REFUSAL.MALFORMED);
-  assert.equal(refusalOf(await readStoredUIMessages(undefined, TOOLS)), SCHEMA_REFUSAL.MALFORMED);
   assert.equal(
-    refusalOf(await readStoredUIMessages(["not a row"], TOOLS)),
+    refusalOf(await runTest(readStoredUIMessages({ id: "x" }, TOOLS))),
     SCHEMA_REFUSAL.MALFORMED,
   );
   assert.equal(
-    refusalOf(await readStoredUIMessages([{ id: "x", role: "tool", parts: [] }], TOOLS)),
+    refusalOf(await runTest(readStoredUIMessages(undefined, TOOLS))),
+    SCHEMA_REFUSAL.MALFORMED,
+  );
+  assert.equal(
+    refusalOf(await runTest(readStoredUIMessages(["not a row"], TOOLS))),
+    SCHEMA_REFUSAL.MALFORMED,
+  );
+  assert.equal(
+    refusalOf(await runTest(readStoredUIMessages([{ id: "x", role: "tool", parts: [] }], TOOLS))),
     SCHEMA_REFUSAL.MALFORMED,
   );
   assert.equal(
     refusalOf(
-      await readStoredUIMessages(
-        [{ id: "x", role: MESSAGE_ROLE.USER, parts: [{ type: "text" }] }],
-        TOOLS,
+      await runTest(
+        readStoredUIMessages(
+          [{ id: "x", role: MESSAGE_ROLE.USER, parts: [{ type: "text" }] }],
+          TOOLS,
+        ),
       ),
     ),
     SCHEMA_REFUSAL.MALFORMED,
@@ -380,7 +417,9 @@ test("what is not a list of rows, or not a row, is malformed", async () => {
 });
 
 test("the Either entry point answers a right of the rows admitted", async () => {
-  const read = await readStoredUIMessagesEither([await fixture(FIXTURE.SPOKEN_ASK)], TOOLS);
+  const read = await runTest(
+    readStoredUIMessagesEither([await fixture(FIXTURE.SPOKEN_ASK)], TOOLS),
+  );
   assert.ok(Result.isSuccess(read));
   const [ask] = read.success;
   assert.equal(ask?.role, MESSAGE_ROLE.USER);
@@ -389,7 +428,7 @@ test("the Either entry point answers a right of the rows admitted", async () => 
 test("the Either entry point answers a left carrying the refusal and path", async () => {
   const spokenAsk = await fixture(FIXTURE.SPOKEN_ASK);
   const extra = withMetadata(spokenAsk, { ...wireRecord(spokenAsk.metadata), mood: "cheerful" });
-  const read = await readStoredUIMessagesEither([extra], TOOLS);
+  const read = await runTest(readStoredUIMessagesEither([extra], TOOLS));
   assert.ok(Result.isFailure(read));
   assert.equal(read.failure.refusal, SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(read.failure.path, [0, "metadata"]);
@@ -398,8 +437,8 @@ test("the Either entry point answers a left carrying the refusal and path", asyn
 test("the SchemaRead entry point is the Either entry point's result converted, not a second computation", async () => {
   const message = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
   const [either, schemaRead] = await Promise.all([
-    readStoredUIMessagesEither([message], TOOLS),
-    readStoredUIMessages([message], TOOLS),
+    runTest(readStoredUIMessagesEither([message], TOOLS)),
+    runTest(readStoredUIMessages([message], TOOLS)),
   ]);
   assert.deepEqual(
     schemaRead,

@@ -94,9 +94,7 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
     model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
     accounts: deploymentAccounts,
     record: voiceSessionRecord(),
-    run: runWeb,
     exchange: deploymentExchange({
-      run: runWeb,
       encryptionSecret: () => configured(VAULT_ENCRYPTION_ENVIRONMENT.SECRET),
       deploymentSecret: () => configured(OBSERVATION_ENVIRONMENT.CRON_SECRET),
       eveOrigin: deploymentEveOrigin,

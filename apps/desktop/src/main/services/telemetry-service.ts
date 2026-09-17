@@ -9,7 +9,7 @@ import { feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { type RunMode, sentryReportingEnabled } from "@sidecar/host";
 import { Effect } from "effect";
 import type { DesktopConfig } from "./desktop-config";
-import type { DesktopService } from "./service";
+import type { EffectDesktopService } from "./service";
 
 /** How long the quit waits for a queued crash report to leave; a flush must not hold a quit. */
 const CRASH_REPORT_FLUSH_MS = 2_000;
@@ -31,7 +31,7 @@ export function initializeCrashReporting(runMode: RunMode): void {
   });
 }
 
-export interface TelemetryService extends DesktopService {
+export interface TelemetryService extends EffectDesktopService {
   /**
    * A counted event, whose name and every property value the allowlist in
    * `@sidecar/analytics` fixed. It travels to Luke's own service through the
@@ -74,11 +74,9 @@ export function createTelemetryService(
           : Effect.void,
       );
     },
-    start: async () => undefined,
+    start: () => Effect.void,
     // A report queued when the quit began would otherwise go with the
     // process; the flush is bounded so it cannot be what holds one open.
-    stop: async () => {
-      await Sentry.close(CRASH_REPORT_FLUSH_MS);
-    },
+    stop: () => Effect.asVoid(Effect.promise(() => Sentry.close(CRASH_REPORT_FLUSH_MS))),
   };
 }

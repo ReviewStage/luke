@@ -1,5 +1,6 @@
 import type { MachinePresence } from "@sidecar/host";
-import type { DesktopService } from "./service";
+import { Effect } from "effect";
+import type { EffectDesktopService } from "./service";
 
 /**
  * The two facts of the machine the presence report is read from, as
@@ -14,7 +15,7 @@ export interface PresenceMonitor {
   removeListener(event: "unlock-screen", listener: () => void): void;
 }
 
-export interface MachinePresenceService extends DesktopService {
+export interface MachinePresenceService extends EffectDesktopService {
   /** The machine's idle time and lock state as they stand now; the host reads this at each poll. */
   read: () => MachinePresence;
 }
@@ -38,14 +39,16 @@ export function createMachinePresence(monitor: PresenceMonitor): MachinePresence
   return {
     name: "machine-presence",
     read: () => ({ idleSeconds: monitor.getSystemIdleTime(), screenLocked }),
-    start: async () => {
-      monitor.on("lock-screen", lock);
-      monitor.on("unlock-screen", unlock);
-    },
-    stop: async () => {
-      monitor.removeListener("lock-screen", lock);
-      monitor.removeListener("unlock-screen", unlock);
-      screenLocked = false;
-    },
+    start: () =>
+      Effect.sync(() => {
+        monitor.on("lock-screen", lock);
+        monitor.on("unlock-screen", unlock);
+      }),
+    stop: () =>
+      Effect.sync(() => {
+        monitor.removeListener("lock-screen", lock);
+        monitor.removeListener("unlock-screen", unlock);
+        screenLocked = false;
+      }),
   };
 }

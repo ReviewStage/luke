@@ -486,16 +486,18 @@ test("a developer turn leaves its ask, its journal closed as the answer told, an
     },
   );
 
-  const read = await readStoredUIMessages(
-    asWire(
-      rows.map((row) => ({
-        id: row.clientId,
-        role: row.role,
-        metadata: row.metadata,
-        parts: row.parts,
-      })),
+  const read = await database.run(
+    readStoredUIMessages(
+      asWire(
+        rows.map((row) => ({
+          id: row.clientId,
+          role: row.role,
+          metadata: row.metadata,
+          parts: row.parts,
+        })),
+      ),
+      TOOLS,
     ),
-    TOOLS,
   );
   assert.equal(read.ok, true);
 });
@@ -634,16 +636,18 @@ test("a writer killed after the calls were told leaves a resumable journal: one 
   const turn = await storedTurn(stream.turnId);
   assert.equal(turn?.status, TURN_STATUS.RUNNING);
 
-  const read = await readStoredUIMessages(
-    asWire([
-      {
-        id: journal.clientId,
-        role: journal.role,
-        metadata: journal.metadata,
-        parts: journal.parts,
-      },
-    ]),
-    TOOLS,
+  const read = await database.run(
+    readStoredUIMessages(
+      asWire([
+        {
+          id: journal.clientId,
+          role: journal.role,
+          metadata: journal.metadata,
+          parts: journal.parts,
+        },
+      ]),
+      TOOLS,
+    ),
   );
   assert.equal(read.ok, true);
 });
@@ -779,16 +783,18 @@ test("a turn that ends with a call unanswered settles the call as an answer whos
   // SAFETY: a stored part's output is JSON the store holds as jsonb; the wire boundary is where it is read.
   const envelope = unparsedWire(unanswered.output as WireBoundaryInput);
   assert.equal(isRecord(envelope) && envelope.status, UNKNOWN_ACTION_STATUS);
-  const read = await readStoredUIMessages(
-    asWire([
-      {
-        id: journal.clientId,
-        role: journal.role,
-        metadata: journal.metadata,
-        parts: journal.parts,
-      },
-    ]),
-    TOOLS,
+  const read = await database.run(
+    readStoredUIMessages(
+      asWire([
+        {
+          id: journal.clientId,
+          role: journal.role,
+          metadata: journal.metadata,
+          parts: journal.parts,
+        },
+      ]),
+      TOOLS,
+    ),
   );
   assert.equal(read.ok, true);
   const turn = await storedTurn(stream.turnId);

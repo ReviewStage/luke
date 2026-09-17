@@ -15,6 +15,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@sidecar/wire";
+import { runTest } from "@sidecar/wire/testing";
 import { type ToolSet, tool } from "ai";
 import { test } from "vitest";
 import { z } from "zod";
@@ -127,7 +128,7 @@ function expectOk<Value>(read: SchemaRead<Value>): Value {
 /** The rows read back under the vocabulary, in the order they were handed over. */
 async function readRows(rows: readonly FixtureRow[]): Promise<ConversationViewStoredMessage[]> {
   const read = expectOk(
-    await readStoredUIMessages(unparsedWire(rows.map((row) => row.message)), TOOLS),
+    await runTest(readStoredUIMessages(unparsedWire(rows.map((row) => row.message)), TOOLS)),
   );
   return read.map((message, index) => {
     const row = rows[index];
@@ -667,7 +668,9 @@ test("groups are ordered by where their earliest row is placed, not by when it w
 test("a compaction row of main's is not shown, since the rows it folded still are", async () => {
   const input = await loadView(FIXTURE.TYPED_ASK);
   const compaction = await readFixtureFile<WireBoundaryInput>("ui-messages", "compaction.json");
-  const [message] = expectOk(await readStoredUIMessages(unparsedWire([compaction]), TOOLS));
+  const [message] = expectOk(
+    await runTest(readStoredUIMessages(unparsedWire([compaction]), TOOLS)),
+  );
   if (message === undefined) throw new Error("unreachable");
   const last = input.main.at(-1);
   if (last === undefined) throw new Error("unreachable");

@@ -79,7 +79,7 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
   const { report } = config;
   const channels = Layer.effectDiscard(Effect.sync(() => registerDesktopIpc(services)));
   const machine = layersInOrder([
-    serviceLayer(telemetry, report),
+    effectServiceLayer(telemetry, report),
     serviceLayer(native, report),
   ]).pipe(Layer.provideMerge(channels));
   // The one place the document becomes a push. Every window reads its state
@@ -213,7 +213,10 @@ export function composeDesktop(
     // else is built over: the host takes their readings as seams, so they are
     // constructed before the assembly and begin before it.
     Layer.provideMerge(
-      layersInOrder([serviceLayer(keychain, config.report), serviceLayer(presence, config.report)]),
+      layersInOrder([
+        effectServiceLayer(keychain, config.report),
+        effectServiceLayer(presence, config.report),
+      ]),
     ),
   );
 }
