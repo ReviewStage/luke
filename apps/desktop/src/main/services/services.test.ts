@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { setImmediate as immediate } from "node:timers/promises";
+import { it } from "@effect/vitest";
 import { runModeFor } from "@sidecar/host";
 import { HostAssemblyTag, hostStandingLayer, layersInOrder } from "@sidecar/host/effect";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
@@ -193,16 +194,16 @@ test("a close before any start resolves, and a second close resolves too", async
   await built.close();
 });
 
-test("the host's assembly stands its server up before any composer starts", async (t) => {
-  const stateRoot = await temporaryDirectory(t);
-  const stood = await Effect.runPromise(
-    Effect.provide(
+it.effect("the host's assembly stands its server up before any composer starts", (t) =>
+  Effect.gen(function* () {
+    const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
+    const stood = yield* Effect.provide(
       Effect.map(HostAssemblyTag, (assembly) => assembly.startOrder.length > 0),
       hostAssemblyLayerFor({ config: fixtureConfig(stateRoot), cipher: CIPHER }),
-    ),
-  );
-  assert.equal(stood, true);
-});
+    );
+    assert.equal(stood, true);
+  }),
+);
 
 test("the host stands and drains leaving no handle, and a second close is not a second drain", async (t) => {
   const stateRoot = await temporaryDirectory(t);
@@ -221,64 +222,66 @@ test("the host stands and drains leaving no handle, and a second close is not a 
   assert.equal(reports.length, stoodUp + 1);
 });
 
-test("the updater's timers are handles the stop takes back, and a restart tears down first", async (t) => {
-  const stateRoot = await temporaryDirectory(t);
-  const order: string[] = [];
-  let events: UpdaterEngineEvents | undefined;
-  const engine: UpdaterEngine = {
-    wire: (wired) => {
-      events = wired;
-    },
-    checkForUpdates: async () => undefined,
-    quitAndInstall: () => order.push("install"),
-    clearCachedUpdate: async () => undefined,
-  };
-  const config = {
-    ...fixtureConfig(stateRoot),
-    runMode: runModeFor({ capture: false, fixture: false }),
-  };
-  const state = new AppStateStore(initialAppState(config, true), Context.empty());
-  const snapshots: string[] = [];
-  const watching = Effect.runSync(
-    Effect.forkDetach(
-      Stream.runForEach(state.changes, (held) =>
-        Effect.sync(() => snapshots.push(held.update.status)),
-      ),
-    ),
-  );
-  const quit = desktopQuit();
-  quit.closesThrough(async () => {
-    order.push("teardown");
-  });
-  const runtime = ManagedRuntime.make(
-    Layer.effect(
-      UpdatesTag,
-      createUpdateServiceHost({
-        config,
-        recordProductEvent: () => undefined,
-        engine,
-        beforeRestart: quit.teardown,
-        state,
-      }),
-    ),
-  );
-  const updates = await runtime.runPromise(UpdatesTag);
-  updates.start();
-  assert.ok(events, "the engine was never wired");
-  events.onDownloaded("9.9.9");
-  updates.install();
-  await immediate();
-  await immediate();
-  // The restart into a downloaded build swaps this executable, so everything
-  // owed is given back before Squirrel is let anywhere near it — and given
-  // back first, so the installer's own quit is not the one held open.
-  assert.deepEqual(order, ["teardown", "install"]);
-  assert.ok(snapshots.length > 0, "no update state ever reached the windows");
-  // The scope's close is the stop, and a second one is not a second stop.
-  await runtime.dispose();
-  await runtime.dispose();
-  await Effect.runPromise(Fiber.interrupt(watching));
-});
+it.effect(
+  "the updater's timers are handles the stop takes back, and a restart tears down first",
+  (t) =>
+    Effect.gen(function* () {
+      const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
+      const order: string[] = [];
+      let events: UpdaterEngineEvents | undefined;
+      const engine: UpdaterEngine = {
+        wire: (wired) => {
+          events = wired;
+        },
+        checkForUpdates: async () => undefined,
+        quitAndInstall: () => order.push("install"),
+        clearCachedUpdate: async () => undefined,
+      };
+      const config = {
+        ...fixtureConfig(stateRoot),
+        runMode: runModeFor({ capture: false, fixture: false }),
+      };
+      const state = new AppStateStore(initialAppState(config, true), Context.empty());
+      const snapshots: string[] = [];
+      const watching = yield* Effect.forkChild(
+        Stream.runForEach(state.changes, (held) =>
+          Effect.sync(() => snapshots.push(held.update.status)),
+        ),
+      );
+      const quit = desktopQuit();
+      quit.closesThrough(async () => {
+        order.push("teardown");
+      });
+      const runtime = ManagedRuntime.make(
+        Layer.effect(
+          UpdatesTag,
+          createUpdateServiceHost({
+            config,
+            recordProductEvent: () => undefined,
+            engine,
+            beforeRestart: quit.teardown,
+            state,
+          }),
+        ),
+      );
+      const updates = yield* Effect.promise(() => runtime.runPromise(UpdatesTag));
+      updates.start();
+      assert.ok(events, "the engine was never wired");
+      events.onDownloaded("9.9.9");
+      updates.install();
+      yield* Effect.promise(immediate);
+      yield* Effect.promise(immediate);
+      // The restart into a downloaded build swaps this executable, so everything
+      // owed is given back before Squirrel is let anywhere near it — and given
+      // back first, so the installer's own quit is not the one held open.
+      assert.deepEqual(order, ["teardown", "install"]);
+      assert.ok(snapshots.length > 0, "no update state ever reached the windows");
+      // The scope's close is the stop, and a second one is not a second stop.
+      yield* Effect.promise(() => runtime.dispose());
+      yield* Effect.promise(() => runtime.dispose());
+      yield* Fiber.interrupt(watching);
+    }),
+);
 
 test("a launch suspended on one of its waits opens nothing once a quit has been asked for", async () => {
   // The invariant, in the shape the composition wires: the signal a start

@@ -5,6 +5,7 @@ import { describe, it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { Effect, Layer, type Path, Result } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 import { parsePersistedSettingsEither, SettingsParseRefusal } from "../settings-store.js";
 import { readSettingsFileText, writeSettingsFileAtomic } from "./settings-store-io.js";
 
@@ -14,56 +15,57 @@ const SETTINGS_FILE_MODE = 0o600;
 
 const withDirectory = <A, E>(
   run: (directory: string) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
-): Promise<A> =>
+): Effect.Effect<A, E | PlatformError> =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped();
     return yield* run(directory);
-  }).pipe(
-    Effect.scoped,
-    Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
-    Effect.runPromise,
-  );
+  }).pipe(Effect.scoped, Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)));
 
 describe("readSettingsFileText", () => {
-  it("answers nothing for a directory with no settings file yet", () =>
+  it.effect("answers nothing for a directory with no settings file yet", () =>
     withDirectory((directory) =>
       Effect.gen(function* () {
         const text = yield* readSettingsFileText(directory);
         assert.equal(text, undefined);
       }),
-    ));
+    ),
+  );
 
-  it("answers the file's own bytes once one has been written", () =>
+  it.effect("answers the file's own bytes once one has been written", () =>
     withDirectory((directory) =>
       Effect.gen(function* () {
         yield* writeSettingsFileAtomic(directory, '{"version":2}\n');
         const text = yield* readSettingsFileText(directory);
         assert.equal(text, '{"version":2}\n');
       }),
-    ));
+    ),
+  );
 });
 
 describe("writeSettingsFileAtomic", () => {
-  it("leaves only the settings file behind, at the owner-only mode, holding the latest write", () =>
-    withDirectory((directory) =>
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        yield* writeSettingsFileAtomic(directory, '{"version":2}\n');
-        yield* writeSettingsFileAtomic(directory, '{"version":3}\n');
+  it.effect(
+    "leaves only the settings file behind, at the owner-only mode, holding the latest write",
+    () =>
+      withDirectory((directory) =>
+        Effect.gen(function* () {
+          const fileSystem = yield* FileSystem.FileSystem;
+          yield* writeSettingsFileAtomic(directory, '{"version":2}\n');
+          yield* writeSettingsFileAtomic(directory, '{"version":3}\n');
 
-        const entries = yield* fileSystem.readDirectory(directory);
-        assert.deepEqual([...entries].sort(), [SETTINGS_FILE_NAME]);
-        assert.equal(
-          yield* fileSystem.readFileString(path.join(directory, SETTINGS_FILE_NAME)),
-          '{"version":3}\n',
-        );
+          const entries = yield* fileSystem.readDirectory(directory);
+          assert.deepEqual([...entries].sort(), [SETTINGS_FILE_NAME]);
+          assert.equal(
+            yield* fileSystem.readFileString(path.join(directory, SETTINGS_FILE_NAME)),
+            '{"version":3}\n',
+          );
 
-        const info = yield* fileSystem.stat(path.join(directory, SETTINGS_FILE_NAME));
-        assert.equal(Number(info.mode) & 0o777, SETTINGS_FILE_MODE);
-      }),
-    ));
+          const info = yield* fileSystem.stat(path.join(directory, SETTINGS_FILE_NAME));
+          assert.equal(Number(info.mode) & 0o777, SETTINGS_FILE_MODE);
+        }),
+      ),
+  );
 
-  it("restates the mode of a temporary file an earlier write left at rest", () =>
+  it.effect("restates the mode of a temporary file an earlier write left at rest", () =>
     withDirectory((directory) =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -83,7 +85,8 @@ describe("writeSettingsFileAtomic", () => {
         const info = yield* fileSystem.stat(path.join(directory, SETTINGS_FILE_NAME));
         assert.equal(Number(info.mode) & 0o777, SETTINGS_FILE_MODE);
       }),
-    ));
+    ),
+  );
 });
 
 describe("parsePersistedSettingsEither", () => {

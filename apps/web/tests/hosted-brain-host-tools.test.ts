@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   maximumMemorySearchResults,
   NOTEBOOK_MEMORY_TOOL,
@@ -6,7 +7,7 @@ import {
 } from "@sidecar/memory";
 import { Effect, Redacted, Result } from "effect";
 import type { ToolContext as EveToolContext } from "eve/tools";
-import { afterAll, test } from "vitest";
+import { afterAll } from "vitest";
 import {
   ACTION_KIND,
   ACTION_OUTPUT_STATUS,
@@ -175,10 +176,10 @@ function call(
     hostedToolDeclarations(turn.trigger, LOUD).some((declared) => declared.name === name),
     `${name} is offered`,
   );
-  return Effect.runPromise(runHostedTool(name, input, context, seams, turn));
+  return runHostedTool(name, input, context, seams, turn);
 }
 
-test("an ask is offered the catalog under the hosted policy, an observation the same set plus announce and less the message send", () => {
+it("an ask is offered the catalog under the hosted policy, an observation the same set plus announce and less the message send", () => {
   const ask = hostedToolDeclarations(ASK.trigger, LOUD).map((declared) => declared.name);
   const observation = hostedToolDeclarations(OBSERVATION.trigger, LOUD).map(
     (declared) => declared.name,
@@ -220,32 +221,34 @@ test("an ask is offered the catalog under the hosted policy, an observation the 
   );
 });
 
-test("an observation turn's call of the message send is refused as no tool of its own, before admission or the carrier", async () => {
-  const { seams, executed } = fakes();
-  assert.equal(
-    hostedToolDeclarations(OBSERVATION.trigger, LOUD).some(
-      (declared) => declared.name === ACTION_TOOL.SEND_SESSION_MESSAGE,
-    ),
-    false,
-  );
-  const answer = await Effect.runPromise(
-    runHostedTool(
-      ACTION_TOOL.SEND_SESSION_MESSAGE,
-      {
-        provider_id: "conductor",
-        provider_session_id: SESSION_UUID,
-        text: "the developer said so",
-      },
-      eveContext(),
-      seams,
-      OBSERVATION,
-    ),
-  );
-  assert.deepEqual(answer, { status: "rejected", reason: ACTION_REFUSAL.NO_TOOL });
-  assert.deepEqual(executed, []);
-});
+it.effect(
+  "an observation turn's call of the message send is refused as no tool of its own, before admission or the carrier",
+  () =>
+    Effect.gen(function* () {
+      const { seams, executed } = fakes();
+      assert.equal(
+        hostedToolDeclarations(OBSERVATION.trigger, LOUD).some(
+          (declared) => declared.name === ACTION_TOOL.SEND_SESSION_MESSAGE,
+        ),
+        false,
+      );
+      const answer = yield* runHostedTool(
+        ACTION_TOOL.SEND_SESSION_MESSAGE,
+        {
+          provider_id: "conductor",
+          provider_session_id: SESSION_UUID,
+          text: "the developer said so",
+        },
+        eveContext(),
+        seams,
+        OBSERVATION,
+      );
+      assert.deepEqual(answer, { status: "rejected", reason: ACTION_REFUSAL.NO_TOOL });
+      assert.deepEqual(executed, []);
+    }),
+);
 
-test("a quiet account's observation turn is offered the same set less announce; an ask's set does not change", () => {
+it("a quiet account's observation turn is offered the same set less announce; an ask's set does not change", () => {
   const observation = hostedToolDeclarations(OBSERVATION.trigger, LOUD).map(
     (declared) => declared.name,
   );
@@ -262,374 +265,434 @@ test("a quiet account's observation turn is offered the same set less announce; 
   );
 });
 
-test("a session message is admitted against the stored roster and carried with the account's key; no key, no carry", async () => {
-  const withKey = fakes();
-  const carried = await call(withKey.seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
-    provider_id: "conductor",
-    provider_session_id: SESSION_UUID,
-    text: "please continue",
-  });
-  assert.equal(carried.status, ACTION_OUTPUT_STATUS.ACCEPTED);
-  assert.deepEqual(withKey.executed, [
-    {
-      kind: "message",
+it.effect(
+  "a session message is admitted against the stored roster and carried with the account's key; no key, no carry",
+  () =>
+    Effect.gen(function* () {
+      const withKey = fakes();
+      const carried = yield* call(withKey.seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
+        provider_id: "conductor",
+        provider_session_id: SESSION_UUID,
+        text: "please continue",
+      });
+      assert.equal(carried.status, ACTION_OUTPUT_STATUS.ACCEPTED);
+      assert.deepEqual(withKey.executed, [
+        {
+          kind: "message",
+          provider_id: "conductor",
+          provider_session_id: SESSION_UUID,
+          text: "please continue",
+        },
+      ]);
+
+      const unobserved = yield* call(withKey.seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
+        provider_id: "conductor",
+        provider_session_id: OTHER_UUID,
+        text: "hello",
+      });
+      assert.equal(unobserved.status, ACTION_OUTPUT_STATUS.REFUSED);
+      assert.equal(withKey.executed.length, 1);
+
+      const noKey = fakes({});
+      const refused = yield* call(noKey.seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
+        provider_id: "conductor",
+        provider_session_id: SESSION_UUID,
+        text: "please continue",
+      });
+      assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
+      assert.deepEqual(noKey.executed, []);
+    }),
+);
+
+it.effect("a created workspace keeps the created session identity in its action envelope", () =>
+  Effect.gen(function* () {
+    const roster = () =>
+      Effect.succeed(
+        hostedRosterFrom(
+          {
+            version: 1,
+            providers: [
+              {
+                providerId: "conductor",
+                keyFingerprint: "f",
+                observations: [observation(SESSION_UUID)],
+                projects: [
+                  {
+                    providerProjectId: "project-1",
+                    repository: "repo",
+                    taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+                  },
+                ],
+              },
+            ],
+          },
+          NOW,
+        ),
+      );
+    const carrier = hostedActionCarrier({
+      roster,
+      defaults: () => Effect.succeed({}),
+      apiKey: () => Effect.succeed(Redacted.make("conductor-key")),
+      execute: () =>
+        Effect.succeed({
+          result: ACTION_RESULT_STATUS.ACCEPTED,
+          providerSessionId: "workspace-created",
+        }),
+    });
+    const seams: HostedToolSeams = {
+      conversation: { userId: "user-a", conversationId: "c-1" },
+      roster,
+      carrier,
+      transcripts: {
+        whole: () =>
+          Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
+      },
+      notebook: unsearchedNotebook,
+      children: undefined,
+      workspace: {
+        read: () => Effect.succeed(Result.fail("not read in these tests")),
+        write: () => Effect.succeed(Result.fail("not written in these tests")),
+        append: () => Effect.succeed(Result.fail("not appended in these tests")),
+        listNotes: () => Effect.succeed([]),
+        loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
+      },
+      now: () => NOW,
+    };
+
+    const created = yield* call(seams, ASK, ACTION_TOOL.CREATE_WORKSPACE, {
       provider_id: "conductor",
-      provider_session_id: SESSION_UUID,
-      text: "please continue",
-    },
-  ]);
+      project_id: "project-1",
+      name: "Checkout",
+    });
 
-  const unobserved = await call(withKey.seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
-    provider_id: "conductor",
-    provider_session_id: OTHER_UUID,
-    text: "hello",
-  });
-  assert.equal(unobserved.status, ACTION_OUTPUT_STATUS.REFUSED);
-  assert.equal(withKey.executed.length, 1);
+    assert.deepEqual(created, {
+      status: ACTION_OUTPUT_STATUS.ACCEPTED,
+      target: { providerId: "conductor" },
+      createdSession: { providerId: "conductor", providerSessionId: "workspace-created" },
+    });
+  }),
+);
 
-  const noKey = fakes({});
-  const refused = await call(noKey.seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
-    provider_id: "conductor",
-    provider_session_id: SESSION_UUID,
-    text: "please continue",
-  });
-  assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
-  assert.deepEqual(noKey.executed, []);
-});
-
-test("a created workspace keeps the created session identity in its action envelope", async () => {
-  const roster = () =>
-    Effect.succeed(
-      hostedRosterFrom(
-        {
-          version: 1,
-          providers: [
+it.effect(
+  "the carrier hands the stored agent pairing to a creation and a spawn, and to nothing else",
+  () =>
+    Effect.gen(function* () {
+      const executed: {
+        kind: string;
+        fields: WireRecord;
+        agentSelection?: WorkspaceAgentSelection;
+      }[] = [];
+      const roster = () =>
+        Effect.succeed(
+          hostedRosterFrom(
             {
-              providerId: "conductor",
-              keyFingerprint: "f",
-              observations: [observation(SESSION_UUID)],
-              projects: [
+              version: 1,
+              providers: [
                 {
-                  providerProjectId: "project-1",
-                  repository: "repo",
-                  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+                  providerId: "conductor",
+                  keyFingerprint: "f",
+                  observations: [observation(SESSION_UUID)],
+                  projects: [
+                    {
+                      providerProjectId: "project-1",
+                      repository: "repo",
+                      taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+                    },
+                  ],
                 },
               ],
             },
-          ],
+            NOW,
+          ),
+        );
+      const stored: WorkspaceAgentSelection = {
+        agent: "claude",
+        model: "fable-5-1",
+        effort: "high",
+      };
+      const carrier = hostedActionCarrier({
+        roster,
+        defaults: () => Effect.succeed({ agentDefaults: { conductor: stored } }),
+        apiKey: () => Effect.succeed(Redacted.make("conductor-key")),
+        execute: (input) =>
+          Effect.sync(() => {
+            executed.push({
+              kind: input.kind,
+              fields: input.fields,
+              ...(input.agentSelection === undefined
+                ? undefined
+                : { agentSelection: input.agentSelection }),
+            });
+            return {
+              result: ACTION_RESULT_STATUS.ACCEPTED,
+              providerSessionId: "workspace-created",
+            };
+          }),
+      });
+      const seams: HostedToolSeams = {
+        conversation: { userId: "user-a", conversationId: "c-1" },
+        roster,
+        carrier,
+        transcripts: {
+          whole: () =>
+            Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
         },
-        NOW,
-      ),
-    );
-  const carrier = hostedActionCarrier({
-    roster,
-    defaults: () => Effect.succeed({}),
-    apiKey: () => Effect.succeed(Redacted.make("conductor-key")),
-    execute: () =>
-      Effect.succeed({
-        result: ACTION_RESULT_STATUS.ACCEPTED,
-        providerSessionId: "workspace-created",
-      }),
-  });
-  const seams: HostedToolSeams = {
-    conversation: { userId: "user-a", conversationId: "c-1" },
-    roster,
-    carrier,
-    transcripts: {
-      whole: () =>
-        Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
-    },
-    notebook: unsearchedNotebook,
-    children: undefined,
-    workspace: {
-      read: () => Effect.succeed(Result.fail("not read in these tests")),
-      write: () => Effect.succeed(Result.fail("not written in these tests")),
-      append: () => Effect.succeed(Result.fail("not appended in these tests")),
-      listNotes: () => Effect.succeed([]),
-      loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
-    },
-    now: () => NOW,
-  };
+        notebook: unsearchedNotebook,
+        children: undefined,
+        workspace: {
+          read: () => Effect.succeed(Result.fail("not read in these tests")),
+          write: () => Effect.succeed(Result.fail("not written in these tests")),
+          append: () => Effect.succeed(Result.fail("not appended in these tests")),
+          listNotes: () => Effect.succeed([]),
+          loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
+        },
+        now: () => NOW,
+      };
 
-  const created = await call(seams, ASK, ACTION_TOOL.CREATE_WORKSPACE, {
-    provider_id: "conductor",
-    project_id: "project-1",
-    name: "Checkout",
-  });
+      // The call names a model, an effort, and an agent of its own, as the
+      // production record showed the brain doing on every creation. None is a
+      // field the tool declares, so none reaches admission or the execution.
+      const created = yield* call(seams, ASK, ACTION_TOOL.CREATE_WORKSPACE, {
+        provider_id: "conductor",
+        project_id: "project-1",
+        name: "Checkout",
+        agent: "codex",
+        model: "gpt-5.6-terra",
+        effort: "high",
+      });
+      assert.equal(created.status, ACTION_OUTPUT_STATUS.ACCEPTED);
+      const messaged = yield* call(seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
+        provider_id: "conductor",
+        provider_session_id: SESSION_UUID,
+        text: "hello",
+      });
+      assert.equal(messaged.status, ACTION_OUTPUT_STATUS.ACCEPTED);
 
-  assert.deepEqual(created, {
-    status: ACTION_OUTPUT_STATUS.ACCEPTED,
-    target: { providerId: "conductor" },
-    createdSession: { providerId: "conductor", providerSessionId: "workspace-created" },
-  });
-});
-
-test("the carrier hands the stored agent pairing to a creation and a spawn, and to nothing else", async () => {
-  const executed: {
-    kind: string;
-    fields: WireRecord;
-    agentSelection?: WorkspaceAgentSelection;
-  }[] = [];
-  const roster = () =>
-    Effect.succeed(
-      hostedRosterFrom(
+      // The pairing is read for the creation alone and rides it, since the fields
+      // the execution admits again carry no model to outrank it.
+      assert.deepEqual(executed, [
         {
-          version: 1,
-          providers: [
-            {
-              providerId: "conductor",
-              keyFingerprint: "f",
-              observations: [observation(SESSION_UUID)],
-              projects: [
-                {
-                  providerProjectId: "project-1",
-                  repository: "repo",
-                  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
-                },
-              ],
-            },
-          ],
+          kind: ACTION_KIND.CREATE_WORKSPACE,
+          fields: { provider_id: "conductor", project_id: "project-1", name: "Checkout" },
+          agentSelection: stored,
         },
-        NOW,
-      ),
+        {
+          kind: ACTION_KIND.MESSAGE,
+          fields: { provider_id: "conductor", provider_session_id: SESSION_UUID, text: "hello" },
+        },
+      ]);
+    }),
+);
+
+it.effect(
+  "read_transcript answers for a session the roster holds and refuses one it does not",
+  () =>
+    Effect.gen(function* () {
+      const { seams } = fakes();
+      const held = yield* call(seams, ASK, BRAIN_TOOL.READ_TRANSCRIPT, {
+        provider_id: "conductor",
+        provider_session_id: SESSION_UUID,
+      });
+      assert.equal(held.status, ACTION_RESULT_STATUS.ACCEPTED);
+      const unheld = yield* call(seams, ASK, BRAIN_TOOL.READ_TRANSCRIPT, {
+        provider_id: "conductor",
+        provider_session_id: OTHER_UUID,
+      });
+      assert.equal(unheld.status, ACTION_RESULT_STATUS.REJECTED);
+    }),
+);
+
+it.effect(
+  "memory_search and memory_get dispatch through the memory provider to the notebook access, the arguments trimmed and bounded on the way",
+  () =>
+    Effect.gen(function* () {
+      const asks: WireRecord[] = [];
+      const notebook: NotebookMemoryAccess = {
+        search: (ask) =>
+          Effect.sync(() => {
+            asks.push({ query: ask.query, max_results: ask.maxResults ?? null });
+            return { status: ACTION_RESULT_STATUS.ACCEPTED, mode: "keyword", results: [] };
+          }),
+        get: (ask) =>
+          Effect.sync(() => {
+            asks.push({ path: ask.path, from: ask.from ?? null, lines: ask.lines ?? null });
+            return { status: ACTION_RESULT_STATUS.ACCEPTED, path: ask.path, text: "" };
+          }),
+      };
+      const seams: HostedToolSeams = { ...fakes().seams, notebook };
+      const searched = yield* call(seams, ASK, NOTEBOOK_MEMORY_TOOL.SEARCH, {
+        query: "  notch   decision ",
+        max_results: 500,
+      });
+      assert.equal(searched.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal(searched.mode, "keyword");
+      const read = yield* call(seams, OBSERVATION, NOTEBOOK_MEMORY_TOOL.GET, {
+        path: "MEMORY.md",
+        from: 3,
+        lines: 2,
+      });
+      assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.deepEqual(asks, [
+        { query: "notch decision", max_results: maximumMemorySearchResults },
+        { path: "MEMORY.md", from: 3, lines: 2 },
+      ]);
+
+      const empty = yield* call(seams, ASK, NOTEBOOK_MEMORY_TOOL.SEARCH, { query: "   " });
+      assert.equal(empty.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(asks.length, 2, "an empty query never reaches the notebook");
+    }),
+);
+
+it.effect(
+  "announce answers accepted for words and refuses an empty briefing; it is offered only on an observation turn",
+  () =>
+    Effect.gen(function* () {
+      const { seams } = fakes();
+      const offered = yield* call(seams, OBSERVATION, BRAIN_TOOL.ANNOUNCE, {
+        briefing: "One agent finished.",
+      });
+      assert.equal(offered.status, ACTION_RESULT_STATUS.ACCEPTED);
+      const empty = yield* call(seams, OBSERVATION, BRAIN_TOOL.ANNOUNCE, { briefing: "" });
+      assert.equal(empty.status, ACTION_RESULT_STATUS.REJECTED);
+      const withheld = yield* runHostedTool(
+        BRAIN_TOOL.ANNOUNCE,
+        { briefing: "x" },
+        eveContext(),
+        seams,
+        ASK,
+      );
+      assert.equal(withheld.status, ACTION_RESULT_STATUS.REJECTED);
+    }),
+);
+
+it.effect("a call whose turn is over is refused before anything runs", () =>
+  Effect.gen(function* () {
+    const { seams, executed } = fakes();
+    const answer = yield* call(
+      seams,
+      ASK,
+      ACTION_TOOL.SEND_SESSION_MESSAGE,
+      { provider_id: "conductor", provider_session_id: SESSION_UUID, text: "too late" },
+      eveContext(true),
     );
-  const stored: WorkspaceAgentSelection = { agent: "claude", model: "fable-5-1", effort: "high" };
-  const carrier = hostedActionCarrier({
-    roster,
-    defaults: () => Effect.succeed({ agentDefaults: { conductor: stored } }),
-    apiKey: () => Effect.succeed(Redacted.make("conductor-key")),
-    execute: (input) =>
-      Effect.sync(() => {
-        executed.push({
-          kind: input.kind,
-          fields: input.fields,
-          ...(input.agentSelection === undefined
-            ? undefined
-            : { agentSelection: input.agentSelection }),
+    assert.equal(answer.status, ACTION_OUTPUT_STATUS.REFUSED);
+    assert.deepEqual(executed, []);
+  }),
+);
+
+it.effect(
+  "a briefing is offered as an event on the turn's own journal row, and refused where no journal stands",
+  () =>
+    Effect.gen(function* () {
+      const userId = yield* Effect.promise(() => database.createUser());
+      const conversationId = yield* Effect.promise(() =>
+        insertConversation(database.run, {
+          userId,
+          kind: CONVERSATION_KIND.OBSERVED,
+        }),
+      );
+      const target: ConversationTarget = { userId, conversationId };
+      const writer = yield* Effect.promise(() =>
+        database.run(
+          storeWriter({
+            tools: CATALOG_TOOL_SET,
+          }),
+        ),
+      );
+      const turnId = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
+
+      assert.equal(
+        yield* Effect.promise(() =>
+          database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
+        ),
+        false,
+      );
+
+      const stamp = { conversationId: sessionKey(conversationId), turnId };
+      yield* Effect.promise(() =>
+        database.run(
+          writer.consume(target, {
+            ...stamp,
+            sequence: 1,
+            kind: BRAIN_RUN_EVENT.TURN_STARTED,
+            origin: BRAIN_TURN_ORIGIN.OBSERVATION,
+            trigger: BRAIN_TURN_TRIGGER.ROSTER,
+            at: NOW,
+          }),
+        ),
+      );
+      yield* Effect.promise(() =>
+        database.run(
+          writer.consume(target, {
+            ...stamp,
+            sequence: 2,
+            kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
+            callId: "call-a",
+            name: BRAIN_TOOL.ANNOUNCE,
+            input: { briefing: "One agent finished." },
+          }),
+        ),
+      );
+      assert.equal(
+        yield* Effect.promise(() =>
+          database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
+        ),
+        true,
+      );
+      const recorded = yield* Effect.promise(() =>
+        readEventsByConversation(database.run, conversationId),
+      );
+      assert.deepEqual(
+        recorded.map((event) => event.kind),
+        [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
+      );
+    }),
+);
+
+it.effect(
+  "a spawn is offered to an ask and an observation and reaches the children access; a child's task is refused at the policy",
+  () =>
+    Effect.gen(function* () {
+      const spawns: Parameters<BrainChildAccess["spawn"]>[0][] = [];
+      const children: BrainChildAccess = {
+        sessionKey: sessionKey("c-1"),
+        spawn: (ask) =>
+          Effect.sync(() => {
+            spawns.push(ask);
+            return {
+              accepted: true,
+              receipt: { childId: "child-1", childSessionKey: sessionKey("child-1") },
+            };
+          }),
+        list: () => Effect.succeed([]),
+        cancel: () => Effect.succeed(undefined),
+        conversations: () => Effect.succeed([]),
+        lines: () => Effect.succeed(undefined),
+      };
+      for (const turn of [ASK, OBSERVATION]) {
+        const seams: HostedToolSeams = { ...fakes().seams, children };
+        const answered = yield* call(seams, turn, BRAIN_TOOL.SESSIONS_SPAWN, {
+          task: "fixture task",
         });
-        return { result: ACTION_RESULT_STATUS.ACCEPTED, providerSessionId: "workspace-created" };
-      }),
-  });
-  const seams: HostedToolSeams = {
-    conversation: { userId: "user-a", conversationId: "c-1" },
-    roster,
-    carrier,
-    transcripts: {
-      whole: () =>
-        Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
-    },
-    notebook: unsearchedNotebook,
-    children: undefined,
-    workspace: {
-      read: () => Effect.succeed(Result.fail("not read in these tests")),
-      write: () => Effect.succeed(Result.fail("not written in these tests")),
-      append: () => Effect.succeed(Result.fail("not appended in these tests")),
-      listNotes: () => Effect.succeed([]),
-      loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
-    },
-    now: () => NOW,
-  };
-
-  // The call names a model, an effort, and an agent of its own, as the
-  // production record showed the brain doing on every creation. None is a
-  // field the tool declares, so none reaches admission or the execution.
-  const created = await call(seams, ASK, ACTION_TOOL.CREATE_WORKSPACE, {
-    provider_id: "conductor",
-    project_id: "project-1",
-    name: "Checkout",
-    agent: "codex",
-    model: "gpt-5.6-terra",
-    effort: "high",
-  });
-  assert.equal(created.status, ACTION_OUTPUT_STATUS.ACCEPTED);
-  const messaged = await call(seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
-    provider_id: "conductor",
-    provider_session_id: SESSION_UUID,
-    text: "hello",
-  });
-  assert.equal(messaged.status, ACTION_OUTPUT_STATUS.ACCEPTED);
-
-  // The pairing is read for the creation alone and rides it, since the fields
-  // the execution admits again carry no model to outrank it.
-  assert.deepEqual(executed, [
-    {
-      kind: ACTION_KIND.CREATE_WORKSPACE,
-      fields: { provider_id: "conductor", project_id: "project-1", name: "Checkout" },
-      agentSelection: stored,
-    },
-    {
-      kind: ACTION_KIND.MESSAGE,
-      fields: { provider_id: "conductor", provider_session_id: SESSION_UUID, text: "hello" },
-    },
-  ]);
-});
-
-test("read_transcript answers for a session the roster holds and refuses one it does not", async () => {
-  const { seams } = fakes();
-  const held = await call(seams, ASK, BRAIN_TOOL.READ_TRANSCRIPT, {
-    provider_id: "conductor",
-    provider_session_id: SESSION_UUID,
-  });
-  assert.equal(held.status, ACTION_RESULT_STATUS.ACCEPTED);
-  const unheld = await call(seams, ASK, BRAIN_TOOL.READ_TRANSCRIPT, {
-    provider_id: "conductor",
-    provider_session_id: OTHER_UUID,
-  });
-  assert.equal(unheld.status, ACTION_RESULT_STATUS.REJECTED);
-});
-
-test("memory_search and memory_get dispatch through the memory provider to the notebook access, the arguments trimmed and bounded on the way", async () => {
-  const asks: WireRecord[] = [];
-  const notebook: NotebookMemoryAccess = {
-    search: (ask) =>
-      Effect.sync(() => {
-        asks.push({ query: ask.query, max_results: ask.maxResults ?? null });
-        return { status: ACTION_RESULT_STATUS.ACCEPTED, mode: "keyword", results: [] };
-      }),
-    get: (ask) =>
-      Effect.sync(() => {
-        asks.push({ path: ask.path, from: ask.from ?? null, lines: ask.lines ?? null });
-        return { status: ACTION_RESULT_STATUS.ACCEPTED, path: ask.path, text: "" };
-      }),
-  };
-  const seams: HostedToolSeams = { ...fakes().seams, notebook };
-  const searched = await call(seams, ASK, NOTEBOOK_MEMORY_TOOL.SEARCH, {
-    query: "  notch   decision ",
-    max_results: 500,
-  });
-  assert.equal(searched.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.equal(searched.mode, "keyword");
-  const read = await call(seams, OBSERVATION, NOTEBOOK_MEMORY_TOOL.GET, {
-    path: "MEMORY.md",
-    from: 3,
-    lines: 2,
-  });
-  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.deepEqual(asks, [
-    { query: "notch decision", max_results: maximumMemorySearchResults },
-    { path: "MEMORY.md", from: 3, lines: 2 },
-  ]);
-
-  const empty = await call(seams, ASK, NOTEBOOK_MEMORY_TOOL.SEARCH, { query: "   " });
-  assert.equal(empty.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(asks.length, 2, "an empty query never reaches the notebook");
-});
-
-test("announce answers accepted for words and refuses an empty briefing; it is offered only on an observation turn", async () => {
-  const { seams } = fakes();
-  const offered = await call(seams, OBSERVATION, BRAIN_TOOL.ANNOUNCE, {
-    briefing: "One agent finished.",
-  });
-  assert.equal(offered.status, ACTION_RESULT_STATUS.ACCEPTED);
-  const empty = await call(seams, OBSERVATION, BRAIN_TOOL.ANNOUNCE, { briefing: "" });
-  assert.equal(empty.status, ACTION_RESULT_STATUS.REJECTED);
-  const withheld = await Effect.runPromise(
-    runHostedTool(BRAIN_TOOL.ANNOUNCE, { briefing: "x" }, eveContext(), seams, ASK),
-  );
-  assert.equal(withheld.status, ACTION_RESULT_STATUS.REJECTED);
-});
-
-test("a call whose turn is over is refused before anything runs", async () => {
-  const { seams, executed } = fakes();
-  const answer = await call(
-    seams,
-    ASK,
-    ACTION_TOOL.SEND_SESSION_MESSAGE,
-    { provider_id: "conductor", provider_session_id: SESSION_UUID, text: "too late" },
-    eveContext(true),
-  );
-  assert.equal(answer.status, ACTION_OUTPUT_STATUS.REFUSED);
-  assert.deepEqual(executed, []);
-});
-
-test("a briefing is offered as an event on the turn's own journal row, and refused where no journal stands", async () => {
-  const userId = await database.createUser();
-  const conversationId = await insertConversation(database.run, {
-    userId,
-    kind: CONVERSATION_KIND.OBSERVED,
-  });
-  const target: ConversationTarget = { userId, conversationId };
-  const writer = await database.run(
-    storeWriter({
-      tools: CATALOG_TOOL_SET,
+        assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED);
+        assert.equal(answered.child_id, "child-1");
+      }
+      assert.deepEqual(
+        spawns.map((ask) => ask.task),
+        ["fixture task", "fixture task"],
+      );
+      const childTask: HostedTurnStanding = {
+        trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+        turnId: "t-3",
+        runId: "t-3",
+      };
+      const refused = yield* runHostedTool(
+        BRAIN_TOOL.SESSIONS_SPAWN,
+        { task: "fixture task" },
+        eveContext(),
+        fakes().seams,
+        childTask,
+      );
+      assert.deepEqual(refused, { status: "rejected", reason: ACTION_REFUSAL.NO_TOOL });
     }),
-  );
-  const turnId = "6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b";
-
-  assert.equal(
-    await database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)),
-    false,
-  );
-
-  const stamp = { conversationId: sessionKey(conversationId), turnId };
-  await database.run(
-    writer.consume(target, {
-      ...stamp,
-      sequence: 1,
-      kind: BRAIN_RUN_EVENT.TURN_STARTED,
-      origin: BRAIN_TURN_ORIGIN.OBSERVATION,
-      trigger: BRAIN_TURN_TRIGGER.ROSTER,
-      at: NOW,
-    }),
-  );
-  await database.run(
-    writer.consume(target, {
-      ...stamp,
-      sequence: 2,
-      kind: BRAIN_RUN_EVENT.TOOL_CALL_STARTED,
-      callId: "call-a",
-      name: BRAIN_TOOL.ANNOUNCE,
-      input: { briefing: "One agent finished." },
-    }),
-  );
-  assert.equal(await database.run(offerBriefing({ writer, now: () => NOW }, target, turnId)), true);
-  const recorded = await readEventsByConversation(database.run, conversationId);
-  assert.deepEqual(
-    recorded.map((event) => event.kind),
-    [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
-  );
-});
-
-test("a spawn is offered to an ask and an observation and reaches the children access; a child's task is refused at the policy", async () => {
-  const spawns: Parameters<BrainChildAccess["spawn"]>[0][] = [];
-  const children: BrainChildAccess = {
-    sessionKey: sessionKey("c-1"),
-    spawn: (ask) =>
-      Effect.sync(() => {
-        spawns.push(ask);
-        return {
-          accepted: true,
-          receipt: { childId: "child-1", childSessionKey: sessionKey("child-1") },
-        };
-      }),
-    list: () => Effect.succeed([]),
-    cancel: () => Effect.succeed(undefined),
-    conversations: () => Effect.succeed([]),
-    lines: () => Effect.succeed(undefined),
-  };
-  for (const turn of [ASK, OBSERVATION]) {
-    const seams: HostedToolSeams = { ...fakes().seams, children };
-    const answered = await call(seams, turn, BRAIN_TOOL.SESSIONS_SPAWN, { task: "fixture task" });
-    assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED);
-    assert.equal(answered.child_id, "child-1");
-  }
-  assert.deepEqual(
-    spawns.map((ask) => ask.task),
-    ["fixture task", "fixture task"],
-  );
-  const childTask: HostedTurnStanding = {
-    trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
-    turnId: "t-3",
-    runId: "t-3",
-  };
-  const refused = await Effect.runPromise(
-    runHostedTool(
-      BRAIN_TOOL.SESSIONS_SPAWN,
-      { task: "fixture task" },
-      eveContext(),
-      fakes().seams,
-      childTask,
-    ),
-  );
-  assert.deepEqual(refused, { status: "rejected", reason: ACTION_REFUSAL.NO_TOOL });
-});
+);
