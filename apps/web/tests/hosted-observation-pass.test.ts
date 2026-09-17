@@ -470,6 +470,86 @@ test("a snapshot this build cannot open or read is replaced by the next whole pa
   }
 });
 
+test("a pass whose snapshot landed retires the observed conversations of the sessions its roster no longer lists, and no other pass does", async () => {
+  const landed = memoryObservationStore();
+  const outcome = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store: landed,
+      seams: { httpClient: api().layer, now: () => TEST_TIME },
+      now: TEST_TIME,
+    }),
+  );
+  assert.equal(outcome.complete, true);
+  assert.deepEqual(landed.retirements, [
+    {
+      userId: "user-1",
+      standing: [{ providerId: "conductor", sessionIds: ["session-one"] }],
+      now: TEST_TIME,
+    },
+  ]);
+
+  // Rate limited: no whole roster, so nothing is retired against it.
+  const limited = memoryObservationStore();
+  await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store: limited,
+      seams: {
+        httpClient: interceptedClient(api().layer, async (url) =>
+          new URL(url).pathname.endsWith("/status")
+            ? new Response("{}", { status: HTTP_STATUS.TOO_MANY_REQUESTS })
+            : undefined,
+        ),
+        now: () => TEST_TIME,
+      },
+      now: TEST_TIME,
+    }),
+  );
+  assert.deepEqual(limited.retirements, []);
+
+  // Superseded: another pass landed first, and its roster is the one the rows stand against.
+  const superseded = memoryObservationStore();
+  superseded.roster.advance = () => Effect.succeed(false);
+  const overtaken = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store: superseded,
+      seams: { httpClient: api().layer, now: () => TEST_TIME },
+      now: TEST_TIME,
+    }),
+  );
+  assert.equal(overtaken.complete, true);
+  assert.deepEqual(superseded.retirements, []);
+}, 15_000);
+
+test("a retire that fails leaves the pass complete, since the next pass retires the same rows", async () => {
+  const store = memoryObservationStore();
+  store.roster.retireDeparted = () =>
+    Effect.sync(() => {
+      throw new Error("disk full");
+    });
+  const outcome = await runWithoutDatabase(
+    observeAndSnapshot({
+      userId: "user-1",
+      rows: KEY_ROWS,
+      secret: SECRET,
+      store,
+      seams: { httpClient: api().layer, now: () => TEST_TIME },
+      now: TEST_TIME,
+    }),
+  );
+  assert.equal(outcome.complete, true);
+  assert.equal(outcome.observedAt, TEST_TIME);
+  assert.deepEqual(store.passes.get("user-1"), { attemptedAt: TEST_TIME, observedAt: TEST_TIME });
+});
+
 test("a store that cannot take the snapshot is a failed pass, never an unrecorded roster", async () => {
   const store = memoryObservationStore();
   store.roster.advance = () =>

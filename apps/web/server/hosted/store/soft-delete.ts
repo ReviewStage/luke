@@ -83,7 +83,7 @@ const stampChildren = SqlSchema.findAll({
 });
 
 /** Stamps every not-yet-stamped child of the given rows, level by level, and answers every id stamped. */
-const stampDescendants = /* @__PURE__ */ Effect.fn("stampDescendants")(function* (
+export const stampDescendants = /* @__PURE__ */ Effect.fn("stampDescendants")(function* (
   parents: readonly string[],
   deletedAt: Date,
 ): Effect.fn.Return<string[], ClearFailure, SqlClient.SqlClient> {

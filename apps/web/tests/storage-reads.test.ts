@@ -494,6 +494,32 @@ test("the purge takes a cleared conversation and everything under it once the wi
   assert.equal(await countConversations(standing), 1);
 });
 
+test("the purge takes a retired observed conversation on the same terms as a cleared one", async () => {
+  // In the same year of its own as the Clear purge above, a day further on, clear of the other tests' stamps.
+  const base = new Date("2020-06-01T00:00:00.000Z");
+  const userId = await database.createUser();
+  const session = { providerId: "conductor", providerSessionId: "s-purge-retired" };
+  const observed = await database.run(
+    database.store.directory.observed(userId, session, base.getTime()),
+  );
+  assert.ok(observed);
+  const retired = await database.run(
+    database.store.roster.retireDeparted(
+      userId,
+      [{ providerId: "conductor", sessionIds: [] }],
+      base.getTime(),
+    ),
+  );
+  assert.deepEqual(retired, [observed]);
+
+  const beforeWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS - 1);
+  assert.equal(await database.run(database.store.retention.purgeCleared(beforeWindow)), 0);
+  assert.equal(await countConversations(observed), 1);
+  const atWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS);
+  assert.equal(await database.run(database.store.retention.purgeCleared(atWindow)), 1);
+  assert.equal(await countConversations(observed), 0);
+});
+
 test("deleting the account takes cleared and standing conversations alike", async () => {
   const userId = await database.createUser();
   const { main } = await populateMain(userId);
