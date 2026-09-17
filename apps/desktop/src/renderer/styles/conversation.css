@@ -503,6 +503,49 @@
   font-size: 12px;
 }
 
+/* A transcript's loading turns: bubbles where the turns will stand, on the
+   Sessions list's terms — the shape of what is coming, only opacity moving,
+   in step across every bubble so the wait reads as one object, on the
+   `skeleton-pulse` loop sessions.css declares, and held on one frame by
+   `--loop-motion` like every animation with no end of its own. They take
+   the thread's own two sides and corners: a short ask on the right, a
+   longer answer on the left, the widths leaning on `--row-index` so the
+   rows read as an exchange rather than a repeated tile. One neutral ground
+   for both sides, since the sent bubble's colour would claim a speaker
+   nobody has read yet. The panel is as tall as what it holds, so the
+   bubbles are the room rather than standing in it, the way the list's
+   loading rows are. */
+.conversation-skeleton {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.conversation-skeleton-bubble {
+  flex: 0 0 auto;
+  max-width: min(82%, 58ch);
+  background: var(--raised-strong);
+  animation: skeleton-pulse 1500ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+/* One line of words, as a bubble draws it: the words' line and their inset. */
+.conversation-skeleton-bubble[data-speaker="you"] {
+  width: calc(30% + var(--row-index) * 6%);
+  height: 32px;
+  align-self: flex-end;
+  border-radius: 15px 15px 5px 15px;
+}
+
+/* Two lines, on the same measure. */
+.conversation-skeleton-bubble[data-speaker="luke"] {
+  width: calc(46% + var(--row-index) * 7%);
+  height: 49px;
+  border-radius: 15px 15px 15px 5px;
+}
+
 /* The Agents pages stand on the settings pages' terms rather than the
    thread's: the settings' own gap between a page's head and what it holds,
    so turning from the thread to the list, or from the Sessions tab to it,

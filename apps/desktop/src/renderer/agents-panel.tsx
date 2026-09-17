@@ -28,6 +28,7 @@ import {
   followsConversationTail,
   scrollMetrics,
 } from "./conversation-panel";
+import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import {
   CONVERSATION_SEARCH_SUBJECT,
   ConversationSearch,
@@ -116,6 +117,52 @@ function activityAt(row: ChildRead | AgentRead): number {
 
 const byLatestActivity = (a: ChildRead | AgentRead, b: ChildRead | AgentRead) =>
   activityAt(b) - activityAt(a);
+
+/**
+ * The placeholder turns a transcript page draws before its first read lands,
+ * each named by the `--row-index` it is drawn at and the side it stands on:
+ * a developer's ask, then the agent's longer answer, twice over, the shape
+ * an exchange usually has. The slot is the row's identity, because nothing
+ * else about a placeholder tells it from its neighbours.
+ */
+const LOADING_TURN_SLOTS = [
+  { slot: 1, speaker: CONVERSATION_ENTRY_SPEAKER.YOU },
+  { slot: 2, speaker: CONVERSATION_ENTRY_SPEAKER.LUKE },
+  { slot: 3, speaker: CONVERSATION_ENTRY_SPEAKER.YOU },
+  { slot: 4, speaker: CONVERSATION_ENTRY_SPEAKER.LUKE },
+] as const;
+
+/** What a reader is told of a transcript whose first read has not landed; the sighted read the bubbles. */
+const TRANSCRIPT_LOADING_LABEL = "Reading the transcript";
+
+/**
+ * Stands where the turns will, before the transcript's first read has
+ * landed: bubbles on the thread's own two sides, pulsing as the Sessions
+ * list's loading rows do, so what waits is the shape of what is coming and
+ * the same wait reads the same on every surface. A word of the thread's own
+ * would claim a fact nobody has checked, so the status line says it is
+ * reading rather than that nothing was said. The bubbles pulse on
+ * `--loop-motion`, so reduced motion and capture runs hold them still like
+ * every other endless loop.
+ */
+function TranscriptLoadingState(): React.JSX.Element {
+  return (
+    <div className="conversation-skeleton">
+      <span className="visually-hidden" role="status">
+        {TRANSCRIPT_LOADING_LABEL}
+      </span>
+      {LOADING_TURN_SLOTS.map(({ slot, speaker }) => (
+        <span
+          key={slot}
+          className="conversation-skeleton-bubble"
+          data-speaker={speaker}
+          aria-hidden="true"
+          style={cssCustomProperties({ "--row-index": slot })}
+        />
+      ))}
+    </div>
+  );
+}
 
 /** The row a child's transcript is opened from, named as the list names the child. */
 export function childTranscriptRow(child: ChildRead): TranscriptRow {
@@ -640,10 +687,8 @@ export function AgentTranscriptPanel({
               </div>
             ) : (
               // Nothing read yet says neither "nothing said" nor a thread: the
-              // room says it is still reading until the first read lands.
-              <div className="conversation-empty" role="status">
-                Loading…
-              </div>
+              // room holds the shape of one until the first read lands.
+              <TranscriptLoadingState />
             )}
           </div>
         </div>
