@@ -175,6 +175,130 @@ in for the missing job before the first release.
   and `PRIVACY.md` says each in as many words under "Briefing notifications" and
   the Apple line of "Who we send it to".
 
+## Testing
+
+Agents write most of this repository's tests, and a test written by reading
+the implementation back proves nothing. The mechanical half of this policy is
+the `testing` oxlint plugin under `tools/oxlint/testing/`, whose four rules
+are named where they apply; every other rule is a question a reviewer answers
+from the diff.
+
+### What gets a test
+
+Every behavior change lands in the same PR as the test that fails without
+it, and a bug fix starts red: the test is shown failing before the fix lands
+(the PR template's checkbox). Decide the layer by the first yes:
+
+1. A type or a lint rule states it: not a test.
+2. One module: a small test through its public export.
+3. Two modules: both real, a double only at a process boundary.
+4. A real database dialect or a child process: a medium test, localhost only.
+5. A Mac, an Electron window, or a live provider: `verify.sh` evidence, not
+   a test.
+
+| Size | May reach | Where |
+| --- | --- | --- |
+| Small (the default) | One process, `TestClock`, a temp dir it made, PGlite in process | Every `*.test.ts`; `./scripts/check.sh` |
+| Medium | A real Postgres on localhost, a spawned process, a loopback socket | `pnpm --filter @luke/web test:store`; the `liveClockTests` below |
+| Large | A Mac, a window, a provider's live API | `./scripts/verify.sh`, an offline eval; never `check.sh` |
+
+### Doubles and assertions
+
+A double is a test `Layer` on the subject's `Context.Tag`, and what is faked
+is a process boundary and nothing nearer: provider HTTP, Apple, the model,
+the OS, the clock. `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.fn`, and
+`vi.mocked` are refused by `testing/no-module-mocks` (`vi.stubEnv` stays
+legal). Assert what a caller observes, never a call count or private state.
+Reach for the shared builders before inline setup:
+`packages/host/src/testing/test-kernel.ts` for a host,
+`apps/web/tests/support/*` for a hosted store, the eve turns, and the voice
+fakes, `packages/wire/src/testing/*` for HTTP and cloud fakes and the JSON
+Schema golden, `packages/providers/src/testing/provider-contract.ts` for a
+provider, and `temporaryDirectory` from `@sidecar/runtime/testing` for a temp
+dir, never `mkdtemp` inline.
+
+### Effect
+
+A suite runs on `it.effect` and advances time with `TestClock.adjust`. A
+test body is not a runtime edge: `Effect.run*`, `Runtime.run*`, and
+`ManagedRuntime.make` in a test file are refused by `testing/no-runner`, and
+`setTimeout`, `setInterval`, a `new Promise` around a timer, `Effect.sleep`,
+and `it.live` by `testing/no-real-time`. LUKE-280 (#1684) moved the suites
+onto these terms; the files still short of them are held out by whole path in
+`tools/oxlint/testing/test-edges.json`, whose lists are `runnerHoldouts` and
+`realTimeHoldouts` (shrink only, deleted with their last entry) and
+`liveClockTests` (permanent: a test whose subject is a real socket or a
+process timeout, each named here with its reason). `it.live` is legal only in
+a `liveClockTests` file. The one today is
+`packages/gateway/src/node-invocations.test.ts`, whose subject is a real
+Gateway socket's reconnection and in-flight timeout, which no `TestClock`
+drives. `scripts/repository-checks.sh` refuses a holdout that no longer
+violates its rule and a `liveClockTests` entry this section does not name.
+
+### Hermetic tests, goldens, and fixtures
+
+A test reads no personal data, live provider, network, clock, or path
+outside the temp dir it made, and passes in any order and alone. A golden
+changes only under `LUKE_UPDATE_FIXTURES=1`, read by the shared helpers
+alone (`packages/wire/src/testing/json-schema-golden.ts`,
+`packages/providers/src/testing/fixture-recording.ts`,
+`apps/web/tests/support/response-golden.ts`) and never inline, and the PR
+explains the diff line by line. Fixtures are synthetic: no recorded session,
+transcript, or account of a real person.
+
+### The brain and the model
+
+The deterministic ring around the model is tested: tool schemas, the turn
+envelope, what a settled call writes, what the relay sends. A model's words
+are never asserted. Judgment is an offline eval
+(`pnpm --filter @luke/web test:agent`, on the scripted brain fixture), and
+an eval that calls a live model runs in no `check.sh`.
+
+### Desktop, web, iOS
+
+Desktop main and renderer logic is small tests; a window, motion, or
+appearance change is `verify.sh` evidence, since CI builds nothing for the
+Mac. Web routes are tested through their `HttpRouter` over a fake `SqlClient`
+or PGlite, and the store tests run again on Postgres. iOS logic is
+`apps/ios/LukeTests` in Xcode on a Mac; `ios-project.test.mjs` beside it
+checks the project file on Linux.
+
+### Do not write
+
+- An expected value computed by the code under test or pasted from its output.
+- A test of a getter, constant, type, re-export, or Schema round-trip on a
+  valid value.
+- A test that only asserts a fake was called.
+- A private function exported so a test can reach it.
+- A claim another test already makes.
+- A fix whose only test is the exact bug, with no neighboring case.
+
+The gate for every new test: which plausible wrong implementation would it
+reject? None means do not write it.
+
+### Integrity
+
+Never loosen, delete, or skip a test to go green. `.only`, `.skip`, `.todo`,
+`it.flakyTest`, and a `retry` option are refused by
+`testing/no-focus-or-retry` (`it.skipIf(reason)` stays legal). A flaky test
+is fixed or deleted the same day. During a repair loop, test files are
+read-only: a red test is a fact about the code. A test file you touch must
+comply with this section before the PR merges, holdout or not, and a file
+that complies leaves the holdout list in the same PR.
+
+### Done
+
+`./scripts/check.sh` exits 0; a Mac or UI change also has its
+`./scripts/verify.sh` evidence inspected.
+
+```
+./scripts/check.sh
+pnpm exec vitest run <path>
+pnpm exec vitest run --shard=<n>/4
+pnpm --filter @luke/web test:store
+pnpm --filter @luke/web test:agent
+```
+
 ## Effect idioms
 
 Effect is the repository's infrastructure library, replacing what used to be

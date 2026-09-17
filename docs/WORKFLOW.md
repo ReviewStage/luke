@@ -4,9 +4,9 @@
    trust constraints before editing.
 2. Bootstrap with `./scripts/bootstrap.sh`, then make the smallest change that
    satisfies the issue. Use deterministic fixtures instead of personal data or
-   live provider state. Put regression coverage at the cheapest layer that
-   would have caught a behavior bug; use visual evidence for appearance-only
-   changes.
+   live provider state. Choose the test's layer, its doubles, and its
+   fixtures by root `AGENTS.md`'s "Testing" section; a bug fix starts with
+   the test shown red, and an appearance-only change gets visual evidence.
 3. Run `./scripts/check.sh` for portable-only work. For a macOS, Electron-window,
    native-adapter, microphone, or desktop UI change, run `./scripts/verify.sh`
    and inspect all PNGs. For a web UI change, run `pnpm --filter @luke/web dev`

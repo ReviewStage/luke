@@ -28,6 +28,7 @@ judgment call is a reason to stop and ask, not to tick it.
 
 - [ ] `./scripts/check.sh` green; renderer/UI PRs also `./scripts/verify.sh` with evidence inspected. (CI)
 - [ ] JSON Schema goldens unchanged (`LUKE_UPDATE_FIXTURES` not run, or diff explained line by line). (CI)
+- [ ] Every behavior change has its test in this PR, and a bug fix's new test is shown failing before the fix (command and output in Evidence). (manual; root `AGENTS.md` "Testing")
 - [ ] Gateway envelope goldens unchanged. (CI)
 - [ ] No new `as` type assertion outside the allowlisted files; `as Admitted` only in `admit.ts` and wire's admitted files. (CI via anti-slop + new grep)
 - [ ] No `effect` import in an OpenClaw-ported file. (CI grep)
