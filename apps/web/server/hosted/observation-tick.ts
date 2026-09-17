@@ -89,7 +89,7 @@ interface ObservationTickReads {
    * The account's pending roster diffs handed to the brain as observation
    * turns, one per observed conversation, after the account's own pass and
    * under the same deadline as that pass, so the two together are one
-   * account's share of the tick and the batches are gated exactly as before.
+   * account's share of the tick, gated by the budget as one.
    * A pass that fails still has its earlier diffs opened. Runs only for an
    * account this tick listed, which is the one way an account is ever named
    * to eve on the tick's own credential.
@@ -153,6 +153,13 @@ const FAILED_OPENING: TurnOpeningOutcome = {
   failed: 1,
 };
 
+/** The tick's budget as each account reads it at its own start: when the tick began, how long it may run, and how long one account may take. */
+interface TickBudget {
+  readonly startedAt: number;
+  readonly budgetMs: number;
+  readonly passDeadlineMs: number;
+}
+
 /** One account's pass, opening, and completion sweep as the tick counts them: each failed when it threw, and all cut short when the account outran its deadline. */
 interface AccountOutcome {
   readonly pass: AccountPassOutcome;
@@ -194,6 +201,23 @@ const accountTurn = /* @__PURE__ */ Effect.fn("accountTurn")(function* (
   const turns = yield* withFallback(options.openTurns(userId), FAILED_OPENING);
   const children = yield* withFallback(options.sweepChildCompletions(userId), NOTHING_DELIVERED);
   return { pass, turns, children };
+});
+
+/**
+ * One account's share of the tick, or nothing when a whole pass deadline no
+ * longer fits inside the budget. The check is read at the account's own
+ * start, on the clock, so the window that opens as an earlier account
+ * settles is what decides it; `Effect.fn` suspends the body until the fiber
+ * runs it, which is that start.
+ */
+const accountShare = /* @__PURE__ */ Effect.fn("accountShare")(function* (
+  options: ObservationTickReads,
+  userId: string,
+  budget: TickBudget,
+): Effect.fn.Return<AccountOutcome | undefined, never, SqlClient.SqlClient> {
+  const now = yield* Clock.currentTimeMillis;
+  if (now - budget.startedAt + budget.passDeadlineMs > budget.budgetMs) return undefined;
+  return yield* accountWithin(accountTurn(options, userId), budget.passDeadlineMs);
 });
 
 export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservationTick")(function* (
@@ -239,30 +263,32 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
     children: NOTHING_DELIVERED,
     turns: NOTHING_OPENED,
   };
-  for (let index = 0; index < accounts.length; index += OBSERVATION_TICK.CONCURRENCY) {
-    if ((yield* Clock.currentTimeMillis) - startedAt + passDeadlineMs > budgetMs) {
+  // A sliding window of CONCURRENCY accounts: one settling admits the next, so
+  // no account waits on the slowest of a batch, and one skipped for budget
+  // says the tick stopped with accounts still listed.
+  const outcomes = yield* Effect.forEach(
+    accounts,
+    (account) => accountShare(options, account.userId, { startedAt, budgetMs, passDeadlineMs }),
+    { concurrency: OBSERVATION_TICK.CONCURRENCY },
+  );
+  for (const outcome of outcomes) {
+    if (outcome === undefined) {
       answer.exhausted = true;
-      break;
+      continue;
     }
-    const batch = accounts.slice(index, index + OBSERVATION_TICK.CONCURRENCY);
-    const outcomes = yield* Effect.all(
-      batch.map((account) => accountWithin(accountTurn(options, account.userId), passDeadlineMs)),
-      { concurrency: "unbounded" },
-    );
-    for (const { pass, turns, children } of outcomes) {
-      answer.accounts += 1;
-      if (pass.complete) answer.observed += 1;
-      else answer.failed += 1;
-      answer.turns = {
-        observation: answer.turns.observation + turns.observation,
-        failed: answer.turns.failed + turns.failed,
-      };
-      answer.children = {
-        delivered: answer.children.delivered + children.delivered,
-        undelivered: answer.children.undelivered + children.undelivered,
-        withheld: answer.children.withheld + children.withheld,
-      };
-    }
+    const { pass, turns, children } = outcome;
+    answer.accounts += 1;
+    if (pass.complete) answer.observed += 1;
+    else answer.failed += 1;
+    answer.turns = {
+      observation: answer.turns.observation + turns.observation,
+      failed: answer.turns.failed + turns.failed,
+    };
+    answer.children = {
+      delivered: answer.children.delivered + children.delivered,
+      undelivered: answer.children.undelivered + children.undelivered,
+      withheld: answer.children.withheld + children.withheld,
+    };
   }
 
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);

@@ -23,10 +23,10 @@ export const OBSERVATION_ENVIRONMENT = {
 
 export const OBSERVATION_TICK = {
   /**
-   * How long one tick may spend before leaving the rest for the next. A batch
-   * starts only while a whole pass deadline still fits inside it, so the tick
-   * settles under the function's own cap even when its last batch spends
-   * every second a pass may.
+   * How long one tick may spend before leaving the rest for the next. An
+   * account starts only while a whole pass deadline still fits inside it, so
+   * the tick settles under the function's own cap even when its last account
+   * spends every second a pass may.
    */
   BUDGET_MS: Duration.toMillis(Duration.seconds(50)),
   /**
@@ -42,7 +42,7 @@ export const OBSERVATION_TICK = {
   MAX_DURATION_SECONDS: 60,
   /** The most accounts one tick lists; the least recently attempted come first, so nobody starves. */
   MAX_ACCOUNTS: 200,
-  /** Accounts observed at once; each is a fan of provider requests of its own. */
+  /** Accounts observed at once, as a sliding window one settling account admits the next into; each is a fan of provider requests of its own. */
   CONCURRENCY: 4,
   /** How recently an account must have been seen to be observed on the schedule. */
   ACCOUNT_SEEN_WITHIN_MS: Duration.toMillis(Duration.days(7)),

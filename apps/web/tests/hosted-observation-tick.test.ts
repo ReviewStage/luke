@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { atInstant } from "@sidecar/wire/testing";
-import { Duration, Effect, Fiber, Redacted } from "effect";
+import { Clock, Duration, Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
@@ -43,6 +43,16 @@ const NOTHING_OPENED: TurnOpeningOutcome = {
   observation: 0,
   failed: 0,
 };
+
+/** Lets a fiber forked on this test's runtime run up to its next wait, with no time passing. */
+const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Duration.zero)), {
+  times: 10,
+});
+
+/** Advances the clock the tick's own waits are armed against, then lets what fell due settle. */
+function advance(delayMs: number): Effect.Effect<void> {
+  return Effect.andThen(TestClock.adjust(Duration.millis(delayMs)), settle);
+}
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function tickRequest(
@@ -234,23 +244,91 @@ test("a pass that throws is counted as failed and does not end the tick", async 
   });
 });
 
-test("a tick starts a batch only while a whole pass deadline still fits its budget, and reports the accounts it could not reach", async () => {
-  const accounts = Array.from({ length: OBSERVATION_TICK.CONCURRENCY * 3 }, (_, i) => `user-${i}`);
-  const { options, recorded } = tickOptions(
-    { budgetMs: 1_500, passDeadlineMs: 1_000 },
-    accounts,
-    // Each pass moves the clock less than its deadline, so what ends the tick is the budget alone.
-    () => Effect.as(TestClock.adjust(Duration.millis(200)), { complete: true }),
-  );
+it.effect(
+  "a tick holds at most CONCURRENCY accounts in flight, admits the next as one settles, and opens none once a whole pass deadline no longer fits its budget",
+  () =>
+    Effect.gen(function* () {
+      const accounts = Array.from(
+        { length: OBSERVATION_TICK.CONCURRENCY * 3 },
+        (_, i) => `user-${i}`,
+      );
+      const passMs = 300;
+      // Two windows fit: at 0 and at 300 a whole deadline still fits 1,500; at 600 it does not.
+      const budgetMs = 1_500;
+      const passDeadlineMs = 1_000;
+      const tickStart = yield* Clock.currentTimeMillis;
+      const startedAt: number[] = [];
+      let inFlight = 0;
+      let mostInFlight = 0;
+      const { options } = tickOptions({ budgetMs, passDeadlineMs }, accounts, () =>
+        Effect.gen(function* () {
+          startedAt.push((yield* Clock.currentTimeMillis) - tickStart);
+          inFlight += 1;
+          mostInFlight = Math.max(mostInFlight, inFlight);
+          yield* Effect.sleep(Duration.millis(passMs));
+          inFlight -= 1;
+          return { complete: true };
+        }),
+      );
 
-  const response = await runTick(options);
+      const fiber = yield* Effect.forkChild(
+        Effect.provide(handleObservationTick(options), noDatabase),
+      );
+      yield* settle;
+      assert.equal(inFlight, OBSERVATION_TICK.CONCURRENCY);
+      yield* advance(passMs);
+      assert.equal(inFlight, OBSERVATION_TICK.CONCURRENCY);
+      yield* advance(passMs);
+      assert.equal(inFlight, 0);
+      const response = yield* Fiber.join(fiber);
+      const body = yield* Effect.promise(() => response.json());
 
-  const body = await response.json();
-  assert.equal(body.exhausted, true);
-  assert.equal(body.purged, 2);
-  assert.equal(body.accounts, OBSERVATION_TICK.CONCURRENCY);
-  assert.equal(recorded.observed.length, OBSERVATION_TICK.CONCURRENCY);
-});
+      assert.equal(mostInFlight, OBSERVATION_TICK.CONCURRENCY);
+      assert.deepEqual(startedAt, [
+        ...Array.from({ length: OBSERVATION_TICK.CONCURRENCY }, () => 0),
+        ...Array.from({ length: OBSERVATION_TICK.CONCURRENCY }, () => passMs),
+      ]);
+      assert.equal(body.exhausted, true);
+      assert.equal(body.accounts, OBSERVATION_TICK.CONCURRENCY * 2);
+      assert.equal(body.observed, OBSERVATION_TICK.CONCURRENCY * 2);
+      assert.equal(body.purged, 2);
+    }),
+);
+
+it.effect(
+  "a slow account holds only its own place in the window: the others keep admitting accounts behind it",
+  () =>
+    Effect.gen(function* () {
+      const accounts = Array.from(
+        { length: OBSERVATION_TICK.CONCURRENCY + 2 },
+        (_, i) => `user-${i}`,
+      );
+      const observed: string[] = [];
+      const { options } = tickOptions({ passDeadlineMs: 1_000 }, accounts, (userId) =>
+        Effect.gen(function* () {
+          observed.push(userId);
+          // The first account outruns its deadline; the rest settle at once.
+          if (userId === "user-0") yield* Effect.never;
+          return { complete: true };
+        }),
+      );
+
+      const fiber = yield* Effect.forkChild(
+        Effect.provide(handleObservationTick(options), noDatabase),
+      );
+      // Every quick account is reached before the slow one's deadline; the batch loop this replaces held two of them behind it.
+      yield* settle;
+      assert.deepEqual(observed, accounts);
+      yield* advance(1_000);
+      const response = yield* Fiber.join(fiber);
+      const body = yield* Effect.promise(() => response.json());
+
+      assert.equal(body.accounts, accounts.length);
+      assert.equal(body.observed, accounts.length - 1);
+      assert.equal(body.failed, 1);
+      assert.equal(body.exhausted, false);
+    }),
+);
 
 it.effect("a pass that outruns its deadline is counted failed and the tick moves on", () =>
   Effect.gen(function* () {
