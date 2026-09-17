@@ -40,16 +40,19 @@ function senderWith(
 ) {
   const { layer, requests } = recordingHttpClient(respond);
   return Effect.map(
-    ProductEventSender.make({
-      serviceBaseUrl: BASE_URL,
-      appVersion: APP_VERSION,
-      sends: true,
-      readAccessToken: () => Effect.succeed("token-1"),
-      refreshAccount: () => Effect.void,
-      httpClient: layer,
-      now: () => NOON,
-      ...overrides,
-    }),
+    Effect.andThen(
+      TestClock.setTime(NOON),
+      ProductEventSender.make({
+        serviceBaseUrl: BASE_URL,
+        appVersion: APP_VERSION,
+        sends: true,
+        readAccessToken: () => Effect.succeed("token-1"),
+        refreshAccount: () => Effect.void,
+        httpClient: layer,
+        now: () => NOON,
+        ...overrides,
+      }),
+    ),
     (sender) => ({ sender, requests }),
   );
 }

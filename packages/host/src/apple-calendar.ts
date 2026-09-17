@@ -21,7 +21,7 @@ import {
   type UnparsedWireValue,
   unparsedWire,
 } from "@sidecar/wire";
-import { Duration, Effect, Result } from "effect";
+import { Clock, Duration, Effect, Result } from "effect";
 
 const ACCESS_WORDS = new Set<string>(Object.values(APPLE_CALENDAR_ACCESS));
 
@@ -93,7 +93,6 @@ interface AppleCalendarReaderOptions {
   readConnection: () => Effect.Effect<AppleCalendarConnection | undefined>;
   /** Given rather than resolved: only the process that holds the device can find the helper bundle. */
   runHelper: AppleCalendarHelperRun;
-  now?: () => number;
 }
 
 /** One helper answer, held to shape before anything downstream reads it. */
@@ -186,14 +185,12 @@ export const APPLE_CALENDAR_ACCESS_REFUSAL = {
 export class AppleCalendarReader {
   readonly #readConnection: () => Effect.Effect<AppleCalendarConnection | undefined>;
   readonly #runHelper: AppleCalendarHelperRun;
-  readonly #now: () => number;
   /** The last good observation, which stands in when a pass fails. */
   #lastObservation: AppleCalendarObservation | undefined;
 
   constructor(options: AppleCalendarReaderOptions) {
     this.#readConnection = options.readConnection;
     this.#runHelper = options.runHelper;
-    this.#now = options.now ?? Date.now;
   }
 
   /**
@@ -297,8 +294,8 @@ export class AppleCalendarReader {
       if (options.superseded()) return outcome;
       if (outcome.access !== APPLE_CALENDAR_ACCESS.FULL && !outcome.failure) {
         options.openSystemSettings();
-        const deadline = this.#now() + SETTINGS_WAIT_TIMEOUT_MS;
-        while (this.#now() < deadline && !options.superseded()) {
+        const deadline = (yield* Clock.currentTimeMillis) + SETTINGS_WAIT_TIMEOUT_MS;
+        while ((yield* Clock.currentTimeMillis) < deadline && !options.superseded()) {
           yield* Effect.sleep(Duration.millis(SETTINGS_WAIT_POLL_MS));
           const granted = yield* this.status().pipe(
             Effect.map((access) => access === APPLE_CALENDAR_ACCESS.FULL),
@@ -332,7 +329,7 @@ export class AppleCalendarReader {
     connection: AppleCalendarConnection,
   ): Effect.Effect<AppleCalendarObservation, unknown> {
     return Effect.gen({ self: this }, function* () {
-      const now = this.#now();
+      const now = yield* Clock.currentTimeMillis;
       // The same window the Google free/busy read keeps to, so the two
       // sources hold and release announcements on identical terms.
       const report = yield* this.#runHelperEffect(

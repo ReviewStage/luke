@@ -1,6 +1,12 @@
 import type { ProviderSessionObservation, SessionProviderPlugin } from "@sidecar/session";
 import type { JsonObject, JsonValue } from "@sidecar/wire/testing";
-import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
+import {
+  atInstant,
+  HTTP_STATUS,
+  jsonResponse,
+  recordingHttpClient,
+  runTest,
+} from "@sidecar/wire/testing";
 import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { conductorPlugin } from "../conductor/index.js";
@@ -310,7 +316,6 @@ export function pluginFor(
   overrides: {
     apiKey?: string | undefined;
     readApiKey?: () => Effect.Effect<string | undefined>;
-    now?: () => number;
     minimumRefreshIntervalMs?: number;
     /** The roster the brain's reads answer for, when a host holds one the plugin did not read itself. */
     reported?: () => readonly ProviderSessionObservation[];
@@ -321,11 +326,18 @@ export function pluginFor(
     readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
     httpClient,
-    now: overrides.now ?? (() => TEST_TIME),
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
     ...(overrides.reported ? { reported: overrides.reported } : undefined),
   });
 }
+/** One pass of the plugin at `at`, the fixture's own instant by default, since the pass reads the ambient `Clock`. */
+export function observeAt(
+  plugin: SessionProviderPlugin,
+  at: number = TEST_TIME,
+): Promise<readonly ProviderSessionObservation[]> {
+  return runTest(atInstant(at)(plugin.observe()));
+}
+
 export const LUKE_PROJECT: TestProject = {
   id: "project-luke",
   name: "luke",

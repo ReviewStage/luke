@@ -1,4 +1,5 @@
 import { Effect, type Layer } from "effect";
+import { TestClock } from "effect/testing";
 
 /**
  * Runs an Effect to a `Promise` for a test still written on `node:assert`
@@ -19,3 +20,14 @@ export function runTest<A, E, R>(
   }
   return Effect.runPromise(Effect.provide(effect, layer));
 }
+
+/**
+ * Runs an Effect under a `TestClock` set to `millis`, for a test still on a
+ * promise runner whose subject reads `Clock`: what used to be handed in as
+ * `now: () => millis` is the ambient clock instead. A test on `it.effect`
+ * already runs under a `TestClock` and sets its own time.
+ */
+export const atInstant =
+  (millis: number) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.provide(Effect.andThen(TestClock.setTime(millis), effect), TestClock.layer());

@@ -1,4 +1,4 @@
-import { Deferred, Effect, Path, Queue, type Scope } from "effect";
+import { DateTime, Deferred, Effect, Path, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
@@ -45,7 +45,6 @@ type TraceWork =
 interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
   directory: string;
-  now?: () => Date;
   report?: (message: string) => void;
 }
 
@@ -59,8 +58,8 @@ interface AgentTraceWriterOptions {
  * runtime log event and nothing outside a fiber can fabricate one; the
  * stamping is the writer's own, taken the instant `record*` was called.
  */
-function traceLine(entry: PendingTraceEntry, now: () => Date): string {
-  return `${JSON.stringify({ at: now().toISOString(), ...entry })}\n`;
+function traceLine(entry: PendingTraceEntry): string {
+  return `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`;
 }
 
 /** Appends one already-formatted line, making the directory on first use. */
@@ -93,7 +92,6 @@ export class AgentTraceWriter {
   readonly file: string;
   readonly #directory: string;
   readonly #report: (message: string) => void;
-  readonly #now: () => Date;
   readonly #work: Queue.Queue<TraceWork>;
   #failed = false;
 
@@ -113,13 +111,11 @@ export class AgentTraceWriter {
   private constructor(
     options: AgentTraceWriterOptions,
     file: string,
-    now: () => Date,
     work: Queue.Queue<TraceWork>,
   ) {
     this.#directory = options.directory;
     this.#report = options.report ?? ((text: string) => process.stderr.write(text));
     this.file = file;
-    this.#now = now;
     this.#work = work;
   }
 
@@ -129,10 +125,10 @@ export class AgentTraceWriter {
   ): Effect.Effect<AgentTraceWriter, never, Scope.Scope | FileSystem.FileSystem | Path.Path> {
     return Effect.gen(function* () {
       const path = yield* Path.Path;
-      const now = options.now ?? (() => new Date());
-      const stamp = now().toISOString().replace(/[:.]/gu, "-");
+      const openedAt = yield* DateTime.nowAsDate;
+      const stamp = openedAt.toISOString().replace(/[:.]/gu, "-");
       const file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
-      const writer = new AgentTraceWriter(options, file, now, yield* Queue.unbounded<TraceWork>());
+      const writer = new AgentTraceWriter(options, file, yield* Queue.unbounded<TraceWork>());
       yield* Effect.forkScoped(writer.#drain());
       return writer;
     });
@@ -154,7 +150,7 @@ export class AgentTraceWriter {
   #append(entry: PendingTraceEntry): void {
     Queue.offerUnsafe(this.#work, {
       kind: TRACE_WORK.LINE,
-      line: traceLine(entry, this.#now),
+      line: traceLine(entry),
     });
   }
 

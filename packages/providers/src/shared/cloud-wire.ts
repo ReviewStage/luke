@@ -93,21 +93,22 @@ export class RateLimitedRead extends Data.TaggedError("RateLimitedRead")<{
  *
  * The decision is taken once per step, inside the mapping, because it is also
  * what spends the pass's budget: asking twice would read the clock twice and
- * could decide differently on an HTTP-date `Retry-After`.
+ * could decide differently on an HTTP-date `Retry-After`. The instant an
+ * HTTP-date is taken against is the step's own `now`, which the schedule reads
+ * from the fiber's `Clock`.
  */
 export function rateLimitSchedule(
   budget: BackoffBudget,
-  now: () => number,
 ): Schedule.Schedule<number | undefined, RateLimitedRead> {
   return Schedule.identity<RateLimitedRead>().pipe(
-    Schedule.map(({ input: limited, attempt }) => {
+    Schedule.map(({ input: limited, attempt, now }) => {
       const delay = rateLimitDelayMs({
         // The step's own attempt counts from one; the decision below counts
         // the retries already made, so the first attempt decides against zero.
         attempt: attempt - 1,
         retryAfter: limited.retryAfter,
         budget,
-        now: now(),
+        now,
       });
       if (delay !== undefined) budget.spentMs += delay;
       return delay;

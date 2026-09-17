@@ -186,7 +186,6 @@ export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(fu
   const appleCalendar = new AppleCalendarReader({
     readConnection: () => Effect.orDie(settingsStore.readAppleCalendarConnection()),
     runHelper: runAppleCalendarHelper,
-    now,
   });
 
   /** The observed meetings; `undefined` until the first observation of this run has resolved. */
