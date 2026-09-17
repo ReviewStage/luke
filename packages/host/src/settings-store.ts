@@ -135,7 +135,8 @@ export interface SettingsStoreOptions {
 }
 
 interface ResolvedApiKey {
-  apiKey?: string;
+  /** Sealed: the store hands it to the provider's adapter, which reveals it onto its header, and to nothing else. */
+  apiKey?: Redacted.Redacted;
   source: CredentialSource;
 }
 
@@ -983,7 +984,9 @@ export class SettingsStore {
    * reads. A provider with no key resolves to nothing, so its adapter observes
    * nothing and issues no request.
    */
-  readApiKey(providerId: CredentialProviderId): Effect.Effect<string | undefined, PlatformError> {
+  readApiKey(
+    providerId: CredentialProviderId,
+  ): Effect.Effect<Redacted.Redacted | undefined, PlatformError> {
     const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
     if (!provider) return Effect.succeed(undefined);
     return Effect.map(this.#resolveApiKey(provider), (resolved) => resolved.apiKey);
@@ -1003,7 +1006,7 @@ export class SettingsStore {
    */
   readStoredApiKey(
     providerId: CredentialProviderId,
-  ): Effect.Effect<string | undefined, PlatformError> {
+  ): Effect.Effect<Redacted.Redacted | undefined, PlatformError> {
     const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
     if (!provider) return Effect.succeed(undefined);
     return Effect.map(this.#resolveApiKey(provider), (resolved) =>
@@ -1384,17 +1387,20 @@ export class SettingsStore {
       const resolved: ResolvedApiKey = stored
         ? { apiKey: stored, source: CREDENTIAL_SOURCE.ENCRYPTED_FILE }
         : fromEnvironment
-          ? { apiKey: Redacted.value(fromEnvironment), source: CREDENTIAL_SOURCE.ENVIRONMENT }
+          ? { apiKey: fromEnvironment, source: CREDENTIAL_SOURCE.ENVIRONMENT }
           : { source: CREDENTIAL_SOURCE.NONE };
       this.#resolved.set(provider.id, resolved);
       return resolved;
     });
   }
 
-  #storedApiKey(provider: CredentialProvider): Effect.Effect<string | undefined, PlatformError> {
+  #storedApiKey(
+    provider: CredentialProvider,
+  ): Effect.Effect<Redacted.Redacted | undefined, PlatformError> {
     return Effect.map(this.#load(), (persisted) => {
       const ciphertext = persisted.apiKeys[provider.id];
-      return ciphertext ? this.#decryptSecret(ciphertext, provider.keyFormat) : undefined;
+      const key = ciphertext ? this.#decryptSecret(ciphertext, provider.keyFormat) : undefined;
+      return key === undefined ? undefined : Redacted.make(key);
     });
   }
 

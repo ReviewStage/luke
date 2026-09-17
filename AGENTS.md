@@ -227,7 +227,11 @@ its own process), the eve project's authored files —
 memory slot whose `compaction.requested` capture runs the pre-compaction
 memory flush), and `apps/web/eve/tools/brain.ts` — each
 an edge because eve drives them through promise-shaped hooks of its own and
-an authored file is where this deployment runs what it hands eve. Not
+an authored file is where this deployment runs what it hands eve — and
+`apps/web/eve/host.ts`, the one module those files share their host through,
+which composes the production seams over `HostedEnvironment` with
+`Effect.runSync` as it loads, because the channel's door takes the
+deployment's secret as a value and the environment read suspends on nothing. Not
 every seam under `apps/web/server/hosted/` is an effect down to its floor:
 `hosted/brain-host/production.ts`'s `spend` is
 the AI SDK's async middleware, and `hosted/brain-host/door.ts`'s

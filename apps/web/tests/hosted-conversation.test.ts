@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClientLayer, runTest } from "@sidecar/wire/testing";
-import { Effect, type Layer } from "effect";
+import { Effect, type Layer, Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
 import { CLOUD_AGENT_PROVIDER_ID, type WireRecord } from "../server/core";
@@ -16,7 +16,7 @@ import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { runWithoutDatabase } from "./support/no-database";
 
-const SECRET = "a".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
 const SESSION_UUID = "11111111-1111-4111-8111-111111111111";
 const MESSAGE_UUIDS = [
   "aaaaaaaa-0000-4000-8000-000000000001",
@@ -361,7 +361,7 @@ test("a conversation read re-observes, reads the documented endpoint, and maps t
       providerId: "conductor",
       providerSessionId: SESSION_UUID,
       afterMessageId: MESSAGE_UUIDS[0],
-      apiKey: "key-1",
+      apiKey: Redacted.make("key-1"),
       seams: {
         httpClient: conductorClient({
           recordReads: reads,
@@ -417,7 +417,7 @@ test("an opening read answers the latest page with the positions to continue fro
     executeConversationRead({
       providerId: "conductor",
       providerSessionId: SESSION_UUID,
-      apiKey: "key-1",
+      apiKey: Redacted.make("key-1"),
       seams: {
         httpClient: conductorClient({
           messages: [
@@ -448,7 +448,7 @@ test("a history read rides its offset to the adapter and back", async () => {
       providerId: "conductor",
       providerSessionId: SESSION_UUID,
       beforeOffset: 2,
-      apiKey: "key-1",
+      apiKey: Redacted.make("key-1"),
       seams: {
         httpClient: conductorClient({
           recordReads: reads,
@@ -480,7 +480,7 @@ test("a conversation read for a session the fresh pass did not observe refuses",
     executeConversationRead({
       providerId: "conductor",
       providerSessionId: "99999999-9999-4999-8999-999999999999",
-      apiKey: "key-1",
+      apiKey: Redacted.make("key-1"),
       seams: { httpClient: conductorClient({ messages: [] }) },
     }),
   );
@@ -493,7 +493,7 @@ test("a key the provider refuses is named as the reason, not a missing session",
     executeConversationRead({
       providerId: "conductor",
       providerSessionId: SESSION_UUID,
-      apiKey: "key-1",
+      apiKey: Redacted.make("key-1"),
       seams: { httpClient: fakeHttpClientLayer(async () => new Response("{}", { status: 401 })) },
     }),
   );

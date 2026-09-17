@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import {
@@ -63,9 +63,10 @@ const deploymentAccounts: VoiceAccounts = {
   recordSeconds: (input) => Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
 };
 
-/** A secret as the environment holds it: nothing where it is absent or blank, the one absence the kill switch reads. */
-function configured(name: string): string | undefined {
-  return process.env[name]?.trim() || undefined;
+/** A secret as the environment holds it, sealed: nothing where it is absent or blank, the one absence the kill switch reads. */
+function configured(name: string): Redacted.Redacted | undefined {
+  const named = process.env[name]?.trim();
+  return named ? Redacted.make(named) : undefined;
 }
 
 /** How much of a report's own wording the log keeps: its fixed sentence, which every reporter on the exchange path puts ahead of the first colon. */

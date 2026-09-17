@@ -20,6 +20,7 @@
  * the proxy is inert there.
  */
 
+import { Redacted } from "effect";
 import { text } from "./core.js";
 
 /** The Vercel environment a deployment runs as, as its own `VERCEL_ENV` names it. */
@@ -37,6 +38,15 @@ const AUTH_DEPLOYMENT_ENVIRONMENT = {
   PRODUCTION_URL: "BETTER_AUTH_URL",
   PROXY_SECRET: "BETTER_AUTH_PROXY_SECRET",
   PROXY_TRUSTED_ORIGINS: "BETTER_AUTH_PROXY_TRUSTED_ORIGINS",
+} as const;
+
+/** The variables the auth service's own secrets are read from; a blank value is absent. */
+const AUTH_SECRET_ENVIRONMENT = {
+  SESSION_SECRET: "BETTER_AUTH_SECRET",
+  GOOGLE_CLIENT_ID: "GOOGLE_CLIENT_ID",
+  GOOGLE_CLIENT_SECRET: "GOOGLE_CLIENT_SECRET",
+  GITHUB_CLIENT_ID: "GITHUB_CLIENT_ID",
+  GITHUB_CLIENT_SECRET: "GITHUB_CLIENT_SECRET",
 } as const;
 
 /** Where the site answers when nothing names a deployment: the Vite dev server. */
@@ -71,6 +81,25 @@ export interface AuthDeployment {
   acceptsProxyProfiles: boolean;
 }
 
+/** One social provider's registration; a provider with no registration is configured with nothing, and Better Auth refuses its sign-in. */
+export interface SocialClient {
+  clientId: string;
+  clientSecret: Redacted.Redacted | undefined;
+}
+
+export interface AuthSecrets {
+  /** The secret that signs this deployment's sessions; absent, Better Auth refuses to sign any, and `auth.ts` says so as it loads. */
+  sessionSecret: Redacted.Redacted | undefined;
+  google: SocialClient;
+  github: SocialClient;
+}
+
+/** A secret as the environment holds it, sealed; a blank one is absent. */
+function secret(value: string | undefined): Redacted.Redacted | undefined {
+  const named = text(value);
+  return named === undefined ? undefined : Redacted.make(named);
+}
+
 /** Vercel reports a bare hostname; a value that already names a scheme keeps it. */
 function deploymentOrigin(host: string | undefined): string | undefined {
   const named = text(host);
@@ -80,6 +109,28 @@ function deploymentOrigin(host: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The auth service's own secrets, sealed. Read from the record rather than
+ * through `Config`, because `betterAuth` is built at module scope with no
+ * runtime to run a `Config` on; the record is the same `process.env` a
+ * `Config` would read. A missing or blank session secret is absent rather
+ * than the empty string, and nothing throws here: every function bundle
+ * loads the auth service, and a bundle must load with nothing configured.
+ */
+export function authSecrets(variables: Record<string, string | undefined>): AuthSecrets {
+  return {
+    sessionSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.SESSION_SECRET]),
+    google: {
+      clientId: text(variables[AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_ID]) ?? "",
+      clientSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_SECRET]),
+    },
+    github: {
+      clientId: text(variables[AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_ID]) ?? "",
+      clientSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_SECRET]),
+    },
+  };
 }
 
 export function authDeployment(variables: Record<string, string | undefined>): AuthDeployment {

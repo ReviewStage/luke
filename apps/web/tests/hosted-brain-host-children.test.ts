@@ -7,6 +7,7 @@ import {
   Effect,
   Fiber,
   ManagedRuntime,
+  Redacted,
   Result,
   Schedule,
   Schema,
@@ -81,7 +82,7 @@ afterAll(() => database.close());
 
 const NOW = Date.parse("2026-09-15T10:00:00.000Z");
 const ORIGIN = "https://luke.test";
-const SECRET = "deployment-secret-fixture";
+const SECRET = Redacted.make("deployment-secret-fixture");
 const SESSION_ID = "wrun_01M000000000000000000CHILD";
 const EVE_TURN_ID = "turn_3";
 

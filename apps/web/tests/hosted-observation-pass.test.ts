@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { SESSION_STATUS } from "@sidecar/session";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { test } from "vitest";
@@ -29,7 +29,7 @@ import type { VaultKeyRow } from "../server/hosted/vault-route";
 import { runWithoutDatabase } from "./support/no-database";
 import { memoryObservationStore, UNOPENABLE_BODY } from "./support/observation-store";
 
-const SECRET = "a".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
 const KEY_ROWS: VaultKeyRow[] = [
   { providerId: "conductor", ciphertext: encryptProviderKey(TEST_API_KEY, SECRET) },
 ];
@@ -400,7 +400,10 @@ test("a snapshot observed under a key since replaced is another key's roster: no
       now: TEST_TIME,
     }),
   );
-  assert.equal(first.roster?.providers[0]?.keyFingerprint, keyFingerprint(TEST_API_KEY, SECRET));
+  assert.equal(
+    first.roster?.providers[0]?.keyFingerprint,
+    keyFingerprint(Redacted.make(TEST_API_KEY), SECRET),
+  );
   assert.ok((await runWithoutDatabase(storedRoster(store, "user-1", KEY_ROWS, SECRET)))?.roster);
 
   // The Mac re-saves the same key on every launch, under a fresh nonce.

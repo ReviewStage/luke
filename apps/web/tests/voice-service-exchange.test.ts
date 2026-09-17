@@ -11,7 +11,7 @@ import {
 } from "@sidecar/live";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Effect, Exit, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import {
   CONVERSATION_EVENT_KIND,
@@ -269,7 +269,7 @@ async function stand(offer: Offer): Promise<Stand> {
         : deploymentExchange({
             encryptionSecret: () =>
               offer === OFFER.UNCONFIGURED ? undefined : TEST_PAYLOAD_SECRET,
-            deploymentSecret: () => "deployment-secret",
+            deploymentSecret: () => Redacted.make("deployment-secret"),
             eveOrigin: () => "https://eve.test",
             eve: () => eve,
             now: () => NOW,

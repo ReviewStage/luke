@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Redacted, Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { accountCall, fixedBearer, HTTP_METHOD } from "../../core.js";
 import { HOSTED_OPENAI_DEFAULTS } from "../openai.js";
@@ -66,12 +66,13 @@ function vectorsOf(
 
 /** The embedder over Luke's own key, one call per `embed`, under the hosted OpenAI deadline. */
 export function hostedEmbedder(
-  apiKey: string,
+  apiKey: Redacted.Redacted,
   model: string = HOSTED_EMBEDDING.MODEL,
 ): HostedEmbedder {
+  // The key is revealed here alone, into the bearer the embeddings call sends.
   const call = accountCall({
     baseUrl: HOSTED_OPENAI_DEFAULTS.BASE_URL,
-    credential: fixedBearer(apiKey),
+    credential: fixedBearer(Redacted.value(apiKey)),
     requestTimeoutMs: HOSTED_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
   });
   return {

@@ -33,7 +33,7 @@
 
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { isTextUIPart, type ToolSet } from "ai";
-import { Cause, Effect, type Schema } from "effect";
+import { Cause, Effect, type Redacted, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { childCompletionInputText, MESSAGE_ROLE } from "../../core.js";
@@ -49,7 +49,7 @@ export type CompletionTurn = typeof BRAIN_HOST_TURN.CHILD_COMPLETION;
 
 export interface ChildCompletionSeams {
   /** The deployment's own secret, the one eve's door admits the deployment under; undefined means it is unset and nothing is delivered. */
-  readonly deploymentSecret: () => string | undefined;
+  readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on; undefined on a machine that is neither configured nor deployed. */
   readonly eveOrigin: () => string | undefined;
   /** eve's session client composed for one caller: `eveSessions` in production, a fake in the tests. */

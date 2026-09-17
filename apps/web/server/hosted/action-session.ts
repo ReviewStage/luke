@@ -1,4 +1,4 @@
-import { Effect, Option, Result, type Schema } from "effect";
+import { Effect, Option, Redacted, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -139,7 +139,7 @@ export interface SessionActionOptions
   roster: (
     userId: string,
     providerId: CloudAgentProviderId,
-    secret: string,
+    secret: Redacted.Redacted,
   ) => HostedActionEffect<ActionRoster>;
   /**
    * The reason this provider cannot take this action. Injected only in tests:
@@ -167,7 +167,7 @@ export interface SessionActionOptions
     kind: HostedSessionActionKind;
     providerId: CloudAgentProviderId;
     fields: WireRecord;
-    apiKey: string;
+    apiKey: Redacted.Redacted;
     roster: ActionRoster;
     agentSelection?: WorkspaceAgentSelection;
   }) => Effect.Effect<ActionExecutionAnswer>;
@@ -188,7 +188,7 @@ const storedAgentDefault: NonNullable<SessionActionOptions["agentDefault"]> = (
  */
 interface ActionAdmission {
   userId: string;
-  secret: string;
+  secret: Redacted.Redacted;
   providerId: CloudAgentProviderId;
   body: WireRecord;
 }
@@ -256,9 +256,9 @@ const apiKeyOrAnswer = /* @__PURE__ */ Effect.fn("apiKeyOrAnswer")(function* (
   readKey: HostedVaultRoute["readKey"],
   userId: string,
   providerId: CloudAgentProviderId,
-  secret: string,
+  secret: Redacted.Redacted,
 ): Effect.fn.Return<
-  { apiKey: string } | Response,
+  { apiKey: Redacted.Redacted } | Response,
   SqlError | Schema.SchemaError,
   SqlClient.SqlClient
 > {
@@ -270,7 +270,7 @@ const apiKeyOrAnswer = /* @__PURE__ */ Effect.fn("apiKeyOrAnswer")(function* (
     );
   }
   try {
-    return { apiKey: decryptProviderKey(keyRow.ciphertext, secret) };
+    return { apiKey: Redacted.make(decryptProviderKey(keyRow.ciphertext, secret)) };
   } catch {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }

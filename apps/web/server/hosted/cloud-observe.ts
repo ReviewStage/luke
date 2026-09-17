@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, type Layer } from "effect";
+import { Cause, Effect, Exit, type Layer, type Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { ADAPTER_FAILURE } from "../../../../packages/providers/src/shared/adapter-failure.js";
 import type {
@@ -65,7 +65,9 @@ interface CloudProviderPass {
  */
 export function observeCloudProviders(options: {
   providerIds: readonly CloudAgentProviderId[];
-  readApiKey: (providerId: CloudAgentProviderId) => () => Effect.Effect<string | undefined>;
+  readApiKey: (
+    providerId: CloudAgentProviderId,
+  ) => () => Effect.Effect<Redacted.Redacted | undefined>;
   seams: CloudObserveSeams;
 }): Effect.Effect<CloudProviderPass[]> {
   return Effect.suspend(() => {

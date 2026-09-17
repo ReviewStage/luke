@@ -24,7 +24,7 @@ import {
   recordingHttpClient,
   runTest,
 } from "@sidecar/wire/testing";
-import { Cause, Duration, Effect, Exit, Fiber, type Layer, Predicate } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, type Layer, Predicate, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
@@ -113,18 +113,23 @@ interface StubState {
 
 interface StubOptions {
   apiKey?: string | undefined;
-  readApiKey?: () => Effect.Effect<string | undefined>;
+  readApiKey?: () => Effect.Effect<Redacted.Redacted | undefined>;
   minimumRefreshIntervalMs?: number;
   onDiagnostic?: AdapterDiagnosticCallback;
   /** Observes and routes nothing: a provider whose actions are all absent. */
   routesNothing?: boolean;
 }
 
+/** A key as the seam takes it, or nothing. */
+function sealed(apiKey: string | undefined): Redacted.Redacted | undefined {
+  return apiKey === undefined ? undefined : Redacted.make(apiKey);
+}
+
 function stubPluginFor(
   httpClient: Layer.Layer<HttpClient.HttpClient>,
   overrides: StubOptions = {},
 ): StubCloudPlugin {
-  const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
+  const apiKey = sealed("apiKey" in overrides ? overrides.apiKey : TEST_API_KEY);
   const state: StubState = {
     passes: 0,
     forgottenIdentities: 0,
@@ -336,7 +341,7 @@ test("leaves a stopped session unknown once its timestamp goes stale", async () 
 test("forgets cached identity when the credential changes, and reports nothing without one", async () => {
   const stub = stubClient();
   let apiKey: string | undefined = TEST_API_KEY;
-  const plugin = stubPluginFor(stub.layer, { readApiKey: () => Effect.succeed(apiKey) });
+  const plugin = stubPluginFor(stub.layer, { readApiKey: () => Effect.succeed(sealed(apiKey)) });
   plugin.collected = [observation("session-one")];
 
   await observeAt(plugin);
@@ -388,7 +393,7 @@ function deferred() {
  * by the account that answers, not by anything cached on the adapter.
  */
 function accountBoundPlugin(options: {
-  readApiKey: () => Effect.Effect<string | undefined>;
+  readApiKey: () => Effect.Effect<Redacted.Redacted | undefined>;
   httpClient: Layer.Layer<HttpClient.HttpClient>;
   minimumRefreshIntervalMs: number;
 }) {
@@ -449,7 +454,7 @@ test("a pass superseded by a key rotation neither lands nor keeps using the old 
   const { layer, authorizations } = accountBoundClient({ oldKeyGate: oldKeyRequest.promise });
   let apiKey = "first-key";
   const plugin = accountBoundPlugin({
-    readApiKey: () => Effect.succeed(apiKey),
+    readApiKey: () => Effect.succeed(sealed(apiKey)),
     httpClient: layer,
     minimumRefreshIntervalMs: 0,
   });
@@ -479,7 +484,7 @@ test("a replaced key rejected mid-flight does not clear the new key's observatio
   });
   let apiKey = "first-key";
   const plugin = accountBoundPlugin({
-    readApiKey: () => Effect.succeed(apiKey),
+    readApiKey: () => Effect.succeed(sealed(apiKey)),
     httpClient: layer,
     minimumRefreshIntervalMs: 60_000,
   });
@@ -589,7 +594,7 @@ test("sends a user message through the route and body the provider documents", a
 test("refuses to send once the credential is gone, whatever was observed with it", async () => {
   const stub = stubClient();
   let apiKey: string | undefined = TEST_API_KEY;
-  const plugin = stubPluginFor(stub.layer, { readApiKey: () => Effect.succeed(apiKey) });
+  const plugin = stubPluginFor(stub.layer, { readApiKey: () => Effect.succeed(sealed(apiKey)) });
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await observeAt(plugin);
   const observationRequests = stub.requests.length;
@@ -1028,7 +1033,7 @@ test("sends a POSTed read as the document the build fixed and nothing else", asy
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
-    readApiKey: () => Effect.succeed(TEST_API_KEY),
+    readApiKey: () => Effect.succeed(Redacted.make(TEST_API_KEY)),
     httpClient: stub.layer,
     minimumRefreshIntervalMs: 0,
     collect: (request) =>
@@ -1067,7 +1072,7 @@ test("a body that never arrives ends the read on its own deadline", async () => 
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
-    readApiKey: () => Effect.succeed(TEST_API_KEY),
+    readApiKey: () => Effect.succeed(Redacted.make(TEST_API_KEY)),
     httpClient: stub.layer,
     minimumRefreshIntervalMs: 0,
     collect: (request) =>
@@ -1090,7 +1095,7 @@ test("a write whose answer never arrives hedges on its own deadline", async () =
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
     baseUrl: TEST_BASE_URL,
-    readApiKey: () => Effect.succeed(TEST_API_KEY),
+    readApiKey: () => Effect.succeed(Redacted.make(TEST_API_KEY)),
     httpClient: stub.layer,
     minimumRefreshIntervalMs: 0,
     collect: () => Effect.succeed([]),
@@ -1098,7 +1103,7 @@ test("a write whose answer never arrives hedges on its own deadline", async () =
 
   const written = await runTest(
     pass.write(
-      TEST_API_KEY,
+      Redacted.make(TEST_API_KEY),
       {
         segments: ["v0", "sessions", "session-one", "approve"],
         timeoutMs: STUB_STALLED_DEADLINE_MS,

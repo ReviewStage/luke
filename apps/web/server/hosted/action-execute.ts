@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer, type Redacted } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import {
@@ -222,7 +222,7 @@ function watchingHttpClient(
 
 function observeForAction(
   providerId: CloudAgentProviderId,
-  apiKey: string,
+  apiKey: Redacted.Redacted,
   seams: ActionExecuteSeams,
 ): Effect.Effect<ObservedActionPass> {
   return Effect.suspend(() => {
@@ -245,7 +245,7 @@ function observeForAction(
  */
 function pluginOverRoster(
   providerId: CloudAgentProviderId,
-  apiKey: string,
+  apiKey: Redacted.Redacted,
   roster: ActionRoster,
   seams: ActionExecuteSeams,
 ): SessionProviderPlugin {
@@ -365,7 +365,7 @@ export function executeSessionAction(options: {
   providerId: CloudAgentProviderId;
   /** The ask's own fields, keyed by the names admission reads, unparsed. */
   fields: WireRecord;
-  apiKey: string;
+  apiKey: Redacted.Redacted;
   roster: ActionRoster;
   /**
    * The developer's stored agent pairing for this provider, when the caller
@@ -454,7 +454,7 @@ export const executeConversationRead = /* @__PURE__ */ Effect.fn("executeConvers
     providerSessionId: string;
     afterMessageId?: string;
     beforeOffset?: number;
-    apiKey: string;
+    apiKey: Redacted.Redacted;
     seams?: ActionExecuteSeams;
   }): Effect.fn.Return<HostedConversationAnswer | ConversationReadRefusal> {
     const { providerId, providerSessionId, afterMessageId, beforeOffset, apiKey } = options;

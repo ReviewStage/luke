@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Layer, Option, Redacted, Result } from "effect";
+import { Effect, type Schema as EffectSchema, Layer, Option, type Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -160,7 +160,7 @@ const devicesEffect = /* @__PURE__ */ Effect.fn("devicesEffect")(
 
 /** The vault's encryption secret, read from the environment, or the unavailable refusal without one. */
 const vaultSecret = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Return<
-  string,
+  Redacted.Redacted,
   HostedRefusal,
   HostedEnvironment
 > {
@@ -168,7 +168,7 @@ const vaultSecret = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Re
   if (environment.providerKeyEncryptionSecret === undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
-  return Redacted.value(environment.providerKeyEncryptionSecret);
+  return environment.providerKeyEncryptionSecret;
 });
 
 /**

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Fiber } from "effect";
+import { Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -30,7 +30,7 @@ const CRON_SECRET = "cron-secret-1";
 const ACCOUNT = "user-observed-1";
 const DEPLOYMENT_CALLER: EveCaller = {
   kind: EVE_CALLER.DEPLOYMENT,
-  secret: CRON_SECRET,
+  secret: Redacted.make(CRON_SECRET),
   account: ACCOUNT,
 };
 const CONVERSATION = "2b000000-0000-4000-8000-000000000001";

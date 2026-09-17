@@ -1,4 +1,4 @@
-import { Layer, Redacted } from "effect";
+import { Layer, type Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { type DevicesVaultSeams, devicesVaultApp } from "../../server/devices-vault-app.js";
 import { HostedEnvironment } from "../../server/hosted/environment.js";
@@ -13,16 +13,10 @@ import { noDatabase } from "./no-database.js";
 export interface DevicesVaultCall extends DevicesVaultSeams {
   request: Request;
   /** Absent, or blank, means the vault is off, the way the environment's own absence does. */
-  encryptionSecret?: string | undefined;
-}
-
-function present(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
+  encryptionSecret?: Redacted.Redacted | undefined;
 }
 
 export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
-  const secret = present(call.encryptionSecret);
   // The seams a test hands in reach no connection, so the group runs over the
   // refusing client rather than one this suite would have to open.
   const { handler } = HttpRouter.toWebHandler(
@@ -32,10 +26,11 @@ export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
         Layer.succeed(HostedEnvironment, {
           openAiKey: undefined,
           realtimeModel: undefined,
+          brainModel: undefined,
           posthogPersonalApiKey: undefined,
           posthogProjectId: undefined,
           posthogApiHost: undefined,
-          providerKeyEncryptionSecret: secret === undefined ? undefined : Redacted.make(secret),
+          providerKeyEncryptionSecret: call.encryptionSecret,
           posthogProjectApiKey: undefined,
           posthogIngestHost: undefined,
           cronSecret: undefined,

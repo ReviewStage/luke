@@ -1,9 +1,8 @@
 import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
 import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "../server/hosted/brain-host/bounds.js";
-import { productionBrainHostSeams } from "../server/hosted/brain-host/production.js";
 import { runWeb } from "../server/runtime.js";
-import { host } from "./host.js";
+import { host, seams } from "./host.js";
 import { scriptedModel } from "./scripted-model.js";
 
 /**
@@ -16,8 +15,6 @@ import { scriptedModel } from "./scripted-model.js";
  * host decides, never when a clock runs out. The model is chosen per
  * inference, so the account's daily meter is spent once for each.
  */
-
-const seams = productionBrainHostSeams(runWeb);
 
 export default defineAgent({
   defaultTools: false,

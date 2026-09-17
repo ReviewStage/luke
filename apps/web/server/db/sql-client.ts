@@ -1,8 +1,8 @@
 import { PgClient } from "@effect/sql-pg";
-import { Config, Duration, Effect, Layer, Redacted } from "effect";
+import { Duration, Effect, Layer, Redacted } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { POOL_LIMITS } from "./index.js";
+import { databaseUrl, POOL_LIMITS } from "./index.js";
 
 /**
  * The bounds `POOL_LIMITS` states, in the words `@effect/sql-pg`'s own pool
@@ -29,7 +29,7 @@ const POOL_CONFIG = {
  * round trip would land on the cold start of functions that never query.
  */
 export const webSqlClient = Layer.unwrap(
-  Effect.map(Config.Redacted("DATABASE_URL"), (url) => PgClient.layer({ url, ...POOL_CONFIG })),
+  Effect.map(databaseUrl, (url) => PgClient.layer({ url, ...POOL_CONFIG })),
 );
 
 /**

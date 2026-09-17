@@ -1,4 +1,4 @@
-import { Effect, type Option, Redacted } from "effect";
+import { Effect, Equal, type Option, type Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import type { DevicesVaultSeams } from "../devices-vault-app.js";
@@ -37,8 +37,8 @@ export interface VaultKeyRow {
 export interface HostedVaultRoute {
   request: Request;
   resolveUserId: UserIdResolver;
-  /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
-  encryptionSecret: string | undefined;
+  /** PROVIDER_KEY_ENCRYPTION_SECRET, sealed; undefined means the env var is absent or blank. */
+  encryptionSecret: Redacted.Redacted | undefined;
   /** Reads the encrypted key row for this user and provider, or undefined if none stored. */
   readKey: (
     userId: string,
@@ -51,14 +51,14 @@ export interface HostedVaultRoute {
   storeKey: (userId: string, providerId: string, ciphertext: string) => VaultKeyEffect<void>;
   deleteKey: (userId: string, providerId: string) => VaultKeyEffect<boolean>;
   /** The hosted store under the deployment's payload key ring, for the routes that read or write it. */
-  store: (secret: string) => HostedStore;
+  store: (secret: Redacted.Redacted) => HostedStore;
 }
 
-let storeUnderSecret: { secret: string; store: HostedStore } | undefined;
+let storeUnderSecret: { secret: Redacted.Redacted; store: HostedStore } | undefined;
 
-/** One store per process, rebuilt only if the secret it was built under changes. */
-function storeFor(secret: string): HostedStore {
-  if (storeUnderSecret?.secret !== secret) {
+/** One store per process, rebuilt only if the secret it was built under changes; the secrets are compared sealed. */
+function storeFor(secret: Redacted.Redacted): HostedStore {
+  if (storeUnderSecret === undefined || !Equal.equals(storeUnderSecret.secret, secret)) {
     storeUnderSecret = {
       secret,
       store: hostedStore({ keys: payloadKeyRing(secret) }),
@@ -96,14 +96,10 @@ export function resolveHostedUserId(request: Request): Effect.Effect<Option.Opti
  * `HostedEnvironment` directly rather than running one to get at it.
  */
 export const hostedEncryptionSecretEffect: Effect.Effect<
-  string | undefined,
+  Redacted.Redacted | undefined,
   never,
   HostedEnvironment
-> = Effect.map(HostedEnvironment, (environment) =>
-  environment.providerKeyEncryptionSecret === undefined
-    ? undefined
-    : Redacted.value(environment.providerKeyEncryptionSecret),
-);
+> = Effect.map(HostedEnvironment, (environment) => environment.providerKeyEncryptionSecret);
 
 /**
  * The same seams, read directly by every route built as an `HttpApi` group

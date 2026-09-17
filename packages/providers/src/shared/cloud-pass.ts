@@ -15,7 +15,7 @@ import {
   WireValueSchema,
   wireRecord,
 } from "@sidecar/wire";
-import { Cause, Clock, Duration, Effect, type Layer, Option } from "effect";
+import { Cause, Clock, Duration, Effect, Equal, type Layer, Option, Redacted } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpBody from "effect/unstable/http/HttpBody";
@@ -54,8 +54,9 @@ const HTTP_METHOD = {
  * How every provider observed here presents its credential. A provider that
  * authenticates some other way is not supported rather than approximated.
  */
-function authorizationHeaders(apiKey: string) {
-  return { Authorization: `Bearer ${apiKey}` };
+function authorizationHeaders(apiKey: Redacted.Redacted) {
+  // The one place a credential is revealed: onto the header the provider reads.
+  return { Authorization: `Bearer ${Redacted.value(apiKey)}` };
 }
 
 const DEFAULT_REQUEST_HEADERS = {
@@ -114,8 +115,8 @@ export interface CloudPassInput {
   provider: SessionProvider;
   defaultBaseUrl: string;
   baseUrlEnvironmentVariable?: string;
-  /** Resolves the credential at observation time so a settings change applies immediately. */
-  readApiKey: () => Effect.Effect<string | undefined>;
+  /** Resolves the credential at observation time so a settings change applies immediately; sealed until the header is written. */
+  readApiKey: () => Effect.Effect<Redacted.Redacted | undefined>;
   baseUrl?: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
@@ -168,13 +169,13 @@ export interface CloudPass {
   lastFailure(): AdapterFailureKind | undefined;
   /** One authenticated write; answers what became of it, never fails. */
   write(
-    apiKey: string,
+    apiKey: Redacted.Redacted,
     route: CloudWriteRoute,
     subject?: WriteSubject,
   ): Effect.Effect<CloudWriteOutcome>;
   credentialBoundRead: CredentialBoundRead;
-  /** The credential as the caller's own action should present it, read afresh. */
-  readApiKey(): Effect.Effect<string | undefined>;
+  /** The credential as the caller's own action should present it, read afresh and still sealed. */
+  readApiKey(): Effect.Effect<Redacted.Redacted | undefined>;
   reportDiagnostic(kind: AdapterDiagnosticKind, error: Error): void;
 }
 
@@ -227,7 +228,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     },
     { nonNegative: ["minimumRefreshIntervalMs"] },
   );
-  let credential: string | undefined;
+  let credential: Redacted.Redacted | undefined;
   /**
    * Bumped only when the credential changes or is rejected — unlike the pass
    * counter, which moves on every observation. It is what a slow read that
@@ -249,7 +250,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * that fails is treated the same as having no credential at all — here, and
    * for the action that reads the credential again at its own moment.
    */
-  const readApiKey = (): Effect.Effect<string | undefined> =>
+  const readApiKey = (): Effect.Effect<Redacted.Redacted | undefined> =>
     // A caller ending the fiber is not a settings read that failed, so an
     // interruption is re-raised rather than read as a missing credential.
     catchAllButInterrupt(input.readApiKey(), () => Effect.succeed(undefined));
@@ -279,7 +280,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   };
 
   const sent = (
-    apiKey: string,
+    apiKey: Redacted.Redacted,
     address: string,
     document: string | undefined,
   ): HttpClientRequest.HttpClientRequest =>
@@ -353,7 +354,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * one thing the cadence retries.
    */
   const readOnce = (
-    apiKey: string,
+    apiKey: Redacted.Redacted,
     segments: readonly string[],
     query: Readonly<Record<string, string>>,
     document: string | undefined,
@@ -384,7 +385,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   };
 
   const requestJson = /* @__PURE__ */ Effect.fnUntraced(function* (
-    apiKey: string,
+    apiKey: Redacted.Redacted,
     budget: BackoffBudget,
     segments: readonly string[],
     query: Readonly<Record<string, string>> = {},
@@ -435,7 +436,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * whatever a request already read is discarded before an adapter can cache
    * it over state that belongs to the new credential.
    */
-  const requestForPass = (pass: number, apiKey: string): CloudRequest => {
+  const requestForPass = (pass: number, apiKey: Redacted.Redacted): CloudRequest => {
     const budget = backoffBudget();
     return (segments, query, options) =>
       Effect.gen(function* () {
@@ -457,7 +458,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * and travels no further.
    */
   const writeAttempt = /* @__PURE__ */ Effect.fnUntraced(function* (
-    apiKey: string,
+    apiKey: Redacted.Redacted,
     route: CloudWriteRoute,
     subject: WriteSubject,
   ): Effect.fn.Return<CloudWriteOutcome, HttpClientError.HttpClientError, HttpClient.HttpClient> {
@@ -546,7 +547,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * instead of the cache still advertising it.
    */
   const writeOnce = (
-    apiKey: string,
+    apiKey: Redacted.Redacted,
     route: CloudWriteRoute,
     subject: WriteSubject,
   ): Effect.Effect<CloudWriteOutcome, never, HttpClient.HttpClient> =>
@@ -577,7 +578,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     }
 
     const attemptedAt = yield* Clock.currentTimeMillis;
-    if (apiKey === credential) {
+    if (credential !== undefined && Equal.equals(apiKey, credential)) {
       // A network provider refreshes on its own cadence instead of on every
       // tick of the shared observation timer.
       if (attemptedAt - lastAttemptAt < minimumRefreshIntervalMs) return observations;

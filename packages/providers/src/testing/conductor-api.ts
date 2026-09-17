@@ -7,7 +7,7 @@ import {
   recordingHttpClient,
   runTest,
 } from "@sidecar/wire/testing";
-import { Effect, type Layer } from "effect";
+import { Effect, type Layer, Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { conductorPlugin } from "../conductor/index.js";
 
@@ -315,15 +315,16 @@ export function pluginFor(
   httpClient: Layer.Layer<HttpClient.HttpClient>,
   overrides: {
     apiKey?: string | undefined;
-    readApiKey?: () => Effect.Effect<string | undefined>;
+    readApiKey?: () => Effect.Effect<Redacted.Redacted | undefined>;
     minimumRefreshIntervalMs?: number;
     /** The roster the brain's reads answer for, when a host holds one the plugin did not read itself. */
     reported?: () => readonly ProviderSessionObservation[];
   } = {},
 ): SessionProviderPlugin {
   const apiKey = "apiKey" in overrides ? overrides.apiKey : TEST_API_KEY;
+  const sealed = apiKey === undefined ? undefined : Redacted.make(apiKey);
   return conductorPlugin({
-    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
+    readApiKey: overrides.readApiKey ?? (() => Effect.succeed(sealed)),
     baseUrl: TEST_BASE_URL,
     httpClient,
     minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,

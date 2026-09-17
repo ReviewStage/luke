@@ -4,7 +4,7 @@ import {
   NOTEBOOK_MEMORY_TOOL,
   type NotebookMemoryAccess,
 } from "@sidecar/memory";
-import { Effect, Result } from "effect";
+import { Effect, Redacted, Result } from "effect";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import {
@@ -117,7 +117,8 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
   const carrier = hostedActionCarrier({
     roster,
     defaults: () => Effect.succeed({}),
-    apiKey: () => Effect.succeed(options.apiKey),
+    apiKey: () =>
+      Effect.succeed(options.apiKey === undefined ? undefined : Redacted.make(options.apiKey)),
     execute: (input) =>
       Effect.sync(() => {
         executed.push({ kind: input.kind, provider_id: input.providerId, ...input.fields });
@@ -323,7 +324,7 @@ test("a created workspace keeps the created session identity in its action envel
   const carrier = hostedActionCarrier({
     roster,
     defaults: () => Effect.succeed({}),
-    apiKey: () => Effect.succeed("conductor-key"),
+    apiKey: () => Effect.succeed(Redacted.make("conductor-key")),
     execute: () =>
       Effect.succeed({
         result: ACTION_RESULT_STATUS.ACCEPTED,
@@ -396,7 +397,7 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
   const carrier = hostedActionCarrier({
     roster,
     defaults: () => Effect.succeed({ agentDefaults: { conductor: stored } }),
-    apiKey: () => Effect.succeed("conductor-key"),
+    apiKey: () => Effect.succeed(Redacted.make("conductor-key")),
     execute: (input) =>
       Effect.sync(() => {
         executed.push({

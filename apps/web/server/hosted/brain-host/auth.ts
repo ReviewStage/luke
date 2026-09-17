@@ -1,3 +1,4 @@
+import type { Redacted } from "effect";
 import { type AuthFn, ForbiddenError, withAuthChallenges } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { isWireString } from "../../core.js";
@@ -82,8 +83,8 @@ export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
 
 /** The deployment acting for an account: which secret admits it, and which kinds of turn a message under it may open. */
 export interface DeploymentActor {
-  /** The deployment's own secret; nothing while the environment names none, which admits no request. */
-  readonly secret: string | undefined;
+  /** The deployment's own secret, sealed; nothing while the environment names none, which admits no request. */
+  readonly secret: Redacted.Redacted | undefined;
   /** Every kind of turn, and whether a message under the secret may open it; a kind admitted nowhere is refused outright. */
   readonly admits: Readonly<Record<BrainHostTurn, boolean>>;
 }

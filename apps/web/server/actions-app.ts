@@ -1,4 +1,4 @@
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, type Redacted } from "effect";
 import {
   type HttpMethod,
   HttpRouter,
@@ -85,12 +85,11 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * and the handler answers the 503 for it, the same as when
  * `hostedVaultRoute` read it.
  */
-const actionEncryptionSecret: Effect.Effect<string | undefined, never, HostedEnvironment> =
-  Effect.map(HostedEnvironment, (environment) =>
-    environment.providerKeyEncryptionSecret === undefined
-      ? undefined
-      : Redacted.value(environment.providerKeyEncryptionSecret),
-  );
+const actionEncryptionSecret: Effect.Effect<
+  Redacted.Redacted | undefined,
+  never,
+  HostedEnvironment
+> = Effect.map(HostedEnvironment, (environment) => environment.providerKeyEncryptionSecret);
 
 /**
  * Carries the handler's own `Response` back unchanged: the request handed to
