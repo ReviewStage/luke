@@ -44,7 +44,7 @@ import {
 } from "./conversation-rating";
 import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import { detailToolLabel, TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
-import { ConversationTurns, foldOpen } from "./conversation-turns";
+import { ConversationTurns, conversationSearchEntries, foldOpen } from "./conversation-turns";
 import {
   FIXTURE_AGENT,
   FIXTURE_INPUT,
@@ -736,6 +736,70 @@ test("an observation announce call is a fold of thinking and nothing else, and a
   assert.ok(insideFold !== undefined && afterFold !== undefined);
   assert.equal(count(insideFold, "class", "conversation-time"), 0);
   assert.equal(count(afterFold, "class", "conversation-time"), 1);
+});
+
+/**
+ * The observed fixture turn as the service pages a transcript: the session's
+ * own conversation read as main, its messages whole rather than cut to what
+ * crosses into the thread.
+ */
+function transcriptOf(turnId: string): ConversationViewTurnGroup {
+  const group = selectConversationView({
+    ...FIXTURE_INPUT,
+    main: FIXTURE_INPUT.observed.flatMap((conversation) => conversation.messages),
+    observed: [],
+  }).find((candidate) => candidate.turnId === turnId);
+  assert.ok(group);
+  return group;
+}
+
+test("on an observed session's transcript page an announce call is a row of the turn's working: Luke's face, the one word, and the briefing folded under it", () => {
+  const BRIEFING = "The fixture session is waiting on a permission prompt.";
+  const group = transcriptOf(FIXTURE_TURN.ANNOUNCED);
+  assert.equal(group.source.kind, CONVERSATION_VIEW_SOURCE.MAIN);
+  const session: SessionIdentity = {
+    providerId: "conductor",
+    providerSessionId: FIXTURE_SESSION.HELD,
+  };
+  const markup = render([group], OPEN, { session });
+  // One announced row, no bubble anywhere, and no observed-group fold either.
+  assert.equal(count(markup, "data-announced", "true"), 1);
+  assert.equal(count(markup, "data-observation-announcement", "true"), 0);
+  assert.ok(!markup.includes("conversation-bubble"));
+  assert.equal((markup.match(/data-tool-kind="/g) ?? []).length, 0);
+  const row = entries(markup).find((entry) => entry.includes('data-announced="true"'));
+  assert.ok(row);
+  // The line is the tool calls' anatomy under his own judgment: the chevron,
+  // his face for a mark, the one word naming the tool, and none of the words.
+  assert.ok(row.includes('data-judgment="own"'));
+  assert.ok(row.includes('data-thinking-fold="true"'));
+  const summaryEnd = row.indexOf("</summary>");
+  assert.ok(summaryEnd > 0);
+  const summary = row.slice(0, summaryEnd);
+  assert.equal(count(summary, "class", "settings-chevron"), 1);
+  assert.equal(count(summary, "class", "luke-face"), 1);
+  assert.ok(summary.includes("<span>Announced</span>"));
+  assert.ok(!summary.includes("Thinking"));
+  assert.ok(!summary.includes(BRIEFING));
+  // The briefing stands inside the fold; the stamp on the line, none inside.
+  const [insideFold, afterFold] = row.split("</details>");
+  assert.ok(insideFold !== undefined && afterFold !== undefined);
+  assert.ok(insideFold.includes(BRIEFING));
+  assert.equal(count(insideFold, "class", "conversation-time"), 0);
+  assert.equal(count(afterFold, "class", "conversation-time"), 1);
+  // The rating stands on the message's last words, the note after the call, and not on the fold.
+  assert.equal(ratingControls(markup), 1);
+  assert.equal(ratingControls(row), 0);
+  // The same group drawn by a thread that is the transcript of no session is the bubble it was.
+  const thread = render([group], OPEN);
+  assert.equal(count(thread, "data-announced", "true"), 0);
+  assert.ok(thread.includes("conversation-bubble"));
+  assert.ok(thread.includes(BRIEFING));
+  // The search reads what each draws: the fold is not words said, the bubble is.
+  const folded = conversationSearchEntries([group], { session });
+  assert.ok(!folded.some((entry) => entry.words.includes(BRIEFING)));
+  const drawn = conversationSearchEntries([group]);
+  assert.ok(drawn.some((entry) => entry.words.includes(BRIEFING)));
 });
 
 test("a developer's row is a sent bubble with a copy control, and a note the brain wrote is a quiet row", () => {

@@ -95,7 +95,11 @@ import { ThinkingDots } from "./thinking-dots";
  * observation's briefing folds like his thinking instead, since it is the
  * brain's proposal and not words anyone heard, with the chip naming the
  * observed agent inside the fold above the words; the recorded spoken text
- * stays below as the voice's own bubble. Every other stored tool call of one assistant
+ * stays below as the voice's own bubble. On an observed session's own
+ * transcript page the announce call is a row of the turn's working like the
+ * reads beside it — Luke's face, the one word naming the tool, the briefing
+ * folded under the line — and never a bubble, since there it is what the
+ * call did. Every other stored tool call of one assistant
  * message — reads, actions, even one whose tool failed — draws ahead of that
  * message's words, in the call order the message stored them: one call as
  * the row it is, stamped like any other, and two or more inside one fold
@@ -364,27 +368,49 @@ function BubbleRow({
 /** What a fold of Luke's thinking opens on: one word for both kinds, for now. */
 const THINKING_LABEL = "Thinking";
 
+/** What the fold of a briefing on an observed session's transcript page opens on: the tool's own past tense. */
+const ANNOUNCED_LABEL = "Announced";
+
 /**
- * A fold of Luke's thinking: a line drawn the way a fold of tool calls is —
- * the disclosure chevron, then his brain for a mark, then the one word — that
- * opens on the words below it, closed until the reader presses it, and never
- * a control of anything. It is a row of its own and never a row inside the
- * tool calls' fold: what he did and what he thought are two things. The two
- * rows below share it and nothing else, so the record's two kinds of
- * thinking stay two kinds in the markup while reading as one on the surface.
+ * A fold of words: a line drawn the way a fold of tool calls is — the
+ * disclosure chevron, then a mark for what the words are, then one word —
+ * that opens on the words below it, closed until the reader presses it, and
+ * never a control of anything. It is a row of its own and never a row inside
+ * the tool calls' fold: what he did and what he thought are two things.
  */
-function ThinkingFold({ children }: { children: React.ReactNode }): React.JSX.Element {
+function WordsFold({
+  mark,
+  label,
+  children,
+}: {
+  mark: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
     <details className="conversation-thinking-fold">
       <summary className="conversation-turn-summary">
         <ChevronIcon />
         <span className="conversation-action-mark" aria-hidden="true">
-          <BrainIcon />
+          {mark}
         </span>
-        <span>{THINKING_LABEL}</span>
+        <span>{label}</span>
       </summary>
       {children}
     </details>
+  );
+}
+
+/**
+ * A fold of Luke's thinking: his brain for a mark, then the one word. The
+ * two rows below share it and nothing else, so the record's two kinds of
+ * thinking stay two kinds in the markup while reading as one on the surface.
+ */
+function ThinkingFold({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <WordsFold mark={<BrainIcon />} label={THINKING_LABEL}>
+      {children}
+    </WordsFold>
   );
 }
 
@@ -474,6 +500,61 @@ function ObservationAnnouncementRow({
             <ConversationMessageMenu>{rating}</ConversationMessageMenu>
           )}
         </ThinkingFold>
+      </div>
+      <RowStamp at={at} />
+    </li>
+  );
+}
+
+/**
+ * The briefing an announce call carried, on an observed session's transcript
+ * page: the service pages that session's own conversation as main, so the
+ * call stands among the turn's reads and actions rather than crossing into
+ * the thread as a briefing, and it is drawn as one of them — a row of the
+ * turn's working led by the mark every other call there leads with, Luke's
+ * face under his own judgment, and the one word naming the tool — with the
+ * briefing folded under the line the way his thinking is, since on that page
+ * it is what the call did and not words the thread says. The rating stands
+ * inside the fold with the words it is about, and the row carries the
+ * message's stamp on its line, as the tool calls' fold does.
+ */
+function AnnouncedRow({
+  judgment,
+  words,
+  at,
+  rating,
+  search,
+}: {
+  judgment: Judgment;
+  words: string;
+  at: number;
+  rating: React.ReactNode;
+  /** The search's anchor and marks for the row's message. */
+  search: RowSearch;
+}): React.JSX.Element {
+  const own = judgment === JUDGMENT.OWN;
+  const voice = own ? VOICE.OWN : VOICE.ACTION;
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={voice.speaker}
+      data-judgment={judgment}
+      data-thinking-fold="true"
+      data-announced="true"
+      {...rowSearchAttributes(search)}
+    >
+      <small className="visually-hidden">{voice.label}</small>
+      <div className="conversation-message">
+        <WordsFold mark={own ? <WingFace /> : <MegaphoneIcon />} label={ANNOUNCED_LABEL}>
+          <MarkdownMessage
+            words={words}
+            className="conversation-thinking-fold-words"
+            highlight={search.highlight}
+          />
+          {rating === undefined ? null : (
+            <ConversationMessageMenu>{rating}</ConversationMessageMenu>
+          )}
+        </WordsFold>
       </div>
       <RowStamp at={at} />
     </li>
@@ -1254,8 +1335,9 @@ function toolCallRow(
  * control on its last words. Which tool calls are announcements is the view's
  * decision, read back by call id; an announce call carrying its briefing is
  * drawn as that bubble, or in an observed group as a fold of thinking worn
- * by the source chip handed in, and as no tool call row; every other call
- * is a row composed from its own part.
+ * by the source chip handed in, or on an observed session's transcript page
+ * as a row of the turn's working with the briefing folded under it, and as
+ * no tool call row; every other call is a row composed from its own part.
  * In a turn whose answer the voice said, the
  * brain's text is his thinking and folds as his written working, whatever
  * the voice made of it; the rating of the brain's judgment then stands on the
@@ -1277,6 +1359,8 @@ function messageRows(
   sourceChip?: React.ReactNode,
   /** The session whose transcript the row stands in, so an observed-messages note's chip opens its chat; absent where the thread knows none. */
   chat?: SessionIdentity,
+  /** Whether the thread is an observed session's transcript page, where an announce call is a row of the turn's working. */
+  transcript = false,
 ): readonly React.JSX.Element[] {
   const { message } = view;
   const search: RowSearch = {
@@ -1410,6 +1494,19 @@ function messageRows(
         );
         return;
       }
+      if (words !== undefined && transcript) {
+        rows.push(
+          <AnnouncedRow
+            key={key}
+            judgment={judgment}
+            words={words}
+            at={view.placedAt}
+            rating={placed}
+            search={search}
+          />,
+        );
+        return;
+      }
       if (words !== undefined && readAloud) {
         rows.push(<WrittenRow key={key} words={words} />);
         return;
@@ -1534,6 +1631,7 @@ function searchEntriesOf(
   judgment: Judgment,
   aloud: boolean,
   observed: boolean,
+  transcript: boolean,
   readings: Readings,
   ask: string | undefined,
 ): readonly ConversationSearchEntry[] {
@@ -1604,10 +1702,10 @@ function searchEntriesOf(
         ? { view, words: quotedWords(message, part), ask }
         : undefined;
     if (isTextPart(part)) return thinking ? [] : entry(key, { ...spoken, text: part.text }, rated);
-    // An observed session's briefing folds as the brain's proposal, and a
-    // briefing a device read aloud folds as his written working: neither is
-    // words said.
-    if (observed || readAloud || !isStoredToolPart(part)) return [];
+    // An observed session's briefing folds as the brain's proposal, on its
+    // own transcript page as the call it was, and a briefing a device read
+    // aloud as his written working: none is words said.
+    if (observed || transcript || readAloud || !isStoredToolPart(part)) return [];
     if (described.get(part.toolCallId)?.kind !== CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) return [];
     const briefing = announcedWords(part);
     return briefing === undefined ? [] : entry(key, { ...LUKE_BUBBLE, text: briefing }, rated);
@@ -1668,7 +1766,12 @@ export function ConversationSearchHitRow({
  */
 export function conversationSearchEntries(
   groups: readonly ConversationViewTurnGroup[],
+  options?: {
+    /** The session the thread is the transcript of, as `ConversationTurns` is handed it; absent for the main thread. */
+    readonly session?: SessionIdentity | undefined;
+  },
 ): readonly ConversationSearchEntry[] {
+  const transcript = options?.session !== undefined;
   const readings = readingsOf(groups);
   const entries: ConversationSearchEntry[] = [];
   // The ask a rated reply answered is the developer's latest words in the
@@ -1681,7 +1784,15 @@ export function conversationSearchEntries(
     const observed = group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED;
     for (const view of group.messages) {
       entries.push(
-        ...searchEntriesOf(view, judgment, aloud, observed, readings, asks.get(group.turnId)),
+        ...searchEntriesOf(
+          view,
+          judgment,
+          aloud,
+          observed,
+          transcript,
+          readings,
+          asks.get(group.turnId),
+        ),
       );
       if (
         judgment === JUDGMENT.ASK &&
@@ -1832,7 +1943,9 @@ export function ConversationTurns({
   /**
    * The session this thread is the transcript of, on an agent's page, so an
    * observed-messages note's chip opens its chat the way the page's header
-   * does; absent for the main thread, which is the transcript of no session.
+   * does and an announce call is a row of the turn's working rather than a
+   * bubble; absent for the main thread, which is the transcript of no
+   * session.
    */
   session?: SessionIdentity;
   /**
@@ -1956,6 +2069,7 @@ export function ConversationTurns({
             ) : undefined,
             naming === undefined ? undefined : <SourceChip {...naming} />,
             chat,
+            session !== undefined,
           );
           if (
             judgment === JUDGMENT.ASK &&
