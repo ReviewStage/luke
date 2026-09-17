@@ -69,12 +69,9 @@ const STATUS_WORD = {
 } as const satisfies Record<ChildStatus, string>;
 
 /**
- * The state a row wears in the session rows' own vocabulary, which is what
- * colours its detail line and leads it with a glyph: a running turn spins
- * as a working session does, a settled one checks off as a complete one,
- * and a failure takes the attention colour, since a thing that did not
- * happen is the one thing here worth a colour. Waiting and cancelled say
- * their word in the row's quiet voice and wear no state.
+ * A row's state in the session rows' vocabulary: running spins as working
+ * does, settled checks off as complete, failed takes the attention colour,
+ * and waiting or cancelled wear none.
  */
 const ROW_STATE = {
   [CHILD_STATUS.ACCEPTED]: undefined,
@@ -196,19 +193,12 @@ export function AgentsButton({
   );
 }
 
-/**
- * One page's head, on the settings pages' own terms: the way back as the
- * same square icon button a settings page leads with, then the page's name
- * in the same weight, and whatever else the page has to say on the line.
- * Outside the scroller rather than pinned inside it, the way the tab bar
- * stands outside the list, so the way back is never scrolled away from.
- */
+/** A page's head, as a settings page's: the icon back button, then the page's name and whatever else the line says. */
 function AgentsPageHeader({
   backTo,
   onBack,
   children,
 }: {
-  /** The page the back control returns to, named for a reader. */
   backTo: string;
   onBack: () => void;
   children: React.ReactNode;
@@ -229,42 +219,25 @@ function AgentsPageHeader({
   );
 }
 
-/**
- * One section of the list, drawn as the sessions tab draws a workspace's
- * tray: one card named once at its top, its rows divided by hairlines
- * inside, so a group of agents reads as the same kind of thing as a group of
- * chats. Named by the tray's own classes rather than styled after them,
- * because it is the same drawing and a second copy of its rules would drift.
- * The tray arrives at its lead row's turn of the stagger, as a workspace's
- * does, so the two sections fan in as one stack.
- */
+/** One section of the list: its heading over its rows, or what it says once read with none. */
 function AgentsSection({
   heading,
-  index,
   settled,
   empty,
   children,
 }: {
   heading: string;
-  /** The stack's index of the section's lead row, for its turn of the arrival. */
-  index: number;
   settled: boolean;
   empty: string;
   children: readonly React.JSX.Element[];
 }): React.JSX.Element {
   return (
-    <section
-      className="workspace-tray agents-section"
-      style={cssCustomProperties({ "--row-index": index })}
-    >
-      <header className="workspace-tray-header">
-        <h3 className="workspace-tray-name agents-section-title">{heading}</h3>
-      </header>
+    <section className="agents-section">
+      <h3 className="agents-section-title">{heading}</h3>
       {children.length > 0 ? (
         children
       ) : settled ? (
-        // Only a list actually read may say it is empty; before that the
-        // room stands empty, as the thread's does before its first read.
+        // Only a list actually read may say it is empty.
         <p className="agents-section-empty">{empty}</p>
       ) : null}
     </section>
@@ -272,16 +245,15 @@ function AgentsSection({
 }
 
 /**
- * One row of either section, in a session row's own anatomy and classes:
- * the mark, the title over the line saying where it stands, and the age at
- * the row's end, so an agent or a child reads exactly as a chat does one tab
- * over. An agent leads with its agent's mark as its session's row does; a
- * child, being the brain's own and no session's, leads with the robot the
- * thread's chips wear for Luke's agents. The whole row is one press, and it
- * opens the transcript.
+ * One row of either section, in a session row's own anatomy and classes, so
+ * an agent or a child reads as a chat does one tab over. An agent leads with
+ * its agent's mark; a child, the brain's own, with the robot the thread's
+ * chips wear for Luke's agents. The row is one press, and it opens the
+ * transcript.
  */
 function AgentRow({
   row,
+  index,
   mark,
   providerId,
   title,
@@ -290,12 +262,10 @@ function AgentRow({
   onOpen,
 }: {
   row: ChildRead | AgentRead;
-  /** What stands in the mark's slot where no provider's mark does. */
+  index: number;
   mark?: React.ReactNode;
-  /** Whose mark leads the row, where one does. */
   providerId?: string | undefined;
   title: string;
-  /** Where a child was delegated from, said after its status where it is worth saying. */
   origin?: string | undefined;
   now: number;
   onOpen: () => void;
@@ -306,6 +276,7 @@ function AgentRow({
       type="button"
       className="session-row agent-row"
       {...(state === undefined ? undefined : { "data-state": state })}
+      style={cssCustomProperties({ "--row-index": index + 1 })}
       onClick={onOpen}
     >
       <PanelSessionRow
@@ -381,14 +352,14 @@ export function AgentsPanel({
       <div className="agents-scroll">
         <AgentsSection
           heading="Per-workspace agents"
-          index={1}
           settled={agents.settled}
           empty="No per-workspace agents yet"
         >
-          {listedAgents.map((agent) => (
+          {listedAgents.map((agent, index) => (
             <AgentRow
               key={agent.id}
               row={agent}
+              index={index}
               providerId={agentSession(agent, roster)?.agentId ?? agent.providerId}
               title={agentTitle(agent, roster)}
               now={now}
@@ -396,16 +367,12 @@ export function AgentsPanel({
             />
           ))}
         </AgentsSection>
-        <AgentsSection
-          heading="Sub-agents"
-          index={listedAgents.length + 1}
-          settled={subagents.settled}
-          empty="No sub-agents yet"
-        >
-          {children.map((child) => (
+        <AgentsSection heading="Sub-agents" settled={subagents.settled} empty="No sub-agents yet">
+          {children.map((child, index) => (
             <AgentRow
               key={child.id}
               row={child}
+              index={listedAgents.length + index}
               mark={<RobotIcon className="agent-robot" />}
               title={subagentTitle(child)}
               origin={

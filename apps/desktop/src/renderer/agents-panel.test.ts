@@ -170,7 +170,7 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("the list is mounted under the thread's own root, ids and blocked class alike, in two sections drawn as workspace trays under a settings page's head", () => {
+test("the list is mounted under the thread's own root, ids and blocked class alike, in two headed sections under a settings page's head", () => {
   const markup = renderChildren([LABELLED]);
   assert.ok(markup.includes('class="conversation-view agents-page ph-no-capture"'));
   assert.ok(markup.includes('id="panel-view-conversation"'));
@@ -183,16 +183,11 @@ test("the list is mounted under the thread's own root, ids and blocked class ali
   );
   assert.ok(markup.includes('<h2 class="agents-title">Agents</h2>'));
   const drawn = sections(markup);
-  assert.deepEqual(
-    drawn.map((section) => section.className),
-    ["workspace-tray agents-section", "workspace-tray agents-section"],
-  );
   const headings = drawn.map(
-    (section) =>
-      section.querySelector(".workspace-tray-header > .agents-section-title")?.textContent,
+    (section) => section.querySelector(".agents-section-title")?.textContent,
   );
   assert.deepEqual(headings, ["Per-workspace agents", "Sub-agents"]);
-  // The rows are the tray's own children, as a workspace's chats are, so the tray's seams divide them.
+  // Each row is a session row standing on its own under the heading, as a chat's does one tab over.
   const [, subagents] = drawn;
   assert.ok(subagents);
   assert.equal(subagents.children[1]?.className, "session-row agent-row");

@@ -485,7 +485,7 @@
   font-weight: 700;
 }
 
-/* The two sections share one scroller, on the session list's own terms:
+/* The two sections share one scroller on the session list's own terms:
    contained, thin-barred, dissolving at its foot through the shared fade,
    with the head left outside it so the way back is never scrolled away
    from, the way the tab bar stands outside every list. */
@@ -494,7 +494,7 @@
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 9px;
+  gap: 14px;
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -504,18 +504,28 @@
   animation-timeline: scroll(self block);
 }
 
-/* A section is a workspace tray with a heading for its name: the tray's
-   classes draw the card and the seams, and the heading only gives up the
-   margin a heading element arrives with. */
-.agents-section-title {
-  margin: 0;
+/* A section is its heading over session rows at the list's own spacing. */
+.agents-section {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 9px;
 }
 
-/* A read section with nothing stands one row tall, its words at the inset a
-   row's own detail line keeps, in that line's quiet voice. */
+/* The heading speaks in a settings section's voice, at the head's inset. */
+.agents-section-title {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
 .agents-section-empty {
   margin: 0;
-  padding: 11px 14px;
+  padding: 0 2px;
   color: var(--text-tertiary);
   font-size: 10.5px;
 }
