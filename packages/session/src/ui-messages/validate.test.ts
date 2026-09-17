@@ -44,7 +44,6 @@ const FIXTURE = {
   CHILD_TASK: "child-task.json",
   CHILD_COMPLETION: "child-completion.json",
   RECALLED_NOTES: "recalled-notes.json",
-  ACTIVITY_NOTICES: "activity-notices.json",
   COMPACTION_UNCOUNTED: "compaction-uncounted.json",
 } as const;
 
@@ -55,7 +54,6 @@ const BRAIN_SOURCE_FIXTURES = {
   [OBSERVATION_SOURCE.CHILD]: FIXTURE.CHILD_TASK,
   [OBSERVATION_SOURCE.CHILD_COMPLETION]: FIXTURE.CHILD_COMPLETION,
   [OBSERVATION_SOURCE.RECALLED_NOTES]: FIXTURE.RECALLED_NOTES,
-  [OBSERVATION_SOURCE.ACTIVITY_NOTICES]: FIXTURE.ACTIVITY_NOTICES,
 } as const satisfies Record<ObservationSource, (typeof FIXTURE)[keyof typeof FIXTURE]>;
 
 async function fixture(name: (typeof FIXTURE)[keyof typeof FIXTURE]): Promise<WireRecord> {

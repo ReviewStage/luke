@@ -74,7 +74,7 @@ export function isWorkspaceFile(name: string): name is WorkspaceFile {
 }
 
 /** What each file holds when the workspace is first made. */
-export type WorkspaceSeeds = Readonly<Record<WorkspaceFile, string>>;
+export type WorkspaceSeeds = Readonly<Partial<Record<WorkspaceFile, string>>>;
 
 /** One bootstrap file as the prompt receives it: its text within the bounds, and what the bounds did to it. */
 export interface BootstrapFile {

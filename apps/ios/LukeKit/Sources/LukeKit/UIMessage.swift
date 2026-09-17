@@ -29,7 +29,6 @@ public enum ObservationSource: String, Sendable {
     case child
     case childCompletion = "child_completion"
     case recalledNotes = "recalled_notes"
-    case activityNotices = "activity_notices"
 }
 
 /// The states a stored tool part may carry — `TOOL_PART_STATE` in

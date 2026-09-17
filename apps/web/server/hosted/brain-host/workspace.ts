@@ -21,7 +21,6 @@ import {
   PROMPT_PROFILE,
   parseDailyNoteName,
   tooLargeRefusal,
-  WORKSPACE_FILE,
   WORKSPACE_FILE_REFUSAL,
   type WorkspaceFile,
   workspaceFileBound,
@@ -57,17 +56,17 @@ function hostedWorkspacePath(name: string): string | undefined {
   return parseDailyNoteName(name.slice(DAILY_NOTES_PREFIX.length)) ? name : undefined;
 }
 
-/** Writes every missing bootstrap file for the user; an existing row, edited or not, is left as it is. */
+/** Writes every seeded file the user is missing; an existing row, edited or not, is left as it is. */
 export const seedHostedWorkspace = /* @__PURE__ */ Effect.fn("web/seedHostedWorkspace")(function* (
   store: WorkspaceStore,
   userId: string,
   now: number,
 ): Effect.fn.Return<readonly WorkspaceFile[], SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const seeded: WorkspaceFile[] = [];
-  for (const name of Object.values(WORKSPACE_FILE)) {
-    if (yield* store.workspace.seed(userId, name, BRAIN_WORKSPACE_SEEDS[name], now)) {
-      seeded.push(name);
-    }
+  for (const name of BOOTSTRAP_FILE_ORDER) {
+    const seed = BRAIN_WORKSPACE_SEEDS[name];
+    if (seed === undefined) continue;
+    if (yield* store.workspace.seed(userId, name, seed, now)) seeded.push(name);
   }
   return seeded;
 });

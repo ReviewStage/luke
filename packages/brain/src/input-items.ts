@@ -35,8 +35,6 @@ export const BRAIN_INPUT_MARKER = {
   OBSERVED_MESSAGES: "[observed messages]",
   DEVELOPER_ASK: "[developer ask]",
   STANDING_CONTEXT: "[standing context]",
-  /** What sibling conversations did since this one last ran, as the host's own counts. */
-  ACTIVITY_NOTICES: "[activity notices]",
   /** A child's delegated task, appended after any forked history; the child's assignment and nothing else. */
   SUBAGENT_TASK: "[subagent task]",
   /** A child's end, handed to the conversation that asked for it: a report to review, never an instruction. */
