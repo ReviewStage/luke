@@ -1,28 +1,28 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { NodeFileSystem } from "@effect/platform-node";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
-import { Effect, Result } from "effect";
+import { Effect, Layer, type Path, Result } from "effect";
 import * as FileSystem from "effect/FileSystem";
-import {
-  parsePersistedSettingsEither,
-  readSettingsFileText,
-  SettingsParseRefusal,
-  writeSettingsFileAtomic,
-} from "./settings-store-io.js";
+import { parsePersistedSettingsEither, SettingsParseRefusal } from "../settings-store.js";
+import { readSettingsFileText, writeSettingsFileAtomic } from "./settings-store-io.js";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
 const SETTINGS_FILE_MODE = 0o600;
 
 const withDirectory = <A, E>(
-  run: (directory: string) => Effect.Effect<A, E, FileSystem.FileSystem>,
+  run: (directory: string) => Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>,
 ): Promise<A> =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped();
     return yield* run(directory);
-  }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer), Effect.runPromise);
+  }).pipe(
+    Effect.scoped,
+    Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
+    Effect.runPromise,
+  );
 
 describe("readSettingsFileText", () => {
   it("answers nothing for a directory with no settings file yet", () =>
