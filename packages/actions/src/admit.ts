@@ -695,7 +695,10 @@ const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
     }
     // A model named for this one creation resolves against the provider's own
     // documented table, and the effort only ever rides a model: alone it has
-    // nothing documented to attach to. The model decides which agent runs it,
+    // nothing documented to attach to. Note that the brain's tool declares no
+    // model, agent, or effort and its call is cut to its declaration before
+    // admission, so a model here is a device picker's own word, never the
+    // brain's guess. The model decides which agent runs it,
     // so an agent the ask named beside it has to be that agent: a claude
     // asked for beside a codex model is a refusal, never a Codex workspace,
     // exactly as a spawn's mismatch is.
@@ -762,7 +765,8 @@ const admitAddAgent: Admitter<typeof ACTION_KIND.ADD_AGENT> = (fields, context, 
     }
     // A model named for this one agent resolves within the asked-for kind alone:
     // the developer's chosen agent is never re-decided by the model they named
-    // beside it, so a mismatch is a refusal rather than a swap.
+    // beside it, so a mismatch is a refusal rather than a swap. As for a
+    // creation, only a device's own picker reaches here with a model.
     const spokenModel = textArgument(fields, "model");
     const spokenEffort = textArgument(fields, "effort");
     if (spokenEffort !== undefined && spokenModel === undefined) {

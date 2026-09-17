@@ -8,7 +8,13 @@ import {
   type ValidatedAction,
 } from "@sidecar/actions";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
+import {
+  normalizeSession,
+  type ObservedWorkspaceProject,
+  SESSION_STATUS,
+  WORKSPACE_TASK_SUPPORT,
+} from "@sidecar/session";
+import type { WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { test } from "vitest";
@@ -29,9 +35,18 @@ const observed = normalizeSession(
 
 const MESSAGE_INPUT = { provider_id: "claude-code", provider_session_id: "abc", text: "go" };
 
-/** A turn's standing over a roster of one session, whose carrier records what it was handed. */
+const PROJECT: ObservedWorkspaceProject = {
+  providerId: "conductor",
+  providerName: "Conductor",
+  providerProjectId: "proj-1",
+  repository: "luke",
+  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+};
+
+/** A turn's standing over a roster of one session and one project, whose carrier records what it was handed. */
 function context(revoked: () => boolean = () => false) {
   const carried: ValidatedAction[] = [];
+  const carriedFields: WireRecord[] = [];
   const rosterReads: number[] = [];
   const ctx: ActionToolContext = {
     conversationId: MAIN_SESSION_KEY,
@@ -48,14 +63,22 @@ function context(revoked: () => boolean = () => false) {
             return [observed];
           }),
       },
+      projects: {
+        read: () => Effect.succeed([PROJECT]),
+        defaults: () => Effect.succeed({}),
+        agentModels: () => [
+          { agent: "codex", models: [{ id: "gpt-5.4", label: "GPT-5.4" }], efforts: ["high"] },
+        ],
+      },
     },
-    carry: (action) =>
+    carry: (action, fields) =>
       Effect.sync(() => {
         carried.push(action);
+        carriedFields.push(fields);
         return acceptedActionOutput();
       }),
   };
-  return { ctx, carried, rosterReads };
+  return { ctx, carried, carriedFields, rosterReads };
 }
 
 test("every row of the actions table is a module, in the table's order", () => {
@@ -88,6 +111,40 @@ test("execute admits over the roster admission reads for itself, then carries wh
       text: "go",
       origin: RUN_ORIGIN.USER,
     },
+  ]);
+});
+
+test("a creation is cut to the fields its tool declares before admission, so a model the call added never rides", async () => {
+  const tool = actionToolNamed("create_workspace");
+  assert.ok(tool);
+  const { ctx, carried, carriedFields } = context();
+  // Every key the model wrote beside the declaration is dropped: a codex model
+  // at high effort that admission would otherwise resolve, and an agent kind.
+  const output = await Effect.runPromise(
+    tool.execute(
+      {
+        provider_id: "conductor",
+        project_id: "proj-1",
+        name: "Checkout",
+        agent: "codex",
+        model: "gpt-5.4",
+        effort: "high",
+      },
+      ctx,
+    ),
+  );
+  assert.equal(output.status, ACTION_OUTPUT_STATUS.ACCEPTED);
+  assert.deepEqual(carried, [
+    {
+      kind: ACTION_KIND.CREATE_WORKSPACE,
+      providerId: "conductor",
+      providerProjectId: "proj-1",
+      name: "Checkout",
+      origin: RUN_ORIGIN.USER,
+    },
+  ]);
+  assert.deepEqual(carriedFields, [
+    { provider_id: "conductor", project_id: "proj-1", name: "Checkout" },
   ]);
 });
 

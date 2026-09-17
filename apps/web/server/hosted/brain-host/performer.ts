@@ -147,8 +147,9 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
       if (standing.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER, target);
       if (!apiKey) return refusedActionOutput(REFUSAL.NO_KEY, target);
       // The developer's stored agent pairing is read only for an action that
-      // starts an agent, and the execution lets it ride only where the ask
-      // named no model: a preference rides with an ask, never against it.
+      // starts an agent. The brain's creation and spawn declare no model, so on
+      // this path the pairing always rides; the execution's rule that a named
+      // model outranks it serves the device routes, whose pickers may name one.
       const agentSelection = AGENT_STARTING_ACTION_KINDS.has(kind)
         ? (yield* dependencies.defaults()).agentDefaults?.[providerId]
         : undefined;

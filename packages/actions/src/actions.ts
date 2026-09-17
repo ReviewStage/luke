@@ -14,7 +14,7 @@
  * schema. Luke is another way to ask, never a wider one.
  */
 
-import type { JsonSchemaNode, UnparsedWireValue } from "@sidecar/wire";
+import type { JsonSchemaNode, UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Schema } from "effect";
 import { ACTION_FAMILY, ACTION_KIND, type ActionFamily, type ActionKind } from "./action-kinds.js";
@@ -40,6 +40,23 @@ export interface ToolSpec<Family extends ActionFamily, Kind extends ActionKind> 
   readonly description: string;
   /** The action's own field vocabulary: what admission reads and what the model is shown. */
   readonly request: Schema.Codec<unknown, UnparsedWireValue>;
+}
+
+/**
+ * A call's fields under the request's own declaration: a key the model was
+ * not shown is dropped before admission reads anything, so what is written
+ * outside the declaration — a model beside a creation, say — is no ask at all
+ * rather than one admission has to argue with. Every request is a struct, so
+ * its AST names its own keys.
+ */
+export function declaredFields(
+  spec: ToolSpec<ActionFamily, ActionKind>,
+  fields: WireRecord,
+): WireRecord {
+  const ast = spec.request.ast;
+  if (ast._tag !== "Objects") throw new Error(`${spec.name} declares no field table`);
+  const declared = new Set<PropertyKey>(ast.propertySignatures.map((signature) => signature.name));
+  return Object.fromEntries(Object.entries(fields).filter(([key]) => declared.has(key)));
 }
 
 /**

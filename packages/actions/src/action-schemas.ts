@@ -159,21 +159,6 @@ export const UPDATE_ACTION = enumLiteral(
   "The action to run, as the guide's Updates line offers it.",
 );
 const AGENT_KIND = boundedText({ description: "The agent kind." });
-const CHOSEN_AGENT_KIND = boundedText({
-  description:
-    "The agent kind, only when the developer named one for this workspace; omit it " +
-    "otherwise, so the developer's saved default decides.",
-});
-const MODEL_TEXT = boundedText({
-  description:
-    "The model, only when the developer named one for this agent, by the name they said; " +
-    "omit it otherwise, so the developer's saved default decides, and never supply a guess.",
-});
-const EFFORT_TEXT = boundedText({
-  description:
-    "The effort level, only when the developer named one beside a model they named; omit " +
-    "it otherwise, so the developer's saved default decides.",
-});
 
 /** A field the model may leave out entirely, rather than send holding nothing. */
 const optional = <Field extends Schema.Top>(field: Field) => Schema.optionalKey(field);
@@ -213,6 +198,16 @@ export const OPEN_REQUEST = Schema.Struct({
   ),
 });
 
+/**
+ * A creation and a spawn declare no agent, model, or effort. The developer's
+ * saved pairing rides every one the brain asks for, and the brain is offered
+ * no field to name one in: the production record showed it volunteering a
+ * model of its own on every creation whatever the description said, and a
+ * named model outranks the pairing by design. A device's own picker (the
+ * phone's creation sheet) still hands admission an agent, model, and effort
+ * through its route, which reads no declaration here; a spoken change of
+ * model is the setting's, through `SETTING_REQUEST`.
+ */
 export const CREATE_WORKSPACE_REQUEST = Schema.Struct({
   provider_id: optional(
     boundedText({ description: "The provider ID; omit it to create in the default provider." }),
@@ -229,7 +224,6 @@ export const CREATE_WORKSPACE_REQUEST = Schema.Struct({
         "project whose line carries a target_id; a project listed without one takes none.",
     }),
   ),
-  agent: optional(CHOSEN_AGENT_KIND),
   name: optional(
     describeWire(
       WORKSPACE_NAME,
@@ -240,8 +234,6 @@ export const CREATE_WORKSPACE_REQUEST = Schema.Struct({
     ),
   ),
   task: optional(OPENING_TASK),
-  model: optional(MODEL_TEXT),
-  effort: optional(EFFORT_TEXT),
 });
 
 export const ADD_AGENT_REQUEST = Schema.Struct({
@@ -249,8 +241,6 @@ export const ADD_AGENT_REQUEST = Schema.Struct({
   agent: AGENT_KIND,
   name: optional(describeWire(WORKSPACE_NAME, "An optional agent name.")),
   task: optional(OPENING_TASK),
-  model: optional(MODEL_TEXT),
-  effort: optional(EFFORT_TEXT),
 });
 
 export const RENAME_WORKSPACE_REQUEST = Schema.Struct({
@@ -270,11 +260,11 @@ export const SETTING_REQUEST = Schema.Struct({
   setting_id: boundedText({ description: "The setting ID." }),
   value: boundedText({ description: "The new value." }),
   effort: optional(
-    describeWire(
-      EFFORT_TEXT,
-      "An effort level, only when the developer named one and the setting's guide line lists " +
-        "efforts for the value; omit it everywhere else.",
-    ),
+    boundedText({
+      description:
+        "An effort level, only when the developer named one and the setting's guide line " +
+        "lists efforts for the value; omit it everywhere else.",
+    }),
   ),
 });
 

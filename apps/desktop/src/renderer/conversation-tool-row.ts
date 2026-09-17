@@ -448,10 +448,10 @@ function composeRuns(
         envelope?.status === ACTION_OUTPUT_STATUS.ACCEPTED ? envelope.createdSession : undefined;
       const providerId = target?.providerId ?? (read.ok ? read.value.provider_id : undefined);
       const name = read.ok ? read.value.name : undefined;
-      const markId = (read.ok ? read.value.agent : undefined) ?? providerId;
+      // A creation names no agent, so its mark is the provider's.
       const fallback: ChipFallback = {
         ...(name !== undefined ? { name } : undefined),
-        ...(markId !== undefined ? { markId } : undefined),
+        ...(providerId !== undefined ? { markId: providerId } : undefined),
       };
       // The session the answer named is the chip, wherever the roster stands;
       // a creation whose answer named none is a name alone, or no chip at all.
@@ -459,7 +459,11 @@ function composeRuns(
         created !== undefined
           ? sessionChip(created, target, roster, fallback, { openWhenAbsentIdentity: false })
           : name !== undefined
-            ? { text: name, ...(markId !== undefined ? { markId } : undefined), openable: false }
+            ? {
+                text: name,
+                ...(providerId !== undefined ? { markId: providerId } : undefined),
+                openable: false,
+              }
             : undefined;
       return {
         runs:
