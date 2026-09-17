@@ -1,5 +1,6 @@
 import type { DevicePlatform, SessionBeatFrame } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND, type ProactiveSpeechKind } from "@sidecar/live";
+import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   type AdoptableSession,
@@ -11,7 +12,7 @@ import {
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
 import { eq } from "drizzle-orm";
-import { Effect, Layer, Option, Queue, Schema, type Scope } from "effect";
+import { Cause, Effect, Layer, Option, Schema, type Scope } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
@@ -231,14 +232,12 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange"
    * what this fiber carries is the reporting, on the socket's own scope,
    * rather than a promise left to settle wherever the session has gone.
    */
-  const written = yield* Queue.unbounded<Effect.Effect<string | undefined>>();
-  yield* Effect.forkScoped(
-    Effect.forever(
-      Effect.flatMap(Effect.flatten(Queue.take(written)), (message) =>
-        message === undefined ? Effect.void : Effect.sync(() => report(message)),
-      ),
-    ),
-  );
+  const written = yield* serialQueue({
+    onDefect: (cause) =>
+      Effect.sync(() => report(`Reporting a live event failed: ${String(Cause.squash(cause))}`)),
+  });
+  const reported = (message: string | undefined): Effect.Effect<void> =>
+    message === undefined ? Effect.void : Effect.sync(() => report(message));
   const brain = yield* hostedLiveBrain({
     userId,
     conversationId,
@@ -272,7 +271,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange"
     return () =>
       Effect.map(attach(), (sideband) =>
         observedSideband(sideband, (event) => {
-          Queue.offerUnsafe(written, writeReport(record.observe(event)));
+          written.offerUnsafe(Effect.flatMap(writeReport(record.observe(event)), reported));
         }),
       );
   };

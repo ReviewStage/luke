@@ -5,6 +5,7 @@ import {
 } from "@sidecar/session";
 import {
   EXCESS_KEYS,
+  jsonRoundTrip,
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
@@ -29,9 +30,9 @@ import { brainToolCatalog, brainToolRegistry, TOOL_GROUP } from "./tools.js";
 
 function validatedInput(schema: Schema.Codec<unknown, UnparsedWireValue>) {
   return jsonSchema<unknown>(
-    // SAFETY: the wire schema's node is JSON Schema in the strict form a function tool takes; a
+    // The wire schema's node is JSON Schema in the strict form a function tool takes; a
     // round trip is its plain-object form, which is what the SDK's schema type names.
-    JSON.parse(JSON.stringify(emitJsonSchema(schema))),
+    jsonRoundTrip(emitJsonSchema(schema)),
     {
       validate: (value) => {
         // SAFETY: the SDK hands the part's input back as it was stored, which is JSON; the read is the validation.

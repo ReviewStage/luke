@@ -26,6 +26,7 @@ import {
   isStoredToolPart,
   isWireString,
   isWireUuid,
+  jsonRoundTrip,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -50,7 +51,6 @@ import {
   type UnparsedWireValue,
   type UserMessageMetadata,
   unknownActionOutput,
-  unparsedWire,
   WireValueSchema,
 } from "../../core.js";
 import { db } from "../../db/query.js";
@@ -1121,9 +1121,7 @@ function admitted(
   message: UIMessage | StoredUIMessage,
 ): Effect.Effect<Admitted> {
   return Effect.flatMap(
-    Effect.promise(() =>
-      readStoredUIMessages(unparsedWire([JSON.parse(JSON.stringify(message))]), context.tools),
-    ),
+    Effect.promise(() => readStoredUIMessages(jsonRoundTrip([message]), context.tools)),
     (read): Effect.Effect<Admitted> => {
       if (!read.ok) {
         return Effect.succeed({
