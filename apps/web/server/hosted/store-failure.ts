@@ -24,7 +24,7 @@ export type StoreFailure = SqlError | Schema.SchemaError;
  * can quote the key a constraint refused.
  */
 export function logStoreFailure(failure: StoreFailure): Effect.Effect<void> {
-  const kind = failure._tag === "SqlError" ? failure.cause._tag : failure.issue._tag;
+  const kind = failure._tag === "SqlError" ? failure.reason._tag : failure.issue._tag;
   return Effect.logWarning(`Hosted store unavailable: ${failure._tag}: ${kind}`);
 }
 

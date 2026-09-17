@@ -927,7 +927,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
             Effect.andThen(store.retireStoredApiKeys(), store.snapshot()),
             (cause) =>
               Effect.sync(() => {
-                report(`Retiring stored API keys failed: ${failureReason(cause)}`);
+                report(`Retiring stored API keys failed: ${Cause.pretty(cause)}`);
               }),
           ),
         );
