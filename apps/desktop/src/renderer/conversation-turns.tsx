@@ -361,16 +361,21 @@ function WrittenRow({ words }: { words: string }): React.JSX.Element {
  * read with the proposal and never as a line of the thread's own. The
  * voice's recorded utterance follows as its own bubble, so the visible
  * spoken text is always what the developer heard; the rating stands inside
- * the fold with the words it is about.
+ * the fold with the words it is about. The row carries the message's stamp
+ * on its line, as the tool calls' fold does, since the proposal is dated
+ * like every other row of the thread and the bubble it replaced was.
  */
 function ObservationAnnouncementRow({
   source,
   words,
+  at,
   rating,
 }: {
   /** The chip naming the observed agent, drawn first inside the fold. */
   source: React.ReactNode;
   words: string;
+  /** Where the announcing message is placed: the fold's stamp. */
+  at: number;
   rating: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -390,6 +395,7 @@ function ObservationAnnouncementRow({
           )}
         </ThinkingFold>
       </div>
+      <RowStamp at={at} />
     </li>
   );
 }
@@ -1240,6 +1246,7 @@ function messageRows(
             key={key}
             source={sourceChip}
             words={words}
+            at={view.placedAt}
             rating={placed}
           />,
         );
