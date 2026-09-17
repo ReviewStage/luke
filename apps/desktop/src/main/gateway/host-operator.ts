@@ -194,6 +194,8 @@ export interface HostOperator {
   clearConversation(): Effect.Effect<boolean>;
   /** A read of the Conversation now: a spoken line settled and the record is being written, so the poll should not wait its cadence out. */
   refreshConversation(): Effect.Effect<void>;
+  /** One page of older turns read onto the Conversation the host publishes, for a reader at the top of the thread; answers whether a page landed. */
+  loadOlderConversation(): Effect.Effect<boolean>;
   /** One transcript held open on the host, read to its end and again as its list's head moves; answers whether the host took it. Named for the child's transcript still, kept so the Gateway method names stay put. */
   openChildTranscript(conversationId: string, kind: TranscriptKind): Effect.Effect<boolean>;
   closeChildTranscript(): Effect.Effect<void>;
@@ -498,6 +500,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (answer) => record(answer)?.cleared === true,
       ),
     refreshConversation: () => fire(client.call(GATEWAY_METHOD.CONVERSATION_REFRESH)),
+    loadOlderConversation: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CONVERSATION_LOAD_OLDER),
+        (answer) => record(answer)?.loaded === true,
+      ),
     openChildTranscript: (conversationId, kind) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { conversationId, kind }),

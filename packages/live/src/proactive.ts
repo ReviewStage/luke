@@ -22,7 +22,7 @@ export const PROACTIVE_SPEECH_KIND = {
   ARRIVAL: "arrival",
   /** The line beside the calendar step of onboarding, carrying nothing observed. */
   CALENDAR_ONBOARDING: "calendar-onboarding",
-  /** The greeting of every signed-in launch, spoken before the developer says a word. */
+  /** The greeting of every signed-in launch, spoken before the developer says a word and before anything else Luke says; a session already speaking or spoken to settles it unsaid. */
   LAUNCH: "launch",
 } as const;
 

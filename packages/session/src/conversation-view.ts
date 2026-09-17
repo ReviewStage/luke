@@ -86,9 +86,9 @@ export interface ConversationViewStoredMessage {
   readonly createdAt: number;
   /**
    * Epoch milliseconds; where the row stands in the Conversation, and the one
-   * key groups are ordered by across conversations. A spoken row stands at
-   * the instant its words began, which is earlier than its write; every other
-   * row stands where it was written.
+   * key the thread is ordered by across turns and conversations. A spoken row
+   * stands at the instant its words began, which is earlier than its write;
+   * every other row stands where it was written.
    */
   readonly placedAt: number;
 }
@@ -212,7 +212,13 @@ export interface ConversationViewMessage {
   readonly rating?: StandingRating;
 }
 
-/** The messages one turn produced, in sequence, under the turn row where the store holds one. */
+/**
+ * Consecutive messages of one turn in the thread's order, under the turn row
+ * where the store holds one. On a page or in a device's merge a group is
+ * every selected message of the turn; in the thread `threadRuns` answers, a
+ * turn stands as more than one group where a row of another's is placed
+ * between its rows.
+ */
 export interface ConversationViewTurnGroup {
   readonly turnId: string;
   readonly turn: ConversationViewTurn | undefined;
@@ -228,7 +234,7 @@ export interface UnreadableRow {
 
 /**
  * The Conversation as one device holds it after reading the view: the turn
- * groups in the view's order, whether a read has landed at all — before one,
+ * groups in the thread's order, whether a read has landed at all — before one,
  * an empty thread says "not read yet" rather than "nothing said" — and the
  * row the latest read could not read back where the reader named one, so
  * the thread stands as last read and says so rather than drawing an empty
@@ -237,6 +243,13 @@ export interface UnreadableRow {
 export interface ConversationViewSnapshot {
   readonly groups: readonly ConversationViewTurnGroup[];
   readonly settled: boolean;
+  /**
+   * Present, and true, where turns older than the oldest group held stand on
+   * the service and this device may read them: a reader at the top of the
+   * thread is offered more. Absent where the beginning has been reached, the
+   * thread was cleared, or the picture is at its bound.
+   */
+  readonly hasOlder?: boolean;
   readonly unreadable?: UnreadableRow;
 }
 
@@ -361,11 +374,14 @@ function viewMessage(
 
 type GroupedRows = { readonly source: ConversationViewSource; readonly rows: SourcedRow[] };
 
-/** A group's place in time: its earliest placed message, then its turn's queue instant, then its id, so every device orders alike. */
-type PlacedGroup = { readonly group: ConversationViewTurnGroup; readonly instant: number };
+/** One message beside the group it was read from, so the thread's order can see the row's turn. */
+type ThreadRow = {
+  readonly message: ConversationViewMessage;
+  readonly group: ConversationViewTurnGroup;
+};
 
-function queuedInstant(group: ConversationViewTurnGroup): number {
-  return group.turn?.queuedAt ?? Number.MAX_SAFE_INTEGER;
+function queuedInstant(turn: ConversationViewTurn | undefined): number {
+  return turn?.queuedAt ?? Number.MAX_SAFE_INTEGER;
 }
 
 function compareCodePoints(a: string, b: string): number {
@@ -373,12 +389,61 @@ function compareCodePoints(a: string, b: string): number {
   return a < b ? -1 : 1;
 }
 
-function comparePlaced(a: PlacedGroup, b: PlacedGroup): number {
+/**
+ * Where a row stands in the thread: where it is placed; between rows of
+ * different turns placed at one instant, the turn's queue instant and then
+ * its id; and between rows of one turn, the store's sequence. Total, so
+ * every device orders alike.
+ */
+function compareThreadRows(a: ThreadRow, b: ThreadRow): number {
   return (
-    a.instant - b.instant ||
-    queuedInstant(a.group) - queuedInstant(b.group) ||
-    compareCodePoints(a.group.turnId, b.group.turnId)
+    a.message.placedAt - b.message.placedAt ||
+    queuedInstant(a.group.turn) - queuedInstant(b.group.turn) ||
+    compareCodePoints(a.group.turnId, b.group.turnId) ||
+    a.message.seq - b.message.seq
   );
+}
+
+/**
+ * The thread's order over turn groups: every row of every group in one order,
+ * by where it is placed, cut into groups again wherever the turn changes. A
+ * group out is the consecutive rows of one turn, under that turn's row and
+ * source, and a turn stands as more than one group where a row of another
+ * turn's, or of no turn — the voice's acknowledgment of an ask, said before
+ * the brain's turn had opened, or a line the voice answered alone — is placed
+ * between its rows. The turn is what a row's decorations are read from, never the unit
+ * the thread is ordered by, so nothing said between an ask and its reply
+ * sorts past the reply. The groups handed in may come in any order and each
+ * turn once or more; a group with no row contributes nothing.
+ */
+export function threadRuns(
+  groups: readonly ConversationViewTurnGroup[],
+): readonly ConversationViewTurnGroup[] {
+  const rows: ThreadRow[] = [];
+  for (const group of groups) {
+    for (const message of group.messages) rows.push({ message, group });
+  }
+  rows.sort(compareThreadRows);
+  const runs: {
+    turnId: string;
+    turn: ConversationViewTurn | undefined;
+    source: ConversationViewSource;
+    messages: ConversationViewMessage[];
+  }[] = [];
+  for (const { message, group } of rows) {
+    const last = runs.at(-1);
+    if (last !== undefined && last.turnId === group.turnId) {
+      last.messages.push(message);
+      continue;
+    }
+    runs.push({
+      turnId: group.turnId,
+      turn: group.turn,
+      source: group.source,
+      messages: [message],
+    });
+  }
+  return runs;
 }
 
 /**
@@ -386,9 +451,9 @@ function comparePlaced(a: PlacedGroup, b: PlacedGroup): number {
  * since it stands in for messages the view still shows), and from each
  * observed conversation the assistant messages carrying an announcement or an
  * action, cut to those parts. Messages are grouped by the turn that wrote
- * them, in their conversation's sequence within a group, and the groups are
- * ordered by where their earliest message is placed. A turn with nothing
- * selected is not shown.
+ * them and the thread is ordered by where each row is placed, as `threadRuns`
+ * orders it, so a group is the consecutive rows of one turn. A turn with
+ * nothing selected is not shown.
  */
 export function selectConversationView(
   input: ConversationViewInput,
@@ -420,16 +485,12 @@ export function selectConversationView(
     else group.rows.push(row);
   }
 
-  const placed: PlacedGroup[] = [...grouped].map(([turnId, { source, rows }]) => ({
-    group: {
+  return threadRuns(
+    [...grouped].map(([turnId, { source, rows }]) => ({
       turnId,
       turn: turns.get(turnId),
       source,
-      messages: rows
-        .sort((a, b) => a.seq - b.seq)
-        .map((row) => viewMessage(row, input.toolKinds, speech, ratings)),
-    },
-    instant: Math.min(...rows.map((row) => row.placedAt)),
-  }));
-  return placed.sort(comparePlaced).map(({ group }) => group);
+      messages: rows.map((row) => viewMessage(row, input.toolKinds, speech, ratings)),
+    })),
+  );
 }

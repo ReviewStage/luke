@@ -59,6 +59,8 @@ const GATEWAY_METHODS = {
   CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
   /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
   CONVERSATION_REFRESH: { name: "conversation.refresh", mutates: false },
+  /** One page of older turns read back from where this device's history stands, for a reader at the top of the thread; the page arrives on the view, the answer says whether one landed. */
+  CONVERSATION_LOAD_OLDER: { name: "conversation.loadOlder", mutates: false },
   /** One transcript held open on this device, a child's or an observed session's: read to its end now and again whenever its list's head moves, until closed. */
   // Named for the child's transcript still, an observed session's opening through the same method; kept so the protocol goldens stay put.
   CONVERSATION_OPEN_CHILD_TRANSCRIPT: { name: "conversation.openChildTranscript", mutates: true },
@@ -320,6 +322,13 @@ export const conversationRateMessageResultSchema = Schema.Struct({
 });
 
 export type ConversationRateMessageResult = typeof conversationRateMessageResultSchema.Type;
+
+/** What `conversation.loadOlder` answers: whether a page of older turns landed on the view, so the panel knows its ask is spent. */
+export const conversationLoadOlderResultSchema = Schema.Struct({
+  loaded: Schema.Boolean,
+});
+
+export type ConversationLoadOlderResult = typeof conversationLoadOlderResultSchema.Type;
 
 /**
  * `conversation.openChildTranscript`: which conversation, by the id its list

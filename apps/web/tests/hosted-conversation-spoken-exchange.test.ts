@@ -13,6 +13,7 @@ import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, type Schema as EffectSchema, Result } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import { afterAll } from "vitest";
 import {
   ConversationViewSync,
@@ -433,7 +434,22 @@ it.effect(
       // An observed row with neither announcement nor action is not drawn, so the picture holds as it was.
       await holds("observation journal open", 2);
 
-      // A third exchange in the other order: the turn opens its journal before the voice writer's cut lands.
+      // A third exchange in the other order: the turn opens its journal before the voice writer's
+      // cut lands. The line is placed where its words began, on its session's clock, which is
+      // before the journal however late its row lands.
+      tick();
+      const lateSessionId = `sess_${randomUUID()}`;
+      const lateVoiceSession = await database.run(
+        voiceSessionRecord(now).register({ userId, sessionId: lateSessionId }),
+      );
+      assert.ok(lateVoiceSession !== undefined);
+      // The session's clock starts on this test's clock, as the register's default would on the database's.
+      await database.run(
+        Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`update voice_sessions set started_at = ${new Date(now())} where id = ${lateVoiceSession}`;
+        }),
+      );
       tick();
       const lateAsk = await asks.record({
         userId,
@@ -461,9 +477,14 @@ it.effect(
       );
 
       tick();
-      const lateLine = await spokenLine(target, "dl_3", "fixture ask 3", VOICE_ASK);
+      const lateLine = await spokenLine(target, "dl_3", "fixture ask 3", {
+        ...VOICE_ASK,
+        voice_session_id: lateVoiceSession,
+        from_ms: 0,
+        to_ms: 1_500,
+      });
       assert.ok(lateLine.ok);
-      // The line stands ahead of the journal the store moved behind it, and the journal stands once.
+      // The line stands ahead of the journal, placed where its words began, and the journal stands once.
       const reordered = await holds("3: line landed after the journal", 3);
       assert.deepEqual(
         reordered.groups.at(-1)?.messages.map((message) => message.message.role),

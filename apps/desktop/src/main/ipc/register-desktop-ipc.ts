@@ -145,6 +145,16 @@ export function registerDesktopIpc(services: DesktopServices): void {
       }
       return operator.host.rateConversationMessage(messageId, rating);
     },
+    // Older turns are read for the thread a panel draws, and a tab exists
+    // only on a panel; the hidden voice window and the introduction's takeover
+    // draw none, so they are refused before the host is reached. Whether
+    // older turns stand and what a page holds are the host's to decide.
+    [ACT_KIND.CONVERSATION_LOAD_OLDER]: (_payload, sender) => {
+      if (!sender.panel || sender.introduction) {
+        throw new ActRefused(ACT[ACT_KIND.CONVERSATION_LOAD_OLDER].refusal);
+      }
+      return operator.host.loadOlderConversation();
+    },
     // A transcript is a view of the Conversation tab, and a tab exists only
     // on a panel; the hidden voice window and the introduction's takeover
     // draw none, so they are refused before the host is reached. Whether the

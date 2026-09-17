@@ -293,7 +293,26 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   statement and awaits a promise for its rows, and the callback it awaits
   takes the SQL and nothing else, so the door is `Effect.runPromiseExitWith`
   on the context the yielding fiber was carrying, squashed to the `SqlError`
-  Drizzle re-wraps. Handing that run to an edge is what cannot be done: the
+  Drizzle re-wraps. One thing about that run is deliberate and is not to be
+  tidied away. A raw `SqlClient` statement is a wait for the pool's
+  connection, and Effect resumes a waiter inside the stack of whoever released
+  it, so a raw statement hands its caller back in the releasing caller's
+  `AsyncLocalStorage` context rather than the one it asked from. eve's relay
+  depends on exactly that handoff: `apps/web/eve/hooks/store.ts` is entered in
+  a per-request container, and it is the statement in `admitConversation` that
+  moves the hook into eve's long-lived session container, which is the one the
+  relay's `defineState("luke.relay")` state accumulates in across a session's
+  events. The door's own root fiber would absorb that handoff and leave the
+  asking fiber in the context it registered its `then` in, so the door
+  reproduces the handoff on purpose: it snapshots the async context in a
+  finalizer inside the run, which is the tick the statement settled on, and
+  the patched `evaluate` resumes the asking fiber inside that snapshot through
+  `Effect.callback`, whose `resume` continues that fiber's loop on the stack
+  it is called from. Read as a leak and removed, it stops a turn's tool parts
+  from ever being written. What the bridge owes is the raw statement's answer
+  and not one of its own, and `apps/web/tests/drizzle-bridge.test.ts` reads
+  one against the other on both dialects. Handing that run to an edge is what
+  cannot be done: the
   context is the point — an enclosing `sql.withTransaction`'s connection is a
   service of the running fiber and of no runtime an edge built — so the run
   has to happen where the fiber is, which is inside the callback Drizzle

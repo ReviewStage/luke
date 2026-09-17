@@ -229,6 +229,8 @@ interface PanelBodyProps {
   spokenAskPending: boolean;
   /** Clears that same thread on the service, for every Mac signed in to the account. */
   onClearConversationConversation: () => void;
+  /** Asks the host for one page of older turns of that thread, as the reader reaches its top; answers whether one landed. */
+  onLoadOlderConversation: () => Promise<boolean>;
   /** Which of the Conversation tab's three pages is showing: the thread, the Agents list, or one transcript. */
   conversationPage: ConversationPage;
   onConversationPageChange: (page: ConversationPage) => void;
@@ -296,6 +298,7 @@ export function PanelBody({
   onOfferRatingFeedback,
   spokenAskPending,
   onClearConversationConversation,
+  onLoadOlderConversation,
   conversationPage,
   onConversationPageChange,
   subagents,
@@ -480,6 +483,7 @@ export function PanelBody({
           // The chip names an agent the list holds, so the row it opens is the list's own for it.
           onOpenAgent={(agent) => onOpenTranscript(agentTranscriptRow(agent, roster))}
           onOfferRatingFeedback={onOfferRatingFeedback}
+          onLoadOlder={onLoadOlderConversation}
           live={liveConversationEntries}
           spokenAskPending={spokenAskPending}
           now={now}

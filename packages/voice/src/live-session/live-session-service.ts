@@ -1639,6 +1639,16 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * has the model begin, and no cue at all for an instruction the session
    * refused or never acknowledged, so a greeting that did not land is not
    * begun on the strength of the cue alone.
+   *
+   * A greeting opens a conversation, and only one nothing has opened yet.
+   * Decided when the channel reaches it, so every append enqueued ahead of it
+   * has left: a session Luke has already been asked to speak into (a briefing
+   * the exchange claimed the moment the session stood, a reply) or on which
+   * either speaker has already been heard is not greeted, because the
+   * instruction to greet now has the model drop what it is saying to say
+   * "Hey" instead, and a conversation under way is not opened again. Such a
+   * greeting is settled as spoken all the same, so the device that owes it
+   * once per run stops asking for it.
    */
   #speakOpening(
     session: StandingSession,
@@ -1647,6 +1657,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   ): void {
     session.channel.enqueue(
       Effect.gen({ self: this }, function* () {
+        if (session.channel.commentarySent || session.ledger.lastActivityMs() !== undefined) {
+          this.#trace(LIVE_TRACE_DECISION.SUPERSEDED);
+          this.#queue.spoken(request);
+          this.#options.onProactiveSpoken?.(request.kind);
+          return;
+        }
         const instructed = yield* session.channel.send(
           instructionsAppend(this.#input(null, opening.instruction)),
         );

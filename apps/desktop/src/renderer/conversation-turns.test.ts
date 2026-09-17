@@ -266,19 +266,84 @@ test("the brain's own tools draw as rows of the turn's working, each led by a ma
   assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 7);
 });
 
-test("the wait is the thread's last object: once after the newest turn, and never above a later turn", () => {
+test("the wait is the thread's last object: once after the newest turn by queue instant, and never for a pending turn a later one was queued after", () => {
   const running = groupOf(FIXTURE_TURN.RUNNING);
   const settled = groupOf(FIXTURE_TURN.SINGLE);
-  // A pending row a later turn has passed is a record eve never finished, not a run: no wait.
+  assert.ok(running.turn !== undefined && settled.turn !== undefined);
+  // A pending turn a later turn was queued after is a record eve never finished, not a run: no
+  // wait, wherever its rows stand.
   assert.equal(count(render([running, settled], OPEN), "data-thinking", "true"), 0);
+  assert.equal(count(render([settled, running], OPEN), "data-thinking", "true"), 0);
   // The newest turn running: one wait, after every row of the thread, stamped by nothing.
-  const newest = render([settled, running], OPEN);
+  const newestRunning: ConversationViewTurnGroup = {
+    ...running,
+    turn: { ...running.turn, queuedAt: settled.turn.queuedAt + 1_000 },
+  };
+  const newest = render([settled, newestRunning], OPEN);
   assert.equal(count(newest, "data-thinking", "true"), 1);
   const [above, below] = newest.split('data-thinking="true"');
   assert.ok(above !== undefined && below !== undefined);
   assert.equal(count(below, "data-speaker", "you"), 0);
   assert.equal(count(below, "class", "conversation-time"), 0);
   assert.equal(count(above, "data-speaker", "you"), 2);
+  // An older turn's reply placed after the newer ask — read aloud while the developer was already
+  // asking again — stands last without being newer, so the wait for the running turn still draws.
+  const [settledAsk, ...settledWork] = settled.messages;
+  assert.ok(settledAsk !== undefined && settledWork.length > 0);
+  const interleaved = render(
+    [{ ...settled, messages: [settledAsk] }, newestRunning, { ...settled, messages: settledWork }],
+    OPEN,
+  );
+  assert.equal(count(interleaved, "data-thinking", "true"), 1);
+  assert.equal(interleaved.split('data-thinking="true"')[1]?.includes('data-speaker="you"'), false);
+});
+
+test("a row of no turn said while the newest turn runs stands above the wait, and the turn's rows around it read the turn: the ask is still the rating's, and the wait is still last", () => {
+  const running = groupOf(FIXTURE_TURN.RUNNING);
+  const [ask, ...work] = running.messages;
+  assert.ok(ask !== undefined && work.length > 0);
+  const ACKNOWLEDGMENT = "1e000000-0000-4000-8000-000000000601";
+  const acknowledgment: ConversationViewTurnGroup = {
+    turnId: ACKNOWLEDGMENT,
+    turn: undefined,
+    source: { kind: CONVERSATION_VIEW_SOURCE.MAIN },
+    messages: [
+      {
+        message: {
+          id: ACKNOWLEDGMENT,
+          role: MESSAGE_ROLE.ASSISTANT,
+          parts: [{ type: "text", text: "Sure. I'm on it.", state: "done" }],
+          metadata: {
+            author: MESSAGE_AUTHOR.VOICE_MODEL,
+            channel: MESSAGE_CHANNEL.VOICE,
+            voice_session_id: "vs_1",
+            from_ms: 600,
+            to_ms: 1_400,
+          },
+        },
+        seq: ask.seq - 1,
+        createdAt: ask.placedAt + 3_000,
+        placedAt: ask.placedAt + 600,
+        tools: [],
+      },
+    ],
+  };
+  const markup = render(
+    [{ ...running, messages: [ask] }, acknowledgment, { ...running, messages: work }],
+    OPEN,
+  );
+  // One wait, after every row: the acknowledgment is not a later turn.
+  assert.equal(count(markup, "data-thinking", "true"), 1);
+  const [above, below] = markup.split('data-thinking="true"');
+  assert.ok(above !== undefined && below !== undefined);
+  assert.equal(count(below, "data-speaker", "you"), 0);
+  assert.equal(count(below, "data-speaker", "luke"), 0);
+  assert.ok(above.includes("Sure. I&#x27;m on it."));
+  // The acknowledgment stands between the ask and the turn's work.
+  const askAt = markup.indexOf("Sure. I&#x27;m on it.");
+  const youAt = markup.indexOf('data-speaker="you"');
+  const workAt = markup.indexOf("conversation-actions-fold");
+  assert.ok(youAt < askAt && askAt < workAt);
 });
 
 test("a running turn ends in Luke's wait, driven by the turn row's status alone", () => {
@@ -412,6 +477,40 @@ function actionOnly(group: ConversationViewTurnGroup): ConversationViewTurnGroup
   };
 }
 
+/** The observed fixture group with an accepted action added ahead of its announcement in the same message. */
+function withAction(group: ConversationViewTurnGroup): ConversationViewTurnGroup {
+  const ACTION_CALL = "call-observed-action";
+  return {
+    ...group,
+    messages: group.messages.map((view) => ({
+      ...view,
+      message: {
+        ...view.message,
+        parts: [
+          {
+            type: "tool-open_chat",
+            toolCallId: ACTION_CALL,
+            state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+            input: {},
+            output: {},
+          },
+          ...view.message.parts,
+        ],
+      },
+      tools: [
+        {
+          toolCallId: ACTION_CALL,
+          toolName: "open_chat",
+          state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+          kind: CONVERSATION_VIEW_TOOL_KIND.ACTION,
+          outcome: CONVERSATION_VIEW_ACTION_OUTCOME.ACCEPTED,
+        },
+        ...view.tools,
+      ],
+    })),
+  };
+}
+
 test("a turn of an observed session's own conversation folds as Thinking around one chip naming the agent, pressed as the Agents list's row is, and main's turns wear none", () => {
   const observed = groupOf(FIXTURE_TURN.ANNOUNCED);
   assert.ok(observed.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED);
@@ -496,6 +595,19 @@ test("a turn of an observed session's own conversation folds as Thinking around 
     ),
   );
   assert.ok(head.includes(SOURCE_CHIP_BUTTON));
+  // A group carrying an action beside its briefing heads on the chip too,
+  // since the action's row stands outside the fold and would otherwise
+  // read as nobody's work; the fold keeps its own chip all the same.
+  const mixed = render([withAction(observed)], OPEN, {
+    agents: [FIXTURE_AGENT],
+    onOpenAgent: OPEN_AGENT,
+  });
+  assert.equal(count(mixed, "data-source-session", "true"), 1);
+  assert.equal(count(mixed, "data-observation-announcement", "true"), 1);
+  assert.equal(mixed.split(SOURCE_CHIP_BUTTON).length - 1, 2);
+  const [mixedHead] = mixed.split('<li class="conversation-entry"').slice(1);
+  assert.ok(mixedHead !== undefined);
+  assert.ok(mixedHead.includes('data-source-session="true"'));
 });
 
 test("a source chip is a name wherever the agents list cannot lead to the agent, and is never the provider's press", () => {
@@ -533,7 +645,7 @@ test("a source chip is a name wherever the agents list cannot lead to the agent,
   }
 });
 
-test("a reasoning part folds to a line on Luke's side, and an observation announcement folds as Thinking marked when unheard", () => {
+test("a reasoning part folds to a line on Luke's side, and an observation announcement folds as Thinking whatever became of its offer", () => {
   const groups = fixtureConversationTurns();
   const markup = render(groups, OPEN);
   // Main's turn carries its thought; the observed turn's crosses cut to its announcement.
@@ -541,7 +653,6 @@ test("a reasoning part folds to a line on Luke's side, and an observation announ
   // The reasoning row and the brain's written row open on the same one word, for now.
   const reasoning = entries(markup).find((row) => row.includes('data-reasoning="true"'));
   assert.ok(reasoning?.includes("Thinking"));
-  assert.equal(count(markup, "data-unspoken", "true"), 0);
 
   const announced = FIXTURE_INPUT.observed[0]?.messages[0];
   assert.ok(announced);
@@ -553,8 +664,10 @@ test("a reasoning part folds to a line on Luke's side, and an observation announ
       { messageId: announced.message.id, kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, seq: 2 },
     ],
   });
+  // A lapsed offer draws the same bubble as a heard one: the record keeps the mark, the panel says nothing of it.
   const unheard = render(expired, OPEN);
-  assert.equal(count(unheard, "data-unspoken", "true"), 1);
+  assert.ok(!unheard.includes("unspoken"));
+  assert.ok(!unheard.includes("Not spoken"));
   assert.equal(count(unheard, "data-speaker", "luke"), 0);
   assert.equal(count(unheard, "data-observation-announcement", "true"), 1);
   assert.ok(!unheard.includes("Announcement from"));

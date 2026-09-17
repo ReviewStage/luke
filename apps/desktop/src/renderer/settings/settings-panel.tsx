@@ -95,9 +95,10 @@ export interface SettingsPanelProps {
   onQuit: () => void;
   shortcuts: ShortcutControl;
   /**
-   * Whether the search field stands at the head of the front page. Held by
-   * the app rather than here because the magnifier that answers for it lives
-   * beside the tab bar, above this panel.
+   * Whether the search field stands at the head of the settings surface,
+   * above whichever page is showing. Held by the app rather than here because
+   * the magnifier that answers for it lives beside the tab bar, above this
+   * panel.
    */
   searchOpen: boolean;
   /** The field's own way out — Escape on an empty query — which also clears. */
@@ -182,7 +183,9 @@ export function SettingsPanel({
     landOnSettingsRow(entry.id);
   };
   // A pressed group head is the same answer one level up: the page itself.
-  const openSearchPage = (page: SettingsSubview) => {
+  // A front-page row pressed under an open, empty field is the same press —
+  // the field was reached for and not used, and the page is the answer.
+  const openPage = (page: SettingsSubview) => {
     onSearchClose();
     onViewChange(page);
   };
@@ -215,15 +218,10 @@ export function SettingsPanel({
       id={panelPanelId(PANEL_TAB.SETTINGS)}
       aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
     >
-      {view !== SETTINGS_VIEW.ROOT ? (
-        <SettingsPageHeader
-          view={view}
-          onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
-          backControl={backControl}
-          {...(pageReset ? { reset: pageReset } : undefined)}
-        />
-      ) : null}
-
+      {/* The search stands first, above a page's own head: it reads across
+          every page, so it is the surface's field rather than the page's,
+          the way a desktop settings window keeps its search above whichever
+          pane is showing. */}
       {settings && searchOpen ? (
         <SettingsSearch
           query={searchQuery}
@@ -234,11 +232,20 @@ export function SettingsPanel({
         />
       ) : null}
 
+      {view !== SETTINGS_VIEW.ROOT ? (
+        <SettingsPageHeader
+          view={view}
+          onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
+          backControl={backControl}
+          {...(pageReset ? { reset: pageReset } : undefined)}
+        />
+      ) : null}
+
       {search ? (
         <SettingsSearchResults
           search={search}
           pageIcon={(page) => SETTINGS_PAGE[page].icon}
-          onOpenPage={openSearchPage}
+          onOpenPage={openPage}
           onOpen={openSearchResult}
         />
       ) : null}
@@ -256,7 +263,7 @@ export function SettingsPanel({
             <SettingsNavRow
               key={subview}
               view={subview}
-              onOpen={onViewChange}
+              onOpen={openPage}
               {...(subview === SETTINGS_VIEW.VOICE && voiceNote
                 ? { attention: voiceNote }
                 : undefined)}

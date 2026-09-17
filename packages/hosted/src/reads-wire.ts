@@ -60,9 +60,14 @@ export const READ_PAGE_BOUNDS = {
   MAX_LIMIT: 200,
 } as const;
 
-/** The two query parameters every per-resource read takes: the cursor to read on from, and the page bound. */
+/**
+ * The query parameters the per-resource reads take: the cursor to read on
+ * from and the page bound, which every read takes, and the cursor to read
+ * back from, which the history read alone takes.
+ */
 export const READ_QUERY = {
   AFTER: "after",
+  BEFORE: "before",
   LIMIT: "limit",
 } as const;
 
@@ -250,6 +255,77 @@ export function encodeSequenceReadCursor(positions: Iterable<SequencePosition>):
   });
 }
 
+/** An instant as the store renders one into a cursor: the UTC wall clock to the microsecond, zone spelled. */
+const STORE_INSTANT_TEXT =
+  /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?[+-]\d{2}(?::?\d{2})?$/u;
+
+/**
+ * Where a device's read back through the Conversation's history stands: the
+ * oldest row it has taken, by the instant the row is placed at, as the
+ * service's own store renders it to the microsecond, and the row's
+ * conversation and sequence to break a tie, since two rows of two
+ * conversations can be placed at one instant. The history read walks the
+ * view's rows across every standing conversation newest first, the one
+ * order a device can draw a thread's tail from before it has the rest, so
+ * its position is an instant rather than a sequence per conversation. The
+ * instant is text for the reason a turn cursor's is: a millisecond number
+ * cannot tell two rows placed in one millisecond apart, and a row placed in
+ * the same millisecond as the oldest a device took would otherwise never
+ * read as older.
+ */
+export interface HistoryPosition {
+  readonly placedAt: string;
+  readonly conversationId: string;
+  readonly seq: number;
+}
+
+/**
+ * A cursor over the Conversation's history: the position to read back from,
+ * or none to read from the tail, the newest rows the view holds. A device
+ * reading a long Conversation for the first time asks for the tail, draws
+ * it, and reads back a page at a time only as far as its reader looks.
+ */
+export interface HistoryReadCursor {
+  readonly before?: HistoryPosition;
+}
+
+const historyPositionSchema = EffectSchema.Struct({
+  placedAt: trimmedText({ max: 40 }).check(
+    EffectSchema.makeFilter((instant) => STORE_INSTANT_TEXT.test(instant)),
+  ),
+  conversationId: wireUuidSchema,
+  seq: wholeNumber(1),
+});
+
+const historyReadCursorRecord = EffectSchema.Struct({
+  before: EffectSchema.optionalKey(historyPositionSchema),
+});
+
+/** Reads a history cursor a device handed back, or refuses one this build did not mint the shape of. */
+export const historyReadCursorSchema = encodedCursorSchema(historyReadCursorRecord);
+
+const encodedHistoryReadCursorSchema = trimmedText({
+  max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH,
+}).check(
+  EffectSchema.makeFilter((encoded) => admitted(historyReadCursorSchema, encoded) !== undefined),
+);
+
+/** Mints the one string that stands for reading back from this position, or from the tail where none is given. */
+export function encodeHistoryReadCursor(before: HistoryPosition | undefined): string {
+  return encodeCursor(
+    historyReadCursorRecord,
+    before === undefined
+      ? {}
+      : {
+          before: {
+            placedAt: before.placedAt,
+            conversationId: before.conversationId,
+            seq: before.seq,
+          },
+        },
+  );
+}
+
 /**
  * Where a device's read of the account's turns stands: the instant the last
  * turn it took last changed, as the service's own store renders it to the
@@ -262,9 +338,6 @@ export interface TurnReadCursor {
   readonly changedAt: string;
   readonly id: string;
 }
-
-const STORE_INSTANT_TEXT =
-  /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?[+-]\d{2}(?::?\d{2})?$/u;
 
 const turnReadCursorRecord = EffectSchema.Struct({
   changedAt: trimmedText({ max: 40 }).check(
@@ -479,13 +552,16 @@ const conversationReadMessageSchema = EffectSchema.Struct({
 });
 
 /**
- * The messages one turn wrote that the view selected, in sequence, under
- * the turn row where the store holds one. A group may continue on a later
- * page — a turn still running writes rows after a page was cut — so a device
- * merges groups by `turnId`, holds each message once by its id at the `seq`
- * and in the group its latest delivery gave it, and orders groups by their
- * earliest placed message, then the turn's queue instant, then the id, the
- * order the view itself keeps. The sequence is the store's order and the device's
+ * The messages one turn wrote that the view selected, under the turn row
+ * where the store holds one, in the thread's order. A group may continue on
+ * a later page — a turn still running writes rows after a page was cut — and
+ * a turn may stand as more than one group on one page, where a row of
+ * another turn's is placed between its rows, so a device merges groups by
+ * `turnId`, holds each message once by its id at the `seq` and in the turn
+ * its latest delivery gave it, and orders the thread as the view itself does:
+ * every row by where it is placed, then the turn's queue instant, then the
+ * turn id, then the sequence, cut into groups wherever the turn changes. The
+ * sequence is the store's order and the device's
  * cursor both, so a row the store moves — a spoken ask's line taken into
  * the turn that ran it, a turn's own rows placed behind the line that
  * arrived after them — takes a fresh sequence and is answered again past
@@ -538,6 +614,37 @@ export const conversationMessagesAnswerSchema = EffectSchema.Struct({
   ),
   next: encodedSequenceReadCursorSchema,
   hasMore: EffectSchema.Boolean,
+});
+
+/**
+ * The history endpoint's answer: the same view over the same standing
+ * conversations, read newest first from the position the query named or
+ * from the tail, grouped by turn the same way. `older` is the cursor to read
+ * further back from and `hasOlder` whether any row stands before the page;
+ * `next` is the messages read's cursor standing at the head as of this
+ * answer, so a device that began at the tail knows where its forward reads
+ * begin without walking the whole Conversation to find out. A page may hold
+ * no group and still say older rows stand, as a messages page may; the
+ * cursor moved all the same, and a device reads on.
+ */
+export interface ConversationHistoryAnswer {
+  readonly conversations: readonly ConversationReadConversation[];
+  readonly groups: readonly ConversationReadTurnGroup[];
+  readonly older: string;
+  readonly hasOlder: boolean;
+  readonly next: string;
+}
+
+export const conversationHistoryAnswerSchema = EffectSchema.Struct({
+  conversations: EffectSchema.Array(conversationReadConversationSchema).check(
+    EffectSchema.isMaxLength(READ_CURSOR_BOUNDS.MAX_CONVERSATIONS),
+  ),
+  groups: EffectSchema.Array(conversationReadTurnGroupSchema).check(
+    EffectSchema.isMaxLength(MAX_MESSAGE_GROUPS),
+  ),
+  older: encodedHistoryReadCursorSchema,
+  hasOlder: EffectSchema.Boolean,
+  next: encodedSequenceReadCursorSchema,
 });
 
 /** One event row about a message, in its conversation's own event sequence. */

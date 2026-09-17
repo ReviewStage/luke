@@ -13,12 +13,16 @@ import {
 import { type HostedStoreContext, userSeal } from "./database.js";
 import {
   eventsForMessages,
+  type HistoryCursor,
+  type HistoryWindow,
   latestMessageRating,
   latestTurnPosition,
   listEvents,
   listMessages,
+  listMessagesBefore,
   listTurns,
   type MessageCursor,
+  type MessageHistoryRead,
   type MessageListRead,
   readMessageByClientId,
   type SequenceCursor,
@@ -111,6 +115,13 @@ export interface HostedStore {
       tools: ToolSet,
       cursor?: MessageCursor,
     ): HostedStoreEffect<MessageListRead>;
+    /** The view's rows before a position across the windows given, newest first and cut at the bound, answered oldest first with the position to read on from; a page with an unreadable row is refused whole. */
+    listBefore(
+      userId: string,
+      windows: readonly HistoryWindow[],
+      tools: ToolSet,
+      cursor?: HistoryCursor,
+    ): HostedStoreEffect<MessageHistoryRead>;
     /** The one message a writer's client id names — a turn's journal under the turn's id — read back under the registry; an empty page where none stands. */
     byClientId(
       userId: string,
@@ -267,6 +278,8 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
     messages: {
       list: (userId, conversationId, tools, cursor) =>
         listMessages(userId, conversationId, tools, cursor),
+      listBefore: (userId, windows, tools, cursor) =>
+        listMessagesBefore(userId, windows, tools, cursor),
       byClientId: (userId, conversationId, tools, clientId) =>
         readMessageByClientId(userId, conversationId, tools, clientId),
     },
@@ -336,6 +349,7 @@ export { promptHashOf } from "./content-addressed.js";
 export type { HostedStoreContext } from "./database.js";
 export {
   findMessageByClientId,
+  type HistoryWindow,
   listRecentMessages,
   readMessageById,
   type StoredEventRecord,

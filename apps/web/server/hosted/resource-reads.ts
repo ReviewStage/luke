@@ -16,6 +16,7 @@ import {
   CONVERSATION_EVENT_KIND,
   CONVERSATION_VIEW_SOURCE,
   type ConversationEventsAnswer,
+  type ConversationHistoryAnswer,
   type ConversationMessagesAnswer,
   type ConversationReadConversation,
   type ConversationReadEvent,
@@ -27,8 +28,10 @@ import {
   type ConversationViewStoredMessage,
   type ConversationViewTurn,
   clientUIMessage,
+  encodeHistoryReadCursor,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,
+  historyReadCursorSchema,
   RATING_EVENT_PAYLOAD,
   READ_PAGE_BOUNDS,
   READ_QUERY,
@@ -52,6 +55,7 @@ import { makeRateBrake } from "./rate-brake.js";
 import type {
   AgentRecord,
   ChildRecord,
+  HistoryWindow,
   HostedStore,
   PagedConversation,
   StandingConversation,
@@ -131,13 +135,16 @@ interface ReadPage<Cursor> {
  * The page a query asks for: a cursor an earlier answer minted, or none for
  * the beginning, and a bound inside the page's own. A cursor this build did
  * not mint the shape of, or a bound outside it, is the one refusal, so a
- * refused request says nothing about which was wrong.
+ * refused request says nothing about which was wrong. The cursor is read
+ * under the key the read takes it by: `after` for every forward read, and
+ * `before` for the history read, which walks the other way.
  */
 function readPage<Cursor>(
   query: URLSearchParams,
   cursorSchema: EffectSchema.Codec<Cursor, UnparsedWireValue>,
+  cursorKey: typeof READ_QUERY.AFTER | typeof READ_QUERY.BEFORE = READ_QUERY.AFTER,
 ): ReadPage<Cursor> | undefined {
-  const afterText = query.get(READ_QUERY.AFTER);
+  const afterText = query.get(cursorKey);
   const after =
     afterText === null ? undefined : Result.getOrUndefined(readEither(cursorSchema)(afterText));
   if (afterText !== null && after === undefined) return undefined;
@@ -440,12 +447,36 @@ const messagesPage = /* @__PURE__ */ Effect.fnUntraced(function* (
     });
   }
   const walk: SequenceWalk<StoredMessageRecord> = walked.success;
+  const answer: ServerMessagesAnswer = {
+    conversations: standing.map(readConversation),
+    groups: yield* projectGroups(store, userId, walk.taken),
+    next: walk.next,
+    hasMore: walk.hasMore,
+  };
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
 
+/**
+ * The view over a page's rows, grouped by turn: D1's `selectConversationView`
+ * run over the rows taken, with the turn rows and the events about those
+ * messages read beside them, each group named for the conversation that
+ * wrote it. The one projection every messages answer makes, whichever way
+ * the page was walked.
+ */
+const projectGroups = /* @__PURE__ */ Effect.fnUntraced(function* (
+  store: ResourceReadOptions["store"],
+  userId: string,
+  taken: readonly TakenRows<StoredMessageRecord>[],
+): Effect.fn.Return<
+  readonly ServerTurnGroup[],
+  SqlError | EffectSchema.SchemaError,
+  SqlClient.SqlClient
+> {
   const main: ConversationViewStoredMessage[] = [];
   const observed: ConversationViewObservedConversation[] = [];
   const conversationOfTurn = new Map<string, StandingConversation>();
   const messageIds: string[] = [];
-  for (const { conversation, rows } of walk.taken) {
+  for (const { conversation, rows } of taken) {
     const viewRows = rows.map(viewRow);
     for (const row of viewRows) conversationOfTurn.set(row.turnId, conversation);
     for (const record of rows) messageIds.push(record.id);
@@ -471,32 +502,98 @@ const messagesPage = /* @__PURE__ */ Effect.fnUntraced(function* (
     events: events.map(viewEvent),
     toolKinds: CATALOG_VIEW_TOOL_KINDS,
   });
-
-  const answer: ServerMessagesAnswer = {
-    conversations: standing.map(readConversation),
-    groups: groups.map((group) => {
-      const conversation = conversationOfTurn.get(group.turnId);
-      if (conversation === undefined) throw new Error("the view grouped a row no page held");
-      return {
-        turnId: group.turnId,
-        conversationId: conversation.id,
-        source: viewSource(conversation),
-        ...(group.turn ? { turn: group.turn } : undefined),
-        messages: group.messages.map((message) => ({
-          message: clientUIMessage(message.message),
-          seq: message.seq,
-          createdAt: message.createdAt,
-          placedAt: message.placedAt,
-          tools: message.tools,
-          ...(message.rating === undefined ? undefined : { rating: message.rating }),
-        })),
-      };
-    }),
-    next: walk.next,
-    hasMore: walk.hasMore,
-  };
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  return groups.map((group) => {
+    const conversation = conversationOfTurn.get(group.turnId);
+    if (conversation === undefined) throw new Error("the view grouped a row no page held");
+    return {
+      turnId: group.turnId,
+      conversationId: conversation.id,
+      source: viewSource(conversation),
+      ...(group.turn ? { turn: group.turn } : undefined),
+      messages: group.messages.map((message) => ({
+        message: clientUIMessage(message.message),
+        seq: message.seq,
+        createdAt: message.createdAt,
+        placedAt: message.placedAt,
+        tools: message.tools,
+        ...(message.rating === undefined ? undefined : { rating: message.rating }),
+      })),
+    };
+  });
 });
+
+/** Where the messages read stands at the head for these conversations: the same positions the change signal answers as its messages head. */
+function messagesHead(standing: readonly StandingConversation[]): string {
+  return encodeSequenceReadCursor(
+    standing.map((conversation) => ({
+      conversationId: conversation.id,
+      seq: conversation.nextMessageSeq - 1,
+      revision: conversation.journalRevision,
+    })),
+  );
+}
+
+type ServerHistoryAnswer = Omit<ConversationHistoryAnswer, "groups"> & {
+  readonly groups: readonly ServerTurnGroup[];
+};
+
+/**
+ * GET: the view over the standing conversations read the other way, newest
+ * first from the position `before` names or from the tail, grouped by turn
+ * as the messages read groups it, with the position to read further back
+ * from, whether older rows stand, and the messages cursor standing at the
+ * head as of this answer. The window is the messages read's own: an
+ * observed conversation's rows from before the standing main opened are cut,
+ * so a Clear ends the history where it ends the thread. A row this build
+ * cannot read back refuses the page whole, naming the row, as every messages
+ * read does.
+ */
+export const handleConversationHistory = /* @__PURE__ */ Effect.fn("handleConversationHistory")(
+  function* (
+    options: ResourceReadOptions,
+  ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+    const gate = yield* readGate(options);
+    if (gate instanceof Response) return gate;
+    const { userId, query } = gate;
+    const page = readPage(query, historyReadCursorSchema, READ_QUERY.BEFORE);
+    if (!page) return invalidRequest();
+    const { store } = options;
+
+    const standing = yield* store.directory.standing(userId);
+    const windowStart = viewWindowStart(standing);
+    const windows: HistoryWindow[] = standing.map((conversation) => ({
+      conversationId: conversation.id,
+      ...(conversation.kind === CONVERSATION_KIND.OBSERVED && windowStart !== undefined
+        ? { since: windowStart }
+        : undefined),
+    }));
+    const before = page.after?.before;
+    const read = yield* store.messages.listBefore(userId, windows, CATALOG_TOOL_SET, {
+      ...(before === undefined ? undefined : { before }),
+      limit: page.limit,
+    });
+    if (!read.ok) {
+      return errorResponse(HOSTED_HTTP_STATUS.INTERNAL_ERROR, HOSTED_API_ERROR.UNREADABLE_ROW, {
+        unreadableRow: { conversationId: read.conversationId, seq: read.seq },
+      });
+    }
+    // The rows regrouped by conversation in the directory's order, which is the shape the projection takes a walk in.
+    const taken: TakenRows<StoredMessageRecord>[] = [];
+    for (const conversation of standing) {
+      const rows = read.value.filter((record) => record.conversationId === conversation.id);
+      if (rows.length > 0) taken.push({ conversation, rows });
+    }
+    const answer: ServerHistoryAnswer = {
+      conversations: standing.map(readConversation),
+      groups: yield* projectGroups(store, userId, taken),
+      // A page that took nothing leaves the position where the query had it, so a device reads on from the same place.
+      older: encodeHistoryReadCursor(read.older ?? before),
+      hasOlder: read.hasOlder,
+      next: messagesHead(standing),
+    };
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  },
+);
 
 /** GET: the view over the page's rows, grouped by turn, with the cursor to read on from. */
 export const handleConversationMessages = /* @__PURE__ */ Effect.fn("handleConversationMessages")(

@@ -15,7 +15,8 @@ import { useLayoutEffect, useRef } from "react";
 import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/agents";
 import { agentSession, agentTitle, subagentTitle } from "./agent-title";
 import { ConversationUnreadableNotice } from "./conversation-panel";
-import { ConversationTurns } from "./conversation-turns";
+import type { ToolRowChip } from "./conversation-tool-row";
+import { ConversationTurns, SessionChip } from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
 
@@ -38,13 +39,16 @@ export type ConversationPage = (typeof CONVERSATION_PAGE)[keyof typeof CONVERSAT
  * The row a transcript page is opened from: which conversation, of which
  * kind, and the words the page's header wears for it, taken from the row as
  * it stood when pressed rather than looked up again, so the header reads the
- * same whether the list still names the conversation or not.
+ * same whether the list still names the conversation or not. An agent's row
+ * also carries its session's identity, so the header can wear the session's
+ * chip in the title's place and keep it level with the roster.
  */
 export interface TranscriptRow {
   readonly conversationId: string;
   readonly kind: TranscriptKind;
   readonly title: string;
   readonly status: ChildStatus;
+  readonly session?: SessionIdentity;
 }
 
 /** Where a child or an agent stands, in the one word its row wears for it. */
@@ -102,7 +106,7 @@ export function transcriptListed(
   return rows.some((listed) => listed.id === row.conversationId);
 }
 
-/** The row an agent's transcript is opened from, named from the roster by session identity. */
+/** The row an agent's transcript is opened from, named from the roster by session identity, which it carries for the header's chip. */
 export function agentTranscriptRow(
   agent: AgentRead,
   roster: readonly SessionView[],
@@ -112,6 +116,33 @@ export function agentTranscriptRow(
     kind: TRANSCRIPT_KIND.OBSERVED,
     title: agentTitle(agent, roster),
     status: agent.status,
+    session: { providerId: agent.providerId, providerSessionId: agent.providerSessionId },
+  };
+}
+
+/**
+ * The chip the transcript page's header wears for an agent's session, built
+ * as an action row's is: the roster's own title, mark, and identity while it
+ * holds the session, pressable exactly when the session's own row is, and
+ * that press opens the chat in the provider; once the roster has let the
+ * session go, the title the row wore under the provider's mark, a name
+ * alone, since a press could reach nothing. Read from the roster where it is
+ * drawn, so a session the roster lets go while its page is open stops being
+ * a press there too. The Agents list's rows wear no such chip: a row is one
+ * press, and it opens the transcript.
+ */
+function headerChip(
+  identity: SessionIdentity,
+  title: string,
+  roster: readonly SessionView[],
+): ToolRowChip {
+  const session = agentSession(identity, roster);
+  if (session === undefined) return { text: title, markId: identity.providerId, openable: false };
+  return {
+    text: session.title,
+    markId: session.agentId ?? session.providerId,
+    identity,
+    openable: session.openable,
   };
 }
 
@@ -283,8 +314,12 @@ export function AgentsPanel({
  * same scroll scaffolding so the sideways pull and the scrollbars behave the
  * same. The header names the way back to the list, the conversation by the
  * title and status the row that opened it wore, and nothing is looked up
- * again. Nothing here is live: the words arrive settled, as stored turns, so
- * there is no streaming row, no listening row, and no Stop. The page opens at
+ * again but the chip an agent's header wears for its session, which stands
+ * with the roster as the thread's chips do and opens the chat in the provider
+ * exactly when the session's own row would, so a session the roster lets go
+ * or stops opening is no longer a press here either. Nothing else here is
+ * live: the words arrive settled, as stored turns, so there is no streaming
+ * row, no listening row, and no Stop. The page opens at
  * its tail, as the thread does, and jumps there again only when the transcript
  * gains a turn or another row is opened, so a re-read that adds nothing leaves
  * a reader who scrolled up where they stand. Mounted under the thread's own
@@ -307,7 +342,7 @@ export function AgentTranscriptPanel({
   roster: readonly SessionView[];
   /** The instant a running turn's wait is read against, on the thread's own terms. */
   now: number;
-  /** A session row's own press by identity, for the chip naming the session an action reached. */
+  /** A session row's own press by identity, for the header's chip and for the chip naming the session an action reached. */
   onOpenChat: (identity: SessionIdentity) => void;
   /** Returns the tab to the Agents list. */
   onBack: () => void;
@@ -347,7 +382,18 @@ export function AgentTranscriptPanel({
         <button type="button" className="agents-back" onClick={onBack}>
           ‹ Agents
         </button>
-        <h2 className="agents-title agent-transcript-title">{open.title}</h2>
+        {/* The heading's own name is the title, so heading navigation hears the
+            conversation and not the chip's press. */}
+        <h2 className="agents-title agent-transcript-title" aria-label={open.title}>
+          {open.session === undefined ? (
+            open.title
+          ) : (
+            <SessionChip
+              chip={headerChip(open.session, open.title, roster)}
+              onOpenChat={onOpenChat}
+            />
+          )}
+        </h2>
         <span className="agent-status" data-status={open.status}>
           {STATUS_WORD[open.status]}
         </span>

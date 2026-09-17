@@ -186,10 +186,12 @@
   pointer-events: none;
 }
 
-/* On a page with a pinned header the stand pins below it, past the header's
-   own dissolve band, so the two never trade paint at the same edge. */
-.settings:has(> .settings-header) > .settings-search-stand {
-  top: calc(var(--settings-header-height) + var(--settings-gap));
+/* With the pill standing, a page's header pins below it, past the pill's own
+   dissolve band, so the two never trade paint at the same edge. The pill
+   takes the top because the search is the surface's, reading across every
+   page, and the header is one page's own. */
+.settings:has(> .settings-search-stand) > .settings-header {
+  top: calc(var(--settings-search-height) + var(--settings-gap));
 }
 
 /* What keyboard scrolling has to clear while the pill is pinned, on the
@@ -201,7 +203,7 @@
   scroll-padding-top: calc(var(--settings-search-height) + var(--settings-gap));
 }
 
-/* Both pinned at once: the header, its gap, the pill, and the pill's gap are
+/* Both pinned at once: the pill, its gap, the header, and the header's gap are
    all above the first row a keyboard scroll may land on. */
 .settings:has(> .settings-header):has(> .settings-search-stand) {
   scroll-padding-top: calc(

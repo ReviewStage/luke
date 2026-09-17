@@ -75,6 +75,15 @@ export const HOSTED_SERVICE_PATH = {
    * handed back, `limit` the page bound.
    */
   CONVERSATION_MESSAGES: "/api/conversation/messages",
+  /**
+   * The Conversation's history behind a device's own cursor (GET): the same
+   * view, read newest first across the standing conversations from the
+   * position `before` names, or from the tail where none is named, so a
+   * device draws the newest turns first and reads back a page at a time as
+   * its reader looks; `limit` the page bound. The answer also carries the
+   * messages read's cursor standing at the head, where forward reads begin.
+   */
+  CONVERSATION_HISTORY: "/api/conversation/history",
   /** The events about the Conversation's messages behind a device's own cursor (GET). */
   CONVERSATION_EVENTS: "/api/conversation/events",
   /**

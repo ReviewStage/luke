@@ -148,6 +148,8 @@ export function App(): React.JSX.Element {
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
   const { conversationPage, transcriptOpen, changeConversationPage, openTranscript } =
     useConversationPage(tell);
+  /** The thread's reader reaching the top of what this Mac holds: one page of older turns, asked of the host. */
+  const loadOlderConversation = useCallback(() => act(ACT_KIND.CONVERSATION_LOAD_OLDER), [act]);
   // The host closes an open transcript its list no longer names, stamped by
   // a Clear on any Mac or fallen past the list's bound; the page follows it
   // back to the list rather than standing over a transcript nothing fills.
@@ -945,6 +947,7 @@ export function App(): React.JSX.Element {
             liveConversationEntries={liveConversationEntries}
             spokenAskPending={spokenAskPending}
             onClearConversationConversation={clearConversationLines}
+            onLoadOlderConversation={loadOlderConversation}
             conversationPage={conversationPage}
             onConversationPageChange={changeConversationPage}
             subagents={state.children}

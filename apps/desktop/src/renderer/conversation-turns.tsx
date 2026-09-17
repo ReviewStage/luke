@@ -91,11 +91,12 @@ import { ThinkingDots } from "./thinking-dots";
  * The Conversation drawn from its stored shape: the turn groups the view
  * selection answers, each a run of `UIMessage` rows. A text part is a bubble
  * on its author's side; a reasoning part is Luke's thought, folded to a line
- * that opens on its summary; an announcement is Luke's briefing, marked when
- * nobody heard it. An observation's briefing folds like his thinking, since
- * it is the brain's proposal and not words anyone heard, with the chip naming
- * the observed agent inside the fold above the words; the recorded spoken
- * text stays below as the voice's own bubble. Every other stored tool call of one assistant
+ * that opens on its summary; an announcement is Luke's briefing in his own
+ * bubble, and that bubble is the whole of what the announce call draws. An
+ * observation's briefing folds like his thinking instead, since it is the
+ * brain's proposal and not words anyone heard, with the chip naming the
+ * observed agent inside the fold above the words; the recorded spoken text
+ * stays below as the voice's own bubble. Every other stored tool call of one assistant
  * message — reads, actions, even one whose tool failed — draws ahead of that
  * message's words, in the call order the message stored them: one call as
  * the row it is, stamped like any other, and two or more inside one fold
@@ -228,9 +229,6 @@ function rowGlyph(row: ToolRow): (() => React.JSX.Element) | undefined {
   return row.controlKind !== undefined ? CONTROL_GLYPH[row.controlKind] : ROW_GLYPH[row.kind];
 }
 
-/** What a reader is told of an announcement no device claimed before its offer lapsed. */
-const UNSPOKEN_LABEL = "Not spoken";
-
 /** What a reader is told of an action still under way. */
 const PENDING_LABEL = "Under way";
 
@@ -250,7 +248,6 @@ function BubbleRow({
   words,
   at,
   copy = true,
-  unspoken = false,
   reading = false,
   rating,
 }: {
@@ -258,7 +255,6 @@ function BubbleRow({
   words: string;
   at: number;
   copy?: boolean;
-  unspoken?: boolean;
   /** Whether the words are what Luke's voice said of a message folded above them. */
   reading?: boolean;
   /** The rating control, behind the ellipsis on the last words of one of Luke's messages and nowhere else. */
@@ -268,14 +264,12 @@ function BubbleRow({
     <li
       className="conversation-entry"
       data-speaker={voice.speaker}
-      data-unspoken={unspoken ? "true" : undefined}
       data-reading={reading ? "true" : undefined}
     >
       <small className="visually-hidden">{voice.label}</small>
       <div className="conversation-message">
         <span className="conversation-bubble">
           <MarkdownMessage words={words} className="conversation-words" />
-          {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
           {copy ? <ConversationCopyButton words={words} /> : null}
           {rating === undefined ? null : (
             <ConversationMessageMenu>{rating}</ConversationMessageMenu>
@@ -366,19 +360,17 @@ function WrittenRow({ words }: { words: string }): React.JSX.Element {
  * briefing came from stands above the words, so whose session it was is
  * read with the proposal and never as a line of the thread's own. The
  * voice's recorded utterance follows as its own bubble, so the visible
- * spoken text is always what the developer heard; the unheard mark and the
- * rating stand inside the fold with the words they are about.
+ * spoken text is always what the developer heard; the rating stands inside
+ * the fold with the words it is about.
  */
 function ObservationAnnouncementRow({
   source,
   words,
-  unspoken,
   rating,
 }: {
   /** The chip naming the observed agent, drawn first inside the fold. */
   source: React.ReactNode;
   words: string;
-  unspoken: boolean;
   rating: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -387,14 +379,12 @@ function ObservationAnnouncementRow({
       data-speaker={VOICE.NOTE.speaker}
       data-thinking-fold="true"
       data-observation-announcement="true"
-      data-unspoken={unspoken ? "true" : undefined}
     >
       <small className="visually-hidden">{VOICE.NOTE.label}</small>
       <div className="conversation-message">
         <ThinkingFold>
           {source}
           <MarkdownMessage words={words} className="conversation-thinking-fold-words" />
-          {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
           {rating === undefined ? null : (
             <ConversationMessageMenu>{rating}</ConversationMessageMenu>
           )}
@@ -486,8 +476,10 @@ function Chip({
  * by another hand: it mints the same open act, for the identity the record
  * names, and the host answers with the address the provider reported — or
  * refuses, for a session that reported none. Every other chip is a name.
+ * Exported for the one place outside the thread that wears it: the transcript
+ * page's header, where an agent's title is this chip for its session.
  */
-function SessionChip({
+export function SessionChip({
   chip,
   onOpenChat,
 }: {
@@ -560,10 +552,10 @@ function SourceChip({ source, roster, agents, onOpenAgent }: SourceNaming): Reac
 }
 
 /**
- * The header line of an observed turn group that folds no briefing — one
- * whose rows are actions alone — so a reader still knows whose work the rows
- * below record. A group that folds a briefing wears its chip inside the fold
- * instead and heads on nothing.
+ * The header line of an observed turn group with rows outside a briefing's
+ * fold — actions, with or without a briefing beside them — so a reader still
+ * knows whose work those rows record. A group that is briefing folds and
+ * nothing else wears its chip inside the fold instead and heads on nothing.
  */
 function SourceRow(naming: SourceNaming): React.JSX.Element {
   return (
@@ -580,20 +572,25 @@ function SourceRow(naming: SourceNaming): React.JSX.Element {
   );
 }
 
-/** Whether a group draws a briefing fold: an announce call carrying its briefing, in any of its messages. */
-function foldsBriefing(group: ConversationViewTurnGroup): boolean {
-  return group.messages.some((view) =>
-    view.tools.some(
-      (tool) =>
-        tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE &&
-        view.message.parts.some(
-          (part: StoredPart) =>
-            isStoredToolPart(part) &&
-            part.toolCallId === tool.toolCallId &&
-            announcedWords(part) !== undefined,
-        ),
-    ),
-  );
+/**
+ * Whether every row an observed group draws is a briefing fold: each of its
+ * messages' parts an announce call carrying its briefing, and at least one
+ * such call among them. The view cuts an observed message to its announce
+ * and action parts, so any other part is an action row the fold's chip
+ * would not attribute.
+ */
+function onlyBriefings(group: ConversationViewTurnGroup): boolean {
+  let briefings = 0;
+  for (const view of group.messages) {
+    const described = new Map(view.tools.map((tool) => [tool.toolCallId, tool.kind]));
+    for (const part of view.message.parts) {
+      if (!isStoredToolPart(part)) return false;
+      if (described.get(part.toolCallId) !== CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) return false;
+      if (announcedWords(part) === undefined) return false;
+      briefings += 1;
+    }
+  }
+  return briefings > 0;
 }
 
 /** What the chip on a completion calls the child: the list's own title for it, or the bare word for a child the list no longer names. */
@@ -640,9 +637,12 @@ function SubagentChip({
  * composed. Nothing for any other turn, or for a note the reader cannot hold
  * to that shape.
  */
-function completedChildOf(group: ConversationViewTurnGroup): string | undefined {
-  if (group.turn?.origin !== TURN_ORIGIN.CHILD_COMPLETION) return undefined;
-  for (const { message } of group.messages) {
+function completedChildOf(
+  turn: ConversationViewTurn | undefined,
+  messages: readonly ConversationViewMessage[],
+): string | undefined {
+  if (turn?.origin !== TURN_ORIGIN.CHILD_COMPLETION) return undefined;
+  for (const { message } of messages) {
     if (message.role !== MESSAGE_ROLE.USER) continue;
     if (message.metadata.author !== MESSAGE_AUTHOR.BRAIN) continue;
     if (message.metadata.source !== OBSERVATION_SOURCE.CHILD_COMPLETION) continue;
@@ -1240,7 +1240,6 @@ function messageRows(
             key={key}
             source={sourceChip}
             words={words}
-            unspoken={tool.unspoken}
             rating={placed}
           />,
         );
@@ -1257,7 +1256,6 @@ function messageRows(
             voice={VOICE.LUKE}
             words={words}
             at={view.placedAt}
-            unspoken={tool.unspoken}
             rating={placed}
           />,
         );
@@ -1344,14 +1342,53 @@ function placedLiveRows(
     });
 }
 
-/** When a turn's rows begin and end: where its earliest and latest messages are placed, which is what dates the silence around it. */
+/** When a group's rows begin and end: where its earliest and latest messages are placed, which is what dates the silence around it. */
 function groupSpan(group: ConversationViewTurnGroup) {
   const instants = group.messages.map((message) => message.placedAt);
   return { first: Math.min(...instants), last: Math.max(...instants) };
 }
 
+/** A group's key among the thread's elements: its first message's id, since a turn may stand as more than one group and its id alone would repeat. */
+function groupKey(group: ConversationViewTurnGroup): string {
+  return group.messages[0]?.message.id ?? group.turnId;
+}
+
+/** The newest turn the thread holds a row of, by queue instant and then id: the one turn that can still be running. */
+function newestTurn(
+  groups: readonly ConversationViewTurnGroup[],
+): ConversationViewTurn | undefined {
+  let newest: ConversationViewTurn | undefined;
+  for (const { turn } of groups) {
+    if (turn === undefined) continue;
+    if (
+      newest === undefined ||
+      turn.queuedAt > newest.queuedAt ||
+      (turn.queuedAt === newest.queuedAt && turn.id > newest.id)
+    ) {
+      newest = turn;
+    }
+  }
+  return newest;
+}
+
+/** Every message of each turn in the thread's order, whole across the groups the turn stands as, for what is decided of a turn rather than of a group. */
+function messagesByTurn(
+  groups: readonly ConversationViewTurnGroup[],
+): ReadonlyMap<string, readonly ConversationViewMessage[]> {
+  const byTurn = new Map<string, ConversationViewMessage[]>();
+  for (const group of groups) {
+    const standing = byTurn.get(group.turnId);
+    if (standing === undefined) byTurn.set(group.turnId, [...group.messages]);
+    else standing.push(...group.messages);
+  }
+  return byTurn;
+}
+
 /**
- * The thread as turns. Each group's messages draw in sequence, and every
+ * The thread as the groups hand it: in their order, each the consecutive
+ * rows of one turn, a turn standing as more than one group where a row of
+ * another's is placed between its rows, so the turn is what a row's
+ * decorations are read from and never what orders it. Every
  * assistant message that carried tool calls opens with them — one as a row,
  * more as one fold — before the words that followed. A turn still running ends in Luke's wait,
  * driven by the turn row's own status and nothing else. A turn that followed
@@ -1420,12 +1457,20 @@ export function ConversationTurns({
   };
   // The wait is the thread's last object or nothing: a turn still running is
   // the newest one, since eve runs a conversation's turns one at a time and
-  // in order, so a pending row above a settled reply is a record eve never
-  // finished writing (an interrupted run), not a run still going. Drawing a
-  // wait there would tell the developer Luke is thinking about words he
-  // already answered, or never will.
-  const last = groups.at(-1);
-  const waiting = turnPending(last?.turn) ? last?.turn : undefined;
+  // in order, so a pending turn queued before a settled one is a record eve
+  // never finished writing (an interrupted run), not a run still going.
+  // Drawing a wait there would tell the developer Luke is thinking about
+  // words he already answered, or never will. The newest turn is the newest
+  // by its queue instant, not by where its rows stand: a row of no turn after
+  // its rows is not a later turn, and an older turn's reply read aloud after
+  // a newer ask is placed later without being newer.
+  const newest = newestTurn(groups);
+  const waiting = turnPending(newest) ? newest : undefined;
+  const byTurn = messagesByTurn(groups);
+  // The ask a rated reply answered is the developer's latest words in the
+  // same turn before it, wherever the turn's groups stand; a turn Luke opened
+  // himself answered none.
+  const asks = new Map<string, string>();
   return (
     <ol className="conversation-list">
       {groups.flatMap((group) => {
@@ -1435,8 +1480,8 @@ export function ConversationTurns({
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
         const aloud = answeredAloud(group.turn);
-        // An observed group's chip goes inside its briefing's fold, or heads
-        // a group with no briefing to fold, and is drawn in one place only.
+        // An observed group that is briefing folds alone wears its chip inside
+        // them and heads on nothing; one with rows outside a fold heads on it.
         const naming: SourceNaming | undefined =
           group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED
             ? {
@@ -1446,22 +1491,21 @@ export function ConversationTurns({
                 ...(onOpenAgent ? { onOpenAgent } : undefined),
               }
             : undefined;
-        const folded = naming !== undefined && foldsBriefing(group);
+        const folded = naming !== undefined && onlyBriefings(group);
         // A child's completion leads Luke's first words on it with the chip
         // naming the child: the first of his messages in the turn with words,
         // since one that only called tools has no words to lead.
-        const completedChild = completedChildOf(group);
+        const turnMessages = byTurn.get(group.turnId) ?? group.messages;
+        const completedChild = completedChildOf(group.turn, turnMessages);
         const led =
           completedChild === undefined
             ? undefined
-            : group.messages.find(
+            : turnMessages.find(
                 (message) =>
                   message.message.role === MESSAGE_ROLE.ASSISTANT &&
                   message.message.parts.some(isTextPart),
               );
-        // The ask a rated reply answered is the developer's latest words in
-        // the same turn before it; a turn Luke opened himself answered none.
-        let ask: string | undefined;
+        let ask = asks.get(group.turnId);
         const drawn = group.messages.flatMap((message) => {
           const rows = messageRows(
             message,
@@ -1490,6 +1534,7 @@ export function ConversationTurns({
             message.message.metadata.author === MESSAGE_AUTHOR.DEVELOPER
           ) {
             ask = userWords(message.message);
+            asks.set(group.turnId, ask);
           }
           return rows;
         });
@@ -1498,21 +1543,21 @@ export function ConversationTurns({
           ...(dated
             ? [
                 <ConversationTimeBreak
-                  key={`${group.turnId}:break`}
+                  key={`${groupKey(group)}:break`}
                   recordedAt={span.first}
                   now={now}
                 />,
               ]
             : []),
           ...(naming !== undefined && !folded
-            ? [<SourceRow key={group.turnId} {...naming} />]
+            ? [<SourceRow key={groupKey(group)} {...naming} />]
             : []),
           ...drawn,
         ];
       })}
-      {waiting !== undefined && last !== undefined ? (
+      {waiting !== undefined ? (
         <ConversationThinkingRow
-          key={`${last.turnId}:thinking`}
+          key={`${waiting.id}:thinking`}
           since={waiting.startedAt ?? waiting.queuedAt}
           now={now}
         />
