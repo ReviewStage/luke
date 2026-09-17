@@ -12,7 +12,7 @@ import { payloadKeyRing } from "../server/hosted/encryption";
 import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
 import { readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
-import { countRowsWhere, deleteUser, insertDevice } from "./support/store-rows";
+import { countRowsWhere, deleteUser, insertDevice, instantColumn } from "./support/store-rows";
 
 /** Synthetic fixtures: no real title, branch, or transcript anywhere. */
 
@@ -330,7 +330,8 @@ test("retiring departed observed conversations stamps the sessions the roster no
         .from(conversations)
         .where(eq(conversations.id, id)),
     );
-    return row?.deletedAt ?? undefined;
+    // The two dialects read a timestamptz back differently, so the instant is compared as millis.
+    return row?.deletedAt == null ? undefined : instantColumn(row.deletedAt).getTime();
   };
 
   // Only the conductor slice is read: the other provider's row is not this pass's to retire.
@@ -345,8 +346,8 @@ test("retiring departed observed conversations stamps the sessions the roster no
   assert.equal(await stampedAt(listed), undefined);
   assert.equal(await stampedAt(elsewhere), undefined);
   assert.equal(await stampedAt(theirs), undefined);
-  assert.deepEqual(await stampedAt(departed), new Date(NOW + 1));
-  assert.deepEqual(await stampedAt(child.id), new Date(NOW + 1));
+  assert.equal(await stampedAt(departed), NOW + 1);
+  assert.equal(await stampedAt(child.id), NOW + 1);
   assert.deepEqual(
     (await database.run(directory.standing(userId)))
       .filter((conversation) => conversation.kind === CONVERSATION_KIND.OBSERVED)
