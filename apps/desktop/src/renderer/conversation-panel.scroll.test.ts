@@ -117,19 +117,40 @@ function renderPanel(props: PanelProps) {
   };
 }
 
+/** Whether the fixture's reader asked for motion to be reduced; jsdom answers no media query of its own. */
+let reducedMotion = false;
+
+Object.defineProperty(window, "matchMedia", {
+  configurable: true,
+  value: (query: string) => ({
+    matches: query === "(prefers-reduced-motion: reduce)" && reducedMotion,
+  }),
+});
+
 /**
  * Fakes the scroll box's geometry, since jsdom lays nothing out. A browser
  * clamps the offset to what the thread can scroll, which only the case of a
  * thread that fits its window whole depends on; the other cases read the
  * offset a scroll asked for as it was asked, so the tail's pin shows plainly.
+ * A `scrollTo` is kept as it was asked and lands at once, since jsdom
+ * animates nothing; `animate` holds it off instead, so a test can play the
+ * steps of the way down itself.
  */
 function controlMetrics(
   element: HTMLDivElement,
   initial: MutableScrollMetrics,
-  { clamp = false }: { clamp?: boolean } = {},
+  { clamp = false, animate = false }: { clamp?: boolean; animate?: boolean } = {},
 ) {
   const state = { ...initial };
+  let asked: ScrollToOptions | undefined;
   Object.defineProperties(element, {
+    scrollTo: {
+      configurable: true,
+      value: (options: ScrollToOptions) => {
+        asked = options;
+        if (!animate) element.scrollTop = options.top ?? 0;
+      },
+    },
     scrollTop: {
       configurable: true,
       get: () => state.scrollTop,
@@ -150,6 +171,10 @@ function controlMetrics(
   });
   return {
     state,
+    /** The last `scrollTo` the panel asked for, as it asked. */
+    get asked() {
+      return asked;
+    },
     set(next: Partial<MutableScrollMetrics>) {
       Object.assign(state, next);
     },
@@ -168,8 +193,16 @@ function scrollElement(element: HTMLDivElement, top: number): void {
   });
 }
 
+/** Plays the browser's word that a scroll came to rest, which jsdom never says on its own. */
+function endScroll(element: HTMLDivElement): void {
+  act(() => {
+    element.dispatchEvent(new Event("scrollend"));
+  });
+}
+
 afterEach(() => {
   document.body.innerHTML = "";
+  reducedMotion = false;
 });
 
 test("while the reader follows the tail, same-message tool and thinking rows keep the thread pinned", () => {
@@ -214,7 +247,141 @@ test("scrolling up pauses automatic scrolling until the jump-to-bottom control i
   act(() => {
     button.click();
   });
+  assert.deepEqual(metrics.asked, { top: 480, behavior: "smooth" });
   assert.equal(metrics.state.scrollTop, 480);
+  assert.equal(jumpButton(mounted.container), null);
+  mounted.unmount();
+});
+
+test("the jump-to-bottom control carries the reader down smoothly, and the steps on the way are not read as scrolling away", () => {
+  const mounted = renderPanel(BASE_PROPS);
+  const metrics = controlMetrics(
+    mounted.scroll,
+    { scrollTop: 300, scrollHeight: 420, clientHeight: 120 },
+    { animate: true },
+  );
+  scrollElement(mounted.scroll, 100);
+  const button = jumpButton(mounted.container);
+  assert.ok(button);
+  act(() => {
+    button.click();
+  });
+  assert.deepEqual(metrics.asked, { top: 420, behavior: "smooth" });
+  assert.equal(metrics.state.scrollTop, 100);
+  assert.equal(jumpButton(mounted.container), null);
+  // A step of the way down is short of the tail, and the control stays away.
+  scrollElement(mounted.scroll, 180);
+  assert.equal(jumpButton(mounted.container), null);
+  // Words landing on the way move the tail the reader is carried to, not the reader.
+  metrics.set({ scrollHeight: 540 });
+  mounted.render({
+    ...BASE_PROPS,
+    live: [
+      {
+        entry: { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Still working through it." },
+        at: undefined,
+      },
+    ],
+  });
+  assert.deepEqual(metrics.asked, { top: 540, behavior: "smooth" });
+  assert.equal(metrics.state.scrollTop, 180);
+  scrollElement(mounted.scroll, 300);
+  assert.equal(jumpButton(mounted.container), null);
+  // Arriving ends the seek: a scroll back up from here is the reader's own.
+  scrollElement(mounted.scroll, 420);
+  endScroll(mounted.scroll);
+  assert.equal(jumpButton(mounted.container), null);
+  scrollElement(mounted.scroll, 300);
+  assert.ok(jumpButton(mounted.container));
+  mounted.unmount();
+});
+
+test("a jump the reader takes back by scrolling up leaves them where they stopped, and one that came to rest short of the tail is carried on", () => {
+  const mounted = renderPanel(BASE_PROPS);
+  const metrics = controlMetrics(
+    mounted.scroll,
+    { scrollTop: 300, scrollHeight: 420, clientHeight: 120 },
+    { animate: true },
+  );
+  scrollElement(mounted.scroll, 100);
+  const first = jumpButton(mounted.container);
+  assert.ok(first);
+  act(() => {
+    first.click();
+  });
+  scrollElement(mounted.scroll, 180);
+  assert.equal(jumpButton(mounted.container), null);
+  // A step back up is one the animation never makes: the reader took the scroll back.
+  scrollElement(mounted.scroll, 140);
+  const second = jumpButton(mounted.container);
+  assert.ok(second);
+  act(() => {
+    second.click();
+  });
+  scrollElement(mounted.scroll, 200);
+  assert.equal(jumpButton(mounted.container), null);
+  // The scroll came to rest short of the tail with the press still standing,
+  // as a retargeted animation or a reader scrolling on down leaves it: the
+  // press is carried the rest of the way.
+  endScroll(mounted.scroll);
+  assert.deepEqual(metrics.asked, { top: 420, behavior: "smooth" });
+  assert.equal(jumpButton(mounted.container), null);
+  scrollElement(mounted.scroll, 420);
+  endScroll(mounted.scroll);
+  assert.equal(jumpButton(mounted.container), null);
+  mounted.unmount();
+});
+
+test("a jump pressed near the top asks for no older turns on its way down", async () => {
+  const load = deferredLoad();
+  const props: PanelProps = {
+    ...BASE_PROPS,
+    view: { ...BASE_PROPS.view, hasOlder: true },
+    onLoadOlder: load.onLoadOlder,
+  };
+  const mounted = renderPanel({ ...props, view: BASE_PROPS.view });
+  controlMetrics(
+    mounted.scroll,
+    { scrollTop: 300, scrollHeight: 420, clientHeight: 120 },
+    { animate: true },
+  );
+  mounted.render(props);
+  assert.equal(load.count, 0);
+  // Reaching the top asks once; the ask lands nothing, so a reach of the reader's own would ask again.
+  scrollElement(mounted.scroll, 20);
+  assert.equal(load.count, 1);
+  await load.settle(false);
+  const button = jumpButton(mounted.container);
+  assert.ok(button);
+  act(() => {
+    button.click();
+  });
+  // The first steps down are still within reach of the top, and are not a reach.
+  scrollElement(mounted.scroll, 30);
+  scrollElement(mounted.scroll, 45);
+  assert.equal(load.count, 1);
+  scrollElement(mounted.scroll, 300);
+  assert.equal(load.count, 1);
+  assert.equal(jumpButton(mounted.container), null);
+  mounted.unmount();
+});
+
+test("with motion reduced, the jump-to-bottom control seats the reader on the tail at once", () => {
+  reducedMotion = true;
+  const mounted = renderPanel(BASE_PROPS);
+  const metrics = controlMetrics(mounted.scroll, {
+    scrollTop: 300,
+    scrollHeight: 420,
+    clientHeight: 120,
+  });
+  scrollElement(mounted.scroll, 100);
+  const button = jumpButton(mounted.container);
+  assert.ok(button);
+  act(() => {
+    button.click();
+  });
+  assert.deepEqual(metrics.asked, { top: 420, behavior: "instant" });
+  assert.equal(metrics.state.scrollTop, 420);
   assert.equal(jumpButton(mounted.container), null);
   mounted.unmount();
 });
