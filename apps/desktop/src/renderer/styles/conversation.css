@@ -1046,11 +1046,19 @@ button.conversation-action-chip:focus-visible {
   align-self: flex-start;
 }
 
-/* The chip naming the observed session a turn group belongs to heads the
-   group on a line of its own, at the rows' left edge rather than centred the
-   way an event's words are, and close over the first row it names. */
+/* The chip naming the observed session a turn group belongs to heads a
+   group with no briefing to fold on a line of its own, at the rows' left
+   edge rather than centred the way an event's words are, and close over the
+   first row it names. */
 .conversation-entry[data-source-session] .conversation-message {
   justify-content: flex-start;
   padding: 6px 12px 0;
   text-align: left;
+}
+
+/* Inside a briefing's fold the same chip stands first, on a line of its own
+   above the words, at the words' own inset and never pulled into their
+   run: the fold says one word, and the chip says whose session. */
+.conversation-thinking-fold > .conversation-source-chip {
+  margin: 4px 0 0;
 }

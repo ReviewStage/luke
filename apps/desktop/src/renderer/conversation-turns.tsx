@@ -92,8 +92,10 @@ import { ThinkingDots } from "./thinking-dots";
  * selection answers, each a run of `UIMessage` rows. A text part is a bubble
  * on its author's side; a reasoning part is Luke's thought, folded to a line
  * that opens on its summary; an announcement is Luke's briefing, marked when
- * nobody heard it. Observation briefings fold under the chat that proposed
- * them, while the recorded spoken text stays below. Every other stored tool call of one assistant
+ * nobody heard it. An observation's briefing folds like his thinking, since
+ * it is the brain's proposal and not words anyone heard, with the chip naming
+ * the observed agent inside the fold above the words; the recorded spoken
+ * text stays below as the voice's own bubble. Every other stored tool call of one assistant
  * message — reads, actions, even one whose tool failed — draws ahead of that
  * message's words, in the call order the message stored them: one call as
  * the row it is, stamped like any other, and two or more inside one fold
@@ -297,13 +299,7 @@ const THINKING_LABEL = "Thinking";
  * rows below share it and nothing else, so the record's two kinds of
  * thinking stay two kinds in the markup while reading as one on the surface.
  */
-function ThinkingFold({
-  label = THINKING_LABEL,
-  children,
-}: {
-  label?: string;
-  children: React.ReactNode;
-}): React.JSX.Element {
+function ThinkingFold({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
     <details className="conversation-thinking-fold">
       <summary className="conversation-turn-summary">
@@ -311,7 +307,7 @@ function ThinkingFold({
         <span className="conversation-action-mark" aria-hidden="true">
           <BrainIcon />
         </span>
-        <span>{label}</span>
+        <span>{THINKING_LABEL}</span>
       </summary>
       {children}
     </details>
@@ -364,18 +360,23 @@ function WrittenRow({ words }: { words: string }): React.JSX.Element {
 }
 
 /**
- * The briefing an observation agent handed the voice, kept under its source
- * chat rather than looking like words Luke actually said. The voice model's
- * recorded utterance follows as its own bubble, so the visible spoken text is
- * always what the developer heard.
+ * The briefing the brain proposed from an observed session, folded as his
+ * thinking rather than drawn as words Luke said: the fold opens on the same
+ * one word his reasoning does, and inside it the chip naming the agent the
+ * briefing came from stands above the words, so whose session it was is
+ * read with the proposal and never as a line of the thread's own. The
+ * voice's recorded utterance follows as its own bubble, so the visible
+ * spoken text is always what the developer heard; the unheard mark and the
+ * rating stand inside the fold with the words they are about.
  */
 function ObservationAnnouncementRow({
-  chat,
+  source,
   words,
   unspoken,
   rating,
 }: {
-  chat: string;
+  /** The chip naming the observed agent, drawn first inside the fold. */
+  source: React.ReactNode;
   words: string;
   unspoken: boolean;
   rating: React.ReactNode;
@@ -390,7 +391,8 @@ function ObservationAnnouncementRow({
     >
       <small className="visually-hidden">{VOICE.NOTE.label}</small>
       <div className="conversation-message">
-        <ThinkingFold label={`Announcement from ${chat}`}>
+        <ThinkingFold>
+          {source}
           <MarkdownMessage words={words} className="conversation-thinking-fold-words" />
           {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
           {rating === undefined ? null : (
@@ -519,44 +521,51 @@ function listedAgent(
   );
 }
 
-/** What an observed group calls its chat everywhere it needs to name its source. */
-function sourceTitle(
-  source: Extract<ConversationViewSource, { kind: typeof CONVERSATION_VIEW_SOURCE.OBSERVED }>,
-  roster: readonly SessionView[],
-  agents: readonly AgentRead[],
-): string {
-  return agentTitle(listedAgent(source.session, agents) ?? source.session, roster);
+/** What names an observed group's agent: the source, and what the roster and the list know of it. */
+interface SourceNaming {
+  readonly source: Extract<
+    ConversationViewSource,
+    { kind: typeof CONVERSATION_VIEW_SOURCE.OBSERVED }
+  >;
+  readonly roster: readonly SessionView[];
+  readonly agents: readonly AgentRead[];
+  readonly onOpenAgent?: (agent: AgentRead) => void;
 }
 
 /**
- * The header line of a turn group from an observed session's own
- * conversation: one chip naming the agent, worn by the group rather than by
- * any of its rows, so a reader knows whose work the rows below record. The
- * chip leads to the agent here rather than to the provider that runs it: it
- * wears a robot for the mark and not the provider's, and its press is the
- * Agents list's own row press for the agent, turning the tab to the agent's
- * transcript page. It is named as that row is, by the roster while it holds
- * the session and by the title the service kept once it has let it go. A
- * session the agents list no longer names is a name alone, since the app
- * closes a transcript of an agent the list does not name the moment it
- * opens, and so is every chip in a thread with no press to hand. Main's own
- * groups wear none.
+ * The chip naming the agent whose session an observed turn group came from,
+ * worn by the group rather than by any of its rows: inside the fold of the
+ * briefing it proposed, above the words, or heading a group with no
+ * briefing to fold. The chip leads to the agent here rather than to the
+ * provider that runs it: it wears a robot for the mark and not the
+ * provider's, and its press is the Agents list's own row press for the
+ * agent, turning the tab to the agent's transcript page. It is named as that
+ * row is, by the roster while it holds the session and by the title the
+ * service kept once it has let it go. A session the agents list no longer
+ * names is a name alone, since the app closes a transcript of an agent the
+ * list does not name the moment it opens, and so is every chip in a thread
+ * with no press to hand. Main's own groups wear none.
  */
-function SourceRow({
-  source,
-  roster,
-  agents,
-  onOpenAgent,
-}: {
-  source: Extract<ConversationViewSource, { kind: typeof CONVERSATION_VIEW_SOURCE.OBSERVED }>;
-  roster: readonly SessionView[];
-  agents: readonly AgentRead[];
-  onOpenAgent?: (agent: AgentRead) => void;
-}): React.JSX.Element {
+function SourceChip({ source, roster, agents, onOpenAgent }: SourceNaming): React.JSX.Element {
   const agent = listedAgent(source.session, agents);
-  const text = sourceTitle(source, roster, agents);
+  const text = agentTitle(agent ?? source.session, roster);
   const press =
     agent !== undefined && onOpenAgent !== undefined ? () => onOpenAgent(agent) : undefined;
+  return (
+    <Chip className={SOURCE_CHIP_CLASS} label={text} {...(press ? { onPress: press } : undefined)}>
+      <RobotIcon className="conversation-chip-mark" />
+      {text}
+    </Chip>
+  );
+}
+
+/**
+ * The header line of an observed turn group that folds no briefing — one
+ * whose rows are actions alone — so a reader still knows whose work the rows
+ * below record. A group that folds a briefing wears its chip inside the fold
+ * instead and heads on nothing.
+ */
+function SourceRow(naming: SourceNaming): React.JSX.Element {
   return (
     <li
       className="conversation-entry"
@@ -565,16 +574,25 @@ function SourceRow({
     >
       <small className="visually-hidden">{VOICE.SOURCE.label}</small>
       <div className="conversation-message">
-        <Chip
-          className={SOURCE_CHIP_CLASS}
-          label={text}
-          {...(press ? { onPress: press } : undefined)}
-        >
-          <RobotIcon className="conversation-chip-mark" />
-          {text}
-        </Chip>
+        <SourceChip {...naming} />
       </div>
     </li>
+  );
+}
+
+/** Whether a group draws a briefing fold: an announce call carrying its briefing, in any of its messages. */
+function foldsBriefing(group: ConversationViewTurnGroup): boolean {
+  return group.messages.some((view) =>
+    view.tools.some(
+      (tool) =>
+        tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE &&
+        view.message.parts.some(
+          (part: StoredPart) =>
+            isStoredToolPart(part) &&
+            part.toolCallId === tool.toolCallId &&
+            announcedWords(part) !== undefined,
+        ),
+    ),
   );
 }
 
@@ -1095,9 +1113,10 @@ function toolCallRow(
  * more inside one fold — then its visible parts in order, with the rating
  * control on its last words. Which tool calls are announcements is the view's
  * decision, read back by call id; an announce call carrying its briefing is
- * drawn as a bubble or a source-named observation fold, never as a tool call
- * row; every other call is a row composed from its own part. In a turn whose
- * answer the voice said, the
+ * drawn as that bubble, or in an observed group as a fold of thinking worn
+ * by the source chip handed in, and as no tool call row; every other call
+ * is a row composed from its own part.
+ * In a turn whose answer the voice said, the
  * brain's text is his thinking and folds as his written working, whatever
  * the voice made of it; the rating of the brain's judgment then stands on the
  * voice's reading of it, where the record ties one to the journal, and on no
@@ -1113,7 +1132,8 @@ function messageRows(
   readings: Readings,
   onOpenChat?: (identity: SessionIdentity) => void,
   lead?: React.ReactNode,
-  observationChat?: string,
+  /** The chip naming the observed agent, for a group from an observed session; its announcement folds around it. */
+  sourceChip?: React.ReactNode,
 ): readonly React.JSX.Element[] {
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
@@ -1214,11 +1234,11 @@ function messageRows(
     const tool = described.get(part.toolCallId);
     if (tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) {
       const words = announcedWords(part);
-      if (words !== undefined && observationChat !== undefined) {
+      if (words !== undefined && sourceChip !== undefined) {
         rows.push(
           <ObservationAnnouncementRow
             key={key}
-            chat={observationChat}
+            source={sourceChip}
             words={words}
             unspoken={tool.unspoken}
             rating={placed}
@@ -1415,10 +1435,18 @@ export function ConversationTurns({
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
         const aloud = answeredAloud(group.turn);
-        const observationChat =
+        // An observed group's chip goes inside its briefing's fold, or heads
+        // a group with no briefing to fold, and is drawn in one place only.
+        const naming: SourceNaming | undefined =
           group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED
-            ? sourceTitle(group.source, roster, agents)
+            ? {
+                source: group.source,
+                roster,
+                agents,
+                ...(onOpenAgent ? { onOpenAgent } : undefined),
+              }
             : undefined;
+        const folded = naming !== undefined && foldsBriefing(group);
         // A child's completion leads Luke's first words on it with the chip
         // naming the child: the first of his messages in the turn with words,
         // since one that only called tools has no words to lead.
@@ -1454,7 +1482,7 @@ export function ConversationTurns({
                 {...(onOpenChild ? { onOpenChild } : undefined)}
               />
             ) : undefined,
-            observationChat,
+            naming === undefined ? undefined : <SourceChip {...naming} />,
           );
           if (
             judgment === JUDGMENT.ASK &&
@@ -1476,16 +1504,8 @@ export function ConversationTurns({
                 />,
               ]
             : []),
-          ...(group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED
-            ? [
-                <SourceRow
-                  key={group.turnId}
-                  source={group.source}
-                  roster={roster}
-                  agents={agents}
-                  {...(onOpenAgent ? { onOpenAgent } : undefined)}
-                />,
-              ]
+          ...(naming !== undefined && !folded
+            ? [<SourceRow key={group.turnId} {...naming} />]
             : []),
           ...drawn,
         ];

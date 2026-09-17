@@ -9,6 +9,7 @@ import {
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { type AgentRead, CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
 import {
+  CONVERSATION_VIEW_ACTION_OUTCOME,
   CONVERSATION_VIEW_SOURCE,
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewMessage,
@@ -299,7 +300,7 @@ test("a turn nobody opened is Luke's own judgment: his face leads every row, and
   assert.equal(count(asked, "data-judgment", "own"), 0);
   assert.equal((asked.match(/class="luke-face"/g) ?? []).length, 0);
 
-  // The observed session's own turn keeps the proposed announcement in its source disclosure.
+  // The observed session's own turn folds the proposed announcement as thinking, said by nobody.
   const announced = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
   assert.equal(count(announced, "data-speaker", "luke"), 0);
   assert.equal(count(announced, "data-observation-announcement", "true"), 1);
@@ -381,14 +382,37 @@ afterEach(() => {
 
 const SOURCE_CHIP_NAME = '<span class="conversation-action-chip conversation-source-chip">';
 
-/** The head row alone: the group's first entry, which is the source chip's line. */
-function sourceHead(markup: string): string {
-  const [head] = markup.split('<li class="conversation-entry"').slice(1);
-  assert.ok(head !== undefined);
-  return head;
+/** The fold's own markup: the one row of an observed group that announced, which wears the source chip inside its fold. */
+function announcementFold(markup: string): string {
+  const rows = markup.split('<li class="conversation-entry"').slice(1);
+  assert.equal(rows.length, 1);
+  const [fold] = rows;
+  assert.ok(fold !== undefined);
+  assert.ok(fold.includes('data-observation-announcement="true"'));
+  return fold;
 }
 
-test("a turn of an observed session's own conversation heads on one chip naming the agent, pressed as the Agents list's row is, and main's turns wear none", () => {
+/**
+ * The observed fixture group with its announcement read as an action, so
+ * the group has no briefing to fold and the chip has no fold to stand in.
+ */
+function actionOnly(group: ConversationViewTurnGroup): ConversationViewTurnGroup {
+  return {
+    ...group,
+    messages: group.messages.map((view) => ({
+      ...view,
+      tools: view.tools.map((tool) => ({
+        toolCallId: tool.toolCallId,
+        toolName: tool.toolName,
+        state: tool.state,
+        kind: CONVERSATION_VIEW_TOOL_KIND.ACTION,
+        outcome: CONVERSATION_VIEW_ACTION_OUTCOME.ACCEPTED,
+      })),
+    })),
+  };
+}
+
+test("a turn of an observed session's own conversation folds as Thinking around one chip naming the agent, pressed as the Agents list's row is, and main's turns wear none", () => {
   const observed = groupOf(FIXTURE_TURN.ANNOUNCED);
   assert.ok(observed.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED);
   const OPEN_AGENT = (agent: AgentRead) => void agent;
@@ -401,24 +425,25 @@ test("a turn of an observed session's own conversation heads on one chip naming 
   assert.ok(markup.includes(`aria-label="Open ${FIXTURE_TITLE.HELD}"`));
   assert.ok(markup.includes(`${FIXTURE_TITLE.HELD}</button>`));
   assert.ok(!markup.includes(FIXTURE_TITLE.HELD_THEN));
-  // The chip is the group's first row, a line of its own in the event voice,
-  // and the rows below it are the turn's own, unchanged.
-  const head = sourceHead(markup);
-  assert.ok(
-    head.startsWith(
-      ` data-speaker="${CONVERSATION_ENTRY_SPEAKER.EVENT}" data-source-session="true"`,
-    ),
-  );
-  assert.ok(!head.includes("conversation-bubble"));
+  // The observed message crosses cut to the announcement, folded as one
+  // ordinary Thinking row and the group's only row: its summary is the same
+  // word his reasoning opens on and never names the chat, and the chip
+  // stands inside the fold, first, above the words, so the group heads on no
+  // line of its own and the chat's name is read with the proposal.
+  const fold = announcementFold(markup);
+  assert.equal(count(markup, "data-source-session", "true"), 0);
+  assert.ok(!markup.includes("Announcement from"));
+  assert.ok(!fold.includes("conversation-bubble"));
+  const summaryEnd = fold.indexOf("</summary>");
+  assert.ok(summaryEnd > 0);
+  assert.ok(fold.slice(0, summaryEnd).includes("<span>Thinking</span>"));
+  assert.ok(!fold.slice(0, summaryEnd).includes(FIXTURE_TITLE.HELD));
+  const chipAt = fold.indexOf(SOURCE_CHIP_BUTTON);
+  const wordsAt = fold.indexOf('class="markdown conversation-thinking-fold-words"');
+  assert.ok(summaryEnd < chipAt && chipAt < wordsAt);
   // The mark is a robot, ours and in the text colour, never the provider's brand mark.
-  assert.ok(head.includes('<svg class="conversation-chip-mark"'));
-  assert.ok(!head.includes("provider-mark"));
-  // The observed message crosses cut to a disclosure naming its source; only
-  // the disclosure is the one row that follows it.
-  const rows = markup.split('<li class="conversation-entry"').slice(2);
-  assert.equal(rows.length, 1);
-  assert.equal(count(markup, "data-observation-announcement", "true"), 1);
-  assert.ok(markup.includes(`Announcement from ${FIXTURE_TITLE.HELD}`));
+  assert.ok(fold.includes('<svg class="conversation-chip-mark"'));
+  assert.ok(!fold.includes("provider-mark"));
   assert.equal(count(markup, "data-speaker", CONVERSATION_ENTRY_SPEAKER.LUKE), 0);
   // Pressed, the chip hands the list's agent to the transcript page, and
   // never the session to the provider.
@@ -446,15 +471,31 @@ test("a turn of an observed session's own conversation heads on one chip naming 
   assert.deepEqual(openedAgents, [FIXTURE_AGENT]);
   assert.deepEqual(openedChats, []);
   // Main's own groups, the developer's and Luke's own alike, wear none; the
-  // fixture thread wears exactly one per observed group.
+  // fixture thread wears exactly one per observed group, and in one place.
   for (const turnId of [FIXTURE_TURN.SINGLE, FIXTURE_TURN.OWN]) {
     assert.ok(!render([groupOf(turnId)], OPEN).includes("conversation-source-chip"));
   }
   const groups = fixtureConversationTurns();
   assert.equal(
-    count(render(groups, OPEN), "data-source-session", "true"),
+    render(groups, OPEN).split("conversation-source-chip").length - 1,
     groups.filter((group) => group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED).length,
   );
+  // An observed group with no briefing to fold, actions alone, still heads
+  // on the chip as a line of its own in the event voice, and on nothing else.
+  const acted = render([actionOnly(observed)], OPEN, {
+    agents: [FIXTURE_AGENT],
+    onOpenAgent: OPEN_AGENT,
+  });
+  assert.equal(acted.split(SOURCE_CHIP_BUTTON).length - 1, 1);
+  assert.equal(count(acted, "data-observation-announcement", "true"), 0);
+  const [head] = acted.split('<li class="conversation-entry"').slice(1);
+  assert.ok(head !== undefined);
+  assert.ok(
+    head.startsWith(
+      ` data-speaker="${CONVERSATION_ENTRY_SPEAKER.EVENT}" data-source-session="true"`,
+    ),
+  );
+  assert.ok(head.includes(SOURCE_CHIP_BUTTON));
 });
 
 test("a source chip is a name wherever the agents list cannot lead to the agent, and is never the provider's press", () => {
@@ -472,7 +513,6 @@ test("a source chip is a name wherever the agents list cannot lead to the agent,
   // Neither the roster nor the list knows the session: a name from its id.
   const gone = render([observed], OPEN, { roster: [], agents: [], onOpenAgent: OPEN_AGENT });
   assert.equal(gone.split(SOURCE_CHIP_BUTTON).length - 1, 0);
-  assert.equal(count(gone, "data-source-session", "true"), 1);
   assert.ok(gone.includes(SOURCE_CHIP_NAME));
   assert.ok(gone.includes(`Session ${FIXTURE_SESSION.HELD.slice(0, 8)}</span>`));
   // The roster holds the session and its row would open in the provider,
@@ -485,15 +525,15 @@ test("a source chip is a name wherever the agents list cannot lead to the agent,
   const unpressed = render([observed], OPEN, { agents: [FIXTURE_AGENT] });
   assert.equal(unpressed.split(SOURCE_CHIP_BUTTON).length - 1, 0);
   assert.ok(unpressed.includes(`${FIXTURE_TITLE.HELD}</span>`));
-  // Every one of them still wears the robot.
+  // Every one of them still wears the robot, inside the fold.
   for (const markup of [departed, gone, unlisted, unpressed]) {
-    const head = sourceHead(markup);
-    assert.ok(head.includes('<svg class="conversation-chip-mark"'));
-    assert.ok(!head.includes("provider-mark"));
+    const fold = announcementFold(markup);
+    assert.ok(fold.includes('<svg class="conversation-chip-mark"'));
+    assert.ok(!fold.includes("provider-mark"));
   }
 });
 
-test("a reasoning part folds to a line on Luke's side, and an observation announcement folds under its chat when unheard", () => {
+test("a reasoning part folds to a line on Luke's side, and an observation announcement folds as Thinking marked when unheard", () => {
   const groups = fixtureConversationTurns();
   const markup = render(groups, OPEN);
   // Main's turn carries its thought; the observed turn's crosses cut to its announcement.
@@ -517,7 +557,7 @@ test("a reasoning part folds to a line on Luke's side, and an observation announ
   assert.equal(count(unheard, "data-unspoken", "true"), 1);
   assert.equal(count(unheard, "data-speaker", "luke"), 0);
   assert.equal(count(unheard, "data-observation-announcement", "true"), 1);
-  assert.ok(unheard.includes(`Announcement from ${FIXTURE_TITLE.HELD}`));
+  assert.ok(!unheard.includes("Announcement from"));
   assert.equal(count(unheard, "data-reasoning", "true"), 0);
 });
 
@@ -567,9 +607,9 @@ test("a reasoning fold keeps paragraph breaks as separate blocks inside the expa
   );
 });
 
-test("an observation announce call is a source-named disclosure and nothing else, and a detail's label is its tool's name", () => {
+test("an observation announce call is a fold of thinking and nothing else, and a detail's label is its tool's name", () => {
   assert.equal(detailToolLabel("read_transcript"), "read transcript");
-  // The announce call is its disclosure and nothing else: no tool call row, no generic call fold.
+  // The announce call is its fold and nothing else: no tool call row, no generic call fold.
   const markup = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
   assert.equal(count(markup, "data-speaker", "luke"), 0);
   assert.equal(count(markup, "data-observation-announcement", "true"), 1);
@@ -1125,8 +1165,8 @@ test("a briefing a device read aloud folds as the brain's written words, the rea
   assert.equal(count(alone, "data-reading", "true"), 0);
   assert.equal(ratingControls(alone), 1);
 
-  // An observation keeps the agent's proposed briefing behind a source-named
-  // disclosure; the row below remains the text the voice actually said.
+  // An observation keeps the brain's proposed briefing behind a fold of
+  // thinking; the row below remains the text the voice actually said.
   const observedGroup = groupOf(FIXTURE_TURN.ANNOUNCED);
   const observedMessage = observedGroup.messages[0];
   assert.ok(observedMessage);
@@ -1167,7 +1207,7 @@ test("a briefing a device read aloud folds as the brain's written words, the rea
   ]);
   assert.equal(count(observedMarkup, "data-observation-announcement", "true"), 1);
   assert.equal(count(observedMarkup, "data-reading", "true"), 1);
-  assert.ok(observedMarkup.includes(`Announcement from ${FIXTURE_TITLE.HELD}`));
+  assert.ok(!observedMarkup.includes("Announcement from"));
   assert.ok(
     observedMarkup.indexOf("The fixture session is waiting on a permission prompt.") <
       observedMarkup.indexOf("The fixture session needs permission before it can continue."),
