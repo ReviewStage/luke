@@ -6,10 +6,12 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import {
+  atInstant,
   fakeHttpClientLayer,
   HTTP_STATUS,
   jsonResponse,
   type RecordingHttpClient,
+  runTest,
 } from "@sidecar/wire/testing";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -976,21 +978,23 @@ test("holds at most the read bound of status reads in flight at once", async () 
   });
 
   const observations = await runTest(
-    Effect.gen(function* () {
-      const gate = yield* Deferred.make<void>();
-      const reached = yield* Deferred.make<void>();
-      const reads = gatedStatusReads(api, gate, reached);
-      const pass = yield* Effect.forkChild(pluginFor(reads.layer).observe());
-      // The bound's worth reach the gate and stand there; were the fan-out
-      // unbounded, the rest would follow before the gate opened.
-      yield* Deferred.await(reached);
-      yield* Effect.yieldNow;
-      assert.equal(reads.inFlight(), CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY);
-      yield* Deferred.succeed(gate, undefined);
-      const observed = yield* Fiber.join(pass);
-      assert.equal(reads.peak(), CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY);
-      return observed;
-    }),
+    atInstant(TEST_TIME)(
+      Effect.gen(function* () {
+        const gate = yield* Deferred.make<void>();
+        const reached = yield* Deferred.make<void>();
+        const reads = gatedStatusReads(api, gate, reached);
+        const pass = yield* Effect.forkChild(pluginFor(reads.layer).observe());
+        // The bound's worth reach the gate and stand there; were the fan-out
+        // unbounded, the rest would follow before the gate opened.
+        yield* Deferred.await(reached);
+        yield* Effect.yieldNow;
+        assert.equal(reads.inFlight(), CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY);
+        yield* Deferred.succeed(gate, undefined);
+        const observed = yield* Fiber.join(pass);
+        assert.equal(reads.peak(), CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY);
+        return observed;
+      }),
+    ),
   );
 
   assert.equal(observations.length, sessionCount);
