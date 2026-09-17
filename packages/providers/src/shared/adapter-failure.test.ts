@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Option } from "effect";
-import { test } from "vitest";
 import {
   ADAPTER_FAILURE,
   AdapterFailure,
@@ -9,43 +9,45 @@ import {
   tolerateItemFailureEffect,
 } from "./adapter-failure.js";
 
-test("a rejected credential and nothing to observe with both clear observed state", () => {
+it("a rejected credential and nothing to observe with both clear observed state", () => {
   assert.equal(clearsObservedState(ADAPTER_FAILURE.UNAUTHORIZED), true);
   assert.equal(clearsObservedState(ADAPTER_FAILURE.UNAVAILABLE), true);
 });
 
-test("a failure that says nothing about the credential leaves the snapshot standing", () => {
+it("a failure that says nothing about the credential leaves the snapshot standing", () => {
   assert.equal(clearsObservedState(ADAPTER_FAILURE.TRANSIENT), false);
   assert.equal(clearsObservedState(ADAPTER_FAILURE.RATE_LIMITED), false);
 });
 
-test("a rate limit ends the pass without clearing it, and one resource's transient failure is tolerated alone", async () => {
-  assert.equal(endsPass(ADAPTER_FAILURE.RATE_LIMITED), true);
-  assert.equal(endsPass(ADAPTER_FAILURE.TRANSIENT), false);
-  assert.equal(
-    await Effect.runPromise(
-      tolerateItemFailureEffect(
-        Effect.fail(
-          new AdapterFailure({
-            failure: ADAPTER_FAILURE.TRANSIENT,
-            message: "one status read failed",
-          }),
+it.effect(
+  "a rate limit ends the pass without clearing it, and one resource's transient failure is tolerated alone",
+  () =>
+    Effect.gen(function* () {
+      assert.equal(endsPass(ADAPTER_FAILURE.RATE_LIMITED), true);
+      assert.equal(endsPass(ADAPTER_FAILURE.TRANSIENT), false);
+      assert.equal(
+        yield* tolerateItemFailureEffect(
+          Effect.fail(
+            new AdapterFailure({
+              failure: ADAPTER_FAILURE.TRANSIENT,
+              message: "one status read failed",
+            }),
+          ),
         ),
-      ),
-    ),
-    undefined,
-  );
-  const rateLimited = new AdapterFailure({
-    failure: ADAPTER_FAILURE.RATE_LIMITED,
-    message: "the provider is rate limiting",
-  });
-  const exit = await Effect.runPromiseExit(tolerateItemFailureEffect(Effect.fail(rateLimited)));
-  assert.equal(Exit.isFailure(exit), true);
-  const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
-  assert.equal(Option.isSome(failure) && failure.value, rateLimited);
-});
+        undefined,
+      );
+      const rateLimited = new AdapterFailure({
+        failure: ADAPTER_FAILURE.RATE_LIMITED,
+        message: "the provider is rate limiting",
+      });
+      const exit = yield* Effect.exit(tolerateItemFailureEffect(Effect.fail(rateLimited)));
+      assert.equal(Exit.isFailure(exit), true);
+      const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+      assert.equal(Option.isSome(failure) && failure.value, rateLimited);
+    }),
+);
 
-test("every failure kind has an answer, so a new one cannot arrive undecided", () => {
+it("every failure kind has an answer, so a new one cannot arrive undecided", () => {
   const answers = Object.values(ADAPTER_FAILURE).map((failure) => [
     failure,
     clearsObservedState(failure),
@@ -58,7 +60,7 @@ test("every failure kind has an answer, so a new one cannot arrive undecided", (
   ]);
 });
 
-test("a failure carries its kind under its own tag", () => {
+it("a failure carries its kind under its own tag", () => {
   const failure = new AdapterFailure({
     failure: ADAPTER_FAILURE.TRANSIENT,
     message: "the provider did not answer",
@@ -68,17 +70,21 @@ test("a failure carries its kind under its own tag", () => {
   assert.equal(failure.message, "the provider did not answer");
 });
 
-test("an interrupted item ends the pass with the interruption rather than standing as one resource missing", async () => {
-  const exit = await Effect.runPromiseExit(
+it.effect(
+  "an interrupted item ends the pass with the interruption rather than standing as one resource missing",
+  () =>
     Effect.gen(function* () {
-      const fiber = yield* Effect.forkChild(tolerateItemFailureEffect(Effect.never));
-      yield* Effect.yieldNow;
-      yield* Fiber.interrupt(fiber);
-      return yield* Fiber.await(fiber);
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.forkChild(tolerateItemFailureEffect(Effect.never));
+          yield* Effect.yieldNow;
+          yield* Fiber.interrupt(fiber);
+          return yield* Fiber.await(fiber);
+        }),
+      );
+      assert.equal(Exit.isSuccess(exit), true);
+      const itemExit = Exit.isSuccess(exit) ? exit.value : undefined;
+      assert.ok(itemExit !== undefined);
+      assert.equal(Exit.hasInterrupts(itemExit), true);
     }),
-  );
-  assert.equal(Exit.isSuccess(exit), true);
-  const itemExit = Exit.isSuccess(exit) ? exit.value : undefined;
-  assert.ok(itemExit !== undefined);
-  assert.equal(Exit.hasInterrupts(itemExit), true);
-});
+);
