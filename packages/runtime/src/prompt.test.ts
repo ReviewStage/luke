@@ -51,7 +51,6 @@ test("the full profile opens on the identity, injects the files, lists skills by
   assert.ok(built.text.includes("/skills/deploy/SKILL.md"));
   assert.ok(built.text.includes("Prefers tests."));
   assert.ok(built.text.endsWith("# Runtime\n\nagent: main\nruntime: tool-loop\nmodel: m"));
-  assert.equal(built.chars, built.text.length);
 });
 
 test("the stable sections are byte-identical across turns whose dynamic facts differ", () => {

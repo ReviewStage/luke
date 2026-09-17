@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber } from "effect";
-import { TestClock } from "effect/testing";
 import { catchAllButInterrupt, unlessInterrupted, withFallback } from "./fallback.js";
 
 it.effect("withFallback answers the fallback for a failure and for a defect alike", () =>
@@ -17,9 +16,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(
-        withFallback(Effect.as(Effect.sleep("1 hour"), "answered"), "fallback"),
+        withFallback(Effect.as(Effect.never, "answered"), "fallback"),
       );
-      yield* TestClock.adjust("1 minute");
       yield* Fiber.interrupt(fiber);
       const exit = yield* Fiber.await(fiber);
       assert.equal(Exit.hasInterrupts(exit), true);
@@ -41,7 +39,7 @@ it.effect(
       assert.deepEqual(seen, ["failure", "defect"]);
 
       const fiber = yield* Effect.forkChild(
-        catchAllButInterrupt(Effect.andThen(Effect.sleep("1 hour"), Effect.fail("late")), recover),
+        catchAllButInterrupt(Effect.andThen(Effect.never, Effect.fail("late")), recover),
       );
       yield* Fiber.interrupt(fiber);
       assert.equal(Exit.hasInterrupts(yield* Fiber.await(fiber)), true);
@@ -57,7 +55,7 @@ it.effect("unlessInterrupted re-raises an interruption and hands everything else
     assert.equal(handled, "handled");
 
     const fiber = yield* Effect.forkChild(
-      Effect.catchCause(Effect.sleep("1 hour"), (cause) =>
+      Effect.catchCause(Effect.never, (cause) =>
         unlessInterrupted(cause, () => Effect.succeed("handled")),
       ),
     );

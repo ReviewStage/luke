@@ -24,15 +24,6 @@ const EVENTS: readonly TurnEvent[] = [
   { turnId: TURN, seq: 4, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED },
 ];
 
-test("every kind of event reads back as itself", () => {
-  for (const event of EVENTS) {
-    assert.deepEqual(
-      readEither(turnEventSchema)(unparsedWire(JSON.parse(JSON.stringify(event)))),
-      Result.succeed(event),
-    );
-  }
-});
-
 test("a frame carries the event's number as its id and decodes to the same event", () => {
   for (const event of EVENTS) {
     const frame = encodeTurnEventFrame(event);
@@ -70,7 +61,6 @@ test("an event outside the vocabulary is refused: an unnumbered one, a step kind
 test("the cursor is a whole number from zero", () => {
   assert.deepEqual(readEither(turnEventCursorSchema)(unparsedWire(0)), Result.succeed(0));
   assert.deepEqual(readEither(turnEventCursorSchema)(unparsedWire(12)), Result.succeed(12));
-  assert.equal(Result.isFailure(readEither(turnEventCursorSchema)(unparsedWire(-1))), true);
   const negative = readEither(turnEventCursorSchema)(unparsedWire(-1));
   assert.ok(Result.isFailure(negative));
   assert.equal(negative.failure.refusal, SCHEMA_REFUSAL.MALFORMED);

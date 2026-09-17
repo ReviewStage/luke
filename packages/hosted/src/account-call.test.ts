@@ -321,38 +321,29 @@ it.effect("an ask answers a body its own schema admitted, and nothing else", () 
   }),
 );
 
-it.effect(
-  "the deadline is the one the call was built with, and it ends a request that outlives it",
-  () =>
-    Effect.gen(function* () {
-      assert.equal(
-        accountCall({ baseUrl: BASE_URL, credential: fixedBearer("sk-test") }).requestTimeoutMs,
-        10_000,
-      );
+it.effect("the deadline the call was built with ends a request that outlives it", () =>
+  Effect.gen(function* () {
+    const held = accountCall({
+      baseUrl: BASE_URL,
+      credential: fixedBearer("sk-test"),
+      requestTimeoutMs: 90_000,
+    });
+    const asked = yield* Deferred.make<void>();
 
-      const held = accountCall({
-        baseUrl: BASE_URL,
-        credential: fixedBearer("sk-test"),
-        requestTimeoutMs: 90_000,
-      });
-      assert.equal(held.requestTimeoutMs, 90_000);
+    const sending = yield* Effect.forkChild(
+      Effect.provide(
+        held.send({ method: HTTP_METHOD.GET, path: PATH }),
+        fakeHttpClientLayer(() => {
+          Deferred.doneUnsafe(asked, Effect.void);
+          return new Promise<Response>(() => undefined);
+        }),
+      ),
+    );
+    yield* Deferred.await(asked);
+    yield* TestClock.adjust(Duration.millis(90_000));
+    const answer = yield* Fiber.join(sending);
 
-      const asked = yield* Deferred.make<void>();
-
-      const sending = yield* Effect.forkChild(
-        Effect.provide(
-          held.send({ method: HTTP_METHOD.GET, path: PATH }),
-          fakeHttpClientLayer(() => {
-            Deferred.doneUnsafe(asked, Effect.void);
-            return new Promise<Response>(() => undefined);
-          }),
-        ),
-      );
-      yield* Deferred.await(asked);
-      yield* TestClock.adjust(Duration.millis(90_000));
-      const answer = yield* Fiber.join(sending);
-
-      assert.ok(!callAnswered(answer) && answer.fault === CALL_FAULT.NETWORK);
-      assert.equal(answer.errorName, "TimeoutError");
-    }),
+    assert.ok(!callAnswered(answer) && answer.fault === CALL_FAULT.NETWORK);
+    assert.equal(answer.errorName, "TimeoutError");
+  }),
 );

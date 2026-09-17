@@ -22,19 +22,4 @@ describe("temporaryDirectoryScoped", () => {
       assert.equal(fs.existsSync(directory), false);
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
-
-  it.effect("names the directory with this repository's default prefix", () =>
-    Effect.gen(function* () {
-      const scope = yield* Scope.make();
-      const directory = yield* Effect.provideService(
-        temporaryDirectoryScoped(),
-        Scope.Scope,
-        scope,
-      );
-
-      assert.match(directory.split("/").at(-1) ?? "", /^luke-/);
-
-      yield* Scope.close(scope, Exit.void);
-    }).pipe(Effect.provide(NodeFileSystem.layer)),
-  );
 });

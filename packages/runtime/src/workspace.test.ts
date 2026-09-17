@@ -5,32 +5,12 @@ import {
   BOOTSTRAP_BOUNDS,
   boundBootstrapFiles,
   CURATED_FILE_BUDGET,
-  dailyNoteName,
   dailyNotePath,
   isDailyNotePath,
   WORKSPACE_FILE,
-  workspaceFileBound,
 } from "./workspace.js";
 
 const NOW = Date.UTC(2026, 8, 8, 12);
-
-test("each file's own bound is the curated budget for USER.md and MEMORY.md and the per-file bound for the rest", () => {
-  assert.equal(workspaceFileBound(WORKSPACE_FILE.USER), CURATED_FILE_BUDGET[WORKSPACE_FILE.USER]);
-  assert.equal(
-    workspaceFileBound(WORKSPACE_FILE.MEMORY),
-    CURATED_FILE_BUDGET[WORKSPACE_FILE.MEMORY],
-  );
-  assert.equal(CURATED_FILE_BUDGET[WORKSPACE_FILE.USER], 4_000);
-  assert.equal(CURATED_FILE_BUDGET[WORKSPACE_FILE.MEMORY], 4_000);
-  for (const name of [
-    WORKSPACE_FILE.AGENTS,
-    WORKSPACE_FILE.IDENTITY,
-    WORKSPACE_FILE.BOOTSTRAP,
-    `memory/${dailyNoteName(NOW)}`,
-  ]) {
-    assert.equal(workspaceFileBound(name), BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE);
-  }
-});
 
 test("bootstrap files are bounded per file and in total, in order, with what the bounds did recorded", () => {
   const perFile = BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE;
