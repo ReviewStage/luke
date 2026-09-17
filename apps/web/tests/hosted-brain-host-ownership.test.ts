@@ -90,7 +90,7 @@ interface TestHost {
   storeReads(): number;
 }
 
-function hostOverTestDatabase(): TestHost {
+async function hostOverTestDatabase(): Promise<TestHost> {
   let storeReads = 0;
   const seams: BrainHostSeams = {
     store: () =>
@@ -113,7 +113,7 @@ function hostOverTestDatabase(): TestHost {
     executeAction: unreached("executeAction"),
     now: () => NOW,
   };
-  return { host: Effect.runSync(brainHost(seams)), storeReads: () => storeReads };
+  return { host: await database.run(brainHost(seams)), storeReads: () => storeReads };
 }
 
 function principal(
@@ -233,7 +233,7 @@ function binding(target: ConversationTarget, sessionId: string): HostedToolBindi
 }
 
 test("two concurrent starts on one conversation leave exactly one recorded session, the newer, whichever start lands first", async () => {
-  const { host } = hostOverTestDatabase();
+  const { host } = await hostOverTestDatabase();
   for (const first of ["OLDER", "NEWER"] as const) {
     const SESSION = sessions();
     const order =
@@ -257,7 +257,7 @@ test("two concurrent starts on one conversation leave exactly one recorded sessi
 
 test("the session that lost the race relays nothing: one turn stands on the conversation's sequence, keyed to the session that won", async () => {
   const SESSION = sessions();
-  const { host } = hostOverTestDatabase();
+  const { host } = await hostOverTestDatabase();
   const target = await ownedConversation(await database.createUser());
   const seat = ownSeat(target.userId, target.conversationId);
   await Promise.all([start(host, seat, SESSION.OLDER), start(host, seat, SESSION.NEWER)]);
@@ -333,7 +333,7 @@ test("a session id nobody's record attributes is refused at the door to everyone
   const userB = await database.createUser();
   const target = await ownedConversation(userA);
   const seat = ownSeat(userA, target.conversationId);
-  const { host } = hostOverTestDatabase();
+  const { host } = await hostOverTestDatabase();
   const auth = channelAuth([userA, userB]);
   const stream = (sessionId: string, bearer: string) =>
     request(`/eve/v1/session/${sessionId}/stream`, bearer);
@@ -361,7 +361,7 @@ test("another account's conversation and another account's session are refused a
   const userA = await database.createUser();
   const userB = await database.createUser();
   const target = await ownedConversation(userA);
-  const { host } = hostOverTestDatabase();
+  const { host } = await hostOverTestDatabase();
   assert.equal(await start(host, ownSeat(userA, target.conversationId), SESSION.OLDER), true);
   const auth = channelAuth([userA, userB]);
   const opening = (bearer: string, headers: Readonly<Record<string, string>> = {}) =>
@@ -407,7 +407,7 @@ test("a conversation cleared while its session runs admits nobody at the door an
   const userA = await database.createUser();
   const target = await ownedConversation(userA);
   const seat = ownSeat(userA, target.conversationId);
-  const { host } = hostOverTestDatabase();
+  const { host } = await hostOverTestDatabase();
   assert.equal(await start(host, seat, SESSION.OLDER), true);
   const auth = channelAuth([userA]);
 
@@ -445,7 +445,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const userB = await database.createUser();
   const target = await ownedConversation(userA);
   const seat = ownSeat(userA, target.conversationId);
-  const { host, storeReads } = hostOverTestDatabase();
+  const { host, storeReads } = await hostOverTestDatabase();
   const directive = "# USER.md\n\n- 2026-09-15: prefers short replies\n";
   const call = (sessionId: string, auth: SessionAuth) =>
     database.run(

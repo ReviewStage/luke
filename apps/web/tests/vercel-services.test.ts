@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import { test } from "vitest";
 import { webFunctions } from "../server/function-layout";
 import {
@@ -103,8 +103,8 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
   assert.deepEqual(regenerated.services[SERVICE.WEB].routes, web.routes);
 });
 
-test("a top-level routes key beside services is refused by the generator before the file is read for anything else", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "vercel-services-"));
+test("a top-level routes key beside services is refused by the generator before the file is read for anything else", async (t) => {
+  const directory = await temporaryDirectory(t, "vercel-services-");
   const shape = { ...vercel, routes: vercel.services[SERVICE.WEB].routes };
   await writeFile(join(directory, VERCEL_CONFIG_FILE), JSON.stringify(shape));
   await assert.rejects(rewritesDrifted(directory), {

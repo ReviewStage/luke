@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { atInstant } from "@sidecar/wire/testing";
-import { Clock, Duration, Effect, Fiber, Redacted } from "effect";
+import { Clock, Deferred, Duration, Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
@@ -260,12 +260,22 @@ it.effect(
       const startedAt: number[] = [];
       let inFlight = 0;
       let mostInFlight = 0;
+      // A pass ends when the test says it does, on the instant the test has
+      // advanced to, so what a pass takes is the window the test opened rather
+      // than a wait of the fake's own.
+      let open = yield* Deferred.make<void>();
+      const release = Effect.gen(function* () {
+        const holding = open;
+        open = yield* Deferred.make<void>();
+        yield* Deferred.succeed(holding, undefined);
+        yield* settle;
+      });
       const { options } = tickOptions({ budgetMs, passDeadlineMs }, accounts, () =>
         Effect.gen(function* () {
           startedAt.push((yield* Clock.currentTimeMillis) - tickStart);
           inFlight += 1;
           mostInFlight = Math.max(mostInFlight, inFlight);
-          yield* Effect.sleep(Duration.millis(passMs));
+          yield* Deferred.await(open);
           inFlight -= 1;
           return { complete: true };
         }),
@@ -277,8 +287,10 @@ it.effect(
       yield* settle;
       assert.equal(inFlight, OBSERVATION_TICK.CONCURRENCY);
       yield* advance(passMs);
+      yield* release;
       assert.equal(inFlight, OBSERVATION_TICK.CONCURRENCY);
       yield* advance(passMs);
+      yield* release;
       assert.equal(inFlight, 0);
       const response = yield* Fiber.join(fiber);
       const body = yield* Effect.promise(() => response.json());

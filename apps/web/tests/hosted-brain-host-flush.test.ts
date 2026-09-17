@@ -83,7 +83,7 @@ const seams: BrainHostSeams = {
   now: () => NOW,
 };
 
-const host: BrainHost = Effect.runSync(brainHost(seams));
+const host: BrainHost = await database.run(brainHost(seams));
 
 function principal(id: string, attributes: Readonly<Record<string, string>>): SessionAuthContext {
   return { principalId: id, principalType: "user", authenticator: "test", attributes };

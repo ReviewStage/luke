@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
 import { authDatabaseAdapter } from "../server/auth-database";
@@ -161,67 +161,75 @@ const StoredAccessTokenSchema = Schema.Struct({
  * the adapter's decision and not the schema's, and this is the one write in
  * the test suite that would notice the two disagreeing.
  */
-test("Better Auth's own adapter writes an access token's scopes into the migrated schema and reads them back", async () => {
-  const client = await openMigratedPglite();
-  const runtime = ManagedRuntime.make(Layer.mergeAll(sqlClientOverPglite(client)));
-  try {
-    await runtime.runPromise(seedOAuthClient(DESKTOP_OAUTH_CLIENT));
-    const auth = betterAuth({
-      database: authDatabaseAdapter(drizzle(client, { schema: authSchema })),
-      baseURL: "http://127.0.0.1",
-      secret: "auth-database-test-secret-with-enough-length",
-      plugins: [
-        jwt(JWT_KEY_STORAGE),
-        oauthProvider({
-          loginPage: "/sign-in.html",
-          consentPage: "/consent.html",
-          allowDynamicClientRegistration: false,
+it.effect(
+  "Better Auth's own adapter writes an access token's scopes into the migrated schema and reads them back",
+  () =>
+    Effect.gen(function* () {
+      const client = yield* Effect.acquireRelease(
+        Effect.promise(() => openMigratedPglite()),
+        (opened) => Effect.promise(() => opened.close()),
+      );
+      const sql = sqlClientOverPglite(client);
+      yield* Effect.provide(seedOAuthClient(DESKTOP_OAUTH_CLIENT), sql);
+      const auth = betterAuth({
+        database: authDatabaseAdapter(drizzle(client, { schema: authSchema })),
+        baseURL: "http://127.0.0.1",
+        secret: "auth-database-test-secret-with-enough-length",
+        plugins: [
+          jwt(JWT_KEY_STORAGE),
+          oauthProvider({
+            loginPage: "/sign-in.html",
+            consentPage: "/consent.html",
+            allowDynamicClientRegistration: false,
+          }),
+        ],
+      });
+      // Better Auth's adapter is promise-shaped; its calls are awaited where they are made.
+      const context = yield* Effect.promise(() => auth.$context);
+      const issued = new Date("2026-09-12T00:00:00.000Z");
+      const expires = new Date(issued.getTime() + 60 * 60 * 1000);
+      const token = "access-token-under-test";
+      yield* Effect.promise(() =>
+        context.adapter.create({
+          model: "oauthAccessToken",
+          data: {
+            token,
+            clientId: DESKTOP_OAUTH_CLIENT.id,
+            scopes: [...ISSUED_SCOPES],
+            createdAt: issued,
+            expiresAt: expires,
+          },
         }),
-      ],
-    });
-    const context = await auth.$context;
-    const issued = new Date("2026-09-12T00:00:00.000Z");
-    const expires = new Date(issued.getTime() + 60 * 60 * 1000);
-    const token = "access-token-under-test";
-    await context.adapter.create({
-      model: "oauthAccessToken",
-      data: {
-        token,
-        clientId: DESKTOP_OAUTH_CLIENT.id,
-        scopes: [...ISSUED_SCOPES],
-        createdAt: issued,
-        expiresAt: expires,
-      },
-    });
+      );
 
-    const stored = await context.adapter.findOne({
-      model: "oauthAccessToken",
-      where: [{ field: "token", value: token }],
-    });
-    assert.ok(stored);
-    const decoded = Schema.decodeUnknownSync(StoredAccessTokenSchema)(stored);
-    assert.deepEqual(decoded.scopes, [...ISSUED_SCOPES]);
-    assert.deepEqual(
-      [decoded.createdAt.getTime(), decoded.expiresAt.getTime()],
-      [issued.getTime(), expires.getTime()],
-    );
+      const stored = yield* Effect.promise(() =>
+        context.adapter.findOne({
+          model: "oauthAccessToken",
+          where: [{ field: "token", value: token }],
+        }),
+      );
+      assert.ok(stored);
+      const decoded = Schema.decodeUnknownSync(StoredAccessTokenSchema)(stored);
+      assert.deepEqual(decoded.scopes, [...ISSUED_SCOPES]);
+      assert.deepEqual(
+        [decoded.createdAt.getTime(), decoded.expiresAt.getTime()],
+        [issued.getTime(), expires.getTime()],
+      );
 
-    const rows = await runtime.runPromise(
-      Effect.flatMap(
-        SqlClient.SqlClient,
-        (sql) =>
-          sql`select token, client_id, scopes from oauth_access_token where token = ${token}`,
-      ),
-    );
-    assert.deepEqual(
-      rows.map((row) => Schema.decodeUnknownSync(AccessTokenRowSchema)(row)),
-      [{ token, client_id: DESKTOP_OAUTH_CLIENT.id, scopes: [...ISSUED_SCOPES] }],
-    );
-  } finally {
-    await runtime.dispose();
-    await client.close();
-  }
-});
+      const rows = yield* Effect.provide(
+        Effect.flatMap(
+          SqlClient.SqlClient,
+          (client) =>
+            client`select token, client_id, scopes from oauth_access_token where token = ${token}`,
+        ),
+        sql,
+      );
+      assert.deepEqual(
+        rows.map((row) => Schema.decodeUnknownSync(AccessTokenRowSchema)(row)),
+        [{ token, client_id: DESKTOP_OAUTH_CLIENT.id, scopes: [...ISSUED_SCOPES] }],
+      );
+    }),
+);
 
 test("the auth service encrypts credentials and refuses user-provisioned OAuth clients", () => {
   assert.equal(ACCOUNT_TOKEN_STORAGE.encryptOAuthTokens, true);

@@ -5,7 +5,7 @@ import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { atInstant } from "@sidecar/wire/testing";
 import { eq } from "drizzle-orm";
-import { Effect, Result, Schema } from "effect";
+import { Deferred, Effect, Fiber, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { db } from "../server/db/query";
@@ -254,22 +254,34 @@ function dispatchedRow(answer: AskRow | typeof ASK_DISPATCH_REFUSAL.NO_CONVERSAT
   return answer;
 }
 
+/**
+ * The gate a test holds an open open with, in place of a pause: the fake says
+ * the moment an open was entered and answers only once the test releases it,
+ * so two dispatches in flight together meet at the conversation's lock rather
+ * than one answering before the other asks.
+ */
+interface OpenGate {
+  readonly opened: Deferred.Deferred<void>;
+  readonly released: Deferred.Deferred<void>;
+}
+
 function eveAccepting(
   sessionId: string,
+  gate?: OpenGate,
 ): EveSessions & { readonly deliveries: string[]; opens: number } {
   const deliveries: string[] = [];
   const eve = {
     deliveries,
     opens: 0,
-    // The open takes a moment on the runtime's own clock, so two dispatches in flight together
-    // meet at the conversation's lock rather than one answering before the other asks.
     open: () =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         eve.opens += 1;
-      }).pipe(
-        Effect.andThen(Effect.sleep("5 millis")),
-        Effect.as({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId }),
-      ),
+        if (gate !== undefined) {
+          yield* Deferred.succeed(gate.opened, undefined);
+          yield* Deferred.await(gate.released);
+        }
+        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId };
+      }),
     send: () =>
       Effect.sync(() => {
         const deliveryId = `delivery-${deliveries.length + 1}`;
@@ -284,10 +296,14 @@ function eveAccepting(
 it.effect(
   "two retries of one client id in flight together dispatch once: the second finds the session the first wrote under the row's lock, and both answer the same record",
   () =>
-    Effect.promise(async () => {
-      const userId = await database.createUser();
-      const conversationId = await conversation(userId);
-      const eve = eveAccepting(`wrun_${randomUUID()}`);
+    Effect.gen(function* () {
+      const userId = yield* Effect.promise(() => database.createUser());
+      const conversationId = yield* Effect.promise(() => conversation(userId));
+      const gate: OpenGate = {
+        opened: Deferred.makeUnsafe<void>(),
+        released: Deferred.makeUnsafe<void>(),
+      };
+      const eve = eveAccepting(`wrun_${randomUUID()}`, gate);
       const seams = { asks: askEffects, eve };
       const input = {
         userId,
@@ -296,10 +312,19 @@ it.effect(
         question: "what changed?",
         origin: ASK_ORIGIN.TYPED,
       };
-      const [first, second] = await Promise.all([
-        database.run(acceptAsk(seams, input)),
-        database.run(acceptAsk(seams, input)),
-      ]);
+      // Both retries go in flight, and the open answers only once one of them has reached it
+      // holding the conversation's lock.
+      const dispatches = yield* Effect.forkChild(
+        Effect.promise(() =>
+          Promise.all([
+            database.run(acceptAsk(seams, input)),
+            database.run(acceptAsk(seams, input)),
+          ]),
+        ),
+      );
+      yield* Deferred.await(gate.opened);
+      yield* Deferred.succeed(gate.released, undefined);
+      const [first, second] = yield* Fiber.join(dispatches);
       assert.deepEqual(first, second);
       assert.ok(Result.isSuccess(first));
       assert.equal(eve.opens, 1);

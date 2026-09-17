@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, expect, test } from "vitest";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
+import { expect, type TestContext, test } from "vitest";
 import {
   coverageDrift,
   filesRun,
@@ -43,14 +43,8 @@ const filesUsingADoorSymbol = () =>
     .filter((entry) => usesDoorSymbol(readFileSync(join(TESTS_DIRECTORY, entry), "utf8")))
     .sort();
 
-const temporary: string[] = [];
-afterEach(() => {
-  for (const directory of temporary.splice(0)) rmSync(directory, { recursive: true, force: true });
-});
-
-function fixtureTests(files: Record<string, string>): string {
-  const directory = mkdtempSync(join(tmpdir(), "luke-store-selection-"));
-  temporary.push(directory);
+async function fixtureTests(t: TestContext, files: Record<string, string>): Promise<string> {
+  const directory = await temporaryDirectory(t, "luke-store-selection-");
   for (const [file, source] of Object.entries(files)) {
     mkdirSync(join(directory, file, ".."), { recursive: true });
     writeFileSync(join(directory, file), source);
@@ -74,8 +68,8 @@ test("a door's import is read in each spelling a file uses, and nothing else is"
   expect(importsStoreDoor(`import { PGlite } from "@electric-sql/pglite";`)).toBe(false);
 });
 
-test("the selection is every test file importing a door, wherever it sits, in path order, and no other", () => {
-  const directory = fixtureTests({
+test("the selection is every test file importing a door, wherever it sits, in path order, and no other", async (t) => {
+  const directory = await fixtureTests(t, {
     "zeta.test.ts": `import { openHostedStoreTestDatabase } from "${STORE_TEST_DOORS.HOSTED_STORE_DATABASE}";`,
     "alpha.test.ts": `import { testSqlClient } from "${STORE_TEST_DOORS.SQL_CLIENT}.js";`,
     "nested/deep.test.ts": `import { cloneStoreTestPostgres } from "${STORE_TEST_DOORS.STORE_TEST_POSTGRES}";`,

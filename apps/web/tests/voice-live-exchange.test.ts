@@ -6,8 +6,10 @@ import {
   type LiveSessionSource,
   sidebandOverSocket,
 } from "@sidecar/voice/live-session";
-import { FakeLiveSocket } from "@sidecar/voice/testing";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { arrival, FakeLiveSocket, onFakeChange } from "@sidecar/voice/testing";
+import { Duration, Effect, Exit, Schema, Scope } from "effect";
+import { TestClock } from "effect/testing";
+import { SqlClient } from "effect/unstable/sql";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
@@ -42,7 +44,6 @@ import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, sessionStarted } from "./support/live-events";
-import { settled } from "./support/settle";
 import {
   insertConversation,
   insertDevice,
@@ -131,16 +132,30 @@ function mintEveSession(): string {
 
 interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];
+  /** Tells a waiter that eve was reached, so a wait on the ask arriving polls nothing. */
+  readonly onChange: (notify: () => void) => () => void;
 }
 
 function fakeEve(): FakeEve {
+  const listeners = new Set<() => void>();
+  const announce = () => {
+    for (const listener of [...listeners]) listener();
+  };
   const eve: FakeEve = {
     opened: [],
+    onChange: (notify) => {
+      listeners.add(notify);
+      return () => {
+        listeners.delete(notify);
+      };
+    },
     open(message) {
       eve.opened.push(message);
+      announce();
       return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: mintEveSession() });
     },
     send(sessionId) {
+      announce();
       return Effect.succeed({
         outcome: EVE_SEND_OUTCOME.ACCEPTED,
         sessionId,
@@ -172,24 +187,67 @@ async function device(userId: string): Promise<string> {
   return id;
 }
 
-async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
-  for (const event of events) await database.run(relay.handle(event, standing));
-}
+const play = Effect.fnUntraced(function* (
+  events: readonly MessageStreamEvent[],
+  standing: RelayStanding,
+) {
+  for (const event of events) yield* relay.handle(event, standing);
+});
+
+/** The one client the suite's runtime holds, provided to the exchange's fibers so every statement takes the same permit. */
+const sqlClient = await database.run(Effect.service(SqlClient.SqlClient));
 
 /**
- * The exchange keeps time on the store runtime's clock, which is the real
- * one, so this suite runs under `it.live`: a wait for a row is a poll on a
- * `Schedule` (`settled`), and a wait after an offer the exchange must leave
- * alone is the suite's one plain sleep, asserting that nothing is appended.
+ * The exchange is built in the test's own fiber, so the brain's follow of an
+ * accepted ask keeps time on the ambient `TestClock`: a wait here advances it
+ * by that follow's own poll and awaits a real statement each time, which is
+ * what lets the look the poll woke land, and nothing here waits on the
+ * machine.
  */
-const QUIET_MS = 30;
+const FOLLOW_POLL = Duration.millis(250);
+/** The most steps a wait walks before it gives up, well past what any fixture here needs. */
+const WAIT_STEPS = 200;
+/** How many of those steps a test walks to say that nothing is appended. */
+const QUIET_STEPS = 4;
+
+/** One step of the wait: the follow's poll on the test's own clock, then a real statement. */
+const step = Effect.gen(function* () {
+  yield* TestClock.adjust(FOLLOW_POLL);
+  yield* Effect.orDie(Effect.asVoid(sqlClient`select 1`));
+});
+
+/** Waits for what only a look can bring, naming it and reading the fixtures behind it where a test offers a diagnosis. */
+function settled(
+  ready: () => boolean | Promise<boolean>,
+  waitedFor: string,
+  diagnose?: () => Promise<string>,
+) {
+  return Effect.gen(function* () {
+    for (let walked = 0; walked < WAIT_STEPS; walked += 1) {
+      if (yield* Effect.promise(async () => ready())) return;
+      yield* step;
+    }
+    yield* Effect.promise(async () => {
+      const detail = diagnose ? `: ${await diagnose()}` : "";
+      assert.fail(`timed out waiting for ${waitedFor}${detail}`);
+    });
+  });
+}
+
+/** The steps a test walks to say that nothing more arrives, each one a look the exchange was free to take. */
+const quiet = Effect.gen(function* () {
+  for (let walked = 0; walked < QUIET_STEPS; walked += 1) yield* step;
+});
 
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
-async function stand(target: ConversationTarget, deviceId: string | undefined) {
+const stand = Effect.fnUntraced(function* (
+  target: ConversationTarget,
+  deviceId: string | undefined,
+) {
   const liveSessionId = `sess_${randomUUID()}`;
-  await database.run(sessionRecord.register({ userId: target.userId, sessionId: liveSessionId }));
+  yield* sessionRecord.register({ userId: target.userId, sessionId: liveSessionId });
   if (deviceId !== undefined) {
-    await setVoiceSessionDeviceId(database.run, liveSessionId, deviceId);
+    yield* Effect.promise(() => setVoiceSessionDeviceId(database.run, liveSessionId, deviceId));
   }
   const socket = new FakeLiveSocket();
   const source: LiveSessionSource = {
@@ -230,28 +288,26 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
   const eve = fakeEve();
   const reports: string[] = [];
   // The socket's own scope, as the attachment opens one: the exchange is built in it and the test's own stop closes it.
-  const scope = await database.run(Scope.make());
-  const standing = await database.run(
-    Scope.provide(
-      hostedLiveExchange({
-        userId: target.userId,
-        liveSessionId,
-        conversationId: target.conversationId,
-        context: { keys: KEYS },
-        writer,
-        eve,
-        source: () => source,
-        conversationEntries: () => [],
-        emit: () => undefined,
-        now: () => NOW,
-        createId: () => randomUUID(),
-        report: (message) => reports.push(message),
-      }),
-      scope,
-    ),
+  const scope = yield* Scope.make();
+  const standing = yield* Scope.provide(
+    hostedLiveExchange({
+      userId: target.userId,
+      liveSessionId,
+      conversationId: target.conversationId,
+      context: { keys: KEYS },
+      writer,
+      eve,
+      source: () => source,
+      conversationEntries: () => [],
+      emit: () => undefined,
+      now: () => NOW,
+      createId: () => randomUUID(),
+      report: (message) => reports.push(message),
+    }),
+    scope,
   );
-  const exchange = { ...standing, stop: () => database.run(Scope.close(scope, Exit.void)) };
-  const created = await database.run(exchange.service.createSession("offer"));
+  const exchange = { ...standing, stop: () => Scope.close(scope, Exit.void) };
+  const created = yield* exchange.service.createSession("offer");
   assert.ok(created);
   socket.receive(sessionStarted(liveSessionId));
   const commentary = (): LiveAppendEvent[] =>
@@ -261,7 +317,7 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
         (event): event is LiveAppendEvent => event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
       );
   return { liveSessionId, socket, eve, exchange, reports, commentary };
-}
+});
 
 function socketSent(f: { socket: FakeLiveSocket }): string {
   const types = f.socket.sent.map((frame) => {
@@ -276,37 +332,29 @@ async function speechEventsOf(messageId: string) {
   return rows.map((row) => row.kind);
 }
 
-it.live(
+it.effect(
   "a spoken ask runs a turn through the ask door and is spoken from the service's own appends, its words one user message and both speakers' words segments",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() => stand(target, undefined));
+      const f = yield* stand(target, undefined);
       f.socket.receive(heard("What needs me?", 1000, 2400));
       f.socket.receive(delegated("dl_1", 2500));
-      yield* settled(
-        () => f.eve.opened.length === 1,
-        "the ask to reach eve",
-        async () => `reports ${JSON.stringify(f.reports)}`,
-      );
+      yield* arrival(f.eve.onChange, () => f.eve.opened.length === 1, "the ask to reach eve");
       assert.deepEqual(
         f.eve.opened.map((message) => [message.conversationId, message.turn]),
         [[target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
       );
-      const recorded = yield* Effect.promise(() =>
-        asks.latestSession(target.userId, target.conversationId),
-      );
+      const recorded = yield* askEffects.latestSession(target.userId, target.conversationId);
       assert.ok(recorded);
-      yield* Effect.promise(() =>
-        play(spokenTurn(FIRST_EVE_TURN, NOW), {
-          sessionId: recorded,
-          target,
-          kind: CONVERSATION_KIND.MAIN,
-          turn: BRAIN_HOST_TURN.SPOKEN,
-          model: "scripted-model",
-          state: memoryRelayState(),
-        }),
-      );
+      yield* play(spokenTurn(FIRST_EVE_TURN, NOW), {
+        sessionId: recorded,
+        target,
+        kind: CONVERSATION_KIND.MAIN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      });
       const diagnosis = async () => {
         const ask = (await asks.latestSession(target.userId, target.conversationId)) ?? "none";
         const turn = await database.run(
@@ -350,17 +398,17 @@ it.live(
         segments.map((segment) => segment.text),
         ["What needs me?"],
       );
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
+      yield* f.exchange.stop();
+    }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient)),
 );
 
-it.live(
+it.effect(
   "a briefing on offer is claimed as the session's device before it is appended, and the session's own voice past the append marks it spoken",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
       const deviceId = yield* Effect.promise(() => device(target.userId));
-      const f = yield* Effect.promise(() => stand(target, deviceId));
+      const f = yield* stand(target, deviceId);
       const standing: RelayStanding = {
         sessionId: mintEveSession(),
         target,
@@ -369,19 +417,15 @@ it.live(
         model: "scripted-model",
         state: memoryRelayState(),
       };
-      yield* Effect.promise(() =>
-        play(announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW), standing),
-      );
-      const [offer] = yield* Effect.promise(() =>
-        database.run(database.store.speech.open(target.userId)),
-      );
+      yield* play(announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW), standing);
+      const [offer] = yield* database.store.speech.open(target.userId);
       assert.ok(offer);
 
-      yield* Effect.promise(() => database.run(f.exchange.briefings.look));
-      yield* settled(
+      yield* f.exchange.briefings.look;
+      yield* arrival(
+        onFakeChange,
         () => f.commentary().length === 1,
         "the briefing to be appended",
-        async () => `reports ${JSON.stringify(f.reports)}`,
       );
       assert.deepEqual(
         f.commentary().map((event) => [event.delegation_id, event.content]),
@@ -409,63 +453,53 @@ it.live(
         CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
       ]);
       assert.deepEqual(f.reports, []);
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
+      yield* f.exchange.stop();
+    }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient)),
 );
 
-it.live(
+it.effect(
   "a session whose row names no device appends no briefing: the offer stands unclaimed for the push or the sweep",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() => stand(target, undefined));
-      yield* Effect.promise(() =>
-        play(announceTurn(FIRST_EVE_TURN, "Not for this session.", NOW), {
-          sessionId: mintEveSession(),
-          target,
-          kind: CONVERSATION_KIND.MAIN,
-          turn: BRAIN_HOST_TURN.OBSERVATION,
-          model: "scripted-model",
-          state: memoryRelayState(),
-        }),
-      );
-      const [offer] = yield* Effect.promise(() =>
-        database.run(database.store.speech.open(target.userId)),
-      );
+      const f = yield* stand(target, undefined);
+      yield* play(announceTurn(FIRST_EVE_TURN, "Not for this session.", NOW), {
+        sessionId: mintEveSession(),
+        target,
+        kind: CONVERSATION_KIND.MAIN,
+        turn: BRAIN_HOST_TURN.OBSERVATION,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      });
+      const [offer] = yield* database.store.speech.open(target.userId);
       assert.ok(offer);
-      yield* Effect.promise(() => database.run(f.exchange.briefings.look));
-      yield* Effect.sleep(QUIET_MS);
+      yield* f.exchange.briefings.look;
+      yield* quiet;
       assert.deepEqual(f.commentary(), []);
       assert.deepEqual(yield* Effect.promise(() => speechEventsOf(offer.messageId)), [
         CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
       ]);
       assert.equal(f.reports.length, 1);
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
+      yield* f.exchange.stop();
+    }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient)),
 );
 
-it.live(
+it.effect(
   "after a Clear, a spoken ask is refused at the door and eve is not reached: the record and the ask name one conversation, never the record's old main and eve's new one",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
       const deviceId = yield* Effect.promise(() => device(target.userId));
-      const f = yield* Effect.promise(() => stand(target, deviceId));
-      const cleared = yield* Effect.promise(() =>
-        database.run(database.store.main.clear(target.userId, new Date(NOW))),
-      );
+      const f = yield* stand(target, deviceId);
+      const cleared = yield* database.store.main.clear(target.userId, new Date(NOW));
       assert.deepEqual(cleared.cleared, [target.conversationId]);
 
-      const refused = yield* Effect.promise(() =>
-        database.run(
-          f.exchange.brain.submitAsk({
-            submissionId: randomUUID(),
-            question: "Developer: still there?",
-          }),
-        ),
-      );
+      const refused = yield* f.exchange.brain.submitAsk({
+        submissionId: randomUUID(),
+        question: "Developer: still there?",
+      });
       assert.equal(refused.outcome, LIVE_BRAIN_SUBMISSION.REFUSED);
       assert.deepEqual(f.eve.opened, []);
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
+      yield* f.exchange.stop();
+    }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient)),
 );

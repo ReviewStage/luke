@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_HEADER, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import {
@@ -121,6 +120,8 @@ const SDP_OFFER =
 const CLOSE_TIMEOUT_MS = 300;
 /** How long a frame is waited on where none is expected, before its absence counts. */
 const QUIET_MS = 150;
+/** How many real round trips a wait for written frames to reach a paused socket takes. */
+const LOOP_TURNS = 8;
 
 const SEED = [
   {
@@ -160,11 +161,12 @@ interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];
 }
 
-function fakeEve(): FakeEve {
+function fakeEve(announce: () => void): FakeEve {
   const eve: FakeEve = {
     opened: [],
     open(message) {
       eve.opened.push(message);
+      announce();
       return Effect.succeed({
         outcome: EVE_SEND_OUTCOME.ACCEPTED,
         sessionId: `wrun_${randomUUID()}`,
@@ -201,6 +203,18 @@ function clientEvent(text: string): LiveClientEvent {
   return JSON.parse(text) as LiveClientEvent;
 }
 
+/**
+ * Turns the event loop over real round trips against the store, so frames
+ * already written to the upstream socket reach the service's paused end
+ * before the test releases it. Note that what orders them is the pause
+ * itself, not this wait, which is why the turns are real reads rather than a
+ * pause of the test's own.
+ */
+async function crossed(userId: string): Promise<void> {
+  for (let turn = 0; turn < LOOP_TURNS; turn += 1)
+    await readVoiceSessionsByUserTyped(database.run, userId);
+}
+
 /** Every frame the upstream reader has within the quiet window; none is a claim, not a timeout. */
 async function framesWithin(reader: SocketReader, ms: number): Promise<LiveClientEvent[]> {
   const frames: LiveClientEvent[] = [];
@@ -215,12 +229,21 @@ async function framesWithin(reader: SocketReader, ms: number): Promise<LiveClien
   return frames;
 }
 
-async function until(predicate: () => boolean, what: () => string): Promise<void> {
-  for (let attempt = 0; attempt < 600; attempt += 1) {
-    if (predicate()) return;
-    await sleep(5);
-  }
-  assert.fail(`timed out waiting for ${what()}`);
+/**
+ * Waits for what the stand's own collectors hold to satisfy `predicate`,
+ * woken by each thing they record rather than by a pause. Note that the bound
+ * is the suite's own timeout, because a bound of its own would be a wait on
+ * the machine's clock, which is what this wait exists to avoid.
+ */
+function until(context: Stand, predicate: () => boolean): Promise<void> {
+  if (predicate()) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const stop = context.watch(() => {
+      if (!predicate()) return;
+      stop();
+      resolve();
+    });
+  });
 }
 
 interface Stand {
@@ -233,6 +256,8 @@ interface Stand {
   readonly offered: AttachedSession[];
   /** Lets a gated attachment proceed; a no-op for every other offer. */
   release(): void;
+  /** Hears each entry, report, and ask the stand records, so a wait on them polls nothing. */
+  watch(listener: () => void): () => void;
   url(path: string): string;
   stop(): Promise<void>;
 }
@@ -252,7 +277,11 @@ type Offer = (typeof OFFER)[keyof typeof OFFER];
 async function stand(offer: Offer): Promise<Stand> {
   const target = await account();
   const openAi = await startFakeOpenAi();
-  const eve = fakeEve();
+  const watchers = new Set<() => void>();
+  const announce = (): void => {
+    for (const listener of [...watchers]) listener();
+  };
+  const eve = fakeEve(announce);
   const log: LogEntry[] = [];
   const reports: ExchangeReport[] = [];
   const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(target.userId) };
@@ -272,7 +301,10 @@ async function stand(offer: Offer): Promise<Stand> {
             eveOrigin: () => "https://eve.test",
             eve: () => eve,
             now: () => NOW,
-            report: (reported) => reports.push(reported),
+            report: (reported) => {
+              reports.push(reported);
+              announce();
+            },
           });
   const offered: AttachedSession[] = [];
   const exchange: VoiceServiceOptions["exchange"] =
@@ -298,6 +330,7 @@ async function stand(offer: Offer): Promise<Stand> {
           openAiBaseUrl: openAi.baseUrl,
           log: (entry) => {
             log.push(entry);
+            announce();
           },
           closeTimeoutMs: CLOSE_TIMEOUT_MS,
           firstFrameTimeoutMs: 1_000,
@@ -317,6 +350,12 @@ async function stand(offer: Offer): Promise<Stand> {
     openAi,
     offered,
     release: () => release(),
+    watch: (listener) => {
+      watchers.add(listener);
+      return () => {
+        watchers.delete(listener);
+      };
+    },
     url: (path) => `ws://127.0.0.1:${port}${path}`,
     stop: async () => {
       await database.run(Scope.close(scope, Exit.void));
@@ -365,10 +404,7 @@ async function hangUp(context: Stand, session: Awaited<ReturnType<typeof openSes
       usage: { seconds: 4 },
     }),
   );
-  await until(
-    () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
-    () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
-  );
+  await until(context, () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED));
 }
 
 it.effect(
@@ -420,10 +456,7 @@ it.effect(
 
       const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, upstreamSessionId);
-      await until(
-        () => context.eve.opened.length === 1,
-        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
-      );
+      await until(context, () => context.eve.opened.length === 1);
       assert.deepEqual(
         context.eve.opened.map((message) => [message.conversationId, message.turn]),
         [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
@@ -626,9 +659,8 @@ it.effect(
       // The desktop is handed the close it caused, and then its socket ends normally.
       assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_CLOSED);
       assert.equal((await session.desktop.closed).code, SOCKET_CLOSE_CODE.NORMAL);
-      await until(
-        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
-        () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
+      await until(context, () =>
+        context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
       );
       const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
       assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
@@ -787,9 +819,8 @@ it.effect(
           usage: { seconds: 2 },
         }),
       );
-      await until(
-        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
-        () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
+      await until(context, () =>
+        context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
       );
       assert.deepEqual(
         context.log.map((entry) => entry.event),
@@ -872,7 +903,7 @@ it.effect(
       // Spoken before either consumer listens: the exchange is still standing, the relay not yet piping.
       await sendText(attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
       await sendText(attach.socket, JSON.stringify(heard("What needs me?", 1000, 2400)));
-      await sleep(QUIET_MS);
+      await crossed(context.target.userId);
       context.release();
       const created = record(
         await desktop.next(5_000).catch((error: Error) => {
@@ -897,10 +928,7 @@ it.effect(
         `desktop frames after created: ${JSON.stringify(relayed)}; log ${JSON.stringify(context.log.map((entry) => entry.event))}; reports ${JSON.stringify(context.reports)}; upstream paused ${attach.socket.isPaused}`,
       );
       await sendText(attach.socket, JSON.stringify(delegated("dl_1", 2500)));
-      await until(
-        () => context.eve.opened.length === 1,
-        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
-      );
+      await until(context, () => context.eve.opened.length === 1);
       assert.deepEqual(
         context.eve.opened.map((message) => [message.conversationId, message.turn]),
         [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
@@ -954,9 +982,8 @@ it.effect(
         );
       }
       await until(
+        context,
         () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
-        () =>
-          `both sessions to be reported ended; log ${JSON.stringify(context.log.map((entry) => entry.event))}`,
       );
       await context.stop();
     }),
@@ -1130,10 +1157,7 @@ it.effect(
         JSON.stringify({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: AUDIO_MARKER.LUKE }),
       );
       await sendText(session.primary.socket, JSON.stringify(delegated("dl_1", 2500)));
-      await until(
-        () => context.eve.opened.length === 1,
-        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
-      );
+      await until(context, () => context.eve.opened.length === 1);
       assert.deepEqual(
         context.eve.opened.map((message) => [message.conversationId, message.turn]),
         [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
@@ -1200,9 +1224,8 @@ it.effect(
           usage: { seconds: 6 },
         }),
       );
-      await until(
-        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
-        () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
+      await until(context, () =>
+        context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
       );
       const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
       assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);

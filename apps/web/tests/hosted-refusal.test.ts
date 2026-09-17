@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { Schema } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
@@ -18,6 +17,11 @@ import {
   UnavailableRefusal,
   UnknownToolRefusal,
 } from "../server/hosted/http-effect.js";
+import {
+  recordedGoldenNames,
+  recordedRefusal,
+  settleResponseGolden,
+} from "./support/response-golden.js";
 
 /**
  * The bytes a hosted refusal answers with, recorded. The desktop's hosted
@@ -27,34 +31,7 @@ import {
  * against once the promise-shaped `errorResponse` beside them is gone.
  */
 
-const UPDATE_FIXTURES = process.env.LUKE_UPDATE_FIXTURES === "1";
-const GOLDEN_SUFFIX = ".json";
 const GOLDEN_ROOT = path.join(import.meta.dirname, "../fixtures/hosted-refusal");
-
-interface RecordedResponse {
-  status: number;
-  contentType: string | null;
-  body: string;
-}
-
-async function recordedResponse(response: Response): Promise<RecordedResponse> {
-  return {
-    status: response.status,
-    contentType: response.headers.get("content-type"),
-    body: await response.text(),
-  };
-}
-
-async function settleResponseGolden(name: string, recorded: RecordedResponse): Promise<void> {
-  const text = `${JSON.stringify(recorded, undefined, 2)}\n`;
-  const file = path.join(GOLDEN_ROOT, `${name}${GOLDEN_SUFFIX}`);
-  if (UPDATE_FIXTURES) {
-    await fs.mkdir(GOLDEN_ROOT, { recursive: true });
-    await fs.writeFile(file, text);
-    return;
-  }
-  assert.equal(text, await fs.readFile(file, "utf8"));
-}
 
 const REFUSALS = [
   {
@@ -106,12 +83,12 @@ const REFUSALS = [
 
 test("a refusal answers the status and the bytes the promise-shaped route answers", async () => {
   for (const entry of REFUSALS) {
-    const converted = await recordedResponse(
+    const converted = await recordedRefusal(
       HttpServerResponse.toWeb(hostedRefusalResponse(entry.refusal)),
     );
-    const promised = await recordedResponse(errorResponse(entry.status, entry.refusal.error));
+    const promised = await recordedRefusal(errorResponse(entry.status, entry.refusal.error));
     assert.deepEqual(converted, promised);
-    await settleResponseGolden(entry.refusal.error, converted);
+    await settleResponseGolden(GOLDEN_ROOT, entry.refusal.error, converted);
   }
 });
 
@@ -123,9 +100,5 @@ test("each refusal schema carries the status its group answers with", () => {
 
 test("the recorded set is exactly the refusals declared", async () => {
   const named = REFUSALS.map((entry) => entry.refusal.error).sort();
-  const held = (await fs.readdir(GOLDEN_ROOT))
-    .filter((entry) => entry.endsWith(GOLDEN_SUFFIX))
-    .map((entry) => entry.slice(0, -GOLDEN_SUFFIX.length))
-    .sort();
-  assert.deepEqual(held, named);
+  assert.deepEqual(await recordedGoldenNames(GOLDEN_ROOT), named);
 });

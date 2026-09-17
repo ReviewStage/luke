@@ -1,17 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
-import {
-  Deferred,
-  Duration,
-  Effect,
-  Fiber,
-  ManagedRuntime,
-  Redacted,
-  Result,
-  Schedule,
-  Schema,
-} from "effect";
+import { Deferred, Duration, Effect, Fiber, Redacted, Result, Schedule, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -716,53 +706,52 @@ test.skipIf(database.anotherConnection === undefined)(
     // drop's check then runs under a snapshot of its own and finds the turn. A check folded into
     // the waited update's own statement would not, since a lock waited on refreshes the update's
     // row and not its subquery, and would stamp the running child.
-    const another = ManagedRuntime.make(database.anotherConnection());
-    try {
-      const held = await database.run(Deferred.make<void>());
-      // The wait for the drop polls on a Schedule, so the transaction runs on the live clock rather
-      // than the pinned one every other run of this file stamps its rows from.
-      const turn = await database.run(
-        Effect.forkDetach(
-          TestClock.withLive(
-            Effect.flatMap(SqlClient.SqlClient, (sql) =>
-              sql.withTransaction(
-                Effect.gen(function* () {
-                  yield* db
-                    .select({ id: conversations.id })
-                    .from(conversations)
-                    .where(eq(conversations.id, child.childId))
-                    .for("update");
-                  yield* db.insert(turns).values({
-                    userId: fixture.userId,
-                    conversationId: child.childId,
-                    origin: TURN_ORIGIN.CHILD,
-                    status: TURN_STATUS.RUNNING,
-                    queuedAt: at(21),
-                    startedAt: at(21),
-                  });
-                  yield* Deferred.succeed(held, undefined);
-                  const waiting = yield* Effect.repeat(lockWaiters(sql), {
-                    schedule: Schedule.spaced(CONTENTION_WAIT.INTERVAL).pipe(
-                      Schedule.upTo({ times: CONTENTION_WAIT.ATTEMPTS }),
-                    ),
-                    until: (waiting: number): boolean => waiting > 0,
-                  });
-                  assert.ok(waiting > 0, "the drop never waited on the turn's lock");
-                }),
-              ),
+    const another = database.anotherConnection();
+    const held = await database.run(Deferred.make<void>());
+    // The wait for the drop polls on a Schedule, so the transaction runs on the live clock rather
+    // than the pinned one every other run of this file stamps its rows from.
+    const turn = await database.run(
+      Effect.forkDetach(
+        TestClock.withLive(
+          Effect.flatMap(SqlClient.SqlClient, (sql) =>
+            sql.withTransaction(
+              Effect.gen(function* () {
+                yield* db
+                  .select({ id: conversations.id })
+                  .from(conversations)
+                  .where(eq(conversations.id, child.childId))
+                  .for("update");
+                yield* db.insert(turns).values({
+                  userId: fixture.userId,
+                  conversationId: child.childId,
+                  origin: TURN_ORIGIN.CHILD,
+                  status: TURN_STATUS.RUNNING,
+                  queuedAt: at(21),
+                  startedAt: at(21),
+                });
+                yield* Deferred.succeed(held, undefined);
+                const waiting = yield* Effect.repeat(lockWaiters(sql), {
+                  schedule: Schedule.spaced(CONTENTION_WAIT.INTERVAL).pipe(
+                    Schedule.upTo({ times: CONTENTION_WAIT.ATTEMPTS }),
+                  ),
+                  until: (waiting: number): boolean => waiting > 0,
+                });
+                assert.ok(waiting > 0, "the drop never waited on the turn's lock");
+              }),
             ),
           ),
         ),
-      );
-      await database.run(Deferred.await(held));
-      const dropped = await another.runPromise(
-        dropChildConversation(fixture.userId, child.childId, at(0)),
-      );
-      await database.run(Fiber.join(turn));
-      assert.equal(dropped, false);
-      assert.equal((await readConversationById(database.run, child.childId))[0]?.deletedAt, null);
-    } finally {
-      await another.dispose();
-    }
+      ),
+    );
+    await database.run(Deferred.await(held));
+    // The drop runs on a second connection built for this test alone, closed with its scope.
+    const dropped = await database.run(
+      Effect.scoped(
+        Effect.provide(dropChildConversation(fixture.userId, child.childId, at(0)), another),
+      ),
+    );
+    await database.run(Fiber.join(turn));
+    assert.equal(dropped, false);
+    assert.equal((await readConversationById(database.run, child.childId))[0]?.deletedAt, null);
   },
 );

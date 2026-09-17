@@ -241,7 +241,7 @@ async function tablesNamed(name: string): Promise<readonly string[]> {
 }
 
 test("two sessions composed over unchanged workspace rows carry one prompt hash, the hash of the prompt as sent, and the prompt is stored nowhere", async () => {
-  const host = Effect.runSync(brainHost(seams));
+  const host = await database.run(brainHost(seams));
   const target = await ownedConversation();
   const first = await startSession(host, target, BRAIN_HOST_TURN.TYPED);
   const firstPrompt = await composePrompt(host, first);
@@ -255,7 +255,7 @@ test("two sessions composed over unchanged workspace rows carry one prompt hash,
 });
 
 test("a workspace file edited between two sessions yields a new hash", async () => {
-  const host = Effect.runSync(brainHost(seams));
+  const host = await database.run(brainHost(seams));
   const target = await ownedConversation();
   const before = await composePrompt(host, await startSession(host, target, BRAIN_HOST_TURN.TYPED));
 
@@ -274,7 +274,7 @@ test("a workspace file edited between two sessions yields a new hash", async () 
 });
 
 test("two accounts over the same seeded rows compose one prompt hash", async () => {
-  const host = Effect.runSync(brainHost(seams));
+  const host = await database.run(brainHost(seams));
   const one = await composePrompt(
     host,
     await startSession(host, await ownedConversation(), BRAIN_HOST_TURN.TYPED),
@@ -288,7 +288,7 @@ test("two accounts over the same seeded rows compose one prompt hash", async () 
 });
 
 test("two turns of one session record the session's prompt hash and one tool set, hashed from the declarations the tools resolver offers", async () => {
-  const host = Effect.runSync(brainHost(seams));
+  const host = await database.run(brainHost(seams));
   const target = await ownedConversation();
   const session = await startSession(host, target, BRAIN_HOST_TURN.TYPED);
   const prompt = await composePrompt(host, session);
@@ -320,7 +320,7 @@ test("two turns of one session record the session's prompt hash and one tool set
 });
 
 test("an observation turn is offered another tool set and records another hash, and a session that composed no prompt records none", async () => {
-  const host = Effect.runSync(brainHost(seams));
+  const host = await database.run(brainHost(seams));
   const typed = await startSession(host, await ownedConversation(), BRAIN_HOST_TURN.TYPED);
   const observedTarget = await ownedConversation(CONVERSATION_KIND.OBSERVED);
   const observed = await startSession(host, observedTarget, BRAIN_HOST_TURN.OBSERVATION);
@@ -351,7 +351,7 @@ test("an observation turn is offered another tool set and records another hash, 
 });
 
 test("while a device of the account reports quiet ahead, an observation turn is offered no announce and records the hash of what it was offered; the quiet lifting offers it again", async () => {
-  const host = Effect.runSync(brainHost(seams));
+  const host = await database.run(brainHost(seams));
   const target = await ownedConversation(CONVERSATION_KIND.OBSERVED);
   const session = await startSession(host, target, BRAIN_HOST_TURN.OBSERVATION);
   const turn = { kind: BRAIN_HOST_TURN.OBSERVATION, trigger: BRAIN_TURN_TRIGGER.ROSTER } as const;

@@ -31,6 +31,7 @@ export async function recordedResponse(response: Response): Promise<RecordedResp
 }
 
 const FRAMING_HEADER = { CONTENT_LENGTH: "content-length" } as const;
+const REFUSAL_HEADER = { CONTENT_TYPE: "content-type" } as const;
 
 /**
  * A response recorded the way a converted route's answer is compared: the
@@ -48,11 +49,30 @@ export async function recordedAnswer(response: Response): Promise<RecordedRespon
   };
 }
 
+export interface RecordedRefusal {
+  status: number;
+  contentType: string | null;
+  body: string;
+}
+
+/**
+ * A refusal recorded narrowly: the status, the one header its clients read,
+ * and the body. The hosted refusal goldens stand in this shape, and a refusal
+ * carries no header set worth recording whole.
+ */
+export async function recordedRefusal(response: Response): Promise<RecordedRefusal> {
+  return {
+    status: response.status,
+    contentType: response.headers.get(REFUSAL_HEADER.CONTENT_TYPE),
+    body: await response.text(),
+  };
+}
+
 /** The recorded response against the file named for it, which `LUKE_UPDATE_FIXTURES=1` writes. */
 export async function settleResponseGolden(
   root: string,
   name: string,
-  recorded: RecordedResponse,
+  recorded: RecordedResponse | RecordedRefusal,
 ): Promise<void> {
   const text = `${JSON.stringify(recorded, undefined, 2)}\n`;
   const file = path.join(root, `${name}${GOLDEN_SUFFIX}`);

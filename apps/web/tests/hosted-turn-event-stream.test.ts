@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { it } from "@effect/vitest";
 import {
   brainTurnEventsPath,
   decodeTurnEventFrame,
@@ -12,7 +13,9 @@ import {
   TURN_SLOW_STEP,
   type TurnEvent,
 } from "@sidecar/hosted";
-import { Effect, Option } from "effect";
+import { Duration, Effect, Option } from "effect";
+import { TestClock } from "effect/testing";
+import { SqlClient } from "effect/unstable/sql";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -72,6 +75,9 @@ const NOW = 1_800_000_000_000;
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
+
+/** The one client the store's effects run against, for a test that runs a handler on its own clock. */
+const sqlClient = await database.run(Effect.service(SqlClient.SqlClient));
 
 const writer = await database.run(
   storeWriter({
@@ -337,38 +343,51 @@ test("an attachment lapses without an end while the turn runs, heartbeats meanwh
   );
 });
 
-test("a client that disconnects stops the polling", async () => {
-  const target = await conversation();
-  const standing = standingFor(target);
-  const events = spokenTurn(EVE_TURN);
-  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
-  await play(events.slice(0, untilRequested(events)), standing);
+/** The store with every look at a turn counted: one look is one poll of the stream's own loop. */
+function countingStore(looks: { count: number }): TurnEventStreamOptions["store"] {
+  return {
+    ...database.store,
+    turns: {
+      ...database.store.turns,
+      named: (userId, ids) =>
+        Effect.andThen(
+          Effect.sync(() => {
+            looks.count += 1;
+          }),
+          database.store.turns.named(userId, ids),
+        ),
+    },
+  };
+}
 
-  let polls = 0;
-  const response = await database.run(
-    handleTurnEventStream({
+it.effect("a client that disconnects stops the polling", () =>
+  Effect.gen(function* () {
+    const target = yield* Effect.promise(() => conversation());
+    const standing = standingFor(target);
+    const events = spokenTurn(EVE_TURN);
+    const turnId = hostTurnId(standing.sessionId, EVE_TURN);
+    yield* Effect.promise(() => play(events.slice(0, untilRequested(events)), standing));
+
+    // The stream polls on this test's own clock, so nothing here waits on the machine.
+    const looks = { count: 0 };
+    const response = yield* handleTurnEventStream({
       ...options(target.userId, request(turnId), {
-        POLL_MS: 5,
+        POLL_MS: QUICK.POLL_MS,
         HEARTBEAT_MS: 60_000,
         ATTACHMENT_MS: 60_000,
       }),
-      sleep: (ms) =>
-        Effect.andThen(
-          Effect.sync(() => {
-            polls += 1;
-          }),
-          Effect.sleep(ms),
-        ),
-    }),
-  );
-  assert.ok(response.body);
-  const reader = response.body.getReader();
-  await reader.read();
-  await reader.cancel();
-  const seen = polls;
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.ok(polls <= seen + 1);
-});
+      store: countingStore(looks),
+    });
+    assert.ok(response.body);
+    const reader = response.body.getReader();
+    yield* Effect.promise(() => reader.read());
+    yield* Effect.promise(() => reader.cancel());
+    const seen = looks.count;
+    // Many polls' worth of time passes on the clock the cancelled loop would have slept on.
+    yield* TestClock.adjust(Duration.millis(QUICK.POLL_MS * 10));
+    assert.ok(looks.count <= seen + 1);
+  }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient)),
+);
 
 test("a cancelled turn and a failed one end without a settled mark or a sentence", async () => {
   for (const [end, ending] of [

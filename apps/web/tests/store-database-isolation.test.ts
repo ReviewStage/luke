@@ -1,4 +1,6 @@
-import { Effect, ManagedRuntime } from "effect";
+import { it } from "@effect/vitest";
+import { Effect, Layer } from "effect";
+import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { expect, test } from "vitest";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
@@ -41,19 +43,25 @@ test("an unscoped delete through one store harness leaves a sibling harness's ro
   }
 });
 
-test("an unscoped delete through one build of the test SqlClient leaves a sibling build's rows standing", async () => {
-  const deleter = ManagedRuntime.make(testSqlClient);
-  const sibling = ManagedRuntime.make(testSqlClient);
-  try {
-    await sibling.runPromise(insertUser("user-kept"));
-    await deleter.runPromise(insertUser("user-doomed"));
-    expect(await deleter.runPromise(userIds)).toEqual(["user-doomed"]);
+it.effect(
+  "an unscoped delete through one build of the test SqlClient leaves a sibling build's rows standing",
+  () =>
+    Effect.gen(function* () {
+      // Two builds of the layer are two databases; each is built once here and closed with the test's scope.
+      const deleter = yield* Layer.build(testSqlClient);
+      const sibling = yield* Layer.build(testSqlClient);
+      const through = <A, E>(
+        context: typeof deleter,
+        effect: Effect.Effect<A, E, SqlClient.SqlClient>,
+      ) => Effect.provideContext(effect, context);
 
-    await deleter.runPromise(deleteEveryUser);
+      yield* through(sibling, insertUser("user-kept"));
+      yield* through(deleter, insertUser("user-doomed"));
+      expect(yield* through(deleter, userIds)).toEqual(["user-doomed"]);
 
-    expect(await deleter.runPromise(userIds)).toEqual([]);
-    expect(await sibling.runPromise(userIds)).toEqual(["user-kept"]);
-  } finally {
-    await Promise.all([deleter.dispose(), sibling.dispose()]);
-  }
-});
+      yield* through(deleter, deleteEveryUser);
+
+      expect(yield* through(deleter, userIds)).toEqual([]);
+      expect(yield* through(sibling, userIds)).toEqual(["user-kept"]);
+    }),
+);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Redacted, Result, Schema } from "effect";
+import { Deferred, Effect, Fiber, Redacted, Result, Schema } from "effect";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
@@ -325,13 +325,14 @@ test("a session that claimed the child before eve's answer was read is the child
 
 test("an open interrupted before eve answered stamps the child on its way out", async () => {
   const fixture = await delegating();
-  const hanging = fakeEve(() => Effect.never);
+  // The fake says when eve was reached, so the interrupt waits on that and not on the clock.
+  const reached = Deferred.makeUnsafe<void>();
+  const hanging = fakeEve(() => Effect.andThen(Deferred.succeed(reached, undefined), Effect.never));
   const opener = seams({ eve: hanging.eve });
   await database.run(
     Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(openChild(opener, spawn(fixture)));
-      // The fork reaches eve before it is interrupted.
-      yield* Effect.sleep("20 millis");
+      yield* Deferred.await(reached);
       assert.equal(hanging.opened.length, 1);
       yield* Fiber.interrupt(fiber);
     }),

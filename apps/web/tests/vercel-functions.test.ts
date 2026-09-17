@@ -1,19 +1,12 @@
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
-import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import { build } from "esbuild";
-import { test } from "vitest";
+import { type TestContext, test } from "vitest";
 import {
   bundlesReaching,
   expectedExternals,
@@ -98,8 +91,8 @@ test("the committed table is what the routes generate, and vercel.json's /api/ e
 });
 
 /** A web app whose routes are this one's and whose two committed files are the caller's, so each half can drift alone. */
-function scratchWeb(table: string, config: string): string {
-  const web = mkdtempSync(join(tmpdir(), "luke-rewrites-"));
+async function scratchWeb(t: TestContext, table: string, config: string): Promise<string> {
+  const web = await temporaryDirectory(t, "luke-rewrites-");
   mkdirSync(join(web, "server"));
   symlinkSync(join(WEB, "server", "routes"), join(web, "server", "routes"), "dir");
   writeFileSync(join(web, API_REWRITES_FILE), table);
@@ -107,13 +100,13 @@ function scratchWeb(table: string, config: string): string {
   return web;
 }
 
-test("drift is read from both halves: a table behind the routes, and a vercel.json behind the table", async () => {
+test("drift is read from both halves: a table behind the routes, and a vercel.json behind the table", async (t) => {
   const table = readFileSync(join(WEB, API_REWRITES_FILE), "utf8");
   const config = readFileSync(join(WEB, VERCEL_CONFIG_FILE), "utf8");
-  assert.equal(await rewritesDrifted(scratchWeb(table, config)), false);
+  assert.equal(await rewritesDrifted(await scratchWeb(t, table, config)), false);
   const generated = apiRewrites(await webFunctions(WEB));
   assert.equal(
-    await rewritesDrifted(scratchWeb(apiRewritesSource(generated.slice(1)), config)),
+    await rewritesDrifted(await scratchWeb(t, apiRewritesSource(generated.slice(1)), config)),
     true,
   );
   // SAFETY: the text is this app's own committed vercel.json, which the generator's schema decoded whole in the assertion above; only the web service's routes array is moved here.
@@ -124,7 +117,7 @@ test("drift is read from both halves: a table behind the routes, and a vercel.js
   assert.ok(first);
   const web = { ...reordered.services.web, routes: [...rest, first] };
   const swapped = `${JSON.stringify({ ...reordered, services: { ...reordered.services, web } }, null, 2)}\n`;
-  assert.equal(await rewritesDrifted(scratchWeb(table, swapped)), true);
+  assert.equal(await rewritesDrifted(await scratchWeb(t, table, swapped)), true);
 });
 
 test("every dispatched route has one rewrite onto its function, carrying the route key", async () => {

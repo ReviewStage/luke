@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
 import { Schema } from "effect";
 import { build } from "esbuild";
-import { test } from "vitest";
+import { type TestContext, test } from "vitest";
 import {
   type EmittedFunction,
   emitBuildOutput,
@@ -58,14 +58,14 @@ const LOAD_MODULE = "await import(process.argv[1]);";
  */
 const LOAD_ENVIRONMENT = { PATH: process.env.PATH ?? "" } as const;
 
-async function emitFromPlan(): Promise<{
+async function emitFromPlan(t: TestContext): Promise<{
   readonly outputDirectory: string;
   readonly paths: readonly string[];
 }> {
   const plan = await functionBundlePlan(WEB);
   const result = await build({ ...plan.options, write: false });
   const contentsOf = new Map(result.outputFiles.map((file) => [file.path, file.contents] as const));
-  const outputDirectory = mkdtempSync(join(tmpdir(), "luke-build-output-"));
+  const outputDirectory = await temporaryDirectory(t, "luke-build-output-");
   const functions: EmittedFunction[] = [
     ...plan.functions.map((definition) => {
       const contents = contentsOf.get(join(WEB, "dist-functions", `${definition.file}.js`));
@@ -90,8 +90,8 @@ async function emitFromPlan(): Promise<{
 
 test("every planned function and every rewrite lands on a .func carrying the plan's configuration", {
   timeout: 180_000,
-}, async () => {
-  const { outputDirectory, paths } = await emitFromPlan();
+}, async (t) => {
+  const { outputDirectory, paths } = await emitFromPlan(t);
   const functions = await webFunctions(WEB);
   assert.deepEqual(
     paths,
@@ -128,8 +128,8 @@ test("every planned function and every rewrite lands on a .func carrying the pla
  */
 test("every function also answers at its extensionless path, through a symlink onto the same .func", {
   timeout: 180_000,
-}, async () => {
-  const { outputDirectory, paths } = await emitFromPlan();
+}, async (t) => {
+  const { outputDirectory, paths } = await emitFromPlan(t);
   for (const path of paths) {
     const primary = functionDirectory(outputDirectory, path);
     const alias = functionDirectory(outputDirectory, functionAliasPath(path));
@@ -147,8 +147,8 @@ test("every function also answers at its extensionless path, through a symlink o
   );
 });
 
-test("each .func loads with nothing above it available", { timeout: 180_000 }, async () => {
-  const { outputDirectory, paths } = await emitFromPlan();
+test("each .func loads with nothing above it available", { timeout: 180_000 }, async (t) => {
+  const { outputDirectory, paths } = await emitFromPlan(t);
   for (const path of paths) {
     const directory = functionDirectory(outputDirectory, path);
     const loaded = spawnSync(

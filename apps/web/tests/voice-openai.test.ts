@@ -3,7 +3,9 @@ import { once } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { arrival } from "@sidecar/voice/testing";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { onTestFinished } from "vitest";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import {
@@ -24,7 +26,10 @@ import { textFrame } from "./support/voice-fakes";
  * `session.started`, and what the door does with every other way that
  * exchange can end. One case writes both of its frames in a single write to
  * the raw socket, which is the only way to put a second frame in the chunk the
- * handshake's own flush carries.
+ * handshake's own flush carries. Every wait here stands on an event the fake
+ * announces — `ws` delivers frames on IO ticks a fiber yield would not wait
+ * for — and the one deadline under test runs on Effect's Clock, which the
+ * test advances once the frame that starts it has arrived.
  */
 
 const LOOPBACK = "127.0.0.1";
@@ -54,6 +59,22 @@ const PROTOCOL_HEADERS: ReadonlySet<string> = new Set([
   "sec-websocket-version",
   "sec-websocket-extensions",
 ]);
+
+/** Tells whoever is waiting that the fake moved, so a wait stands on the event rather than on time. */
+function notifier() {
+  const listeners = new Set<() => void>();
+  return {
+    notify: (): void => {
+      for (const listener of [...listeners]) listener();
+    },
+    subscribe: (listener: () => void): (() => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
 
 function startedEvent(): string {
   return JSON.stringify({
@@ -97,6 +118,8 @@ interface FakePrimary {
   received: string[];
   /** How many of the door's sockets the far end has seen close. */
   closes: number;
+  /** Hears every move of the fake: a frame received, a socket closed. */
+  onMove(listener: () => void): () => void;
   /** What the next `session.start` is answered with. */
   answer: Answer;
   /** The status an upgrade is refused with, where one is; a socket otherwise. */
@@ -109,7 +132,9 @@ interface FakePrimary {
 async function startFakePrimary(): Promise<FakePrimary> {
   const waiting: Array<(far: WebSocket) => void> = [];
   let standing: WebSocket | undefined;
+  const moved = notifier();
   const fake: FakePrimary = {
+    onMove: moved.subscribe,
     baseUrl: "",
     paths: [],
     authorizations: [],
@@ -158,9 +183,11 @@ async function startFakePrimary(): Promise<FakePrimary> {
       }
       far.on("close", () => {
         fake.closes += 1;
+        moved.notify();
       });
       far.on("message", (data: RawData) => {
         fake.received.push(data.toString());
+        moved.notify();
         switch (fake.answer) {
           case ANSWER.STARTED:
             far.send(startedEvent());
@@ -191,9 +218,6 @@ async function startFakePrimary(): Promise<FakePrimary> {
   return fake;
 }
 
-/** Gives the fibers and the sockets their turns, so what the far side said has been read. */
-const pause = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
-
 function upstreamAt(fake: FakePrimary, primaryTimeoutMs?: number) {
   return createLiveUpstream({
     apiKey: API_KEY,
@@ -202,9 +226,12 @@ function upstreamAt(fake: FakePrimary, primaryTimeoutMs?: number) {
   });
 }
 
+/** The deadline the silence case ends at, moved by the test's own clock. */
+const PRIMARY_TIMEOUT_MS = 30;
+
 const CONFIG = livePrimarySessionConfig({ scene: LIVE_SCENE.DESKTOP });
 
-it.live("a primary socket starts its session and answers the id `session.started` carried", () =>
+it.effect("a primary socket starts its session and answers the id `session.started` carried", () =>
   Effect.gen(function* () {
     const fake = yield* Effect.promise(() => startFakePrimary());
     onTestFinished(() => fake.close());
@@ -226,7 +253,7 @@ it.live("a primary socket starts its session and answers the id `session.started
   }),
 );
 
-it.live("a frame written into the handshake's own chunk is held rather than lost", () =>
+it.effect("a frame written into the handshake's own chunk is held rather than lost", () =>
   Effect.gen(function* () {
     const fake = yield* Effect.promise(() => startFakePrimary());
     onTestFinished(() => fake.close());
@@ -245,7 +272,7 @@ it.live("a frame written into the handshake's own chunk is held rather than lost
   }),
 );
 
-it.live("a refused handshake is an outcome name and a status", () =>
+it.effect("a refused handshake is an outcome name and a status", () =>
   Effect.gen(function* () {
     const fake = yield* Effect.promise(() => startFakePrimary());
     onTestFinished(() => fake.close());
@@ -258,25 +285,33 @@ it.live("a refused handshake is an outcome name and a status", () =>
   }),
 );
 
-it.live("a session that never starts ends at the wait, leaving no socket standing", () =>
+it.effect("a session that never starts ends at the wait, leaving no socket standing", () =>
   Effect.gen(function* () {
     const fake = yield* Effect.promise(() => startFakePrimary());
     onTestFinished(() => fake.close());
     fake.answer = ANSWER.SILENCE;
 
-    const opened = yield* upstreamAt(fake, 30).openPrimary(CONFIG);
+    // The wait the door ends at runs on Effect's Clock: it is started by the
+    // start frame arriving at a far end that answers nothing, so the clock
+    // moves past it only once the fake has that frame.
+    const opening = yield* Effect.forkScoped(
+      upstreamAt(fake, PRIMARY_TIMEOUT_MS).openPrimary(CONFIG),
+    );
+    yield* arrival(fake.onMove, () => fake.received.length === 1, "the start frame sent");
+    yield* TestClock.adjust(`${PRIMARY_TIMEOUT_MS} millis`);
+    const opened = yield* Fiber.join(opening);
 
     assert.deepEqual(opened, {
       outcome: LIVE_SESSION_OUTCOME.NETWORK_ERROR,
       errorName: "TimeoutError",
     });
     assert.deepEqual(fake.received, [JSON.stringify(liveStartRequest(CONFIG))]);
-    while (fake.closes === 0) yield* pause;
+    yield* arrival(fake.onMove, () => fake.closes === 1, "the door's socket closed");
     assert.equal(fake.closes, 1);
   }),
 );
 
-it.live("an error in place of a started session is refused, and the socket goes with it", () =>
+it.effect("an error in place of a started session is refused, and the socket goes with it", () =>
   Effect.gen(function* () {
     const fake = yield* Effect.promise(() => startFakePrimary());
     onTestFinished(() => fake.close());
@@ -285,12 +320,12 @@ it.live("an error in place of a started session is refused, and the socket goes 
     const opened = yield* upstreamAt(fake).openPrimary(CONFIG);
 
     assert.deepEqual(opened, { outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE });
-    while (fake.closes === 0) yield* pause;
+    yield* arrival(fake.onMove, () => fake.closes === 1, "the door's socket closed");
     assert.equal(fake.closes, 1);
   }),
 );
 
-it.live("a frame beside `session.started` in one chunk is held rather than lost", () =>
+it.effect("a frame beside `session.started` in one chunk is held rather than lost", () =>
   Effect.gen(function* () {
     const fake = yield* Effect.promise(() => startFakePrimary());
     onTestFinished(() => fake.close());
@@ -310,7 +345,7 @@ it.live("a frame beside `session.started` in one chunk is held rather than lost"
   }),
 );
 
-it.live("what the session says after the handshake is the caller's to read once it resumes", () =>
+it.effect("what the session says after the handshake is the caller's to read once it resumes", () =>
   Effect.gen(function* () {
     const fake = yield* Effect.promise(() => startFakePrimary());
     onTestFinished(() => fake.close());
@@ -328,8 +363,12 @@ it.live("what the session says after the handshake is the caller's to read once 
       socket.resume();
     });
     const far = yield* Effect.promise(() => fake.far());
-    yield* Effect.sync(() => far.send(transcriptDelta()));
-    while (read.length < 2) yield* pause;
+    const readTwice = notifier();
+    yield* Effect.sync(() => {
+      socket.on("message", () => readTwice.notify());
+      far.send(transcriptDelta());
+    });
+    yield* arrival(readTwice.subscribe, () => read.length >= 2, "the delta read off the socket");
 
     assert.deepEqual(
       read.map((frame) => JSON.parse(frame)),

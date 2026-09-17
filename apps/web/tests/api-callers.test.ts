@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { test } from "vitest";
+import { temporaryDirectory } from "@sidecar/runtime/testing";
+import { type TestContext, test } from "vitest";
 import {
   buildOutputAliases,
   CALLER_KIND,
@@ -33,8 +33,8 @@ const TABLE = [
 ];
 const ALIASES = ["/api/feedback"];
 
-function scratch(files: Readonly<Record<string, string>>): string {
-  const root = mkdtempSync(join(tmpdir(), "api-callers-"));
+async function scratch(t: TestContext, files: Readonly<Record<string, string>>): Promise<string> {
+  const root = await temporaryDirectory(t, "api-callers-");
   for (const [path, contents] of Object.entries(files)) {
     mkdirSync(join(root, path, ".."), { recursive: true });
     writeFileSync(join(root, path), contents);
@@ -42,8 +42,8 @@ function scratch(files: Readonly<Record<string, string>>): string {
   return root;
 }
 
-async function scratchReport(files: Readonly<Record<string, string>>) {
-  const root = scratch(files);
+async function scratchReport(t: TestContext, files: Readonly<Record<string, string>>) {
+  const root = await scratch(t, files);
   const scan = await scanCallers(root, ["."]);
   return { scan, ...resolveCallers(scan.sites, TABLE, ALIASES) };
 }
@@ -51,8 +51,8 @@ async function scratchReport(files: Readonly<Record<string, string>>) {
 const refusals = (report: { readonly refused: readonly { display: string; reason: string }[] }) =>
   report.refused.map((refusal) => [refusal.display, refusal.reason]);
 
-test("a caller path the table does not serve is refused, whichever language spells it", async () => {
-  const report = await scratchReport({
+test("a caller path the table does not serve is refused, whichever language spells it", async (t) => {
+  const report = await scratchReport(t, {
     "client.ts": `const url = \`\${origin}/api/nowhere\`;\nfetch("https://luke.test/api/devices?since=1");\n`,
     "Client.swift": 'let url = base.appendingPathComponent("api/elsewhere")\n',
     "probe.sh": 'curl "https://luke.test/api/absent"\n',
@@ -68,8 +68,8 @@ test("a caller path the table does not serve is refused, whichever language spel
   );
 });
 
-test("a template interpolating a whole segment is matched against the pattern that serves it", async () => {
-  const report = await scratchReport({
+test("a template interpolating a whole segment is matched against the pattern that serves it", async (t) => {
+  const report = await scratchReport(t, {
     "client.ts": [
       `const read = \`/api/brain/turns/\${encodeURIComponent(id)}\`;`,
       `const events = \`\${origin}/api/brain/turns/\${id}/events\`;`,
@@ -87,8 +87,8 @@ test("a template interpolating a whole segment is matched against the pattern th
   assert.equal(report.resolved[1]?.caller.sites.length, 2);
 });
 
-test("a template whose interpolation is not a whole segment is refused as unreadable, not skipped", async () => {
-  const report = await scratchReport({
+test("a template whose interpolation is not a whole segment is refused as unreadable, not skipped", async (t) => {
+  const report = await scratchReport(t, {
     "client.ts": [
       `const a = \`/api/brain/turns/\${id}-events\`;`,
       `const b = \`/api/dev\${suffix}\`;`,
@@ -102,9 +102,9 @@ test("a template whose interpolation is not a whole segment is refused as unread
   ]);
 });
 
-test("a base other segments are appended to resolves as a prefix, and an alias as itself", async () => {
+test("a base other segments are appended to resolves as a prefix, and an alias as itself", async (t) => {
   // `/api/auth/` is the wildcard's own match with an empty capture, so it is a rewrite, not a prefix.
-  const report = await scratchReport({
+  const report = await scratchReport(t, {
     "client.ts": 'const base = "https://luke.test/api/auth";\nconst feedback = "/api/feedback";\n',
     "Client.swift": 'static let auth = URL(string: "https://luke.test/api/auth/")!\n',
   });
@@ -119,8 +119,8 @@ test("a base other segments are appended to resolves as a prefix, and an alias a
   );
 });
 
-test("comments are not callers, and skipped directories are not scanned", async () => {
-  const report = await scratchReport({
+test("comments are not callers, and skipped directories are not scanned", async (t) => {
+  const report = await scratchReport(t, {
     "client.ts": [
       "// GET /api/nowhere",
       "/** `PUT /api/elsewhere/{id}` */",
@@ -135,8 +135,8 @@ test("comments are not callers, and skipped directories are not scanned", async 
   assert.equal(report.scan.filesScanned, 3);
 });
 
-test("a package directory with no source directory contributes nothing, and the scan completes", async () => {
-  const root = scratch({
+test("a package directory with no source directory contributes nothing, and the scan completes", async (t) => {
+  const root = await scratch(t, {
     "packages/one/src/client.ts": 'fetch("/api/devices");\n',
     "packages/two/src/nested/Client.swift":
       'let url = base.appendingPathComponent("api/feedback")\n',
@@ -166,8 +166,8 @@ test("a package directory with no source directory contributes nothing, and the 
   );
 });
 
-test("a paths-module export that is not a path is refused by name", async () => {
-  const root = scratch({
+test("a paths-module export that is not a path is refused by name", async (t) => {
+  const root = await scratch(t, {
     "paths.ts": [
       'export const TABLE = { A: "/api/devices" } as const;',
       "export const BOUND = 3;",
