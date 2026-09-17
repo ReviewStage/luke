@@ -217,10 +217,13 @@ export class ConversationViewSync {
   /**
    * Whether the events read stands at or past the fold. The messages answer
    * folds every speech mark and rating up to the moment it was read, so while
-   * the events are still being replayed from before that moment the rating
-   * marks held here may be older than the fold and stand behind it; once a
-   * page has answered that nothing more stands, they carry everything the
-   * fold did and whatever came after, and only then do they amend it.
+   * the events are still being replayed from before that moment the speech
+   * and rating marks held here may be older than the fold and stand behind
+   * it; once a page has answered that nothing more stands, they carry
+   * everything the fold did and whatever came after, and only then do they
+   * amend it. A speech mark replayed early would otherwise strip the spoken
+   * instant the page carried and move a briefing's fold away from the
+   * utterance it stands above until the spoken mark itself is replayed.
    */
   #eventsCaughtUp = false;
   #cursors: ConversationReadCursors = {};
@@ -379,7 +382,8 @@ export class ConversationViewSync {
             : undefined),
           ...(spoken === undefined ? undefined : { spoken }),
         });
-        moved = true;
+        // A mark held while the read is still catching up shows nothing yet; the catch-up below shows them all.
+        if (this.#eventsCaughtUp) moved = true;
         continue;
       }
       if (event.kind !== CONVERSATION_EVENT_KIND.RATING) continue;
@@ -401,7 +405,8 @@ export class ConversationViewSync {
     }
     if (!hasMore && !this.#eventsCaughtUp) {
       this.#eventsCaughtUp = true;
-      // The marks read back were standing behind the fold until now; one known newer already showed.
+      // The marks read back were standing behind the fold until now; a rating known newer already showed.
+      if (this.#speech.size > 0) moved = true;
       if ([...this.#ratings.values()].some((held) => !held.newerThanFold)) moved = true;
     }
     this.#cursors = { ...this.#cursors, events: next };
@@ -599,10 +604,12 @@ export class ConversationViewSync {
    * them: unspoken where it is the expiry, and carrying where the speech
    * began where it is the spoken mark and said so, as the fold the page
    * answered would have carried them had the event stood when it was read.
+   * Not until the events read has caught up with the fold: a mark replayed
+   * from before it is older than what the page carries, not newer.
    */
   #withSpeech(message: ConversationViewMessage): ConversationViewMessage {
     const speech = this.#speech.get(message.message.id);
-    if (speech === undefined) return message;
+    if (speech === undefined || !this.#eventsCaughtUp) return message;
     const unspoken = speech.kind === CONVERSATION_EVENT_KIND.SPEECH_EXPIRED;
     const spokenAt =
       speech.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN ? speech.spoken : undefined;

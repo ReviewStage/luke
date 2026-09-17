@@ -332,6 +332,51 @@ test("the latest speech event on a message decides whether its announcement was 
   assert.equal(sync.cursors().events, "e4");
 });
 
+test("a speech mark replayed while the events read is still catching up does not amend the page's fold; once caught up, the latest mark does", () => {
+  const SPOKEN = { voiceSessionId: "3e000000-0000-4000-8000-000000000001", atMs: 4_200 };
+  const said = announcement(1, 1, NOW);
+  const [tool] = said.tools;
+  assert.ok(tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE);
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page(
+      [
+        {
+          turnId: turnId(1),
+          conversationId: OBSERVED,
+          source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
+          messages: [{ ...said, tools: [{ ...tool, spokenAt: SPOKEN }] }],
+        },
+      ],
+      "c1",
+      [MAIN, OBSERVED],
+    ),
+  );
+  const spokenAt = () => {
+    const held = sync.snapshot().groups[0]?.messages[0]?.tools[0];
+    assert.ok(held?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE);
+    return held.spokenAt;
+  };
+  assert.deepEqual(spokenAt(), SPOKEN);
+  // The offer and the claim replayed from before the fold, more to come: the
+  // page's spoken instant stands, since these are older than it, not newer.
+  const before = sync.revision;
+  sync.applyEvents([speech(1, 1, CONVERSATION_EVENT_KIND.SPEECH_OFFERED)], "e1", true);
+  sync.applyEvents([speech(1, 2, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)], "e2", true);
+  assert.deepEqual(spokenAt(), SPOKEN);
+  assert.equal(sync.revision, before);
+  // The spoken mark itself, and the read has caught up: the same instant, from the mark.
+  sync.applyEvents(
+    [speech(1, 3, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, OBSERVED, SPOKEN)],
+    "e3",
+    false,
+  );
+  assert.deepEqual(spokenAt(), SPOKEN);
+  // Caught up, a later expiry is the newest word and takes the instant with it.
+  sync.applyEvents([speech(1, 4, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED)], "e4", false);
+  assert.equal(spokenAt(), undefined);
+});
+
 test("the spoken mark's payload rides onto the announcement as where its speech began, and leaves with a later event", () => {
   const sync = new ConversationViewSync();
   sync.applyMessages(
