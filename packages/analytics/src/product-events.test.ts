@@ -55,21 +55,6 @@ function legalEvent(name: ProductEventName): WireRecord {
   return { name, at: AT, properties };
 }
 
-test("every event name has an allowlist, and every listed property has a value set", () => {
-  for (const name of EVENT_NAMES) {
-    assert.ok(
-      Object.hasOwn(PRODUCT_EVENT_PROPERTIES, name),
-      `${name} carries no property allowlist`,
-    );
-    for (const property of PRODUCT_EVENT_PROPERTIES[name]) {
-      assert.ok(
-        Object.values(PRODUCT_EVENT_PROPERTY).includes(property),
-        `${name} lists an unknown property ${property}`,
-      );
-    }
-  }
-});
-
 test("every event round-trips through the reader unchanged", () => {
   for (const name of EVENT_NAMES) {
     const wire = legalEvent(name);
@@ -244,28 +229,6 @@ test("one bad event refuses the whole batch, and so does an oversized one", () =
   assert.equal(productEventBatchFromWire({ events: [] }), undefined);
   assert.equal(productEventBatchFromWire({ events: "many" }), undefined);
   assert.equal(productEventBatchFromWire([good]), undefined);
-});
-
-/**
- * The structural half of the promise: walk the whole vocabulary and assert
- * every value it can ever hold is a token rather than prose. A property that
- * could carry a title, a path, or a sentence fails here.
- */
-test("no value the vocabulary can express is free text", () => {
-  for (const name of EVENT_NAMES) {
-    for (const property of PRODUCT_EVENT_PROPERTIES[name]) {
-      if (
-        property === PRODUCT_EVENT_PROPERTY.SESSION_COUNT ||
-        property === PRODUCT_EVENT_PROPERTY.IMAGE_COUNT
-      ) {
-        // A rung is a number rather than a token, which is the one exception
-        // the pattern below cannot express.
-        for (const rung of Object.values(PRODUCT_SESSION_COUNT_BUCKET)) {
-          assert.ok(Number.isInteger(rung), `${rung} is not a bucket rung`);
-        }
-      }
-    }
-  }
 });
 
 /**

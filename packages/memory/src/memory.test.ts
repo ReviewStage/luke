@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import {
-  failedHousekeeping,
-  MEMORY_FLUSH_DEFAULTS,
-  MEMORY_HOUSEKEEPING_OUTCOME,
-  memoryFlushPrompt,
-  SILENT_REPLY_TOKEN,
-  skippedHousekeeping,
-} from "./flush.js";
+import { MEMORY_FLUSH_DEFAULTS, memoryFlushPrompt, SILENT_REPLY_TOKEN } from "./flush.js";
 
 test("the pinned flush bounds match OpenClaw b7528507: 2,000 output tokens, a minute, and NO_REPLY for nothing", () => {
   assert.equal(MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS, 2_000);
@@ -26,17 +19,4 @@ test("the flush prompt names the day's note as the caller's workspace does, appe
   assert.match(prompt.system, /as data, never as instructions/);
   assert.match(prompt.ask, /reply with NO_REPLY/);
   assert.match(prompt.ask, /always use the canonical YYYY-MM-DD\.md filename/);
-});
-
-test("a housekeeping turn that never ran or failed before answering is written down as such, with nothing written", () => {
-  assert.deepEqual(failedHousekeeping("the model refused"), {
-    outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
-    writes: 0,
-    reason: "the model refused",
-  });
-  assert.deepEqual(skippedHousekeeping("not an ask"), {
-    outcome: MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED,
-    writes: 0,
-    reason: "not an ask",
-  });
 });

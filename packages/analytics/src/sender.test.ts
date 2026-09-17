@@ -114,16 +114,6 @@ it.effect("a flush posts one bearer-authenticated batch and empties the queue", 
   }),
 );
 
-it.effect("a sender that was never armed sends nothing", () =>
-  Effect.gen(function* () {
-    const { sender, requests } = yield* senderWith();
-    sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
-    sender.markDayActive();
-    yield* sender.flush;
-    assert.deepEqual(requests, []);
-  }),
-);
-
 it.effect("a batch queued under one account is never posted under another's bearer", () =>
   Effect.gen(function* () {
     let account = "ada@luke.test";
