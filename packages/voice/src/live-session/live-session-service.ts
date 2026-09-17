@@ -40,6 +40,7 @@ import {
   type TranscriptUtterance,
   thinkingAppend,
 } from "@sidecar/live";
+import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
 import type { ConversationEntry } from "@sidecar/session";
 import {
   Clock,
@@ -50,7 +51,6 @@ import {
   Fiber,
   FiberSet,
   Option,
-  Queue,
   Scope,
   Stream,
 } from "effect";
@@ -425,7 +425,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * own scope: the queue is how a synchronous callback starts an effect
    * without a runtime of its own.
    */
-  readonly #tasks: Queue.Queue<Effect.Effect<void>>;
+  /** The fibers the tasks run as, one each, all ended by the service's scope. */
+  readonly #fibers: FiberSet.FiberSet<void, unknown>;
+  /** The door a synchronous edge starts a task through: the queue forks it into the set. */
+  readonly #tasks: SerialQueue;
   #stopped = false;
   /**
    * The release still running for the session last declared over. A
@@ -462,14 +465,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   private constructor(
     options: LiveSessionServiceOptions<Delivery>,
     collaborators: { readonly brain: LiveBrain; readonly record: LiveRecord },
-    tasks: Queue.Queue<Effect.Effect<void>>,
+    running: { readonly fibers: FiberSet.FiberSet<void, unknown>; readonly tasks: SerialQueue },
     clock: Clock.Clock,
     sessions: Scope.Scope,
   ) {
     this.#options = options;
     this.#brain = collaborators.brain;
     this.#record = collaborators.record;
-    this.#tasks = tasks;
+    this.#fibers = running.fibers;
+    this.#tasks = running.tasks;
     this.#clock = clock;
     this.#sessions = sessions;
     this.#queue = new ProactiveQueue({ now: () => this.#now(), trace: this.#trace });
@@ -499,27 +503,25 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     Scope.Scope | LiveBrainTag | LiveRecordTag
   > {
     return Effect.gen(function* () {
-      const tasks = yield* Queue.unbounded<Effect.Effect<void>>();
-      const fibers = yield* FiberSet.make();
+      const fibers = yield* FiberSet.make<void>();
+      const tasks = yield* serialQueue({
+        onDefect: (cause) => Effect.logError("a live session task could not be started", cause),
+      });
       const collaborators = { brain: yield* LiveBrainTag, record: yield* LiveRecordTag };
       const scope = yield* Effect.scope;
-      const service = new LiveSessionService(
+      return new LiveSessionService(
         options,
         collaborators,
-        tasks,
+        { fibers, tasks },
         yield* Clock.Clock,
         yield* Scope.fork(scope),
       );
-      yield* Effect.forkScoped(
-        Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
-      );
-      return service;
     });
   }
 
   /** Begins what nothing waits for, on the service's own fiber. */
   #start(effect: Effect.Effect<void>): void {
-    Queue.offerUnsafe(this.#tasks, effect);
+    this.#tasks.offerUnsafe(Effect.asVoid(FiberSet.run(this.#fibers, effect)));
   }
 
   /** The instant this session reads everything by: its scope's own clock, which a test drives. */

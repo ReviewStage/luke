@@ -33,9 +33,9 @@ import {
   isRecord,
   isWireNumber,
   isWireString,
+  jsonRoundTrip,
   recordFromJsonLine,
   text,
-  unparsedWire,
   type WireRecord,
   type WireValue,
   wholeNumber,
@@ -340,7 +340,7 @@ function brainAvailableTools(entry: WireRecord): readonly WireRecord[] {
         return tool ? [tool] : [];
       })
     : [];
-  return toolDefinitions(unparsedWire(JSON.parse(JSON.stringify(definitions))));
+  return toolDefinitions(jsonRoundTrip(definitions));
 }
 
 /**

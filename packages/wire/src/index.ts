@@ -41,6 +41,7 @@ export {
   isWireBoolean,
   isWireNumber,
   isWireString,
+  jsonRoundTrip,
   nonNegativeNumber,
   positiveInteger,
   recordFromJsonLine,

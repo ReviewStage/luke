@@ -1,51 +1,19 @@
 /**
- * The settings store's body: the bytes on disk and the shape parsed out of
- * them, stated as an `Effect` over `effect`'s `FileSystem` and as an
- * `Result` rather than a throw. `readSettingsFileText` and
- * `writeSettingsFileAtomic` never construct a `FileSystem` layer themselves —
- * a caller with a runtime edge hands one in, the way the host's own
- * composition eventually will — and `parsePersistedSettingsEither` answers the
- * legacy parse failure ("Settings file is not an object") as a
- * `SettingsParseRefusal` instead of a thrown `Error`, keeping the same reason
- * text a caller already discards into `defaultPersistedSettings()`.
+ * The settings store's bytes on disk, stated as an `Effect` over `effect`'s
+ * `FileSystem` and `Path`. `readSettingsFileText` and `writeSettingsFileAtomic`
+ * never construct a layer themselves — a caller with a runtime edge hands the
+ * services in — and neither reads the bytes as settings: the record's shape
+ * is `PersistedSettingsSchema` in `../settings-store.ts`, beside the store
+ * that keeps it, so this module imports nothing of the store's.
  */
-import path from "node:path";
-import { Data, Effect, Result } from "effect";
+import { Effect, Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
-import { type PersistedSettings, parsePersistedSettingsThrowing } from "../settings-store.js";
 
 const SETTINGS_FILE_NAME = "settings.json";
 const SETTINGS_TEMPORARY_FILE_NAME = "settings.json.tmp";
 /** Owner read/write only: a settings file carries a decryption key's ciphertext. */
 const SETTINGS_FILE_MODE = 0o600;
-
-/** A stored file this build cannot read as settings; `reason` is the legacy message. */
-export class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal")<{
-  readonly reason: string;
-}> {
-  override get message(): string {
-    return this.reason;
-  }
-}
-
-/**
- * The settings file's shape, parsed once. A malformed file answers a refusal
- * rather than throwing; every caller today still folds that refusal into
- * `defaultPersistedSettings()`, exactly as the throwing form's catch already
- * did, so the fallback is a caller's decision and not this function's.
- */
-export function parsePersistedSettingsEither(
-  source: string,
-): Result.Result<PersistedSettings, SettingsParseRefusal> {
-  return Result.try({
-    try: () => parsePersistedSettingsThrowing(source),
-    catch: (error) =>
-      new SettingsParseRefusal({
-        reason: error instanceof Error ? error.message : "Settings file is not an object",
-      }),
-  });
-}
 
 function isIgnorableReadFailure(error: PlatformError): boolean {
   // v4 wraps the reason rather than tagging the error itself, and normalizes
@@ -73,8 +41,9 @@ function isIgnorableReadFailure(error: PlatformError): boolean {
  */
 export const readSettingsFileText = /* @__PURE__ */ Effect.fn("readSettingsFileText")(function* (
   directory: string,
-): Effect.fn.Return<string | undefined, PlatformError, FileSystem.FileSystem> {
+): Effect.fn.Return<string | undefined, PlatformError, FileSystem.FileSystem | Path.Path> {
   const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
   return yield* fileSystem
     .readFileString(path.join(directory, SETTINGS_FILE_NAME))
     .pipe(Effect.catchIf(isIgnorableReadFailure, () => Effect.succeed(undefined)));
@@ -92,8 +61,9 @@ export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("writeSettingsF
   function* (
     directory: string,
     contents: string,
-  ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem> {
+  ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem | Path.Path> {
     const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
     const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
     yield* fileSystem.makeDirectory(directory, { recursive: true });

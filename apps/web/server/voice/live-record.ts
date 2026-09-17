@@ -1,5 +1,6 @@
+import { serialQueue } from "@sidecar/runtime/effect";
 import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
-import { Deferred, Effect, Queue, type Schema, type Scope } from "effect";
+import { Deferred, Effect, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -57,11 +58,8 @@ interface HostedLiveRecord extends LiveRecord {
 
 type Write = Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
-/** One write waiting its turn at the writer, and what the caller that handed it over is waiting on. */
-interface PendingWrite {
-  readonly write: Write;
-  readonly landed: Deferred.Deferred<VoiceWriteResult, SqlError | Schema.SchemaError>;
-}
+/** What the caller that handed a write over is waiting on. */
+type Landed = Deferred.Deferred<VoiceWriteResult, SqlError | Schema.SchemaError>;
 
 export function hostedLiveRecord({
   writer,
@@ -72,18 +70,12 @@ export function hostedLiveRecord({
   Scope.Scope | SqlClient.SqlClient
 > {
   return Effect.gen(function* () {
-    const waiting = yield* Queue.unbounded<PendingWrite>();
-    let last: PendingWrite["landed"] | undefined;
-
-    yield* Effect.forkScoped(
-      Effect.forever(
-        Effect.flatMap(Queue.take(waiting), (pending) =>
-          Effect.flatMap(Effect.exit(pending.write), (written) =>
-            Deferred.done(pending.landed, written),
-          ),
-        ),
-      ),
-    );
+    // Every end of a write, its death included, is the exit its deferred is
+    // settled with, so the queue itself is handed nothing to catch.
+    const waiting = yield* serialQueue<SqlClient.SqlClient>({
+      onDefect: (cause) => Effect.logError("a live record write could not be settled", cause),
+    });
+    let last: Landed | undefined;
 
     /**
      * Every write of one session takes its turn, so a segment's place in the
@@ -93,7 +85,11 @@ export function hostedLiveRecord({
     function enqueue(write: Write): Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError> {
       const landed = Deferred.makeUnsafe<VoiceWriteResult, SqlError | Schema.SchemaError>();
       last = landed;
-      Queue.offerUnsafe(waiting, { write, landed });
+      waiting.offerUnsafe(
+        Effect.flatMap(Effect.exit(write), (written) =>
+          Effect.asVoid(Deferred.done(landed, written)),
+        ),
+      );
       return Deferred.await(landed);
     }
 

@@ -175,6 +175,20 @@ export function valueFromJsonText(text: string): WireValue {
   }
 }
 
+/**
+ * A value as JSON carries it: `undefined` fields dropped, prototypes and
+ * boxed primitives gone, which is the plain-object form a schema emitted by
+ * this build or a message stored by it is read back through. A wire value
+ * round-trips to itself; anything else comes back unparsed, for the wire
+ * guards to read.
+ */
+export function jsonRoundTrip(value: WireValue): WireValue;
+export function jsonRoundTrip<Value>(value: Value): UnparsedWireValue;
+export function jsonRoundTrip<Value>(value: Value): UnparsedWireValue {
+  // SAFETY: the text is JSON.stringify's own serialization of the value; parsing it back yields a wire value.
+  return JSON.parse(JSON.stringify(value)) as UnparsedWireValue;
+}
+
 export function recordFromJsonLine(line: string): WireRecord | undefined {
   const parsed = valueFromJsonText(line);
   return isRecord(parsed) ? parsed : undefined;

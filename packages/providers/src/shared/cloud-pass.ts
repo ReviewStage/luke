@@ -1,3 +1,4 @@
+import { catchAllButInterrupt, unlessInterrupted } from "@sidecar/runtime/effect";
 import {
   ACTION_RESULT_STATUS,
   type ProviderActionResult,
@@ -249,11 +250,9 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * for the action that reads the credential again at its own moment.
    */
   const readApiKey = (): Effect.Effect<string | undefined> =>
-    Effect.catchCause(input.readApiKey(), (cause) =>
-      // A caller ending the fiber is not a settings read that failed, so an
-      // interruption is re-raised rather than read as a missing credential.
-      Cause.hasInterruptsOnly(cause) ? Effect.failCause(cause) : Effect.succeed(undefined),
-    );
+    // A caller ending the fiber is not a settings read that failed, so an
+    // interruption is re-raised rather than read as a missing credential.
+    catchAllButInterrupt(input.readApiKey(), () => Effect.succeed(undefined));
 
   const forgetObservedState = (): void => {
     // A pass still in flight was started under a credential that no longer
@@ -589,7 +588,8 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         // server failure, or a rate limit that outlasted its backoff, keeps
         // the previous snapshot until the next attempt. A superseded pass
         // reports on a credential that no longer stands, so its rejection
-        // says nothing about the current one.
+        // says nothing about the current one. A caller ending the pass is
+        // none of these and is re-raised as it came, below.
         if (pass !== collectPass) return Effect.succeed(observations);
         const failure = Cause.findErrorOption(cause);
         if (Option.isSome(failure)) {
@@ -600,15 +600,17 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         // Anything else is a bug in this pass — a TypeError thrown by an
         // adapter's parsing is not a network blip, and must not keep serving
         // the stale snapshot with no log, counter, or hook.
-        const squashed = Cause.squash(cause);
-        input.onDiagnostic?.(
-          ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE,
-          squashed instanceof Error ? squashed : new Error(String(squashed)),
-        );
-        // SAFETY: `failureOption` answered `None` above, so this cause carries
-        // no typed `AdapterFailure` — only a defect or an interruption — and
-        // rethrowing it can never join the typed failure channel below.
-        return Effect.failCause(cause as Cause.Cause<never>);
+        return unlessInterrupted(cause, (other) => {
+          const squashed = Cause.squash(other);
+          input.onDiagnostic?.(
+            ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE,
+            squashed instanceof Error ? squashed : new Error(String(squashed)),
+          );
+          // SAFETY: `findErrorOption` answered `None` above, so this cause carries
+          // no typed `AdapterFailure` — only a defect — and rethrowing it can never
+          // join the typed failure channel below.
+          return Effect.failCause(other as Cause.Cause<never>);
+        });
       },
     );
   });
