@@ -119,7 +119,8 @@ function reachesConversationHead({ scrollTop }: ConversationScrollMetrics): bool
   return scrollTop <= HISTORY_REACH_SLACK_PX;
 }
 
-function scrollMetrics(element: HTMLDivElement): ConversationScrollMetrics {
+/** The scroller's measure, read once so a decision is made over one instant's numbers. */
+export function scrollMetrics(element: HTMLDivElement): ConversationScrollMetrics {
   return {
     scrollTop: element.scrollTop,
     scrollHeight: element.scrollHeight,

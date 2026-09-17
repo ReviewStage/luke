@@ -12,10 +12,15 @@ import { afterEach, test } from "vitest";
 import {
   AgentsPanel,
   AgentTranscriptPanel,
+  CONVERSATION_PAGE,
   childTranscriptRow,
+  conversationSearchable,
+  ownTranscript,
   type TranscriptRow,
   transcriptListed,
 } from "./agents-panel";
+import { CONVERSATION_SEARCH_INPUT_ID, searchConversation } from "./conversation-search";
+import { CONVERSATION_MESSAGE_ATTRIBUTE, conversationSearchEntries } from "./conversation-turns";
 import {
   FIXTURE_NOW,
   FIXTURE_ROSTER,
@@ -655,4 +660,387 @@ test("the transcript's back control returns to the list", () => {
     back.click();
   });
   assert.equal(backs, 1);
+});
+
+/** The whole fixture thread as a child's transcript, with a query the tests type and the message its first shown result names. */
+const TRANSCRIPT_TURNS = fixtureConversationTurns();
+
+const QUERY = "session";
+
+const FIRST_HIT = searchConversation(conversationSearchEntries(TRANSCRIPT_TURNS), QUERY)
+  ?.groups[0]?.[0];
+
+if (FIRST_HIT === undefined) throw new Error("The fixtures hold no match for the test's query.");
+
+const CHILD_TRANSCRIPT = {
+  conversationId: OPEN_CHILD.conversationId,
+  kind: TRANSCRIPT_KIND.CHILD,
+  settled: true,
+  groups: TRANSCRIPT_TURNS,
+} as const;
+
+/**
+ * The browser's frame schedule and layout, stood in for the way the thread
+ * panel's search tests stand them in: nothing runs until a test says a frame
+ * passed; an element is drawn visibly unless it stands in the transcript
+ * behind the results; and each scroll into view is recorded rather than
+ * performed, with whether the row still stood behind the results when asked.
+ */
+function stagedFrames() {
+  const pending = new Map<number, () => void>();
+  let next = 1;
+  window.requestAnimationFrame = (callback) => {
+    const handle = next++;
+    pending.set(handle, () => callback(0));
+    return handle;
+  };
+  window.cancelAnimationFrame = (handle) => {
+    pending.delete(handle);
+  };
+  const scrolled: { element: Element; options: unknown; behind: boolean }[] = [];
+  HTMLElement.prototype.checkVisibility = function checkVisibility(
+    this: HTMLElement,
+    options?: CheckVisibilityOptions,
+  ) {
+    return !(options?.visibilityProperty === true && this.closest("[data-behind-results]"));
+  };
+  Element.prototype.scrollIntoView = function scrollIntoView(
+    this: Element,
+    options?: boolean | ScrollIntoViewOptions,
+  ) {
+    scrolled.push({
+      element: this,
+      options,
+      behind: this.closest("[data-behind-results]") !== null,
+    });
+  };
+  return {
+    scrolled,
+    tick(): boolean {
+      const entry = [...pending.entries()].at(-1);
+      if (!entry) return false;
+      pending.delete(entry[0]);
+      entry[1]();
+      return true;
+    },
+  };
+}
+
+function mountTranscript(props: Partial<TranscriptProps> = {}) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = (next: Partial<TranscriptProps>) => {
+    act(() => {
+      root.render(
+        createElement(AgentTranscriptPanel, {
+          open: OPEN_CHILD,
+          transcript: CHILD_TRANSCRIPT,
+          roster: FIXTURE_ROSTER,
+          now: FIXTURE_NOW,
+          onOpenChat: () => undefined,
+          onBack: () => undefined,
+          searchOpen: true,
+          ...next,
+        }),
+      );
+    });
+  };
+  render(props);
+  return { container, render };
+}
+
+function searchField(container: ParentNode): HTMLInputElement {
+  const input = container.querySelector(`#${CONVERSATION_SEARCH_INPUT_ID}`);
+  assert.ok(input instanceof HTMLInputElement, "the search field is drawn");
+  return input;
+}
+
+/** Types past React's own value tracking, so the input event reads as a change. */
+function type(input: HTMLInputElement, value: string): void {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function press(input: HTMLInputElement, key: string): void {
+  act(() => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+function resultPresses(container: ParentNode): HTMLButtonElement[] {
+  return [
+    ...container.querySelectorAll(".conversation-search-results .conversation-words-press"),
+  ].filter((element): element is HTMLButtonElement => element instanceof HTMLButtonElement);
+}
+
+/** The transcript's list while it stands forward; nothing while the results stand in its place. */
+function transcriptList(container: ParentNode): Element | null {
+  return container.querySelector(
+    ".conversation-thread:not([data-behind-results]) ol.conversation-list:not(.conversation-search-results)",
+  );
+}
+
+function transcriptScroller(container: ParentNode): HTMLDivElement {
+  const element = container.querySelector(".conversation-scroll:not(.conversation-search-scroll)");
+  assert.ok(element instanceof HTMLDivElement, "the transcript's scroller is drawn");
+  return element;
+}
+
+/** jsdom lays nothing out: a fixed height of transcript in a fixed view, and a position each scroller keeps for itself. */
+function laidOut(scrollHeight: number, clientHeight: number) {
+  const positions = new WeakMap<Element, number>();
+  Object.defineProperties(HTMLElement.prototype, {
+    scrollTop: {
+      configurable: true,
+      get(this: Element) {
+        return positions.get(this) ?? 0;
+      },
+      set(this: Element, value: number) {
+        positions.set(this, value);
+      },
+    },
+    scrollHeight: { configurable: true, get: () => scrollHeight },
+    clientHeight: { configurable: true, get: () => clientHeight },
+  });
+}
+
+function scrollTo(element: HTMLDivElement, scrollTop: number): void {
+  act(() => {
+    element.scrollTop = scrollTop;
+    element.dispatchEvent(new Event("scroll"));
+  });
+}
+
+test("a page has words to search exactly when it draws turns: the thread with turns, or a transcript whose own read has landed with turns", () => {
+  const thread = { groups: TRANSCRIPT_TURNS, settled: true };
+  const empty = { groups: [], settled: true };
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.THREAD, thread, undefined, undefined),
+    true,
+  );
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.THREAD, empty, undefined, undefined),
+    false,
+  );
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.THREAD, undefined, undefined, undefined),
+    false,
+  );
+  // The Agents list has no words of its own, whatever the thread or a transcript holds.
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.AGENTS, thread, OPEN_CHILD, CHILD_TRANSCRIPT),
+    false,
+  );
+  // A transcript page searches its own transcript once read with turns, and the thread has no say.
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.TRANSCRIPT, empty, OPEN_CHILD, CHILD_TRANSCRIPT),
+    true,
+  );
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.TRANSCRIPT, thread, OPEN_CHILD, undefined),
+    false,
+  );
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.TRANSCRIPT, thread, undefined, CHILD_TRANSCRIPT),
+    false,
+  );
+  // Still loading, read with nothing, another conversation's, or this one's under another kind: nothing to search yet.
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.TRANSCRIPT, thread, OPEN_CHILD, {
+      ...CHILD_TRANSCRIPT,
+      settled: false,
+      groups: [],
+    }),
+    false,
+  );
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.TRANSCRIPT, thread, OPEN_CHILD, {
+      ...CHILD_TRANSCRIPT,
+      groups: [],
+    }),
+    false,
+  );
+  const other = { ...CHILD_TRANSCRIPT, conversationId: AGENT_ID.HELD };
+  assert.equal(ownTranscript(OPEN_CHILD, other), undefined);
+  assert.equal(
+    conversationSearchable(CONVERSATION_PAGE.TRANSCRIPT, thread, OPEN_CHILD, other),
+    false,
+  );
+  const asAgent = { ...CHILD_TRANSCRIPT, kind: TRANSCRIPT_KIND.OBSERVED };
+  assert.equal(ownTranscript(OPEN_CHILD, asAgent), undefined);
+  assert.equal(ownTranscript(OPEN_CHILD, CHILD_TRANSCRIPT), CHILD_TRANSCRIPT);
+});
+
+test("the transcript's search field stands under the header while open and turns are drawn, worded for a transcript, and a query puts the results in the transcript's place", () => {
+  // No field over a closed search, a transcript still loading, or one read with nothing.
+  assert.equal(
+    mountTranscript({ searchOpen: false }).container.querySelector(
+      `#${CONVERSATION_SEARCH_INPUT_ID}`,
+    ),
+    null,
+  );
+  assert.equal(
+    mountTranscript({ transcript: undefined }).container.querySelector(
+      `#${CONVERSATION_SEARCH_INPUT_ID}`,
+    ),
+    null,
+  );
+  assert.equal(
+    mountTranscript({ transcript: { ...CHILD_TRANSCRIPT, groups: [] } }).container.querySelector(
+      `#${CONVERSATION_SEARCH_INPUT_ID}`,
+    ),
+    null,
+  );
+  const { container } = mountTranscript();
+  const input = searchField(container);
+  assert.equal(input.getAttribute("aria-label"), "Search transcript");
+  assert.equal(input.placeholder, "Search transcript…");
+  // Under the header, so the way back is never behind the pill, and inside the blocked root.
+  const header = container.querySelector(".agents-header");
+  const pill = input.closest(".conversation-search");
+  assert.ok(header && pill);
+  assert.ok(header.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const blocked = container.querySelector(".ph-no-capture");
+  assert.ok(blocked?.contains(input));
+  assert.ok(transcriptList(container));
+  type(input, QUERY);
+  const rows = resultPresses(container);
+  assert.ok(rows.length >= 2);
+  assert.ok(rows.every((row) => blocked?.contains(row)));
+  assert.equal(transcriptList(container), null, "the results stand in the transcript's place");
+  assert.equal(
+    transcriptScroller(container)
+      .closest(".conversation-thread")
+      ?.getAttribute("data-behind-results"),
+    "true",
+  );
+  assert.match(container.querySelector(".session-search-count")?.textContent ?? "", /^\d+ of \d+$/);
+  // The results carry no rating offer the transcript's own rows would not: no composer is offered here.
+  type(input, "zeta");
+  assert.equal(resultPresses(container).length, 0);
+  assert.equal(container.querySelector(".session-search-count")?.textContent, "No matches");
+  assert.ok(container.querySelector(".empty-state")?.textContent?.includes("No messages match"));
+});
+
+test("pressing a transcript result brings the transcript back marked, lands on the message, and the caret back in the field brings the results back", () => {
+  const stage = stagedFrames();
+  const engaged: boolean[] = [];
+  const { container } = mountTranscript({ onSearchEngaged: (value) => engaged.push(value) });
+  const input = searchField(container);
+  type(input, QUERY);
+  const [first] = resultPresses(container);
+  assert.ok(first);
+  act(() => {
+    first.click();
+  });
+  assert.ok(transcriptList(container));
+  assert.equal(resultPresses(container).length, 0);
+  assert.ok(container.querySelectorAll("mark.row-match").length >= 1);
+  const landed = [...container.querySelectorAll('[data-search-landed="true"]')];
+  assert.ok(landed.length >= 1);
+  assert.ok(
+    landed.every((row) => row.getAttribute(CONVERSATION_MESSAGE_ATTRIBUTE) === FIRST_HIT.messageId),
+  );
+  assert.equal(input.value, QUERY);
+  // The seek waits out the swap, then centres the message's first row in the transcript that came forward.
+  assert.equal(stage.scrolled.length, 0);
+  for (let frame = 0; frame < 60 && stage.scrolled.length === 0; frame += 1) stage.tick();
+  assert.equal(stage.scrolled.length, 1);
+  assert.equal(stage.scrolled[0]?.behind, false);
+  assert.deepEqual(stage.scrolled[0]?.options, { block: "center", inline: "nearest" });
+  assert.equal(
+    stage.scrolled[0]?.element.getAttribute(CONVERSATION_MESSAGE_ATTRIBUTE),
+    FIRST_HIT.messageId,
+  );
+  act(() => {
+    input.focus();
+    input.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  assert.ok(engaged.includes(true));
+  assert.ok(resultPresses(container).length >= 2);
+  assert.equal(transcriptList(container), null);
+});
+
+test("Enter in the transcript's field lands on the first result and leaves the field; Escape clears, then closes; a closed field drops its query", () => {
+  stagedFrames();
+  const closes: number[] = [];
+  const { container, render } = mountTranscript({ onSearchClose: () => closes.push(1) });
+  const input = searchField(container);
+  press(input, "Enter");
+  assert.ok(transcriptList(container), "Enter over no search changes nothing");
+  type(input, QUERY);
+  act(() => {
+    input.focus();
+  });
+  press(input, "Enter");
+  assert.ok(transcriptList(container));
+  assert.equal(
+    container
+      .querySelector('[data-search-landed="true"]')
+      ?.getAttribute(CONVERSATION_MESSAGE_ATTRIBUTE),
+    FIRST_HIT.messageId,
+  );
+  assert.notEqual(document.activeElement, input);
+  // Escape clears the held query first, and only an empty field asks to close.
+  press(input, "Escape");
+  assert.equal(input.value, "");
+  assert.equal(container.querySelectorAll("mark.row-match").length, 0);
+  assert.equal(closes.length, 0);
+  press(input, "Escape");
+  assert.equal(closes.length, 1);
+  // A query does not outlive the field it was typed in.
+  type(input, QUERY);
+  assert.ok(resultPresses(container).length >= 1);
+  render({ searchOpen: false, onSearchClose: () => closes.push(1) });
+  assert.equal(container.querySelector(`#${CONVERSATION_SEARCH_INPUT_ID}`), null);
+  assert.ok(transcriptList(container));
+  assert.equal(container.querySelectorAll("mark.row-match").length, 0);
+  render({ searchOpen: true, onSearchClose: () => closes.push(1) });
+  assert.equal(searchField(container).value, "");
+});
+
+test("the transcript keeps the reader's place behind the results: a reader on the tail is seated there again, one who scrolled up is left where they stood", () => {
+  stagedFrames();
+  laidOut(1000, 300);
+  const { container, render } = mountTranscript({ searchOpen: false });
+  const box = transcriptScroller(container);
+  // The page opened at its tail; the pill opening seats a reader there again.
+  assert.equal(box.scrollTop, 1000);
+  box.scrollTop = 700;
+  render({ searchOpen: true });
+  assert.equal(box.scrollTop, 1000);
+  const input = searchField(container);
+  // The results come and go with the reader still on the tail.
+  box.scrollTop = 700;
+  type(input, QUERY);
+  assert.equal(
+    transcriptScroller(container),
+    box,
+    "the transcript stands behind, its scroller the same",
+  );
+  press(input, "Escape");
+  assert.ok(transcriptList(container));
+  assert.equal(box.scrollTop, 1000);
+  // A reader who scrolled up is where they were.
+  scrollTo(box, 120);
+  type(input, QUERY);
+  press(input, "Escape");
+  assert.equal(box.scrollTop, 120);
+  render({ searchOpen: false });
+  assert.equal(box.scrollTop, 120);
+  // A landing is the reader's own place: nothing but the seek moves the scroller.
+  render({ searchOpen: true });
+  scrollTo(box, 1000);
+  type(searchField(container), QUERY);
+  box.scrollTop = 700;
+  const [result] = resultPresses(container);
+  assert.ok(result);
+  act(() => {
+    result.click();
+  });
+  assert.equal(transcriptScroller(container), box);
+  assert.equal(box.scrollTop, 700);
 });

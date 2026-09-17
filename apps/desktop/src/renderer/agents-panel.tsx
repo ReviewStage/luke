@@ -12,6 +12,7 @@ import {
 } from "@sidecar/panel";
 import {
   CONVERSATION_VIEW_SOURCE,
+  type ConversationViewSnapshot,
   SESSION_URGENCY,
   type SessionIdentity,
   type SessionUrgency,
@@ -19,12 +20,29 @@ import {
 } from "@sidecar/session";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { TRANSCRIPT_KIND, type TranscriptKind } from "@sidecar/wire";
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/agents";
 import { agentSession, agentTitle, subagentTitle } from "./agent-title";
-import { ConversationUnreadableNotice } from "./conversation-panel";
+import {
+  ConversationUnreadableNotice,
+  followsConversationTail,
+  scrollMetrics,
+} from "./conversation-panel";
+import {
+  CONVERSATION_SEARCH_SUBJECT,
+  ConversationSearch,
+  ConversationSearchResults,
+  landOnConversationMessage,
+  searchConversation,
+} from "./conversation-search";
 import type { ToolRowChip } from "./conversation-tool-row";
-import { ConversationTurns, SessionChip } from "./conversation-turns";
+import {
+  type ConversationSearchEntry,
+  type ConversationSearchMarks,
+  ConversationTurns,
+  conversationSearchEntries,
+  SessionChip,
+} from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
 
@@ -125,6 +143,39 @@ export function transcriptListed(
   const rows: readonly { readonly id: string }[] =
     row.kind === TRANSCRIPT_KIND.CHILD ? subagents.children : agents.agents;
   return rows.some((listed) => listed.id === row.conversationId);
+}
+
+/**
+ * The transcript the host holds open, where it is the row's own: a transcript
+ * still standing for another conversation, or for this one under another
+ * kind, is the one this open replaced, and is not this page's.
+ */
+export function ownTranscript(
+  open: TranscriptRow,
+  transcript: TranscriptSnapshot | undefined,
+): TranscriptSnapshot | undefined {
+  return transcript?.conversationId === open.conversationId && transcript.kind === open.kind
+    ? transcript
+    : undefined;
+}
+
+/**
+ * Whether the Conversation tab's showing page has words to search: the
+ * thread with turns in it, or a transcript page whose own transcript has
+ * landed with turns. The Agents list has none; a transcript still loading, or
+ * read with nothing, has none yet. The app offers the search on exactly these
+ * terms and closes it the render they stop holding, by the sessions search's
+ * own rule that a field nobody can see must not hold a query.
+ */
+export function conversationSearchable(
+  page: ConversationPage,
+  conversation: ConversationViewSnapshot | undefined,
+  transcriptOpen: TranscriptRow | undefined,
+  transcript: TranscriptSnapshot | undefined,
+): boolean {
+  if (page === CONVERSATION_PAGE.THREAD) return (conversation?.groups.length ?? 0) > 0;
+  if (page !== CONVERSATION_PAGE.TRANSCRIPT || transcriptOpen === undefined) return false;
+  return (ownTranscript(transcriptOpen, transcript)?.groups.length ?? 0) > 0;
 }
 
 /** The row an agent's transcript is opened from, named from the roster by session identity, which it carries for the header's chip. */
@@ -407,6 +458,15 @@ export function AgentsPanel({
  * a reader who scrolled up where they stand. Mounted under the thread's own
  * root, ids and blocked class alike, because the words are the developer's and
  * belong in no optional recording.
+ *
+ * The page searches as the thread does, through the thread's own pieces: the
+ * same pill under the header, the matching messages drawn as the transcript
+ * draws them in its place, and a pressed result bringing the transcript back
+ * with every match marked and the named message scrolled to the middle of the
+ * view. The transcript stands behind the results while they show, so its
+ * scroller keeps the reader's place; a reader on the tail is seated there
+ * again as the pill and the results come and go, since each takes its room
+ * from the transcript and there is no jump control here to offer the way down.
  */
 export function AgentTranscriptPanel({
   open,
@@ -415,6 +475,9 @@ export function AgentTranscriptPanel({
   now,
   onOpenChat,
   onBack,
+  searchOpen = false,
+  onSearchClose,
+  onSearchEngaged,
 }: {
   /** The row the page was opened from: which conversation, and the header's words for it. */
   open: TranscriptRow;
@@ -428,16 +491,53 @@ export function AgentTranscriptPanel({
   onOpenChat: (identity: SessionIdentity) => void;
   /** Returns the tab to the Agents list. */
   onBack: () => void;
+  /** Whether the search field stands under the header; the app opens and closes it, as it does the thread's. */
+  searchOpen?: boolean;
+  /** The field's own way out — Escape on an empty query. */
+  onSearchClose?: () => void;
+  /** Reports someone being part-way through a search, so the panel holds for them. */
+  onSearchEngaged?: (engaged: boolean) => void;
 }): React.JSX.Element {
-  // A transcript still standing for another conversation, or for this one
-  // under another kind, is the one this open replaced; it is not this page's.
-  const own =
-    transcript?.conversationId === open.conversationId && transcript.kind === open.kind
-      ? transcript
-      : undefined;
+  const own = ownTranscript(open, transcript);
   const groups = own?.groups ?? [];
   const scroller = useRef<HTMLDivElement | null>(null);
   const shown = useRef<{ row: TranscriptRow; count: number } | undefined>(undefined);
+  // Whether the reader stands on the tail, read off their own scrolling; a
+  // page opens on its tail. What it decides is only whether the search's
+  // chrome coming and going seats them there again.
+  const onTail = useRef(true);
+  // The query someone typed into the search field, and the message a pressed
+  // result landed the transcript on, held on the thread panel's own terms and
+  // corrected during the render that discovers the field closed, because a
+  // query belongs to the field it was typed in.
+  const [query, setQuery] = useState("");
+  const [landed, setLanded] = useState<string | undefined>(undefined);
+  if (!searchOpen && (query !== "" || landed !== undefined)) {
+    setQuery("");
+    setLanded(undefined);
+  }
+  const search =
+    searchOpen && query !== ""
+      ? searchConversation(conversationSearchEntries(groups), query)
+      : undefined;
+  const marks: ConversationSearchMarks | undefined =
+    search === undefined ? undefined : { tokens: search.tokens, landed };
+  // The results stand in the transcript's place until one is pressed, and the
+  // transcript stands behind them, laid out and unseen, so its scroller keeps
+  // the reader's place. A changed query is a new question, so it brings them back.
+  const resultsShowing = search !== undefined && landed === undefined;
+  const changeQuery = (next: string) => {
+    setQuery(next);
+    setLanded(undefined);
+  };
+  // A pressed result is the search answered: the transcript comes forward
+  // with the query's words marked, and the view follows to the message itself.
+  // Fire-and-forget like the thread's landing — the seek gives itself up after
+  // its own frame limit.
+  const land = (entry: ConversationSearchEntry) => {
+    setLanded(entry.messageId);
+    landOnConversationMessage(entry.messageId);
+  };
 
   // Keyed on the row and the count rather than the snapshot: a re-read that
   // hands back the same turns as a new array must not move a reader who
@@ -452,6 +552,18 @@ export function AgentTranscriptPanel({
     if (!element || groups.length === 0) return;
     element.scrollTop = element.scrollHeight;
   }, [open, groups.length]);
+
+  // The pill takes its room from the transcript, and the transcript standing
+  // behind the results is sized to the whole page, so a reader on the tail
+  // would be left a pill's height short of it as the field opens and closes
+  // and as the results come and go; they are seated there again instead. A
+  // landing is the reader's own place, and the seek that follows it is what
+  // moves the scroller then.
+  useLayoutEffect(() => {
+    const element = scroller.current;
+    if (!element || !onTail.current || landed !== undefined) return;
+    element.scrollTop = element.scrollHeight;
+  }, [searchOpen, resultsShowing]);
 
   return (
     <section
@@ -477,13 +589,45 @@ export function AgentTranscriptPanel({
           {STATUS_WORD[open.status]}
         </span>
       </AgentsPageHeader>
+      {searchOpen && groups.length > 0 ? (
+        <ConversationSearch
+          query={query}
+          search={search}
+          subject={CONVERSATION_SEARCH_SUBJECT.TRANSCRIPT}
+          onQueryChange={changeQuery}
+          onEnter={() => {
+            // The first result shown: the newest group's oldest message.
+            const first = search?.groups[0]?.[0];
+            if (first !== undefined) land(first);
+          }}
+          onClose={() => onSearchClose?.()}
+          onEngagedChange={(engaged) => {
+            onSearchEngaged?.(engaged);
+            // The caret back in the field is someone asking to see the
+            // results again, whatever message the last press landed on.
+            if (engaged) setLanded(undefined);
+          }}
+        />
+      ) : null}
+      {search !== undefined && resultsShowing ? (
+        <ConversationSearchResults search={search} now={now} onOpen={land} />
+      ) : null}
       {groups.length === 0 && own?.settled ? (
         <div className="conversation-empty">
           <strong>Nothing said yet</strong>
         </div>
       ) : (
-        <div className="conversation-thread">
-          <div className="conversation-scroll" ref={scroller}>
+        <div
+          className="conversation-thread"
+          data-behind-results={resultsShowing ? "true" : undefined}
+        >
+          <div
+            className="conversation-scroll"
+            ref={scroller}
+            onScroll={(event) => {
+              onTail.current = followsConversationTail(scrollMetrics(event.currentTarget));
+            }}
+          >
             {groups.length > 0 ? (
               <div className="conversation-pull">
                 <ConversationTurns
@@ -491,6 +635,7 @@ export function AgentTranscriptPanel({
                   roster={roster}
                   now={now}
                   onOpenChat={onOpenChat}
+                  search={marks}
                 />
               </div>
             ) : (
