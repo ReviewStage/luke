@@ -1308,9 +1308,9 @@ open an envelope; the rows it dropped on production were untouched seeds an
 account's next turn writes again.
 
 The conversation tables — `conversations`, `messages`, `turns`, `events`,
-and `provider_cursors` — are the shape `plan/storage-plan.md` on the
-`orchestration/storage-plan` branch settles on, less the `prompts` table it
-drew and less the `tool_sets` table `0039_dead_tool_sets` dropped: a turn keeps
+and `provider_cursors` — are the shape the LUKE-95 storage plan settled on,
+less the `prompts` table it drew and less the `tool_sets` table
+`0039_dead_tool_sets` dropped: a turn keeps
 the composed prompt's hash and the tool set's and nothing else of either,
 because the prompt embeds the developer's notebook and nothing replays it, and
 the tool set is the build's own and read from the build that offered it. A conversation row names its

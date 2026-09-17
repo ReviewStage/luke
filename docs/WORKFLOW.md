@@ -13,8 +13,7 @@
    and inspect the page in a browser. For desktop motion changes, run
    `pnpm evidence:record` on a physical Mac and inspect the generated MP4 or GIF
    before publishing it. CI cannot run `verify.sh` for you: its jobs are Linux
-   only, and by Dean's ruling of 2026-09-11 (recorded on
-   `orchestration/storage-plan` at `e7b57a9a`) no macOS job is coming back. The
+   only, and by Dean's ruling of 2026-09-11 no macOS job is coming back. The
    release rehearsal, `release.yml`'s `macos-15` job on a tag push, is the only
    Mac gate, so do not wait for a macOS check and do not read a green PR as
    covering the Mac.
