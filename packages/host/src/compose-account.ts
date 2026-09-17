@@ -26,6 +26,7 @@ import {
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { Config, Effect, MutableRef, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -90,7 +91,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("composeAccount")(functi
 ): Effect.fn.Return<
   AccountComposer,
   never,
-  HostKernelTag | Environment | AppIdentity | FileSystem.FileSystem | Scope.Scope
+  HostKernelTag | Environment | AppIdentity | FileSystem.FileSystem | Path.Path | Scope.Scope
 > {
   const { settings } = dependencies;
   const kernel = yield* HostKernelTag;

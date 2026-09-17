@@ -70,6 +70,9 @@ const AggregateColumnSchema = Schema.Union([
 ]);
 const NullableAggregateColumnSchema = Schema.NullOr(AggregateColumnSchema);
 
+/** The `role` column as the auth plugin writes it: one of the roles this build knows, or none yet. */
+const UserRoleSchema = Schema.NullOr(Schema.Literals(Object.values(USER_ROLE)));
+
 const CountRowSchema = Schema.Struct({ value: AggregateColumnSchema });
 
 const AdminMetricsScopeSchema = Schema.Literals([
@@ -92,12 +95,6 @@ function keptByScope(scope: AdminMetricsScope) {
 
 /** A `count` row a query always answers with, or the zero an absent row means. */
 const countOf = Option.match({ onNone: () => 0, onSome: (row: { value: number }) => row.value });
-
-/** Postgres returns a `count` as a number and a bigint `sum` as a string or null. */
-function toNumber(value: number | string | null | undefined): number {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
 
 /**
  * Whether the database answers at all, and how long it took. A failure is the
@@ -226,7 +223,7 @@ const TopUserRowSchema = Schema.Struct({
   name: Schema.String,
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
-  role: Schema.NullOr(Schema.String),
+  role: UserRoleSchema,
   activeDays: AggregateColumnSchema,
   lastActiveDay: Schema.String,
   calls: NullableAggregateColumnSchema,
@@ -280,7 +277,7 @@ const readUsageMetrics = /* @__PURE__ */ Effect.fn("readUsageMetrics")(function*
   );
 
   const byDay = new Map<string, number>();
-  for (const row of usageRows) byDay.set(row.day, toNumber(row.calls));
+  for (const row of usageRows) byDay.set(row.day, row.calls ?? 0);
 
   const topUsers: AdminTopUser[] = topUserRows.map((row) => ({
     id: row.id,
@@ -290,7 +287,7 @@ const readUsageMetrics = /* @__PURE__ */ Effect.fn("readUsageMetrics")(function*
     admin: isAdminRole(row.role),
     activeDays: row.activeDays,
     lastActiveDay: row.lastActiveDay,
-    calls: toNumber(row.calls),
+    calls: row.calls ?? 0,
   }));
 
   const countOf = Option.match({
@@ -531,7 +528,7 @@ const AccountRowSchema = Schema.Struct({
   name: Schema.String,
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
-  role: Schema.NullOr(Schema.String),
+  role: UserRoleSchema,
   createdAt: InstantColumnSchema,
 });
 
@@ -611,7 +608,7 @@ const DayAccountRowSchema = Schema.Struct({
   name: Schema.String,
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
-  role: Schema.NullOr(Schema.String),
+  role: UserRoleSchema,
   calls: AggregateColumnSchema,
 });
 
@@ -721,7 +718,7 @@ const RosterRowSchema = Schema.Struct({
   name: Schema.String,
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
-  role: Schema.NullOr(Schema.String),
+  role: UserRoleSchema,
   createdAt: InstantColumnSchema,
   activeDays: AggregateColumnSchema,
   lastActiveDay: Schema.NullOr(Schema.String),
@@ -881,7 +878,7 @@ export function readAdminUserSource(input: {
           }),
           calls: Option.match(allTime, {
             onNone: () => 0,
-            onSome: (totals) => toNumber(totals.calls),
+            onSome: (totals) => totals.calls ?? 0,
           }),
         },
         quotaLimitedDaysWindow: countOf(quotaLimited),
@@ -921,7 +918,7 @@ export function readAdminDaySource(input: {
       })),
       totals: {
         accounts: Option.match(totals, { onNone: () => 0, onSome: (row) => row.accounts }),
-        calls: Option.match(totals, { onNone: () => 0, onSome: (row) => toNumber(row.calls) }),
+        calls: Option.match(totals, { onNone: () => 0, onSome: (row) => row.calls ?? 0 }),
       },
     };
   });
@@ -988,7 +985,7 @@ export function readAdminUsersSource(input: {
           sessionSeenByUser.get(row.id) ?? null,
           lastUsageDayByUser.get(row.id) ?? null,
         ),
-        calls: toNumber(row.calls),
+        calls: row.calls ?? 0,
         favorite: row.favorite === true,
       })),
     };

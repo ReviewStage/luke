@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { NodeFileSystem } from "@effect/platform-node";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { LIVE_SERVER_EVENT } from "@sidecar/live";
 import { isRecord, recordFromJsonLine } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { AgentTraceWriter } from "./trace-writer.js";
 import { TRACE_DIRECTION } from "./vocabulary.js";
 
@@ -27,7 +27,7 @@ it.live("raw audio handed straight to the writer still never reaches the file", 
     const entry = recordFromJsonLine(line ?? "");
     assert.ok(isRecord(entry?.event));
     assert.deepEqual(entry?.event, { type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, audioBytes: 5 });
-  }).pipe(Effect.provide(NodeFileSystem.layer)),
+  }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );
 
 it.live("a writer that cannot write reports once and stays quiet after", () =>
@@ -45,5 +45,5 @@ it.live("a writer that cannot write reports once and stays quiet after", () =>
     writer.recordWire({ direction: TRACE_DIRECTION.CLIENT, event: { type: "two" } });
     yield* writer.settled;
     assert.equal(reports.length, 1);
-  }).pipe(Effect.provide(NodeFileSystem.layer)),
+  }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );

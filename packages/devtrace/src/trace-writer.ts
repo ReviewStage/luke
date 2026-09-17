@@ -1,5 +1,4 @@
-import path from "node:path";
-import { Deferred, Effect, Queue, type Scope } from "effect";
+import { Deferred, Effect, Path, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
@@ -111,12 +110,15 @@ export class AgentTraceWriter {
     ),
   );
 
-  private constructor(options: AgentTraceWriterOptions, work: Queue.Queue<TraceWork>) {
+  private constructor(
+    options: AgentTraceWriterOptions,
+    file: string,
+    now: () => Date,
+    work: Queue.Queue<TraceWork>,
+  ) {
     this.#directory = options.directory;
-    const now = options.now ?? (() => new Date());
     this.#report = options.report ?? ((text: string) => process.stderr.write(text));
-    const stamp = now().toISOString().replace(/[:.]/gu, "-");
-    this.file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
+    this.file = file;
     this.#now = now;
     this.#work = work;
   }
@@ -124,9 +126,13 @@ export class AgentTraceWriter {
   /** One writer, with the fiber that carries its lines to disk forked into the caller's scope. */
   static make(
     options: AgentTraceWriterOptions,
-  ): Effect.Effect<AgentTraceWriter, never, Scope.Scope | FileSystem.FileSystem> {
+  ): Effect.Effect<AgentTraceWriter, never, Scope.Scope | FileSystem.FileSystem | Path.Path> {
     return Effect.gen(function* () {
-      const writer = new AgentTraceWriter(options, yield* Queue.unbounded<TraceWork>());
+      const path = yield* Path.Path;
+      const now = options.now ?? (() => new Date());
+      const stamp = now().toISOString().replace(/[:.]/gu, "-");
+      const file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
+      const writer = new AgentTraceWriter(options, file, now, yield* Queue.unbounded<TraceWork>());
       yield* Effect.forkScoped(writer.#drain());
       return writer;
     });

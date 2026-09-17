@@ -1,6 +1,5 @@
-import { join } from "node:path";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Effect, FileSystem, Layer, Option, Redacted, Schema } from "effect";
+import { Config, Effect, FileSystem, Layer, Option, Path, Redacted, Schema } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import {
   PREVIEW_STATE,
@@ -41,8 +40,6 @@ import {
  * `GITHUB_STEP_SUMMARY` names a file, appended there as a table.
  */
 
-const WEB = join(import.meta.dirname, "..");
-const REPO_ROOT = join(WEB, "..", "..");
 const URL_FLAG = "--url";
 
 const ENV = {
@@ -173,7 +170,10 @@ const program = Effect.gen(function* () {
   ) {
     return yield* new BypassSecretMissing();
   }
-  const plan = planProbes(door, yield* readProbePaths({ repoRoot: REPO_ROOT, web: WEB }));
+  const path = yield* Path.Path;
+  const web = path.join(import.meta.dirname, "..");
+  const repoRoot = path.join(web, "..", "..");
+  const plan = planProbes(door, yield* readProbePaths({ repoRoot, web }));
   const target = yield* resolveTarget(bypassSecret);
   if ("kind" in target) {
     const notice = renderNotAffected(target);

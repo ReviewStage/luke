@@ -8,9 +8,8 @@
  * for runs locally too.
  */
 
-import path from "node:path";
-import { NodeFileSystem, NodeRuntime } from "@effect/platform-node";
-import { Effect } from "effect";
+import { NodeFileSystem, NodePath, NodeRuntime } from "@effect/platform-node";
+import { Effect, Layer, Path } from "effect";
 import { unboxExportEffect } from "./run.js";
 
 const [source, destination] = process.argv.slice(2);
@@ -25,12 +24,17 @@ if (!source) {
 // process's own cwd lands inside the repository. INIT_CWD is pnpm's record
 // of where the developer actually stood.
 const invocationDirectory = process.env.INIT_CWD ?? process.cwd();
-const sourcePath = path.resolve(invocationDirectory, source);
 
-NodeRuntime.runMain(
-  unboxExportEffect(
+const program = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  const sourcePath = path.resolve(invocationDirectory, source);
+  yield* unboxExportEffect(
     sourcePath,
     destination ? { path: path.resolve(invocationDirectory, destination) } : { stdout: true },
     { name: path.basename(sourcePath, ".jsonl") },
-  ).pipe(Effect.provide(NodeFileSystem.layer)),
+  );
+});
+
+NodeRuntime.runMain(
+  program.pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );

@@ -26,6 +26,7 @@ import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
 import { Duration, Effect, Fiber, Queue, Result, Schedule, Scope, Semaphore } from "effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -142,12 +143,16 @@ interface CalendarsLinks {
  */
 export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(function* (
   dependencies: CalendarsDependencies,
-): Effect.fn.Return<CalendarsComposer, never, HostKernelTag | FileSystem.FileSystem | Scope.Scope> {
+): Effect.fn.Return<
+  CalendarsComposer,
+  never,
+  HostKernelTag | FileSystem.FileSystem | Path.Path | Scope.Scope
+> {
   const { settings, observationGate, onOnboardingWritten, onAnnouncementHoldRead } = dependencies;
   const kernel = yield* HostKernelTag;
   const { runMode, report, now } = kernel;
   const settingsStore = settings.store;
-  const fileSystemContext = yield* Effect.context<FileSystem.FileSystem>();
+  const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
 
   const googleCalendar = new GoogleCalendarReader({
     readAccounts: () => Effect.orDie(settingsStore.readCalendarAccounts()),

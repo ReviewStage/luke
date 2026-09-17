@@ -1,5 +1,4 @@
-import path from "node:path";
-import { Cause, Effect } from "effect";
+import { Cause, Effect, Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
 
 /**
@@ -43,9 +42,10 @@ interface RemoveRetiredStoreOptions {
  */
 export const removeRetiredStore = (
   options: RemoveRetiredStoreOptions,
-): Effect.Effect<void, never, FileSystem.FileSystem> =>
+): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     yield* Effect.forEach(
       RETIRED_STORE_ENTRIES,
       (entry) => {
