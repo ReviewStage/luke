@@ -38,7 +38,7 @@ import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Cause, Deferred, Effect, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
-import type * as Path from "effect/Path";
+import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
@@ -146,6 +146,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
     const overrides = yield* settingsOverrides;
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
     const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
     const { runMode, report } = kernel;
     const late = yield* lateService<SettingsLinks>();
     /**
@@ -183,6 +184,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
       cipher,
       overrides,
       fileSystem,
+      path,
     });
 
     /**
