@@ -1,4 +1,4 @@
-import { Effect, type Schema } from "effect";
+import { Effect, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -41,5 +41,5 @@ export const offerBriefing = /* @__PURE__ */ Effect.fn("offerBriefing")(function
     journal.id,
     seams.now(),
   );
-  return offered.ok;
+  return Result.isSuccess(offered);
 });

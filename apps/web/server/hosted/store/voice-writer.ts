@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -376,13 +376,13 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
           // Which session said it, and when on that session's clock.
           { voiceSessionId: voiceSession.id, atMs: delta.start_ms },
         );
-        if (marked.ok) {
+        if (Result.isSuccess(marked)) {
           outcome ??= WRITTEN;
         } else {
           outcome = {
             ok: false,
             refusal:
-              marked.refusal === SPEECH_REFUSAL.NOT_FOUND
+              marked.failure === SPEECH_REFUSAL.NOT_FOUND
                 ? VOICE_WRITE_REFUSAL.NO_MESSAGE
                 : VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
           };

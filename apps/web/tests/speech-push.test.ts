@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -159,7 +159,7 @@ async function announced(userId: string, parts: MessageParts): Promise<Announced
 async function offered(userId: string, briefing = BRIEFING): Promise<Announced> {
   const row = await announced(userId, [announcePart({ briefing })]);
   const offer = await database.run(offerSpeech(store, userId, row.messageId, clock));
-  assert.equal(offer.ok, true);
+  assert.ok(Result.isSuccess(offer));
   return row;
 }
 
@@ -405,10 +405,7 @@ test("Mac inactive: the briefing is pushed once to the most recently seen device
   // The settled state is what refuses a second push, at the store and not only in the pass.
   assert.deepEqual(
     await database.run(markSpeechPushed(store, userId, row.messageId, clock, phone)),
-    {
-      ok: false,
-      refusal: SPEECH_REFUSAL.SETTLED,
-    },
+    Result.fail(SPEECH_REFUSAL.SETTLED),
   );
 });
 
@@ -422,7 +419,7 @@ test("Mac active and claimed: never pushed; Mac active and unclaimed: waited on 
   await device(userId, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
   const claimed = await offered(userId);
   assert.equal(
-    (await database.run(claimSpeech(store, userId, claimed.messageId, mac, clock))).ok,
+    Result.isSuccess(await database.run(claimSpeech(store, userId, claimed.messageId, mac, clock))),
     true,
   );
   const unclaimed = await offered(userId);
@@ -558,7 +555,7 @@ test("an account with no token-holding device leaves the offer standing for the 
     { type: "text", text: "A reply with no briefing on offer." } as unknown as MessageParts[number],
   ]);
   assert.equal(
-    (await database.run(offerSpeech(store, unreadable, wordless.messageId, clock))).ok,
+    Result.isSuccess(await database.run(offerSpeech(store, unreadable, wordless.messageId, clock))),
     true,
   );
   const accounts = [unaddressed, nobody, unreadable];

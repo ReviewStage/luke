@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { type ToolSet, tool } from "ai";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
@@ -119,11 +119,13 @@ async function briefing(conversation: ConversationTarget): Promise<string> {
 
 async function claim(conversation: ConversationTarget, messageId: string): Promise<void> {
   assert.equal(
-    (await database.run(offerSpeech(speech, conversation.userId, messageId, NOW))).ok,
+    Result.isSuccess(await database.run(offerSpeech(speech, conversation.userId, messageId, NOW))),
     true,
   );
   assert.equal(
-    (await database.run(claimSpeech(speech, conversation.userId, messageId, DEVICE_ID, NOW))).ok,
+    Result.isSuccess(
+      await database.run(claimSpeech(speech, conversation.userId, messageId, DEVICE_ID, NOW)),
+    ),
     true,
   );
 }
@@ -361,7 +363,10 @@ test("one delta past the ends of two acknowledged appends marks both briefings",
 test("a briefing this session's device did not claim is not marked spoken by its voice: unclaimed, another device's, or a session with no device", async () => {
   const live = await target();
   const unclaimed = await announced(live.conversation);
-  assert.equal((await database.run(offerSpeech(speech, live.userId, unclaimed, NOW))).ok, true);
+  assert.equal(
+    Result.isSuccess(await database.run(offerSpeech(speech, live.userId, unclaimed, NOW))),
+    true,
+  );
   const voice = writer();
   voice.noteAppend(live, { clientEventId: "append-u", messageId: unclaimed });
   await database.run(voice.consume(live, appended("append-u", 0, 1000)));

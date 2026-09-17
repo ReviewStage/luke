@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
 import { asc, desc, inArray } from "drizzle-orm";
-import { Duration, Effect, Schema } from "effect";
+import { Duration, Effect, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -323,7 +323,7 @@ export const pushSpeech = /* @__PURE__ */ Effect.fn("pushSpeech")(function* (
       now,
       target.deviceId,
     );
-    if (!marked.ok) continue;
+    if (Result.isFailure(marked)) continue;
     const delivery = yield* Effect.promise(() =>
       seams.send(briefingNotification(briefing, offer.messageId, target)),
     );
