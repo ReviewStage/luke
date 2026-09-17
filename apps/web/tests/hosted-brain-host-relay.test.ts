@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { isToolUIPart } from "ai";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import {
@@ -85,13 +85,14 @@ async function spokenLine(
   const written = await database.run(
     writer.upsertSpokenRow(target, { role: MESSAGE_ROLE.USER, clientId: rowId, text, metadata }),
   );
-  assert.ok(written.ok);
+  assert.ok(Result.isSuccess(written));
+  if (!Result.isSuccess(written)) throw new Error("the spoken row was refused");
   const attached = await database.run(
     writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }),
   );
-  assert.ok(attached.ok);
-  assert.deepEqual(attached.attached, [written.id]);
-  return { ok: true, id: written.id };
+  assert.ok(Result.isSuccess(attached));
+  assert.deepEqual(Result.getOrUndefined(attached), [written.success.id]);
+  return { ok: true, id: written.success.id };
 }
 const refusals: string[] = [];
 /** The children whose sealed turn the relay handed to the completion seam, in order. */
@@ -997,7 +998,7 @@ it.effect(
           consume: (to, event) =>
             event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
             event.message.role === MESSAGE_ROLE.ASSISTANT
-              ? Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
+              ? Effect.succeed(Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }))
               : writer.consume(to, event),
           enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
@@ -1069,7 +1070,7 @@ it.effect(
           consume: (to, event) =>
             event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
             event.message.role === MESSAGE_ROLE.USER
-              ? Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN })
+              ? Effect.succeed(Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }))
               : writer.consume(to, event),
           enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
@@ -1113,7 +1114,7 @@ it.effect(
           consume: (to, event) => {
             if (event.kind === BRAIN_RUN_EVENT.TURN_ENDED && refuseEnds > 0) {
               refuseEnds -= 1;
-              return Effect.succeed({ ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
+              return Effect.succeed(Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }));
             }
             return writer.consume(to, event);
           },

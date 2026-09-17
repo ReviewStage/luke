@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { type ToolSet, tool, type UIMessage } from "ai";
 import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -267,7 +267,9 @@ async function feed(
 }
 
 function effects(results: readonly StoreWriteResult[]): readonly string[] {
-  return results.map((result) => (result.ok ? result.effect : result.refusal));
+  return results.map((result) =>
+    Result.isSuccess(result) ? result.success : result.failure.refusal,
+  );
 }
 
 async function storedMessages(target: ConversationTarget) {
@@ -526,10 +528,7 @@ test("an observation turn on an observed conversation is a transcript-change tur
     stream.answered(randomUUID(), announceParts),
     stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
   ]);
-  assert.equal(
-    results.every((result) => result.ok),
-    true,
-  );
+  assert.equal(results.every(Result.isSuccess), true);
 
   const rows = await storedMessages(target);
   assert.deepEqual(
@@ -566,10 +565,7 @@ test("a child turn on a child conversation is a child-origin turn opened by the 
     stream.answered(randomUUID(), replyParts),
     stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED, { responseIds: ["resp_c"] }),
   ]);
-  assert.equal(
-    results.every((result) => result.ok),
-    true,
-  );
+  assert.equal(results.every(Result.isSuccess), true);
   const rows = await storedMessages(target);
   assert.deepEqual(
     rows.map((row) => [row.seq, row.role, row.turnId, row.finishedAt !== null]),
@@ -602,10 +598,7 @@ test("a child's completion opens a turn of the requester's own, written with the
     stream.answered(randomUUID(), replyParts),
     stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
   ]);
-  assert.equal(
-    results.every((result) => result.ok),
-    true,
-  );
+  assert.equal(results.every(Result.isSuccess), true);
   const turn = await storedTurn(stream.turnId);
   assert.deepEqual(
     [turn?.origin, turn?.status],
@@ -623,10 +616,7 @@ test("a writer killed after the calls were told leaves a resumable journal: one 
     stream.toolCall("call_2", "read_transcript", TRANSCRIPT_INPUT),
     stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT),
   ]);
-  assert.equal(
-    results.every((result) => result.ok),
-    true,
-  );
+  assert.equal(results.every(Result.isSuccess), true);
 
   const rows = await storedMessages(target);
   const journal = rows[1];
@@ -663,7 +653,9 @@ test("every event delivered twice, and the whole stream replayed, writes one row
     second.push(await database.run(writer.consume(target, event)));
   }
   assert.equal(
-    first.every((result) => result.ok && result.effect === STORE_WRITE_EFFECT.WRITTEN),
+    first.every(
+      (result) => Result.isSuccess(result) && result.success === STORE_WRITE_EFFECT.WRITTEN,
+    ),
     true,
   );
   assert.deepEqual(
@@ -696,10 +688,7 @@ test("a refused call settles as an error part carrying the refusal's own reason 
       ACTION_OUTPUT_STATUS.REFUSED,
     ),
   ]);
-  assert.equal(
-    results.every((result) => result.ok),
-    true,
-  );
+  assert.equal(results.every(Result.isSuccess), true);
   const [journal] = await storedMessages(target);
   assert.deepEqual(journal?.parts, [
     {
@@ -721,7 +710,7 @@ test("a refused call settles as an error part carrying the refusal's own reason 
       ),
     ),
   );
-  assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
+  assert.deepEqual(again, Result.succeed(STORE_WRITE_EFFECT.REPEATED));
 });
 
 test("an action whose effect is unknown settles as an answer carrying its envelope, distinguishable on the row from a refused one", async () => {
@@ -740,10 +729,7 @@ test("an action whose effect is unknown settles as an answer carrying its envelo
       ACTION_OUTPUT_STATUS.REFUSED,
     ),
   ]);
-  assert.equal(
-    results.every((result) => result.ok),
-    true,
-  );
+  assert.equal(results.every(Result.isSuccess), true);
   const [journal] = await storedMessages(target);
   assert.deepEqual(journal?.parts, [
     {
@@ -803,11 +789,11 @@ test("a turn that ends with a call unanswered settles the call as an answer whos
   const late = await database.run(
     writer.consume(target, stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT)),
   );
-  assert.deepEqual(late, { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED });
+  assert.deepEqual(late, Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED }));
   const again = await database.run(
     writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED)),
   );
-  assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
+  assert.deepEqual(again, Result.succeed(STORE_WRITE_EFFECT.REPEATED));
 });
 
 test("a turn that failed records its failure word and detail cut to the bound, and one that timed out without a word records the status it ended in", async () => {
@@ -856,7 +842,10 @@ test("a queued turn keeps the origin it was queued under through running to sett
       model: "gpt-fixture",
     }),
   );
-  assert.deepEqual(queued, { ok: true, turnId: stream.turnId, effect: STORE_WRITE_EFFECT.WRITTEN });
+  assert.deepEqual(
+    queued,
+    Result.succeed({ turnId: stream.turnId, effect: STORE_WRITE_EFFECT.WRITTEN }),
+  );
   assert.equal((await storedTurn(stream.turnId))?.eveTurnId, "turn_3");
   const twice = await database.run(
     writer.enqueueTurn(target, {
@@ -864,7 +853,10 @@ test("a queued turn keeps the origin it was queued under through running to sett
       origin: TURN_ORIGIN.TYPED,
     }),
   );
-  assert.deepEqual(twice, { ok: true, turnId: stream.turnId, effect: STORE_WRITE_EFFECT.REPEATED });
+  assert.deepEqual(
+    twice,
+    Result.succeed({ turnId: stream.turnId, effect: STORE_WRITE_EFFECT.REPEATED }),
+  );
   assert.equal((await storedTurn(stream.turnId))?.status, TURN_STATUS.QUEUED);
 
   const started = await database.run(
@@ -873,7 +865,7 @@ test("a queued turn keeps the origin it was queued under through running to sett
       stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK, NOW + 500),
     ),
   );
-  assert.deepEqual(started, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
+  assert.deepEqual(started, Result.succeed(STORE_WRITE_EFFECT.WRITTEN));
   const running = await storedTurn(stream.turnId);
   assert.deepEqual(
     [running?.origin, running?.status, running?.queuedAt?.getTime(), running?.startedAt?.getTime()],
@@ -885,10 +877,10 @@ test("a queued turn keeps the origin it was queued under through running to sett
   const minted = await database.run(
     writer.enqueueTurn(target, { origin: TURN_ORIGIN.TRANSCRIPT_CHANGE }),
   );
-  assert.equal(minted.ok, true);
-  if (!minted.ok) return;
-  assert.equal((await storedTurn(minted.turnId))?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
-  assert.equal((await storedTurn(minted.turnId))?.eveTurnId, null);
+  assert.ok(Result.isSuccess(minted));
+  if (!Result.isSuccess(minted)) return;
+  assert.equal((await storedTurn(minted.success.turnId))?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
+  assert.equal((await storedTurn(minted.success.turnId))?.eveTurnId, null);
 });
 
 test("a sequence already taken under the counter is the retry signal: the write lands on the next free position and the counter is re-aligned", async () => {
@@ -911,7 +903,7 @@ test("a sequence already taken under the counter is the retry signal: the write 
   const result = await database.run(
     writer.consume(target, stream.words(askId, "hello", TYPED_ASK)),
   );
-  assert.deepEqual(result, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
+  assert.deepEqual(result, Result.succeed(STORE_WRITE_EFFECT.WRITTEN));
   const rows = await storedMessages(target);
   assert.deepEqual(
     rows.map((row) => [row.seq, row.clientId]),
@@ -933,20 +925,25 @@ test("a message the reader would refuse is refused at the write, with the reader
   const unregistered = await database.run(
     writer.consume(target, stream.toolCall("call_x", "list_sessions", {})),
   );
-  assert.deepEqual(unregistered, {
-    ok: false,
-    refusal: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
-    reason: SCHEMA_REFUSAL.NOT_REGISTERED,
-    path: [0, "parts", 0, "type"],
-  });
+  assert.deepEqual(
+    unregistered,
+    Result.fail({
+      refusal: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
+      reason: SCHEMA_REFUSAL.NOT_REGISTERED,
+      path: [0, "parts", 0, "type"],
+    }),
+  );
 
   const wrongInput = await database.run(
     writer.consume(target, stream.toolCall("call_y", "read_transcript", { providerId: 7 })),
   );
-  assert.equal(wrongInput.ok, false);
-  if (wrongInput.ok) return;
-  assert.equal(wrongInput.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
-  assert.equal("reason" in wrongInput && wrongInput.reason, SCHEMA_REFUSAL.MALFORMED);
+  assert.ok(Result.isFailure(wrongInput));
+  if (!Result.isFailure(wrongInput)) return;
+  assert.equal(wrongInput.failure.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
+  assert.equal(
+    "reason" in wrongInput.failure && wrongInput.failure.reason,
+    SCHEMA_REFUSAL.MALFORMED,
+  );
 
   const decorated = await database.run(
     writer.consume(
@@ -962,9 +959,9 @@ test("a message the reader would refuse is refused at the write, with the reader
       }),
     ),
   );
-  assert.equal(decorated.ok, false);
-  if (decorated.ok) return;
-  assert.equal(decorated.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
+  assert.ok(Result.isFailure(decorated));
+  if (!Result.isFailure(decorated)) return;
+  assert.equal(decorated.failure.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
 
   const rows = await storedMessages(target);
   assert.deepEqual(
@@ -981,31 +978,31 @@ test("a write for a conversation, turn, or call that is not there is refused by 
   const noConversation = await database.run(
     writer.consume(elsewhere, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
   );
-  assert.deepEqual(noConversation, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION });
+  assert.deepEqual(noConversation, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
 
   const other = await conversation();
   const otherUser = { userId: other.userId, conversationId: target.conversationId };
   const wrongUser = await database.run(
     writer.consume(otherUser, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
   );
-  assert.deepEqual(wrongUser, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION });
+  assert.deepEqual(wrongUser, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
 
   const noTurn = await database.run(
     writer.consume(target, stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT)),
   );
-  assert.deepEqual(noTurn, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
+  assert.deepEqual(noTurn, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }));
   const noTurnAnswer = await database.run(
     writer.consume(target, stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT)),
   );
-  assert.deepEqual(noTurnAnswer, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
+  assert.deepEqual(noTurnAnswer, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }));
   const noTurnWords = await database.run(
     writer.consume(target, stream.words(randomUUID(), "hi", TYPED_ASK)),
   );
-  assert.deepEqual(noTurnWords, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
+  assert.deepEqual(noTurnWords, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }));
   const noTurnEnd = await database.run(
     writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED)),
   );
-  assert.deepEqual(noTurnEnd, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
+  assert.deepEqual(noTurnEnd, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }));
 
   await database.run(
     writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
@@ -1016,7 +1013,7 @@ test("a write for a conversation, turn, or call that is not there is refused by 
       stream.toolAnswered("call_never_told", "read_transcript", TRANSCRIPT_OUTPUT),
     ),
   );
-  assert.deepEqual(noCall, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CALL });
+  assert.deepEqual(noCall, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CALL }));
   assert.deepEqual(await storedMessages(target), []);
 });
 
@@ -1027,9 +1024,9 @@ test("a cleared conversation is written by nothing, like one that never was", as
   const started = await database.run(
     writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
   );
-  assert.deepEqual(started, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION });
+  assert.deepEqual(started, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
   const queued = await database.run(writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED }));
-  assert.deepEqual(queued, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION });
+  assert.deepEqual(queued, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
 });
 
 test("a turn that ended without a journal opens none after the fact: a late part, answer, or word is refused as finished", async () => {
@@ -1060,7 +1057,7 @@ test("a closed journal takes its own projection again as a repeat and a differen
   const same = await database.run(
     writer.consume(target, stream.answered(randomUUID(), REPLY_PARTS)),
   );
-  assert.deepEqual(same, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
+  assert.deepEqual(same, Result.succeed(STORE_WRITE_EFFECT.REPEATED));
   const different = await database.run(
     writer.consume(
       target,
@@ -1069,7 +1066,7 @@ test("a closed journal takes its own projection again as a repeat and a differen
       ]),
     ),
   );
-  assert.deepEqual(different, { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED });
+  assert.deepEqual(different, Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED }));
   const [, reply] = await storedMessages(target);
   assert.deepEqual(reply?.parts, REPLY_PARTS);
 });
@@ -1149,11 +1146,11 @@ test("a reasoning item naming no id is not journaled, since nothing could tell i
       }),
     ),
   );
-  assert.deepEqual(unnamed, { ok: true, effect: STORE_WRITE_EFFECT.IGNORED });
+  assert.deepEqual(unnamed, Result.succeed(STORE_WRITE_EFFECT.IGNORED));
   const named = await database.run(writer.consume(target, stream.reasoning("rs_9", "Thinking.")));
-  assert.deepEqual(named, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
+  assert.deepEqual(named, Result.succeed(STORE_WRITE_EFFECT.WRITTEN));
   const again = await database.run(writer.consume(target, stream.reasoning("rs_9", "Thinking.")));
-  assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
+  assert.deepEqual(again, Result.succeed(STORE_WRITE_EFFECT.REPEATED));
   const [journal] = await storedMessages(target);
   assert.deepEqual(journal?.parts, [
     { type: UI_PART_TYPE.REASONING, id: "rs_9", text: "Thinking.", state: UI_PART_STATE.DONE },
@@ -1217,8 +1214,8 @@ test("events about a message are numbered by the conversation's own event sequen
       unless: [],
     }),
   );
-  assert.equal(offered.ok && offered.seq, 1);
-  assert.equal(claimed.ok && claimed.seq, 2);
+  assert.equal(Result.isSuccess(offered) && offered.success.seq, 1);
+  assert.equal(Result.isSuccess(claimed) && claimed.success.seq, 2);
   const stored = (await readEventsByConversation(database.run, target.conversationId))
     .filter((row) => row.messageId === reply.id)
     .map((row) => ({
@@ -1245,7 +1242,7 @@ test("events about a message are numbered by the conversation's own event sequen
       unless: [],
     }),
   );
-  assert.deepEqual(noMessage, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE });
+  assert.deepEqual(noMessage, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_MESSAGE }));
 
   const other = await conversation();
   const elsewhere = await database.run(
@@ -1255,7 +1252,7 @@ test("events about a message are numbered by the conversation's own event sequen
       unless: [],
     }),
   );
-  assert.deepEqual(elsewhere, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE });
+  assert.deepEqual(elsewhere, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_MESSAGE }));
 
   const secondClaim = await database.run(
     writer.recordEvent(target, {
@@ -1265,7 +1262,7 @@ test("events about a message are numbered by the conversation's own event sequen
       unless: [],
     }),
   );
-  assert.deepEqual(secondClaim, { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED });
+  assert.deepEqual(secondClaim, Result.fail({ refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED }));
 
   // A write naming kinds that exclude it is refused while one of them stands, and lands otherwise.
   const superseded = await database.run(
@@ -1275,7 +1272,7 @@ test("events about a message are numbered by the conversation's own event sequen
       unless: [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
     }),
   );
-  assert.deepEqual(superseded, { ok: false, refusal: STORE_WRITE_REFUSAL.SUPERSEDED });
+  assert.deepEqual(superseded, Result.fail({ refusal: STORE_WRITE_REFUSAL.SUPERSEDED }));
   const claimedAgain = await database.run(
     writer.recordEvent(target, {
       messageId: reply.id,
@@ -1284,7 +1281,7 @@ test("events about a message are numbered by the conversation's own event sequen
       unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
     }),
   );
-  assert.deepEqual(claimedAgain, { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED });
+  assert.deepEqual(claimedAgain, Result.fail({ refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED }));
   const spoken = await database.run(
     writer.recordEvent(target, {
       messageId: reply.id,
@@ -1293,7 +1290,7 @@ test("events about a message are numbered by the conversation's own event sequen
       unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
     }),
   );
-  assert.equal(spoken.ok && spoken.seq, 3);
+  assert.equal(Result.isSuccess(spoken) && spoken.success.seq, 3);
   assert.deepEqual(await counters(target), { message: 3, event: 4 });
 });
 
@@ -1314,8 +1311,8 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
         },
       }),
     );
-  assert.ok((await spokenLine("line-1", 1000, 2000)).ok);
-  assert.ok((await spokenLine("dl_1", 3000, 4000, "dl_1")).ok);
+  assert.ok(Result.isSuccess(await spokenLine("line-1", 1000, 2000)));
+  assert.ok(Result.isSuccess(await spokenLine("dl_1", 3000, 4000, "dl_1")));
 
   const reply = await database.run(
     writer.upsertSpokenRow(target, {
@@ -1325,8 +1322,9 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
       metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL },
     }),
   );
-  assert.ok(reply.ok);
-  assert.equal(reply.effect, STORE_WRITE_EFFECT.WRITTEN);
+  assert.ok(Result.isSuccess(reply));
+  if (!Result.isSuccess(reply)) return;
+  assert.equal(reply.success.effect, STORE_WRITE_EFFECT.WRITTEN);
   const again = await database.run(
     writer.upsertSpokenRow(target, {
       role: MESSAGE_ROLE.ASSISTANT,
@@ -1336,8 +1334,12 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
     }),
   );
   // Told again under the same id, the row is grown in place rather than doubled.
-  assert.ok(again.ok);
-  assert.deepEqual([again.id, again.effect], [reply.id, STORE_WRITE_EFFECT.WRITTEN]);
+  assert.ok(Result.isSuccess(again));
+  if (!Result.isSuccess(again)) return;
+  assert.deepEqual(
+    [again.success.id, again.success.effect],
+    [reply.success.id, STORE_WRITE_EFFECT.WRITTEN],
+  );
   const rows = await storedMessages(target);
   assert.deepEqual(
     rows.map((row) => [row.clientId, row.role, row.turnId, row.finishedAt !== null]),
@@ -1354,8 +1356,15 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
       startingAtOrBeforeMs: 2500,
     }),
   );
-  assert.ok(ownLine.ok);
-  assert.deepEqual([ownLine.line?.clientId, ownLine.line?.delegationId], ["line-1", undefined]);
+  assert.ok(Result.isSuccess(ownLine));
+  if (!Result.isSuccess(ownLine)) return;
+  assert.deepEqual(
+    [
+      Option.getOrUndefined(ownLine.success)?.clientId,
+      Option.getOrUndefined(ownLine.success)?.delegationId,
+    ],
+    ["line-1", undefined],
+  );
   // Found by where it starts: a delegation's offset may fall inside the line it is about.
   const delegatedLine = await database.run(
     writer.latestSpokenLine(target, {
@@ -1363,9 +1372,13 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
       startingAtOrBeforeMs: 3500,
     }),
   );
-  assert.ok(delegatedLine.ok);
+  assert.ok(Result.isSuccess(delegatedLine));
+  if (!Result.isSuccess(delegatedLine)) return;
   assert.deepEqual(
-    [delegatedLine.line?.clientId, delegatedLine.line?.delegationId],
+    [
+      Option.getOrUndefined(delegatedLine.success)?.clientId,
+      Option.getOrUndefined(delegatedLine.success)?.delegationId,
+    ],
     ["dl_1", "dl_1"],
   );
   const none = await database.run(
@@ -1374,16 +1387,18 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
       startingAtOrBeforeMs: 500,
     }),
   );
-  assert.ok(none.ok);
-  assert.equal(none.line, undefined);
+  assert.ok(Result.isSuccess(none));
+  if (!Result.isSuccess(none)) return;
+  assert.ok(Option.isNone(none.success));
   const otherSession = await database.run(
     writer.latestSpokenLine(target, {
       voiceSessionId: "vs_fixture_2",
       startingAtOrBeforeMs: 9000,
     }),
   );
-  assert.ok(otherSession.ok);
-  assert.equal(otherSession.line, undefined);
+  assert.ok(Result.isSuccess(otherSession));
+  if (!Result.isSuccess(otherSession)) return;
+  assert.ok(Option.isNone(otherSession.success));
 });
 
 test("a row is placed where it stands in the Conversation: a spoken row at its session's start plus its span's start, any other row where it was written", async () => {
@@ -1410,27 +1425,27 @@ test("a row is placed where it stands in the Conversation: a spoken row at its s
       }),
     );
   assert.ok(
-    (
+    Result.isSuccess(
       await database.run(
         writer.recordUserMessage(target, {
           clientId: "typed-placed",
           text: "typed",
           metadata: TYPED_ASK,
         }),
-      )
-    ).ok,
+      ),
+    ),
   );
-  assert.ok((await spokenLine("spoken-placed", voiceSessionId, 4_000)).ok);
+  assert.ok(Result.isSuccess(await spokenLine("spoken-placed", voiceSessionId, 4_000)));
   // A spoken row naming a session the store does not hold, or holds for
   // another account, has no clock to stand on.
-  assert.ok((await spokenLine("spoken-unheld", randomUUID(), 4_000)).ok);
+  assert.ok(Result.isSuccess(await spokenLine("spoken-unheld", randomUUID(), 4_000)));
   const other = await conversation();
   const foreignSessionId = await insertVoiceSession(database.run, {
     userId: other.userId,
     liveSessionId: `live_${randomUUID()}`,
     delegationMode: VOICE_DELEGATION_MODE.CLIENT,
   });
-  assert.ok((await spokenLine("spoken-foreign", foreignSessionId, 4_000)).ok);
+  assert.ok(Result.isSuccess(await spokenLine("spoken-foreign", foreignSessionId, 4_000)));
   const rows = await storedMessages(target);
   const placedAt = (clientId: string) => rows.find((row) => row.clientId === clientId)?.placedAt;
   assert.equal(placedAt("typed-placed")?.getTime(), NOW);
@@ -1485,7 +1500,7 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
   await dispatched("dl_fresh", fresh.turnId);
   const journal = (await storedMessages(target)).find((row) => row.clientId === fresh.turnId);
   assert.ok(journal);
-  assert.ok((await spoken("reading-1", 9000, 12_000, "dl_fresh")).ok);
+  assert.ok(Result.isSuccess(await spoken("reading-1", 9000, 12_000, "dl_fresh")));
   const reading = (await storedMessages(target)).find((row) => row.clientId === "reading-1");
   assert.equal(reading?.turnId, fresh.turnId);
   assert.deepEqual(reading?.metadata, {
@@ -1507,7 +1522,7 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
     stale.ended(BRAIN_REQUEST_STATUS.SUCCEEDED, { at: NOW - 10 * 60_000 }),
   ]);
   await dispatched("dl_stale", stale.turnId);
-  assert.ok((await spoken("aside-1", 20_000, 21_000, "dl_stale")).ok);
+  assert.ok(Result.isSuccess(await spoken("aside-1", 20_000, 21_000, "dl_stale")));
   const aside = (await storedMessages(target)).find((row) => row.clientId === "aside-1");
   assert.equal(aside?.turnId, null);
   assert.deepEqual(aside?.metadata, {
@@ -1520,7 +1535,7 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
   });
 
   // A delegation whose ask has no turn yet: the row stands under no turn and was read from nothing.
-  assert.ok((await spoken("early-1", 30_000, 31_000, "dl_unknown")).ok);
+  assert.ok(Result.isSuccess(await spoken("early-1", 30_000, 31_000, "dl_unknown")));
   const early = (await storedMessages(target)).find((row) => row.clientId === "early-1");
   assert.equal(early?.turnId, null);
   assert.deepEqual(early?.metadata, {
@@ -1575,8 +1590,8 @@ test("the turn's answer closes the journal behind what landed while the turn ran
     stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
   ]);
   // Luke's words while the brain works: his row joins the running turn, behind the open journal.
-  assert.ok((await spoken("checking", 2_000)).ok);
-  assert.ok((await spoken("reading-one", 4_000)).ok);
+  assert.ok(Result.isSuccess(await spoken("checking", 2_000)));
+  assert.ok(Result.isSuccess(await spoken("reading-one", 4_000)));
   const placed = (rows: Awaited<ReturnType<typeof storedMessages>>) =>
     rows.map((row) => [row.clientId, row.seq, row.turnId, row.finishedAt !== null]);
   assert.deepEqual(placed(await storedMessages(target)), [
@@ -1603,7 +1618,7 @@ test("the turn's answer closes the journal behind what landed while the turn ran
   assert.deepEqual(await counters(target), { message: 6, event: 1 });
 
   // The reading of the answer lands after it, read from the journal where it now stands.
-  assert.ok((await spoken("reading", 9_000)).ok);
+  assert.ok(Result.isSuccess(await spoken("reading", 9_000)));
   const reading = (await storedMessages(target)).find((row) => row.clientId === "reading");
   assert.equal(reading?.seq, 6);
   assert.equal(reading?.turnId, stream.turnId);
@@ -1658,11 +1673,11 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
       createdAt: new Date(NOW),
     }),
   );
-  assert.ok((await spoken("checking", 1_500)).ok);
-  assert.ok((await spoken("desk", 2_500)).ok);
+  assert.ok(Result.isSuccess(await spoken("checking", 1_500)));
+  assert.ok(Result.isSuccess(await spoken("desk", 2_500)));
   // A briefing read aloud in the same breath names the delegation too, but is the briefing's.
   const briefing = randomUUID();
-  assert.ok((await spoken("briefing-reading", 2_800, briefing)).ok);
+  assert.ok(Result.isSuccess(await spoken("briefing-reading", 2_800, briefing)));
   const before = (await storedMessages(target)).map((row) => [row.clientId, row.seq, row.turnId]);
   assert.deepEqual(before, [
     ["checking", 1, null],
@@ -1681,8 +1696,9 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
     stream.words(askId, "What is the fixture session doing?", TYPED_ASK),
   ]);
   const attached = await database.run(writer.attachAskLines(target, stream.turnId));
-  assert.ok(attached.ok);
-  assert.equal(attached.attached.length, 2);
+  assert.ok(Result.isSuccess(attached));
+  if (!Result.isSuccess(attached)) return;
+  assert.equal(attached.success.length, 2);
   const placed = (rows: Awaited<ReturnType<typeof storedMessages>>) =>
     rows.map((row) => [row.clientId, row.seq, row.turnId]);
   assert.deepEqual(placed(await storedMessages(target)), [
@@ -1707,8 +1723,9 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
     [stream.turnId, 7, stream.turnId],
   ]);
   const again = await database.run(writer.attachAskLines(target, stream.turnId));
-  assert.ok(again.ok);
-  assert.deepEqual(again.attached, []);
+  assert.ok(Result.isSuccess(again));
+  if (!Result.isSuccess(again)) return;
+  assert.deepEqual(again.success, []);
 });
 
 test("attaching a spoken ask gives the developer's rows the delegation in place and keeps their ids; a row keeps the delegation as it grows; the turn takes the rows in order once known; a row another delegation owns is left alone", async () => {
@@ -1727,10 +1744,10 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
         metadata: { ...SPOKEN, from_ms: fromMs, to_ms: toMs },
       }),
     );
-  assert.ok((await developerRow("row-a", "Open the failing", 1000, 2200)).ok);
-  assert.ok((await developerRow("row-b", "one.", 6000, 6400)).ok);
+  assert.ok(Result.isSuccess(await developerRow("row-a", "Open the failing", 1000, 2200)));
+  assert.ok(Result.isSuccess(await developerRow("row-b", "one.", 6000, 6400)));
   assert.ok(
-    (
+    Result.isSuccess(
       await database.run(
         writer.upsertSpokenRow(target, {
           role: MESSAGE_ROLE.ASSISTANT,
@@ -1738,8 +1755,8 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
           text: "Mm-hmm.",
           metadata: { ...SPOKEN, author: MESSAGE_AUTHOR.VOICE_MODEL, from_ms: 3000, to_ms: 3400 },
         }),
-      )
-    ).ok,
+      ),
+    ),
   );
   const before = await storedMessages(target);
   const revisionBefore = await journalRevision(target);
@@ -1748,8 +1765,9 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
   const attached = await database.run(
     writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: ["row-a", "row-b"] }),
   );
-  assert.ok(attached.ok);
-  assert.deepEqual(attached.attached, [before[0]?.id, before[1]?.id]);
+  assert.ok(Result.isSuccess(attached));
+  if (!Result.isSuccess(attached)) return;
+  assert.deepEqual(attached.success, [before[0]?.id, before[1]?.id]);
   const delegated = await storedMessages(target);
   assert.deepEqual(
     delegated.map((row) => [row.id, row.clientId, row.seq, row.turnId, row.metadata]),
@@ -1777,14 +1795,15 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
   const twice = await database.run(
     writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: ["row-a", "row-b"] }),
   );
-  assert.ok(twice.ok);
-  assert.deepEqual(twice.attached, attached.attached);
+  assert.ok(Result.isSuccess(twice));
+  if (!Result.isSuccess(twice)) return;
+  assert.deepEqual(twice.success, attached.success);
   assert.deepEqual(
     (await storedMessages(target)).map((row) => [row.seq, row.revision]),
     delegated.map((row) => [row.seq, row.revision]),
   );
   // A row keeps growing under its own id after the handover, and keeps the delegation as it grows.
-  assert.ok((await developerRow("row-b", "one. Please.", 6000, 7100)).ok);
+  assert.ok(Result.isSuccess(await developerRow("row-b", "one. Please.", 6000, 7100)));
   const grown = (await storedMessages(target))[1];
   assert.deepEqual(
     [grown?.id, grown?.clientId, grown?.parts, grown?.metadata],
@@ -1799,8 +1818,7 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
   const other = await database.run(
     writer.attachSpokenAsk(target, { delegationId: "dl_2", rowIds: ["row-a"] }),
   );
-  assert.ok(other.ok);
-  assert.deepEqual(other.attached, []);
+  assert.deepEqual(other, Result.succeed([]));
   assert.deepEqual((await storedMessages(target))[0]?.metadata, {
     ...SPOKEN,
     from_ms: 1000,
@@ -1833,8 +1851,9 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
   const taken = await database.run(
     writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: ["row-a", "row-b"] }),
   );
-  assert.ok(taken.ok);
-  assert.deepEqual(taken.attached, attached.attached);
+  assert.ok(Result.isSuccess(taken));
+  if (!Result.isSuccess(taken)) return;
+  assert.deepEqual(taken.success, attached.success);
   const after = await storedMessages(target);
   assert.deepEqual(
     after.map((row) => [row.id, row.clientId, row.turnId]),
@@ -1850,18 +1869,18 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
   // Attaching nothing is nothing.
   assert.deepEqual(
     await database.run(writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: [] })),
-    { ok: true, attached: [] },
+    Result.succeed([]),
   );
   // A delegation id the vocabulary refuses is a refusal, and the row stands as it was: the stream
   // admits any opaque delegation id, and a row it cannot be read back with is never written.
-  assert.ok((await developerRow("row-c", "And this.", 9000, 9400)).ok);
+  assert.ok(Result.isSuccess(await developerRow("row-c", "And this.", 9000, 9400)));
   const standing = (await storedMessages(target)).find((row) => row.clientId === "row-c");
   const refused = await database.run(
     writer.attachSpokenAsk(target, { delegationId: "x".repeat(129), rowIds: ["row-c"] }),
   );
-  assert.equal(refused.ok, false);
-  if (refused.ok) return;
-  assert.equal(refused.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
+  assert.ok(Result.isFailure(refused));
+  if (!Result.isFailure(refused)) return;
+  assert.equal(refused.failure.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
   assert.deepEqual(
     (await storedMessages(target)).find((row) => row.clientId === "row-c"),
     standing,

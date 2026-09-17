@@ -457,15 +457,14 @@ it.effect(
         ...askEffects,
         cancelRequested: (id: string, at: Date) =>
           Effect.promise(async () => {
-            assert.equal(
-              (
+            assert.ok(
+              Result.isSuccess(
                 await writes.enqueueTurn(target, {
                   turnId,
                   eveTurnId: "turn_9",
                   origin: TURN_ORIGIN.TYPED,
-                })
-              ).ok,
-              true,
+                }),
+              ),
             );
             await asks.bindDeliveries(target, ["delivery-w"], turnId);
             await asks.cancelRequested(id, at);
@@ -556,15 +555,14 @@ it.effect(
         ...askEffects,
         cancelRequested: (askId: string, at: Date) =>
           Effect.promise(async () => {
-            assert.equal(
-              (
+            assert.ok(
+              Result.isSuccess(
                 await writes.enqueueTurn(target, {
                   turnId: honouredTurn,
                   eveTurnId: "turn_11",
                   origin: TURN_ORIGIN.TYPED,
-                })
-              ).ok,
-              true,
+                }),
+              ),
             );
             await asks.bindDeliveries(target, ["delivery-h"], honouredTurn);
             await writes.requestTurnCancel(target, { turnId: honouredTurn, at: new Date(NOW - 5) });

@@ -1,5 +1,5 @@
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
-import { Cause, Effect, Option, Schema } from "effect";
+import { Cause, Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
@@ -506,8 +506,10 @@ export class StreamRelay {
         ...(standing.promptHash !== undefined ? { promptHash: standing.promptHash } : undefined),
         ...(standing.toolSetHash !== undefined ? { toolSetHash: standing.toolSetHash } : undefined),
       });
-      if (!queued.ok) {
-        this.#seams.report(`The store refused to queue turn ${eveTurnId}: ${queued.refusal}.`);
+      if (Result.isFailure(queued)) {
+        this.#seams.report(
+          `The store refused to queue turn ${eveTurnId}: ${queued.failure.refusal}.`,
+        );
         standing.state.update((state) => this.#without(state, eveTurnId));
         return;
       }
@@ -561,9 +563,9 @@ export class StreamRelay {
           standing.target,
           hostTurnId(standing.sessionId, eveTurnId),
         );
-        if (!attached.ok) {
+        if (Result.isFailure(attached)) {
           this.#seams.report(
-            `The store refused to tie turn ${eveTurnId}'s line to it: ${attached.refusal}.`,
+            `The store refused to tie turn ${eveTurnId}'s line to it: ${attached.failure.refusal}.`,
           );
         }
         return;
@@ -823,12 +825,12 @@ export class StreamRelay {
         sequence,
       };
       const written = yield* this.#seams.writer.consume(standing.target, event);
-      if (!written.ok) {
+      if (Result.isFailure(written)) {
         this.#seams.report(
-          `The store refused a ${event.kind} event of turn ${event.turnId}: ${written.refusal}.`,
+          `The store refused a ${event.kind} event of turn ${event.turnId}: ${written.failure.refusal}.`,
         );
       }
-      return written.ok;
+      return Result.isSuccess(written);
     });
   }
 }

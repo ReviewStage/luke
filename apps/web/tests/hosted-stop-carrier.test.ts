@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { EVE_CANCEL_OUTCOME } from "../server/hosted/brain-host/eve-sessions";
 import { carryStop, type StopCarrierSeams } from "../server/hosted/brain-host/stop-carrier";
 import { STORE_WRITE_EFFECT } from "../server/hosted/store";
@@ -26,7 +26,7 @@ function harness(outcome: Effect.Success<ReturnType<StopCarrierSeams["eve"]["can
       requestTurnCancel: (_target, cancel) =>
         Effect.sync(() => {
           stamps.push([cancel.turnId, cancel.at.getTime()]);
-          return { ok: true as const, effect: STORE_WRITE_EFFECT.WRITTEN };
+          return Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
         }),
     },
     now: () => NOW,
