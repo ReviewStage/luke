@@ -48,11 +48,11 @@ test("a secret that is set to the empty string, or to whitespace, is absent, the
   assert.equal(environment.cronSecret, undefined);
 });
 
-test("a secret that is set travels sealed, and its value is the one the environment holds", async () => {
+test("a secret that is set travels sealed and trimmed, and its value is the one the environment holds", async () => {
   const environment = await environmentOver({
     [HOSTED_OPENAI_ENVIRONMENT.API_KEY]: "sk-test-not-a-real-key",
-    [VAULT_ENCRYPTION_ENVIRONMENT.SECRET]: "a".repeat(64),
-    [OBSERVATION_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
+    [VAULT_ENCRYPTION_ENVIRONMENT.SECRET]: `  ${"a".repeat(64)}\n`,
+    [OBSERVATION_ENVIRONMENT.CRON_SECRET]: " cron-secret-1 ",
   });
   assert.ok(environment.openAiKey && Redacted.isRedacted(environment.openAiKey));
   assert.equal(Redacted.value(environment.openAiKey), "sk-test-not-a-real-key");

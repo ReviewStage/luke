@@ -48,10 +48,16 @@ function present(value: Option.Option<string>): string | undefined {
   return text(Option.getOrUndefined(value));
 }
 
-/** A secret stays sealed while its blankness is judged: a blank one is dropped, never revealed and re-wrapped. */
+/**
+ * A secret under the same rule as a plain value: trimmed, and a blank one is
+ * dropped. The trimming is the one reveal on the way in, so every reveal on
+ * the way out — a bearer, a cipher key — sees the same bytes a compare does.
+ */
 function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Redacted | undefined {
   return Option.getOrUndefined(
-    Option.filter(value, (secret) => text(Redacted.value(secret)) !== undefined),
+    Option.flatMap(value, (secret) =>
+      Option.map(Option.fromNullishOr(text(Redacted.value(secret))), Redacted.make),
+    ),
   );
 }
 

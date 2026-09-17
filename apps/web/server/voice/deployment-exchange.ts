@@ -95,7 +95,7 @@ function configuredSeams(
 function deploymentEve(
   compose: EveSessionsComposer,
   origin: string,
-  deploymentSecret: string,
+  deploymentSecret: Redacted.Redacted,
 ): (accountId: string) => EveSessions {
   return (accountId) =>
     compose({
