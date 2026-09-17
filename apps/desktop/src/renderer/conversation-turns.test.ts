@@ -221,7 +221,6 @@ test("a message of one tool call draws the row itself, stamped, with no fold and
   assert.equal(count(markup, "class", "settings-chevron"), 0);
   assert.equal(actionRows(markup), 1);
   assert.equal(count(markup, "data-thinking", "true"), 0);
-  assert.equal(count(markup, "data-judgment", "ask"), 1);
   // The row stands between the ask and the reply, and carries the message's stamp as they do.
   assert.equal(count(markup, "class", "conversation-time"), 3);
   const [beforeRow, afterRow] = markup.split('data-action-kind="');
@@ -353,13 +352,19 @@ test("a running turn ends in Luke's wait, driven by the turn row's status alone"
   }
 });
 
-test("a turn nobody opened is Luke's own judgment: his face leads every row, and his words are never a reply bubble", () => {
+test("a turn nobody opened is Luke's own judgment: his words lead with his face and are never a reply bubble, and his tool calls draw as any tool call does", () => {
   const own = render([groupOf(FIXTURE_TURN.OWN)], OPEN);
-  assert.equal(count(own, "data-judgment", "own"), 2);
+  assert.equal(count(own, "data-judgment", "own"), 1);
   assert.equal(count(own, "data-judgment", "ask"), 0);
   assert.equal(count(own, "data-own-words", "true"), 1);
   assert.equal(count(own, "data-speaker", "luke"), 0);
-  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 2);
+  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 1);
+  // The face is the words' alone: the turn's tool call leads with its kind's
+  // mark, stamped with no judgment, exactly as the same call would in an ask.
+  const ownRow = entries(own).find((row) => row.includes("data-tool-kind="));
+  assert.ok(ownRow);
+  assert.ok(!ownRow.includes("luke-face") && !ownRow.includes("data-judgment="));
+  assert.ok(ownRow.includes('<span class="conversation-action-mark" aria-hidden="true"><svg'));
 
   const asked = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
   assert.equal(count(asked, "data-judgment", "own"), 0);
@@ -405,7 +410,7 @@ test("a child's completion leads Luke's words with a chip naming the child, pres
   // The turn is Luke's own judgment: a read of his, then his words, and the
   // chip stands before the words, past the message that only read.
   assert.equal(count(markup, "data-own-words", "true"), 1);
-  assert.equal(count(markup, "data-judgment", "own"), 2);
+  assert.equal(count(markup, "data-judgment", "own"), 1);
   assert.equal(markup.split(SUBAGENT_CHIP_BUTTON).length - 1, 1);
   assert.ok(markup.includes('aria-label="Open Sub-agent: Audit the release notes"'));
   assert.ok(markup.includes(">Sub-agent: Audit the release notes</button>"));
@@ -779,16 +784,17 @@ test("on an observed session's transcript page the announce call is a tool call 
   };
   const markup = render([group], OPEN, { session });
   // The announce is one tool call row of its own kind, composed as every
-  // other call is: stamped, led by his face under his own judgment, its
+  // other call is: stamped, led by its kind's mark and never his face, its
   // briefing quoted in the row's words; no observed-group fold anywhere.
   assert.equal(count(markup, "data-tool-kind", "announce"), 1);
   assert.equal(count(markup, "data-observation-announcement", "true"), 0);
   assert.equal((markup.match(/data-tool-calls-fold=/g) ?? []).length, 0);
   const row = entries(markup).find((entry) => entry.includes('data-tool-kind="announce"'));
   assert.ok(row);
-  assert.ok(row.includes('data-judgment="own"'));
+  assert.ok(!row.includes("data-judgment="));
   assert.ok(row.includes('data-tool-status="accepted"'));
-  assert.equal(count(row, "class", "luke-face"), 1);
+  assert.equal(count(row, "class", "luke-face"), 0);
+  assert.ok(row.includes('<span class="conversation-action-mark" aria-hidden="true"><svg'));
   assert.ok(row.includes(`Announced: &quot;${BRIEFING}&quot;`));
   assert.equal(count(row, "class", "conversation-time"), 1);
   assert.ok(!row.includes("conversation-bubble"));

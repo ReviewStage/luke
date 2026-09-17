@@ -110,11 +110,13 @@ import { ThinkingDots } from "./thinking-dots";
  * row anatomy — a mark for the kind of thing it was, then a sentence with the
  * session it reached as a chip — whether it did something to a session or to
  * Luke, or only read a roster, a transcript, a file, or the notebook; what a
- * read answered is never drawn. A turn the developer
- * did not open — a roster look, a child's end — is Luke's
- * own judgment, and everything it did leads with his face under that name and
- * never wears a reply's bubble, so what he decided for himself is never read
- * as something the developer asked. A turn of an observed session's own
+ * read answered is never drawn, and a call draws the same whoever opened
+ * the turn. A turn the developer did not open — a roster look, a child's
+ * end — is Luke's own judgment, and the words he wrote in it lead with his
+ * face under that name and never wear a reply's bubble, so what he decided
+ * for himself is never read as something the developer asked; on an
+ * observed session's own transcript page, where no ask stands to be
+ * confused with, they are his bubble. A turn of an observed session's own
  * conversation — a per-workspace agent's — opens on one chip naming that
  * agent, a header line of the group and no part of any bubble, so what he
  * did there is never read as done in the main thread; the chip leads to the
@@ -142,13 +144,13 @@ const VOICE = {
   /** A note the brain wrote itself into the conversation, never the developer's words. */
   NOTE: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Note" },
   ACTION: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Action" },
-  /** A turn nobody opened: what Luke did and said in it is his own judgment, and the label says so. */
+  /** A turn nobody opened: what Luke said in it is his own judgment, and the label says so. */
   OWN: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Luke, on his own judgment" },
   /** The header line naming the observed session a turn group belongs to. */
   SOURCE: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "In session" },
 } as const satisfies Record<string, RowVoice>;
 
-/** Whose judgment a turn's rows record, stamped on each so the two never look alike. */
+/** Whose judgment a turn's words record, stamped on the rows of words so the two never look alike. */
 const JUDGMENT = { ASK: "ask", OWN: "own" } as const;
 
 type Judgment = (typeof JUDGMENT)[keyof typeof JUDGMENT];
@@ -806,16 +808,15 @@ function chipOf(row: ToolRow): ToolRowChip | undefined {
  * stands down rather than repeat it. A refused or unknown outcome says why
  * under the words; an accepted action shows the carrier's own note where it
  * wrote one. A row of its own carries the message's stamp; one inside a fold
- * carries none, since the fold's line carries it for all of them.
+ * carries none, since the fold's line carries it for all of them. The row is
+ * the same whoever opened the turn: a call is drawn by what it did.
  */
 function ToolCallRow({
   row,
-  judgment,
   at,
   onOpenChat,
 }: {
   row: ToolRow;
-  judgment: Judgment;
   at?: number;
   onOpenChat?: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
@@ -823,26 +824,23 @@ function ToolCallRow({
   const chip = chipOf(row);
   const trailingProvider =
     row.providerId !== undefined && chip?.markId !== row.providerId ? row.providerId : undefined;
-  const own = judgment === JUDGMENT.OWN;
-  const voice = own ? VOICE.OWN : VOICE.ACTION;
   return (
     <li
       className="conversation-entry"
-      data-speaker={voice.speaker}
-      data-judgment={judgment}
+      data-speaker={VOICE.ACTION.speaker}
       data-tool-kind={row.kind}
       data-action-kind={isActionRowKind(row.kind) ? row.kind : undefined}
       data-tool-status={row.status}
     >
-      <small className="visually-hidden">{voice.label}</small>
+      <small className="visually-hidden">{VOICE.ACTION.label}</small>
       <div className="conversation-message">
         <span className="conversation-action">
           <span
             className="conversation-action-mark"
             aria-hidden="true"
-            data-control={own ? undefined : row.controlKind}
+            data-control={row.controlKind}
           >
-            {own ? <WingFace /> : Glyph === undefined ? null : <Glyph />}
+            {Glyph === undefined ? null : <Glyph />}
           </span>
           <span className="conversation-action-body">
             <span className="conversation-words">
@@ -920,33 +918,27 @@ const FOLD_FROM_CALLS = 2;
  * for the state the turn set as well as for a press, so a toggle is read as
  * the reader's only when it leaves the element in a state the turn did not
  * ask for; a fold that mistook the turn's word for the reader's would never
- * close. Under Luke's own judgment the line leads with his face, as each row
- * inside it does.
+ * close.
  */
 function ToolCallsFold({
   rows,
   pending,
-  judgment,
   at,
 }: {
   rows: readonly React.JSX.Element[];
   pending: boolean;
-  judgment: Judgment;
   /** When the first of the folded actions ran: the line's stamp, since the rows inside carry none. */
   at: number;
 }): React.JSX.Element {
   const [choice, setChoice] = useState<FoldChoice | undefined>(undefined);
   const open = foldOpen(choice, pending);
-  const own = judgment === JUDGMENT.OWN;
-  const voice = own ? VOICE.OWN : VOICE.ACTION;
   return (
     <li
       className="conversation-entry"
-      data-speaker={voice.speaker}
-      data-judgment={judgment}
+      data-speaker={VOICE.ACTION.speaker}
       data-tool-calls-fold={pending ? "running" : "settled"}
     >
-      <small className="visually-hidden">{voice.label}</small>
+      <small className="visually-hidden">{VOICE.ACTION.label}</small>
       <div className="conversation-message">
         <details
           className="conversation-actions-fold"
@@ -961,11 +953,6 @@ function ToolCallsFold({
         >
           <summary className="conversation-turn-summary">
             <ChevronIcon />
-            {own ? (
-              <span className="conversation-action-mark" aria-hidden="true">
-                <WingFace />
-              </span>
-            ) : null}
             <span>{`${rows.length} tool calls`}</span>
           </summary>
           <ol className="conversation-turn-rows">{rows}</ol>
@@ -1246,7 +1233,6 @@ interface ToolCall {
 
 function toolCallRow(
   call: ToolCall,
-  judgment: Judgment,
   at: number | undefined,
   onOpenChat: ((identity: SessionIdentity) => void) | undefined,
 ): React.JSX.Element {
@@ -1254,7 +1240,6 @@ function toolCallRow(
     <ToolCallRow
       key={call.key}
       row={call.row}
-      judgment={judgment}
       {...(at === undefined ? undefined : { at })}
       {...(onOpenChat ? { onOpenChat } : undefined)}
     />
@@ -1453,14 +1438,13 @@ function messageRows(
   const [only] = toolCalls;
   if (only === undefined) return rows;
   if (toolCalls.length < FOLD_FROM_CALLS) {
-    return [toolCallRow(only, judgment, view.placedAt, onOpenChat), ...rows];
+    return [toolCallRow(only, view.placedAt, onOpenChat), ...rows];
   }
   return [
     <ToolCallsFold
       key={`${message.id}:tools`}
-      rows={toolCalls.map((call) => toolCallRow(call, judgment, undefined, onOpenChat))}
+      rows={toolCalls.map((call) => toolCallRow(call, undefined, onOpenChat))}
       pending={pending}
-      judgment={judgment}
       at={view.placedAt}
     />,
     ...rows,
