@@ -6,7 +6,10 @@ import { AudioBadge, CloudBadge, ProviderMark } from "./provider-marks.js";
 void React;
 
 interface SessionRowProps {
-  providerId: string;
+  /** Whose mark leads the row; absent where `mark` stands in the slot instead. */
+  providerId?: string | undefined;
+  /** What stands in the mark's slot in place of a provider's mark: a sub-agent's robot. */
+  mark?: React.ReactNode;
   cloud?: boolean;
   realtimeVoice?: boolean | undefined;
   markName?: string;
@@ -28,6 +31,7 @@ interface SessionRowProps {
 /** The shared visual anatomy of a session row; each app owns its interaction shell. */
 export function SessionRow({
   providerId,
+  mark,
   cloud = false,
   realtimeVoice = false,
   markName,
@@ -52,7 +56,7 @@ export function SessionRow({
         title={markName ? (model ? `${markName} · ${model}` : markName) : undefined}
       >
         {markName ? <span className="visually-hidden">{markName}</span> : null}
-        <ProviderMark providerId={providerId} />
+        {mark ?? (providerId === undefined ? null : <ProviderMark providerId={providerId} />)}
         {cloud ? <CloudBadge /> : null}
         {realtimeVoice ? <AudioBadge /> : null}
       </span>
