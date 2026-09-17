@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
 import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
@@ -32,12 +32,12 @@ export default defineHook({
         Effect.gen(function* () {
           if (event.type === "session.started") {
             const starting = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
-            if (!starting.ok) return;
-            if (!(yield* host.sessionStarted(starting, ctx.session.id))) return;
+            if (Result.isFailure(starting)) return;
+            if (!(yield* host.sessionStarted(starting.success, ctx.session.id))) return;
           }
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-          if (!admitted.ok) return;
-          yield* host.relay(event, admitted, ctx.session, state, prompt.get());
+          if (Result.isFailure(admitted)) return;
+          yield* host.relay(event, admitted.success, ctx.session, state, prompt.get());
         }),
       );
     },

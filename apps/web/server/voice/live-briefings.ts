@@ -1,7 +1,7 @@
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import type { BriefingDelivery } from "@sidecar/voice/live-session";
 import type { ToolSet } from "ai";
-import { Cause, Duration, Effect, Schedule, type Schema, type Scope } from "effect";
+import { Cause, Duration, Effect, Result, Schedule, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { briefingWordsOf } from "../hosted/briefing-words.js";
@@ -115,8 +115,8 @@ export const hostedBriefings = /* @__PURE__ */ Effect.fn("hostedBriefings")(func
       deviceId,
       options.now(),
     );
-    if (!claimed.ok) return;
-    options.deliver({ briefing: words, decidedAt: options.now(), claim: claimed.claim });
+    if (Result.isFailure(claimed)) return;
+    options.deliver({ briefing: words, decidedAt: options.now(), claim: claimed.success.claim });
   });
 
   /** Every open offer of the account is read, so rows claimed or held elsewhere cannot fill a page ahead of a newer offer. */

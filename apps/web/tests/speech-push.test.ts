@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { atInstant } from "@sidecar/wire/testing";
 import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -164,7 +164,7 @@ async function announced(userId: string, parts: MessageParts): Promise<Announced
 async function offered(userId: string, briefing = BRIEFING): Promise<Announced> {
   const row = await announced(userId, [announcePart({ briefing })]);
   const offer = await run(offerSpeech(store, userId, row.messageId, clock));
-  assert.equal(offer.ok, true);
+  assert.ok(Result.isSuccess(offer));
   return row;
 }
 
@@ -405,10 +405,10 @@ test("Mac inactive: the briefing is pushed once to the most recently seen device
   assert.deepEqual(await run(pushSpeech(seams, { now: clock, userIds: [userId] })), NOTHING);
   assert.equal(sent.length, 1);
   // The settled state is what refuses a second push, at the store and not only in the pass.
-  assert.deepEqual(await run(markSpeechPushed(store, userId, row.messageId, clock, phone)), {
-    ok: false,
-    refusal: SPEECH_REFUSAL.SETTLED,
-  });
+  assert.deepEqual(
+    await run(markSpeechPushed(store, userId, row.messageId, clock, phone)),
+    Result.fail(SPEECH_REFUSAL.SETTLED),
+  );
 });
 
 test("Mac active and claimed: never pushed; Mac active and unclaimed: waited on inside the grace and pushed past it; a device gone idle ends the wait", async () => {
@@ -420,7 +420,10 @@ test("Mac active and claimed: never pushed; Mac active and unclaimed: waited on 
   });
   await device(userId, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
   const claimed = await offered(userId);
-  assert.equal((await run(claimSpeech(store, userId, claimed.messageId, mac, clock))).ok, true);
+  assert.equal(
+    Result.isSuccess(await run(claimSpeech(store, userId, claimed.messageId, mac, clock))),
+    true,
+  );
   const unclaimed = await offered(userId);
   const { seams, sent } = fakeSender();
 
@@ -541,7 +544,10 @@ test("an account with no token-holding device leaves the offer standing for the 
     // SAFETY: a stored text part in the SDK's own shape, with no announce call beside it.
     { type: "text", text: "A reply with no briefing on offer." } as unknown as MessageParts[number],
   ]);
-  assert.equal((await run(offerSpeech(store, unreadable, wordless.messageId, clock))).ok, true);
+  assert.equal(
+    Result.isSuccess(await run(offerSpeech(store, unreadable, wordless.messageId, clock))),
+    true,
+  );
   const accounts = [unaddressed, nobody, unreadable];
   const { seams, sent } = fakeSender();
 

@@ -155,9 +155,11 @@ export const SPEECH_REFUSAL = {
 
 type SpeechRefusal = (typeof SPEECH_REFUSAL)[keyof typeof SPEECH_REFUSAL];
 
-type SpeechWriteResult =
-  | { readonly ok: true; readonly id: string; readonly seq: number }
-  | { readonly ok: false; readonly refusal: SpeechRefusal };
+/** The speech event as written, by id and sequence, or why the offer did not move. */
+type SpeechWriteResult = Result.Result<
+  { readonly id: string; readonly seq: number },
+  SpeechRefusal
+>;
 
 declare const SPEECH_CLAIM: unique symbol;
 
@@ -178,9 +180,10 @@ export interface SpeechClaim {
   readonly deviceId: string;
 }
 
-type SpeechClaimResult =
-  | { readonly ok: true; readonly id: string; readonly seq: number; readonly claim: SpeechClaim }
-  | { readonly ok: false; readonly refusal: SpeechRefusal };
+type SpeechClaimResult = Result.Result<
+  { readonly id: string; readonly seq: number; readonly claim: SpeechClaim },
+  SpeechRefusal
+>;
 
 export interface SpeechStore {
   readonly writer: Pick<StoreWriter, "recordEvent">;
@@ -323,9 +326,10 @@ function speechEventsOf(
   });
 }
 
-type Located =
-  | { readonly ok: true; readonly conversationId: string; readonly standing: SpeechStanding }
-  | { readonly ok: false; readonly refusal: SpeechRefusal };
+type Located = Result.Result<
+  { readonly conversationId: string; readonly standing: SpeechStanding },
+  SpeechRefusal
+>;
 
 /** The offer on one of the account's messages as it stands now, or why there is none to move. */
 const locate = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -333,11 +337,11 @@ const locate = /* @__PURE__ */ Effect.fnUntraced(function* (
   messageId: string,
 ): Effect.fn.Return<Located, SpeechReadFailure, SqlClient.SqlClient> {
   const conversation = yield* findMessageConversation({ userId, messageId });
-  if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  if (Option.isNone(conversation)) return Result.fail(SPEECH_REFUSAL.NOT_FOUND);
   const events = yield* speechEventsOf([messageId]);
   const standing = speechStandingOf(events.get(messageId) ?? []);
-  if (standing === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_OFFERED };
-  return { ok: true, conversationId: conversation.value.conversationId, standing };
+  if (standing === undefined) return Result.fail(SPEECH_REFUSAL.NOT_OFFERED);
+  return Result.succeed({ conversationId: conversation.value.conversationId, standing });
 });
 
 /**
@@ -400,14 +404,10 @@ interface Move {
  * the refusal answered is then the one the offer's new standing names.
  */
 /** Where a transition landed, with the conversation the message stands in, which a claim carries onward. */
-type Moved =
-  | {
-      readonly ok: true;
-      readonly id: string;
-      readonly seq: number;
-      readonly conversationId: string;
-    }
-  | { readonly ok: false; readonly refusal: SpeechRefusal };
+type Moved = Result.Result<
+  { readonly id: string; readonly seq: number; readonly conversationId: string },
+  SpeechRefusal
+>;
 
 const move = /* @__PURE__ */ Effect.fnUntraced(function* (
   store: SpeechStore,
@@ -416,11 +416,12 @@ const move = /* @__PURE__ */ Effect.fnUntraced(function* (
   { transition, deviceId, payload, guard }: Move,
 ): Effect.fn.Return<Moved, SpeechReadFailure, SqlClient.SqlClient> {
   const located = yield* locate(userId, messageId);
-  if (!located.ok) return located;
-  const refusal = transition.refusals[located.standing.state] ?? guard?.(located.standing);
-  if (refusal !== undefined) return { ok: false, refusal };
+  if (Result.isFailure(located)) return Result.fail(located.failure);
+  const { conversationId, standing } = located.success;
+  const refusal = transition.refusals[standing.state] ?? guard?.(standing);
+  if (refusal !== undefined) return Result.fail(refusal);
   const written = yield* store.writer.recordEvent(
-    { userId, conversationId: located.conversationId },
+    { userId, conversationId },
     {
       messageId,
       kind: transition.kind,
@@ -429,22 +430,21 @@ const move = /* @__PURE__ */ Effect.fnUntraced(function* (
       unless: transition.unless,
     },
   );
-  if (written.ok) return { ...written, conversationId: located.conversationId };
+  if (written.ok) return Result.succeed({ id: written.id, seq: written.seq, conversationId });
   switch (written.refusal) {
     case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
-      return { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED };
+      return Result.fail(SPEECH_REFUSAL.ALREADY_CLAIMED);
     case STORE_WRITE_REFUSAL.SUPERSEDED: {
       const now = yield* locate(userId, messageId);
-      return {
-        ok: false,
-        refusal: now.ok
-          ? (transition.refusals[now.standing.state] ?? SPEECH_REFUSAL.SETTLED)
-          : now.refusal,
-      };
+      return Result.fail(
+        Result.isSuccess(now)
+          ? (transition.refusals[now.success.standing.state] ?? SPEECH_REFUSAL.SETTLED)
+          : now.failure,
+      );
     }
     case STORE_WRITE_REFUSAL.NO_CONVERSATION:
     case STORE_WRITE_REFUSAL.NO_MESSAGE:
-      return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+      return Result.fail(SPEECH_REFUSAL.NOT_FOUND);
   }
 });
 
@@ -461,10 +461,10 @@ export const offerSpeech = /* @__PURE__ */ Effect.fn("offerSpeech")(function* (
   now: number,
 ): Effect.fn.Return<SpeechWriteResult, SpeechReadFailure, SqlClient.SqlClient> {
   const conversation = yield* findMessageConversation({ userId, messageId });
-  if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  if (Option.isNone(conversation)) return Result.fail(SPEECH_REFUSAL.NOT_FOUND);
   const standing = yield* findOfferedEvent(messageId);
   if (Option.isSome(standing)) {
-    return { ok: true, id: standing.value.id, seq: standing.value.seq };
+    return Result.succeed({ id: standing.value.id, seq: standing.value.seq });
   }
   const written = yield* store.writer.recordEvent(
     { userId, conversationId: conversation.value.conversationId },
@@ -475,19 +475,19 @@ export const offerSpeech = /* @__PURE__ */ Effect.fn("offerSpeech")(function* (
       unless: [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
     },
   );
-  if (written.ok) return written;
+  if (written.ok) return Result.succeed({ id: written.id, seq: written.seq });
   switch (written.refusal) {
     case STORE_WRITE_REFUSAL.SUPERSEDED: {
       // The same offer landed from another caller between the read and the lock; it is the one to answer.
       const landed = yield* findOfferedEvent(messageId);
       return Option.isNone(landed)
-        ? { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND }
-        : { ok: true, id: landed.value.id, seq: landed.value.seq };
+        ? Result.fail(SPEECH_REFUSAL.NOT_FOUND)
+        : Result.succeed({ id: landed.value.id, seq: landed.value.seq });
     }
     case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
     case STORE_WRITE_REFUSAL.NO_CONVERSATION:
     case STORE_WRITE_REFUSAL.NO_MESSAGE:
-      return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+      return Result.fail(SPEECH_REFUSAL.NOT_FOUND);
   }
 });
 
@@ -509,15 +509,15 @@ export const claimSpeech = /* @__PURE__ */ Effect.fn("claimSpeech")(function* (
     deviceId,
     guard: (standing) => (standing.expiresAt <= now ? SPEECH_REFUSAL.EXPIRED : undefined),
   });
-  if (!moved.ok) return moved;
+  if (Result.isFailure(moved)) return Result.fail(moved.failure);
   // SAFETY: the claim event is on the record under this device; this is the one place the brand is minted.
   const claim = {
     userId,
-    conversationId: moved.conversationId,
+    conversationId: moved.success.conversationId,
     messageId,
     deviceId,
   } as SpeechClaim;
-  return { ok: true, id: moved.id, seq: moved.seq, claim };
+  return Result.succeed({ id: moved.success.id, seq: moved.success.seq, claim });
 });
 
 /**

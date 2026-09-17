@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -106,13 +106,12 @@ type VoiceWriteRefusal = (typeof VOICE_WRITE_REFUSAL)[keyof typeof VOICE_WRITE_R
 
 type VoiceWriteEffect = (typeof STORE_WRITE_EFFECT)[keyof typeof STORE_WRITE_EFFECT];
 
-export type VoiceWriteResult =
-  | { readonly ok: true; readonly effect: VoiceWriteEffect }
-  | { readonly ok: false; readonly refusal: VoiceWriteRefusal };
+/** What a live event did to the record, or why the record refused it. */
+export type VoiceWriteResult = Result.Result<VoiceWriteEffect, VoiceWriteRefusal>;
 
-const IGNORED: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-const WRITTEN: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-const NO_SESSION: VoiceWriteResult = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION };
+const IGNORED: VoiceWriteResult = Result.succeed(STORE_WRITE_EFFECT.IGNORED);
+const WRITTEN: VoiceWriteResult = Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
+const NO_SESSION: VoiceWriteResult = Result.fail(VOICE_WRITE_REFUSAL.NO_SESSION);
 
 /** The span one utterance covers on the session's own clock, as the ledger grouped it. */
 interface SpokenUtteranceSpan {
@@ -204,7 +203,7 @@ const upserted = <E, R>(
     R
   >,
 ): Effect.Effect<VoiceWriteResult, E, R> =>
-  Effect.map(write, (written) => (written.ok ? WRITTEN : { ok: false, refusal: written.refusal }));
+  Effect.map(write, (written) => (written.ok ? WRITTEN : Result.fail(written.refusal)));
 
 const VoiceSessionKeySchema = Schema.Struct({
   userId: Schema.String,
@@ -365,7 +364,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         if (append.spokenFromMs === undefined || delta.start_ms < append.spokenFromMs) continue;
         appends.delete(clientEventId);
         if (voiceSession.deviceId === null) {
-          outcome = { ok: false, refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT };
+          outcome = Result.fail(VOICE_WRITE_REFUSAL.NOT_CLAIMANT);
           continue;
         }
         const marked = yield* markSpeechSpoken(
@@ -376,16 +375,14 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
           // Which session said it, and when on that session's clock.
           { voiceSessionId: voiceSession.id, atMs: delta.start_ms },
         );
-        if (marked.ok) {
+        if (Result.isSuccess(marked)) {
           outcome ??= WRITTEN;
         } else {
-          outcome = {
-            ok: false,
-            refusal:
-              marked.refusal === SPEECH_REFUSAL.NOT_FOUND
-                ? VOICE_WRITE_REFUSAL.NO_MESSAGE
-                : VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
-          };
+          outcome = Result.fail(
+            marked.failure === SPEECH_REFUSAL.NOT_FOUND
+              ? VOICE_WRITE_REFUSAL.NO_MESSAGE
+              : VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
+          );
         }
       }
       return outcome;
@@ -456,7 +453,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         voiceSessionId,
         startingAtOrBeforeMs: row.startMs,
       });
-      if (!latest.ok) return { ok: false, refusal: latest.refusal };
+      if (!latest.ok) return Result.fail(latest.refusal);
       const delegationId = latest.line?.delegationId;
       const metadata: AssistantMessageMetadata = {
         author: MESSAGE_AUTHOR.VOICE_MODEL,
@@ -484,7 +481,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         ? attached.attached.length > 0
           ? WRITTEN
           : IGNORED
-        : { ok: false, refusal: attached.refusal },
+        : Result.fail(attached.refusal),
     );
   }
 

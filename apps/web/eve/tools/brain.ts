@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { defineDynamic, defineTool } from "eve/tools";
 import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
 import { eveTurnIdOf, type HostedToolBinding } from "../../server/hosted/brain-host/host.js";
@@ -19,14 +19,15 @@ export default defineDynamic({
       runWeb(
         Effect.gen(function* () {
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-          if (!admitted.ok) return null;
+          if (Result.isFailure(admitted)) return null;
           // SAFETY: eve hands a resolver the JSON event it recorded; the host reads it as wire input.
           const eveTurnId = eveTurnIdOf(unparsedWire(event as WireBoundaryInput));
           if (eveTurnId === undefined) return null;
           const turn = host.turnOf(ctx.session.auth, ctx.session.id, eveTurnId);
           if (!turn) return null;
-          const binding: HostedToolBinding = { target: admitted.target, turn };
-          const declarations = yield* host.toolDeclarations(admitted.target, turn);
+          const { target } = admitted.success;
+          const binding: HostedToolBinding = { target, turn };
+          const declarations = yield* host.toolDeclarations(target, turn);
           return Object.fromEntries(
             declarations.map((declared) => {
               const name = declared.name;

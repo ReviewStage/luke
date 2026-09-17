@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -34,16 +34,14 @@ export { claimRuntimeSession, conversationOwnedBy } from "./recorded-session.js"
 type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 
 export interface AdmittedConversation {
-  readonly ok: true;
   readonly target: ConversationTarget;
   readonly kind: ConversationKind;
   /** The eve session id the conversation row last recorded, where one has been. */
   readonly runtimeSessionId: string | undefined;
 }
 
-export type ConversationAdmission =
-  | AdmittedConversation
-  | { readonly ok: false; readonly refusal: BrainHostRefusal };
+/** The conversation the session was admitted to, or the one word for why it was not. */
+export type ConversationAdmission = Result.Result<AdmittedConversation, BrainHostRefusal>;
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
 type ConversationFailure = SqlError | Schema.SchemaError;
@@ -97,30 +95,28 @@ export function admitConversation(
   const current = auth.current;
   const account = actedForAccount(current);
   if (!current || account === undefined) {
-    return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NO_PRINCIPAL });
+    return Effect.succeed(Result.fail(BRAIN_HOST_REFUSAL.NO_PRINCIPAL));
   }
   const initiator = auth.initiator ?? current;
   if (actedForAccount(initiator) !== account) {
-    return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR });
+    return Effect.succeed(Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR));
   }
   const conversationId = conversationIdOf(initiator);
-  if (!conversationId)
-    return Effect.succeed({ ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION });
+  if (!conversationId) return Effect.succeed(Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION));
   return Effect.map(findConversation(conversationId), (found) => {
-    if (Option.isNone(found)) return { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION };
+    if (Option.isNone(found)) return Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION);
     const row = found.value;
     if (row.userId !== account) {
-      return { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_OWNER };
+      return Result.fail(BRAIN_HOST_REFUSAL.NOT_OWNER);
     }
     if (session.standing === SESSION_STANDING.CURRENT && row.runtimeSessionId !== session.id) {
-      return { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION };
+      return Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION);
     }
-    return {
-      ok: true,
+    return Result.succeed({
       target: { userId: row.userId, conversationId },
       kind: row.kind,
       runtimeSessionId: row.runtimeSessionId ?? undefined,
-    };
+    });
   });
 }
 

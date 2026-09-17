@@ -3,7 +3,7 @@ import { type DailyNoteListing, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime"
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { test } from "vitest";
 import { BRAIN_TOOL, maximumListedDailyNotes } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -53,16 +53,16 @@ function fakeWorkspace() {
   const appended: string[] = [];
   const listed: number[] = [];
   const workspace: BrainWorkspaceAccess = {
-    read: (name) => Effect.succeed({ ok: true, content: `content of ${name}` }),
+    read: (name) => Effect.succeed(Result.succeed({ content: `content of ${name}` })),
     write: (name, content) =>
       Effect.sync(() => {
         written.push([name, content]);
-        return { ok: true, chars: content.length };
+        return Result.succeed({ chars: content.length });
       }),
     append: (entry) =>
       Effect.sync(() => {
         appended.push(entry);
-        return { ok: true, path: TODAY, chars: appended.join("\n\n").length };
+        return Result.succeed({ path: TODAY, chars: appended.join("\n\n").length });
       }),
     listNotes: (limit) =>
       Effect.sync(() => {
@@ -153,7 +153,7 @@ test("an append trims its entry, refuses one left with nothing before the journa
   // The host's refusal is the model's answer, journaled like any other outcome.
   const full: BrainWorkspaceAccess = {
     ...workspace,
-    append: () => Effect.succeed({ ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE }),
+    append: () => Effect.succeed(Result.fail(WORKSPACE_FILE_REFUSAL.TOO_LARGE)),
   };
   const bounded = context({ workspace: full });
   const refused: WireRecord = await Effect.runPromise(

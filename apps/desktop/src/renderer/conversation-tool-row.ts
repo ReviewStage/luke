@@ -39,7 +39,7 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Result, Schema } from "effect";
+import { Option, Result, Schema } from "effect";
 import type { SessionView } from "./session-model";
 
 /**
@@ -51,11 +51,8 @@ import type { SessionView } from "./session-model";
 function parsedRequest<Value, Encoded>(
   schema: Schema.Codec<Value, Encoded>,
   input: UnparsedWireValue,
-): { readonly ok: true; readonly value: Value } | { readonly ok: false } {
-  return Result.match(readEither(schema, { excess: EXCESS_KEYS.DROP })(input), {
-    onSuccess: (value) => ({ ok: true, value }),
-    onFailure: () => ({ ok: false }),
-  });
+): Option.Option<Value> {
+  return Result.getSuccess(readEither(schema, { excess: EXCESS_KEYS.DROP })(input));
 }
 
 /**
@@ -249,7 +246,7 @@ function detailOutcome(part: StoredToolPart): RowOutcome {
     case TOOL_PART_STATE.OUTPUT_AVAILABLE: {
       // SAFETY: a stored part's output is JSON the store holds as jsonb; the wire boundary is where it is read.
       const read = parsedRequest(TOOL_ANSWER, unparsedWire(part.output as WireBoundaryInput));
-      return read.ok &&
+      return Option.isSome(read) &&
         read.value.status !== undefined &&
         read.value.status !== ACTION_RESULT_STATUS.ACCEPTED &&
         read.value.reason !== undefined
@@ -434,12 +431,12 @@ function composeRuns(
   switch (kind) {
     case ACTION_KIND.MESSAGE: {
       const read = parsedRequest(MESSAGE_REQUEST, input);
-      const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
+      const { chip, providerId } = namedSession(Option.getOrUndefined(read), target, roster);
       return {
         runs: [
           { text: "Sent a message to " },
           { chip },
-          ...(read.ok ? [{ text: `: "${read.value.text}"` }] : []),
+          ...(Option.isSome(read) ? [{ text: `: "${read.value.text}"` }] : []),
         ],
         ...(providerId !== undefined ? { providerId } : undefined),
       };
@@ -447,13 +444,13 @@ function composeRuns(
     case ACTION_KIND.CONTROL: {
       const read = parsedRequest(CONTROL_REQUEST, input);
       const { identity, chip, providerId } = namedSession(
-        read.ok ? read.value : undefined,
+        Option.getOrUndefined(read),
         target,
         roster,
       );
       const control = controlOf(
         target,
-        read.ok ? read.value.control_id : undefined,
+        Option.isSome(read) ? read.value.control_id : undefined,
         identity,
         roster,
       );
@@ -475,11 +472,12 @@ function composeRuns(
     case ACTION_KIND.OPEN: {
       const read = parsedRequest(OPEN_REQUEST, input);
       const { identity, chip, providerId } = namedSession(
-        read.ok ? read.value : undefined,
+        Option.getOrUndefined(read),
         target,
         roster,
       );
-      const applicationId = target?.applicationId ?? (read.ok ? read.value.application : undefined);
+      const applicationId =
+        target?.applicationId ?? (Option.isSome(read) ? read.value.application : undefined);
       return {
         runs: [
           { text: "Opened " },
@@ -495,8 +493,9 @@ function composeRuns(
       const read = parsedRequest(CREATE_WORKSPACE_REQUEST, input);
       const created =
         envelope?.status === ACTION_OUTPUT_STATUS.ACCEPTED ? envelope.createdSession : undefined;
-      const providerId = target?.providerId ?? (read.ok ? read.value.provider_id : undefined);
-      const name = read.ok ? read.value.name : undefined;
+      const providerId =
+        target?.providerId ?? (Option.isSome(read) ? read.value.provider_id : undefined);
+      const name = Option.isSome(read) ? read.value.name : undefined;
       // A creation names no agent, so its mark is the provider's.
       const fallback: ChipFallback = {
         ...(name !== undefined ? { name } : undefined),
@@ -524,10 +523,14 @@ function composeRuns(
     }
     case ACTION_KIND.ADD_AGENT: {
       const read = parsedRequest(ADD_AGENT_REQUEST, input);
-      const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
+      const { chip, providerId } = namedSession(Option.getOrUndefined(read), target, roster);
       return {
         runs: [
-          { text: read.ok ? `Added a ${read.value.agent} agent to ` : "Added an agent to " },
+          {
+            text: Option.isSome(read)
+              ? `Added a ${read.value.agent} agent to `
+              : "Added an agent to ",
+          },
           { chip },
         ],
         ...(providerId !== undefined ? { providerId } : undefined),
@@ -539,12 +542,12 @@ function composeRuns(
         kind === ACTION_KIND.RENAME_WORKSPACE ? RENAME_WORKSPACE_REQUEST : RENAME_SESSION_REQUEST,
         input,
       );
-      const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
+      const { chip, providerId } = namedSession(Option.getOrUndefined(read), target, roster);
       return {
         runs: [
           { text: kind === ACTION_KIND.RENAME_WORKSPACE ? "Renamed workspace " : "Renamed " },
           { chip },
-          ...(read.ok ? [{ text: ` to "${read.value.name}"` }] : []),
+          ...(Option.isSome(read) ? [{ text: ` to "${read.value.name}"` }] : []),
         ],
         ...(providerId !== undefined ? { providerId } : undefined),
       };
@@ -554,7 +557,7 @@ function composeRuns(
       return {
         runs: [
           {
-            text: read.ok
+            text: Option.isSome(read)
               ? `Changed ${settingLabel(read.value.setting_id)} to "${read.value.value}"`
               : "Changed a setting",
           },
@@ -563,19 +566,31 @@ function composeRuns(
     }
     case ACTION_KIND.PANEL: {
       const read = parsedRequest(PANEL_REQUEST, input);
-      const tab = read.ok ? (read.value.tab ?? APP_PANEL_TAB.SESSIONS) : APP_PANEL_TAB.SESSIONS;
+      const tab = Option.isSome(read)
+        ? (read.value.tab ?? APP_PANEL_TAB.SESSIONS)
+        : APP_PANEL_TAB.SESSIONS;
       return { runs: [{ text: `Showed the ${tab} tab` }] };
     }
     case ACTION_KIND.FEEDBACK: {
       const read = parsedRequest(FEEDBACK_REQUEST, input);
       return {
-        runs: [{ text: read.ok ? `Opened the ${read.value.kind} composer` : "Opened a composer" }],
+        runs: [
+          {
+            text: Option.isSome(read)
+              ? `Opened the ${read.value.kind} composer`
+              : "Opened a composer",
+          },
+        ],
       };
     }
     case ACTION_KIND.UPDATE: {
       const read = parsedRequest(UPDATE_REQUEST, input);
       return {
-        runs: [{ text: read.ok ? UPDATE_WORDS[read.value.action] : "Pressed the Updates row" }],
+        runs: [
+          {
+            text: Option.isSome(read) ? UPDATE_WORDS[read.value.action] : "Pressed the Updates row",
+          },
+        ],
       };
     }
   }

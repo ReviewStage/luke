@@ -1,6 +1,6 @@
 import { serialQueue } from "@sidecar/runtime/effect";
 import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
-import { Deferred, Effect, type Schema, type Scope } from "effect";
+import { Deferred, Effect, Result, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -96,7 +96,7 @@ export function hostedLiveRecord({
     /** Whether the record took an utterance: landed, found standing, or owed nothing; a refusal or a failure is not taken. */
     const taken = (write: Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>) =>
       write.pipe(
-        Effect.map((written) => written.ok),
+        Effect.map(Result.isSuccess),
         Effect.catch(() => Effect.succeed(false)),
         Effect.catchDefect(() => Effect.succeed(false)),
       );
@@ -128,7 +128,10 @@ export function hostedLiveRecord({
             }),
           ),
         ).pipe(
-          Effect.map((attached) => attached.ok && attached.effect !== STORE_WRITE_EFFECT.IGNORED),
+          Effect.map(
+            (attached) =>
+              Result.isSuccess(attached) && attached.success !== STORE_WRITE_EFFECT.IGNORED,
+          ),
           Effect.catch(() => Effect.succeed(false)),
           Effect.catchDefect(() => Effect.succeed(false)),
         ),

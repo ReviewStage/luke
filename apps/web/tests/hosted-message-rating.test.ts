@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { conversationMessageRatingPath } from "@sidecar/hosted";
 import { MESSAGE_RATING, type WireBoundaryInput } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { test } from "vitest";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { handleMessageRating, type MessageRatingOptions } from "../server/hosted/message-rating";
-import { RATING_REFUSAL, type RatingWriteResult } from "../server/hosted/store/ratings";
+import { RATING_REFUSAL, type RatingRefusal } from "../server/hosted/store/ratings";
 import { runWithoutDatabase } from "./support/no-database";
 
 const MESSAGE_ID = "2b000000-0000-4000-8000-000000000012";
@@ -38,7 +38,7 @@ function options(overrides: Partial<MessageRatingOptions> = {}): MessageRatingOp
   return {
     request: ratingRequest(),
     resolveUserId: () => Effect.succeedSome("user-1"),
-    rate: () => Effect.succeed({ ok: true, id: "event-1", seq: 7 }),
+    rate: () => Effect.succeed(Result.succeed({ id: "event-1", seq: 7 })),
     ...overrides,
   };
 }
@@ -135,7 +135,7 @@ test("an id that is not a UUID names no row: not found, and the store is never a
       rate: () =>
         Effect.sync(() => {
           asked += 1;
-          return { ok: true, id: "event-1", seq: 1 };
+          return Result.succeed({ id: "event-1", seq: 1 });
         }),
     }),
   );
@@ -151,7 +151,7 @@ test("the path's id reaches the store case folded", async () => {
       rate: (_userId, messageId) =>
         Effect.sync(() => {
           seen.push(messageId);
-          return { ok: true, id: "event-1", seq: 1 };
+          return Result.succeed({ id: "event-1", seq: 1 });
         }),
     }),
   );
@@ -170,7 +170,7 @@ test("an admitted rating reaches the store with the caller, the path's message, 
       rate: (userId, messageId, rating) =>
         Effect.sync(() => {
           seen.push([userId, messageId, rating]);
-          return { ok: true, id: "event-9", seq: 3 };
+          return Result.succeed({ id: "event-9", seq: 3 });
         }),
     }),
   );
@@ -186,8 +186,8 @@ test("an admitted rating reaches the store with the caller, the path's message, 
 });
 
 test("the store's two refusals are two statuses: not found for a message the account does not hold, forbidden for one Luke did not write", async () => {
-  const refused = async (refusal: Extract<RatingWriteResult, { ok: false }>["refusal"]) =>
-    errorOf(await runRating(options({ rate: () => Effect.succeed({ ok: false, refusal }) })));
+  const refused = async (refusal: RatingRefusal) =>
+    errorOf(await runRating(options({ rate: () => Effect.succeed(Result.fail(refusal)) })));
   assert.deepEqual(await refused(RATING_REFUSAL.NOT_FOUND), [404, HOSTED_API_ERROR.NOT_FOUND]);
   assert.deepEqual(await refused(RATING_REFUSAL.NOT_LUKES), [403, HOSTED_API_ERROR.NOT_RATEABLE]);
 });

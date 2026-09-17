@@ -525,7 +525,7 @@ it.effect(
         said(" on a permission prompt.", 4700, 6000),
       ]) {
         const result = await run(voice.consume(live, event));
-        assert.ok(result.ok, JSON.stringify(result));
+        assert.ok(Result.isSuccess(result), JSON.stringify(result));
       }
       // Segments alone move nothing the panel draws.
       await holds("spoken: segments", 3);
@@ -538,7 +538,7 @@ it.effect(
           endMs: 3400,
         }),
       );
-      assert.deepEqual(lineWritten, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
+      assert.deepEqual(lineWritten, Result.succeed(STORE_WRITE_EFFECT.WRITTEN));
       const lineHeld = await holds("spoken: developer's line settled", 4);
       assert.deepEqual(
         lineHeld.groups
@@ -567,7 +567,7 @@ it.effect(
           endMs: 6000,
         }),
       );
-      assert.deepEqual(replyWritten, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
+      assert.deepEqual(replyWritten, Result.succeed(STORE_WRITE_EFFECT.WRITTEN));
       const replyHeld = await holds("spoken: Luke's answer settled", 5);
       // Two groups of their own, the developer's line before the answer, each a settled row under no turn.
       assert.deepEqual(

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Schema } from "effect";
+import { Effect, Fiber, Result, Schema } from "effect";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
@@ -175,11 +175,11 @@ test("a delegation inserts the child under its parent and hands eve the task as 
   const opener = seams({ eve: eve.eve });
 
   const answer = await database.run(openChild(opener, spawn(fixture)));
-  assert.equal(answer.ok, true);
-  if (!answer.ok) return;
-  assert.equal(answer.sessionId, SESSION_ID);
+  assert.ok(Result.isSuccess(answer));
+  if (!Result.isSuccess(answer)) return;
+  assert.equal(answer.success.sessionId, SESSION_ID);
 
-  assert.deepEqual(await childRow(answer.childId), {
+  assert.deepEqual(await childRow(answer.success.childId), {
     kind: CONVERSATION_KIND.CHILD,
     userId: fixture.userId,
     parentConversationId: fixture.parentId,
@@ -195,31 +195,38 @@ test("a delegation inserts the child under its parent and hands eve the task as 
     },
   ]);
   assert.deepEqual(eve.opened, [
-    { conversationId: answer.childId, turn: BRAIN_HOST_TURN.CHILD_TASK, message: "fixture task" },
+    {
+      conversationId: answer.success.childId,
+      turn: BRAIN_HOST_TURN.CHILD_TASK,
+      message: "fixture task",
+    },
   ]);
   assert.deepEqual(opener.reports, []);
 
   // The session eve opened is admitted against the child's row as any recorded session is, the row
   // naming its kind, and a session that is not the recorded one is refused.
-  const auth = principal(fixture.userId, answer.childId);
+  const auth = principal(fixture.userId, answer.success.childId);
   const admitted = await database.run(
     admitConversation(
       { current: auth, initiator: auth },
       { id: SESSION_ID, standing: SESSION_STANDING.CURRENT },
     ),
   );
-  assert.equal(admitted.ok, true);
-  if (!admitted.ok) return;
-  assert.equal(admitted.kind, CONVERSATION_KIND.CHILD);
-  assert.deepEqual(admitted.target, { userId: fixture.userId, conversationId: answer.childId });
-  assert.equal(admitted.runtimeSessionId, SESSION_ID);
+  assert.ok(Result.isSuccess(admitted));
+  if (!Result.isSuccess(admitted)) return;
+  assert.equal(admitted.success.kind, CONVERSATION_KIND.CHILD);
+  assert.deepEqual(admitted.success.target, {
+    userId: fixture.userId,
+    conversationId: answer.success.childId,
+  });
+  assert.equal(admitted.success.runtimeSessionId, SESSION_ID);
   const other = await database.run(
     admitConversation(
       { current: auth, initiator: auth },
       { id: "wrun_01M000000000000000000OTHER", standing: SESSION_STANDING.CURRENT },
     ),
   );
-  assert.equal(other.ok, false);
+  assert.ok(Result.isFailure(other));
 });
 
 test("a child without a label or an awaited completion records neither", async () => {
@@ -227,9 +234,9 @@ test("a child without a label or an awaited completion records neither", async (
   const { label, ...unlabeled } = spawn(fixture, { expectsCompletion: false });
   assert.equal(label, "fixture label");
   const answer = await database.run(openChild(seams(), unlabeled));
-  assert.equal(answer.ok, true);
-  if (!answer.ok) return;
-  const row = await childRow(answer.childId);
+  assert.ok(Result.isSuccess(answer));
+  if (!Result.isSuccess(answer)) return;
+  const row = await childRow(answer.success.childId);
   assert.equal(row?.label, null);
   assert.equal(row?.expectsCompletion, false);
 });
@@ -242,10 +249,10 @@ test("a deployment with no secret or no origin opens nothing and inserts nothing
     { eveOrigin: () => undefined },
   ] satisfies Partial<ChildOpenerSeams>[]) {
     const opener = seams({ eve: eve.eve, ...missing });
-    assert.deepEqual(await database.run(openChild(opener, spawn(fixture))), {
-      ok: false,
-      refusal: CHILD_OPEN_REFUSAL.UNCONFIGURED,
-    });
+    assert.deepEqual(
+      await database.run(openChild(opener, spawn(fixture))),
+      Result.fail(CHILD_OPEN_REFUSAL.UNCONFIGURED),
+    );
     assert.equal(opener.reports.length, 1);
   }
   assert.deepEqual(await childrenOf(fixture.parentId), { standing: 0, stamped: 0 });
@@ -256,19 +263,19 @@ test("a refused open and an open that never answered each stamp the child they o
   const fixture = await delegating();
   const refusing = fakeEve(() => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }));
   const refused = seams({ eve: refusing.eve });
-  assert.deepEqual(await database.run(openChild(refused, spawn(fixture))), {
-    ok: false,
-    refusal: CHILD_OPEN_REFUSAL.EVE_REFUSED,
-  });
+  assert.deepEqual(
+    await database.run(openChild(refused, spawn(fixture))),
+    Result.fail(CHILD_OPEN_REFUSAL.EVE_REFUSED),
+  );
   assert.equal(refusing.opened.length, 1);
   assert.match(refused.reports[0] ?? "", /status 503/);
 
   const throwing = fakeEve(() => eveUnreachable(ORIGIN));
   const unreachable = seams({ eve: throwing.eve });
-  assert.deepEqual(await database.run(openChild(unreachable, spawn(fixture))), {
-    ok: false,
-    refusal: CHILD_OPEN_REFUSAL.EVE_REFUSED,
-  });
+  assert.deepEqual(
+    await database.run(openChild(unreachable, spawn(fixture))),
+    Result.fail(CHILD_OPEN_REFUSAL.EVE_REFUSED),
+  );
   assert.match(unreachable.reports[0] ?? "", /eve unreachable/);
 
   // Each stamped row is a cleared conversation: listed by nothing, and admitting no session.
@@ -283,7 +290,7 @@ test("a refused open and an open that never answered each stamp the child they o
       { id: SESSION_ID, standing: SESSION_STANDING.CLAIMING },
     ),
   );
-  assert.equal(admitted.ok, false);
+  assert.ok(Result.isFailure(admitted));
 });
 
 test("a session that claimed the child before eve's answer was read is the child's, whatever eve answered", async () => {
@@ -308,11 +315,11 @@ test("a session that claimed the child before eve's answer was read is the child
   );
   const opener = seams({ eve: claiming.eve });
   const answer = await database.run(openChild(opener, spawn(fixture)));
-  assert.equal(answer.ok, true);
-  if (!answer.ok) return;
-  assert.equal(answer.sessionId, CLAIMED);
+  assert.ok(Result.isSuccess(answer));
+  if (!Result.isSuccess(answer)) return;
+  assert.equal(answer.success.sessionId, CLAIMED);
   assert.deepEqual(await childrenOf(fixture.parentId), { standing: 1, stamped: 0 });
-  assert.equal((await childRow(answer.childId))?.runtimeSessionId, CLAIMED);
+  assert.equal((await childRow(answer.success.childId))?.runtimeSessionId, CLAIMED);
   assert.equal(opener.reports.length, 2);
 });
 
@@ -349,19 +356,19 @@ test("a parent or a message that does not stand for the account inserts no child
       spawn(fixture, { parent: { userId: other, conversationId: fixture.parentId } }),
     ),
   );
-  assert.deepEqual(foreign, { ok: false, refusal: CHILD_OPEN_REFUSAL.NO_PARENT });
+  assert.deepEqual(foreign, Result.fail(CHILD_OPEN_REFUSAL.NO_PARENT));
   const stamped = await database.run(
     openChild(
       opener,
       spawn(fixture, { parent: { userId: fixture.userId, conversationId: cleared } }),
     ),
   );
-  assert.deepEqual(stamped, { ok: false, refusal: CHILD_OPEN_REFUSAL.NO_PARENT });
+  assert.deepEqual(stamped, Result.fail(CHILD_OPEN_REFUSAL.NO_PARENT));
   // A message of another conversation, even one of the account's own parent, spawns nothing here.
   const otherMessage = await database.run(
     openChild(opener, spawn(fixture, { spawnedByMessageId: elsewhere.messageId })),
   );
-  assert.deepEqual(otherMessage, { ok: false, refusal: CHILD_OPEN_REFUSAL.NO_PARENT });
+  assert.deepEqual(otherMessage, Result.fail(CHILD_OPEN_REFUSAL.NO_PARENT));
 
   assert.deepEqual(await childrenOf(fixture.parentId), { standing: 0, stamped: 0 });
   assert.deepEqual(await childrenOf(cleared), { standing: 0, stamped: 0 });

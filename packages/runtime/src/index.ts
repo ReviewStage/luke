@@ -31,6 +31,11 @@ export {
   type ToolPolicy,
   type ToolPolicyLayers,
 } from "./tool-policy.js";
+export type {
+  WorkspaceAppendResult,
+  WorkspaceReadResult,
+  WorkspaceWriteResult,
+} from "./workspace.effect.js";
 export {
   appendedDailyNote,
   BOOTSTRAP_BOUNDS,
@@ -50,10 +55,7 @@ export {
   tooLargeRefusal,
   WORKSPACE_FILE,
   WORKSPACE_FILE_REFUSAL,
-  type WorkspaceAppendResult,
   type WorkspaceFile,
-  type WorkspaceReadResult,
   type WorkspaceSeeds,
-  type WorkspaceWriteResult,
   workspaceFileBound,
 } from "./workspace.js";

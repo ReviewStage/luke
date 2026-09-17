@@ -253,11 +253,13 @@ export const ASK_REFUSAL = {
   STORE: "store",
 } as const;
 
-type AskOutcome =
-  | { readonly ok: true; readonly answer: HostedBrainAskAnswer }
-  | { readonly ok: false; readonly refusal: typeof ASK_REFUSAL.NOT_FOUND }
-  | { readonly ok: false; readonly refusal: typeof ASK_REFUSAL.UPSTREAM; readonly status: number }
-  | { readonly ok: false; readonly refusal: typeof ASK_REFUSAL.STORE; readonly cause: unknown };
+/** Why an ask was not accepted, with what is known of the refusal: eve's status, or the store's cause. */
+type AskRefused =
+  | { readonly refusal: typeof ASK_REFUSAL.NOT_FOUND }
+  | { readonly refusal: typeof ASK_REFUSAL.UPSTREAM; readonly status: number }
+  | { readonly refusal: typeof ASK_REFUSAL.STORE; readonly cause: unknown };
+
+type AskOutcome = Result.Result<HostedBrainAskAnswer, AskRefused>;
 
 /** An ask as a caller that has already resolved the account hands it over. */
 export interface AskInput extends HostedBrainAskRequest {
@@ -293,13 +295,14 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
   let conversationId: string;
   if (input.conversationId !== undefined) {
     if (!(yield* conversationOwnedBy(userId, input.conversationId))) {
-      return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
+      return Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND });
     }
     conversationId = input.conversationId;
   } else {
     const opened = yield* Effect.result(standingMain(userId, now));
-    if (Result.isFailure(opened))
-      return { ok: false, refusal: ASK_REFUSAL.STORE, cause: opened.failure };
+    if (Result.isFailure(opened)) {
+      return Result.fail({ refusal: ASK_REFUSAL.STORE, cause: opened.failure });
+    }
     conversationId = opened.success;
   }
 
@@ -310,10 +313,11 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
     origin,
     createdAt: now,
   });
-  const accepted: AskOutcome = {
-    ok: true,
-    answer: { id: ask.id, conversationId, queuedAt: ask.createdAt.getTime() },
-  };
+  const accepted: AskOutcome = Result.succeed({
+    id: ask.id,
+    conversationId,
+    queuedAt: ask.createdAt.getTime(),
+  });
   if (ask.sessionId !== undefined) return accepted;
   const message = { conversationId, turn: HOST_TURN_OF_ASK_ORIGIN[origin], message: question };
 
@@ -339,7 +343,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
           return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
         }
         if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
-          failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: sent.status };
+          failed = Result.fail({ refusal: ASK_REFUSAL.UPSTREAM, status: sent.status });
           return undefined;
         }
       }
@@ -347,7 +351,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
         .open(message)
         .pipe(Effect.catchTag("EveUnreachable", unreachableSend));
       if (opened.outcome === EVE_SEND_OUTCOME.FAILED) {
-        failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: opened.status };
+        failed = Result.fail({ refusal: ASK_REFUSAL.UPSTREAM, status: opened.status });
         return undefined;
       }
       return {
@@ -357,7 +361,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
     }),
   );
   if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
-    return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
+    return Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND });
   }
   return failed ?? accepted;
 });
@@ -381,12 +385,13 @@ export const handleBrainAsk = /* @__PURE__ */ Effect.fn("handleBrainAsk")(functi
     },
     { ...request.success, userId: admitted.userId },
   );
-  if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, outcome.answer);
-  switch (outcome.refusal) {
+  if (Result.isSuccess(outcome)) return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, outcome.success);
+  const refused = outcome.failure;
+  switch (refused.refusal) {
     case ASK_REFUSAL.NOT_FOUND:
       return notFound();
     case ASK_REFUSAL.UPSTREAM:
-      return upstream(outcome.status);
+      return upstream(refused.status);
     case ASK_REFUSAL.STORE:
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
@@ -454,11 +459,13 @@ export const STOP_REFUSAL = {
   UPSTREAM: "upstream",
 } as const;
 
-type StopOutcome =
-  | { readonly ok: true; readonly answer: HostedBrainTurnAnswer }
-  | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.NOT_FOUND }
-  | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.NOT_RUNNING }
-  | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.UPSTREAM; readonly status: number };
+/** Why a Stop did not land, with eve's status where eve refused it. */
+type StopRefused =
+  | { readonly refusal: typeof STOP_REFUSAL.NOT_FOUND }
+  | { readonly refusal: typeof STOP_REFUSAL.NOT_RUNNING }
+  | { readonly refusal: typeof STOP_REFUSAL.UPSTREAM; readonly status: number };
+
+type StopOutcome = Result.Result<HostedBrainTurnAnswer, StopRefused>;
 
 /** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, and eve as the caller reaches it. */
 interface StopSeams extends AskStandingReads {
@@ -485,9 +492,8 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
   id: string,
 ): Effect.fn.Return<StopOutcome, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
   const standing = yield* askStanding(seams, userId, id);
-  if (standing === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
-  if (TERMINAL_TURN_STATUSES.has(standing.answer.status))
-    return { ok: true, answer: standing.answer };
+  if (standing === undefined) return Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND });
+  if (TERMINAL_TURN_STATUSES.has(standing.answer.status)) return Result.succeed(standing.answer);
   const at = new Date(yield* Clock.currentTimeMillis);
   let turn: StoredTurnRecord;
   if (standing.turn === undefined) {
@@ -498,10 +504,10 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
     // start that binds it after this read finds the stamp and carries it. Either order stops the
     // turn once; neither leaves a turn running that its client was told is stopped.
     const stampedAt = standing.ask.cancelRequestedAt ?? at;
-    const stampedAnswer: StopOutcome = {
-      ok: true,
-      answer: { ...standing.answer, cancelRequestedAt: stampedAt.getTime() },
-    };
+    const stampedAnswer: StopOutcome = Result.succeed({
+      ...standing.answer,
+      cancelRequestedAt: stampedAt.getTime(),
+    });
     const bound = yield* seams.asks.named(userId, standing.ask.id);
     if (bound?.turnId === undefined) return stampedAnswer;
     const [started] = yield* seams.store.turns.named(userId, [bound.turnId]);
@@ -513,16 +519,13 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
   // A turn already settled, or already carrying a Stop (the start's honour, or an earlier Stop),
   // is answered as it stands: a stamp that stands is the one cancel this turn gets.
   const answer = turn === standing.turn ? standing.answer : turnAnswer(id, turn);
-  if (TERMINAL_TURN_STATUSES.has(turn.status)) return { ok: true, answer };
+  if (TERMINAL_TURN_STATUSES.has(turn.status)) return Result.succeed(answer);
   if (turn.cancelRequestedAt) {
-    return {
-      ok: true,
-      answer: { ...answer, cancelRequestedAt: turn.cancelRequestedAt.getTime() },
-    };
+    return Result.succeed({ ...answer, cancelRequestedAt: turn.cancelRequestedAt.getTime() });
   }
   const target = { userId, conversationId: turn.conversationId };
   const sessionId = yield* recordedRuntimeSession(target);
-  if (sessionId === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_RUNNING };
+  if (sessionId === undefined) return Result.fail({ refusal: STOP_REFUSAL.NOT_RUNNING });
   // The cancel names the turn the row was written for and never the session's turn under way:
   // a turn that ends between the read above and eve's answer is answered `no_active_turn`, and
   // the turn queued after it, now the one under way, is left running.
@@ -537,12 +540,12 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
       ),
     );
     if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-      return { ok: false, refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status };
+      return Result.fail({ refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status });
     }
   }
   const stamped = yield* seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
-  if (!stamped.ok) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
-  return { ok: true, answer: { ...answer, cancelRequestedAt: at.getTime() } };
+  if (!stamped.ok) return Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND });
+  return Result.succeed({ ...answer, cancelRequestedAt: at.getTime() });
 });
 
 /** `POST /api/brain/turns/{id}/cancel`: the gate and the path's id, then `stopAsk` under the caller's own bearer. */
@@ -568,13 +571,14 @@ export const handleBrainTurnCancel = /* @__PURE__ */ Effect.fn("handleBrainTurnC
     admitted.userId,
     id,
   );
-  if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.OK, outcome.answer);
-  switch (outcome.refusal) {
+  if (Result.isSuccess(outcome)) return jsonResponse(HOSTED_HTTP_STATUS.OK, outcome.success);
+  const refused = outcome.failure;
+  switch (refused.refusal) {
     case STOP_REFUSAL.NOT_FOUND:
       return notFound();
     case STOP_REFUSAL.NOT_RUNNING:
       return errorResponse(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NOT_RUNNING);
     case STOP_REFUSAL.UPSTREAM:
-      return upstream(outcome.status);
+      return upstream(refused.status);
   }
 });

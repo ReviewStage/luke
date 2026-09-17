@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { type ToolSet, tool } from "ai";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
@@ -72,7 +72,7 @@ const speech = { writer: store };
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 
 let liveSessions = 0;
-const WRITTEN: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+const WRITTEN: VoiceWriteResult = Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 
 function writer(): VoiceWriter {
   return voiceWriter({ store });
@@ -119,11 +119,13 @@ async function briefing(conversation: ConversationTarget): Promise<string> {
 
 async function claim(conversation: ConversationTarget, messageId: string): Promise<void> {
   assert.equal(
-    (await database.run(offerSpeech(speech, conversation.userId, messageId, NOW))).ok,
+    Result.isSuccess(await database.run(offerSpeech(speech, conversation.userId, messageId, NOW))),
     true,
   );
   assert.equal(
-    (await database.run(claimSpeech(speech, conversation.userId, messageId, DEVICE_ID, NOW))).ok,
+    Result.isSuccess(
+      await database.run(claimSpeech(speech, conversation.userId, messageId, DEVICE_ID, NOW)),
+    ),
     true,
   );
 }
@@ -234,18 +236,12 @@ test("a session no row stands for is refused, and another account's row is not t
   const voice = writer();
   assert.deepEqual(
     await database.run(voice.consume({ ...live, liveSessionId: "sess_unknown" }, heard("x", 0, 1))),
-    {
-      ok: false,
-      refusal: VOICE_WRITE_REFUSAL.NO_SESSION,
-    },
+    Result.fail(VOICE_WRITE_REFUSAL.NO_SESSION),
   );
   const other = await database.createUser();
   assert.deepEqual(
     await database.run(voice.consume({ ...live, userId: other }, heard("x", 0, 1))),
-    {
-      ok: false,
-      refusal: VOICE_WRITE_REFUSAL.NO_SESSION,
-    },
+    Result.fail(VOICE_WRITE_REFUSAL.NO_SESSION),
   );
   assert.deepEqual(await segments(live.liveSessionId), []);
 });
@@ -265,10 +261,10 @@ test("events the writer does not keep are ignored, and nothing is written for th
     },
   ];
   for (const event of ignored) {
-    assert.deepEqual(await database.run(voice.consume(live, event)), {
-      ok: true,
-      effect: STORE_WRITE_EFFECT.IGNORED,
-    });
+    assert.deepEqual(
+      await database.run(voice.consume(live, event)),
+      Result.succeed(STORE_WRITE_EFFECT.IGNORED),
+    );
   }
   assert.deepEqual(await segments(live.liveSessionId), []);
   assert.deepEqual(await speechEvents(live.conversation), []);
@@ -283,10 +279,10 @@ test("speech.spoken is written once, on the first output delta at or after the a
 
   // Before the ack places the append, a delta says nothing about it.
   await database.run(voice.consume(live, said("Earlier words.", 100, 900)));
-  assert.deepEqual(await database.run(voice.consume(live, appended("append-1", 1000, 4000))), {
-    ok: true,
-    effect: STORE_WRITE_EFFECT.WRITTEN,
-  });
+  assert.deepEqual(
+    await database.run(voice.consume(live, appended("append-1", 1000, 4000))),
+    Result.succeed(STORE_WRITE_EFFECT.WRITTEN),
+  );
   // A delta that begins before the appended commentary ends is not its speech.
   await database.run(voice.consume(live, said("The fixture", 3800, 4100)));
   assert.equal(
@@ -319,10 +315,7 @@ test("speech.spoken is written once, on the first output delta at or after the a
   // An ack for an append this writer was never told of is ignored rather than marked.
   assert.deepEqual(
     await database.run(voice.consume(live, appended("append-unknown", 7000, 8000))),
-    {
-      ok: true,
-      effect: STORE_WRITE_EFFECT.IGNORED,
-    },
+    Result.succeed(STORE_WRITE_EFFECT.IGNORED),
   );
 });
 
@@ -361,14 +354,17 @@ test("one delta past the ends of two acknowledged appends marks both briefings",
 test("a briefing this session's device did not claim is not marked spoken by its voice: unclaimed, another device's, or a session with no device", async () => {
   const live = await target();
   const unclaimed = await announced(live.conversation);
-  assert.equal((await database.run(offerSpeech(speech, live.userId, unclaimed, NOW))).ok, true);
+  assert.equal(
+    Result.isSuccess(await database.run(offerSpeech(speech, live.userId, unclaimed, NOW))),
+    true,
+  );
   const voice = writer();
   voice.noteAppend(live, { clientEventId: "append-u", messageId: unclaimed });
   await database.run(voice.consume(live, appended("append-u", 0, 1000)));
-  assert.deepEqual(await database.run(voice.consume(live, said("Said anyway.", 1000, 2000))), {
-    ok: false,
-    refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
-  });
+  assert.deepEqual(
+    await database.run(voice.consume(live, said("Said anyway.", 1000, 2000))),
+    Result.fail(VOICE_WRITE_REFUSAL.NOT_CLAIMANT),
+  );
 
   const other = await target();
   const theirs = await briefing(other.conversation);
@@ -380,10 +376,10 @@ test("a briefing this session's device did not claim is not marked spoken by its
   const otherVoice = writer();
   otherVoice.noteAppend(other, { clientEventId: "append-o", messageId: theirs });
   await database.run(otherVoice.consume(other, appended("append-o", 0, 1000)));
-  assert.deepEqual(await database.run(otherVoice.consume(other, said("Not mine.", 1000, 2000))), {
-    ok: false,
-    refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
-  });
+  assert.deepEqual(
+    await database.run(otherVoice.consume(other, said("Not mine.", 1000, 2000))),
+    Result.fail(VOICE_WRITE_REFUSAL.NOT_CLAIMANT),
+  );
 
   const deviceless = await target();
   const claimed = await briefing(deviceless.conversation);
@@ -393,10 +389,7 @@ test("a briefing this session's device did not claim is not marked spoken by its
   await database.run(noDevice.consume(deviceless, appended("append-n", 0, 1000)));
   assert.deepEqual(
     await database.run(noDevice.consume(deviceless, said("Nobody's.", 1000, 2000))),
-    {
-      ok: false,
-      refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
-    },
+    Result.fail(VOICE_WRITE_REFUSAL.NOT_CLAIMANT),
   );
 
   for (const conversation of [live.conversation, other.conversation, deviceless.conversation]) {
@@ -419,10 +412,10 @@ test("an append whose message is gone is refused at the speech, not the segment"
     messageId: "00000000-0000-4000-8000-000000000404",
   });
   await database.run(voice.consume(live, appended("append-2", 0, 500)));
-  assert.deepEqual(await database.run(voice.consume(live, said("Words.", 600, 900))), {
-    ok: false,
-    refusal: VOICE_WRITE_REFUSAL.NO_MESSAGE,
-  });
+  assert.deepEqual(
+    await database.run(voice.consume(live, said("Words.", 600, 900))),
+    Result.fail(VOICE_WRITE_REFUSAL.NO_MESSAGE),
+  );
   assert.equal((await segments(live.liveSessionId)).length, 1);
 });
 
@@ -448,10 +441,10 @@ test("a delegation attaches the developer's rows on record in place, under their
   );
   // The stream's delegation event is consumed like any other and leaves nothing: the ask reaches the
   // record only through the rows the service names.
-  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_1", 4900))), {
-    ok: true,
-    effect: STORE_WRITE_EFFECT.IGNORED,
-  });
+  assert.deepEqual(
+    await database.run(voice.consume(live, delegated("dl_1", 4900))),
+    Result.succeed(STORE_WRITE_EFFECT.IGNORED),
+  );
   assert.deepEqual(await spokenAsks(live.conversation), []);
   assert.deepEqual(
     await database.run(voice.upsertSpokenRow(live, developerRow(`developer-1200`, 1200, 4800))),
@@ -510,11 +503,11 @@ test("a delegation attaches the developer's rows on record in place, under their
     await database.run(
       voice.attachSpokenAsk(live, { delegationId: "dl_3", rowIds: ["developer-1200"] }),
     ),
-    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+    Result.succeed(STORE_WRITE_EFFECT.IGNORED),
   );
   assert.deepEqual(
     await database.run(voice.attachSpokenAsk(live, { delegationId: "dl_3", rowIds: ["nowhere"] })),
-    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+    Result.succeed(STORE_WRITE_EFFECT.IGNORED),
   );
   // Told again, the delegation finds its own row and nothing changes.
   assert.deepEqual(
@@ -616,7 +609,7 @@ test("an exchange the voice model answers itself leaves both utterances as finis
   // An utterance whose span holds no segment writes nothing: the words are not there to write.
   assert.deepEqual(
     await database.run(voice.upsertSpokenRow(live, developerRow(`developer-9000`, 9000, 9500))),
-    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+    Result.succeed(STORE_WRITE_EFFECT.IGNORED),
   );
   assert.equal((await segments(live.liveSessionId)).length, 4);
 });

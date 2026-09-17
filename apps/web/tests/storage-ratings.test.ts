@@ -7,7 +7,7 @@ import {
   MESSAGE_ROLE,
   RATING_WORD,
 } from "@sidecar/wire";
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { db } from "../server/db/query";
 import { events } from "../server/db/storage-schema";
@@ -84,8 +84,8 @@ test("a rating is one event on Luke's message, carrying the verdict, the note, a
       deviceId: DEVICE_ID,
     }),
   );
-  assert.equal(written.ok, true);
-  if (!written.ok) return;
+  assert.ok(Result.isSuccess(written));
+  if (!Result.isSuccess(written)) return;
 
   const rows = await readEventsByConversation(database.run, main);
   assert.deepEqual(
@@ -99,8 +99,8 @@ test("a rating is one event on Luke's message, carrying the verdict, the note, a
     ]),
     [
       [
-        written.id,
-        written.seq,
+        written.success.id,
+        written.success.seq,
         reply,
         CONVERSATION_EVENT_KIND.RATING,
         DEVICE_ID,
@@ -109,8 +109,8 @@ test("a rating is one event on Luke's message, carrying the verdict, the note, a
     ],
   );
   assert.deepEqual(await database.run(database.store.ratings.latest(userId, reply)), {
-    id: written.id,
-    seq: written.seq,
+    id: written.success.id,
+    seq: written.success.seq,
     rating: MESSAGE_RATING.DOWN,
     note: "It answered a different question.",
     deviceId: DEVICE_ID,
@@ -134,25 +134,28 @@ test("a later rating is a second event and the one the latest read answers; the 
       deviceId: OTHER_DEVICE_ID,
     }),
   );
-  assert.equal(first.ok && second.ok, true);
-  if (!first.ok || !second.ok) return;
-  assert.equal(second.seq, first.seq + 1);
+  assert.ok(Result.isSuccess(first) && Result.isSuccess(second));
+  if (!Result.isSuccess(first) || !Result.isSuccess(second)) return;
+  assert.equal(second.success.seq, first.success.seq + 1);
 
   const latest = await database.run(database.store.ratings.latest(userId, reply));
   assert.deepEqual(
     [latest?.id, latest?.rating, latest?.note, latest?.deviceId],
-    [second.id, MESSAGE_RATING.UP, "On reflection it was right.", OTHER_DEVICE_ID],
+    [second.success.id, MESSAGE_RATING.UP, "On reflection it was right.", OTHER_DEVICE_ID],
   );
   const ratings = await readEventsByConversation(database.run, main);
-  assert.deepEqual(ratings.map((row) => row.id).sort(), [first.id, second.id].sort());
+  assert.deepEqual(
+    ratings.map((row) => row.id).sort(),
+    [first.success.id, second.success.id].sort(),
+  );
   assert.deepEqual(
     (await database.run(database.store.events.list(userId, main))).map((event) => [
       event.seq,
       event.kind,
     ]),
     [
-      [first.seq, CONVERSATION_EVENT_KIND.RATING],
-      [second.seq, CONVERSATION_EVENT_KIND.RATING],
+      [first.success.seq, CONVERSATION_EVENT_KIND.RATING],
+      [second.success.seq, CONVERSATION_EVENT_KIND.RATING],
     ],
   );
 });
@@ -166,28 +169,28 @@ test("a verdict taken back is a third event that says so, the one the latest rea
   const withdrawn = await database.run(
     rateMessage(store, userId, reply, { rating: RATING_WORD.WITHDRAWN, deviceId: DEVICE_ID }),
   );
-  assert.equal(given.ok && withdrawn.ok, true);
-  if (!given.ok || !withdrawn.ok) return;
-  assert.equal(withdrawn.seq, given.seq + 1);
+  assert.ok(Result.isSuccess(given) && Result.isSuccess(withdrawn));
+  if (!Result.isSuccess(given) || !Result.isSuccess(withdrawn)) return;
+  assert.equal(withdrawn.success.seq, given.success.seq + 1);
 
   const latest = await database.run(database.store.ratings.latest(userId, reply));
   assert.deepEqual(
     [latest?.id, latest?.rating, latest?.note, latest?.deviceId],
-    [withdrawn.id, RATING_WORD.WITHDRAWN, undefined, DEVICE_ID],
+    [withdrawn.success.id, RATING_WORD.WITHDRAWN, undefined, DEVICE_ID],
   );
   const payloads = new Map(
     (await readEventsByConversation(database.run, main)).map((row) => [row.id, row.payload]),
   );
-  assert.deepEqual(payloads.get(given.id), { rating: MESSAGE_RATING.UP });
-  assert.deepEqual(payloads.get(withdrawn.id), { rating: RATING_WORD.WITHDRAWN });
+  assert.deepEqual(payloads.get(given.success.id), { rating: MESSAGE_RATING.UP });
+  assert.deepEqual(payloads.get(withdrawn.success.id), { rating: RATING_WORD.WITHDRAWN });
   assert.deepEqual(
     (await database.run(database.store.events.list(userId, main))).map((event) => [
       event.seq,
       event.kind,
     ]),
     [
-      [given.seq, CONVERSATION_EVENT_KIND.RATING],
-      [withdrawn.seq, CONVERSATION_EVENT_KIND.RATING],
+      [given.success.seq, CONVERSATION_EVENT_KIND.RATING],
+      [withdrawn.success.seq, CONVERSATION_EVENT_KIND.RATING],
     ],
   );
 });
@@ -198,13 +201,13 @@ test("a message the account does not own is not found, whether another account's
   const { reply } = await populate(other);
   const rating = { rating: MESSAGE_RATING.UP, deviceId: DEVICE_ID } as const;
 
-  assert.deepEqual(await database.run(rateMessage(store, userId, reply, rating)), {
-    ok: false,
-    refusal: RATING_REFUSAL.NOT_FOUND,
-  });
+  assert.deepEqual(
+    await database.run(rateMessage(store, userId, reply, rating)),
+    Result.fail(RATING_REFUSAL.NOT_FOUND),
+  );
   assert.deepEqual(
     await database.run(rateMessage(store, userId, "00000000-0000-4000-8000-000000000000", rating)),
-    { ok: false, refusal: RATING_REFUSAL.NOT_FOUND },
+    Result.fail(RATING_REFUSAL.NOT_FOUND),
   );
   assert.equal(await database.run(database.store.ratings.latest(userId, reply)), undefined);
   const allEvents = await database.run(db.select({ messageId: events.messageId }).from(events));
@@ -230,19 +233,19 @@ test("a message the account owns but Luke did not write is not rateable: the dev
       compaction: { first_kept_message_id: ask, tokens_before: 1200 },
     },
   });
-  assert.deepEqual(await database.run(rateMessage(store, userId, compaction, rating)), {
-    ok: false,
-    refusal: RATING_REFUSAL.NOT_LUKES,
-  });
+  assert.deepEqual(
+    await database.run(rateMessage(store, userId, compaction, rating)),
+    Result.fail(RATING_REFUSAL.NOT_LUKES),
+  );
 
-  assert.deepEqual(await database.run(rateMessage(store, userId, ask, rating)), {
-    ok: false,
-    refusal: RATING_REFUSAL.NOT_LUKES,
-  });
-  assert.deepEqual(await database.run(rateMessage(store, userId, note, rating)), {
-    ok: false,
-    refusal: RATING_REFUSAL.NOT_LUKES,
-  });
+  assert.deepEqual(
+    await database.run(rateMessage(store, userId, ask, rating)),
+    Result.fail(RATING_REFUSAL.NOT_LUKES),
+  );
+  assert.deepEqual(
+    await database.run(rateMessage(store, userId, note, rating)),
+    Result.fail(RATING_REFUSAL.NOT_LUKES),
+  );
   assert.deepEqual(await database.run(database.store.events.list(userId, main)), []);
 });
 
@@ -255,14 +258,14 @@ test("a message in a cleared conversation is not found, and its earlier rating i
       deviceId: DEVICE_ID,
     }),
   );
-  assert.equal(before.ok, true);
+  assert.ok(Result.isSuccess(before));
   await database.run(database.store.main.clear(userId, NOW));
 
   assert.deepEqual(
     await database.run(
       rateMessage(store, userId, reply, { rating: MESSAGE_RATING.DOWN, deviceId: DEVICE_ID }),
     ),
-    { ok: false, refusal: RATING_REFUSAL.NOT_FOUND },
+    Result.fail(RATING_REFUSAL.NOT_FOUND),
   );
   assert.equal(await database.run(database.store.ratings.latest(userId, reply)), undefined);
 });
@@ -276,7 +279,7 @@ test("a latest rating whose payload this build cannot read answers nothing rathe
       deviceId: DEVICE_ID,
     }),
   );
-  assert.equal(first.ok, true);
+  assert.ok(Result.isSuccess(first));
   await insertEvent(database.run, {
     userId,
     conversationId: main,

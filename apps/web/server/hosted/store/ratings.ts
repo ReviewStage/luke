@@ -1,4 +1,4 @@
-import { Effect, type Schema } from "effect";
+import { Effect, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -40,11 +40,13 @@ export const RATING_REFUSAL = {
   NOT_LUKES: "not_lukes",
 } as const;
 
-type RatingRefusal = (typeof RATING_REFUSAL)[keyof typeof RATING_REFUSAL];
+export type RatingRefusal = (typeof RATING_REFUSAL)[keyof typeof RATING_REFUSAL];
 
-export type RatingWriteResult =
-  | { readonly ok: true; readonly id: string; readonly seq: number }
-  | { readonly ok: false; readonly refusal: RatingRefusal };
+/** The rating event as written, by id and sequence, or why the message took none. */
+export type RatingWriteResult = Result.Result<
+  { readonly id: string; readonly seq: number },
+  RatingRefusal
+>;
 
 export interface RatingStore {
   readonly writer: StoreWriter;
@@ -57,9 +59,9 @@ export const rateMessage = /* @__PURE__ */ Effect.fn("rateMessage")(function* (
   rating: HostedMessageRatingRequest,
 ): Effect.fn.Return<RatingWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const authorship = yield* messageAuthorship(userId, messageId);
-  if (authorship === undefined) return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
+  if (authorship === undefined) return Result.fail(RATING_REFUSAL.NOT_FOUND);
   if (authorship.role !== MESSAGE_ROLE.ASSISTANT || authorship.compaction) {
-    return { ok: false, refusal: RATING_REFUSAL.NOT_LUKES };
+    return Result.fail(RATING_REFUSAL.NOT_LUKES);
   }
   const { deviceId, ...payload } = rating;
   const written = yield* writer.recordEvent(
@@ -71,11 +73,11 @@ export const rateMessage = /* @__PURE__ */ Effect.fn("rateMessage")(function* (
       payload: unparsedWire(payload),
     },
   );
-  if (written.ok) return { ok: true, id: written.id, seq: written.seq };
+  if (written.ok) return Result.succeed({ id: written.id, seq: written.seq });
   switch (written.refusal) {
     case STORE_WRITE_REFUSAL.NO_CONVERSATION:
     case STORE_WRITE_REFUSAL.NO_MESSAGE:
-      return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
+      return Result.fail(RATING_REFUSAL.NOT_FOUND);
     case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
       return yield* Effect.die(
         new Error("a rating was refused as a claim, which only a speech.claimed event can be"),
