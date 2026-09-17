@@ -367,6 +367,46 @@ function namedSession(
   };
 }
 
+/** What a control row draws its words and mark from: the adapter's label and kind. */
+interface RowControl {
+  readonly label: string;
+  readonly controlKind?: SessionControlKind;
+}
+
+/**
+ * The control a row names: the envelope's snapshot once the call has answered,
+ * since that is the control as the adapter held it when the action ran, and
+ * before an envelope exists the roster's own advertisement under the call's id,
+ * so a call still under way reads "Stopped" or "Ran "Retry" on" rather than
+ * "Ran a control on" until it settles. The advertisement carries the adapter's
+ * label and kind exactly as the envelope will; the id's own spelling is never
+ * read as either, which is what keeps a provider's words from becoming a
+ * contract they never made. A session the roster has let go, with no envelope
+ * yet, is a control with no name.
+ */
+function controlOf(
+  target: ActionTargetSnapshot | undefined,
+  controlId: string | undefined,
+  identity: SessionIdentity | undefined,
+  roster: readonly SessionView[],
+): RowControl | undefined {
+  if (target?.controlLabel !== undefined) {
+    return {
+      label: target.controlLabel,
+      ...(target.controlKind !== undefined ? { controlKind: target.controlKind } : undefined),
+    };
+  }
+  if (controlId === undefined) return undefined;
+  const advertised = rosterSession(identity, roster)?.actions.find(
+    (control) => control.id === controlId,
+  );
+  if (advertised === undefined) return undefined;
+  return {
+    label: advertised.label,
+    ...(advertised.controlKind !== undefined ? { controlKind: advertised.controlKind } : undefined),
+  };
+}
+
 /**
  * A setting as the row names it: its guide id in words, since the label its
  * row wears is built beside the current settings, which a row of the past
@@ -406,17 +446,26 @@ function composeRuns(
     }
     case ACTION_KIND.CONTROL: {
       const read = parsedRequest(CONTROL_REQUEST, input);
-      const { chip, providerId } = namedSession(read.ok ? read.value : undefined, target, roster);
-      const controlKind = target?.controlKind;
-      const label = target?.controlLabel;
+      const { identity, chip, providerId } = namedSession(
+        read.ok ? read.value : undefined,
+        target,
+        roster,
+      );
+      const control = controlOf(
+        target,
+        read.ok ? read.value.control_id : undefined,
+        identity,
+        roster,
+      );
+      const controlKind = control?.controlKind;
       const lead =
         controlKind === SESSION_CONTROL_KIND.ARCHIVE
           ? "Archived "
           : controlKind === SESSION_CONTROL_KIND.STOP
             ? "Stopped "
-            : label === undefined
+            : control === undefined
               ? "Ran a control on "
-              : `Ran "${label}" on `;
+              : `Ran "${control.label}" on `;
       return {
         runs: [{ text: lead }, { chip }],
         ...(providerId !== undefined ? { providerId } : undefined),

@@ -24,6 +24,7 @@ import {
   FIXTURE_SESSION,
   FIXTURE_TITLE,
 } from "./conversation-turns.fixtures";
+import type { SessionView } from "./session-model";
 
 const PROVIDER = "conductor";
 const AGENT = "claude-code";
@@ -345,7 +346,81 @@ test("a departed session is named from the envelope's snapshot and opened by ide
   });
 });
 
-test("a control's kind and label come from the envelope, never from the call", () => {
+test("a control still under way is worded by the roster's advertisement under the call's id, and the envelope outranks it once it answers", () => {
+  const words = (row: ToolRow) => row.runs.map((run) => ("text" in run ? run.text : "")).join("");
+  const advertising: SessionView[] = FIXTURE_ROSTER.map((session) =>
+    session.id === FIXTURE_SESSION.HELD
+      ? {
+          ...session,
+          actions: [
+            {
+              kind: ACTION_KIND.CONTROL,
+              id: "stop",
+              label: "Stop",
+              controlKind: SESSION_CONTROL_KIND.STOP,
+            },
+            { kind: ACTION_KIND.CONTROL, id: "retry", label: "Retry" },
+          ],
+        }
+      : session,
+  );
+  const pending = (controlId: string) =>
+    toolRow(
+      part(
+        "run_session_control",
+        { ...HELD, control_id: controlId },
+        { state: TOOL_PART_STATE.INPUT_AVAILABLE },
+      ),
+      advertising,
+    );
+  // The advertisement's kind and label read the moment the call is made, so the row never says "a control" first.
+  assert.equal(pending("stop").status, TOOL_ROW_STATUS.PENDING);
+  assert.equal(pending("stop").controlKind, SESSION_CONTROL_KIND.STOP);
+  assert.equal(words(pending("stop")), "Stopped ");
+  assert.equal(pending("retry").controlKind, undefined);
+  assert.equal(words(pending("retry")), 'Ran "Retry" on ');
+  // An id the roster does not advertise is still a control with no name: the id's spelling is never read.
+  assert.equal(pending("archive").controlKind, undefined);
+  assert.equal(words(pending("archive")), "Ran a control on ");
+  // The roster's advertisement is the held session's own; another session's id names nothing here.
+  const elsewhere = toolRow(
+    part(
+      "run_session_control",
+      {
+        provider_id: PROVIDER,
+        provider_session_id: FIXTURE_SESSION.UNOPENABLE,
+        control_id: "stop",
+      },
+      { state: TOOL_PART_STATE.INPUT_AVAILABLE },
+    ),
+    advertising,
+  );
+  assert.equal(words(elsewhere), "Ran a control on ");
+  // Once the envelope exists, its snapshot is the control as it ran, whatever the roster advertises now.
+  const answered = toolRow(
+    part(
+      "run_session_control",
+      { ...HELD, control_id: "stop" },
+      {
+        state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+        output: {
+          status: ACTION_OUTPUT_STATUS.ACCEPTED,
+          target: {
+            providerId: PROVIDER,
+            providerSessionId: FIXTURE_SESSION.HELD,
+            controlKind: SESSION_CONTROL_KIND.ACTION,
+            controlLabel: "Halt",
+          },
+        },
+      },
+    ),
+    advertising,
+  );
+  assert.equal(answered.controlKind, SESSION_CONTROL_KIND.ACTION);
+  assert.equal(words(answered), 'Ran "Halt" on ');
+});
+
+test("a control's kind and label come from the envelope, never from the call's own spelling", () => {
   const withKind = (controlKind: string | undefined) =>
     toolRow(
       part(
