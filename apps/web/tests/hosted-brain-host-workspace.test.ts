@@ -61,6 +61,27 @@ function accessFor(userId: string, now: () => number = () => NOW) {
   );
 }
 
+test("seeding writes the four seeded files once and never BOOTSTRAP.md, whose work is AGENTS.md's own rule", async () => {
+  const userId = await database.createUser();
+  const seeded = await database.run(seedHostedWorkspace(database.store, userId, NOW));
+  assert.deepEqual(seeded, [
+    WORKSPACE_FILE.AGENTS,
+    WORKSPACE_FILE.IDENTITY,
+    WORKSPACE_FILE.USER,
+    WORKSPACE_FILE.MEMORY,
+  ]);
+  assert.deepEqual(await database.run(seedHostedWorkspace(database.store, userId, NOW + 1)), []);
+  const access = await accessFor(userId);
+  assert.deepEqual(
+    await database.run(access.read(WORKSPACE_FILE.BOOTSTRAP)),
+    Result.fail(WORKSPACE_FILE_REFUSAL.NOT_FOUND),
+  );
+  const agents = await database.run(access.read(WORKSPACE_FILE.AGENTS));
+  assert.ok(Result.isSuccess(agents));
+  assert.match(agents.success.content, /append_daily_note/u);
+  assert.doesNotMatch(agents.success.content, /Usually nothing is/u);
+});
+
 test("a curated file is refused past its own budget with the budget named, and the row stands as it was", async () => {
   const userId = await database.createUser();
   await database.run(seedHostedWorkspace(database.store, userId, NOW));

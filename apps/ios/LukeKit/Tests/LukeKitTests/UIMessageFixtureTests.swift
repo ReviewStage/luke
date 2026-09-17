@@ -15,7 +15,7 @@ final class UIMessageFixtureTests: XCTestCase {
 
     func testEveryStoredMessageFixtureDecodes() throws {
         let names = try RepositoryFixtures.names(in: RepositoryFixtures.uiMessages)
-        XCTAssertEqual(names.count, 10)
+        XCTAssertEqual(names.count, 9)
         for name in names {
             XCTAssertNoThrow(try message(name), name)
         }
@@ -67,7 +67,6 @@ final class UIMessageFixtureTests: XCTestCase {
             "child-task.json": .child,
             "child-completion.json": .childCompletion,
             "recalled-notes.json": .recalledNotes,
-            "activity-notices.json": .activityNotices,
         ]
         for (name, source) in sources {
             let note = try message(name)

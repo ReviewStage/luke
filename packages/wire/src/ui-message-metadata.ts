@@ -66,8 +66,6 @@ export const OBSERVATION_SOURCE = {
   CHILD_COMPLETION: "child_completion",
   /** Notes the memory provider recalled for the turn. */
   RECALLED_NOTES: "recalled_notes",
-  /** The compact notices of what sibling conversations did since main's last turn. */
-  ACTIVITY_NOTICES: "activity_notices",
 } as const;
 
 export type ObservationSource = (typeof OBSERVATION_SOURCE)[keyof typeof OBSERVATION_SOURCE];
