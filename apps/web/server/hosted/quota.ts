@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { HostedQuota } from "../core.js";
+import { DAY_MS, type HostedQuota } from "../core.js";
 import { user } from "../db/auth-schema.js";
 import { db } from "../db/query.js";
 import { hostedUsage, introductionUsage, voiceSessionUsage } from "../db/usage-schema.js";
@@ -21,8 +21,6 @@ export interface HostedSpend {
   allowed: boolean;
   quota: HostedQuota;
 }
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** The UTC day a moment falls on, as the usage table's YYYY-MM-DD key. */
 export function utcDayKey(now: number): string {

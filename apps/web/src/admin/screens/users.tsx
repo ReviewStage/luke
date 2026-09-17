@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { AdminUserList, AdminUserListRow } from "../../../server/admin/admin-users";
 import {
   ADMIN_USER_ID_PARAM,
@@ -23,13 +23,32 @@ import {
   windowedReadPath,
 } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
+import {
+  type AdminReader,
+  type AdminWriter,
+  adminReadFailure,
+  useAdminRead,
+  useAdminWrite,
+} from "../use-admin-read";
 
 const USERS_ERROR = "The users endpoint did not answer. Try again shortly.";
 
 // SAFETY: a 200 from the admin users endpoint is an AdminUserList body by its contract.
 const readUserList: AdminReader<AdminUserList> = async (response) =>
   (await response.json()) as AdminUserList;
+
+/** One favorite intent as the endpoint's PUT or DELETE; a response that is not ok did not land. */
+const writeFavorite: AdminWriter = async (id, favorite, signal) => {
+  const response = await fetch(
+    `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
+    {
+      method: favorite ? "PUT" : "DELETE",
+      headers: { accept: "application/json" },
+      signal,
+    },
+  );
+  return response.ok;
+};
 
 /** The roster's own sections. */
 const USERS_SHAPES: readonly SkeletonShape[] = [
@@ -104,49 +123,12 @@ export function UsersScreen({
   const signOut = () => void withdraw(onSignOut);
 
   // The star answers the press at once, while one write chain per account
-  // carries the newest intent to the service: presses faster than the network
-  // coalesce into the chain's next request instead of racing it out of order.
-  // A landed write redraws its own outcome, so a roster refresh that crossed
-  // it mid-flight cannot leave a stale star, and a failed one puts the star
-  // back only when no newer press has spoken since.
-  const favoriteIntents = useRef(new Map<string, boolean>());
-  const favoriteWriting = useRef(new Set<string>());
-  const toggleFavorite = useCallback(
-    (id: string, favorite: boolean) => {
-      const draw = (value: boolean) =>
-        revise((list) => ({
-          ...list,
-          rows: list.rows.map((row) => (row.id === id ? { ...row, favorite: value } : row)),
-        }));
-      draw(favorite);
-      favoriteIntents.current.set(id, favorite);
-      if (favoriteWriting.current.has(id)) return;
-      favoriteWriting.current.add(id);
-      void (async () => {
-        try {
-          for (;;) {
-            const want = favoriteIntents.current.get(id);
-            if (want === undefined) return;
-            favoriteIntents.current.delete(id);
-            let landed = false;
-            try {
-              const response = await fetch(
-                `${FAVORITE_PATH}?${ADMIN_USER_ID_PARAM}=${encodeURIComponent(id)}`,
-                { method: want ? "PUT" : "DELETE", headers: { accept: "application/json" } },
-              );
-              landed = response.ok;
-            } catch {
-              landed = false;
-            }
-            if (landed) draw(want);
-            else if (!favoriteIntents.current.has(id)) draw(!want);
-          }
-        } finally {
-          favoriteWriting.current.delete(id);
-        }
-      })();
-    },
-    [revise],
+  // carries the newest intent to the service and redraws its outcome.
+  const toggleFavorite = useAdminWrite(writeFavorite, (id, favorite) =>
+    revise((list) => ({
+      ...list,
+      rows: list.rows.map((row) => (row.id === id ? { ...row, favorite } : row)),
+    })),
   );
 
   switch (state.status) {

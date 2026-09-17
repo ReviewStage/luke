@@ -65,7 +65,7 @@ function request(query: ReadQuery = {}, method = "GET", authorized = true): Requ
 function options(userId: string, req: Request) {
   return {
     request: req,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeedSome(userId),
     store: database.store,
   };
 }
@@ -119,7 +119,7 @@ test("the gate order is method and bearer, and a cursor or a bound is accepted a
   const anonymous = await database.run(
     handleConversationChildren({
       ...options(userId, request({}, "GET", false)),
-      resolveUserId: () => Effect.succeed(undefined),
+      resolveUserId: () => Effect.succeedNone,
     }),
   );
   assert.equal(anonymous.status, 401);

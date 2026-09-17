@@ -1125,13 +1125,12 @@ the relay pipes. The service hands the attachment the socket and reaches
 nothing of the exchange or the live-session door itself; the attachment
 builds the sideband over that socket and adopts, so the voice function's
 bundle gains that edge only in the commit that passes the attachment. One
-socket, one scope: `exchangeAttachment` opens a `Scope` when the service
-offers it a session, builds the account's standing main, the exchange, its
-adoption of the sideband, and the briefing look as one effect run in that
-scope on the edge's own runner, and hands the service a `stop` that closes
-it; a standing that could not be reached closes the scope before it throws,
-so nothing an attempt acquired outlives the session the service is about to
-refuse. The
+socket, one scope: the attachment is an effect the service runs in a scope
+forked from the session's own, building the account's standing main, the
+exchange, its adoption of the sideband, and the briefing look in it, and the
+service's stop is that scope's close; a standing that could not be reached
+has the scope closed by the service before the session is refused, so nothing
+an attempt acquired outlives it. The
 socket admits many listeners, so the relay keeps piping raw frames to the
 desktop unchanged while the exchange reads parsed events through its
 record-observing sideband. The upstream hands the sideband over paused,

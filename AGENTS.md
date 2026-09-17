@@ -304,19 +304,18 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   tidied away. A raw `SqlClient` statement is a wait for the pool's
   connection, and Effect resumes a waiter inside the stack of whoever released
   it, so a raw statement hands its caller back in the releasing caller's
-  `AsyncLocalStorage` context rather than the one it asked from. eve's relay
-  depends on exactly that handoff: `apps/web/eve/hooks/store.ts` is entered in
-  a per-request container, and it is the statement in `admitConversation` that
-  moves the hook into eve's long-lived session container, which is the one the
-  relay's `defineState("luke.relay")` state accumulates in across a session's
-  events. The door's own root fiber would absorb that handoff and leave the
-  asking fiber in the context it registered its `then` in, so the door
-  reproduces the handoff on purpose: it snapshots the async context in a
-  finalizer inside the run, which is the tick the statement settled on, and
-  the patched `evaluate` resumes the asking fiber inside that snapshot through
+  `AsyncLocalStorage` context rather than the one it asked from. Nothing
+  authored under `apps/web/eve/` stands on that context: with two sessions
+  running turns in one process it is the other session's, so the hook and
+  the prompt resolver pin their `defineState` handles where they are entered
+  (`apps/web/eve/pinned-state.ts`, held by `apps/web/tests/eve-pinned-state.test.ts`).
+  The door's own root fiber would absorb that handoff and leave the asking
+  fiber in the context it registered its `then` in, so the door reproduces
+  the handoff on purpose: it snapshots the async context in a finalizer
+  inside the run, which is the tick the statement settled on, and the patched
+  `evaluate` resumes the asking fiber inside that snapshot through
   `Effect.callback`, whose `resume` continues that fiber's loop on the stack
-  it is called from. Read as a leak and removed, it stops a turn's tool parts
-  from ever being written. What the bridge owes is the raw statement's answer
+  it is called from. What the bridge owes is the raw statement's answer
   and not one of its own, and `apps/web/tests/drizzle-bridge.test.ts` reads
   one against the other on both dialects. Handing that run to an edge is what
   cannot be done: the

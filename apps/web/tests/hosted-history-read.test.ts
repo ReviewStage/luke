@@ -85,7 +85,7 @@ function messagesRequest(after?: string): Request {
 function options(userId: string, request: Request): ResourceReadOptions {
   return {
     request,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeedSome(userId),
     store: database.store,
   };
 }
@@ -254,7 +254,7 @@ test("the gate order is method, bearer, then the query: a position this build di
     await database.run(
       handleConversationHistory({
         ...options(userId, historyRequest({}, "GET", false)),
-        resolveUserId: () => Effect.succeed(undefined),
+        resolveUserId: () => Effect.succeedNone,
       }),
     ),
     401,

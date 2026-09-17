@@ -28,7 +28,12 @@ import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state"
 import type { DisplayDiagnostic } from "#shared/messages/session";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
-import { CONVERSATION_PAGE, transcriptListed } from "./agents-panel";
+import {
+  CONVERSATION_PAGE,
+  type ConversationPage,
+  conversationSearchable,
+  transcriptListed,
+} from "./agents-panel";
 import type { CalendarGateControl } from "./calendar-gate";
 import type { ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
@@ -167,16 +172,30 @@ export function App(): React.JSX.Element {
   const [settingsSearchOpen, setSettingsSearchOpen] = useState(false);
   // The conversation search's field, on the same terms: the magnifier beside
   // the tab bar answers for it, and its query lives with the field in the
-  // conversation panel. It is offered exactly while the thread page shows
-  // with turns in it — the tab is not part of the closing rule, so a search
-  // held while another tab shows waits where the developer left it, but
-  // leaving the thread page or emptying the thread closes it, by the sessions
-  // search's own rule that a field nobody can see must not hold a query.
-  const [conversationSearchOpen, setConversationSearchOpen] = useState(false);
-  const conversationThreadDrawn =
-    conversationPage === CONVERSATION_PAGE.THREAD && (state?.conversation.groups.length ?? 0) > 0;
-  const offerConversationSearch = tab === PANEL_TAB.CONVERSATION && conversationThreadDrawn;
-  if (conversationSearchOpen && !conversationThreadDrawn) setConversationSearchOpen(false);
+  // page that draws it, the thread's panel or a transcript's. It is held as
+  // the page it was opened over, and offered exactly while that page shows
+  // with words to search — the thread with turns in it, or a transcript whose
+  // own read has landed with turns — so turning to another page closes it,
+  // even the turn from the thread straight to a transcript a chip opens; the
+  // tab is not part of the closing rule, so a search held while another tab
+  // shows waits where the developer left it. Emptying the page closes it too,
+  // by the sessions search's own rule that a field nobody can see must not
+  // hold a query.
+  const [conversationSearchPage, setConversationSearchPage] = useState<
+    ConversationPage | undefined
+  >(undefined);
+  const conversationPageSearchable = conversationSearchable(
+    conversationPage,
+    state?.conversation,
+    transcriptOpen,
+    state?.childTranscript,
+  );
+  const conversationSearchOpen =
+    conversationSearchPage === conversationPage && conversationPageSearchable;
+  const offerConversationSearch = tab === PANEL_TAB.CONVERSATION && conversationPageSearchable;
+  if (conversationSearchPage !== undefined && !conversationSearchOpen) {
+    setConversationSearchPage(undefined);
+  }
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -318,7 +337,7 @@ export function App(): React.JSX.Element {
       // were opened on, taking their queries with them: no search survives
       // the panel closing.
       setSettingsSearchOpen(false);
-      setConversationSearchOpen(false);
+      setConversationSearchPage(undefined);
     },
     onCapsuleList: () => {
       // The order goes back when the panel does, so the top row keeps
@@ -476,19 +495,23 @@ export function App(): React.JSX.Element {
 
   /**
    * The conversation search summons, from its magnifier beside the tab bar or
-   * Command-F over the thread: the field opens at the head of the thread and
-   * the caret follows the same frame-by-frame seek the other two need.
+   * Command-F over the thread or a transcript: the field opens at the head of
+   * the page showing and the caret follows the same frame-by-frame seek the
+   * other two need. The two pages are counted apart, never the query.
    */
   const openConversationSearch = useCallback(() => {
-    setConversationSearchOpen(true);
+    setConversationSearchPage(conversationPage);
     focusSearchField(CONVERSATION_SEARCH_INPUT_ID);
     window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
-      search_surface: PRODUCT_SEARCH_SURFACE.CONVERSATION,
+      search_surface:
+        conversationPage === CONVERSATION_PAGE.TRANSCRIPT
+          ? PRODUCT_SEARCH_SURFACE.TRANSCRIPT
+          : PRODUCT_SEARCH_SURFACE.CONVERSATION,
     });
-  }, []);
+  }, [conversationPage]);
 
-  /** Closing it lets go of its query on the settings search's own terms: the panel clears the field the render it finds it closed. */
-  const closeConversationSearch = useCallback(() => setConversationSearchOpen(false), []);
+  /** Closing it lets go of its query on the settings search's own terms: the page's panel clears the field the render it finds it closed. */
+  const closeConversationSearch = useCallback(() => setConversationSearchPage(undefined), []);
 
   // A capture run stages its conversation from the launch profile, since no
   // voice window stands in one: who is heard, and for the muted run the hint
@@ -685,7 +708,7 @@ export function App(): React.JSX.Element {
         event.preventDefault();
         if (tab === PANEL_TAB.SETTINGS) openSettingsSearch();
         else if (tab === PANEL_TAB.SESSIONS) sessions.openSearch();
-        // Only the thread page has a search so far; the Agents pages take the chord as nothing.
+        // The thread and a transcript each have a search; the Agents list takes the chord as nothing.
         else if (offerConversationSearch) openConversationSearch();
         return;
       }
@@ -739,7 +762,7 @@ export function App(): React.JSX.Element {
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
-      // The thread's search field is the nearer layer than the thread itself.
+      // The page's search field is the nearer layer than the page itself, on the thread and on a transcript alike.
       else if (tab === PANEL_TAB.CONVERSATION && conversationSearchOpen) closeConversationSearch();
       // A transcript unwinds to the list it was opened from, and the list to the thread.
       else if (

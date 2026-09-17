@@ -1,5 +1,5 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import type { WebContents } from "electron";
 import {
   ACT,
@@ -103,13 +103,14 @@ export function createActRouter(rows: ActRows): ActRouter {
         catch: (error) => error,
       });
       // A row that answered an effect is run here, on the runtime the bridge
-      // handed this router; a row that answered a value or a promise settles
-      // the same way it always has.
+      // handed this router; a promise is awaited, and a value is the answer.
       // SAFETY: `ActRows` types every row's effect as one needing nothing of
       // its environment, which is the channel the guard below erases.
       const value = yield* Effect.isEffect(answer)
         ? (answer as Effect.Effect<unknown, unknown>)
-        : Effect.tryPromise({ try: async () => answer, catch: (error) => error });
+        : Predicate.isPromiseLike(answer)
+          ? Effect.tryPromise({ try: () => Promise.resolve(answer), catch: (error) => error })
+          : Effect.succeed(answer);
       if (declared.result(value) === false) return refused(declared.refusal);
       // SAFETY: the kind's own result guard admitted this value.
       return { status: ACT_OUTCOME_STATUS.DONE, value: value as ActResultFor<ActKind> };

@@ -356,3 +356,71 @@ test("the thread's magnifier is offered where the app offers it, lit while its f
   );
   assert.equal(unoffered.container.querySelector('button[aria-label="Search conversation"]'), null);
 });
+
+test("a transcript page's magnifier wears the transcript's words, and its field stands in the transcript view", () => {
+  const child: ChildRead = {
+    id: "aaaaaaaa-1111-4000-8000-000000000001",
+    parentConversationId: "7a1b2c3d-0000-4000-8000-000000000001",
+    parentKind: CONVERSATION_VIEW_SOURCE.MAIN,
+    label: "Audit the release notes",
+    status: CHILD_STATUS.RUNNING,
+    acceptedAt: NOW,
+  };
+  const transcript = {
+    conversationId: child.id,
+    kind: TRANSCRIPT_KIND.CHILD,
+    settled: true,
+    groups: fixtureConversationTurns(),
+  };
+  const toggles: number[] = [];
+  const offered = mount(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.TRANSCRIPT, () => {}, {
+      subagents: { settled: true, children: [child] },
+      transcriptOpen: childTranscriptRow(child),
+      childTranscript: transcript,
+      offerConversationSearch: true,
+      onConversationSearchToggle: () => toggles.push(1),
+    }),
+  );
+  assert.equal(offered.container.querySelector('button[aria-label="Search conversation"]'), null);
+  const button = offered.container.querySelector('button[aria-label="Search transcript"]');
+  assert.ok(button instanceof HTMLButtonElement);
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+  assert.equal(button.title, "Search transcript (⌘F)");
+  assert.equal(offered.container.querySelector(`#${CONVERSATION_SEARCH_INPUT_ID}`), null);
+  act(() => {
+    button.click();
+  });
+  assert.equal(toggles.length, 1);
+  const closes: number[] = [];
+  const engaged: boolean[] = [];
+  const open = mount(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.TRANSCRIPT, () => {}, {
+      subagents: { settled: true, children: [child] },
+      transcriptOpen: childTranscriptRow(child),
+      childTranscript: transcript,
+      offerConversationSearch: true,
+      conversationSearchOpen: true,
+      onConversationSearchClose: () => closes.push(1),
+      onFieldEngaged: (value) => engaged.push(value),
+    }),
+  );
+  assert.equal(
+    open.container
+      .querySelector('button[aria-label="Search transcript"]')
+      ?.getAttribute("aria-expanded"),
+    "true",
+  );
+  const field = open.container.querySelector(
+    `.conversation-view.agents-page #${CONVERSATION_SEARCH_INPUT_ID}`,
+  );
+  assert.ok(field instanceof HTMLInputElement);
+  assert.equal(field.placeholder, "Search transcript…");
+  // The field's own way out and its hold on the panel reach the app through the body, as the thread's do.
+  act(() => {
+    field.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.deepEqual(engaged, [true]);
+  assert.deepEqual(closes, [1]);
+});

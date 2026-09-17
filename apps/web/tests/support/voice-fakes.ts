@@ -3,7 +3,7 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { DevicePlatform } from "@sidecar/hosted";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
 import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
@@ -308,7 +308,7 @@ export function fakeAccounts(): FakeAccounts {
     resolveUserId(authorization) {
       return Effect.sync(() => {
         fake.resolved.push(authorization);
-        return authorization === fake.knownBearer ? FAKE_USER_ID : undefined;
+        return authorization === fake.knownBearer ? Option.some(FAKE_USER_ID) : Option.none();
       });
     },
     spend(userId) {

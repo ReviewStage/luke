@@ -5,6 +5,7 @@ import { runWeb } from "../runtime.js";
 import { hostedUserId } from "./bearer.js";
 import { payloadKeyRing } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
 import { hostedEncryptionSecretEffect, hostedVaultUserInfo } from "./vault-route.js";
 
@@ -18,7 +19,7 @@ import { hostedEncryptionSecretEffect, hostedVaultUserInfo } from "./vault-route
  */
 export interface HostedStoreRoute {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   store: HostedStore;
 }
 

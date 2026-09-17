@@ -347,12 +347,10 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   > {
     const groups: ReadTurnGroup[] = [];
     for (const group of answer.groups) {
-      const read = yield* Effect.promise(() =>
-        readStoredUIMessages(
-          group.messages.map((message) => message.message),
-          registry,
-          UNREGISTERED_TOOL_PART.DROP,
-        ),
+      const read = yield* readStoredUIMessages(
+        group.messages.map((message) => message.message),
+        registry,
+        UNREGISTERED_TOOL_PART.DROP,
       );
       if (!read.ok) {
         // The reader's path begins with the index of the row it refused.

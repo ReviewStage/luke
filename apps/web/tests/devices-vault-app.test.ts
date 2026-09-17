@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { test } from "vitest";
 import type { DevicesVaultSeams } from "../server/devices-vault-app.js";
 import type { DeviceHeartbeat, DeviceRegistration } from "../server/hosted/devices.js";
@@ -77,7 +77,7 @@ function seamsFor(overrides: Partial<DevicesVaultSeams> = {}) {
   };
   const seams: DevicesVaultSeams = {
     resolveUserId: (authorization) =>
-      Effect.succeed(authorization?.replace("Bearer ", "") || undefined),
+      Effect.succeed(Option.fromUndefinedOr(authorization?.replace("Bearer ", "") || undefined)),
     now: () => NOON,
     mintId: () => DEVICE_ID,
     registerDevice: (userId, registration, mintId, now) =>
@@ -132,7 +132,7 @@ test("the devices gate order is method, bearer, brake, and every refusal is one 
   assert.equal((await wrongMethod.json()).error, HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
 
   const anonymous = await answer(
-    seamsFor({ resolveUserId: () => Effect.succeed(undefined) }).seams,
+    seamsFor({ resolveUserId: () => Effect.succeedNone }).seams,
     devicesRequest("POST"),
   );
   assert.equal(anonymous.status, 401);
@@ -315,7 +315,9 @@ test("a forget is scoped to the bearer's account and answers whether a row went"
 test("a hammering account is braked to a trickle without reaching a seam", async () => {
   let brakedAt: number | undefined;
   for (let call = 0; call < 200; call += 1) {
-    const { seams, recorded } = seamsFor({ resolveUserId: () => Effect.succeed("user-braked") });
+    const { seams, recorded } = seamsFor({
+      resolveUserId: () => Effect.succeedSome("user-braked"),
+    });
     const response = await answer(seams, devicesRequest("PUT", { deviceId: DEVICE_ID }));
     if (response.status === 429) {
       assert.equal((await response.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
@@ -350,7 +352,7 @@ test("the vault store gate order is method, secret, token, body", async () => {
   assert.equal(blankSecret.status, 503);
 
   const anonymous = await answer(
-    seamsFor({ resolveUserId: () => Effect.succeed(undefined) }).seams,
+    seamsFor({ resolveUserId: () => Effect.succeedNone }).seams,
     vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
   );
   assert.equal(anonymous.status, 401);
@@ -455,7 +457,7 @@ test("the delete gate order is method, secret, token, body", async () => {
   assert.equal(noSecret.status, 503);
 
   const anonymous = await answer(
-    seamsFor({ resolveUserId: () => Effect.succeed(undefined) }).seams,
+    seamsFor({ resolveUserId: () => Effect.succeedNone }).seams,
     vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
   );
   assert.equal(anonymous.status, 401);
@@ -506,7 +508,7 @@ test("the list gate order is method, secret, token", async () => {
   assert.equal(noSecret.status, 503);
 
   const anonymous = await answer(
-    seamsFor({ resolveUserId: () => Effect.succeed(undefined) }).seams,
+    seamsFor({ resolveUserId: () => Effect.succeedNone }).seams,
     vaultKeysRequest(),
   );
   assert.equal(anonymous.status, 401);
@@ -545,7 +547,7 @@ test("the list omits rows stored for a provider the vault no longer accepts", as
 test("the list calls the seam with the resolved user id", async () => {
   let calledWithUserId: string | undefined;
   const { seams } = seamsFor({
-    resolveUserId: () => Effect.succeed("user-xyz"),
+    resolveUserId: () => Effect.succeedSome("user-xyz"),
     listKeys: (userId) =>
       Effect.sync(() => {
         calledWithUserId = userId;
@@ -593,7 +595,7 @@ const EXCHANGES: readonly Exchange[] = [
   },
   {
     name: "devices-invalid-token",
-    seams: { resolveUserId: () => Effect.succeed(undefined) },
+    seams: { resolveUserId: () => Effect.succeedNone },
     request: () => devicesRequest("POST", { deviceId: DEVICE_ID }, "user-golden"),
   },
   {

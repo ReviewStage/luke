@@ -1,4 +1,5 @@
 import { SESSION_STATUS, type SessionIdentity, type SessionStatus } from "@sidecar/session";
+import { Duration } from "effect";
 import { APPEND_TOKEN_BOUND } from "./chunks.js";
 import { developerSeedItem, type InitialItem } from "./seed.js";
 import { estimatedTokens } from "./tokens.js";
@@ -65,9 +66,9 @@ const ROSTER_UPDATE_PREFACE =
 /** How a session that left the roster reads, so a stale line is withdrawn rather than left standing. */
 const GONE_TEXT = "no longer on the desk";
 
-const MINUTE_MS = 60_000;
-const HOUR_MS = 60 * MINUTE_MS;
-const DAY_MS = 24 * HOUR_MS;
+const MINUTE_MS = Duration.toMillis(Duration.minutes(1));
+const HOUR_MS = Duration.toMillis(Duration.hours(1));
+const DAY_MS = Duration.toMillis(Duration.days(1));
 
 /**
  * How long since the provider last wrote about the session. `lastActivityAt`

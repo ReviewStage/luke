@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { runTest } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { createMachinePresence, type PresenceMonitor } from "./machine-presence";
 
@@ -23,7 +24,7 @@ test("the read is the monitor's idle time and the lock state kept from its edges
   const presence = createMachinePresence(monitor);
   assert.deepEqual(presence.read(), { idleSeconds: 3, screenLocked: false });
 
-  await presence.start();
+  await runTest(presence.start());
   emitter.emit("lock-screen");
   idle = 400;
   assert.deepEqual(presence.read(), { idleSeconds: 400, screenLocked: true });
@@ -34,13 +35,13 @@ test("the read is the monitor's idle time and the lock state kept from its edges
 test("a stop gives back both listeners and forgets a lock it was told of", async () => {
   const { monitor, emitter } = fakeMonitor(() => 0);
   const presence = createMachinePresence(monitor);
-  await presence.start();
+  await runTest(presence.start());
   emitter.emit("lock-screen");
-  await presence.stop();
+  await runTest(presence.stop());
   assert.equal(emitter.listenerCount("lock-screen"), 0);
   assert.equal(emitter.listenerCount("unlock-screen"), 0);
   assert.equal(presence.read().screenLocked, false);
   emitter.emit("lock-screen");
   assert.equal(presence.read().screenLocked, false);
-  await presence.stop();
+  await runTest(presence.stop());
 });

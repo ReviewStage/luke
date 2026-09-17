@@ -138,7 +138,7 @@ function request(path: string, after: string | undefined): Request {
 }
 
 function options(userId: string, req: Request): ResourceReadOptions {
-  return { request: req, resolveUserId: () => Effect.succeed(userId), store: database.store };
+  return { request: req, resolveUserId: () => Effect.succeedSome(userId), store: database.store };
 }
 
 async function answered<Value, Encoded>(
@@ -160,9 +160,11 @@ async function answered<Value, Encoded>(
 async function readPage(answer: ConversationMessagesAnswer): Promise<ReadMessagesPage> {
   const groups: ReadTurnGroup[] = [];
   for (const group of answer.groups) {
-    const read = await readStoredUIMessages(
-      group.messages.map((message) => message.message),
-      CATALOG_TOOL_SET,
+    const read = await database.run(
+      readStoredUIMessages(
+        group.messages.map((message) => message.message),
+        CATALOG_TOOL_SET,
+      ),
     );
     if (!read.ok) assert.fail(`the registry refused a row: ${read.refusal}`);
     const messages: ConversationViewMessage[] = group.messages.map((message, index) => {
@@ -225,7 +227,7 @@ class Mac {
             headers: { authorization: "Bearer token-1", "content-type": "application/json" },
             body: JSON.stringify({ deviceId: this.#deviceId }),
           }),
-          resolveUserId: () => Effect.succeed(this.userId),
+          resolveUserId: () => Effect.succeedSome(this.userId),
           store: database.store,
           touchDevice: () => Effect.succeed(false),
           now,

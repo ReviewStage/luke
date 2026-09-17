@@ -7,7 +7,7 @@
 
 import { UNKNOWN_WORKSPACE_LABEL } from "@sidecar/session";
 import { isRecord, positiveInteger, text, type WireRecord } from "@sidecar/wire";
-import { Data, Duration, Effect, Schedule } from "effect";
+import { Data, Duration, Effect, Predicate, Schedule } from "effect";
 import type { AdapterFailure } from "./adapter-failure.js";
 
 const GIT_SUFFIX = ".git";
@@ -112,7 +112,7 @@ export function rateLimitSchedule(
       if (delay !== undefined) budget.spentMs += delay;
       return delay;
     }),
-    Schedule.while(({ output }) => isDefined(output)),
+    Schedule.while(({ output }) => Predicate.isNotUndefined(output)),
     Schedule.modifyDelay(({ output }) => Effect.succeed(Duration.millis(output ?? 0))),
   );
 }
@@ -181,10 +181,6 @@ export function requestDeadlineMs(requested: number | undefined): number {
     positiveInteger(requested, CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS),
     CLOUD_ADAPTER_DEFAULTS.SLOW_REQUEST_TIMEOUT_MS,
   );
-}
-
-export function isDefined<Value>(value: Value | undefined): value is Value {
-  return value !== undefined;
 }
 
 export function textFromRecord(record: WireRecord, key: string): string | undefined {

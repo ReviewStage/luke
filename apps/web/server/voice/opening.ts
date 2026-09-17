@@ -254,8 +254,9 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
     admission: SignedInAdmission,
   ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> =>
     Effect.gen(function* () {
-      const accountId = yield* accounts.resolveUserId(admission.bearer);
-      if (accountId === undefined) return refused(HOSTED_API_ERROR.INVALID_TOKEN);
+      const account = yield* accounts.resolveUserId(admission.bearer);
+      if (Option.isNone(account)) return refused(HOSTED_API_ERROR.INVALID_TOKEN);
+      const accountId = account.value;
       const claimed =
         admission.deviceId === undefined
           ? undefined
@@ -422,13 +423,14 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if (admission.route !== VOICE_ROUTE.SESSIONS) {
         return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       }
-      const accountId = yield* accounts.resolveUserId(admission.bearer);
+      const account = yield* accounts.resolveUserId(admission.bearer);
       if (
-        accountId === undefined ||
-        !(yield* record.owned({ userId: accountId, sessionId: frame.sessionId }))
+        Option.isNone(account) ||
+        !(yield* record.owned({ userId: account.value, sessionId: frame.sessionId }))
       ) {
         return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       }
+      const accountId = account.value;
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
       const answer: SessionAttachedFrame = {

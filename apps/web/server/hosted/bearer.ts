@@ -1,5 +1,5 @@
 import type { Cause } from "effect";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { isRecord, text, type UnparsedWireValue } from "../core.js";
 
 /** The subject a signed-in OAuth userinfo answer names. */
@@ -26,16 +26,11 @@ export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUser
   return sub ? { sub } : undefined;
 }
 
-/**
- * Resolves the signed-in user behind a request's bearer token, or nothing.
- * Nothing distinguishes a missing header from an expired or revoked token on
- * purpose: every failure is one 401, and the desktop's existing refresh
- * machinery is what answers it.
- */
+/** Resolves the signed-in user behind a request's bearer token, on `UserIdResolver`'s terms. */
 export function hostedUserId(
   request: Request,
   userInfo: UserInfoEndpoint,
-): Effect.Effect<string | undefined> {
+): Effect.Effect<Option.Option<string>> {
   return userIdForAuthorization(request.headers.get("authorization"), userInfo);
 }
 
@@ -47,11 +42,11 @@ export function hostedUserId(
 export function userIdForAuthorization(
   value: string | null | undefined,
   userInfo: UserInfoEndpoint,
-): Effect.Effect<string | undefined> {
+): Effect.Effect<Option.Option<string>> {
   const authorization = value?.trim();
-  if (!authorization) return Effect.succeed(undefined);
+  if (!authorization) return Effect.succeedNone;
   return userInfo({ headers: new Headers({ authorization }) }).pipe(
-    Effect.map((identity) => identity?.sub || undefined),
-    Effect.orElseSucceed(() => undefined),
+    Effect.map((identity) => Option.fromUndefinedOr(identity?.sub || undefined)),
+    Effect.orElseSucceed(Option.none<string>),
   );
 }

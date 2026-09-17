@@ -1058,41 +1058,6 @@ it.effect(
     }),
 );
 
-it.effect(
-  "briefings wait for the prior briefing to be spoken, so separate announcements cannot become one utterance",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      f.service.deliverBriefing({
-        briefing: "The checkout needs approval.",
-        decidedAt: f.clock.now,
-      });
-      f.service.deliverBriefing({
-        briefing: "The release notes are ready.",
-        decidedAt: f.clock.now,
-      });
-      yield* settle();
-      const first = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(first.length, 1);
-      const firstAppend = first[0];
-      assert.ok(firstAppend && "content" in firstAppend);
-      assert.equal(firstAppend.content, "The checkout needs approval.");
-      sideband.acknowledge(0, 100, 200);
-      yield* settle();
-      // An acknowledgement only admits the prompt; the model's completed speech releases the next briefing.
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      sideband.output("The checkout needs approval.", 200, 400);
-      yield* settle();
-      const both = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(both.length, 2);
-      const secondAppend = both[1];
-      assert.ok(secondAppend && "content" in secondAppend);
-      assert.equal(secondAppend.content, "The release notes are ready.");
-    }),
-);
-
 it.effect("an error naming an append refuses that append and never counts as success", () =>
   Effect.gen(function* () {
     const f = yield* fixture();

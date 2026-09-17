@@ -122,17 +122,19 @@ const UNKNOWN_OUTCOME_PROBE = unknownActionOutput(
 
 /** The tools whose declared output schema would refuse the unknown outcome's envelope. */
 const toolsRefusingUnknownOutcome = (tools: ToolSet): Effect.Effect<readonly string[]> =>
-  Effect.promise(async () => {
-    const refusing: string[] = [];
-    for (const [name, declared] of Object.entries(tools)) {
-      if (declared.outputSchema === undefined) continue;
+  Effect.map(
+    Effect.forEach(Object.entries(tools), ([name, declared]) => {
+      if (declared.outputSchema === undefined) return Effect.succeed(undefined);
       const validate = asSchema(declared.outputSchema).validate;
-      if (validate === undefined) continue;
-      const result = await validate(UNKNOWN_OUTCOME_PROBE);
-      if (!result.success) refusing.push(name);
-    }
-    return refusing;
-  });
+      if (validate === undefined) return Effect.succeed(undefined);
+      // The SDK's validate answers a value or a thenable, so the door settles either.
+      return Effect.map(
+        Effect.promise(() => Promise.resolve(validate(UNKNOWN_OUTCOME_PROBE))),
+        (result) => (result.success ? undefined : name),
+      );
+    }),
+    (names) => names.filter((name) => name !== undefined),
+  );
 
 export interface ConversationTarget {
   readonly userId: string;
@@ -1121,7 +1123,7 @@ function admitted(
   message: UIMessage | StoredUIMessage,
 ): Effect.Effect<Admitted> {
   return Effect.flatMap(
-    Effect.promise(() => readStoredUIMessages(jsonRoundTrip([message]), context.tools)),
+    readStoredUIMessages(jsonRoundTrip([message]), context.tools),
     (read): Effect.Effect<Admitted> => {
       if (!read.ok) {
         return Effect.succeed({

@@ -1,13 +1,10 @@
 import { Effect } from "effect";
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
-import {
-  EMPTY_RELAY_STATE,
-  type RelayState,
-  type RelayStateStore,
-} from "../../server/hosted/brain-host/relay.js";
+import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-host/relay.js";
 import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
+import { pinnedState } from "../pinned-state.js";
 import { sessionPrompt } from "../session-prompt.js";
 
 /**
@@ -23,14 +20,14 @@ import { sessionPrompt } from "../session-prompt.js";
 
 const relayState = defineState<RelayState>("luke.relay", () => EMPTY_RELAY_STATE);
 
-const state: RelayStateStore = {
-  get: () => relayState.get(),
-  update: (next) => relayState.update(next),
-};
-
 export default defineHook({
   events: {
     "*"(event, ctx) {
+      // Pinned before anything awaits, because the admission's statement can
+      // hand this fiber back in another session's context, and the relay's
+      // state and the prompt's hash are this session's (`../pinned-state.ts`).
+      const state = pinnedState(relayState);
+      const prompt = pinnedState(sessionPrompt);
       return runWeb(
         Effect.gen(function* () {
           if (event.type === "session.started") {
@@ -40,7 +37,7 @@ export default defineHook({
           }
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
           if (!admitted.ok) return;
-          yield* host.relay(event, admitted, ctx.session, state, sessionPrompt.get());
+          yield* host.relay(event, admitted, ctx.session, state, prompt.get());
         }),
       );
     },

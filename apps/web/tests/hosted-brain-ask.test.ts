@@ -17,7 +17,7 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { db } from "../server/db/query";
@@ -272,7 +272,7 @@ function harness(): Harness {
     whileSleeping: async () => {},
     options: (request, userId) => ({
       request,
-      resolveUserId: () => Effect.succeed(userId),
+      resolveUserId: () => Effect.succeed(Option.fromUndefinedOr(userId)),
       store: database.store,
       writer,
       asks,

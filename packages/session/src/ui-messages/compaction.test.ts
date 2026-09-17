@@ -10,6 +10,7 @@ import {
   type WireRecord,
   wireRecord,
 } from "@sidecar/wire";
+import { runTest } from "@sidecar/wire/testing";
 import { type ToolSet, tool } from "ai";
 import { test } from "vitest";
 import { z } from "zod";
@@ -63,7 +64,7 @@ test("the summary message is the compaction fixture's shape exactly, and reads b
   const message = compactionSummaryMessage(FIXTURE_ID, FIXTURE_SUMMARY);
   assert.deepEqual(message, await fixture("compaction.json"));
   assert.ok(message);
-  const read = await readStoredUIMessages([stored(message)], TOOLS);
+  const read = await runTest(readStoredUIMessages([stored(message)], TOOLS));
   assert.deepEqual(read, { ok: true, value: [message] });
 });
 
@@ -73,7 +74,7 @@ test("a fold whose runtime reported no token count writes none: the key is absen
   assert.deepEqual(message, await fixture("compaction-uncounted.json"));
   assert.ok(message);
   assert.deepEqual(Object.keys(message.metadata.compaction), ["first_kept_message_id"]);
-  assert.deepEqual(await readStoredUIMessages([stored(message)], TOOLS), {
+  assert.deepEqual(await runTest(readStoredUIMessages([stored(message)], TOOLS)), {
     ok: true,
     value: [message],
   });

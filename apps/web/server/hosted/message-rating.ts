@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Option, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -15,6 +15,7 @@ import {
   jsonResponse,
   readJsonBody,
 } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { RATING_REFUSAL, type RatingWriteResult } from "./store/ratings.js";
 
 /**
@@ -38,7 +39,7 @@ const MESSAGE_ID_QUERY = "id";
 
 export interface MessageRatingOptions {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   /** Records the rating on the message where the account holds it and Luke wrote it. */
   rate: (
     userId: string,
@@ -68,10 +69,11 @@ export function handleMessageRating(
       return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
     }
 
-    const userId = yield* resolveUserId(request);
-    if (!userId) {
+    const account = yield* resolveUserId(request);
+    if (Option.isNone(account)) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
+    const userId = account.value;
 
     const parsed = yield* Effect.promise(() => readJsonBody(request, MAXIMUM_RATING_BODY_BYTES));
     if (parsed instanceof Response) return parsed;

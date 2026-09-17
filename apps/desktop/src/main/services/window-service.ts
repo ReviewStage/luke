@@ -8,7 +8,7 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { IntroductionLiveSessionSource } from "@sidecar/voice";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import type { Effect } from "effect";
+import { Effect } from "effect";
 import {
   app,
   type IpcMainEvent,
@@ -352,25 +352,39 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     );
   }
 
+  /**
+   * The panels laid out again over the displays as they now stand, then
+   * `then` run over them, unless the launch ended while the geometry was
+   * read: a wait that resumes after the quit landed must not raise panels
+   * over a client whose keys and windows are already given back. Begun on
+   * the launch's runtime and not waited for, since the caller is an Electron
+   * event handler with nothing to answer.
+   */
+  function relayout(then: () => void): void {
+    void run(
+      Effect.andThen(
+        Effect.promise(() => panels.refreshGeometry()),
+        Effect.sync(() => {
+          if (launchStanding()) then();
+        }),
+      ),
+    );
+  }
+
   function handleDisplayChange(): void {
     afterDelay(DISPLAY_SETTLE_MS, () => {
-      void (async () => {
-        await panels.refreshGeometry();
-        if (!launchStanding()) return;
+      relayout(() => {
         panels.reconcile();
         // A takeover follows its display: the reconcile above moved its
         // window somewhere it can stand, and re-taking covers whichever
         // display that window now stands on.
         if (introductionPlaying()) panels.enterTakeover();
-      })();
+      });
     });
   }
 
   const handleSecondInstance = (_event: Electron.Event, argv: string[]): void => {
-    void panels.refreshGeometry().then(() => {
-      // A second launch already in flight when the quit landed must not raise
-      // panels over a client whose keys and windows are already given back.
-      if (!launchStanding()) return;
+    relayout(() => {
       if (introductionPlaying()) {
         panels.enterTakeover();
         return;

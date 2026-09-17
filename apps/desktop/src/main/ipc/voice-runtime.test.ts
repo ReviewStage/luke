@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { runModeFor } from "@sidecar/host";
 import { CONVERSATION_ENTRY_KIND, type LiveConversationLine } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Context, Effect } from "effect";
+import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { channels } from "#shared/bridge";
@@ -79,7 +79,7 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
       createLiveSession: (sdp: string) =>
         Effect.sync(() => {
           liveCalls.push(`create:${sdp}`);
-          return { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" };
+          return Option.some({ sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" });
         }),
       endLiveSession: () =>
         Effect.sync(() => {
@@ -99,7 +99,7 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
           return true;
         }),
     },
-    liveDiagnostics: () => Effect.succeed(undefined),
+    liveDiagnostics: () => Effect.succeedNone,
     recordProductEvent: () => undefined,
     clearConversation,
     setShortcutCapturing: () => undefined,

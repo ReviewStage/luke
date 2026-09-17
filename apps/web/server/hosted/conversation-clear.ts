@@ -1,8 +1,9 @@
-import { Effect, type Schema } from "effect";
+import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationClearAnswer } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { makeRateBrake } from "./rate-brake.js";
 import type { HostedStore } from "./store/index.js";
 
@@ -35,7 +36,7 @@ const CLEAR_METHOD = "POST";
 
 interface ConversationClearOptions {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "main">;
   now?: () => number;
 }
@@ -52,10 +53,11 @@ export const handleConversationClear = /* @__PURE__ */ Effect.fn("handleConversa
         HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
       );
     }
-    const userId = yield* resolveUserId(request);
-    if (!userId) {
+    const account = yield* resolveUserId(request);
+    if (Option.isNone(account)) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
+    const userId = account.value;
     if (!(yield* clearBrake.check(userId))) {
       return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
     }

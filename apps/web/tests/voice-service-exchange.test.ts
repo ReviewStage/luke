@@ -249,7 +249,7 @@ async function stand(offer: Offer): Promise<Stand> {
   const eve = fakeEve();
   const log: LogEntry[] = [];
   const reports: ExchangeReport[] = [];
-  const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeed(target.userId) };
+  const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(target.userId) };
   let release = (): void => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -258,11 +258,8 @@ async function stand(offer: Offer): Promise<Stand> {
     offer === OFFER.NONE
       ? undefined
       : offer === OFFER.FAILING
-        ? async () => {
-            throw new Error("the store is not reachable");
-          }
+        ? () => Effect.fail(new Error("the store is not reachable"))
         : deploymentExchange({
-            run: database.run,
             encryptionSecret: () =>
               offer === OFFER.UNCONFIGURED ? undefined : TEST_PAYLOAD_SECRET,
             deploymentSecret: () => "deployment-secret",
@@ -275,11 +272,12 @@ async function stand(offer: Offer): Promise<Stand> {
   const exchange: VoiceServiceOptions["exchange"] =
     attachment === undefined
       ? undefined
-      : async (session) => {
-          offered.push(session);
-          if (offer === OFFER.GATED) await gate;
-          return attachment(session);
-        };
+      : (session) =>
+          Effect.gen(function* () {
+            offered.push(session);
+            if (offer === OFFER.GATED) yield* Effect.promise(() => gate);
+            return yield* attachment(session);
+          });
   const voice = voiceServer();
   const scope = await database.run(Scope.make());
   const port = await database.run(
@@ -291,7 +289,6 @@ async function stand(offer: Offer): Promise<Stand> {
           apiKey: API_KEY,
           accounts,
           record: sessionRecord,
-          run: database.run,
           openAiBaseUrl: openAi.baseUrl,
           log: (entry) => {
             log.push(entry);

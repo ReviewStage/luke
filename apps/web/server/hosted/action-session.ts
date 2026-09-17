@@ -1,4 +1,4 @@
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Option, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -209,10 +209,11 @@ function admitActionRequest(
     const secretResult = secretOrUnavailable(encryptionSecret);
     if (secretResult instanceof Response) return secretResult;
 
-    const userId = yield* resolveUserId(request);
-    if (!userId) {
+    const account = yield* resolveUserId(request);
+    if (Option.isNone(account)) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
+    const userId = account.value;
 
     const parsed = yield* Effect.result(Effect.tryPromise(() => request.json()));
     if (Result.isFailure(parsed)) return invalidRequest();

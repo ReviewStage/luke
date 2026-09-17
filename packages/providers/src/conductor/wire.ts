@@ -4,8 +4,8 @@ import {
   type ProviderConversationMessage,
 } from "@sidecar/session";
 import { isRecord, text, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
+import { Predicate } from "effect";
 import {
-  isDefined,
   knownValue,
   repositoryLabel,
   textFromRecord,
@@ -366,7 +366,7 @@ function agentWordsFromHarnessEvent(rawPayload: UnparsedWireValue): string | und
         (block) => block[CONDUCTOR_HARNESS_EVENT_FIELD.TYPE] === CONDUCTOR_CLAUDE_TEXT_BLOCK_TYPE,
       )
       .map((block) => text(block[CONDUCTOR_HARNESS_EVENT_FIELD.TEXT]))
-      .filter(isDefined)
+      .filter(Predicate.isNotUndefined)
       .join("\n\n");
     return words || undefined;
   }
@@ -391,7 +391,7 @@ export function agentAndModelLabel(
   agentKind: string | undefined,
   model: string | undefined,
 ): string | undefined {
-  const label = [agentKind, model].filter(isDefined).join(" · ");
+  const label = [agentKind, model].filter(Predicate.isNotUndefined).join(" · ");
   return label || undefined;
 }
 
@@ -437,5 +437,5 @@ export function modelLabel(record: WireRecord): string | undefined {
   if (!model) return undefined;
   const effort = textFromRecord(record, CONDUCTOR_FIELD.EFFORT);
   const fast = record[CONDUCTOR_FIELD.FAST_MODE] === true ? "fast" : undefined;
-  return [model, effort, fast].filter(isDefined).join(" · ");
+  return [model, effort, fast].filter(Predicate.isNotUndefined).join(" · ");
 }

@@ -256,3 +256,98 @@ export function useAdminRead<T>(
 
   return { state, refreshing, reload: run, withdraw, revise };
 }
+
+/* ----- Admin writes ----- */
+
+/** Carries one intent to the service; true when it landed. Never throws past the chain. */
+export type AdminWriter = (id: string, value: boolean, signal: AbortSignal) => Promise<boolean>;
+
+/**
+ * One write chain per subject, carrying the newest intent to the service.
+ * A press draws its value at once and records the intent; presses faster than
+ * the network coalesce into the chain's next request instead of racing it out
+ * of order, since the chain deletes the intent before each request and stops
+ * when none is left. A landed write redraws its own outcome, so a roster
+ * refresh that crossed it mid-flight cannot leave a stale value, and a failed
+ * one puts the old value back only when no newer press has spoken since. An
+ * aborted chain finishes its request in silence: nothing is drawn after the
+ * screen that owned it is gone.
+ */
+export class AdminWriteChain {
+  private readonly intents = new Map<string, boolean>();
+  private readonly writing = new Set<string>();
+
+  constructor(
+    private readonly send: AdminWriter,
+    private readonly draw: (id: string, value: boolean) => void,
+    private readonly signal: AbortSignal,
+  ) {}
+
+  /** Shows the value now and starts the subject's chain unless one is running. */
+  press(id: string, value: boolean): void {
+    this.draw(id, value);
+    this.intents.set(id, value);
+    if (this.writing.has(id)) return;
+    this.writing.add(id);
+    void this.drain(id);
+  }
+
+  /** The subject's chain: one request per intent left, newest first and only. */
+  private async drain(id: string): Promise<void> {
+    try {
+      for (;;) {
+        const want = this.intents.get(id);
+        if (want === undefined) return;
+        this.intents.delete(id);
+        const landed = await this.attempt(id, want);
+        if (this.signal.aborted) return;
+        if (landed) this.draw(id, want);
+        else if (!this.intents.has(id)) this.draw(id, !want);
+      }
+    } finally {
+      this.writing.delete(id);
+    }
+  }
+
+  private async attempt(id: string, want: boolean): Promise<boolean> {
+    try {
+      return await this.send(id, want, this.signal);
+    } catch {
+      return false;
+    }
+  }
+}
+
+/**
+ * The one write an admin screen makes against a row: the chain above, owned
+ * for the screen's life and aborted with it, so an unmounted screen neither
+ * redraws nor keeps a request alive. `draw` is read at the moment a write
+ * settles rather than closed over, so the screen may write it inline.
+ */
+export function useAdminWrite(
+  send: AdminWriter,
+  draw: (id: string, value: boolean) => void,
+): (id: string, value: boolean) => void {
+  const latest = useRef({ send, draw });
+  useEffect(() => {
+    latest.current = { send, draw };
+  });
+
+  // The chain is built under the mount's own controller, so a strict-mode
+  // remount gets a fresh one rather than an already-aborted signal.
+  const chain = useRef<AdminWriteChain>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    chain.current = new AdminWriteChain(
+      (id, value, signal) => latest.current.send(id, value, signal),
+      (id, value) => latest.current.draw(id, value),
+      controller.signal,
+    );
+    return () => {
+      controller.abort();
+      chain.current = null;
+    };
+  }, []);
+
+  return useCallback((id: string, value: boolean) => chain.current?.press(id, value), []);
+}

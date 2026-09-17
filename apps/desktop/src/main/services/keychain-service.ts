@@ -1,8 +1,9 @@
 import type { HostSeams } from "@sidecar/host";
+import { Effect } from "effect";
 import { safeStorage } from "electron";
-import type { DesktopService } from "./service";
+import type { EffectDesktopService } from "./service";
 
-export interface KeychainService extends DesktopService {
+export interface KeychainService extends EffectDesktopService {
   /** The one cipher the host encrypts a credential with, and the one place `safeStorage` is named. */
   readonly cipher: HostSeams["cipher"];
 }
@@ -22,7 +23,7 @@ export function createKeychainService(): KeychainService {
       encrypt: (plainText) => safeStorage.encryptString(plainText),
       decrypt: (cipherText) => safeStorage.decryptString(cipherText),
     },
-    start: async () => undefined,
-    stop: async () => undefined,
+    start: () => Effect.void,
+    stop: () => Effect.void,
   };
 }

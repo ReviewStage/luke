@@ -39,7 +39,7 @@ function conversationOptions(
       providerSessionId: SESSION_UUID,
     }),
     encryptionSecret: SECRET,
-    resolveUserId: () => Effect.succeed("user-1"),
+    resolveUserId: () => Effect.succeedSome("user-1"),
     readKey: () => Effect.succeed({ ciphertext: encryptProviderKey("key-1", SECRET) }),
     execute: () => Effect.succeed({ messages: [], hasMore: false }),
     ...overrides,
@@ -64,7 +64,7 @@ test("the conversation gate order is method, secret, token", async () => {
   assert.equal(noSecret.status, 503);
 
   const anonymous = await runWithoutDatabase(
-    handleConversationRead(conversationOptions({ resolveUserId: () => Effect.succeed(undefined) })),
+    handleConversationRead(conversationOptions({ resolveUserId: () => Effect.succeedNone })),
   );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
@@ -254,13 +254,17 @@ test("the conversation endpoint returns 429 after too many requests in the same 
 
   for (let i = 0; i < 30; i++) {
     const response = await runWithoutDatabase(
-      handleConversationRead(conversationOptions({ resolveUserId: () => Effect.succeed(userId) })),
+      handleConversationRead(
+        conversationOptions({ resolveUserId: () => Effect.succeedSome(userId) }),
+      ),
     );
     assert.equal(response.status, 200, `request ${i + 1} should succeed`);
   }
 
   const limited = await runWithoutDatabase(
-    handleConversationRead(conversationOptions({ resolveUserId: () => Effect.succeed(userId) })),
+    handleConversationRead(
+      conversationOptions({ resolveUserId: () => Effect.succeedSome(userId) }),
+    ),
   );
   assert.equal(limited.status, 429);
   assert.equal((await limited.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);

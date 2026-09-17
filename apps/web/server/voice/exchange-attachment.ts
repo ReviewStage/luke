@@ -1,11 +1,10 @@
-import { Effect, Exit, type Schema, Scope } from "effect";
+import { Effect, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { standingMain } from "../hosted/brain-host/main.js";
 import type { HostedStoreContext } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
-import type { WebStoreRun } from "../runtime.js";
 import {
   type ExchangeAttachment,
   type ExchangeReport,
@@ -25,19 +24,16 @@ import { upstreamSideband } from "./live-sideband.js";
  * seams (`deployment-exchange.ts`) since E5-3 unwired the desktop's own
  * exchange in the same commit.
  *
- * One socket, one scope. The attachment opens a `Scope` when the service
- * offers it a session, builds the whole standing — the account's main, the
- * exchange, its adoption of the sideband, and the briefing look — as one
- * effect run in that scope on the edge's own runner, and hands the service a
- * `stop` that closes it. A standing that could not be reached closes the
- * scope before it throws, so nothing an attempt acquired is left behind on a
- * session the service is about to refuse.
+ * One socket, one scope. The attachment builds the whole standing — the
+ * account's main, the exchange, its adoption of the sideband, and the
+ * briefing look — as one effect in the scope the service provides, and that
+ * scope's close is the exchange's stop. A standing that could not be reached
+ * fails in that scope, so the service closing it gives back everything the
+ * attempt acquired before the session is refused.
  */
 
 interface ExchangeAttachmentDeps {
   readonly context: HostedStoreContext;
-  /** The runner the attachment's own scope and the effects built in it are answered through. */
-  readonly run: WebStoreRun;
   readonly writer: StoreWriter;
   /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
   readonly eve: (accountId: string) => EveSessions;
@@ -61,8 +57,8 @@ class ExchangeCannotStand extends Error {
 }
 
 export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttachment {
-  const standing = (
-    session: Parameters<ExchangeAttachment>[0],
+  return (
+    session,
   ): Effect.Effect<
     HostedLiveExchange,
     SqlError | Schema.SchemaError | ExchangeCannotStand,
@@ -99,16 +95,4 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
       yield* exchange.briefings.start;
       return exchange;
     });
-
-  return async (session) => {
-    const scope = await deps.run(Scope.make());
-    const close = () => deps.run(Scope.close(scope, Exit.void));
-    try {
-      const exchange = await deps.run(Scope.provide(standing(session), scope));
-      return { ...exchange, stop: close };
-    } catch (error) {
-      await close();
-      throw error;
-    }
-  };
 }

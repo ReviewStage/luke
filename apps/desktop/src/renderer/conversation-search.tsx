@@ -13,11 +13,14 @@ import { drawnVisibly, focusSeek } from "./focus-seek";
 import { matchesTokens, searchTokens } from "./session-model";
 
 /**
- * Searching the Conversation thread.
+ * Searching the Conversation thread, and a transcript the tab turns to.
  *
  * The thread grows past what anyone scrolls back through, so the tab bar
  * carries the same magnifier the other two tabs do, opening the same pill at
- * the head of the thread. The corpus is the words the thread draws as
+ * the head of the thread. An agent's transcript page is drawn through the
+ * same turn renderer, so it searches through the same pieces: the same pill
+ * under its header, the same results in the transcript's place, the same
+ * landing, worded for a transcript. The corpus is the words the thread draws as
  * bubbles — the developer's asks, Luke's replies and briefings, his words on
  * his own judgment, and what his voice read aloud — one entry per message,
  * composed by the turn renderer from the very branches that draw them
@@ -40,8 +43,23 @@ import { matchesTokens, searchTokens } from "./session-model";
  * written, and no model runs.
  */
 
-/** What the field is for, in the words the thread itself uses. */
-const SEARCH_PLACEHOLDER = "Search conversation…";
+/**
+ * What a search reads: the Conversation thread, or the one transcript the
+ * tab's third page draws. The field and its magnifier are worded by it, so a
+ * reader on a transcript is never told they are searching the Conversation.
+ */
+export const CONVERSATION_SEARCH_SUBJECT = {
+  CONVERSATION: "conversation",
+  TRANSCRIPT: "transcript",
+} as const;
+
+export type ConversationSearchSubject =
+  (typeof CONVERSATION_SEARCH_SUBJECT)[keyof typeof CONVERSATION_SEARCH_SUBJECT];
+
+/** What the field and its magnifier are for, in the words the pages themselves use. */
+function searchLabel(subject: ConversationSearchSubject): string {
+  return `Search ${subject}`;
+}
 
 /**
  * How the search field is found from outside the component, the way the
@@ -152,20 +170,24 @@ export function landOnConversationMessage(messageId: string, bracket?: LandingBr
  */
 export function ConversationSearchButton({
   open,
+  subject = CONVERSATION_SEARCH_SUBJECT.CONVERSATION,
   onToggle,
 }: {
   open: boolean;
+  /** What the field it opens reads, which words the button. */
+  subject?: ConversationSearchSubject;
   onToggle: () => void;
 }): React.JSX.Element {
+  const label = searchLabel(subject);
   return (
     <button
       type="button"
       className="search-button"
       data-active={String(open)}
       aria-expanded={open}
-      aria-label="Search conversation"
+      aria-label={label}
       aria-keyshortcuts="Meta+F"
-      title="Search conversation (⌘F)"
+      title={`${label} (⌘F)`}
       onClick={onToggle}
     >
       <SearchIcon />
@@ -188,6 +210,7 @@ export function ConversationSearchButton({
 export function ConversationSearch({
   query,
   search,
+  subject = CONVERSATION_SEARCH_SUBJECT.CONVERSATION,
   onQueryChange,
   onEnter,
   onClose,
@@ -195,6 +218,8 @@ export function ConversationSearch({
 }: {
   query: string;
   search?: ConversationSearchOutcome | undefined;
+  /** What the field reads, which words its label and placeholder. */
+  subject?: ConversationSearchSubject;
   onQueryChange: (query: string) => void;
   /** Enter over a standing search: the first result pressed by the keyboard. */
   onEnter: () => void;
@@ -209,6 +234,7 @@ export function ConversationSearch({
 }): React.JSX.Element {
   const { tell } = useAct();
   const field = useRef<HTMLInputElement | null>(null);
+  const label = searchLabel(subject);
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only places the caret.
     <search
@@ -222,8 +248,8 @@ export function ConversationSearch({
         ref={field}
         id={CONVERSATION_SEARCH_INPUT_ID}
         className="session-search-input"
-        aria-label="Search conversation"
-        placeholder={SEARCH_PLACEHOLDER}
+        aria-label={label}
+        placeholder={`${label}…`}
         autoComplete="off"
         spellCheck={false}
         value={query}

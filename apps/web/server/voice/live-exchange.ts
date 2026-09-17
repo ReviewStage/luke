@@ -119,17 +119,19 @@ export interface AttachedSession {
 
 /**
  * The composition's exchange for one session, standing on it, or nothing
- * where this build stands none; one offered that cannot stand throws, and the
+ * where this build stands none; one offered that cannot stand fails, and the
  * route refuses the session. The attachment builds the sideband over the
  * socket and adopts, so the service itself reaches nothing of the exchange
  * or the live-session door; the function bundle gained that edge in the
  * commit that passed the attachment and unwired the desktop's own exchange,
  * since with both live every spoken ask would be delegated twice and every
- * reply appended twice.
+ * reply appended twice. The scope is the caller's: everything the standing
+ * acquires (the follows, the briefing look, the record writes under way)
+ * belongs to it, and closing it is the exchange's stop.
  */
 export type ExchangeAttachment = (
   session: AttachedSession,
-) => Promise<AttachedExchange | undefined>;
+) => Effect.Effect<HostedLiveExchange | undefined, Error, Scope.Scope | SqlClient.SqlClient>;
 
 /**
  * Something a standing exchange reported of itself, as the composition that
@@ -161,17 +163,6 @@ export interface HostedLiveExchange {
    * not the device's word.
    */
   speakBeat(beat: SessionBeatFrame): void;
-}
-
-/**
- * The exchange as the service holds one: the composition above with the close
- * of the scope it was built in, which is what ends the follows and the
- * briefing look, closes the session gracefully, and waits for every record
- * write already started. The service detaching is that close and nothing
- * else, so nothing of the exchange outlives the socket.
- */
-export interface AttachedExchange extends HostedLiveExchange {
-  stop(): Promise<void>;
 }
 
 const VoiceSessionDeviceIdRowSchema = Schema.Struct({

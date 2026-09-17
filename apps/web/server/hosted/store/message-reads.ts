@@ -72,9 +72,7 @@ import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./d
  * `as` casts here used to stand in for. What the builder cannot spell is a
  * named `sql` fragment inside the one rendered statement: the instant a turn
  * last changed, its text form, the jsonb key test behind `compaction`, and
- * the revision-first ordering of a messages page. The one thing still a
- * `Promise` here is `readStoredUIMessages` itself, an unrelated vocabulary
- * reader a selected page is handed to.
+ * the revision-first ordering of a messages page.
  */
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
@@ -211,40 +209,43 @@ type MessageRow = {
 
 type RefusedPage = Exclude<MessageListRead, { ok: true }>;
 
-async function refusedRow(
+function refusedRow(
   rows: readonly MessageRow[],
   read: Exclude<SchemaRead<unknown>, { ok: true }>,
   tools: ToolSet,
-): Promise<RefusedPage> {
+): Effect.Effect<RefusedPage> {
   const [index, ...path] = read.path;
   const named = rows.find((_, position) => position === index);
   if (named !== undefined) {
-    return {
+    return Effect.succeed({
       ok: false,
       refusal: read.refusal,
       conversationId: named.conversationId,
       seq: named.seq,
       path,
-    };
+    });
   }
-  for (const row of rows) {
-    const single = await readStoredUIMessages(
-      unparsedWire([row.stored]),
-      tools,
-      UNREGISTERED_TOOL_PART.DROP,
-    );
-    if (!single.ok) {
-      const [, ...inner] = single.path;
-      return {
-        ok: false,
-        refusal: single.refusal,
-        conversationId: row.conversationId,
-        seq: row.seq,
-        path: inner,
-      };
+  // The reader named no row, so each is read alone until the unreadable one names itself.
+  return Effect.gen(function* () {
+    for (const row of rows) {
+      const single = yield* readStoredUIMessages(
+        unparsedWire([row.stored]),
+        tools,
+        UNREGISTERED_TOOL_PART.DROP,
+      );
+      if (!single.ok) {
+        const [, ...inner] = single.path;
+        return {
+          ok: false,
+          refusal: single.refusal,
+          conversationId: row.conversationId,
+          seq: row.seq,
+          path: inner,
+        };
+      }
     }
-  }
-  throw new Error("a page was refused whole and every row of it read alone");
+    return yield* Effect.die(new Error("a page was refused whole and every row of it read alone"));
+  });
 }
 
 function pageLimit(cursor: { readonly limit?: number }): number {
@@ -324,39 +325,41 @@ const SelectedHistoryRowSchema = Schema.Struct({
 type SelectedHistoryRow = typeof SelectedHistoryRowSchema.Type;
 
 /** Selected rows read back through the vocabulary, in the order given, or the page refused at its first unreadable row. */
-async function readSelected(
+function readSelected(
   selected: readonly SelectedMessage[],
   tools: ToolSet,
-): Promise<MessageListRead> {
+): Effect.Effect<MessageListRead> {
   const rows: MessageRow[] = selected.map(({ role, parts, metadata, ...row }) => ({
     ...row,
     stored: { id: row.id, role, parts, ...optionalField("metadata", metadata) },
   }));
-  const read = await readStoredUIMessages(
+  const read = readStoredUIMessages(
     unparsedWire(rows.map((row) => row.stored)),
     tools,
     UNREGISTERED_TOOL_PART.DROP,
   );
-  if (!read.ok) return refusedRow(rows, read, tools);
-  return {
-    ok: true,
-    value: read.value.map((message, index) => {
-      const row = rows[index];
-      if (row === undefined) throw new Error("a read answered more messages than rows");
-      return {
-        id: row.id,
-        conversationId: row.conversationId,
-        seq: row.seq,
-        ...optionalField("turnId", row.turnId),
-        clientId: row.clientId,
-        createdAt: row.createdAt,
-        placedAt: row.placedAt,
-        ...optionalField("finishedAt", row.finishedAt),
-        ...optionalField("revision", row.revision),
-        message,
-      };
-    }),
-  };
+  return Effect.flatMap(read, (read): Effect.Effect<MessageListRead> => {
+    if (!read.ok) return refusedRow(rows, read, tools);
+    return Effect.succeed({
+      ok: true,
+      value: read.value.map((message, index) => {
+        const row = rows[index];
+        if (row === undefined) throw new Error("a read answered more messages than rows");
+        return {
+          id: row.id,
+          conversationId: row.conversationId,
+          seq: row.seq,
+          ...optionalField("turnId", row.turnId),
+          clientId: row.clientId,
+          createdAt: row.createdAt,
+          placedAt: row.placedAt,
+          ...optionalField("finishedAt", row.finishedAt),
+          ...optionalField("revision", row.revision),
+          message,
+        };
+      }),
+    });
+  });
 }
 
 /**
@@ -415,7 +418,7 @@ export function listMessages(
   cursor: MessageCursor = {},
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(findSelectedMessages({ conversationId, userId, cursor }), (selected) =>
-    Effect.promise(() => readSelected(selected, tools)),
+    readSelected(selected, tools),
   );
 }
 
@@ -494,11 +497,11 @@ export function listMessagesBefore(
   }
   const limit = pageLimit(cursor);
   return Effect.flatMap(findSelectedMessagesBefore({ userId, windows, cursor }), (selected) =>
-    Effect.promise(async () => {
+    Effect.gen(function* () {
       const hasOlder = selected.length > limit;
       const taken: readonly SelectedHistoryRow[] = selected.slice(0, limit);
       const oldest = taken.at(-1);
-      const read = await readSelected(
+      const read = yield* readSelected(
         taken.map(({ placedAtText: _text, ...row }) => row).reverse(),
         tools,
       );
@@ -558,7 +561,7 @@ export function listRecentMessages(
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(
     findRecentMessages({ conversationId, userId, limit: pageLimit({ limit }) }),
-    (selected) => Effect.promise(() => readSelected([...selected].reverse(), tools)),
+    (selected) => readSelected([...selected].reverse(), tools),
   );
 }
 
@@ -596,7 +599,7 @@ export function readMessageByClientId(
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(
     findMessageByClientIdRow({ conversationId, userId, clientId }),
-    (selected) => Effect.promise(() => readSelected(selected, tools)),
+    (selected) => readSelected(selected, tools),
   );
 }
 
@@ -633,7 +636,7 @@ export function readMessageById(
   messageId: string,
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(findMessageByIdRow({ conversationId, userId, messageId }), (selected) =>
-    Effect.promise(() => readSelected(selected, tools)),
+    readSelected(selected, tools),
   );
 }
 

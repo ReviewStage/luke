@@ -118,11 +118,14 @@ const whereItStands: StandingAsyncContext = (resume) => resume();
  * caller in is the releasing caller's and not the asking caller's. That is
  * what a raw `sql` tagged template does to the fiber that yields it, and a
  * bridged statement has to do the same thing: the bridge renders the
- * statement and nothing else, and every statement converted onto it that a
- * hook or an authored file reaches — eve reads its own session container out
- * of such a context — stands on the context the raw one left. Without this
- * the door's own root fiber absorbs the handoff and the asking fiber resumes
- * in the context it registered its `then` in.
+ * statement and nothing else, and a statement converted onto it leaves its
+ * caller exactly where the raw one would have. Without this the door's own
+ * root fiber absorbs the handoff and the asking fiber resumes in the
+ * context it registered its `then` in. Note that no authored file reads
+ * eve's session container out of the context a statement leaves standing:
+ * under two sessions in one process that context is the other session's,
+ * so each pins its own where it is entered (`eve/pinned-state.ts`), and
+ * what the bridge owes is parity with the raw statement and nothing more.
  */
 interface StandingQuery {
   readonly context: Context.Context<SqlClient.SqlClient>;

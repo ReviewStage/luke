@@ -61,7 +61,7 @@ function voice(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(HOSTED_SERVICE_PATH.VOICE_MINT),
     apiKey: API_KEY,
-    resolveUserId: () => Effect.succeed("user-1"),
+    resolveUserId: () => Effect.succeedSome("user-1"),
     spend: () => Effect.succeed(OPEN_SPEND),
     now: () => NOW,
     httpClient: upstream(minted),
@@ -88,10 +88,7 @@ const CASES: [string, () => Promise<Response>][] = [
       mintAnswer(voice({ request: mintRequest(HOSTED_SERVICE_PATH.VOICE_MINT, undefined, "GET") })),
   ],
   ["mint-unavailable", () => mintAnswer(voice({ apiKey: " " }))],
-  [
-    "mint-invalid-token",
-    () => mintAnswer(voice({ resolveUserId: () => Effect.succeed(undefined) })),
-  ],
+  ["mint-invalid-token", () => mintAnswer(voice({ resolveUserId: () => Effect.succeedNone }))],
   [
     "mint-invalid-request",
     () =>

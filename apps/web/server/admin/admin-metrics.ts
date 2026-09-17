@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import { DAY_MS } from "../core.js";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
 import {
   ADMIN_ERROR,
@@ -40,7 +41,6 @@ export function windowFetchDays(windowDays: AdminMetricsWindow): number {
   return Math.max(windowDays, ADMIN_TREND_DAYS * 2);
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 
 /**

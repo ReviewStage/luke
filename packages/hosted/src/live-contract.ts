@@ -2,12 +2,9 @@ import {
   type InitialItem,
   LIVE_INPUT_BOUNDS,
   LIVE_VOICE_LIST,
-  type LiveAudioFormat,
   LiveAudioFormatSchema,
-  type LiveVoice,
   OBSERVED_VALUE_LENGTH,
   PROACTIVE_SPEECH_KIND,
-  type ProactiveSpeechKind,
   ProactiveSpeechKindSchema,
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
@@ -16,7 +13,7 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
+import { hostedQuotaSchema } from "./service-wire.js";
 
 /**
  * A device's contract with the hosted voice service: the three Vercel
@@ -179,140 +176,21 @@ export const SESSION_CREATE_BOUNDS = {
   SDP_CHARS: 65_536,
 } as const;
 
-/**
- * What the service answered with: the session's opaque id, the SDP answer to
- * set as the remote description, and, for a session an account opened, the
- * store's own id for the session's row, the one a stored spoken row names as
- * its `voice_session_id`, so the device can tell its own rows on the
- * Conversation from another session's. The introduction holds no account and
- * so no row, and is answered none.
- */
-export interface LiveSessionCreated {
-  sessionId: string;
-  sdpAnswer: string;
-  voiceSessionId?: string;
-}
-
-/** The desktop's opening frame. */
-export interface SessionCreateFrame {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_CREATE;
-  sdp: string;
-  voice: LiveVoice;
-  input: InitialItem[];
-}
-
-/** The service's answer, and the allowance the session was spent against. */
-export interface SessionCreatedFrame extends LiveSessionCreated {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_CREATED;
-  quota?: HostedQuota;
-}
-
-/**
- * The opening frame of a device that has no WebRTC of its own and streams
- * PCM through the service instead: the voice, and the one format the session
- * carries in both directions, chosen from `LIVE_AUDIO_FORMAT`. No offer,
- * since the service's own socket to OpenAI is the transport, and no seed,
- * since the phone seeds nothing and the watch follows it.
- */
-export interface SessionAudioCreateFrame {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_CREATE;
-  voice: LiveVoice;
-  format: LiveAudioFormat;
-}
-
-/**
- * The service's answer on the audio route: the id `session.started` named,
- * which is the only place a session of the service's own socket names itself,
- * and the allowance the session was spent against. No SDP answer, since
- * nothing negotiated one.
- */
-export interface SessionAudioCreatedFrame {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_CREATED;
-  sessionId: string;
-  quota?: HostedQuota;
-}
-
-/** The desktop's opening frame on a connection to a session it already holds. */
-export interface SessionAttachFrame {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_ATTACH;
-  sessionId: string;
-}
-
-/** The service's answer: the sideband stands again on the session named. */
-export interface SessionAttachedFrame {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_ATTACHED;
-  sessionId: string;
-}
-
-/** Either frame a socket may open with. */
-type SessionOpeningFrame = SessionCreateFrame | SessionAttachFrame;
-
-/** The desktop's word on its peer after the handshake: idle, or heard again. */
-export interface SessionActivityFrame {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_ACTIVITY;
-  idle: boolean;
-}
-
-/** The stop key pressed: the type alone, since what is said to the model is the service's fixed sentence. */
-export interface SessionStopFrame {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_STOP;
-}
-
-/**
- * A beat the desktop asks the service to speak. Each kind names exactly the
- * observed values its script may mention, each bounded as `@sidecar/live`
- * bounds a value before it enters an append; the calendar line mentions
- * nothing observed and carries nothing.
- */
-export type SessionBeatFrame =
-  | {
-      type: typeof VOICE_SERVICE_FRAME.SESSION_BEAT;
-      kind: typeof PROACTIVE_SPEECH_KIND.ARRIVAL;
-      /** A working session's title, so the suggested first ask is about the developer's own work. */
-      sessionTitle?: string;
-      /** The talk key worded for a sentence, present only while holding it would open a turn. */
-      talkKeyLabel?: string;
-    }
-  | {
-      type: typeof VOICE_SERVICE_FRAME.SESSION_BEAT;
-      kind: typeof PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING;
-    }
-  | {
-      type: typeof VOICE_SERVICE_FRAME.SESSION_BEAT;
-      kind: typeof PROACTIVE_SPEECH_KIND.LAUNCH;
-      /** The signed-in account's first name, as the account service reported it. */
-      firstName?: string;
-    };
-
-/** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
-export type SessionReportFrame = SessionActivityFrame | SessionStopFrame | SessionBeatFrame;
-
-/** The service's word that a proactive turn was spoken to its end: the kind, and nothing of the words. */
-export interface SessionSpokenFrame {
-  type: typeof VOICE_SERVICE_FRAME.SESSION_SPOKEN;
-  kind: ProactiveSpeechKind;
-}
-
-/**
- * A declaration handed the interface it decodes into, since Effect's `Schema`
- * is invariant in its decoded type and a struct assembled from field tables
- * only agrees with that interface rather than restating it. The same claim
- * the facade's own `schemaOver` made over its assembled AST.
- */
-function schemaAs<Value>(schema: Schema.Top): Schema.Codec<Value, UnparsedWireValue> {
-  return Schema.make<Schema.Codec<Value, UnparsedWireValue>>(schema.ast);
-}
+/** A struct's type with every key that could hold `undefined` holding a value or absent instead. */
+type OmittingUndefined<Fields> = { [Key in keyof Fields]: Exclude<Fields[Key], undefined> };
 
 /**
  * A key a `dropRefused` field left holding `undefined` is dropped entirely,
  * exactly as an absent optional key is: a struct's decode still writes the
  * key when it arrived, even holding nothing, so nothing downstream sees a
- * `quota` it can ask `in` about unless one actually read.
+ * `quota` it can ask `in` about unless one actually read. The decode's
+ * target is stated as the struct's own type less those `undefined`s, since
+ * the transform is what makes that true and no declaration can say it.
  */
 function omittingUndefinedKeys<Fields extends object, Encoded>(
   schema: Schema.Codec<Fields, Encoded>,
-) {
-  return schema.pipe(
+): Schema.Codec<OmittingUndefined<Fields>, UnparsedWireValue> {
+  const omitting = schema.pipe(
     Schema.decodeTo(Schema.Unknown, {
       decode: SchemaGetter.transform((value) =>
         Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
@@ -323,6 +201,7 @@ function omittingUndefinedKeys<Fields extends object, Encoded>(
       encode: SchemaGetter.passthrough({ strict: false }),
     }),
   );
+  return Schema.make<Schema.Codec<OmittingUndefined<Fields>, UnparsedWireValue>>(omitting.ast);
 }
 
 /** A trimmed text, refused when only whitespace remains, and bounded past a maximum. */
@@ -395,106 +274,139 @@ const liveInitialItemSchema = Schema.Union([
   seedMessage(SEED_ROLE.ASSISTANT, SEED_CONTENT_TYPE.OUTPUT_TEXT),
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
-export const sessionCreateFrameSchema = schemaAs<SessionCreateFrame>(
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
-    sdp: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
-    voice: Schema.Literals(LIVE_VOICE_LIST),
-    input: Schema.Array(liveInitialItemSchema).check(
-      Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES),
-    ),
-  }),
-);
+/** The desktop's opening frame. */
+export const sessionCreateFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
+  sdp: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
+  voice: Schema.Literals(LIVE_VOICE_LIST),
+  input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
+});
+
+export type SessionCreateFrame = typeof sessionCreateFrameSchema.Type;
 
 /** A GPT Live session id is opaque and short; the bound only refuses a document standing in for one. */
 const SESSION_ID_CHARS = 256;
 
 const sessionId = text(SESSION_ID_CHARS);
 
-export const sessionAudioCreateFrameSchema = schemaAs<SessionAudioCreateFrame>(
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
-    voice: Schema.Literals(LIVE_VOICE_LIST),
-    format: LiveAudioFormatSchema,
-  }),
-);
+/**
+ * The opening frame of a device that has no WebRTC of its own and streams
+ * PCM through the service instead: the voice, and the one format the session
+ * carries in both directions, chosen from `LIVE_AUDIO_FORMAT`. No offer,
+ * since the service's own socket to OpenAI is the transport, and no seed,
+ * since the phone seeds nothing and the watch follows it.
+ */
+export const sessionAudioCreateFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
+  voice: Schema.Literals(LIVE_VOICE_LIST),
+  format: LiveAudioFormatSchema,
+});
 
-export const sessionAttachFrameSchema = schemaAs<SessionAttachFrame>(
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACH),
-    sessionId,
-  }),
-);
+export type SessionAudioCreateFrame = typeof sessionAudioCreateFrameSchema.Type;
 
-export const sessionOpeningFrameSchema = schemaAs<SessionOpeningFrame>(
-  Schema.Union([sessionCreateFrameSchema, sessionAttachFrameSchema]).annotate(
-    wireRefusal(SCHEMA_REFUSAL.MALFORMED),
-  ),
-);
+/** The desktop's opening frame on a connection to a session it already holds. */
+export const sessionAttachFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACH),
+  sessionId,
+});
 
-export const sessionActivityFrameSchema = schemaAs<SessionActivityFrame>(
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ACTIVITY),
-    idle: Schema.Boolean,
-  }),
-);
+export type SessionAttachFrame = typeof sessionAttachFrameSchema.Type;
 
-export const sessionStopFrameSchema = schemaAs<SessionStopFrame>(
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_STOP),
-  }),
-);
+/** Either frame a socket may open with. */
+export const sessionOpeningFrameSchema = Schema.Union([
+  sessionCreateFrameSchema,
+  sessionAttachFrameSchema,
+]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+
+type SessionOpeningFrame = typeof sessionOpeningFrameSchema.Type;
+
+/** The desktop's word on its peer after the handshake: idle, or heard again. */
+export const sessionActivityFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ACTIVITY),
+  idle: Schema.Boolean,
+});
+
+export type SessionActivityFrame = typeof sessionActivityFrameSchema.Type;
+
+/** The stop key pressed: the type alone, since what is said to the model is the service's fixed sentence. */
+export const sessionStopFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_STOP),
+});
+
+export type SessionStopFrame = typeof sessionStopFrameSchema.Type;
 
 /** An observed value a beat may mention, bounded here as the append that will carry it is bounded. */
 const beatValue = Schema.optional(text(OBSERVED_VALUE_LENGTH));
 
-export const sessionBeatFrameSchema = schemaAs<SessionBeatFrame>(
-  Schema.Union([
-    Schema.Struct({
-      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
-      kind: Schema.Literal(PROACTIVE_SPEECH_KIND.ARRIVAL),
-      sessionTitle: beatValue,
-      talkKeyLabel: beatValue,
-    }),
-    Schema.Struct({
-      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
-      kind: Schema.Literal(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING),
-    }),
-    Schema.Struct({
-      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
-      kind: Schema.Literal(PROACTIVE_SPEECH_KIND.LAUNCH),
-      firstName: beatValue,
-    }),
-  ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
-);
-
-export const sessionReportFrameSchema = schemaAs<SessionReportFrame>(
-  Schema.Union([
-    sessionActivityFrameSchema,
-    sessionStopFrameSchema,
-    sessionBeatFrameSchema,
-  ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
-);
-
-export const sessionSpokenFrameSchema = schemaAs<SessionSpokenFrame>(
+/**
+ * A beat the desktop asks the service to speak. Each kind names exactly the
+ * observed values its script may mention, each bounded as `@sidecar/live`
+ * bounds a value before it enters an append; the calendar line mentions
+ * nothing observed and carries nothing.
+ */
+export const sessionBeatFrameSchema = Schema.Union([
   Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_SPOKEN),
-    kind: ProactiveSpeechKindSchema,
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
+    kind: Schema.Literal(PROACTIVE_SPEECH_KIND.ARRIVAL),
+    // A working session's title, so the suggested first ask is about the developer's own work.
+    sessionTitle: beatValue,
+    // The talk key worded for a sentence, present only while holding it would open a turn.
+    talkKeyLabel: beatValue,
   }),
-);
-
-export const sessionAttachedFrameSchema = schemaAs<SessionAttachedFrame>(
   Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
-    sessionId,
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
+    kind: Schema.Literal(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING),
   }),
-);
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
+    kind: Schema.Literal(PROACTIVE_SPEECH_KIND.LAUNCH),
+    // The signed-in account's first name, as the account service reported it.
+    firstName: beatValue,
+  }),
+]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
-const CREATED_FIELDS = {
+export type SessionBeatFrame = typeof sessionBeatFrameSchema.Type;
+
+/** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
+export const sessionReportFrameSchema = Schema.Union([
+  sessionActivityFrameSchema,
+  sessionStopFrameSchema,
+  sessionBeatFrameSchema,
+]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+
+export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
+
+/** The service's word that a proactive turn was spoken to its end: the kind, and nothing of the words. */
+export const sessionSpokenFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_SPOKEN),
+  kind: ProactiveSpeechKindSchema,
+});
+
+export type SessionSpokenFrame = typeof sessionSpokenFrameSchema.Type;
+
+/** The service's answer: the sideband stands again on the session named. */
+export const sessionAttachedFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
+  sessionId,
+});
+
+export type SessionAttachedFrame = typeof sessionAttachedFrameSchema.Type;
+
+/**
+ * What the service answered with: the session's opaque id, the SDP answer to
+ * set as the remote description, and, for a session an account opened, the
+ * store's own id for the session's row, the one a stored spoken row names as
+ * its `voice_session_id`, so the device can tell its own rows on the
+ * Conversation from another session's. The introduction holds no account and
+ * so no row, and is answered none.
+ */
+const liveSessionCreatedSchema = Schema.Struct({
   sessionId,
   sdpAnswer: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
   voiceSessionId: Schema.optionalKey(sessionId),
-} as const;
+});
+
+export type LiveSessionCreated = typeof liveSessionCreatedSchema.Type;
 
 /**
  * The value a frame's schema admitted, or nothing. A frame the desktop sends
@@ -571,15 +483,16 @@ function droppedField<Value, Encoded>(
   );
 }
 
-export const sessionCreatedFrameSchema = schemaAs<SessionCreatedFrame>(
-  omittingUndefinedKeys(
-    Schema.Struct({
-      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATED),
-      ...CREATED_FIELDS,
-      quota: Schema.optionalKey(droppedField(hostedQuotaSchema)),
-    }),
-  ),
+/** The service's answer, and the allowance the session was spent against. */
+export const sessionCreatedFrameSchema = omittingUndefinedKeys(
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATED),
+    ...liveSessionCreatedSchema.fields,
+    quota: Schema.optionalKey(droppedField(hostedQuotaSchema)),
+  }),
 );
+
+export type SessionCreatedFrame = typeof sessionCreatedFrameSchema.Type;
 
 export function sessionCreatedFrameFromWire(
   value: UnparsedWireValue,
@@ -587,15 +500,21 @@ export function sessionCreatedFrameFromWire(
   return admittedAnswer(sessionCreatedFrameSchema, value);
 }
 
-export const sessionAudioCreatedFrameSchema = schemaAs<SessionAudioCreatedFrame>(
-  omittingUndefinedKeys(
-    Schema.Struct({
-      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATED),
-      sessionId,
-      quota: Schema.optionalKey(droppedField(hostedQuotaSchema)),
-    }),
-  ),
+/**
+ * The service's answer on the audio route: the id `session.started` named,
+ * which is the only place a session of the service's own socket names itself,
+ * and the allowance the session was spent against. No SDP answer, since
+ * nothing negotiated one.
+ */
+export const sessionAudioCreatedFrameSchema = omittingUndefinedKeys(
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATED),
+    sessionId,
+    quota: Schema.optionalKey(droppedField(hostedQuotaSchema)),
+  }),
 );
+
+export type SessionAudioCreatedFrame = typeof sessionAudioCreatedFrameSchema.Type;
 
 export function sessionAudioCreatedFrameFromWire(
   value: UnparsedWireValue,
