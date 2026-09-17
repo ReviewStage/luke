@@ -177,17 +177,16 @@ in for the missing job before the first release.
 
 ## Testing
 
-Agents write most of this repository's tests, and a test written by reading
-the implementation back proves nothing. The mechanical half of this policy is
-the `testing` oxlint plugin under `tools/oxlint/testing/`, whose four rules
-are named where they apply; every other rule is a question a reviewer answers
-from the diff.
+This is Google's test discipline (*Software Engineering at Google*, chapters
+11 to 14, and Testing on the Toilet) on this repository's tools, and nothing
+beyond it. The mechanical half is the `testing` oxlint plugin under
+`tools/oxlint/testing/`, whose four rules are named where they apply; every
+other rule is a question a reviewer answers from the diff.
 
 ### What gets a test
 
 Every behavior change lands in the same PR as the test that fails without
-it, and a bug fix starts red: the test is shown failing before the fix lands
-(the PR template's checkbox). Decide the layer by the first yes:
+it (the PR template's checkbox). Decide the layer by the first yes:
 
 1. A type or a lint rule states it: not a test.
 2. One module: a small test through its public export.
@@ -204,11 +203,14 @@ it, and a bug fix starts red: the test is shown failing before the fix lands
 
 ### Doubles and assertions
 
-A double is a test `Layer` on the subject's `Context.Tag`, and what is faked
-is a process boundary and nothing nearer: provider HTTP, Apple, the model,
-the OS, the clock. `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.fn`, and
-`vi.mocked` are refused by `testing/no-module-mocks` (`vi.stubEnv` stays
-legal). Assert what a caller observes, never a call count or private state.
+Prefer the real implementation when it is fast, deterministic, and simple to
+build; a fake next; a stub last, and interaction testing (asserting a double
+was called) only when state cannot be observed. A double is a test `Layer` on
+the subject's `Context.Tag`, at the seams a process boundary makes: provider
+HTTP, Apple, the model, the OS, the clock. Mocking frameworks are not used:
+`vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.fn`, and `vi.mocked` are refused by
+`testing/no-module-mocks` (`vi.stubEnv` stays legal). Test through the
+public API and assert state a caller observes, never private state.
 Reach for the shared builders before inline setup:
 `packages/host/src/testing/test-kernel.ts` for a host,
 `apps/web/tests/support/*` for a hosted store, the eve turns, and the voice
@@ -252,7 +254,8 @@ The deterministic ring around the model is tested: tool schemas, the turn
 envelope, what a settled call writes, what the relay sends. A model's words
 are never asserted. Judgment is an offline eval
 (`pnpm --filter @luke/web test:agent`, on the scripted brain fixture), and
-an eval that calls a live model runs in no `check.sh`.
+an eval that calls a live model is a large test, so it runs in no
+`check.sh`.
 
 ### Desktop, web, iOS
 
@@ -265,26 +268,25 @@ checks the project file on Linux.
 
 ### Do not write
 
+Change-detector tests, which break on any refactor and catch no bug:
+
 - An expected value computed by the code under test or pasted from its output.
 - A test of a getter, constant, type, re-export, or Schema round-trip on a
   valid value.
 - A test that only asserts a fake was called.
 - A private function exported so a test can reach it.
 - A claim another test already makes.
-- A fix whose only test is the exact bug, with no neighboring case.
 
-The gate for every new test: which plausible wrong implementation would it
-reject? None means do not write it.
+Tests are DAMP, not DRY: a test reads whole on its own, and the helpers it
+shares are builders, not assertions.
 
 ### Integrity
 
 Never loosen, delete, or skip a test to go green. `.only`, `.skip`, `.todo`,
 `it.flakyTest`, and a `retry` option are refused by
 `testing/no-focus-or-retry` (`it.skipIf(reason)` stays legal). A flaky test
-is fixed or deleted the same day. During a repair loop, test files are
-read-only: a red test is a fact about the code. A test file you touch must
-comply with this section before the PR merges, holdout or not, and a file
-that complies leaves the holdout list in the same PR.
+is fixed or deleted, never retried; a red test is a fact about the code. A
+file that comes to comply leaves the holdout list in the same PR.
 
 ### Done
 
