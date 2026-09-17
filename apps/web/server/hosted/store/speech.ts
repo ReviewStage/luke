@@ -202,13 +202,6 @@ interface SpeechStanding {
   readonly claimedByDeviceId?: string;
 }
 
-/** An offer not yet ended, with the rows that place it. */
-export interface SpeechOffer extends SpeechStanding {
-  readonly userId: string;
-  readonly conversationId: string;
-  readonly messageId: string;
-}
-
 /**
  * One event on a message, as the `events` row holds it. The payload is the
  * `jsonb` column read as the wire value it is, which the payload schemas
@@ -598,6 +591,9 @@ const OfferedMessageSchema = Schema.Struct({
   conversationId: Schema.String,
   messageId: Schema.String,
 });
+
+/** An offer not yet ended: the rows that place it, folded to how it stands. */
+export type SpeechOffer = typeof OfferedMessageSchema.Type & SpeechStanding;
 
 /** The same table read again for the ends: an offer with one of these on its message is not open. */
 const settled = alias(events, "settled");
