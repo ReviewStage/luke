@@ -256,7 +256,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 
 ### The permanent adaptors
 
-- **`packages/credentials/src/single-flight.ts`** — the check-and-create of
+- **`packages/runtime/src/effect/single-flight.ts`** — the check-and-create of
   the one `Deferred` every concurrent caller joins is an uninterruptible step
   that cannot suspend, so it runs synchronously (`Effect.runSync`) and forks
   the flight it decided on as a detached root fiber (`Effect.runFork`) rather

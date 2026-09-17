@@ -107,6 +107,9 @@ export function observeCloudProviders(options: {
           });
         });
       },
+      // Unbounded over the handful of providers alone: each provider's own
+      // pass caps its fan-out at `CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY`,
+      // so the product is what the service holds in flight for one account.
       { concurrency: "unbounded" },
     );
   });

@@ -22,6 +22,8 @@ export const BRAIN_HOST = {
   SEED_CHARS: 40_000,
   /** The most characters one observation turn's transcript delta carries per session. */
   TRANSCRIPT_DELTA_CHARS: 20_000,
+  /** The most cloud plugins the host keeps built, one per account, provider, and sealed key; the least recently reached goes first. */
+  PLUGIN_CACHE_CAPACITY: 1024,
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */

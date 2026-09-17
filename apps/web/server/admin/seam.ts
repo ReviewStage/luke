@@ -1,3 +1,4 @@
+import { unlessInterrupted } from "@sidecar/runtime/effect";
 import { Cause, Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -22,14 +23,18 @@ export type AdminSeamEffect<A> = Effect.Effect<
  * the browser reads as a platform error page. Whatever went wrong is logged
  * where the deployment reads it and never carried into the answer, and a
  * defect is caught beside a failure because a seam that threw and a statement
- * that was refused are the same outage to the page.
+ * that was refused are the same outage to the page. An interruption is
+ * neither: a client that disconnected or a function whose time ran out is no
+ * outage to log, so it passes through as it came and answers nothing.
  */
 export function unavailableSeam<Failure>(
   message: string,
   cause: Cause.Cause<Failure>,
 ): Effect.Effect<Response> {
-  return Effect.sync(() => {
-    console.error(message, Cause.squash(cause));
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  });
+  return unlessInterrupted(cause, (other) =>
+    Effect.sync(() => {
+      console.error(message, Cause.squash(other));
+      return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
+    }),
+  );
 }

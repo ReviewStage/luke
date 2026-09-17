@@ -3,8 +3,9 @@ import {
   type MemoryHousekeepingResult,
   skippedHousekeeping,
 } from "@sidecar/memory";
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import type { LanguageModel } from "ai";
-import { Cause, Effect, type Schema } from "effect";
+import { Cache, Cause, Data, Effect, type Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -19,6 +20,7 @@ import {
   type CloudAgentProviderId,
   isRecord,
   isWireString,
+  type SessionProviderPlugin,
   type UnparsedWireValue,
   type WireRecord,
 } from "../../core.js";
@@ -58,7 +60,7 @@ import { flushMemory, MEMORY_FLUSH_REFUSAL } from "./memory-flush.js";
 import { meteredModel, openAiBrainModel } from "./model.js";
 import { hostedNotebookAccess } from "./notebook.js";
 import { hostedActionCarrier } from "./performer.js";
-import type { BrainHostSeams } from "./production.js";
+import { type BrainHostSeams, onceComposed } from "./production.js";
 import { type RelayStateStore, StreamRelay } from "./relay.js";
 import {
   brainRosterOf,
@@ -133,6 +135,23 @@ export function eveTurnIdOf(event: UnparsedWireValue): string | undefined {
   if (!isRecord(event) || !isRecord(event.data)) return undefined;
   return isWireString(event.data.turnId) ? event.data.turnId : undefined;
 }
+
+/** The roster an account's tools last read, and the sealed key of each provider it was read under. */
+interface LastRosterRead {
+  readonly roster: HostedRoster;
+  readonly sealedKeys: ReadonlyMap<string, string>;
+}
+
+/**
+ * What one cached plugin is keyed by. The sealed key is the provider's row as
+ * the vault held it when the account's roster was last read, so a rotated or
+ * removed key names another plugin rather than invalidating this one.
+ */
+class PluginKey extends Data.Class<{
+  readonly userId: string;
+  readonly providerId: CloudAgentProviderId;
+  readonly sealedKey: string;
+}> {}
 
 /** What a host function answers: an effect over the ambient client, which eve's own authored files run at the web's edge. */
 type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
@@ -261,22 +280,43 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     });
 
   /**
-   * The roster each account's tools last read, and the cloud plugins built
-   * over it, kept for the process's life: a plugin keeps where in each chat
-   * its last transcript read reached, so a read_transcript of a long chat
-   * costs one request from that end rather than a walk from its start, and
-   * a plugin rebuilt for every call would forget it.
+   * The roster each account's tools last read, with the sealed key of each
+   * provider it was read under, kept for the process's life: a plugin keeps
+   * where in each chat its last transcript read reached, so a read_transcript
+   * of a long chat costs one request from that end rather than a walk from
+   * its start, and a plugin rebuilt for every call would forget it.
    */
-  const rosters = new Map<string, HostedRoster>();
-  /** The plugins built for an account, under the vault they were built over; a changed vault rebuilds them. */
-  const plugins = new Map<
-    string,
-    {
-      vault: string;
-      byProvider: Map<CloudAgentProviderId, ReturnType<typeof cloudSessionPluginFor>>;
-    }
-  >();
-  const vaults = new Map<string, string>();
+  const rosters = new Map<string, LastRosterRead>();
+  /**
+   * The plugins built for the accounts, bounded and keyed by the sealed key
+   * each was built under: a rotated or removed key is another key here, so the
+   * plugin bound to the old one is never reached again and ages out. Built on
+   * the first fiber that asks, since the host itself is constructed outside
+   * any effect.
+   */
+  const plugins = onceComposed(
+    Cache.make({
+      capacity: BRAIN_HOST.PLUGIN_CACHE_CAPACITY,
+      requireServicesAt: "lookup",
+      lookup: (key: PluginKey) =>
+        Effect.map(SqlClient.SqlClient, (client) =>
+          cloudSessionPluginFor(key.providerId, {
+            readApiKey: () =>
+              Effect.orDie(
+                Effect.provideService(
+                  seams.providerKey(key.userId, key.providerId),
+                  SqlClient.SqlClient,
+                  client,
+                ),
+              ),
+            reported: () =>
+              (rosters.get(key.userId)?.roster ?? EMPTY_HOSTED_ROSTER).observations.get(
+                key.providerId,
+              ) ?? [],
+          }),
+        ),
+    }),
+  );
   /**
    * The plugins an account's tools reach, built over the request's own client:
    * the key each opens is a vault read, and the plugin interface answers
@@ -285,44 +325,30 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
    * that is merely absent.
    */
   const pluginFor =
-    (userId: string, client: SqlClient.SqlClient) => (providerId: CloudAgentProviderId) => {
-      const vault = vaults.get(userId) ?? "";
-      let held = plugins.get(userId);
-      if (held === undefined || held.vault !== vault) {
-        held = { vault, byProvider: new Map() };
-        plugins.set(userId, held);
-      }
-      const standing = held.byProvider.get(providerId);
-      if (standing) return standing;
-      const plugin = cloudSessionPluginFor(providerId, {
-        readApiKey: () =>
-          Effect.orDie(
-            Effect.provideService(
-              seams.providerKey(userId, providerId),
-              SqlClient.SqlClient,
-              client,
-            ),
+    (userId: string, client: SqlClient.SqlClient) =>
+    (providerId: CloudAgentProviderId): Effect.Effect<SessionProviderPlugin> =>
+      Effect.provideService(
+        Effect.flatMap(plugins(), (cache) =>
+          Cache.get(
+            cache,
+            new PluginKey({
+              userId,
+              providerId,
+              sealedKey: rosters.get(userId)?.sealedKeys.get(providerId) ?? "",
+            }),
           ),
-        reported: () =>
-          (rosters.get(userId) ?? EMPTY_HOSTED_ROSTER).observations.get(providerId) ?? [],
-      });
-      held.byProvider.set(providerId, plugin);
-      return plugin;
-    };
+        ),
+        SqlClient.SqlClient,
+        client,
+      );
   const rosterOf = (userId: string): HostEffect<HostedRoster> =>
     Effect.gen(function* () {
       const rows = yield* seams.vaultRows(userId);
-      // The vault as it stands, by its sealed rows: a rotated or removed key
-      // changes it, and the plugins bound to the old key go with it.
-      vaults.set(
-        userId,
-        rows
-          .map((row) => `${row.providerId}:${row.ciphertext}`)
-          .sort()
-          .join("\n"),
-      );
       const roster = yield* readHostedRoster(seams.store(), userId, rows, seams.vaultSecret());
-      rosters.set(userId, roster);
+      rosters.set(userId, {
+        roster,
+        sealedKeys: new Map(rows.map((row) => [row.providerId, row.ciphertext])),
+      });
       return roster;
     });
 
@@ -523,8 +549,10 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           workspace: hostedWorkspaceAccess(client, seams.store(), userId, seams.now),
           now: seams.now,
         });
-      }).pipe(
-        Effect.catchCause((cause) =>
+      }).pipe((flush) =>
+        // A flush the caller cancelled did not fail: an interruption passes
+        // through rather than standing as a durable refusal reason.
+        catchAllButInterrupt(flush, (cause) =>
           Effect.sync(() => {
             console.warn(`The memory flush could not run: ${Cause.pretty(cause)}`);
             return failedHousekeeping(MEMORY_FLUSH_REFUSAL.HOST_FAILED);

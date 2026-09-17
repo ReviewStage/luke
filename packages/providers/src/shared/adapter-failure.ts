@@ -7,6 +7,7 @@
  * the rest mean the read simply did not happen this time.
  */
 
+import { unlessInterrupted } from "@sidecar/runtime/effect";
 import { Cause, Effect, Option } from "effect";
 
 export const ADAPTER_FAILURE = {
@@ -61,15 +62,19 @@ export function endsPass(failure: AdapterFailureKind): boolean {
  * failure the item's own effect can raise, typed or a defect alike, is
  * swallowed unless it is the whole pass's, so a bug in one item's own parsing
  * costs that item and never the roster the way a rejected credential or a
- * spent backoff budget does.
+ * spent backoff budget does. A caller ending the pass is no item's failure:
+ * an interruption passes through as it came, since a roster assembled past
+ * one would read as complete while missing every item the caller cut short.
  */
 export function tolerateItemFailureEffect<Result>(
   item: Effect.Effect<Result, AdapterFailure>,
 ): Effect.Effect<Result | undefined, AdapterFailure> {
-  return Effect.catchCause(item, (cause) => {
-    const failure = Cause.findErrorOption(cause);
-    if (Option.isSome(failure) && endsPass(failure.value.failure))
-      return Effect.fail(failure.value);
-    return Effect.succeed(undefined);
-  });
+  return Effect.catchCause(item, (cause) =>
+    unlessInterrupted(cause, (other) => {
+      const failure = Cause.findErrorOption(other);
+      if (Option.isSome(failure) && endsPass(failure.value.failure))
+        return Effect.fail(failure.value);
+      return Effect.succeed(undefined);
+    }),
+  );
 }

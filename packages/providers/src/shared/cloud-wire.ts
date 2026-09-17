@@ -26,6 +26,14 @@ export const CLOUD_ADAPTER_DEFAULTS = {
    * one.
    */
   SLOW_REQUEST_TIMEOUT_MS: 45 * 1000,
+  /**
+   * How many reads one pass's fan-out holds in flight at once. A fan-out over
+   * a roster is O(sessions) requests, and unbounded it would open every one
+   * at the same instant, so each fan-out inside one provider's pass keeps at
+   * most this many out; the pass over providers stays unbounded, since a
+   * handful of providers times this bound is the product.
+   */
+  READ_CONCURRENCY: 8,
 } as const;
 
 /**
