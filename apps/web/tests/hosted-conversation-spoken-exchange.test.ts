@@ -113,11 +113,12 @@ async function spokenLine(
   const written = await run(
     writer.upsertSpokenRow(target, { role: MESSAGE_ROLE.USER, clientId: rowId, text, metadata }),
   );
-  assert.ok(written.ok);
+  assert.ok(Result.isSuccess(written));
+  if (!Result.isSuccess(written)) throw new Error("the spoken row was refused");
   const attached = await run(writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }));
-  assert.ok(attached.ok);
-  assert.deepEqual(attached.attached, [written.id]);
-  return { ok: true, id: written.id };
+  assert.ok(Result.isSuccess(attached));
+  assert.deepEqual(Result.getOrUndefined(attached), [written.success.id]);
+  return { ok: true, id: written.success.id };
 }
 const SESSION = {
   providerId: "conductor",
@@ -370,7 +371,7 @@ it.effect(
         event: BrainRunEvent,
       ): Promise<void> {
         const result = await run(writer.consume(conversation, event));
-        assert.ok(result.ok, JSON.stringify(result));
+        assert.ok(Result.isSuccess(result), JSON.stringify(result));
       }
 
       // Two exchanges in the usual order: the voice writer's cut lands before the turn starts.
@@ -402,10 +403,10 @@ it.effect(
             turnId: stream.turnId,
           }),
         );
-        assert.deepEqual(await run(writer.attachAskLines(target, stream.turnId)), {
-          ok: true,
-          attached: [line.id],
-        });
+        assert.deepEqual(
+          await run(writer.attachAskLines(target, stream.turnId)),
+          Result.succeed([line.id]),
+        );
         await holds(`${exchange}: line taken into the turn`, settled + 1);
 
         tick();
@@ -468,10 +469,7 @@ it.effect(
           turnId: late.turnId,
         }),
       );
-      assert.deepEqual(await run(writer.attachAskLines(target, late.turnId)), {
-        ok: true,
-        attached: [],
-      });
+      assert.deepEqual(await run(writer.attachAskLines(target, late.turnId)), Result.succeed([]));
       await write(target, late.step());
       const previewed = await holds("3: journal open before the line", 3);
       assert.deepEqual(

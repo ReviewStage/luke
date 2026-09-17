@@ -293,7 +293,7 @@ export function hostedChildAccess(
             { userId, conversationId: childId },
             { turnId: child.turnId, at: new Date(yield* Clock.currentTimeMillis) },
           );
-          return stamped.ok ? { ok: true, remaining: [] } : notCancelled;
+          return Result.isSuccess(stamped) ? { ok: true, remaining: [] } : notCancelled;
         }),
       ),
 

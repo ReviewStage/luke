@@ -103,13 +103,14 @@ async function spokenLine(
   const written = await database.run(
     writer.upsertSpokenRow(target, { role: MESSAGE_ROLE.USER, clientId: rowId, text, metadata }),
   );
-  assert.ok(written.ok);
+  assert.ok(Result.isSuccess(written));
+  if (!Result.isSuccess(written)) throw new Error("the spoken row was refused");
   const attached = await database.run(
     writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }),
   );
-  assert.ok(attached.ok);
-  assert.deepEqual(attached.attached, [written.id]);
-  return { ok: true, id: written.id };
+  assert.ok(Result.isSuccess(attached));
+  assert.deepEqual(Result.getOrUndefined(attached), [written.success.id]);
+  return { ok: true, id: written.success.id };
 }
 
 const SESSION = {
@@ -669,7 +670,7 @@ it.effect(
         Effect.succeed({ sessionId: "wrun_1", turnId: turn }),
       );
       const attached = await database.run(writer.attachAskLines(target, turn));
-      assert.deepEqual(attached, { ok: true, attached: [line.id] });
+      assert.deepEqual(attached, Result.succeed([line.id]));
       const reply = await insertMessage(userId, main, 3, {
         clientId: turn,
         turnId: turn,
@@ -748,7 +749,7 @@ it.effect(
         Effect.succeed({ sessionId: "wrun_1", turnId: turn }),
       );
       const attached = await database.run(writer.attachAskLines(target, turn));
-      assert.deepEqual(attached, { ok: true, attached: [line.id] });
+      assert.deepEqual(attached, Result.succeed([line.id]));
 
       // Read in sequence: both moved past the sequences they stood at, the line ahead of the journal.
       const bySeq = await readMessagesByConversationTyped(database.run, main);

@@ -196,14 +196,11 @@ type VoiceWriteFailure = SqlError | Schema.SchemaError;
 
 /** The store's answer to a row write, as this writer reports it: written or grown is written, a refusal is the store's own. */
 const upserted = <E, R>(
-  write: Effect.Effect<
-    | { readonly ok: true; readonly effect: VoiceWriteEffect }
-    | { readonly ok: false; readonly refusal: VoiceWriteRefusal },
-    E,
-    R
-  >,
+  write: Effect.Effect<Result.Result<unknown, { readonly refusal: VoiceWriteRefusal }>, E, R>,
 ): Effect.Effect<VoiceWriteResult, E, R> =>
-  Effect.map(write, (written) => (written.ok ? WRITTEN : Result.fail(written.refusal)));
+  Effect.map(write, (written) =>
+    Result.isSuccess(written) ? WRITTEN : Result.fail(written.failure.refusal),
+  );
 
 const VoiceSessionKeySchema = Schema.Struct({
   userId: Schema.String,
@@ -453,8 +450,8 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         voiceSessionId,
         startingAtOrBeforeMs: row.startMs,
       });
-      if (!latest.ok) return Result.fail(latest.refusal);
-      const delegationId = latest.line?.delegationId;
+      if (Result.isFailure(latest)) return Result.fail(latest.failure.refusal);
+      const delegationId = Option.getOrUndefined(latest.success)?.delegationId;
       const metadata: AssistantMessageMetadata = {
         author: MESSAGE_AUTHOR.VOICE_MODEL,
         ...span,
@@ -477,11 +474,11 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
     attach: SpokenAskAttach,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
     return Effect.map(store.attachSpokenAsk(target.conversation, attach), (attached) =>
-      attached.ok
-        ? attached.attached.length > 0
+      Result.isSuccess(attached)
+        ? attached.success.length > 0
           ? WRITTEN
           : IGNORED
-        : Result.fail(attached.refusal),
+        : Result.fail(attached.failure.refusal),
     );
   }
 

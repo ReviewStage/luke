@@ -292,15 +292,17 @@ test("an offer whose announcement has no words this build can read is left stand
       metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
     }),
   );
-  assert.ok(written.ok);
+  assert.ok(Result.isSuccess(written));
+  if (!Result.isSuccess(written)) return;
+  const messageId = written.success.id;
   assert.equal(
-    Result.isSuccess(await database.run(offerSpeech(speech, target.userId, written.id, NOW))),
+    Result.isSuccess(await database.run(offerSpeech(speech, target.userId, messageId, NOW))),
     true,
   );
 
   await database.run(f.briefings.look);
   assert.deepEqual(f.deliveries, []);
-  assert.deepEqual(await speechEventsOf(written.id), [
+  assert.deepEqual(await speechEventsOf(messageId), [
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, null],
   ]);
   assert.equal(f.reports.length, 1);

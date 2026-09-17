@@ -1136,17 +1136,11 @@ test("the writer stamps a Stop on a turn the conversation holds once, and refuse
   const target = { userId, conversationId };
   assert.deepEqual(
     await database.run(writer.requestTurnCancel(target, { turnId, at: new Date(NOW) })),
-    {
-      ok: true,
-      effect: STORE_WRITE_EFFECT.WRITTEN,
-    },
+    Result.succeed(STORE_WRITE_EFFECT.WRITTEN),
   );
   assert.deepEqual(
     await database.run(writer.requestTurnCancel(target, { turnId, at: new Date(NOW + 9) })),
-    {
-      ok: true,
-      effect: STORE_WRITE_EFFECT.REPEATED,
-    },
+    Result.succeed(STORE_WRITE_EFFECT.REPEATED),
   );
   const [row] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
@@ -1157,10 +1151,7 @@ test("the writer stamps a Stop on a turn the conversation holds once, and refuse
         at: new Date(NOW),
       }),
     ),
-    {
-      ok: false,
-      refusal: STORE_WRITE_REFUSAL.NO_TURN,
-    },
+    Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }),
   );
   assert.deepEqual(
     await database.run(
@@ -1169,7 +1160,7 @@ test("the writer stamps a Stop on a turn the conversation holds once, and refuse
         { turnId, at: new Date(NOW) },
       ),
     ),
-    { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION },
+    Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }),
   );
 });
 

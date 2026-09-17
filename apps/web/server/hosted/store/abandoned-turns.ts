@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull, lt } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -102,7 +102,7 @@ export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("sweepAbandonedTurn
         at: options.now,
       },
     );
-    if (written.ok && written.effect === STORE_WRITE_EFFECT.WRITTEN) settled += 1;
+    if (Result.isSuccess(written) && written.success === STORE_WRITE_EFFECT.WRITTEN) settled += 1;
   }
   return settled;
 });

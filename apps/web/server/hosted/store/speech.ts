@@ -430,8 +430,8 @@ const move = /* @__PURE__ */ Effect.fnUntraced(function* (
       unless: transition.unless,
     },
   );
-  if (written.ok) return Result.succeed({ id: written.id, seq: written.seq, conversationId });
-  switch (written.refusal) {
+  if (Result.isSuccess(written)) return Result.succeed({ ...written.success, conversationId });
+  switch (written.failure.refusal) {
     case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
       return Result.fail(SPEECH_REFUSAL.ALREADY_CLAIMED);
     case STORE_WRITE_REFUSAL.SUPERSEDED: {
@@ -475,8 +475,8 @@ export const offerSpeech = /* @__PURE__ */ Effect.fn("offerSpeech")(function* (
       unless: [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
     },
   );
-  if (written.ok) return Result.succeed({ id: written.id, seq: written.seq });
-  switch (written.refusal) {
+  if (Result.isSuccess(written)) return Result.succeed(written.success);
+  switch (written.failure.refusal) {
     case STORE_WRITE_REFUSAL.SUPERSEDED: {
       // The same offer landed from another caller between the read and the lock; it is the one to answer.
       const landed = yield* findOfferedEvent(messageId);
@@ -742,7 +742,7 @@ function sweepWrite(
         unless: SETTLED_KINDS,
       },
     ),
-    (written) => written.ok,
+    Result.isSuccess,
   );
 }
 
