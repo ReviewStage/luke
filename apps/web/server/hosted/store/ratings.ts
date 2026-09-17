@@ -73,8 +73,8 @@ export const rateMessage = /* @__PURE__ */ Effect.fn("rateMessage")(function* (
       payload: unparsedWire(payload),
     },
   );
-  if (written.ok) return Result.succeed({ id: written.id, seq: written.seq });
-  switch (written.refusal) {
+  if (Result.isSuccess(written)) return Result.succeed(written.success);
+  switch (written.failure.refusal) {
     case STORE_WRITE_REFUSAL.NO_CONVERSATION:
     case STORE_WRITE_REFUSAL.NO_MESSAGE:
       return Result.fail(RATING_REFUSAL.NOT_FOUND);

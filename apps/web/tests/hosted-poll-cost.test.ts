@@ -338,7 +338,7 @@ test("an open observation journal costs no Mac on the account a read until it is
     event: BrainRunEvent,
   ) => {
     const result = await database.run(writer.consume(conversation, event));
-    assert.ok(result.ok, JSON.stringify(result));
+    assert.ok(Result.isSuccess(result), JSON.stringify(result));
   };
   const everyMac = async (act: (mac: Mac) => Promise<void>) => {
     for (const mac of macs) await act(mac);
@@ -410,7 +410,7 @@ test("a spoken turn's journal in the main is carried once per write to it, its p
   await mac.poll();
   const write = async (event: BrainRunEvent) => {
     const result = await database.run(writer.consume(target, event));
-    assert.ok(result.ok, JSON.stringify(result));
+    assert.ok(Result.isSuccess(result), JSON.stringify(result));
   };
   /** The journal as this Mac holds it: the types of its parts. */
   const journalParts = () =>

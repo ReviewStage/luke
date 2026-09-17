@@ -548,7 +548,7 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
     }
   }
   const stamped = yield* seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
-  if (!stamped.ok) return Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND });
+  if (Result.isFailure(stamped)) return Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND });
   return Result.succeed({ ...answer, cancelRequestedAt: at.getTime() });
 });
 

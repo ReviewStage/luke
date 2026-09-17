@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
-import { Deferred, Duration, Effect, Fiber, ManagedRuntime, Schedule, Schema } from "effect";
+import {
+  Deferred,
+  Duration,
+  Effect,
+  Fiber,
+  ManagedRuntime,
+  Result,
+  Schedule,
+  Schema,
+} from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { afterAll, test } from "vitest";
@@ -574,8 +583,10 @@ test("a cancel eve refuses is answered as remaining; an ended child as done; a c
       { concurrency: "unbounded" },
     ),
   );
-  assert.equal(dropped, !started.ok);
-  if (!started.ok) assert.equal(started.refusal, STORE_WRITE_REFUSAL.NO_CONVERSATION);
+  assert.equal(dropped, Result.isFailure(started));
+  if (Result.isFailure(started)) {
+    assert.equal(started.failure.refusal, STORE_WRITE_REFUSAL.NO_CONVERSATION);
+  }
 
   const ended = await childOf(fixture, {
     createdAt: at(30),

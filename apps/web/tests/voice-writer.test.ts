@@ -135,14 +135,15 @@ async function announced(conversation: ConversationTarget): Promise<string> {
   const enqueued = await database.run(
     store.enqueueTurn(conversation, { origin: "transcript_change" }),
   );
-  assert.ok(enqueued.ok);
+  assert.ok(Result.isSuccess(enqueued));
+  if (!Result.isSuccess(enqueued)) throw new Error("the turn was not enqueued");
   const standing = await readMessagesByConversationTyped(database.run, conversation.conversationId);
   return await insertMessage(database.run, {
     userId: conversation.userId,
     conversationId: conversation.conversationId,
     seq: standing.length + 1,
-    turnId: enqueued.turnId,
-    clientId: `briefing-${enqueued.turnId}`,
+    turnId: enqueued.success.turnId,
+    clientId: `briefing-${enqueued.success.turnId}`,
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [{ type: "text", text: "A briefing.", state: "done" }],
     metadata: { author: MESSAGE_AUTHOR.BRAIN },
