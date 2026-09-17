@@ -1,3 +1,4 @@
+import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
 import { Effect } from "effect";
 import {
   ACTION_KIND,
@@ -58,10 +59,12 @@ export type CloudActionExecutor = (input: {
 
 interface HostedCarrierDependencies {
   /** The roster as the snapshot holds it now, read again for every action. */
-  readonly roster: () => Effect.Effect<HostedRoster>;
-  readonly defaults: () => Effect.Effect<HostedWorkspaceDefaults>;
+  readonly roster: () => Effect.Effect<HostedRoster, ToolHostUnavailable>;
+  readonly defaults: () => Effect.Effect<HostedWorkspaceDefaults, ToolHostUnavailable>;
   /** The account's stored key for a provider, decrypted; nothing where none is stored. */
-  readonly apiKey: (providerId: CloudAgentProviderId) => Effect.Effect<string | undefined>;
+  readonly apiKey: (
+    providerId: CloudAgentProviderId,
+  ) => Effect.Effect<string | undefined, ToolHostUnavailable>;
   readonly execute: CloudActionExecutor;
 }
 
@@ -74,13 +77,13 @@ const REFUSAL = {
 /** What the hosted carrier answers with, for the action tools' context. */
 export interface HostedActionCarrier {
   /** The readers admission consults for one call; the roster is read once per call however many readers ask. */
-  admission(): Effect.Effect<ActionAdmissionReads>;
+  admission(): Effect.Effect<ActionAdmissionReads, ToolHostUnavailable>;
   /** Carries an action admission minted, with the call's own fields for the execution that admits it again. */
   carry(
     action: ValidatedAction,
     fields: WireRecord,
     standing: ToolContext,
-  ): Effect.Effect<ActionOutputEnvelope>;
+  ): Effect.Effect<ActionOutputEnvelope, ToolHostUnavailable>;
 }
 
 function createdSessionOf(
@@ -134,7 +137,7 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
     action: ValidatedAction<SessionActionKind>,
     fields: WireRecord,
     standing: ToolContext,
-  ): Effect.Effect<ActionOutputEnvelope> =>
+  ): Effect.Effect<ActionOutputEnvelope, ToolHostUnavailable> =>
     Effect.gen(function* () {
       const roster = yield* dependencies.roster();
       const target = actionTargetSnapshot(action, roster.sessions);
@@ -171,12 +174,17 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
   return {
     admission: () =>
       Effect.gen(function* () {
-        const roster = yield* Effect.cached(dependencies.roster());
+        // The readers admission consults answer `Effect<A, never>`, so the
+        // roster and the defaults are read here, once, before any reader is
+        // built: a store the service cannot reach fails the call before
+        // admission asks, rather than inside a reader with no way to say so.
+        const roster = yield* dependencies.roster();
+        const defaults = yield* dependencies.defaults();
         return {
-          roster: { read: () => Effect.map(roster, (held) => held.sessions) },
+          roster: { read: () => Effect.succeed(roster.sessions) },
           projects: {
-            read: () => Effect.map(roster, (held) => held.projects),
-            defaults: () => dependencies.defaults(),
+            read: () => Effect.succeed(roster.projects),
+            defaults: () => Effect.succeed(defaults),
             agentModels: workspaceAgentModels,
           },
         };

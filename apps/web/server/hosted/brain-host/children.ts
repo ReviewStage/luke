@@ -1,6 +1,6 @@
 import { isTextUIPart } from "ai";
 import { Effect, Result } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   type BrainChildAccess,
   CHILD_SPAWN_REFUSAL,
@@ -32,6 +32,7 @@ import {
   type ConversationDirectoryEntry,
   conversationDirectory,
 } from "../store/standing-conversations.js";
+import { type StoreFailure, toolHostSeam } from "../store-failure.js";
 import { CHILD_OPEN_REFUSAL, type ChildOpenerSeams, openChild } from "./child-opener.js";
 import { readRecentMessages } from "./context.js";
 import { describeUnreachable, EVE_CALLER, EVE_CANCEL_OUTCOME } from "./eve-sessions.js";
@@ -176,16 +177,17 @@ function refused(reason: ChildSpawnRefusal, detail?: string): ChildSpawnOutcome 
 
 /**
  * The access for one conversation over the request's own client, as the
- * module comment describes. Every read below answers `Effect<A, never,
- * never>`, the way the other tool seams do, so a row the service cannot read
- * dies rather than becoming a reason the model is offered.
+ * module comment describes. A row the service cannot read or write fails the
+ * access as the tool contract's own unavailability, logged where its cause is
+ * known, and the tool run answers the call as rejected; it is never a reason
+ * the model is offered in words.
  */
 export function hostedChildAccess(
   client: SqlClient.SqlClient,
   seams: HostedChildrenSeams,
 ): BrainChildAccess {
-  const run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>): Effect.Effect<A> =>
-    Effect.orDie(Effect.provideService(effect, SqlClient.SqlClient, client));
+  const run = <A>(effect: Effect.Effect<A, StoreFailure, SqlClient.SqlClient>) =>
+    toolHostSeam(client, effect);
   const { userId, conversationId } = seams.conversation;
   /** One of this conversation's own children, or nothing for an id that names none of them. */
   const own = (childId: string) =>

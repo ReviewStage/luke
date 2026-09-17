@@ -252,8 +252,8 @@ export class AccountSessionManager {
       const tokens = renewed.success;
       // The renewed tokens are already stored by the time the identity read
       // below is made, so a read that fails leaves the account signed in on
-      // them rather than undoing the renewal.
-      yield* Effect.ignore(
+      // them rather than undoing the renewal; it is written down, not held.
+      yield* reportingFailure(
         Effect.gen({ self: this }, function* () {
           if (!(yield* this.#storeCurrent(generation, { ...stored, ...tokens }))) return;
           const next = yield* this.#options.client.userInfo(tokens.accessToken, stored.provider);
@@ -261,6 +261,7 @@ export class AccountSessionManager {
           if (!(yield* this.#storeCurrent(generation, merged))) return;
           yield* this.#publishChange();
         }),
+        "Renewed account identity read failed",
       );
     });
   }

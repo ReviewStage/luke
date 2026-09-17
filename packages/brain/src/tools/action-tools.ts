@@ -11,6 +11,7 @@ import {
   type ToolSpec,
   type ValidatedAction,
 } from "@sidecar/actions";
+import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { Effect, Result } from "effect";
 import type { ToolContext, ToolModule } from "./tool-module.js";
@@ -42,7 +43,10 @@ export interface ActionToolContext extends ToolContext {
    * carried, with the call's fields as the tool declared them, for a host
    * whose execution admits the action once more.
    */
-  carry(action: ValidatedAction, fields: WireRecord): Effect.Effect<ActionOutputEnvelope>;
+  carry(
+    action: ValidatedAction,
+    fields: WireRecord,
+  ): Effect.Effect<ActionOutputEnvelope, ToolHostUnavailable>;
 }
 
 export interface ActionToolModule extends ToolModule<ActionOutputEnvelope, ActionToolContext> {
@@ -57,7 +61,10 @@ function defineActionTool(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolM
     inputSchema: spec.request,
     kind: spec.kind,
     family: spec.family,
-    execute(input: WireRecord, context: ActionToolContext): Effect.Effect<ActionOutputEnvelope> {
+    execute(
+      input: WireRecord,
+      context: ActionToolContext,
+    ): Effect.Effect<ActionOutputEnvelope, ToolHostUnavailable> {
       return Effect.gen(function* () {
         if (context.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER);
         // Only the fields the tool declared reach admission: a key the model

@@ -4,6 +4,7 @@ import {
   notebookMemoryProvider,
   notebookMemoryToolShapes,
 } from "@sidecar/memory";
+import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import type { ToolContext as EveToolContext, ToolDefinition } from "eve/tools";
@@ -102,7 +103,7 @@ export function hostedTurnPolicy(trigger: BrainTurnTrigger): EffectiveToolPolicy
 interface HostedToolSeams {
   readonly conversation: ConversationTarget;
   /** The roster as the snapshot holds it now, read again for every call that needs it. */
-  readonly roster: () => Effect.Effect<HostedRoster>;
+  readonly roster: () => Effect.Effect<HostedRoster, ToolHostUnavailable>;
   readonly carrier: HostedActionCarrier;
   readonly transcripts: Pick<HostedTranscriptReads, "whole">;
   readonly workspace: BrainWorkspaceAccess;
@@ -125,6 +126,16 @@ const UNREADABLE_CALL: WireRecord = {
   reason: ACTION_REFUSAL.UNREADABLE,
 };
 
+/** The executor's own refusal: a seam the call reached could not answer, so the call did not run. */
+const HOSTED_TOOL_REFUSAL = {
+  HOST_UNAVAILABLE: "Not run: the service could not reach its store; the call may be made again.",
+} as const;
+
+const HOST_UNAVAILABLE_CALL: WireRecord = {
+  status: "rejected",
+  reason: HOSTED_TOOL_REFUSAL.HOST_UNAVAILABLE,
+};
+
 function standingOf(
   context: EveToolContext,
   seams: HostedToolSeams,
@@ -145,7 +156,10 @@ function fieldsOf(input: UnparsedWireValue): WireRecord | undefined {
   return isRecord(input) ? input : undefined;
 }
 
-type ModuleRun = (fields: WireRecord, standing: ToolContext) => Effect.Effect<WireRecord>;
+type ModuleRun = (
+  fields: WireRecord,
+  standing: ToolContext,
+) => Effect.Effect<WireRecord, ToolHostUnavailable>;
 
 /**
  * One tool as eve is told of it: the module's own name, words, and wire
@@ -325,6 +339,11 @@ export function runHostedTool(
     if (standing.isRevoked()) {
       return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.TURN_OVER));
     }
-    return runOf(named, seams)(fields, standing);
+    // A seam the call reached and could not answer is the one failure a
+    // module may end in; the host logged it where its cause was known, and
+    // the model is told the call did not run.
+    return Effect.catchTag(runOf(named, seams)(fields, standing), "ToolHostUnavailable", () =>
+      Effect.succeed(HOST_UNAVAILABLE_CALL),
+    );
   });
 }

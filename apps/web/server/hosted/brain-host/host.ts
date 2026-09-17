@@ -4,8 +4,9 @@ import {
   skippedHousekeeping,
 } from "@sidecar/memory";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
+import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
 import type { LanguageModel } from "ai";
-import { Cache, Data, Effect, Result, type Schema } from "effect";
+import { Cache, Data, Duration, Effect, Exit, Result, type Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -34,6 +35,7 @@ import {
   quietUntilByAccount,
   type StoreWriter,
 } from "../store/index.js";
+import { toolHostSeam } from "../store-failure.js";
 import { offerBriefing } from "./announce.js";
 import { turnKindOf } from "./auth.js";
 import {
@@ -299,38 +301,41 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
    * any effect.
    */
   const plugins = onceComposed(
-    Cache.make({
-      capacity: BRAIN_HOST.PLUGIN_CACHE_CAPACITY,
-      requireServicesAt: "lookup",
-      lookup: (key: PluginKey) =>
-        Effect.map(SqlClient.SqlClient, (client) =>
-          cloudSessionPluginFor(key.providerId, {
-            readApiKey: () =>
-              Effect.orDie(
-                Effect.provideService(
-                  seams.providerKey(key.userId, key.providerId),
-                  SqlClient.SqlClient,
-                  client,
-                ),
-              ),
+    Cache.makeWith(
+      (key: PluginKey) =>
+        Effect.gen(function* () {
+          const client = yield* SqlClient.SqlClient;
+          // The key is read as the plugin is built: the plugin interface reads
+          // its key through an `Effect<string | undefined, never>` and takes a
+          // read that fails for a key that is absent, so a vault row the
+          // service cannot read fails the call that asked, leaves the plugin
+          // unbuilt, and is never told to the model as a missing key.
+          const apiKey = yield* toolHostSeam(client, seams.providerKey(key.userId, key.providerId));
+          return cloudSessionPluginFor(key.providerId, {
+            readApiKey: () => Effect.succeed(apiKey),
             reported: () =>
               (rosters.get(key.userId)?.roster ?? EMPTY_HOSTED_ROSTER).observations.get(
                 key.providerId,
               ) ?? [],
-          }),
-        ),
-    }),
+          });
+        }),
+      {
+        capacity: BRAIN_HOST.PLUGIN_CACHE_CAPACITY,
+        requireServicesAt: "lookup",
+        // A plugin stands for as long as its sealed key does; a lookup the
+        // store refused is not kept, so the next call reads the key again.
+        timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),
+      },
+    ),
   );
   /**
-   * The plugins an account's tools reach, built over the request's own client:
-   * the key each opens is a vault read, and the plugin interface answers
-   * `Effect<A, never, never>`, so the client is provided where the plugin is
-   * built and a row the service cannot read dies rather than becoming a key
-   * that is merely absent.
+   * The plugins an account's tools reach, built over the request's own client
+   * and under the account's key as the vault holds it now; a changed vault is
+   * another key here, so the plugin a call reaches holds the current one.
    */
   const pluginFor =
     (userId: string, client: SqlClient.SqlClient) =>
-    (providerId: CloudAgentProviderId): Effect.Effect<SessionProviderPlugin> =>
+    (providerId: CloudAgentProviderId): Effect.Effect<SessionProviderPlugin, ToolHostUnavailable> =>
       Effect.provideService(
         Effect.flatMap(plugins(), (cache) =>
           Cache.get(
@@ -451,11 +456,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         const http = yield* HttpClient.HttpClient;
         const writer = yield* seams.writer();
         const { userId } = binding.target;
-        // Every seam below answers `Effect<A, never, never>`, so the request's
-        // own client is provided into each read here and a row the service
-        // cannot read dies rather than becoming a reason the model is offered.
-        const roster = () =>
-          Effect.orDie(Effect.provideService(rosterOf(userId), SqlClient.SqlClient, client));
+        // Every seam below reads over the request's own client, and a row the
+        // service cannot read fails the seam as the tool contract's own
+        // unavailability, logged where its cause is known; the tool run
+        // answers such a call as rejected, so the model is told the call did
+        // not run and nothing of why.
+        const roster = () => toolHostSeam(client, rosterOf(userId));
         const transcripts = hostedTranscriptReads({
           client,
           userId,
@@ -465,18 +471,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         });
         const carrier = hostedActionCarrier({
           roster,
-          defaults: () =>
-            Effect.orDie(
-              Effect.provideService(readWorkspaceDefaults(userId), SqlClient.SqlClient, client),
-            ),
-          apiKey: (providerId) =>
-            Effect.orDie(
-              Effect.provideService(
-                seams.providerKey(userId, providerId),
-                SqlClient.SqlClient,
-                client,
-              ),
-            ),
+          defaults: () => toolHostSeam(client, readWorkspaceDefaults(userId)),
+          apiKey: (providerId) => toolHostSeam(client, seams.providerKey(userId, providerId)),
           execute: seams.executeAction,
         });
         return yield* runHostedTool(
