@@ -666,9 +666,11 @@ function layerGatewayMethods(
             ),
           );
       };
-      return GATEWAY_METHOD_ENTRIES.map((entry) =>
+      const layers = GATEWAY_METHOD_ENTRIES.map((entry) =>
         GatewayServerRpcs.toLayerHandler(entry.name, handlerFor(entry.name)),
-      ).reduce((all, layer) => Layer.merge(all, layer));
+      );
+      // SAFETY: the method table is never empty, so the handlers are the non-empty tuple `mergeAll` takes.
+      return Layer.mergeAll(...(layers as [(typeof layers)[number], ...typeof layers]));
     }),
   );
 }

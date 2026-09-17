@@ -33,18 +33,16 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Effect, Redacted, Result, Semaphore } from "effect";
+import { declareReader } from "@sidecar/wire/effect";
+import { Data, Effect, Redacted, Result, Schema, Semaphore, type Types } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar.js";
 import type { SettingsEnvironmentOverrides } from "./effect/settings-overrides.js";
-import {
-  parsePersistedSettingsEither,
-  readSettingsFileText,
-  writeSettingsFileAtomic,
-} from "./effect/settings-store-io.js";
+import { readSettingsFileText, writeSettingsFileAtomic } from "./effect/settings-store-io.js";
 
 export type { StoredAccount } from "@sidecar/credentials";
 
@@ -132,57 +130,8 @@ export interface SettingsStoreOptions {
    * its context for a caller to provide.
    */
   fileSystem: FileSystem.FileSystem;
-}
-
-export interface PersistedSettings extends StoredAppSettings {
-  version: number;
-  /**
-   * Ciphertext by provider id. A provider this build does not know is carried
-   * through untouched so an older build cannot discard a newer one's key.
-   */
-  apiKeys: Readonly<Record<string, string>>;
-  /** Account tokens encrypted together; only display identity stays plaintext. */
-  account?: {
-    tokenCipher: string;
-    /** Absent where the sign-in's identity carried none; see `AccountIdentity`. */
-    id?: string;
-    email: string;
-    name?: string;
-    pictureUrl?: string;
-    provider: AccountProvider;
-  };
-  /**
-   * The connected calendar accounts: each account's id, the grant its sign-in
-   * produced as ciphertext, and the calendar ids the user chose to count.
-   * Absent from the file while none are connected.
-   */
-  calendarAccounts?: readonly PersistedCalendarAccount[];
-  /**
-   * Last account-preference baseline used for hosted sync. It is local
-   * bookkeeping only: when the hosted write fails and the app restarts, this
-   * is what lets the next hosted read keep local edits made since the last
-   * successful baseline instead of treating the current local file as already
-   * synced.
-   */
-  accountPreferencesSync?: {
-    accountEmail: string;
-    preferences: AccountPreferences;
-  };
-  /**
-   * The Apple Calendar connection: present exactly while connected, holding
-   * only the calendar ids the user chose to count. No credential rides with
-   * it — the grant lives with macOS, withdrawable in System Settings.
-   */
-  appleCalendar?: { calendars: readonly string[] };
-  /**
-   * Which account an earlier build last synced this Mac's provider keys for —
-   * its opaque id, or its address where the identity carried no id. Read
-   * only: this build writes it never and keeps no local provider key of its
-   * own, but the one migration of a key that earlier build left here asks
-   * it whose key that was, so a later sign-in on a shared Mac cannot claim
-   * someone else's.
-   */
-  vaultSyncAccount?: string;
+  /** The path service the settings file's own path is joined through, resolved by the same composer. */
+  path: Path.Path;
 }
 
 interface ResolvedApiKey {
@@ -190,8 +139,45 @@ interface ResolvedApiKey {
   source: CredentialSource;
 }
 
-function storedAccount(record: WireRecord): PersistedSettings["account"] {
-  const value = record[SETTINGS_FIELD.ACCOUNT];
+/* ----- The settings file's record ----- */
+
+/**
+ * The settings file is read as a `Schema` whose every field is a total
+ * reader: what a field cannot read is that field's fallback, never a refused
+ * file, because a file this build half-understands still carries the keys
+ * and tokens an older or newer build wrote, and the next write must not lose
+ * them. The one refusal is a file whose top level is not an object, which
+ * `parsePersistedSettingsEither` below answers as `SettingsParseRefusal`. No
+ * model is ever shown this record, so the node a reader declares is a
+ * placeholder and nothing draws it.
+ */
+const SETTINGS_FIELD_NODE = {
+  type: "object",
+  properties: {},
+  required: [],
+  additionalProperties: false,
+} as const;
+
+/** A field read by a total reader, over the raw value the file holds under its key. */
+function settingsField<Value>(read: (value: UnparsedWireValue) => Value) {
+  return declareReader<Value>((value) => ({ ok: true, value: read(value) }), SETTINGS_FIELD_NODE);
+}
+
+/** A key the file does not hold is read as if it held nothing, so the reader answers its fallback. */
+const ABSENT = Effect.succeed(undefined);
+
+/** Account tokens encrypted together; only display identity stays plaintext. */
+interface PersistedAccount {
+  tokenCipher: string;
+  /** Absent where the sign-in's identity carried none; see `AccountIdentity`. */
+  id?: string;
+  email: string;
+  name?: string;
+  pictureUrl?: string;
+  provider: AccountProvider;
+}
+
+function storedAccount(value: UnparsedWireValue): PersistedAccount | undefined {
   if (!isRecord(value)) return undefined;
   const account = value;
   if (
@@ -268,8 +254,7 @@ function toggledCalendarSelection(
 }
 
 /** Reads the stored calendar accounts, keeping only well-formed entries. */
-function storedCalendarAccounts(record: WireRecord): readonly PersistedCalendarAccount[] {
-  const persisted = record[SETTINGS_FIELD.CALENDAR_ACCOUNTS];
+function storedCalendarAccounts(persisted: UnparsedWireValue): readonly PersistedCalendarAccount[] {
   if (!Array.isArray(persisted)) return [];
   const accounts: PersistedCalendarAccount[] = [];
   for (const entry of persisted) {
@@ -284,9 +269,18 @@ function storedCalendarAccounts(record: WireRecord): readonly PersistedCalendarA
   return accounts;
 }
 
+/**
+ * The Apple Calendar connection: present exactly while connected, holding
+ * only the calendar ids the user chose to count. No credential rides with
+ * it — the grant lives with macOS, withdrawable in System Settings.
+ */
+interface PersistedAppleCalendar {
+  calendars: readonly string[];
+}
+
 /** The stored Apple Calendar connection; its presence is the connection. */
-function storedAppleCalendar(record: WireRecord): PersistedSettings["appleCalendar"] {
-  const held = readWireRecord(record[SETTINGS_FIELD.APPLE_CALENDAR]);
+function storedAppleCalendar(value: UnparsedWireValue): PersistedAppleCalendar | undefined {
+  const held = readWireRecord(value);
   if (!held) return undefined;
   return { calendars: sanitizedCalendarIds(held.calendars) };
 }
@@ -333,9 +327,12 @@ export function apiKeyRejection(apiKey: string, format?: CredentialFormat): stri
   return undefined;
 }
 
-function storedApiKeys(record: WireRecord) {
+/**
+ * Ciphertext by provider id. A provider this build does not know is carried
+ * through untouched so an older build cannot discard a newer one's key.
+ */
+function storedApiKeys(persisted: UnparsedWireValue) {
   const apiKeys: Record<string, string> = {};
-  const persisted = record[SETTINGS_FIELD.API_KEYS];
   if (isRecord(persisted)) {
     for (const [providerId, ciphertext] of Object.entries(persisted)) {
       if (!isWireString(ciphertext) || !ciphertext) continue;
@@ -346,20 +343,41 @@ function storedApiKeys(record: WireRecord) {
 }
 
 /**
- * Reads the stored per-provider agent choices, keeping only entries the
- * build's own table lists. A file written by another build may pair an agent
- * with a model this one does not know; honouring it would send a value no
- * documented endpoint takes, so it is dropped the way an unknown voice is.
+ * The stored settings, each read through its own guard, so an entry the
+ * build's own table does not list is dropped: a file written by another
+ * build may pair an agent with a model this one does not know, and honouring
+ * it would send a value no documented endpoint takes. A guard answers a value
+ * on both branches, the default where it refuses, so every field decodes.
  */
-function readStoredSettings(record: WireRecord): StoredAppSettings {
-  // SAFETY: Each field is paired with the value its own schema guard accepts.
-  return Object.fromEntries(
-    APP_SETTING_FIELDS.map((field) => [
+function storedSettingCodecs<
+  Table extends {
+    readonly [field: string]: { readonly guard: (value: UnparsedWireValue) => { value: unknown } };
+  },
+>(
+  table: Table,
+): {
+  readonly [Field in keyof Table]: Schema.Codec<
+    ReturnType<Table[Field]["guard"]>["value"],
+    UnparsedWireValue
+  >;
+} {
+  const codecs: { readonly [field: string]: Schema.Top } = Object.fromEntries(
+    Object.entries(table).map(([field, setting]) => [
       field,
-      APP_SETTING_SCHEMA[field].guard(record[field]).value,
+      settingsField((value) => setting.guard(value).value).pipe(Schema.withDecodingDefault(ABSENT)),
     ]),
-  ) as StoredAppSettings;
+  );
+  // SAFETY: each key's codec reads through that key's own guard, so the pairing the
+  // mapped type states is the one built here; `Object.fromEntries` alone cannot say so.
+  return codecs as {
+    readonly [Field in keyof Table]: Schema.Codec<
+      ReturnType<Table[Field]["guard"]>["value"],
+      UnparsedWireValue
+    >;
+  };
 }
+
+const storedSettingFields = storedSettingCodecs(APP_SETTING_SCHEMA);
 
 function storedSettingsFromPersisted(persisted: PersistedSettings): StoredAppSettings {
   const entries = Object.fromEntries(APP_SETTING_FIELDS.map((field) => [field, persisted[field]]));
@@ -431,10 +449,22 @@ function accountPreferencesFromPersisted(persisted: PersistedSettings): AccountP
   return accountPreferencesFromStored(settings) ?? {};
 }
 
+/**
+ * Last account-preference baseline used for hosted sync. It is local
+ * bookkeeping only: when the hosted write fails and the app restarts, this
+ * is what lets the next hosted read keep local edits made since the last
+ * successful baseline instead of treating the current local file as already
+ * synced.
+ */
+interface PersistedAccountPreferencesSync {
+  accountEmail: string;
+  preferences: AccountPreferences;
+}
+
 function storedAccountPreferencesSync(
-  record: WireRecord,
-): PersistedSettings["accountPreferencesSync"] {
-  const held = readWireRecord(record[SETTINGS_FIELD.ACCOUNT_PREFERENCES_SYNC]);
+  value: UnparsedWireValue,
+): PersistedAccountPreferencesSync | undefined {
+  const held = readWireRecord(value);
   if (!held || !isWireString(held.accountEmail) || !held.accountEmail) return undefined;
   const storedPreferences = readWireRecord(held.preferences);
   if (!storedPreferences) return undefined;
@@ -443,47 +473,133 @@ function storedAccountPreferencesSync(
   return { accountEmail: held.accountEmail, preferences };
 }
 
-function defaultPersistedSettings(): PersistedSettings {
-  return {
-    version: SETTINGS_FILE_VERSION,
-    apiKeys: {},
-    ...readStoredSettings({}),
-  };
+/**
+ * Which account an earlier build last synced this Mac's provider keys for —
+ * its opaque id, or its address where the identity carried no id. Read
+ * only: this build writes it never and keeps no local provider key of its
+ * own, but the one migration of a key that earlier build left here asks
+ * it whose key that was, so a later sign-in on a shared Mac cannot claim
+ * someone else's.
+ */
+function storedVaultSyncAccount(value: UnparsedWireValue): string | undefined {
+  return isWireString(value) && value ? value : undefined;
 }
 
 /**
- * The throwing parse this store's earlier body kept; `SettingsParseRefusal`
- * over `parsePersistedSettingsEither` in `./effect/settings-store-io.js` is
- * what a caller reads today, and this stays private to that Result's own
- * `Result.try` rather than a second parse a caller could reach directly.
+ * The settings file's record: the version and the keys every file carries,
+ * the sections a file holds only while something stands in them, and every
+ * stored setting. Read by `parsePersistedSettingsEither` and written by
+ * `#write`; a key beside these is dropped on the next write, as it always
+ * was. `settledPersistedSettings` below is the rule between two fields no
+ * one field's reader can hold.
  */
-export function parsePersistedSettingsThrowing(source: string): PersistedSettings {
-  const parsed = JSON.parse(source);
-  if (!isRecord(parsed)) {
-    throw new Error("Settings file is not an object");
-  }
-  const record = parsed;
-  const version = record[SETTINGS_FIELD.VERSION];
-  const calendarAccounts = storedCalendarAccounts(record);
-  const appleCalendar = storedAppleCalendar(record);
-  const settings = readStoredSettings(record);
-  const vaultSyncAccount = record[SETTINGS_FIELD.VAULT_SYNC_ACCOUNT];
-  const account = storedAccount(record);
-  const accountPreferencesSync = storedAccountPreferencesSync(record);
-  const persisted = {
+const PersistedSettingsSchema = Schema.Struct({
+  [SETTINGS_FIELD.VERSION]: settingsField((value) =>
+    isWireNumber(value) ? value : SETTINGS_FILE_VERSION,
+  ).pipe(Schema.withDecodingDefault(ABSENT)),
+  [SETTINGS_FIELD.API_KEYS]: settingsField(storedApiKeys).pipe(Schema.withDecodingDefault(ABSENT)),
+  [SETTINGS_FIELD.ACCOUNT]: Schema.optionalKey(settingsField(storedAccount)),
+  // The connected calendar accounts: each account's id, the grant its sign-in
+  // produced as ciphertext, and the calendar ids the user chose to count.
+  // Absent from the file while none are connected.
+  [SETTINGS_FIELD.CALENDAR_ACCOUNTS]: Schema.optionalKey(settingsField(storedCalendarAccounts)),
+  [SETTINGS_FIELD.APPLE_CALENDAR]: Schema.optionalKey(settingsField(storedAppleCalendar)),
+  [SETTINGS_FIELD.ACCOUNT_PREFERENCES_SYNC]: Schema.optionalKey(
+    settingsField(storedAccountPreferencesSync),
+  ),
+  [SETTINGS_FIELD.VAULT_SYNC_ACCOUNT]: Schema.optionalKey(settingsField(storedVaultSyncAccount)),
+  ...storedSettingFields,
+});
+
+/** Mutable, because the store edits a copy section by section before it writes. */
+export type PersistedSettings = Types.Mutable<typeof PersistedSettingsSchema.Type>;
+
+const decodePersistedSettings = Schema.decodeUnknownSync(PersistedSettingsSchema);
+const encodePersistedSettings = Schema.encodeSync(PersistedSettingsSchema);
+
+/** The two OAuth tokens one Keychain-backed ciphertext holds, as `setAccount` sealed them. */
+const AccountTokensSchema = Schema.Struct({
+  accessToken: Schema.String,
+  refreshToken: Schema.String,
+});
+
+type AccountTokens = typeof AccountTokensSchema.Type;
+
+const decodeAccountTokens = Schema.decodeUnknownResult(Schema.fromJsonString(AccountTokensSchema));
+
+/**
+ * The record as the store keeps it: a section its reader could not read, or
+ * one holding nothing, is not a key holding `undefined` but no key at all,
+ * so a disconnection reads as no calendars rather than as a connection with
+ * none; and a sync baseline is kept only for the account signed in, since
+ * one left by another account would let that account's edits stand in for
+ * this one's.
+ */
+function settledPersistedSettings(persisted: PersistedSettings): PersistedSettings {
+  const {
+    account,
+    accountPreferencesSync,
+    calendarAccounts,
+    appleCalendar,
+    vaultSyncAccount,
+    ...settings
+  } = persisted;
+  return {
     ...settings,
-    version: isWireNumber(version) ? version : SETTINGS_FILE_VERSION,
-    apiKeys: storedApiKeys(record),
     ...(account ? { account } : undefined),
     ...(account && accountPreferencesSync?.accountEmail === account.email
       ? { accountPreferencesSync }
       : undefined),
-    ...(calendarAccounts.length > 0 ? { calendarAccounts } : undefined),
+    ...(calendarAccounts && calendarAccounts.length > 0 ? { calendarAccounts } : undefined),
     ...(appleCalendar ? { appleCalendar } : undefined),
-    ...(isWireString(vaultSyncAccount) && vaultSyncAccount ? { vaultSyncAccount } : undefined),
+    ...(vaultSyncAccount ? { vaultSyncAccount } : undefined),
   };
-  // SAFETY: readStoredSettings validated every preference field before this spread.
-  return persisted as PersistedSettings;
+}
+
+/** Every field at its fallback: the record an empty file decodes to. */
+function defaultPersistedSettings(): PersistedSettings {
+  return settledPersistedSettings(decodePersistedSettings({}));
+}
+
+/** A stored file this build cannot read as settings; `reason` is the legacy message. */
+export class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal")<{
+  readonly reason: string;
+}> {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+const NOT_AN_OBJECT = "Settings file is not an object";
+
+const decodePersistedSettingsFile = Schema.decodeUnknownResult(
+  Schema.fromJsonString(PersistedSettingsSchema),
+);
+
+/**
+ * Why a file was refused, in the legacy words: text that is JSON but not an
+ * object is the one refusal the record's own readers leave standing, since
+ * each field reads to its fallback; anything else is text that is not JSON,
+ * named as the parser names it.
+ */
+function refusalReason(source: string, error: Schema.SchemaError): string {
+  const parsed = Result.try(() => JSON.parse(source));
+  return Result.isSuccess(parsed) && !isRecord(parsed.success) ? NOT_AN_OBJECT : error.message;
+}
+
+/**
+ * The settings file's shape, decoded once through `PersistedSettingsSchema`.
+ * A malformed file answers a refusal rather than throwing; every caller today
+ * still folds that refusal into `defaultPersistedSettings()`, so the
+ * fallback is a caller's decision and not this function's.
+ */
+export function parsePersistedSettingsEither(
+  source: string,
+): Result.Result<PersistedSettings, SettingsParseRefusal> {
+  return decodePersistedSettingsFile(source).pipe(
+    Result.map(settledPersistedSettings),
+    Result.mapError((error) => new SettingsParseRefusal({ reason: refusalReason(source, error) })),
+  );
 }
 
 /**
@@ -498,6 +614,7 @@ export class SettingsStore {
   readonly #credentialsUsable: boolean;
   readonly #vaultKeyHeld: (providerId: CloudAgentProviderId) => boolean;
   readonly #fileSystem: FileSystem.FileSystem;
+  readonly #path: Path.Path;
   /**
    * The settings as last read or written. The gate beside it is what makes a
    * read shared rather than repeated: a second reader waits for the first
@@ -678,6 +795,7 @@ export class SettingsStore {
     this.#credentialsUsable = options.credentialsUsable ?? true;
     this.#vaultKeyHeld = options.vaultKeyHeld;
     this.#fileSystem = options.fileSystem;
+    this.#path = options.path;
   }
 
   snapshot(): Effect.Effect<AppSettings, PlatformError> {
@@ -766,19 +884,16 @@ export class SettingsStore {
   readAccount(): Effect.Effect<StoredAccount | undefined, PlatformError> {
     return Effect.map(this.#load(), ({ account }) => {
       if (!account) return undefined;
-      return this.#decryptRecord(account.tokenCipher, (tokens) => {
-        const { accessToken, refreshToken } = tokens;
-        if (!isWireString(accessToken) || !isWireString(refreshToken)) return undefined;
-        return {
-          accessToken,
-          refreshToken,
-          ...(account.id ? { id: account.id } : undefined),
-          email: account.email,
-          ...(account.name ? { name: account.name } : undefined),
-          ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
-          provider: account.provider,
-        };
-      });
+      const tokens = this.#decryptTokens(account.tokenCipher);
+      if (tokens === undefined) return undefined;
+      return {
+        ...tokens,
+        ...(account.id ? { id: account.id } : undefined),
+        email: account.email,
+        ...(account.name ? { name: account.name } : undefined),
+        ...(account.pictureUrl ? { pictureUrl: account.pictureUrl } : undefined),
+        provider: account.provider,
+      };
     });
   }
 
@@ -1284,21 +1399,15 @@ export class SettingsStore {
   }
 
   /**
-   * One stored ciphertext's JSON object, read by the caller's own reader, or
-   * nothing. Unrecoverable is an answer: a value encrypted under a different OS
-   * account, or against a rotated Keychain entry, cannot be read back, and the
-   * row it draws is what says to connect again.
+   * One stored ciphertext's token pair, or nothing. Unrecoverable is an
+   * answer: a value encrypted under a different OS account, or against a
+   * rotated Keychain entry, cannot be read back, and the row it draws is what
+   * says to connect again.
    */
-  #decryptRecord<Value>(
-    cipherText: string,
-    read: (record: WireRecord) => Value | undefined,
-  ): Value | undefined {
-    try {
-      const parsed = JSON.parse(this.#cipher.decrypt(Buffer.from(cipherText, "base64")));
-      return isRecord(parsed) ? read(parsed) : undefined;
-    } catch {
-      return undefined;
-    }
+  #decryptTokens(cipherText: string): AccountTokens | undefined {
+    const plain = Result.try(() => this.#cipher.decrypt(Buffer.from(cipherText, "base64")));
+    if (Result.isFailure(plain)) return undefined;
+    return Result.getOrUndefined(decodeAccountTokens(plain.success));
   }
 
   /**
@@ -1351,7 +1460,10 @@ export class SettingsStore {
   /** Only ever run inside `#mutate`'s gate, so writes cannot interleave. */
   #write(persisted: PersistedSettings): Effect.Effect<void, PlatformError> {
     return this.#onFileSystem(
-      writeSettingsFileAtomic(this.#directory(), `${JSON.stringify(persisted, undefined, 2)}\n`),
+      writeSettingsFileAtomic(
+        this.#directory(),
+        `${JSON.stringify(encodePersistedSettings(persisted), undefined, 2)}\n`,
+      ),
     );
   }
 
@@ -1360,8 +1472,11 @@ export class SettingsStore {
    * writes, so a caller of any method above is left nothing to provide.
    */
   #onFileSystem<A>(
-    effect: Effect.Effect<A, PlatformError, FileSystem.FileSystem>,
+    effect: Effect.Effect<A, PlatformError, FileSystem.FileSystem | Path.Path>,
   ): Effect.Effect<A, PlatformError> {
-    return Effect.provideService(effect, FileSystem.FileSystem, this.#fileSystem);
+    return effect.pipe(
+      Effect.provideService(FileSystem.FileSystem, this.#fileSystem),
+      Effect.provideService(Path.Path, this.#path),
+    );
   }
 }

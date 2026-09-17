@@ -1,4 +1,4 @@
-import { scheduleOnce } from "@sidecar/runtime/effect";
+import { delayLadder, scheduleOnce } from "@sidecar/runtime/effect";
 import { type Context, Duration, Effect, type Fiber, Pull, Schedule, Scope } from "effect";
 import {
   UPDATE_STATUS,
@@ -92,21 +92,17 @@ const PUBLISHING_RETRY_DELAYS_MS: readonly [number, ...number[]] = [
 
 /**
  * The delay sequence as a `Schedule`, so the budget a version spends is data
- * a schedule steps through rather than an index counted by hand. One
- * `Schedule.duration` per delay, sequenced with `Schedule.concat`: each
- * recurs once after its own delay and then hands over, so the chain recurs
- * as many times as there are delays and completes. Stepped directly through
- * `Schedule.toStep` rather than the sleeping step `Schedule.toStepWithSleep`
- * hands back: that one sleeps out the delay it decided on, where this needs
- * the delay back to arm a cancellable fiber of its own — one a fresh check
- * can collapse mid-wait.
+ * a schedule steps through rather than an index counted by hand. Stepped
+ * directly through `Schedule.toStep` rather than the sleeping step
+ * `Schedule.toStepWithSleep` hands back: that one sleeps out the delay it
+ * decided on, where this needs the delay back to arm a cancellable fiber of
+ * its own — one a fresh check can collapse mid-wait.
  */
 function publishingRetrySchedule(
   delaysMs: readonly [number, ...number[]],
 ): Schedule.Schedule<Duration.Duration, undefined> {
-  return delaysMs
-    .map((delayMs) => Schedule.duration(Duration.millis(delayMs)))
-    .reduce((earlier, later) => Schedule.concat(earlier, later));
+  const [first, ...rest] = delaysMs;
+  return delayLadder([Duration.millis(first), ...rest.map(Duration.millis)]);
 }
 
 /**

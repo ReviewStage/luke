@@ -31,6 +31,7 @@
  * child again once it has both.
  */
 
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { isTextUIPart, type ToolSet } from "ai";
 import { Cause, Clock, Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
@@ -134,8 +135,7 @@ export const deliverChildCompletion = /* @__PURE__ */ Effect.fn("deliverChildCom
         SESSION_OPENING.LOCKED,
       );
     });
-    const taken = yield* Effect.catchCause(handover, (cause) => {
-      if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
+    const taken = yield* catchAllButInterrupt(handover, (cause) => {
       seams.report(
         `The completion of child ${child.conversationId} could not be handed over: ${String(Cause.squash(cause))}.`,
       );

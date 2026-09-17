@@ -1,4 +1,4 @@
-import type { WireValue } from "@sidecar/wire";
+import { jsonRoundTrip } from "@sidecar/wire";
 import { Effect } from "effect";
 import { unavailableInvocation } from "./invocations.js";
 import {
@@ -38,11 +38,6 @@ interface TextLoopbackTransportOptions {
   schedule?: (work: () => void, delayMs: number) => void;
 }
 
-function throughText(value: WireValue): WireValue {
-  // SAFETY: the text is this transport's own serialization of a wire value; parsing it back yields one.
-  return JSON.parse(JSON.stringify(value)) as WireValue;
-}
-
 /**
  * A test transport that carries every envelope through JSON text and back,
  * exactly as a socket would, and re-parses it with the protocol's own
@@ -68,7 +63,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
 
   protected carryRequest(request: GatewayRequest): Effect.Effect<GatewayResponse> {
     return Effect.gen({ self: this }, function* () {
-      const carried = gatewayRequestFromWire(throughText(gatewayRequestToWire(request)));
+      const carried = gatewayRequestFromWire(jsonRoundTrip(gatewayRequestToWire(request)));
       if (!carried) {
         return gatewayRefusal(
           request.id,
@@ -84,7 +79,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
           schedule(() => resume(Effect.void), delay);
         });
       }
-      const parsed = gatewayResponseFromWire(throughText(gatewayResponseToWire(response)));
+      const parsed = gatewayResponseFromWire(jsonRoundTrip(gatewayResponseToWire(response)));
       return (
         parsed ??
         gatewayRefusal(
@@ -102,7 +97,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
       if (this.#dropNext > 0) this.#dropNext -= 1;
       return;
     }
-    const carried = gatewayEventFromWire(throughText(gatewayEventToWire(event)));
+    const carried = gatewayEventFromWire(jsonRoundTrip(gatewayEventToWire(event)));
     if (carried) this.deliver(carried);
   }
 
@@ -111,7 +106,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
     take: (invocation: NodeInvocation) => Effect.Effect<NodeInvocationAnswer>,
   ): Effect.Effect<NodeCapabilityResult> {
     return Effect.suspend(() => {
-      const carried = nodeInvocationFromWire(throughText(nodeInvocationToWire(invocation)));
+      const carried = nodeInvocationFromWire(jsonRoundTrip(nodeInvocationToWire(invocation)));
       if (!carried) {
         return Effect.succeed(
           unavailableInvocation(invocation, "the invocation did not survive the wire"),
@@ -125,7 +120,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
         const answered = answers[0];
         if (!answered) return unavailableInvocation(invocation, "the node answered nothing");
         const parsed = nodeCapabilityResultFromWire(
-          throughText(nodeCapabilityResultToWire(answered.result)),
+          jsonRoundTrip(nodeCapabilityResultToWire(answered.result)),
         );
         return parsed ?? unavailableInvocation(invocation, "the answer did not survive the wire");
       });

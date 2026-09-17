@@ -1,3 +1,4 @@
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import type { BriefingDelivery } from "@sidecar/voice/live-session";
 import type { ToolSet } from "ai";
 import { Cause, Duration, Effect, Schedule, type Schema, type Scope } from "effect";
@@ -137,8 +138,7 @@ export const hostedBriefings = /* @__PURE__ */ Effect.fn("hostedBriefings")(func
   });
 
   const onSchedule = Effect.repeat(
-    Effect.catchCause(look, (cause) => {
-      if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
+    catchAllButInterrupt(look, (cause) => {
       const failure = Cause.squash(cause);
       return Effect.sync(() => {
         options.report(

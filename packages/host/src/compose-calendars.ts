@@ -20,11 +20,11 @@ import {
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/gateway";
 import { ObservationLoop } from "@sidecar/runtime";
-import { cadenceGate } from "@sidecar/runtime/effect";
+import { cadenceGate, serialQueue } from "@sidecar/runtime/effect";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import { Duration, Effect, Fiber, Queue, Result, Schedule, Scope, Semaphore } from "effect";
+import { Duration, Effect, Fiber, Result, Schedule, Scope, Semaphore } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import {
@@ -212,34 +212,19 @@ export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(fu
    * A write that dies is written down rather than left to end the fiber
    * every later write needs.
    */
-  const onboardingWrites = yield* Queue.unbounded<Effect.Effect<void>>();
+  const onboardingWrites = yield* serialQueue({
+    onDefect: (cause) => Effect.logError("an onboarding write failed", cause),
+    // What was offered and not yet taken when the scope closes is written
+    // then rather than lost with the queue.
+    drainOnClose: true,
+  });
   /**
    * A write is uninterruptible, because a moment that reached this queue is
    * one the record has to end up holding: a quit landing between the read
    * and the write would leave the disk saying the edge never happened.
    */
-  const takeOnboardingWrite = (write: Effect.Effect<void>): Effect.Effect<void> =>
-    Effect.catchDefect(Effect.uninterruptible(write), (defect) =>
-      Effect.logError("an onboarding write failed", defect),
-    );
-  /**
-   * Registered before the fiber below is forked, so the scope closing runs
-   * it after that fiber has been interrupted: what was offered and not yet
-   * taken is written here rather than lost with the queue. `Queue.clear` is
-   * what reads a queue that may be empty — `Queue.takeAll` waits for the
-   * first message rather than answering with nothing, and a finalizer is
-   * uninterruptible, so a close behind an empty queue would never end.
-   */
-  yield* Effect.addFinalizer(() =>
-    Effect.flatMap(Queue.clear(onboardingWrites), (pending) =>
-      Effect.forEach(pending, takeOnboardingWrite, { discard: true }),
-    ),
-  );
-  yield* Effect.forkScoped(
-    Effect.forever(Effect.flatMap(Queue.take(onboardingWrites), takeOnboardingWrite)),
-  );
   const offerOnboardingWrite = (write: Effect.Effect<void>): void => {
-    Queue.offerUnsafe(onboardingWrites, write);
+    onboardingWrites.offerUnsafe(Effect.uninterruptible(write));
   };
   /**
    * One writer at a time over the record, which the synchronous face this

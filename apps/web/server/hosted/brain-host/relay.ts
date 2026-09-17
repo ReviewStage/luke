@@ -1,3 +1,4 @@
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { Cause, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -796,8 +797,7 @@ export class StreamRelay {
       // fails is said and left to the sweep: the seal stands, and a hook that
       // failed here would only have eve tell the same end again.
       if (standing.kind !== CONVERSATION_KIND.CHILD) return;
-      yield* Effect.catchCause(this.#seams.deliverCompletion(standing.target), (cause) => {
-        if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
+      yield* catchAllButInterrupt(this.#seams.deliverCompletion(standing.target), (cause) => {
         this.#seams.report(
           `The completion of child ${standing.target.conversationId} could not be delivered from turn ${eveTurnId}: ${String(Cause.squash(cause))}.`,
         );
