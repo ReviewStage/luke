@@ -19,8 +19,10 @@ import {
   type RowVoice,
 } from "./conversation-turns";
 import {
+  FIXTURE_BRIEFING,
   FIXTURE_NOW,
   FIXTURE_ROSTER,
+  fixtureBriefingTurns,
   fixtureConversationTurns,
 } from "./conversation-turns.fixtures";
 
@@ -88,13 +90,58 @@ test("the corpus is the words the thread draws as bubbles, drawn as their rows d
   assert.equal(own.rated?.ask, undefined);
   // His thinking folds away and is not words said, so it is not searched.
   assert.ok(ENTRIES.every((entry) => !entry.words.includes("read its tail before answering")));
-  // The order is the thread's own, and no message is entered twice.
+  // The order is the thread's own, and no row is entered twice.
   const instants = ENTRIES.map((entry) => entry.at);
   assert.deepEqual(
     instants,
     [...instants].sort((first, second) => first - second),
   );
-  assert.equal(new Set(ENTRIES.map((entry) => entry.messageId)).size, ENTRIES.length);
+  assert.equal(new Set(ENTRIES.map((entry) => entry.key)).size, ENTRIES.length);
+});
+
+test("a message that briefs and writes the same words is two results, drawn as the thread's two rows, never one bubble of both", () => {
+  const groups = fixtureBriefingTurns();
+  const entries = conversationSearchEntries(groups);
+  assert.equal(entries.length, 2);
+  const [bubble, own] = entries;
+  assert.ok(bubble && own);
+  // The briefing is Luke's bubble, copying as his bubbles do; the note is his
+  // words under his own face, copying nothing; each carries its words once.
+  assert.equal(bubble.row, CONVERSATION_SEARCH_ROW.BUBBLE);
+  assert.equal(bubble.voice.label, "Luke");
+  assert.equal(bubble.words, FIXTURE_BRIEFING);
+  assert.equal(bubble.copy, true);
+  assert.equal(own.row, CONVERSATION_SEARCH_ROW.OWN);
+  assert.equal(own.voice.label, "Luke, on his own judgment");
+  assert.equal(own.words, FIXTURE_BRIEFING);
+  assert.equal(own.copy, false);
+  // Both anchor the one message a landing seeks, under keys of their own; the
+  // rating stands on the message's last words, as the thread puts it.
+  assert.equal(bubble.messageId, own.messageId);
+  assert.notEqual(bubble.key, own.key);
+  assert.equal(bubble.rated, undefined);
+  assert.equal(own.rated?.view.message.id, own.messageId);
+  assert.equal(own.rated?.words, FIXTURE_BRIEFING);
+  // The thread draws the same two rows in the same order.
+  const thread = renderToStaticMarkup(
+    createElement(ConversationTurns, { groups, roster: FIXTURE_ROSTER, now: FIXTURE_NOW }),
+  );
+  const drawnBubble = thread.indexOf('class="conversation-bubble"');
+  const drawnOwn = thread.indexOf('class="conversation-action-body"');
+  assert.ok(drawnBubble >= 0 && drawnOwn > drawnBubble);
+  assert.equal(count(thread, 'class="conversation-more-button"'), 1);
+  // A query the words answer finds both rows, and the results draw each once,
+  // with the words in it once.
+  const search = found(searchConversation(entries, "reviews"));
+  assert.equal(search.matched, 2);
+  const results = renderToStaticMarkup(
+    createElement(ConversationSearchResults, { search, now: FIXTURE_NOW, onOpen: () => undefined }),
+  );
+  assert.equal(count(results, 'class="conversation-entry"'), 2);
+  assert.equal(count(results, 'class="conversation-bubble"'), 1);
+  assert.equal(count(results, 'class="conversation-action-body"'), 1);
+  assert.equal(count(results, "The transcript search PR has every check green."), 2);
+  assert.equal(count(results, 'class="conversation-more-button"'), 1);
 });
 
 test("every entry names a message whose rows wear the anchor a landing seeks, and every anchored message is an entry", () => {
@@ -130,6 +177,7 @@ test("the matches stand under the thread's dates: an hour's silence opens a grou
   const row: ConversationSearchRow = CONVERSATION_SEARCH_ROW.BUBBLE;
   const voice: RowVoice = { speaker: CONVERSATION_ENTRY_SPEAKER.YOU, label: "You" };
   const at = (offset: number): ConversationSearchEntry => ({
+    key: `m${offset}`,
     messageId: `m${offset}`,
     row,
     voice,
