@@ -19,8 +19,7 @@ preserving existing provider workflows.
 `./scripts/verify.sh` is the completion invariant for any macOS or UI change. CI
 runs the portable check on Linux alone, and no macOS job is coming back: Dean
 ruled on 2026-09-11 that the release rehearsal (`release.yml`'s `macos-15` job,
-run on a `v*` tag push or a manual dispatch) is the only Mac gate, recorded on
-`orchestration/storage-plan` at `e7b57a9a` in `plan/decisions.md`. A pull
+run on a `v*` tag push or a manual dispatch) is the only Mac gate. A pull
 request builds nothing for the Mac and produces no visual evidence, so a green
 PR says nothing about the Mac and there is no macOS check to wait for. A UI
 PR's evidence is the developer's own `verify.sh` run, its body must say CI could
