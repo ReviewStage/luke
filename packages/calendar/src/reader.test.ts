@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import type { JsonValue } from "@sidecar/wire/testing";
 import { HTTP_STATUS, type RecordedRequest, recordingHttpClient } from "@sidecar/wire/testing";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { CALENDAR_LOOKAHEAD_MS, MAXIMUM_MEETING_LENGTH_MS } from "./calendar.js";
 import { type CalendarAccountCredential, GoogleCalendarReader } from "./reader.js";
 
@@ -68,14 +69,13 @@ function readerWith(
       clientSecret: "GOCSPX-test-secret",
     }),
     httpClient: layer,
-    now: () => NOW,
   });
-  return { reader, requests };
+  return Effect.as(TestClock.setTime(NOW), { reader, requests });
 }
 
 it.effect("with no accounts it observes nothing and issues no request", () =>
   Effect.gen(function* () {
-    const { reader, requests } = readerWith(routes, []);
+    const { reader, requests } = yield* readerWith(routes, []);
 
     assert.equal(yield* reader.observe(), undefined);
     assert.deepEqual(requests, []);
@@ -84,7 +84,7 @@ it.effect("with no accounts it observes nothing and issues no request", () =>
 
 it.effect("an account's pass lists its calendars and reads only their busy times", () =>
   Effect.gen(function* () {
-    const { reader, requests } = readerWith(routes, [WORK_ACCOUNT]);
+    const { reader, requests } = yield* readerWith(routes, [WORK_ACCOUNT]);
 
     const observed = yield* reader.observe();
 
@@ -124,7 +124,7 @@ it.effect("an account's pass lists its calendars and reads only their busy times
 
 it.effect("a selection the list no longer names never enters the read document", () =>
   Effect.gen(function* () {
-    const { reader, requests } = readerWith(routes, [
+    const { reader, requests } = yield* readerWith(routes, [
       { ...WORK_ACCOUNT, selectedCalendarIds: ["team-calendar", "a-calendar-long-gone"] },
     ]);
 
@@ -137,7 +137,9 @@ it.effect("a selection the list no longer names never enters the read document",
 
 it.effect("nothing selected means no free/busy read at all", () =>
   Effect.gen(function* () {
-    const { reader, requests } = readerWith(routes, [{ ...WORK_ACCOUNT, selectedCalendarIds: [] }]);
+    const { reader, requests } = yield* readerWith(routes, [
+      { ...WORK_ACCOUNT, selectedCalendarIds: [] },
+    ]);
 
     const observed = yield* reader.observe();
 
@@ -156,7 +158,7 @@ it.effect("every connected account is read, and their meetings stand apart", () 
       refreshToken: "1//home-grant",
       selectedCalendarIds: ["home@example.com"],
     };
-    const { reader, requests } = readerWith(
+    const { reader, requests } = yield* readerWith(
       (request) => {
         if (request.url === CALENDAR_LIST_URL && request.authorization?.includes("home")) {
           return jsonOk({ items: [{ id: "home@example.com", summary: "Home", primary: true }] });
@@ -192,7 +194,7 @@ it.effect("every connected account is read, and their meetings stand apart", () 
 
 it.effect("the access token is cached across passes under the same grant", () =>
   Effect.gen(function* () {
-    const { reader, requests } = readerWith(routes, [WORK_ACCOUNT]);
+    const { reader, requests } = yield* readerWith(routes, [WORK_ACCOUNT]);
 
     yield* reader.observe();
     yield* reader.observe();
@@ -203,7 +205,7 @@ it.effect("the access token is cached across passes under the same grant", () =>
 
 it.effect("a revoked grant is a failure naming the account, not a quieter calendar", () =>
   Effect.gen(function* () {
-    const { reader } = readerWith(
+    const { reader } = yield* readerWith(
       (request) =>
         request.url === TOKEN_URL
           ? new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 })
@@ -226,7 +228,7 @@ it.effect("one bad account never blinds the others, and keeps what it last showe
     // Work reads fine on the first pass and stops answering on the second;
     // home answers throughout.
     let workBroken = false;
-    const { reader } = readerWith(
+    const { reader } = yield* readerWith(
       (request) => {
         if (request.url === CALENDAR_LIST_URL && request.authorization?.includes("work")) {
           if (workBroken) return new Response("", { status: 500 });
@@ -264,7 +266,7 @@ it.effect("a calendar unread inside an OK answer is a failure, not a quieter cal
     // and dumping the held announcements aloud — so the pass fails and the
     // account stands what it last showed.
     let broken = false;
-    const { reader } = readerWith(
+    const { reader } = yield* readerWith(
       (request) => {
         if (request.url === FREEBUSY_URL && broken) {
           return jsonOk({
@@ -289,7 +291,7 @@ it.effect("a calendar unread inside an OK answer is a failure, not a quieter cal
 
 it.effect("an asked-for calendar missing from the answer fails the pass the same way", () =>
   Effect.gen(function* () {
-    const { reader } = readerWith(
+    const { reader } = yield* readerWith(
       (request) =>
         request.url === FREEBUSY_URL
           ? jsonOk({
@@ -311,7 +313,7 @@ it.effect("an asked-for calendar missing from the answer fails the pass the same
 it.effect("forgetting ends an era: a failing pass after it holds nothing up", () =>
   Effect.gen(function* () {
     let broken = false;
-    const { reader } = readerWith(
+    const { reader } = yield* readerWith(
       (request) =>
         request.url === CALENDAR_LIST_URL && broken
           ? new Response("", { status: 500 })
@@ -333,7 +335,7 @@ it.effect("forgetting ends an era: a failing pass after it holds nothing up", ()
 
 it.effect("listCalendars names the primary first, then the rest by name", () =>
   Effect.gen(function* () {
-    const { reader } = readerWith(routes, []);
+    const { reader } = yield* readerWith(routes, []);
 
     const calendars = yield* reader.listCalendars("at-fresh");
 

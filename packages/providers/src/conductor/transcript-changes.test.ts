@@ -6,6 +6,7 @@ import {
   fakeConductorApi,
   IDLE_SESSION_UUID,
   LUKE_PROJECT,
+  observeAt,
   ownedWorkspace,
   pluginFor,
   SECOND_IDLE_SESSION_UUID,
@@ -51,7 +52,7 @@ const THREE_IDS = THREE_CHATS.map((session) => session.id);
 test("the changes read answers the chats whose status instant passed the mark, oldest first, and sends nothing", async () => {
   const api = changesApi(THREE_CHATS);
   const plugin = pluginFor(api.layer);
-  await runTest(plugin.observe());
+  await observeAt(plugin);
   const before = api.requests.length;
 
   const read = await runTest(
@@ -71,7 +72,7 @@ test("the changes read answers the chats whose status instant passed the mark, o
 test("a first look answers every chat's instant", async () => {
   const api = changesApi(THREE_CHATS);
   const plugin = pluginFor(api.layer);
-  await runTest(plugin.observe());
+  await observeAt(plugin);
 
   const read = await runTest(dispatchTranscriptChanges(plugin, { providerSessionIds: THREE_IDS }));
 
@@ -86,7 +87,7 @@ test("a first look answers every chat's instant", async () => {
 test("a chat whose instant equals the mark is not a change past it", async () => {
   const api = changesApi([chat(IDLE_SESSION_UUID, MARK), chat(SECOND_IDLE_SESSION_UUID, MARK + 1)]);
   const plugin = pluginFor(api.layer);
-  await runTest(plugin.observe());
+  await observeAt(plugin);
 
   const read = await runTest(
     dispatchTranscriptChanges(plugin, {
@@ -104,7 +105,7 @@ test("a chat whose instant equals the mark is not a change past it", async () =>
 test("an id that is not a UUID or not one the roster reported is ignored, and no known ids means no changes", async () => {
   const api = changesApi(THREE_CHATS);
   const plugin = pluginFor(api.layer);
-  await runTest(plugin.observe());
+  await observeAt(plugin);
 
   const read = await runTest(
     dispatchTranscriptChanges(plugin, {

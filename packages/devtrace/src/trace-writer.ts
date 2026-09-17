@@ -1,5 +1,5 @@
 import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
-import { Cause, Deferred, Effect, Path, type Scope } from "effect";
+import { Cause, DateTime, Deferred, Effect, Path, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
@@ -28,7 +28,6 @@ type PendingTraceEntry =
 interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
   directory: string;
-  now?: () => Date;
   report?: (message: string) => void;
 }
 
@@ -47,8 +46,8 @@ const reportToStderr = (text: string): void => {
  * runtime log event and nothing outside a fiber can fabricate one; the
  * stamping is the writer's own, taken the instant `record*` was called.
  */
-function traceLine(entry: PendingTraceEntry, now: () => Date): string {
-  return `${JSON.stringify({ at: now().toISOString(), ...entry })}\n`;
+function traceLine(entry: PendingTraceEntry): string {
+  return `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`;
 }
 
 /** Appends one already-formatted line, making the directory on first use. */
@@ -81,7 +80,6 @@ export class AgentTraceWriter {
   readonly file: string;
   readonly #directory: string;
   readonly #report: (message: string) => void;
-  readonly #now: () => Date;
   /** The line writes in arrival order, and a caller's own marker among them; the fiber is the scope's. */
   readonly #work: SerialQueue<FileSystem.FileSystem>;
   #failed = false;
@@ -104,13 +102,11 @@ export class AgentTraceWriter {
   private constructor(
     options: AgentTraceWriterOptions,
     file: string,
-    now: () => Date,
     work: SerialQueue<FileSystem.FileSystem>,
   ) {
     this.#directory = options.directory;
     this.#report = options.report ?? reportToStderr;
     this.file = file;
-    this.#now = now;
     this.#work = work;
   }
 
@@ -120,8 +116,8 @@ export class AgentTraceWriter {
   ): Effect.Effect<AgentTraceWriter, never, Scope.Scope | FileSystem.FileSystem | Path.Path> {
     return Effect.gen(function* () {
       const path = yield* Path.Path;
-      const now = options.now ?? (() => new Date());
-      const stamp = now().toISOString().replace(/[:.]/gu, "-");
+      const openedAt = yield* DateTime.nowAsDate;
+      const stamp = openedAt.toISOString().replace(/[:.]/gu, "-");
       const file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
       const report = options.report ?? reportToStderr;
       // Only a write's own failure is caught by the write; a line that dies
@@ -130,7 +126,7 @@ export class AgentTraceWriter {
         onDefect: (cause) =>
           Effect.sync(() => report(`Agent trace could not be written: ${Cause.pretty(cause)}\n`)),
       });
-      return new AgentTraceWriter({ ...options, report }, file, now, work);
+      return new AgentTraceWriter({ ...options, report }, file, work);
     });
   }
 
@@ -149,7 +145,7 @@ export class AgentTraceWriter {
 
   /** One line onto the queue; a write that fails is reported once and then silent. */
   #append(entry: PendingTraceEntry): void {
-    const line = traceLine(entry, this.#now);
+    const line = traceLine(entry);
     this.#work.offerUnsafe(
       Effect.catch(writeTraceLine(this.#directory, this.file, line), (error) =>
         Effect.sync(() => {

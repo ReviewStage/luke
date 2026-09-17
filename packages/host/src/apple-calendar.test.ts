@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { CALENDAR_LOOKAHEAD_MS, MAXIMUM_MEETING_LENGTH_MS } from "@sidecar/calendar";
 import { APPLE_CALENDAR_ACCESS, APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   type AppleCalendarConnection,
@@ -43,7 +44,6 @@ function readerFor(options: {
           ? Effect.fail(answer)
           : Effect.succeed(answer);
       }),
-    now: () => NOW,
   });
   return { reader, runs };
 }
@@ -72,6 +72,7 @@ it.effect("with no connection the helper is never run", () =>
 
 it.effect("a pass asks for the shared window and the chosen calendars, and answers meetings", () =>
   Effect.gen(function* () {
+    yield* TestClock.setTime(NOW);
     const { reader, runs } = readerFor({
       connection: { selectedCalendarIds: ["work", "home"] },
       answer: () => fullAccessAnswer(),
@@ -147,6 +148,7 @@ test("the list is bounded the way the Google list is", () => {
 
 it.effect("access withdrawn empties the calendar rather than standing what it held", () =>
   Effect.gen(function* () {
+    yield* TestClock.setTime(NOW);
     let answer: () => string | CalendarHelperFailure = fullAccessAnswer;
     const { reader } = readerFor({
       connection: { selectedCalendarIds: ["work"] },
@@ -177,6 +179,7 @@ it.effect("access withdrawn empties the calendar rather than standing what it he
 
 it.effect("a helper that fails or answers unreadably stands the last observation", () =>
   Effect.gen(function* () {
+    yield* TestClock.setTime(NOW);
     let answer: () => string | CalendarHelperFailure = fullAccessAnswer;
     const { reader } = readerFor({
       connection: { selectedCalendarIds: ["work"] },
@@ -196,6 +199,7 @@ it.effect("a helper that fails or answers unreadably stands the last observation
 
 it.effect("forget clears what a failing pass would otherwise stand", () =>
   Effect.gen(function* () {
+    yield* TestClock.setTime(NOW);
     let healthy = true;
     const { reader } = readerFor({
       connection: { selectedCalendarIds: ["work"] },

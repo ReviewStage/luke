@@ -8,7 +8,7 @@ import {
   type WireValue,
   WireValueSchema,
 } from "@sidecar/wire";
-import { Data, Duration, Effect, type Layer, Result } from "effect";
+import { Clock, Data, Duration, Effect, type Layer, Result } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -169,7 +169,6 @@ export interface GoogleCalendarReaderOptions {
   signInConfig?: () => GoogleCalendarSignInConfig | undefined;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  now?: () => number;
 }
 
 /**
@@ -183,7 +182,6 @@ export class GoogleCalendarReader {
   readonly #readAccounts: () => Effect.Effect<readonly CalendarAccountCredential[]>;
   readonly #signInConfig: () => GoogleCalendarSignInConfig | undefined;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
-  readonly #now: () => number;
   /** Short-lived access tokens by account id, so passes never drum the minter. */
   readonly #accessTokens = new Map<string, CachedAccessToken>();
   /** Each account's last good observation, which stands in when a pass fails. */
@@ -193,7 +191,6 @@ export class GoogleCalendarReader {
     this.#readAccounts = options.readAccounts;
     this.#signInConfig = options.signInConfig ?? googleCalendarSignInConfig;
     this.#client = options.httpClient ?? FetchHttpClient.layer;
-    this.#now = options.now ?? Date.now;
   }
 
   /**
@@ -300,7 +297,7 @@ export class GoogleCalendarReader {
     account: CalendarAccountCredential,
   ): Effect.Effect<CalendarAccountObservation, GoogleCalendarRequestError, HttpClient.HttpClient> {
     return Effect.gen({ self: this }, function* () {
-      const now = this.#now();
+      const now = yield* Clock.currentTimeMillis;
       const accessToken = yield* this.#accessTokenFor(account, now);
       const calendars = yield* this.#listCalendars(accessToken);
       // Only calendars this very pass listed may enter the read document; a

@@ -9,7 +9,7 @@ import {
 } from "@sidecar/hosted";
 import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
-import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
+import { Clock, Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
@@ -306,10 +306,12 @@ export class ProductEventSender {
 
   /** The hold read and taken onto the queue, memoized by `make` so it happens once. */
   #readHold(held: HeldProductEvents): Effect.Effect<void> {
-    return Effect.map(held.read, (record) => {
+    return Effect.gen({ self: this }, function* () {
+      const record = yield* held.read;
       if (!record) return;
+      const now = yield* Clock.currentTimeMillis;
       this.#holdStanding = record.events.length > 0;
-      const adopted = adoptableHeldProductEvents(record, this.#now(), this.#queueLimit).filter(
+      const adopted = adoptableHeldProductEvents(record, now, this.#queueLimit).filter(
         (event) => !(event.name === PRODUCT_EVENT.APP_DAY_ACTIVE && this.#dayMarked(event.at)),
       );
       this.#queue.unshift(...adopted);

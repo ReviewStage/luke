@@ -12,7 +12,6 @@ describeProviderContract(
       readApiKey: input.readApiKey,
       baseUrl: "https://api.conductor.test",
       httpClient: input.api.layer,
-      now: input.now,
       minimumRefreshIntervalMs: input.minimumRefreshIntervalMs,
     }),
   {

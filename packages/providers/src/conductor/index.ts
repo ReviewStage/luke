@@ -22,7 +22,6 @@ export interface ConductorPluginOptions {
   baseUrl?: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  now?: () => number;
   minimumRefreshIntervalMs?: number;
   /**
    * The roster the brain's transcript reads answer for, when a host holds

@@ -3,7 +3,7 @@ import { OBSERVE_QUERY, observeAnswerSchema } from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { atInstant, fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
@@ -128,13 +128,15 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
   const api = conductorApi();
   const store = memoryObservationStore();
   const seeded = await runWithoutDatabase(
-    handleObserve(
-      observeOptions({
-        readVaultKeys: () => Effect.succeed(KEY_ROWS),
-        store: () => store,
-        httpClient: api.layer,
-        now: () => TEST_TIME,
-      }),
+    atInstant(TEST_TIME)(
+      handleObserve(
+        observeOptions({
+          readVaultKeys: () => Effect.succeed(KEY_ROWS),
+          store: () => store,
+          httpClient: api.layer,
+          now: () => TEST_TIME,
+        }),
+      ),
     ),
   );
   assert.equal(seeded.status, 200);
@@ -146,15 +148,17 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
   const readsAfterSeeding = api.requests.length;
 
   const stored = await runWithoutDatabase(
-    handleObserve(
-      observeOptions({
-        readVaultKeys: () => Effect.succeed(KEY_ROWS),
-        store: () => store,
-        httpClient: fakeHttpClientLayer(async () => {
-          throw new Error("a stored roster is not re-observed");
+    atInstant(TEST_TIME + 60_000)(
+      handleObserve(
+        observeOptions({
+          readVaultKeys: () => Effect.succeed(KEY_ROWS),
+          store: () => store,
+          httpClient: fakeHttpClientLayer(async () => {
+            throw new Error("a stored roster is not re-observed");
+          }),
+          now: () => TEST_TIME + 60_000,
         }),
-        now: () => TEST_TIME + 60_000,
-      }),
+      ),
     ),
   );
   assert.equal(stored.status, 200);
@@ -167,13 +171,15 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
 test("a snapshot observed under a replaced key is not served: the read runs a pass under the new key", async () => {
   const store = memoryObservationStore();
   await runWithoutDatabase(
-    handleObserve(
-      observeOptions({
-        readVaultKeys: () => Effect.succeed(KEY_ROWS),
-        store: () => store,
-        httpClient: conductorApi().layer,
-        now: () => TEST_TIME,
-      }),
+    atInstant(TEST_TIME)(
+      handleObserve(
+        observeOptions({
+          readVaultKeys: () => Effect.succeed(KEY_ROWS),
+          store: () => store,
+          httpClient: conductorApi().layer,
+          now: () => TEST_TIME,
+        }),
+      ),
     ),
   );
   const replaced: VaultKeyRow[] = [
@@ -182,13 +188,15 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
   const api = conductorApi(TEST_CONDUCTOR_STATUS.IDLE);
 
   const response = await runWithoutDatabase(
-    handleObserve(
-      observeOptions({
-        readVaultKeys: () => Effect.succeed(replaced),
-        store: () => store,
-        httpClient: api.layer,
-        now: () => TEST_TIME + 1_000,
-      }),
+    atInstant(TEST_TIME + 1_000)(
+      handleObserve(
+        observeOptions({
+          readVaultKeys: () => Effect.succeed(replaced),
+          store: () => store,
+          httpClient: api.layer,
+          now: () => TEST_TIME + 1_000,
+        }),
+      ),
     ),
   );
 
@@ -204,26 +212,30 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
   const store = memoryObservationStore();
   const working = conductorApi();
   await runWithoutDatabase(
-    handleObserve(
-      observeOptions({
-        readVaultKeys: () => Effect.succeed(KEY_ROWS),
-        store: () => store,
-        httpClient: working.layer,
-        now: () => TEST_TIME,
-      }),
+    atInstant(TEST_TIME)(
+      handleObserve(
+        observeOptions({
+          readVaultKeys: () => Effect.succeed(KEY_ROWS),
+          store: () => store,
+          httpClient: working.layer,
+          now: () => TEST_TIME,
+        }),
+      ),
     ),
   );
 
   const idle = conductorApi(TEST_CONDUCTOR_STATUS.IDLE);
   const response = await runWithoutDatabase(
-    handleObserve(
-      observeOptions({
-        request: observeRequest({}, true),
-        readVaultKeys: () => Effect.succeed(KEY_ROWS),
-        store: () => store,
-        httpClient: idle.layer,
-        now: () => TEST_TIME + 1_000,
-      }),
+    atInstant(TEST_TIME + 1_000)(
+      handleObserve(
+        observeOptions({
+          request: observeRequest({}, true),
+          readVaultKeys: () => Effect.succeed(KEY_ROWS),
+          store: () => store,
+          httpClient: idle.layer,
+          now: () => TEST_TIME + 1_000,
+        }),
+      ),
     ),
   );
 
@@ -241,25 +253,29 @@ test("a pass the provider refuses answers what stood before, and stores no roste
   const store = memoryObservationStore();
   const api = conductorApi();
   await runWithoutDatabase(
-    handleObserve(
-      observeOptions({
-        readVaultKeys: () => Effect.succeed(KEY_ROWS),
-        store: () => store,
-        httpClient: api.layer,
-        now: () => TEST_TIME,
-      }),
+    atInstant(TEST_TIME)(
+      handleObserve(
+        observeOptions({
+          readVaultKeys: () => Effect.succeed(KEY_ROWS),
+          store: () => store,
+          httpClient: api.layer,
+          now: () => TEST_TIME,
+        }),
+      ),
     ),
   );
 
   const response = await runWithoutDatabase(
-    handleObserve(
-      observeOptions({
-        request: observeRequest({}, true),
-        readVaultKeys: () => Effect.succeed(KEY_ROWS),
-        store: () => store,
-        httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 401 })),
-        now: () => TEST_TIME + 1_000,
-      }),
+    atInstant(TEST_TIME + 1_000)(
+      handleObserve(
+        observeOptions({
+          request: observeRequest({}, true),
+          readVaultKeys: () => Effect.succeed(KEY_ROWS),
+          store: () => store,
+          httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 401 })),
+          now: () => TEST_TIME + 1_000,
+        }),
+      ),
     ),
   );
 

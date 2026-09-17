@@ -83,7 +83,6 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
     readAccessToken: () => Effect.succeed("token-1"),
     refreshAccount: () => Effect.void,
     readAccountKey: () => Effect.succeed("dev@example.test"),
-    now: () => NOW,
     requestTimeoutMs: 50,
     ...options,
   });
@@ -829,7 +828,6 @@ it.live("the introduction source carries no authorization and opens no sideband"
     const source = new IntroductionLiveSessionSource({
       serviceOrigin: SERVICE_ORIGIN,
       openSocket: script.openSocket,
-      now: () => NOW,
       requestTimeoutMs: 50,
     });
 

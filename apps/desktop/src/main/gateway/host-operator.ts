@@ -54,7 +54,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, Result, Schema } from "effect";
+import { Clock, Effect, Option, Result, Schema } from "effect";
 import {
   type AgentsSnapshot,
   agentsSnapshotSchema,
@@ -508,11 +508,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     recordAgentTrace: (trace) =>
       fire(client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) })),
     recordEvent: (name, properties) =>
-      Effect.suspend(() =>
+      Effect.flatMap(Clock.currentTimeMillis, (at) =>
         fire(
           client.call(GATEWAY_METHOD.ANALYTICS_RECORD, {
             // The host reads the event against the allowlist again before it is queued.
-            event: { name, at: Date.now(), properties: carried(properties) },
+            event: { name, at, properties: carried(properties) },
           }),
         ),
       ),

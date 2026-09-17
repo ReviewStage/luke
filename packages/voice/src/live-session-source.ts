@@ -41,6 +41,7 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
+  Clock,
   Data,
   Deferred,
   Duration,
@@ -202,18 +203,16 @@ function chosenVoice(voice: string | undefined, fallback: LiveVoice): LiveVoice 
  */
 class OutcomeRecord {
   readonly #logLabel: string;
-  readonly #now: () => number;
   lastOutcome: LiveSessionOutcome = LIVE_SESSION_OUTCOME.NOT_ATTEMPTED;
   lastDetail: string | undefined;
   lastAttemptAt: number | undefined;
 
-  constructor(logLabel: string, now: () => number) {
+  constructor(logLabel: string) {
     this.#logLabel = logLabel;
-    this.#now = now;
   }
 
-  attempt(): void {
-    this.lastAttemptAt = this.#now();
+  attempt(at: number): void {
+    this.lastAttemptAt = at;
   }
 
   record(outcome: LiveSessionOutcome, detail?: string): void {
@@ -302,7 +301,6 @@ interface ServiceSessionOptions {
    */
   deviceId?: () => string | undefined;
   voice?: string;
-  now?: () => number;
   requestTimeoutMs?: number;
 }
 
@@ -338,7 +336,7 @@ class ServiceLiveSessionSource {
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
     this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, SERVICE_REQUEST_TIMEOUT_MS);
-    this.#outcome = new OutcomeRecord(options.logLabel, options.now ?? Date.now);
+    this.#outcome = new OutcomeRecord(options.logLabel);
   }
 
   setVoice(voice: string | undefined): void {
@@ -369,7 +367,7 @@ class ServiceLiveSessionSource {
     input: LiveSessionCreateInput,
   ): Effect.Effect<{ created: LiveSessionCreated; socket: HeldSocket } | undefined> {
     return Effect.gen({ self: this }, function* () {
-      this.#outcome.attempt();
+      this.#outcome.attempt(yield* Clock.currentTimeMillis);
       this.#sidebandAttached = false;
       const authorization = this.#authorization;
       const bearer = yield* this.#bearer();

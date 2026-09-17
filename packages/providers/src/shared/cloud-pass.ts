@@ -15,7 +15,7 @@ import {
   WireValueSchema,
   wireRecord,
 } from "@sidecar/wire";
-import { Cause, Duration, Effect, type Layer, Option } from "effect";
+import { Cause, Clock, Duration, Effect, type Layer, Option } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpBody from "effect/unstable/http/HttpBody";
@@ -119,7 +119,6 @@ export interface CloudPassInput {
   baseUrl?: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  now?: () => number;
   minimumRefreshIntervalMs?: number;
   /**
    * Called when an observation pass fails for a reason other than a network
@@ -221,7 +220,6 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   const provider = input.provider;
   const baseUrl = resolveBaseUrl(input);
   const client = input.httpClient ?? FetchHttpClient.layer;
-  const now = input.now ?? Date.now;
   const { minimumRefreshIntervalMs } = resolveOptions(
     input,
     {
@@ -403,7 +401,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     // rate limited rather than merely failed: every further read would meet
     // the same door, so the roster stops here whole as it was rather than
     // continuing as a partial one.
-    const cadence = rateLimitSchedule(budget, now);
+    const cadence = rateLimitSchedule(budget);
     const answered: Answered = yield* Effect.retry(
       readOnce(apiKey, segments, query, document, timeoutMs),
       cadence,
@@ -578,7 +576,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
       return observations;
     }
 
-    const attemptedAt = now();
+    const attemptedAt = yield* Clock.currentTimeMillis;
     if (apiKey === credential) {
       // A network provider refreshes on its own cadence instead of on every
       // tick of the shared observation timer.
