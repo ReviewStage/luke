@@ -14,7 +14,10 @@ import {
   brainToolNotes,
   buildSystemPrompt,
   DAILY_NOTES_DIRECTORY,
+  DAY_MS,
+  type DailyNote,
   DEFAULT_AGENT_ID,
+  dailyNoteDay,
   dailyNotePath,
   type EffectiveToolPolicy,
   isWorkspaceFile,
@@ -135,6 +138,32 @@ export function hostedWorkspaceAccess(
     loadSkill: () => Effect.succeed({ ok: false, reason: NO_SKILLS }),
   };
 }
+
+/** How far back a fresh session's priming reaches: today's and yesterday's notes, as OpenClaw primes. */
+const RECENT_NOTE_DAYS = 2;
+
+/**
+ * Today's and yesterday's notes over the account's rows, slugged variants
+ * included and in path order, for priming a session that opens fresh: one
+ * read for both days, bounded as the bootstrap files are, each at its own
+ * bound and the whole at the total. An ordinary turn never reads these; the
+ * memory slot's recall does, once, into an empty history.
+ */
+export const recentHostedDailyNotes = /* @__PURE__ */ Effect.fn("recentHostedDailyNotes")(
+  function* (
+    store: WorkspaceStore,
+    userId: string,
+    now: number,
+  ): Effect.fn.Return<readonly DailyNote[], SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+    const days = Array.from({ length: RECENT_NOTE_DAYS }, (_, back) =>
+      dailyNoteDay(now - back * DAY_MS),
+    );
+    const rows = yield* store.workspace.readNotes(userId, days);
+    return boundBootstrapFiles(
+      rows.map((row) => ({ name: row.path.slice(DAILY_NOTES_PREFIX.length), ...row })),
+    ).map(({ name, path, content }) => ({ name, path, content }));
+  },
+);
 
 export interface HostedPromptInput {
   readonly policy: EffectiveToolPolicy;

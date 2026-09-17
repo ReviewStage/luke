@@ -1,6 +1,7 @@
 import {
   failedHousekeeping,
   type MemoryHousekeepingResult,
+  primedNotesMessage,
   skippedHousekeeping,
 } from "@sidecar/memory";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
@@ -12,7 +13,7 @@ import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import type { MemoryCompactionRequestedContext } from "eve/memory";
+import type { MemoryCompactionRequestedContext, MemoryTurnStartedContext } from "eve/memory";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
   ACTION_RESULT_STATUS,
@@ -21,6 +22,7 @@ import {
   type CloudAgentProviderId,
   isRecord,
   isWireString,
+  type MemoryRecallResult,
   type SessionProviderPlugin,
   type UnparsedWireValue,
   type WireRecord,
@@ -80,7 +82,12 @@ import {
   runHostedTool,
 } from "./tools.js";
 import { hostedTranscriptReads } from "./transcript.js";
-import { hostedPrompt, hostedWorkspaceAccess, seedHostedWorkspace } from "./workspace.js";
+import {
+  hostedPrompt,
+  hostedWorkspaceAccess,
+  recentHostedDailyNotes,
+  seedHostedWorkspace,
+} from "./workspace.js";
 
 /**
  * The hosted brain composed over eve and the v2 store: what the eve project's
@@ -212,6 +219,17 @@ export interface BrainHost {
     capture: MemoryCompactionRequestedContext,
     fixtureModel?: LanguageModel,
   ): Effect.Effect<MemoryHousekeepingResult, never, SqlClient.SqlClient>;
+  /**
+   * The memory slot's recall as eve's `turn.started` hands it: for a session
+   * admitted for a conversation of the caller's and opening on an empty
+   * history, the account's notes for today and yesterday as the memory
+   * package renders them, and nothing into an ongoing history, an unadmitted
+   * session, or an account with no recent note. Total: a recall that could
+   * not read answers nothing, since eve would fail the turn on an error here.
+   */
+  recall(
+    context: MemoryTurnStartedContext,
+  ): Effect.Effect<MemoryRecallResult | null, never, SqlClient.SqlClient>;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed; over the edge's `HttpClient` too, for the Stop and the child completion the relay carries to eve. */
@@ -569,6 +587,33 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
               Effect.logWarning("The memory flush could not run", cause),
               failedHousekeeping(MEMORY_FLUSH_REFUSAL.HOST_FAILED),
             ),
+          ),
+        ),
+
+      recall: (context) =>
+        Effect.gen(function* () {
+          // Nothing is read for an ongoing history: the provider would answer
+          // nothing, so the admission and the rows are spared on every turn but
+          // the first.
+          if (context.messages.length > 0) return null;
+          const admitted = yield* admitConversation(context.session.auth, {
+            id: context.session.id,
+            standing: SESSION_STANDING.CURRENT,
+          });
+          if (Result.isFailure(admitted)) return null;
+          const store = yield* seams.store();
+          const notes = yield* recentHostedDailyNotes(
+            store,
+            admitted.success.target.userId,
+            seams.now(),
+          );
+          if (notes.length === 0 || context.abortSignal.aborted) return null;
+          return { messages: [primedNotesMessage(notes)] };
+        }).pipe((recall) =>
+          // A recall the caller cancelled did not fail: an interruption passes
+          // through rather than standing as an empty priming.
+          catchAllButInterrupt(recall, (cause) =>
+            Effect.as(Effect.logWarning("The memory recall could not run", cause), null),
           ),
         ),
 

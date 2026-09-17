@@ -1,8 +1,8 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { DAILY_NOTES_DIRECTORY } from "../../core.js";
+import { DAILY_NOTES_DIRECTORY, parseDailyNoteName } from "../../core.js";
 import { user } from "../../db/auth-schema.js";
 import { db } from "../../db/query.js";
 import { workspaceFile } from "../../db/workspace-schema.js";
@@ -105,6 +105,11 @@ const DailyNotesRequestSchema = Schema.Struct({
   limit: Schema.Number,
 });
 
+const DailyNotesForDaysRequestSchema = Schema.Struct({
+  userId: Schema.String,
+  days: Schema.Array(Schema.String),
+});
+
 /** A dated note's row as the listing reads it: its path and its contents, read only to be counted. */
 const DailyNoteRowSchema = Schema.Struct({
   path: Schema.String,
@@ -134,6 +139,12 @@ export type WorkspaceFileListing = Schema.Schema.Type<typeof WorkspaceFileListin
 export interface DailyNoteRecord {
   readonly path: string;
   readonly chars: number;
+}
+
+/** A dated note read whole: its path and its words. */
+export interface DailyNoteRow {
+  readonly path: string;
+  readonly content: string;
 }
 
 export interface WorkspaceFileRecord {
@@ -223,6 +234,31 @@ const findDailyNotes = SqlSchema.findAll({
       .limit(request.limit),
 });
 
+/**
+ * The dated notes for the given days, slugged variants included, in path
+ * order: a note is named by its day, so each day is one prefix under
+ * `memory/`, and the name is still parsed on the way out because a prefix
+ * cannot say where the day ends.
+ */
+const findDailyNotesForDays = SqlSchema.findAll({
+  Request: DailyNotesForDaysRequestSchema,
+  Result: DailyNoteRowSchema,
+  execute: (request) =>
+    db
+      .select({ path: workspaceFile.path, content: workspaceFile.content })
+      .from(workspaceFile)
+      .where(
+        and(
+          eq(workspaceFile.userId, request.userId),
+          or(
+            ...request.days.map(
+              (day) => sql`starts_with(${workspaceFile.path}, ${`${DAILY_NOTES_PREFIX}${day}`})`,
+            ),
+          ),
+        ),
+      ),
+});
+
 /** Takes the user's row lock for the transaction, so two revisions of one account's files run one after the other. */
 const lockUser = (userId: string) =>
   db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
@@ -293,6 +329,26 @@ export function listWorkspaceFiles(
   userId: string,
 ): Effect.Effect<readonly WorkspaceFileListing[], WorkspaceFileFailure, SqlClient.SqlClient> {
   return findFiles(userId);
+}
+
+/** The user's dated notes for the given days, slugged variants included and in path order, words and all. */
+export function readDailyNotesForDays(
+  userId: string,
+  days: readonly string[],
+): Effect.Effect<readonly DailyNoteRow[], WorkspaceFileFailure, SqlClient.SqlClient> {
+  if (days.length === 0) return Effect.succeed([]);
+  // Note that the rows are ordered here and not by the statement, because
+  // Postgres orders text by its collation, where `-` and `.` do not stand
+  // where they do in code points, and the path order must be one order on
+  // every dialect.
+  return Effect.map(findDailyNotesForDays({ userId, days }), (rows) =>
+    rows
+      .filter((row) => {
+        const parsed = parseDailyNoteName(row.path.slice(DAILY_NOTES_PREFIX.length));
+        return parsed !== undefined && days.includes(parsed.day);
+      })
+      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
+  );
 }
 
 /** The user's dated notes under `memory/`, newest first and at most `limit` of them, each read only to count its characters. */

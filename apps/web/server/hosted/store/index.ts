@@ -72,8 +72,10 @@ import {
 } from "./workspace-embeddings.js";
 import {
   type DailyNoteRecord,
+  type DailyNoteRow,
   listDailyNotes,
   listWorkspaceFiles,
+  readDailyNotesForDays,
   readWorkspaceFile,
   reviseWorkspaceFile,
   seedWorkspaceFile,
@@ -209,6 +211,8 @@ export interface HostedStore {
     list(userId: string): HostedStoreEffect<readonly WorkspaceFileListing[]>;
     /** The dated notes under `memory/`, newest first and at most `limit` of them, each with its character count and none of its words. */
     listNotes(userId: string, limit: number): HostedStoreEffect<readonly DailyNoteRecord[]>;
+    /** The dated notes for the given `YYYY-MM-DD` days, slugged variants included and in path order, read whole. */
+    readNotes(userId: string, days: readonly string[]): HostedStoreEffect<readonly DailyNoteRow[]>;
   };
   /**
    * The notebook search's embedding cache: a vector per passage hash, under
@@ -331,6 +335,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       seed: (userId, path, content, now) => seedWorkspaceFile(userId, path, content, now),
       list: (userId) => listWorkspaceFiles(userId),
       listNotes: (userId, limit) => listDailyNotes(userId, limit),
+      readNotes: (userId, days) => readDailyNotesForDays(userId, days),
     },
     embeddings: {
       read: (userId, model, hashes) => readWorkspaceEmbeddings(userId, model, hashes),

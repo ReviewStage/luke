@@ -287,9 +287,9 @@ function runOf(
     case "memory":
       // The provider is the memory package's own, built over the account's
       // scope for this one call: it guards the scope, trims and bounds the
-      // arguments, and hands the notebook access the read. Recall and
-      // capture are eve's here, so the provider is handed no notes to prime
-      // with.
+      // arguments, and hands the notebook access the read. Priming a fresh
+      // session is the host's `recall`, and capture is eve's, so this
+      // provider is handed no notes to prime with.
       return (fields, standing) =>
         Effect.suspend(() => {
           const scope = memoryScopeOf(seams);
