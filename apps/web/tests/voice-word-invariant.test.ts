@@ -161,10 +161,12 @@ class TurnOpeningBrain implements LiveBrain {
         turnId,
         sequence: 1,
       });
-      yield* asks.dispatchOnce(this.#conversation, recorded.id, async () => ({
-        sessionId: `wrun_${turnId}`,
-        turnId,
-      }));
+      yield* asks.dispatchOnce(this.#conversation, recorded.id, () =>
+        Effect.succeed({
+          sessionId: `wrun_${turnId}`,
+          turnId,
+        }),
+      );
       this.turns.set(ask.submissionId, turnId);
       return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: recorded.id };
     }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient), Effect.orDie);

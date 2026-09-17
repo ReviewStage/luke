@@ -163,15 +163,22 @@ interface FakeEve extends EveSessions {
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
-    async open(message) {
+    open(message) {
       eve.opened.push(message);
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` };
+      return Effect.succeed({
+        outcome: EVE_SEND_OUTCOME.ACCEPTED,
+        sessionId: `wrun_${randomUUID()}`,
+      });
     },
-    async send(sessionId) {
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: "delivery-1" };
+    send(sessionId) {
+      return Effect.succeed({
+        outcome: EVE_SEND_OUTCOME.ACCEPTED,
+        sessionId,
+        deliveryId: "delivery-1",
+      });
     },
-    async cancel() {
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED };
+    cancel() {
+      return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED });
     },
   };
   return eve;

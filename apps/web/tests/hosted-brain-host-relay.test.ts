@@ -314,10 +314,12 @@ it.effect(
         origin: ASK_ORIGIN.SPOKEN,
         createdAt: new Date(NOW),
       });
-      await record.dispatchOnce(spoken, ask.id, async () => ({
-        sessionId: spokenStanding.sessionId,
-        deliveryId: "delivery-1",
-      }));
+      await record.dispatchOnce(spoken, ask.id, () =>
+        Effect.succeed({
+          sessionId: spokenStanding.sessionId,
+          deliveryId: "delivery-1",
+        }),
+      );
       const transcript = await spokenLine(spoken, delegationId, "What changed?", {
         author: MESSAGE_AUTHOR.DEVELOPER,
         channel: MESSAGE_CHANNEL.VOICE,
@@ -389,11 +391,13 @@ it.effect(
         origin: ASK_ORIGIN.SPOKEN,
         createdAt: new Date(NOW),
       });
-      await record.dispatchOnce(spoken, later.id, async () => ({
-        sessionId: spokenStanding.sessionId,
-        deliveryId: "delivery-2",
-        turnId: spokenTurnId,
-      }));
+      await record.dispatchOnce(spoken, later.id, () =>
+        Effect.succeed({
+          sessionId: spokenStanding.sessionId,
+          deliveryId: "delivery-2",
+          turnId: spokenTurnId,
+        }),
+      );
       const laterRow = await spokenLine(spoken, laterDelegation, "And now?", {
         author: MESSAGE_AUTHOR.DEVELOPER,
         channel: MESSAGE_CHANNEL.VOICE,
@@ -431,10 +435,12 @@ it.effect(
         origin: ASK_ORIGIN.SPOKEN,
         createdAt: new Date(NOW),
       });
-      await record.dispatchOnce(spoken, ask.id, async () => ({
-        sessionId: standing.sessionId,
-        deliveryId: "delivery-1",
-      }));
+      await record.dispatchOnce(spoken, ask.id, () =>
+        Effect.succeed({
+          sessionId: standing.sessionId,
+          deliveryId: "delivery-1",
+        }),
+      );
       const turn = spokenTurn("turn_0", NOW, ["delivery-1"]);
       const firstStep = turn.findIndex((event) => event.type === "step.started");
       // eve's turn starts, receives the ask, and opens its first step — the journal row — before

@@ -40,6 +40,7 @@ import type { ConversationTarget } from "../server/hosted/store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
 import { clearMainConversation } from "../server/hosted/store/soft-delete";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { eveUnreachable } from "./support/no-network";
 import {
   insertConversation,
   insertMessage,
@@ -65,8 +66,8 @@ const SECRET = "deployment-secret-fixture";
 const PARENT_SESSION = "wrun_01M000000000000000000PARENT";
 const OPENED_SESSION = "wrun_01M000000000000000000OPENED";
 
-type Sent = Awaited<ReturnType<EveSessions<CompletionTurn>["send"]>>;
-type Opened = Awaited<ReturnType<EveSessions<CompletionTurn>["open"]>>;
+type Sent = Effect.Success<ReturnType<EveSessions<CompletionTurn>["send"]>>;
+type Opened = Effect.Success<ReturnType<EveSessions<CompletionTurn>["open"]>>;
 
 const SEND_ACCEPTED: Sent = {
   outcome: EVE_SEND_OUTCOME.ACCEPTED,
@@ -85,11 +86,11 @@ function fakeEve(answers: { send?: () => Sent; open?: () => Opened } = {}) {
     return {
       send(sessionId, message) {
         sent.push({ sessionId, message });
-        return Promise.resolve((answers.send ?? (() => SEND_ACCEPTED))());
+        return Effect.succeed((answers.send ?? (() => SEND_ACCEPTED))());
       },
       open(message) {
         opened.push(message);
-        return Promise.resolve((answers.open ?? (() => OPEN_ACCEPTED))());
+        return Effect.succeed((answers.open ?? (() => OPEN_ACCEPTED))());
       },
       cancel: () => {
         throw new Error("the completion cancels nothing");
@@ -423,7 +424,7 @@ test("the sweep visits one account's ended, unstamped children oldest run first,
   assert.equal(await stampOf(second.child), null);
 });
 
-test("the mark precedes the send: a send that dies after the mark leaves the stamp standing and is retried nowhere, and two deliveries of one child racing send once", async () => {
+test("the mark precedes the send: a send eve never answers after the mark leaves the stamp standing and is retried nowhere, and two deliveries of one child racing send once", async () => {
   const dying = await childOf();
   const eve = fakeEve();
   let sends = 0;
@@ -431,7 +432,7 @@ test("the mark precedes the send: a send that dies after the mark leaves the sta
     ...eve.eve(options),
     send: () => {
       sends += 1;
-      return Promise.reject(new Error("eve unreachable"));
+      return eveUnreachable(ORIGIN);
     },
   });
   const s = seams({ eve: unreachable });
@@ -443,7 +444,7 @@ test("the mark precedes the send: a send that dies after the mark leaves the sta
   assert.equal(await stampOf(dying.child), NOW);
   assert.equal(sends, 1);
   assert.equal(s.reports.length, 1);
-  assert.match(s.reports[0] ?? "", /could not be handed over: .*eve unreachable/);
+  assert.match(s.reports[0] ?? "", /could not be reached for .*eve unreachable/);
   assert.equal(
     await database.run(deliverChildCompletion(s, dying.child)),
     CHILD_COMPLETION_DELIVERY.NOTHING,
@@ -526,17 +527,18 @@ test("the send into the parent's recorded session holds no row lock: a second co
   // connection's permit) until eve answered, which is never, and the test would time out.
   const locking: ChildCompletionSeams["eve"] = (options) => ({
     ...eve.eve(options),
-    send: async (sessionId, message) => {
-      assert.equal(
-        await database.run(
-          Effect.flatMap(SqlClient.SqlClient, (sql) =>
-            sql.withTransaction(lockConversationRow(parent)),
+    send: (sessionId, message) =>
+      Effect.promise(async () => {
+        assert.equal(
+          await database.run(
+            Effect.flatMap(SqlClient.SqlClient, (sql) =>
+              sql.withTransaction(lockConversationRow(parent)),
+            ),
           ),
-        ),
-        true,
-      );
-      return eve.eve(options).send(sessionId, message);
-    },
+          true,
+        );
+        return database.run(eve.eve(options).send(sessionId, message));
+      }),
   });
   const s = seams({ eve: locking });
   assert.equal(
@@ -553,19 +555,20 @@ test("the send into the parent's recorded session holds no row lock: a second co
   const rotating = fakeEve();
   const replacing: ChildCompletionSeams["eve"] = (options) => ({
     ...rotating.eve(options),
-    send: async (sessionId, message) => {
-      const sent = await rotating.eve(options).send(sessionId, message);
-      if (sessionId !== PARENT_SESSION) return sent;
-      await database.run(
-        Effect.asVoid(
-          db
-            .update(conversations)
-            .set({ runtimeSessionId: ROTATED_SESSION })
-            .where(eq(conversations.id, rotated.parentId)),
-        ),
-      );
-      return { outcome: EVE_SEND_OUTCOME.RETIRED };
-    },
+    send: (sessionId, message) =>
+      Effect.promise(async () => {
+        const sent = await database.run(rotating.eve(options).send(sessionId, message));
+        if (sessionId !== PARENT_SESSION) return sent;
+        await database.run(
+          Effect.asVoid(
+            db
+              .update(conversations)
+              .set({ runtimeSessionId: ROTATED_SESSION })
+              .where(eq(conversations.id, rotated.parentId)),
+          ),
+        );
+        return { outcome: EVE_SEND_OUTCOME.RETIRED };
+      }),
   });
   const r = seams({ eve: replacing });
   assert.equal(
@@ -586,20 +589,21 @@ test("a session recorded while the send was refused, and retired too before the 
   const eve = fakeEve();
   const retiring: ChildCompletionSeams["eve"] = (options) => ({
     ...eve.eve(options),
-    send: async (sessionId, message) => {
-      await eve.eve(options).send(sessionId, message);
-      if (sessionId === PARENT_SESSION) {
-        await database.run(
-          Effect.asVoid(
-            db
-              .update(conversations)
-              .set({ runtimeSessionId: ROTATED_SESSION })
-              .where(eq(conversations.id, parentId)),
-          ),
-        );
-      }
-      return { outcome: EVE_SEND_OUTCOME.RETIRED };
-    },
+    send: (sessionId, message) =>
+      Effect.promise(async () => {
+        await database.run(eve.eve(options).send(sessionId, message));
+        if (sessionId === PARENT_SESSION) {
+          await database.run(
+            Effect.asVoid(
+              db
+                .update(conversations)
+                .set({ runtimeSessionId: ROTATED_SESSION })
+                .where(eq(conversations.id, parentId)),
+            ),
+          );
+        }
+        return { outcome: EVE_SEND_OUTCOME.RETIRED };
+      }),
   });
   const s = seams({ eve: retiring });
   assert.equal(
@@ -626,18 +630,19 @@ test("a parent cleared while eve was refusing the send no longer stands when a s
   // take it; the open branch finds no row to lock and opens nothing for a conversation that is gone.
   const clearing: ChildCompletionSeams["eve"] = (options) => ({
     ...eve.eve(options),
-    send: async (sessionId, message) => {
-      await eve.eve(options).send(sessionId, message);
-      await database.run(
-        Effect.asVoid(
-          db
-            .update(conversations)
-            .set({ deletedAt: new Date(NOW) })
-            .where(eq(conversations.id, parentId)),
-        ),
-      );
-      return { outcome: EVE_SEND_OUTCOME.RETIRED };
-    },
+    send: (sessionId, message) =>
+      Effect.promise(async () => {
+        await database.run(eve.eve(options).send(sessionId, message));
+        await database.run(
+          Effect.asVoid(
+            db
+              .update(conversations)
+              .set({ deletedAt: new Date(NOW) })
+              .where(eq(conversations.id, parentId)),
+          ),
+        );
+        return { outcome: EVE_SEND_OUTCOME.RETIRED };
+      }),
   });
   const s = seams({ eve: clearing });
   assert.equal(

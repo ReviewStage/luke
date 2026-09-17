@@ -76,7 +76,7 @@ export interface AskRecord {
   dispatchOnce(
     target: ConversationTarget,
     id: string,
-    dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
+    dispatch: (sessionId: string | undefined) => Effect.Effect<AskDispatch | undefined>,
   ): AskEffect<AskRow | AskDispatchRefusal>;
   /** Stamps a Stop on an ask whose turn has not started, for the start to honour. */
   cancelRequested(id: string, at: Date): AskEffect<void>;
@@ -383,7 +383,7 @@ const readAsk = SqlSchema.findOneOption({
 function dispatchAskOnce(
   target: ConversationTarget,
   id: string,
-  dispatch: (sessionId: string | undefined) => Promise<AskDispatch | undefined>,
+  dispatch: (sessionId: string | undefined) => Effect.Effect<AskDispatch | undefined>,
 ): Effect.Effect<AskRow | AskDispatchRefusal, AskFailure, SqlClient.SqlClient> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -398,7 +398,7 @@ function dispatchAskOnce(
           yield* recordedRuntimeSession(target),
           yield* latestSessionOf(target),
         );
-        const answered = yield* Effect.promise(() => dispatch(session));
+        const answered = yield* dispatch(session);
         if (answered === undefined) return standing;
         yield* markDispatched({
           id,

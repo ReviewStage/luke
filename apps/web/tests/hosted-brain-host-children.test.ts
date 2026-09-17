@@ -81,8 +81,8 @@ const at = (offset: number) => new Date(NOW + offset);
 
 const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
 
-type Opened = Awaited<ReturnType<EveSessions<ChildTurn>["open"]>>;
-type Cancelled = Awaited<ReturnType<EveSessions["cancel"]>>;
+type Opened = Effect.Success<ReturnType<EveSessions<ChildTurn>["open"]>>;
+type Cancelled = Effect.Success<ReturnType<EveSessions["cancel"]>>;
 
 const ACCEPTING: Opened = { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: SESSION_ID };
 const CANCEL_ACCEPTED: Cancelled = { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
@@ -97,14 +97,14 @@ function fakeEve(answers: { open?: Opened; cancel?: Cancelled } = {}) {
     return {
       open(message) {
         opened.push(message);
-        return Promise.resolve(answers.open ?? ACCEPTING);
+        return Effect.succeed(answers.open ?? ACCEPTING);
       },
       send: () => {
         throw new Error("the children access sends nothing");
       },
       cancel(sessionId, eveTurnId) {
         cancelled.push({ sessionId, eveTurnId });
-        return Promise.resolve(answers.cancel ?? CANCEL_ACCEPTED);
+        return Effect.succeed(answers.cancel ?? CANCEL_ACCEPTED);
       },
     };
   };

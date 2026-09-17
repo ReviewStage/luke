@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { it } from "@effect/vitest";
 import {
   ASK_ORIGIN,
   HOSTED_API_ERROR,
@@ -17,7 +18,8 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
-import { Effect, Option, Result, Schema } from "effect";
+import { Effect, Fiber, Option, Result, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { db } from "../server/db/query";
@@ -32,6 +34,7 @@ import {
   handleBrainTurnCancel,
   STOP_REFUSAL,
   stopAsk,
+  TURN_WAIT_POLL_MS,
 } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -61,6 +64,7 @@ import {
 } from "../server/hosted/store/asks";
 import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { noDatabase } from "./support/no-database";
 
 /**
  * The ask routes over the real store on PGlite. The ownership refusals here
@@ -145,7 +149,7 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
             await run(recordedRuntimeSession(target)),
             latestSession(target.userId, target.conversationId),
           );
-          const answered = await dispatch(session);
+          const answered = await run(dispatch(session));
           return answered === undefined ? row : put({ ...row, ...answered });
         });
         inFlight.set(
@@ -212,39 +216,42 @@ function fakeEve(): FakeEve {
     activeTurn: undefined,
     cancelledTurns: [],
     beforeCancel: async () => {},
-    async open(message) {
-      eve.calls.push({ kind: "open", message });
-      if (eve.failNext !== undefined) {
-        const status = eve.failNext;
-        eve.failNext = undefined;
-        return { outcome: EVE_SEND_OUTCOME.FAILED, status };
-      }
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: mintSession() };
-    },
-    async send(sessionId, message) {
-      eve.calls.push({ kind: "send", sessionId, message });
-      if (eve.retired.has(sessionId)) return { outcome: EVE_SEND_OUTCOME.RETIRED };
-      return {
-        outcome: EVE_SEND_OUTCOME.ACCEPTED,
-        sessionId,
-        deliveryId: `delivery-${eve.calls.length}`,
-      };
-    },
+    open: (message) =>
+      Effect.sync(() => {
+        eve.calls.push({ kind: "open", message });
+        if (eve.failNext !== undefined) {
+          const status = eve.failNext;
+          eve.failNext = undefined;
+          return { outcome: EVE_SEND_OUTCOME.FAILED, status };
+        }
+        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: mintSession() };
+      }),
+    send: (sessionId, message) =>
+      Effect.sync(() => {
+        eve.calls.push({ kind: "send", sessionId, message });
+        if (eve.retired.has(sessionId)) return { outcome: EVE_SEND_OUTCOME.RETIRED };
+        return {
+          outcome: EVE_SEND_OUTCOME.ACCEPTED,
+          sessionId,
+          deliveryId: `delivery-${eve.calls.length}`,
+        };
+      }),
     // eve's own cancel, as its route documents it: a cancel naming a turn ends that turn only
     // where it is the one under way, and a cancel naming none ends whatever turn is under way.
-    async cancel(sessionId, eveTurnId?: string) {
-      eve.calls.push({ kind: "cancel", sessionId, eveTurnId });
-      await eve.beforeCancel();
-      if (
-        eve.activeTurn === undefined ||
-        (eveTurnId !== undefined && eveTurnId !== eve.activeTurn)
-      ) {
-        return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
-      }
-      eve.cancelledTurns.push(eve.activeTurn);
-      eve.activeTurn = undefined;
-      return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
-    },
+    cancel: (sessionId, eveTurnId?: string) =>
+      Effect.promise(async () => {
+        eve.calls.push({ kind: "cancel", sessionId, eveTurnId });
+        await eve.beforeCancel();
+        if (
+          eve.activeTurn === undefined ||
+          (eveTurnId !== undefined && eveTurnId !== eve.activeTurn)
+        ) {
+          return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
+        }
+        eve.cancelledTurns.push(eve.activeTurn);
+        eve.activeTurn = undefined;
+        return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
+      }),
   };
   return eve;
 }
@@ -255,9 +262,6 @@ type CancelOptions = Parameters<typeof handleBrainTurnCancel>[0];
 interface Harness {
   readonly asks: ReturnType<typeof memoryAsks>;
   readonly eve: FakeEve;
-  clock: number;
-  /** What the world does while a held read sleeps; the clock moves by the sleep either way. */
-  whileSleeping: () => Promise<void>;
   options(request: Request, userId: string | undefined): CancelOptions;
 }
 
@@ -267,8 +271,6 @@ function harness(): Harness {
   const built: Harness = {
     asks,
     eve,
-    clock: NOW,
-    whileSleeping: async () => {},
     options: (request, userId) => ({
       request,
       resolveUserId: () => Effect.succeed(Option.fromUndefinedOr(userId)),
@@ -278,11 +280,6 @@ function harness(): Harness {
       eve: (authorization) => {
         eve.bearers.push(authorization);
         return eve;
-      },
-      now: () => built.clock,
-      sleep: async (ms) => {
-        built.clock += ms;
-        await built.whileSleeping();
       },
     }),
   };
@@ -924,7 +921,6 @@ test("the in-process ask answers what the ask route answers: the same record aga
     run: database.run,
     asks: h.asks,
     eve: h.eve,
-    now: () => h.clock,
   };
   const routed = parse(
     hostedBrainAskAnswerSchema,
@@ -1039,7 +1035,6 @@ test("the in-process Stop answers what the cancel route answers: for a running t
     asks: h.asks,
     writer,
     eve: h.eve,
-    now: () => h.clock,
   };
 
   for (const id of [running, asked.id]) {
@@ -1103,7 +1098,6 @@ test("a Stop cancels only the turn it was aimed at: the intended turn ending whi
     asks: h.asks,
     writer,
     eve: h.eve,
-    now: () => h.clock,
   };
   const outcome = await database.run(stopAsk(seams, userId, intended));
   assert.equal(outcome.ok, true);
@@ -1135,7 +1129,6 @@ test("a running row that names no eve turn takes the stamp alone: eve is asked n
     asks: h.asks,
     writer,
     eve: h.eve,
-    now: () => h.clock,
   };
   const outcome = await database.run(stopAsk(seams, userId, unnamed));
   assert.deepEqual(outcome.ok && outcome.answer.cancelRequestedAt, NOW);
@@ -1189,39 +1182,76 @@ test("the writer stamps a Stop on a turn the conversation holds once, and refuse
   );
 });
 
-test("a held read answers the moment the turn settles, and at the bound with the turn as it then stands", async () => {
-  const userId = await database.createUser();
-  const h = harness();
-  const conversationId = await conversation(userId);
-  const turnId = await turnRow(userId, conversationId);
-  let sleeps = 0;
-  h.whileSleeping = async () => {
-    sleeps += 1;
-    if (sleeps !== 2) return;
-    await settleTurn(turnId, new Date(NOW + 1_000));
-  };
-  const settling = await database.run(
-    handleBrainTurn(h.options(turnRequest(userId, turnId, { [TURN_WAIT_QUERY]: "5000" }), userId)),
-  );
-  assert.equal(settling.status, 200);
-  const settled = parse(hostedBrainTurnAnswerSchema, await body(settling));
-  assert.equal(settled?.status, TURN_STATUS.SETTLED);
-  assert.equal(sleeps, 2);
-  assert.equal(h.clock, NOW + 1_000);
-  h.whileSleeping = async () => {};
+it.effect(
+  "a held read answers the moment the turn settles, and at the bound with the turn as it then stands",
+  () =>
+    Effect.gen(function* () {
+      const userId = yield* Effect.promise(() => database.createUser());
+      const conversationId = yield* Effect.promise(() => conversation(userId));
+      const turnId = yield* Effect.promise(() => turnRow(userId, conversationId));
+      const [row] = yield* Effect.promise(() =>
+        database.run(database.store.turns.named(userId, [turnId])),
+      );
+      assert.ok(row);
+      // The turn as memory holds it, so each poll is a synchronous read the test clock steps
+      // through: an adjust runs the read that fell due and arms the next wait before it returns.
+      // The client refuses every statement, which is what shows the held read touches no row.
+      let turn = row;
+      let reads = 0;
+      const h = harness();
+      const held = (wait: string) =>
+        Effect.forkChild(
+          Effect.provide(
+            handleBrainTurn({
+              ...h.options(turnRequest(userId, turnId, { [TURN_WAIT_QUERY]: wait }), userId),
+              store: {
+                turns: {
+                  ...database.store.turns,
+                  named: () =>
+                    Effect.sync(() => {
+                      reads += 1;
+                      return [turn];
+                    }),
+                },
+              },
+            }),
+            noDatabase,
+          ),
+          { startImmediately: true },
+        );
 
-  const running = await turnRow(userId, conversationId);
-  const before = h.clock;
-  const held = parse(
-    hostedBrainTurnAnswerSchema,
-    await body(
-      await database.run(
-        handleBrainTurn(
-          h.options(turnRequest(userId, running, { [TURN_WAIT_QUERY]: "2000" }), userId),
-        ),
-      ),
-    ),
-  );
-  assert.equal(held?.status, TURN_STATUS.RUNNING);
-  assert.equal(h.clock, before + 2_000);
-});
+      const settling = yield* held("5000");
+      yield* TestClock.adjust(`${TURN_WAIT_POLL_MS} millis`);
+      assert.equal(reads, 2);
+      turn = { ...turn, status: TURN_STATUS.SETTLED, settledAt: new Date(NOW + 1_000) };
+      yield* TestClock.adjust(`${TURN_WAIT_POLL_MS} millis`);
+      const answered = yield* Fiber.join(settling);
+      assert.equal(answered.status, 200);
+      const settled = parse(
+        hostedBrainTurnAnswerSchema,
+        yield* Effect.promise(() => body(answered)),
+      );
+      assert.equal(settled?.status, TURN_STATUS.SETTLED);
+      assert.equal(settled?.settledAt, NOW + 1_000);
+      assert.equal(reads, 3);
+
+      // Held to a bound off the poll's grid: three polls, then the bound's own read, which sees
+      // the stamp that landed after the last poll.
+      turn = { ...row };
+      reads = 0;
+      const running = yield* held("1800");
+      yield* TestClock.adjust(`${TURN_WAIT_POLL_MS * 3} millis`);
+      assert.equal(reads, 4);
+      turn = { ...turn, cancelRequestedAt: new Date(NOW + 1_700) };
+      yield* TestClock.adjust("300 millis");
+      const response = yield* Fiber.join(running);
+      const stamped = parse(
+        hostedBrainTurnAnswerSchema,
+        yield* Effect.promise(() => body(response)),
+      );
+      assert.equal(response.status, 200);
+      assert.equal(stamped?.status, TURN_STATUS.RUNNING);
+      assert.equal(stamped?.cancelRequestedAt, NOW + 1_700);
+      assert.equal(reads, 5);
+    }),
+);

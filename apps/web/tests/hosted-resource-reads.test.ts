@@ -665,7 +665,9 @@ it.effect(
         status: TURN_STATUS.RUNNING,
         queuedAt: new Date(NOW + 1000),
       });
-      await asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: turn }));
+      await asks.dispatchOnce(target, ask.id, () =>
+        Effect.succeed({ sessionId: "wrun_1", turnId: turn }),
+      );
       const attached = await database.run(writer.attachAskLines(target, turn));
       assert.deepEqual(attached, { ok: true, attached: [line.id] });
       const reply = await insertMessage(userId, main, 3, {
@@ -742,7 +744,9 @@ it.effect(
         [turn, journal],
       ]);
 
-      await asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: turn }));
+      await asks.dispatchOnce(target, ask.id, () =>
+        Effect.succeed({ sessionId: "wrun_1", turnId: turn }),
+      );
       const attached = await database.run(writer.attachAskLines(target, turn));
       assert.deepEqual(attached, { ok: true, attached: [line.id] });
 

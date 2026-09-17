@@ -34,7 +34,7 @@ import {
 } from "../store/standing-conversations.js";
 import { CHILD_OPEN_REFUSAL, type ChildOpenerSeams, openChild } from "./child-opener.js";
 import { readRecentMessages } from "./context.js";
-import { EVE_CALLER, EVE_CANCEL_OUTCOME } from "./eve-sessions.js";
+import { describeUnreachable, EVE_CALLER, EVE_CANCEL_OUTCOME } from "./eve-sessions.js";
 
 /**
  * Delegation as the hosted brain's session tools reach it, for one admitted
@@ -272,7 +272,15 @@ export function hostedChildAccess(
               caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: userId },
             });
             const { runtimeSessionId, eveTurnId } = child;
-            const cancelled = yield* Effect.promise(() => eve.cancel(runtimeSessionId, eveTurnId));
+            const cancelled = yield* eve.cancel(runtimeSessionId, eveTurnId).pipe(
+              Effect.catchTag("EveUnreachable", (failure) => {
+                seams.opener.report(
+                  `The cancel of child ${childId}'s turn ${eveTurnId} did not reach eve: ${describeUnreachable(failure)}.`,
+                );
+                return Effect.succeed(undefined);
+              }),
+            );
+            if (cancelled === undefined) return notCancelled;
             if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
               seams.opener.report(
                 `The cancel of child ${childId}'s turn ${eveTurnId} was refused by eve (${cancelled.status}).`,

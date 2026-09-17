@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Effect, Schema as EffectSchema, Option, Result } from "effect";
+import { Clock, Duration, Effect, Schema as EffectSchema, Option, Result, Schedule } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -80,7 +80,7 @@ const askBrake = makeRateBrake({
 const TURN_ID_QUERY = "id";
 
 /** How often a held turn read looks again; eve's step boundaries land at a few hundred milliseconds apart. */
-const TURN_WAIT_POLL_MS = 500;
+export const TURN_WAIT_POLL_MS = 500;
 
 const waitSchema = EffectSchema.Int.check(
   EffectSchema.isGreaterThanOrEqualTo(0),
@@ -106,9 +106,6 @@ export interface BrainAskOptions {
   asks: AskRecord;
   /** eve as the caller reaches it, under the caller's own bearer. */
   eve: (authorization: string) => EveSessions;
-  /** The long poll's clock and its wait, one seam: both go together when the wait becomes `Effect.sleep`. */
-  now?: () => number;
-  sleep?: (ms: number) => Promise<void>;
 }
 
 type Gate = { readonly userId: string; readonly authorization: string } | Response;
@@ -274,6 +271,10 @@ export interface AskSeams {
   readonly eve: EveSessions;
 }
 
+/** An eve the client never reached reads as a refusal carrying the gateway's own status, since eve named none. */
+const unreachableSend = () =>
+  Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY });
+
 /**
  * Accepts one ask over plain arguments, so the route and the voice function
  * run the same admission and dispatch: the conversation is the caller's and
@@ -322,13 +323,18 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
   // sends into it rather than opening a second the forward-only claim would lose. A Clear that
   // lands between the admission above and this lock finds no conversation to dispatch in, and the
   // ask is refused as not found rather than dispatched into a conversation the account has cleared.
+  // An eve that could not be reached is the same refusal as one that answered outside its shape,
+  // with the gateway's own status for the operator: the row is left standing for a retry, and the
+  // transaction the dispatch runs in commits nothing for it, as it commits nothing for a refusal.
   let failed: AskOutcome | undefined;
   const dispatched = yield* seams.asks.dispatchOnce(
     { userId, conversationId },
     ask.id,
-    async (sessionId) => {
+    Effect.fnUntraced(function* (sessionId) {
       if (sessionId !== undefined) {
-        const sent = await seams.eve.send(sessionId, message);
+        const sent = yield* seams.eve
+          .send(sessionId, message)
+          .pipe(Effect.catchTag("EveUnreachable", unreachableSend));
         if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
           return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
         }
@@ -337,7 +343,9 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
           return undefined;
         }
       }
-      const opened = await seams.eve.open(message);
+      const opened = yield* seams.eve
+        .open(message)
+        .pipe(Effect.catchTag("EveUnreachable", unreachableSend));
       if (opened.outcome === EVE_SEND_OUTCOME.FAILED) {
         failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: opened.status };
         return undefined;
@@ -346,7 +354,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
         sessionId: opened.sessionId,
         turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID),
       };
-    },
+    }),
   );
   if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
     return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
@@ -384,6 +392,41 @@ export const handleBrainAsk = /* @__PURE__ */ Effect.fn("handleBrainAsk")(functi
   }
 });
 
+/** Whether a held read is done with the record: nothing stands under the id, or its turn has ended. */
+function settled(standing: AskStanding | undefined): boolean {
+  return standing === undefined || TERMINAL_TURN_STATUSES.has(standing.answer.status);
+}
+
+/**
+ * The record as it stands, held up to the wait: read once at once, then
+ * again every poll interval on the fiber's own clock until its turn ends or
+ * the wait runs out, and once more at the bound so the answer is the turn as
+ * it then stands rather than as the last poll saw it.
+ */
+const heldStanding = /* @__PURE__ */ Effect.fn("heldStanding")(function* (
+  options: BrainAskOptions,
+  userId: string,
+  id: string,
+  wait: Duration.Duration,
+): Effect.fn.Return<
+  AskStanding | undefined,
+  SqlError | EffectSchema.SchemaError,
+  SqlClient.SqlClient
+> {
+  const read = askStanding(options, userId, id);
+  const first = yield* read;
+  if (settled(first) || Duration.isZero(wait)) return first;
+  // The first poll waits the interval out before it reads, and the schedule spaces the rest; the
+  // wait is not part of the read repeated, since a repeat re-runs the whole of what it is handed.
+  const polled = yield* Effect.sleep(TURN_WAIT_POLL_MS).pipe(
+    Effect.andThen(
+      read.pipe(Effect.repeat({ schedule: Schedule.spaced(TURN_WAIT_POLL_MS), until: settled })),
+    ),
+    Effect.timeoutOption(wait),
+  );
+  return Option.isSome(polled) ? polled.value : yield* read;
+});
+
 export const handleBrainTurn = /* @__PURE__ */ Effect.fn("handleBrainTurn")(function* (
   options: BrainAskOptions,
 ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
@@ -399,18 +442,7 @@ export const handleBrainTurn = /* @__PURE__ */ Effect.fn("handleBrainTurn")(func
   if (Result.isFailure(wait)) {
     return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
   }
-  const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const deadline = now() + wait.success;
-  let standing = yield* askStanding(options, admitted.userId, id);
-  while (
-    standing !== undefined &&
-    !TERMINAL_TURN_STATUSES.has(standing.answer.status) &&
-    now() < deadline
-  ) {
-    yield* Effect.promise(() => sleep(Math.min(TURN_WAIT_POLL_MS, deadline - now())));
-    standing = yield* askStanding(options, admitted.userId, id);
-  }
+  const standing = yield* heldStanding(options, admitted.userId, id, Duration.millis(wait.success));
   if (standing === undefined) return notFound();
   return jsonResponse(HOSTED_HTTP_STATUS.OK, standing.answer);
 });
@@ -496,7 +528,14 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
   // the turn queued after it, now the one under way, is left running.
   if (turn.eveTurnId !== null) {
     const eveTurnId = turn.eveTurnId;
-    const cancelled = yield* Effect.promise(() => seams.eve.cancel(sessionId, eveTurnId));
+    const cancelled = yield* seams.eve.cancel(sessionId, eveTurnId).pipe(
+      Effect.catchTag("EveUnreachable", () =>
+        Effect.succeed({
+          outcome: EVE_CANCEL_OUTCOME.FAILED,
+          status: HOSTED_HTTP_STATUS.BAD_GATEWAY,
+        }),
+      ),
+    );
     if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
       return { ok: false, refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status };
     }
