@@ -12,7 +12,7 @@ import {
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
 import { eq } from "drizzle-orm";
-import { Cause, Effect, Layer, Option, Schema, type Scope } from "effect";
+import { Cause, Effect, Layer, Option, Result, Schema, type Scope } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
@@ -189,7 +189,7 @@ function writeReport(
 ): Effect.Effect<string | undefined> {
   return write.pipe(
     Effect.map((result) =>
-      result.ok ? undefined : `The record refused a live event: ${result.refusal}`,
+      Result.isSuccess(result) ? undefined : `The record refused a live event: ${result.failure}`,
     ),
     Effect.catch((error) =>
       Effect.succeed(`The record could not take a live event: ${error.message}`),
