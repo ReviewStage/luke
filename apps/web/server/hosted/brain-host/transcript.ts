@@ -39,7 +39,7 @@ interface TranscriptReadSeams {
   /** The roster as the snapshot holds it now, read again for every read. */
   readonly roster: () => Effect.Effect<HostedRoster>;
   /** The provider's plugin over the account's own key, built once per provider per host. */
-  readonly pluginFor: (providerId: CloudAgentProviderId) => SessionProviderPlugin;
+  readonly pluginFor: (providerId: CloudAgentProviderId) => Effect.Effect<SessionProviderPlugin>;
   readonly now: () => number;
 }
 
@@ -232,7 +232,7 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
         if (!observedSession(yield* seams.roster(), identity)) return NOT_OBSERVED;
         if (!isCloudAgentProviderId(identity.providerId)) return NOT_CLOUD;
         const read = yield* dispatchRead(
-          seams.pluginFor(identity.providerId),
+          yield* seams.pluginFor(identity.providerId),
           "transcript",
           identity.providerSessionId,
         );
@@ -251,7 +251,7 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
         if (!isCloudAgentProviderId(identity.providerId)) return undefined;
         const from = yield* cursorFor(identity);
         const read = yield* dispatchRead(
-          seams.pluginFor(identity.providerId),
+          yield* seams.pluginFor(identity.providerId),
           "transcriptSince",
           identity.providerSessionId,
           from,
@@ -281,7 +281,7 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
         if (providerSessionIds.length === 0) {
           return { status: ACTION_RESULT_STATUS.ACCEPTED, changes: [] };
         }
-        return yield* dispatchTranscriptChanges(seams.pluginFor(providerId), {
+        return yield* dispatchTranscriptChanges(yield* seams.pluginFor(providerId), {
           providerSessionIds,
           ...(since !== undefined ? { since } : undefined),
         });

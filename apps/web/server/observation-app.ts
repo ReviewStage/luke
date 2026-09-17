@@ -361,10 +361,12 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
               userId,
               roster: () => Effect.succeed(roster),
               pluginFor: (providerId) =>
-                cloudSessionPluginFor(providerId, {
-                  readApiKey: readApiKey(providerId),
-                  reported: () => roster.observations.get(providerId) ?? [],
-                }),
+                Effect.sync(() =>
+                  cloudSessionPluginFor(providerId, {
+                    readApiKey: readApiKey(providerId),
+                    reported: () => roster.observations.get(providerId) ?? [],
+                  }),
+                ),
               now: Date.now,
             }),
             now: Date.now,

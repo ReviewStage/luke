@@ -8,4 +8,5 @@ export {
   type SerialWork,
   serialQueue,
 } from "./serial-queue.js";
+export { singleFlightEffect } from "./single-flight.js";
 export { scheduleOnce, scheduleRepeat } from "./timers.js";
