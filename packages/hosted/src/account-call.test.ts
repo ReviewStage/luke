@@ -21,6 +21,7 @@ import {
   fixedBearer,
   NO_CREDENTIAL,
 } from "./account-call.js";
+import { AccountRefreshFailed } from "./account-token.js";
 
 const BASE_URL = "https://luke.test";
 const PATH = "/api/account/preferences";
@@ -169,7 +170,7 @@ it.effect(
       const failing = callOn(
         {
           authorization: () => Effect.succeed("Bearer held"),
-          renew: () => Effect.fail(new Error("the network is down")),
+          renew: () => Effect.fail(new AccountRefreshFailed({ message: "the network is down" })),
         },
         () => refusal(),
       );

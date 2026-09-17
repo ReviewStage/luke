@@ -19,7 +19,7 @@ import {
 } from "@sidecar/gateway/server";
 import { isIdentifier } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
-import { Effect, type Scope } from "effect";
+import { Data, Effect, type Scope } from "effect";
 
 /**
  * The host side of the Gateway: the node vocabulary, answered over the
@@ -65,7 +65,7 @@ export interface GatewayService {
 }
 
 /** A parameter that is not the shape its method takes; the reading handler answers it as an invalid-params refusal. */
-class ParamRefusal extends Error {}
+class ParamRefusal extends Data.TaggedError("ParamRefusal")<{ readonly message: string }> {}
 
 /**
  * Reads one request's parameters by name. A required read answers the value
@@ -83,25 +83,25 @@ class ParamReader {
   identifier(name: string): string {
     const value = this.#params[name];
     if (isIdentifier(value)) return value;
-    throw new ParamRefusal(`${name} must be a non-empty string`);
+    throw new ParamRefusal({ message: `${name} must be a non-empty string` });
   }
 
   string(name: string): string {
     const value = this.#params[name];
     if (isWireString(value)) return value;
-    throw new ParamRefusal(`${name} must be a string`);
+    throw new ParamRefusal({ message: `${name} must be a string` });
   }
 
   stringList(name: string): readonly string[] {
     const value = this.#params[name];
     if (Array.isArray(value) && value.every(isWireString)) return value;
-    throw new ParamRefusal(`${name} must be a list of strings`);
+    throw new ParamRefusal({ message: `${name} must be a list of strings` });
   }
 
   optionalRecord(name: string): WireRecord | undefined {
     const value = this.#params[name];
     if (value === undefined || isRecord(value)) return value;
-    throw new ParamRefusal(`${name} must be a record`);
+    throw new ParamRefusal({ message: `${name} must be a record` });
   }
 }
 

@@ -1,5 +1,5 @@
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
-import { Cause, Effect } from "effect";
+import { type Cause, Effect } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import type { AdminViewer } from "./admin-access.js";
@@ -48,7 +48,7 @@ export function adminViewerGate(options: {
     // outage: an interruption passes through, logged and answered as nothing.
     const viewer = yield* catchAllButInterrupt(options.resolveViewer(request), (cause) =>
       Effect.andThen(
-        Effect.sync(() => console.error("admin viewer resolution failed", Cause.squash(cause))),
+        Effect.logError("admin viewer resolution failed", cause),
         Effect.fail(adminRefusalResponse(ADMIN_REFUSAL.UNAVAILABLE)),
       ),
     );

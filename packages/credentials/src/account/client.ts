@@ -8,7 +8,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
-import { Duration, Effect, type Layer } from "effect";
+import { Data, Duration, Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -70,23 +70,30 @@ interface AccountClientOptions {
   timeoutMs?: number;
 }
 
-export class AccountClientError extends Error {
+/**
+ * The account service's own answer to a request that reached it: a status and
+ * the OAuth code the body named, when it named one, or a body that would not
+ * read. Everything that decides on a failure below — the renewal, the
+ * sign-out — reads these two fields and nothing else.
+ */
+export class AccountClientError extends Data.TaggedError("AccountClientError")<{
+  readonly message: string;
   readonly status?: number | undefined;
   readonly oauthError?: string | undefined;
+}> {}
 
-  constructor(
-    message: string,
-    options: {
-      status?: number | undefined;
-      oauthError?: string | undefined;
-    } = {},
-  ) {
-    super(message);
-    this.name = "AccountClientError";
-    this.status = options.status;
-    this.oauthError = options.oauthError;
-  }
-}
+/**
+ * A request that reached no status at all: a client that could not carry it,
+ * or the deadline. The name is the error's kind, the way `AbortSignal.timeout`
+ * always named its own, so a reader tells a timeout from a closed socket.
+ */
+export class AccountTransportError extends Data.TaggedError("AccountTransportError")<{
+  readonly message: string;
+  readonly errorName: string | undefined;
+}> {}
+
+/** Every way a call on the account service fails. */
+export type AccountClientFailure = AccountClientError | AccountTransportError;
 
 function record(value: UnparsedWireValue): WireRecord | undefined {
   return isRecord(value) ? value : undefined;
@@ -98,18 +105,16 @@ const responseRecord = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = record(yield* Effect.promise(() => response.json().catch(() => undefined)));
   if (!response.ok) {
     return yield* Effect.fail(
-      new AccountClientError(
-        text(body?.error_description) ?? `Account service returned ${response.status}`,
-        {
-          status: response.status,
-          ...(text(body?.error) ? { oauthError: text(body?.error) } : undefined),
-        },
-      ),
+      new AccountClientError({
+        message: text(body?.error_description) ?? `Account service returned ${response.status}`,
+        status: response.status,
+        ...(text(body?.error) ? { oauthError: text(body?.error) } : undefined),
+      }),
     );
   }
   if (!body) {
     return yield* Effect.fail(
-      new AccountClientError("Account service returned an invalid response"),
+      new AccountClientError({ message: "Account service returned an invalid response" }),
     );
   }
   return body;
@@ -117,7 +122,9 @@ const responseRecord = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 function tokensFrom(body: WireRecord): Effect.Effect<AccountTokens, AccountClientError> {
   if (!isWireString(body.access_token) || !isWireString(body.refresh_token)) {
-    return Effect.fail(new AccountClientError("Account service did not return both tokens"));
+    return Effect.fail(
+      new AccountClientError({ message: "Account service did not return both tokens" }),
+    );
   }
   return Effect.succeed({
     accessToken: body.access_token,
@@ -144,7 +151,7 @@ function timedRequest(
   client: Layer.Layer<HttpClient.HttpClient>,
   request: HttpClientRequest.HttpClientRequest,
   timeoutMs: number,
-): Effect.Effect<Response, Error> {
+): Effect.Effect<Response, AccountTransportError> {
   return HttpClient.execute(request).pipe(
     Effect.flatMap(webResponseFromClientResponse),
     Effect.timeoutOrElse({
@@ -152,14 +159,17 @@ function timedRequest(
       orElse: () => Effect.fail(new DOMException("The request timed out", "TimeoutError")),
     }),
     Effect.provide(client),
-    Effect.catch((error) => Effect.fail(asError(error))),
-    Effect.catchDefect((defect) => Effect.fail(asError(defect))),
+    Effect.catch((error) => Effect.fail(transportError(error))),
+    Effect.catchDefect((defect) => Effect.fail(transportError(defect))),
   );
 }
 
-/** What a failure or a defect carries, as the `Error` every caller here reads. */
-function asError(cause: unknown): Error {
-  return cause instanceof Error ? cause : new Error(String(cause));
+/** What a failure or a defect carried, named by its kind and worded as it was. */
+function transportError(cause: unknown): AccountTransportError {
+  return new AccountTransportError({
+    message: cause instanceof Error ? cause.message : String(cause),
+    errorName: cause instanceof Error ? cause.name : undefined,
+  });
 }
 
 export class AccountClient {
@@ -194,7 +204,7 @@ export class AccountClient {
     code: string;
     codeVerifier: string;
     redirectUri: string;
-  }): Effect.Effect<AccountTokens, Error> {
+  }): Effect.Effect<AccountTokens, AccountClientFailure> {
     return Effect.flatMap(
       this.#token({
         grant_type: "authorization_code",
@@ -207,7 +217,7 @@ export class AccountClient {
     );
   }
 
-  refresh(refreshToken: string): Effect.Effect<AccountTokens, Error> {
+  refresh(refreshToken: string): Effect.Effect<AccountTokens, AccountClientFailure> {
     return Effect.flatMap(
       this.#token({
         grant_type: "refresh_token",
@@ -223,7 +233,7 @@ export class AccountClient {
   }
 
   /** Revokes the long-lived credential; local sign-out never depends on this succeeding. */
-  revoke(refreshToken: string): Effect.Effect<void, Error> {
+  revoke(refreshToken: string): Effect.Effect<void, AccountClientFailure> {
     return Effect.gen({ self: this }, function* () {
       const response = yield* timedRequest(
         this.#client,
@@ -243,7 +253,10 @@ export class AccountClient {
     });
   }
 
-  userInfo(accessToken: string, provider: AccountProvider): Effect.Effect<AccountIdentity, Error> {
+  userInfo(
+    accessToken: string,
+    provider: AccountProvider,
+  ): Effect.Effect<AccountIdentity, AccountClientFailure> {
     return Effect.gen({ self: this }, function* () {
       const response = yield* timedRequest(
         this.#client,
@@ -255,7 +268,7 @@ export class AccountClient {
       const body = yield* responseRecord(response);
       if (!isWireString(body.email)) {
         return yield* Effect.fail(
-          new AccountClientError("Account service returned an invalid identity"),
+          new AccountClientError({ message: "Account service returned an invalid identity" }),
         );
       }
       const pictureUrl = accountPictureUrl(body.picture);
@@ -269,7 +282,7 @@ export class AccountClient {
     });
   }
 
-  #token(fields: Record<string, string>): Effect.Effect<WireRecord, Error> {
+  #token(fields: Record<string, string>): Effect.Effect<WireRecord, AccountClientFailure> {
     return Effect.flatMap(
       timedRequest(
         this.#client,
@@ -299,16 +312,16 @@ export const ACCOUNT_FAILURE_ACTION = {
 type AccountFailureAction = (typeof ACCOUNT_FAILURE_ACTION)[keyof typeof ACCOUNT_FAILURE_ACTION];
 
 /** Only the OAuth server's definitive revocation answer removes a stored account. */
-export function accountFailureAction(error: Error): AccountFailureAction {
-  return error instanceof AccountClientError && error.oauthError === "invalid_grant"
+export function accountFailureAction(error: AccountClientFailure): AccountFailureAction {
+  return error._tag === "AccountClientError" && error.oauthError === "invalid_grant"
     ? ACCOUNT_FAILURE_ACTION.SIGN_OUT
     : ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT;
 }
 
 /** Whether the pinned auth provider has definitively rejected an access token. */
-export function accessTokenNeedsRefresh(error: Error): boolean {
+export function accessTokenNeedsRefresh(error: AccountClientFailure): boolean {
   return (
-    error instanceof AccountClientError &&
+    error._tag === "AccountClientError" &&
     (error.status === 401 || error.oauthError === "invalid_scope")
   );
 }
@@ -343,7 +356,7 @@ interface AccountDeletionOptions {
  */
 export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("deleteHostedAccount")(function* (
   options: AccountDeletionOptions,
-): Effect.fn.Return<void, Error> {
+): Effect.fn.Return<void, AccountClientFailure> {
   const response = yield* timedRequest(
     options.httpClient ?? FetchHttpClient.layer,
     HttpClientRequest.post(
@@ -354,7 +367,8 @@ export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("deleteHostedAccoun
   );
   if (!response.ok) {
     return yield* Effect.fail(
-      new AccountClientError(`Account service returned ${response.status}`, {
+      new AccountClientError({
+        message: `Account service returned ${response.status}`,
         status: response.status,
       }),
     );
@@ -378,12 +392,12 @@ export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("deleteHostedAccoun
  * not reach — a failure, a defect, or an interruption — because a refresh
  * token nobody holds is the same live credential however the attempt ended.
  */
-export function withIssuedAccountTokens<A>(options: {
-  issue: Effect.Effect<AccountTokens, Error>;
-  use: (tokens: AccountTokens) => Effect.Effect<A, Error>;
-  revoke: (refreshToken: string) => Effect.Effect<void, Error>;
-  onRevokeFailure?: (error: Error) => void;
-}): Effect.Effect<A, Error> {
+export function withIssuedAccountTokens<A, E>(options: {
+  issue: Effect.Effect<AccountTokens, AccountClientFailure>;
+  use: (tokens: AccountTokens) => Effect.Effect<A, E>;
+  revoke: (refreshToken: string) => Effect.Effect<void, AccountClientFailure>;
+  onRevokeFailure?: (error: AccountClientFailure) => void;
+}): Effect.Effect<A, E | AccountClientFailure> {
   return Effect.gen(function* () {
     const tokens = yield* options.issue;
     return yield* Effect.onError(options.use(tokens), () =>

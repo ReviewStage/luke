@@ -138,14 +138,11 @@ export const hostedBriefings = /* @__PURE__ */ Effect.fn("hostedBriefings")(func
   });
 
   const onSchedule = Effect.repeat(
-    catchAllButInterrupt(look, (cause) => {
-      const failure = Cause.squash(cause);
-      return Effect.sync(() => {
-        options.report(
-          `Looking at the briefings on offer failed: ${failure instanceof Error ? failure.message : String(failure)}`,
-        );
-      });
-    }),
+    catchAllButInterrupt(look, (cause) =>
+      Effect.sync(() => {
+        options.report(`Looking at the briefings on offer failed: ${Cause.pretty(cause)}`);
+      }),
+    ),
     Schedule.spaced(Duration.millis(bounds.POLL_MS)),
   );
 

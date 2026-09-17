@@ -799,7 +799,7 @@ export class StreamRelay {
       if (standing.kind !== CONVERSATION_KIND.CHILD) return;
       yield* catchAllButInterrupt(this.#seams.deliverCompletion(standing.target), (cause) => {
         this.#seams.report(
-          `The completion of child ${standing.target.conversationId} could not be delivered from turn ${eveTurnId}: ${String(Cause.squash(cause))}.`,
+          `The completion of child ${standing.target.conversationId} could not be delivered from turn ${eveTurnId}: ${Cause.pretty(cause)}`,
         );
         return Effect.void;
       });

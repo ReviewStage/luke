@@ -18,6 +18,7 @@ import {
   type ActSender,
   createActRouter,
 } from "./act-router";
+import { HostUnreachableRefusal } from "./gateway/host-operator";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
@@ -97,7 +98,7 @@ test("a row's own refusal is answered with its sentence; every other throw with 
   const router = createActRouter(
     rowsRecording(ran, {
       [ACT_KIND.WINDOW_QUIT]: () => {
-        throw new ActRefused("A quit is held while the update installs.");
+        throw new ActRefused({ message: "A quit is held while the update installs." });
       },
       [ACT_KIND.CALENDAR_REFRESH]: () => {
         throw new Error("EPIPE writing to the helper");
@@ -140,9 +141,10 @@ test("a row that answers an effect is run by the router, and its failure is the 
           ran.push(ACT_KIND.WINDOW_SET_EXPANDED);
           return "expanded";
         }),
-      [ACT_KIND.CALENDAR_REFRESH]: () => Effect.fail(new Error("the transport closed")),
+      [ACT_KIND.CALENDAR_REFRESH]: () =>
+        Effect.fail(new HostUnreachableRefusal({ message: "the transport closed" })),
       [ACT_KIND.WINDOW_QUIT]: () =>
-        Effect.fail(new ActRefused("A quit is held while the update installs.")),
+        Effect.fail(new ActRefused({ message: "A quit is held while the update installs." })),
     }),
   );
   assert.deepEqual(

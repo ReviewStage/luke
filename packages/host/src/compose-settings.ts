@@ -13,7 +13,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import { HostedVaultClient } from "@sidecar/hosted";
+import { type AccountRefreshFailed, HostedVaultClient } from "@sidecar/hosted";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
@@ -63,7 +63,7 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
  * the graph however much simpler that would be.
  */
 interface SettingsLinks {
-  refreshAccount: () => Effect.Effect<void, unknown>;
+  refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
   /** The vault holds a Conductor key, stored just now or found at sign-in; onboarding's key step is answered. */
   readonly cloudKeyHeld: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
@@ -251,11 +251,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
       Queue.offerUnsafe(accountPreferencesActions, { label, work });
     };
 
-    const failureReason = (cause: Cause.Cause<unknown>): string => {
-      const error = Cause.squash(cause);
-      return error instanceof Error ? error.message : String(error);
-    };
-
     /** The queue drained one action at a time, for as long as the fiber running it stands. */
     const drainAccountPreferencesSync = Queue.take(accountPreferencesActions).pipe(
       Effect.flatMap(({ label, work }) =>
@@ -266,7 +261,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
           Cause.hasInterruptsOnly(cause)
             ? Effect.interrupt
             : Effect.sync(() => {
-                report(`Account preferences ${label} failed: ${failureReason(cause)}`);
+                report(`Account preferences ${label} failed: ${Cause.pretty(cause)}`);
               }),
         ),
       ),

@@ -5,7 +5,7 @@ import {
 } from "@sidecar/memory";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import type { LanguageModel } from "ai";
-import { Cache, Cause, Data, Effect, type Schema } from "effect";
+import { Cache, Data, Effect, type Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -241,10 +241,9 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           const secret = seams.deploymentSecret();
           const origin = seams.eveOrigin();
           if (secret === undefined || origin === undefined) {
-            console.warn(
+            return Effect.logWarning(
               `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
             );
-            return Effect.void;
           }
           return carryStop(
             {
@@ -556,10 +555,10 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         // A flush the caller cancelled did not fail: an interruption passes
         // through rather than standing as a durable refusal reason.
         catchAllButInterrupt(flush, (cause) =>
-          Effect.sync(() => {
-            console.warn(`The memory flush could not run: ${Cause.pretty(cause)}`);
-            return failedHousekeeping(MEMORY_FLUSH_REFUSAL.HOST_FAILED);
-          }),
+          Effect.as(
+            Effect.logWarning("The memory flush could not run", cause),
+            failedHousekeeping(MEMORY_FLUSH_REFUSAL.HOST_FAILED),
+          ),
         ),
       ),
 
