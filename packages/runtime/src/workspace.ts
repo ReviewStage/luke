@@ -76,9 +76,9 @@ export function isWorkspaceFile(name: string): name is WorkspaceFile {
 /** What each file holds when the workspace is first made. */
 export type WorkspaceSeeds = Readonly<Record<WorkspaceFile, string>>;
 
-/** One bootstrap file as the prompt receives it: its text within the bounds, and what the bounds did to it. */
-export interface BootstrapFile {
-  readonly name: WorkspaceFile;
+/** One bootstrap file as the prompt receives it: its text within the bounds, and what the bounds did to it. A dated note bounded the same way names itself by its file name. */
+export interface BootstrapFile<Name extends string = WorkspaceFile> {
+  readonly name: Name;
   readonly path: string;
   readonly content: string;
   readonly missing: boolean;
@@ -95,9 +95,9 @@ export interface BootstrapFile {
  * missing with no content; BOOTSTRAP.md is meant to go missing once setup
  * is done, and its absence is not a diagnostic.
  */
-export function boundBootstrapFiles(
-  files: readonly { name: WorkspaceFile; path: string; content: string | undefined }[],
-): readonly BootstrapFile[] {
+export function boundBootstrapFiles<Name extends string>(
+  files: readonly { name: Name; path: string; content: string | undefined }[],
+): readonly BootstrapFile<Name>[] {
   let remaining = BOOTSTRAP_BOUNDS.MAXIMUM_TOTAL_CHARS;
   return files.map((file) => {
     if (file.content === undefined) {
@@ -126,13 +126,14 @@ export function boundBootstrapFiles(
 
 const DAILY_NOTE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:-[a-z0-9-]+)?\.md$/u;
 
-function dayStamp(atMs: number): string {
+/** The UTC calendar day an instant falls on, `YYYY-MM-DD`, as a daily note's name spells it. */
+export function dailyNoteDay(atMs: number): string {
   return new Date(atMs).toISOString().slice(0, 10);
 }
 
 /** A daily note's file name for the day, or for a slugged variant of it. */
 export function dailyNoteName(atMs: number, slug?: string): string {
-  return `${dayStamp(atMs)}${slug ? `-${slug}` : ""}.md`;
+  return `${dailyNoteDay(atMs)}${slug ? `-${slug}` : ""}.md`;
 }
 
 /** The day's note as the workspace tools name it, `memory/YYYY-MM-DD.md`, the day being the instant's UTC calendar day. */

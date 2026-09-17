@@ -15,6 +15,7 @@ export {
   type NotebookMemoryToolShape,
   notebookMemoryProvider,
   notebookMemoryToolShapes,
+  primedNotesMessage,
 } from "./provider.js";
 export {
   type PassageCandidate,

@@ -47,6 +47,7 @@ export {
   DAILY_NOTES_DIRECTORY,
   type DailyNote,
   type DailyNoteListing,
+  dailyNoteDay,
   dailyNoteName,
   dailyNotePath,
   isDailyNotePath,
