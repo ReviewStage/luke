@@ -728,6 +728,14 @@ test("an observation announce call is a fold of thinking and nothing else, and a
   assert.equal(count(markup, "data-observation-announcement", "true"), 1);
   assert.equal((markup.match(/data-tool-calls-fold=/g) ?? []).length, 0);
   assert.equal((markup.match(/data-tool-kind="/g) ?? []).length, 0);
+  // The fold carries the message's stamp on its line, as the bubble it
+  // replaced did and the tool calls' fold does, and none inside the fold.
+  const fold = announcementFold(markup);
+  assert.equal(count(fold, "class", "conversation-time"), 1);
+  const [insideFold, afterFold] = fold.split("</details>");
+  assert.ok(insideFold !== undefined && afterFold !== undefined);
+  assert.equal(count(insideFold, "class", "conversation-time"), 0);
+  assert.equal(count(afterFold, "class", "conversation-time"), 1);
 });
 
 test("a developer's row is a sent bubble with a copy control, and a note the brain wrote is a quiet row", () => {
