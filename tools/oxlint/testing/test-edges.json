@@ -1,0 +1,47 @@
+{
+  "runnerHoldouts": [
+    "apps/desktop/src/main/services/services.test.ts",
+    "apps/web/tests/auth-database.test.ts",
+    "apps/web/tests/hosted-brain-host-children.test.ts",
+    "apps/web/tests/hosted-brain-host-flush.test.ts",
+    "apps/web/tests/hosted-brain-host-ownership.test.ts",
+    "apps/web/tests/hosted-brain-host-prompt.test.ts",
+    "apps/web/tests/hosted-environment.test.ts",
+    "apps/web/tests/store-database-isolation.test.ts",
+    "packages/gateway/src/node-invocations.test.ts",
+    "packages/host/src/settings-store.test.ts",
+    "packages/voice/src/orchestrator/notice-strip.test.ts"
+  ],
+  "realTimeHoldouts": [
+    "apps/desktop/src/main/native/media-duck.test.ts",
+    "apps/desktop/src/main/services/services.test.ts",
+    "apps/web/tests/admin-write-chain.test.ts",
+    "apps/web/tests/hosted-asks.test.ts",
+    "apps/web/tests/hosted-brain-host-child-opener.test.ts",
+    "apps/web/tests/hosted-observation-tick.test.ts",
+    "apps/web/tests/hosted-turn-event-stream.test.ts",
+    "apps/web/tests/voice-live-brain.test.ts",
+    "apps/web/tests/voice-live-briefings.test.ts",
+    "apps/web/tests/voice-live-exchange.test.ts",
+    "apps/web/tests/voice-live-record.test.ts",
+    "apps/web/tests/voice-live-sideband.test.ts",
+    "apps/web/tests/voice-openai.test.ts",
+    "apps/web/tests/voice-service-exchange.test.ts",
+    "packages/devtrace/src/trace-writer.test.ts",
+    "packages/gateway/src/protocol-envelopes.test.ts",
+    "packages/gateway/src/protocol.test.ts",
+    "packages/host/src/effect/host.test.ts",
+    "packages/host/src/voice/socket-over-ws.test.ts",
+    "packages/runtime/src/effect/fallback.test.ts",
+    "packages/voice/src/live-session-source.test.ts"
+  ],
+  "temporaryDirectoryHoldouts": [
+    "apps/web/tests/api-callers.test.ts",
+    "apps/web/tests/build-output.test.ts",
+    "apps/web/tests/store-tests.test.ts",
+    "apps/web/tests/vercel-functions.test.ts",
+    "apps/web/tests/vercel-services.test.ts",
+    "packages/devtrace/src/trace-writer.test.ts"
+  ],
+  "liveClockTests": ["packages/gateway/src/node-invocations.test.ts"]
+}

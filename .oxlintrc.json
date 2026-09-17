@@ -12,12 +12,17 @@
     ".pi/**",
     ".roo/**",
     ".windsurf/**",
-    "tools/oxlint/anti-slop/**"
+    "tools/oxlint/anti-slop/**",
+    "tools/oxlint/testing/**"
   ],
   "jsPlugins": [
     {
       "name": "anti-slop",
       "specifier": "./tools/oxlint/anti-slop/index.ts"
+    },
+    {
+      "name": "testing",
+      "specifier": "./tools/oxlint/testing/index.ts"
     }
   ],
   "rules": {
@@ -33,7 +38,11 @@
     "anti-slop/no-unknown-parameters": "error",
     "anti-slop/no-unknown-returns": "error",
     "anti-slop/no-unsafe-dictionary-type": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error"
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+    "testing/no-focus-or-retry": "error",
+    "testing/no-module-mocks": "error",
+    "testing/no-real-time": "error",
+    "testing/no-runner": "error"
   },
   "overrides": [
     {

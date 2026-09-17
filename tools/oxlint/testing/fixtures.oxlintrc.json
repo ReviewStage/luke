@@ -1,0 +1,14 @@
+{
+  "jsPlugins": [
+    {
+      "name": "testing",
+      "specifier": "./index.ts"
+    }
+  ],
+  "rules": {
+    "testing/no-focus-or-retry": "error",
+    "testing/no-module-mocks": "error",
+    "testing/no-real-time": "error",
+    "testing/no-runner": "error"
+  }
+}

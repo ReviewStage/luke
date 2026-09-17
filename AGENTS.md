@@ -218,8 +218,9 @@ evidence; CI builds nothing for the Mac.
   a fake was called; a private function exported for a test.
 
 `tools/oxlint/testing/test-edges.json` holds the files not yet on these rules:
-`runnerHoldouts` and `realTimeHoldouts` only shrink and are deleted with their
-last entry. `liveClockTests` is permanent, for a subject that is a real socket
+`runnerHoldouts`, `realTimeHoldouts`, and `temporaryDirectoryHoldouts` (the
+test files still hand-rolling `mkdtemp`, which `scripts/repository-checks.sh`
+refuses everywhere else) only shrink and are deleted with their last entry. `liveClockTests` is permanent, for a subject that is a real socket
 or process timeout; `it.live` is allowed only there, and each entry is named
 here with its reason:
 

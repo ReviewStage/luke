@@ -20,7 +20,8 @@
         "design/check-design-contract.mjs",
         "design/generate-brand-assets.mjs",
         "design/generate-surface-shared.mjs",
-        "tools/oxlint/anti-slop/fixtures/*.ts"
+        "tools/oxlint/anti-slop/fixtures/*.ts",
+        "tools/oxlint/testing/fixtures/*.ts"
       ],
       "project": ["scripts/**", "design/**", "tools/**"]
     },

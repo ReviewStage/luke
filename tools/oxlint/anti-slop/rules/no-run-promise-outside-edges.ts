@@ -58,9 +58,14 @@ const EVERY_RUNNING_MEMBER: ReadonlySet<string> = new Set(
   [...RUNNING_MEMBERS.values()].flatMap((members) => [...members]),
 );
 
-function runningMemberName(
+/**
+ * The `Namespace.member` a callee runs an Effect through, or null. Exported
+ * for `testing/no-runner`, which refuses the same runs in a test body this
+ * rule exempts, so the two never disagree about what running is.
+ */
+export function runningMemberName(
   callee: ESTree.Expression | ESTree.Super,
-  runnerFactoryNames: ReadonlySet<string>,
+  runnerFactoryNames: ReadonlySet<string> = new Set(),
 ): string | null {
   if (callee.type !== "MemberExpression" || callee.computed) return null;
   const object = callee.object;

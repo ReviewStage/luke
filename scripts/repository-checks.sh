@@ -464,14 +464,22 @@ fi
 # temporary directories were never cleaned up. `temporaryDirectory` lives in
 # @sidecar/runtime/testing, because the host's tests are in a package and a
 # package cannot reach into an app; the rest are under apps/desktop/src/testing.
-# This call is how a hand-rolled one always begins. A microtask drain and a
-# fake clock are no longer this check's concern: `TestClock` is the clock an
-# `it.effect` test drives, and a plain vitest test's own wait is a
+# This call is how a hand-rolled one always begins, in every workspace; the
+# test files still hand-rolling one are held out by whole path in
+# `tools/oxlint/testing/test-edges.json`'s `temporaryDirectoryHoldouts`, which
+# the drift check below keeps honest and the pruning PRs empty. A microtask
+# drain and a fake clock are no longer this check's concern: `TestClock` is the
+# clock an `it.effect` test drives, and a plain vitest test's own wait is a
 # package-owned helper beside the suite that needs it, never a shared runtime
 # export.
-hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
-    'mkdtemp' \
-    "$SIDECAR_REPO_ROOT/apps/desktop/src" "$SIDECAR_REPO_ROOT/packages/host/src" || true)
+temporary_directory_holdouts=$(node -e '
+  const edges = require(process.argv[1]);
+  for (const one of edges.temporaryDirectoryHoldouts ?? []) console.log(`${process.argv[2]}/${one}:`);
+' "$SIDECAR_REPO_ROOT/tools/oxlint/testing/test-edges.json" "$SIDECAR_REPO_ROOT")
+hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' --include='*.test.mts' \
+    --exclude-dir=node_modules 'mkdtemp' \
+    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" |
+    grep -vFf <(printf '%s\n' "$temporary_directory_holdouts") || true)
 if [[ -n "$hand_rolled_fixtures" ]]; then
     printf 'error: test files import temporaryDirectory from @sidecar/runtime/testing rather than hand-rolling it:\n%s\n' \
         "$hand_rolled_fixtures" >&2
@@ -668,6 +676,92 @@ node --input-type=module -e '
     process.stderr.write(
       `error: ${allowlistPath} and AGENTS.md have drifted apart:\n${offenders.join("\n")}\n`,
     );
+    process.exit(1);
+  }
+' "$SIDECAR_REPO_ROOT"
+
+# `tools/oxlint/testing/test-edges.json` is the machine-readable twin of root
+# AGENTS.md's "Testing" section. The lint reads its holdout lists, so a test
+# file that starts running an Effect or arming a real timer without being
+# written down fails the lint itself. This is the other direction: a holdout
+# that no longer violates the rule it was held out from stays on the list and
+# hides the next violation in that file, so each is asked of the rule itself,
+# run with every holdout ignored, rather than of a regex beside it; and a
+# `liveClockTests` entry is permanent only for a reason AGENTS.md states by
+# the file's whole path.
+node --input-type=module -e '
+  import { execFile } from "node:child_process";
+  import { readFile } from "node:fs/promises";
+  import path from "node:path";
+  import { promisify } from "node:util";
+  const root = process.argv[1];
+  const edgesPath = "tools/oxlint/testing/test-edges.json";
+  const edges = JSON.parse(await readFile(path.join(root, edgesPath), "utf8"));
+  const agents = await readFile(path.join(root, "AGENTS.md"), "utf8");
+  const section = agents.slice(agents.indexOf("## Testing"), agents.indexOf("## Effect idioms"));
+  const groups = [
+    { name: "runnerHoldouts", rule: "no-runner", permanent: false },
+    { name: "realTimeHoldouts", rule: "no-real-time", permanent: false },
+    { name: "temporaryDirectoryHoldouts", rule: null, pattern: /\bmkdtemp(?:Sync)?\s*\(/u, permanent: false },
+    { name: "liveClockTests", rule: null, permanent: true },
+  ];
+  const offenders = [];
+  // One lint run over every held-out file, with the holdouts switched off, so
+  // the rule that would skip the file answers whether it still violates.
+  const linted = [...new Set(groups.flatMap((group) => edges[group.name] ?? []))];
+  const violating = new Map();
+  if (linted.length > 0) {
+    const oxlint = path.join(root, "node_modules", ".bin", "oxlint");
+    const report = await promisify(execFile)(
+      oxlint,
+      ["--config", ".oxlintrc.json", "--format", "json", ...linted],
+      { cwd: root, env: { ...process.env, LUKE_TESTING_IGNORE_HOLDOUTS: "1" }, maxBuffer: 64 * 1024 * 1024 },
+    ).then((run) => run.stdout, (failure) => failure.stdout ?? "");
+    if (report === "") {
+      process.stderr.write("error: oxlint reported nothing it could parse over the test-edges.json holdouts\n");
+      process.exit(1);
+    }
+    for (const diagnostic of JSON.parse(report).diagnostics) {
+      const rule = /^testing\((?<rule>[^)]+)\)$/u.exec(diagnostic.code)?.groups?.rule;
+      if (rule === undefined) continue;
+      const file = path.relative(root, path.resolve(root, diagnostic.filename)).split(path.sep).join("/");
+      violating.set(file, new Set([...(violating.get(file) ?? []), rule]));
+    }
+  }
+  for (const group of groups) {
+    const entries = edges[group.name];
+    if (entries === undefined) {
+      // A holdout list is deleted with its last entry; the permanent list is never deleted.
+      if (group.permanent) offenders.push(`${edgesPath}: no "${group.name}" list`);
+      continue;
+    }
+    if (!Array.isArray(entries) || (entries.length === 0 && !group.permanent)) {
+      offenders.push(`${edgesPath}: "${group.name}" is empty and should be deleted with its last entry`);
+      continue;
+    }
+    for (const entry of entries) {
+      const text = await readFile(path.join(root, entry), "utf8").catch(() => null);
+      if (text === null) {
+        offenders.push(`${group.name}: ${entry} no longer exists`);
+        continue;
+      }
+      if (group.rule !== null && violating.get(entry)?.has(group.rule) !== true) {
+        offenders.push(`${group.name}: ${entry} no longer violates testing/${group.rule}; take it off the list`);
+      }
+      if (group.pattern !== undefined && !group.pattern.test(text)) {
+        offenders.push(`${group.name}: ${entry} no longer hand-rolls a temporary directory; take it off the list`);
+      }
+      // The whole path, never a tail of it, on the terms of the effect-edges check above.
+      const named = new RegExp(`(?<![\\w.\\-/])${entry.replaceAll(".", "\\.")}(?![\\w\\-/])`, "u");
+      if (group.permanent && !named.test(section)) {
+        offenders.push(
+          `${group.name}: ${entry} is permanent and AGENTS.md'"'"'s Testing section never names it by its whole path with its reason`,
+        );
+      }
+    }
+  }
+  if (offenders.length > 0) {
+    process.stderr.write(`error: ${edgesPath} and the tree have drifted apart:\n${offenders.join("\n")}\n`);
     process.exit(1);
   }
 ' "$SIDECAR_REPO_ROOT"
