@@ -170,17 +170,27 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("the list is mounted under the thread's own root, ids and blocked class alike, in two sections", () => {
+test("the list is mounted under the thread's own root, ids and blocked class alike, in two headed sections under a settings page's head", () => {
   const markup = renderChildren([LABELLED]);
-  assert.ok(markup.includes('class="conversation-view ph-no-capture"'));
+  assert.ok(markup.includes('class="conversation-view agents-page ph-no-capture"'));
   assert.ok(markup.includes('id="panel-view-conversation"'));
   assert.ok(markup.includes('aria-labelledby="panel-tab-conversation"'));
-  assert.ok(markup.includes("‹ Conversation"));
+  // The way back is the settings pages' own square icon button, named for a reader rather than by a glyph in its text.
+  assert.ok(
+    markup.includes(
+      '<button type="button" class="icon-button agents-back" aria-label="Back to Conversation" title="Back">',
+    ),
+  );
   assert.ok(markup.includes('<h2 class="agents-title">Agents</h2>'));
-  const headings = sections(markup).map(
+  const drawn = sections(markup);
+  const headings = drawn.map(
     (section) => section.querySelector(".agents-section-title")?.textContent,
   );
   assert.deepEqual(headings, ["Per-workspace agents", "Sub-agents"]);
+  // Each row is a session row standing on its own under the heading, as a chat's does one tab over.
+  const [, subagents] = drawn;
+  assert.ok(subagents);
+  assert.equal(subagents.children[1]?.className, "session-row agent-row");
 });
 
 test("sub-agent rows are ordered by the instant they last moved, newest first, and each is named by its label, its task without the marker, or its id", () => {
@@ -211,8 +221,24 @@ test("each sub-agent row wears its status word, its age, and where it was delega
   assert.deepEqual(ages, ["10m", "25m", "2h", "2d"]);
   const origins = rows.map((row) => row.querySelector(".agent-origin")?.textContent);
   assert.deepEqual(origins, [undefined, undefined, undefined, "from an observed session"]);
-  // No sub-agent row wears a provider mark: a child is the brain's own, not a session's.
-  assert.equal(subagents.querySelector(".agent-mark"), null);
+  // Each row wears its state in the session rows' vocabulary: a running turn spins, a settled one checks off,
+  // a failure takes the attention colour, and a waiting one wears no state.
+  assert.deepEqual(
+    rows.map((row) => row.getAttribute("data-state")),
+    [null, "urgency-working", "urgency-complete", "urgency-attention"],
+  );
+  assert.deepEqual(
+    rows.map((row) => row.querySelector(".row-spinner") !== null),
+    [false, true, false, false],
+  );
+  assert.deepEqual(
+    rows.map((row) => row.querySelector(".row-check") !== null),
+    [false, false, true, false],
+  );
+  // No sub-agent row wears a provider mark: a child is the brain's own, not a session's, so its
+  // slot holds the robot the thread's chips wear for Luke's agents.
+  assert.equal(subagents.querySelector(".provider-mark"), null);
+  assert.equal(subagents.querySelectorAll(".row-mark > .agent-robot").length, 4);
 });
 
 test("a cancelled child says so", () => {
@@ -241,8 +267,15 @@ test("a per-workspace agent row is named from the roster by session identity, th
     rows.map((row) => row.querySelector(".agent-age")?.textContent),
     ["2m", "5m", "3h"],
   );
-  // Every agent row leads with a mark: the roster's agent while it holds the session, the provider once it has let go.
-  assert.equal(agents.querySelectorAll(".agent-mark").length, 3);
+  // Every agent row leads with a mark in a session row's own slot: the roster's agent while it holds
+  // the session, the provider once it has let go.
+  assert.deepEqual(
+    [...agents.querySelectorAll(".row-mark > .provider-mark")].map((mark) =>
+      mark.getAttribute("data-mark"),
+    ),
+    ["claude-code", "claude-code", "conductor"],
+  );
+  assert.equal(agents.querySelector(".agent-robot"), null);
   // The roster's own title comes first while it holds the session; a row the service never named falls back to the session's id.
   const [alone] = sections(
     render({
@@ -372,9 +405,13 @@ function renderTranscript(extra: Partial<TranscriptProps> = {}): string {
 
 test("the transcript page stands under the thread's own root and names the way back, the row's title, and its status", () => {
   const markup = renderTranscript();
-  assert.ok(markup.includes('class="conversation-view ph-no-capture"'));
+  assert.ok(markup.includes('class="conversation-view agents-page ph-no-capture"'));
   assert.ok(markup.includes('id="panel-view-conversation"'));
-  assert.ok(markup.includes("‹ Agents"));
+  assert.ok(
+    markup.includes(
+      '<button type="button" class="icon-button agents-back" aria-label="Back to Agents" title="Back">',
+    ),
+  );
   assert.ok(markup.includes(">Audit the release notes</h2>"));
   assert.ok(markup.includes(">Running</span>"));
   // An agent's page wears the row's status the same way, and its session's

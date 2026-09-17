@@ -4,12 +4,20 @@ import {
   type ChildRead,
   type ChildStatus,
 } from "@sidecar/hosted/reads-wire";
-import { lastActivityLabel, ProviderMark } from "@sidecar/panel";
+import {
+  BackIcon,
+  lastActivityLabel,
+  SessionRow as PanelSessionRow,
+  RobotIcon,
+} from "@sidecar/panel";
 import {
   CONVERSATION_VIEW_SOURCE,
+  SESSION_URGENCY,
   type SessionIdentity,
+  type SessionUrgency,
   type TranscriptSnapshot,
 } from "@sidecar/session";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { TRANSCRIPT_KIND, type TranscriptKind } from "@sidecar/wire";
 import { useLayoutEffect, useRef } from "react";
 import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/agents";
@@ -59,6 +67,19 @@ const STATUS_WORD = {
   [CHILD_STATUS.FAILED]: "Failed",
   [CHILD_STATUS.CANCELLED]: "Cancelled",
 } as const satisfies Record<ChildStatus, string>;
+
+/**
+ * A row's state in the session rows' vocabulary: running spins as working
+ * does, settled checks off as complete, failed takes the attention colour,
+ * and waiting or cancelled wear none.
+ */
+const ROW_STATE = {
+  [CHILD_STATUS.ACCEPTED]: undefined,
+  [CHILD_STATUS.RUNNING]: SESSION_URGENCY.WORKING,
+  [CHILD_STATUS.SETTLED]: SESSION_URGENCY.COMPLETE,
+  [CHILD_STATUS.FAILED]: SESSION_URGENCY.ATTENTION,
+  [CHILD_STATUS.CANCELLED]: undefined,
+} as const satisfies Record<ChildStatus, SessionUrgency | undefined>;
 
 /**
  * A row's latest instant: its turn's settle, else its start, else its
@@ -172,7 +193,33 @@ export function AgentsButton({
   );
 }
 
-/** One section of the list: its heading, its rows, and what it says when a read list holds none. */
+/** A page's head, as a settings page's: the icon back button, then the page's name and whatever else the line says. */
+function AgentsPageHeader({
+  backTo,
+  onBack,
+  children,
+}: {
+  backTo: string;
+  onBack: () => void;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <header className="agents-header" style={cssCustomProperties({ "--row-index": 0 })}>
+      <button
+        type="button"
+        className="icon-button agents-back"
+        aria-label={`Back to ${backTo}`}
+        title="Back"
+        onClick={onBack}
+      >
+        <BackIcon />
+      </button>
+      {children}
+    </header>
+  );
+}
+
+/** One section of the list: its heading over its rows, or what it says once read with none. */
 function AgentsSection({
   heading,
   settled,
@@ -188,13 +235,72 @@ function AgentsSection({
     <section className="agents-section">
       <h3 className="agents-section-title">{heading}</h3>
       {children.length > 0 ? (
-        <ol className="agents-list">{children}</ol>
+        children
       ) : settled ? (
-        // Only a list actually read may say it is empty; before that the
-        // room stands empty, as the thread's does before its first read.
+        // Only a list actually read may say it is empty.
         <p className="agents-section-empty">{empty}</p>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * One row of either section, in a session row's own anatomy and classes, so
+ * an agent or a child reads as a chat does one tab over. An agent leads with
+ * its agent's mark; a child, the brain's own, with the robot the thread's
+ * chips wear for Luke's agents. The row is one press, and it opens the
+ * transcript.
+ */
+function AgentRow({
+  row,
+  index,
+  mark,
+  providerId,
+  title,
+  origin,
+  now,
+  onOpen,
+}: {
+  row: ChildRead | AgentRead;
+  index: number;
+  mark?: React.ReactNode;
+  providerId?: string | undefined;
+  title: string;
+  origin?: string | undefined;
+  now: number;
+  onOpen: () => void;
+}): React.JSX.Element {
+  const state = ROW_STATE[row.status];
+  return (
+    <button
+      type="button"
+      className="session-row agent-row"
+      {...(state === undefined ? undefined : { "data-state": state })}
+      style={cssCustomProperties({ "--row-index": index + 1 })}
+      onClick={onOpen}
+    >
+      <PanelSessionRow
+        {...(providerId === undefined ? undefined : { providerId })}
+        {...(mark === undefined ? undefined : { mark })}
+        title={<span className="agent-name">{title}</span>}
+        detail={
+          <>
+            <span className="agent-status" data-status={row.status}>
+              {STATUS_WORD[row.status]}
+            </span>
+            {origin === undefined ? null : (
+              <>
+                {" · "}
+                <span className="agent-origin">{origin}</span>
+              </>
+            )}
+          </>
+        }
+        working={state === SESSION_URGENCY.WORKING}
+        complete={state === SESSION_URGENCY.COMPLETE}
+        when={<span className="agent-age">{lastActivityLabel(activityAt(row), now)}</span>}
+      />
+    </button>
   );
 }
 
@@ -233,74 +339,50 @@ export function AgentsPanel({
 }): React.JSX.Element {
   const listedAgents = [...agents.agents].sort(byLatestActivity);
   const children = [...subagents.children].sort(byLatestActivity);
-  const meta = (row: ChildRead | AgentRead) => (
-    <>
-      <span className="agent-status" data-status={row.status}>
-        {STATUS_WORD[row.status]}
-      </span>
-      <span className="agent-age">{lastActivityLabel(activityAt(row), now)}</span>
-    </>
-  );
   return (
     <section
-      className="conversation-view ph-no-capture"
+      className="conversation-view agents-page ph-no-capture"
       role="tabpanel"
       id={panelPanelId(PANEL_TAB.CONVERSATION)}
       aria-labelledby={panelTabId(PANEL_TAB.CONVERSATION)}
     >
-      <header className="agents-header">
-        <button type="button" className="agents-back" onClick={onBack}>
-          ‹ Conversation
-        </button>
+      <AgentsPageHeader backTo="Conversation" onBack={onBack}>
         <h2 className="agents-title">Agents</h2>
-      </header>
-      <div className="agents-sections">
+      </AgentsPageHeader>
+      <div className="agents-scroll">
         <AgentsSection
           heading="Per-workspace agents"
           settled={agents.settled}
           empty="No per-workspace agents yet"
         >
-          {listedAgents.map((agent) => {
-            const session = agentSession(agent, roster);
-            return (
-              <li key={agent.id}>
-                <button
-                  type="button"
-                  className="agent-row"
-                  onClick={() => onOpenTranscript(agentTranscriptRow(agent, roster))}
-                >
-                  <span className="agent-title">
-                    <ProviderMark
-                      providerId={session?.agentId ?? agent.providerId}
-                      className="agent-mark"
-                    />
-                    <span className="agent-name">{agentTitle(agent, roster)}</span>
-                  </span>
-                  <span className="agent-meta">{meta(agent)}</span>
-                </button>
-              </li>
-            );
-          })}
+          {listedAgents.map((agent, index) => (
+            <AgentRow
+              key={agent.id}
+              row={agent}
+              index={index}
+              providerId={agentSession(agent, roster)?.agentId ?? agent.providerId}
+              title={agentTitle(agent, roster)}
+              now={now}
+              onOpen={() => onOpenTranscript(agentTranscriptRow(agent, roster))}
+            />
+          ))}
         </AgentsSection>
         <AgentsSection heading="Sub-agents" settled={subagents.settled} empty="No sub-agents yet">
-          {children.map((child) => (
-            <li key={child.id}>
-              <button
-                type="button"
-                className="agent-row"
-                onClick={() => onOpenTranscript(childTranscriptRow(child))}
-              >
-                <span className="agent-title">
-                  <span className="agent-name">{subagentTitle(child)}</span>
-                </span>
-                <span className="agent-meta">
-                  {meta(child)}
-                  {child.parentKind === CONVERSATION_VIEW_SOURCE.OBSERVED ? (
-                    <span className="agent-origin">from an observed session</span>
-                  ) : null}
-                </span>
-              </button>
-            </li>
+          {children.map((child, index) => (
+            <AgentRow
+              key={child.id}
+              row={child}
+              index={listedAgents.length + index}
+              mark={<RobotIcon className="agent-robot" />}
+              title={subagentTitle(child)}
+              origin={
+                child.parentKind === CONVERSATION_VIEW_SOURCE.OBSERVED
+                  ? "from an observed session"
+                  : undefined
+              }
+              now={now}
+              onOpen={() => onOpenTranscript(childTranscriptRow(child))}
+            />
           ))}
         </AgentsSection>
       </div>
@@ -373,15 +455,12 @@ export function AgentTranscriptPanel({
 
   return (
     <section
-      className="conversation-view ph-no-capture"
+      className="conversation-view agents-page ph-no-capture"
       role="tabpanel"
       id={panelPanelId(PANEL_TAB.CONVERSATION)}
       aria-labelledby={panelTabId(PANEL_TAB.CONVERSATION)}
     >
-      <header className="agents-header">
-        <button type="button" className="agents-back" onClick={onBack}>
-          ‹ Agents
-        </button>
+      <AgentsPageHeader backTo="Agents" onBack={onBack}>
         {/* The heading's own name is the title, so heading navigation hears the
             conversation and not the chip's press. */}
         <h2 className="agents-title agent-transcript-title" aria-label={open.title}>
@@ -397,7 +476,7 @@ export function AgentTranscriptPanel({
         <span className="agent-status" data-status={open.status}>
           {STATUS_WORD[open.status]}
         </span>
-      </header>
+      </AgentsPageHeader>
       {groups.length === 0 && own?.settled ? (
         <div className="conversation-empty">
           <strong>Nothing said yet</strong>

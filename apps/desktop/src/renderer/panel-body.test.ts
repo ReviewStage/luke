@@ -143,7 +143,7 @@ test("pressing the button asks for the list, and the list page draws it in the t
   const change = (page: ConversationPage) => asked.push(page);
   const mounted = mount(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, change));
   assert.ok(mounted.container.querySelector(".conversation-empty"));
-  assert.equal(mounted.container.querySelector(".agents-list, .agents-header"), null);
+  assert.equal(mounted.container.querySelector(".agents-section, .agents-header"), null);
 
   const button = agentsButton(mounted.container);
   assert.ok(button);
@@ -156,7 +156,7 @@ test("pressing the button asks for the list, and the list page draws it in the t
   // One tab panel, under the same root and ids the thread uses.
   const panels = mounted.container.querySelectorAll('[role="tabpanel"]');
   assert.equal(panels.length, 1);
-  assert.equal(panels[0]?.className, "conversation-view ph-no-capture");
+  assert.equal(panels[0]?.className, "conversation-view agents-page ph-no-capture");
   assert.equal(panels[0]?.id, "panel-view-conversation");
   assert.ok(mounted.container.querySelector(".agents-header"));
   assert.ok(mounted.container.textContent?.includes("No sub-agents yet"));
@@ -290,18 +290,18 @@ test("a row's press opens the child or the agent, and the transcript page draws 
   );
   const panels = mounted.container.querySelectorAll('[role="tabpanel"]');
   assert.equal(panels.length, 1);
-  assert.equal(panels[0]?.className, "conversation-view ph-no-capture");
+  assert.equal(panels[0]?.className, "conversation-view agents-page ph-no-capture");
   assert.equal(panels[0]?.id, "panel-view-conversation");
   assert.ok(mounted.container.textContent?.includes("Audit the release notes"));
   assert.ok(mounted.container.textContent?.includes("Nothing said yet"));
-  assert.equal(mounted.container.querySelector(".agents-list"), null);
+  assert.equal(mounted.container.querySelector(".agents-section"), null);
   // The button stays lit over a transcript, and Clear is not offered off the thread.
   assert.equal(agentsButton(mounted.container)?.getAttribute("aria-expanded"), "true");
   assert.equal(mounted.container.querySelector(".conversation-clear"), null);
 
   const back = mounted.container.querySelector(".agents-back");
   assert.ok(back instanceof HTMLButtonElement);
-  assert.equal(back.textContent, "‹ Agents");
+  assert.equal(back.getAttribute("aria-label"), "Back to Agents");
   act(() => {
     back.click();
   });

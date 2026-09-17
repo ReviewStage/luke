@@ -459,120 +459,82 @@
   font-size: 12px;
 }
 
-/* The Agents page: one header line naming the way back and the page, then
-   a list of rows on the session rows' own terms, so an agent or a child reads
-   as a thing with a status and an age rather than as a line of the thread. */
+/* The Agents pages stand on the settings pages' terms rather than the
+   thread's: the settings' own gap between a page's head and what it holds,
+   so turning from the thread to the list, or from the Sessions tab to it,
+   changes the words and not the spacing. */
+.agents-page {
+  gap: 14px;
+}
+
+/* A page's head, drawn as a settings page's is: the back control's square
+   beside the page's name at the header's own inset, in the same face and
+   weight, and whatever else the page says on the line after it. */
 .agents-header {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-}
-
-.agents-back {
-  min-height: 28px;
-  padding: 0 6px;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  font-weight: 620;
-}
-
-.agents-back:hover {
-  background: var(--raised);
-  color: var(--text-primary);
+  gap: 9px;
+  padding: 0 2px;
 }
 
 .agents-title {
   margin: 0;
   color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 620;
+  font-size: 12.5px;
+  font-weight: 700;
 }
 
-/* The two sections share one scroller, so a long list of agents and a long
-   list of sub-agents read as one page rather than two rooms. */
-.agents-sections {
+/* The two sections share one scroller on the session list's own terms:
+   contained, thin-barred, dissolving at its foot through the shared fade,
+   with the head left outside it so the way back is never scrolled away
+   from, the way the tab bar stands outside every list. */
+.agents-scroll {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
-  padding: 4px 12px 12px;
+  gap: 14px;
+  overflow-x: clip;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+  animation: scroll-edge-fade linear both;
+  animation-timeline: scroll(self block);
 }
 
+/* A section is its heading over session rows at the list's own spacing. */
+.agents-section {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* The heading speaks in a settings section's voice, at the head's inset. */
 .agents-section-title {
-  margin: 0 0 6px;
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
   text-transform: uppercase;
 }
 
 .agents-section-empty {
   margin: 0;
-  padding: 2px 0;
-  color: var(--text-secondary);
+  padding: 0 2px;
+  color: var(--text-tertiary);
   font-size: 10.5px;
 }
 
-.agents-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.agent-row {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 9px 12px;
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.028);
-  color: var(--text-primary);
-  text-align: left;
-}
-
-.agent-row:hover {
-  background: var(--raised);
-}
-
-.agent-title {
-  display: flex;
-  max-width: 100%;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-}
-
-.agent-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-mark {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 auto;
-}
-
-.agent-meta {
-  display: flex;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: 10.5px;
+/* A child's mark is the robot the thread's chips wear for Luke's own agents,
+   at the size a provider's mark takes in the slot. */
+.agent-robot {
+  width: 20px;
+  height: 20px;
 }
 
 /* The transcript page's header names one conversation, whose title may run long: the

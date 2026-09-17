@@ -1860,6 +1860,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .workspace-tray,
 .settings-section,
 .settings-header,
+.agents-header,
 .quit-button,
 .empty-state,
 .panel-header {
@@ -1890,6 +1891,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 .app-stage[data-presentation="panel"] .workspace-tray,
 .app-stage[data-presentation="panel"] .settings-section,
 .app-stage[data-presentation="panel"] .settings-header,
+.app-stage[data-presentation="panel"] .agents-header,
 .app-stage[data-presentation="panel"] .quit-button,
 .app-stage[data-presentation="panel"] .empty-state,
 .app-stage[data-presentation="panel"] .panel-header {
