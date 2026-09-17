@@ -16,9 +16,16 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 
 export type StoreFailure = SqlError | Schema.SchemaError;
 
-/** The failure as one warning line: its tag and its own sentence, nothing it carried. */
+/**
+ * The failure as one warning line of kinds alone: a `SqlError` by the kind of
+ * its reason (a connection refused, a statement timed out), a Schema failure
+ * by the kind of its issue. Neither's sentence is written, because a Schema
+ * issue's message renders the value that would not decode, and a statement's
+ * can quote the key a constraint refused.
+ */
 export function logStoreFailure(failure: StoreFailure): Effect.Effect<void> {
-  return Effect.logWarning(`Hosted store unavailable: ${failure._tag}: ${failure.message}`);
+  const kind = failure._tag === "SqlError" ? failure.cause._tag : failure.issue._tag;
+  return Effect.logWarning(`Hosted store unavailable: ${failure._tag}: ${kind}`);
 }
 
 /**
