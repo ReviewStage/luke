@@ -56,19 +56,28 @@ test("the catalog holds every action, every brain tool, and every memory tool on
   );
 });
 
-test("with no configured layers every turn is offered the whole catalog, and only an ask loses announce, to the turn layer", () => {
+test("with no configured layers every turn is offered the whole catalog, less what the turn layer withholds: an ask loses announce, an observation loses the message send", () => {
   const catalog = brainToolCatalog();
   const ask = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.ASK);
   const wake = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.WAKE);
+  const roster = resolveTurnToolPolicy(catalog, {}, BRAIN_TURN_TRIGGER.ROSTER);
   const maintenance = resolveTurnToolPolicy(catalog, {});
   assert.ok(ask.allows(ACTION_TOOL.SEND_SESSION_MESSAGE));
-  assert.ok(wake.allows(ACTION_TOOL.SEND_SESSION_MESSAGE));
+  // An observation's lines are the developer's words to their agent, and a send would come
+  // back as one of them: the send is the ask's alone, whichever observation trigger opened it.
+  assert.ok(!wake.allows(ACTION_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(!roster.allows(ACTION_TOOL.SEND_SESSION_MESSAGE));
+  assert.ok(wake.allows(ACTION_TOOL.RUN_SESSION_CONTROL));
   assert.ok(wake.allows(BRAIN_TOOL.WRITE_WORKSPACE_FILE));
   assert.ok(!ask.allows(BRAIN_TOOL.ANNOUNCE));
   assert.ok(wake.allows(BRAIN_TOOL.ANNOUNCE));
   assert.ok(!ask.allows("delete_everything"));
   assert.ok(!wake.allows("read_session_transcript"));
   assert.deepEqual(ask.denied, [{ tool: BRAIN_TOOL.ANNOUNCE, layer: TOOL_POLICY_LAYER.TURN }]);
+  assert.deepEqual(wake.denied, [
+    { tool: ACTION_TOOL.SEND_SESSION_MESSAGE, layer: TOOL_POLICY_LAYER.TURN },
+  ]);
+  assert.deepEqual(roster.denied, wake.denied);
   assert.deepEqual(maintenance.denied, []);
   // A configured deny still wins over the turn layer, and is the layer named.
   const configured = resolveTurnToolPolicy(
@@ -141,6 +150,13 @@ test("a child's task turn loses announce like an ask and the whole sessions grou
   const childTask = turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_TASK);
   assert.deepEqual(childTask.deny, [BRAIN_TOOL.ANNOUNCE, `${GROUP_PREFIX}${TOOL_GROUP.SESSIONS}`]);
   assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.ASK), { deny: [BRAIN_TOOL.ANNOUNCE] });
+  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.ROSTER), {
+    deny: [ACTION_TOOL.SEND_SESSION_MESSAGE],
+  });
+  assert.deepEqual(
+    turnToolPolicy(BRAIN_TURN_TRIGGER.WAKE),
+    turnToolPolicy(BRAIN_TURN_TRIGGER.ROSTER),
+  );
   assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_COMPLETION), {});
   const catalog = brainToolCatalog();
   for (const name of [

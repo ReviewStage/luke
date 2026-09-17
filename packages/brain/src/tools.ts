@@ -1,4 +1,4 @@
-import type { ActionToolDefinition } from "@sidecar/actions";
+import { ACTION_TOOL, type ActionToolDefinition } from "@sidecar/actions";
 import { type NotebookMemoryToolShape, notebookMemoryToolShapes } from "@sidecar/memory";
 import {
   type EffectiveToolPolicy,
@@ -180,11 +180,23 @@ export function brainToolCatalog(): readonly ToolDescriptor[] {
 
 /**
  * The layer a turn's kind adds beneath the configured policy: the briefing
- * channel is offered only where the reply is not itself the speech, and a
+ * channel is offered only where the reply is not itself the speech, a
  * child's task has no session tools at all, so delegation is capped at one
  * level and a child neither lists nor reads nor cancels its parent's other
- * children. Each is a fact about the kind of turn, not a permission decided
- * from who opened it.
+ * children, and an observation is not offered the message send. Each is a
+ * fact about the kind of turn, not a permission decided from who opened it.
+ *
+ * The send is withheld from an observation because of what an observation
+ * is: one chat speaking, its lines the developer's own words to their agent
+ * and the agent's replies, rendered under the speaker's name. A message
+ * Luke sends into that chat lands there as the developer's — the provider
+ * stores it as a user message and the next read renders it `Developer:` —
+ * so a brain that repeated the developer's line into the chat, or answered
+ * an agent in it, would read its own words back the next minute as the
+ * developer's and could not tell them apart. Luke sends into a session at
+ * the developer's ask and at nothing else, which is what the privacy policy
+ * says of it; an observation that thinks a chat needs words says so in the
+ * briefing, and the developer's answer is an ask.
  */
 export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
   switch (trigger) {
@@ -192,6 +204,9 @@ export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
       return { deny: [BRAIN_TOOL.ANNOUNCE] };
     case BRAIN_TURN_TRIGGER.CHILD_TASK:
       return { deny: [BRAIN_TOOL.ANNOUNCE, `${GROUP_PREFIX}${TOOL_GROUP.SESSIONS}`] };
+    case BRAIN_TURN_TRIGGER.WAKE:
+    case BRAIN_TURN_TRIGGER.ROSTER:
+      return { deny: [ACTION_TOOL.SEND_SESSION_MESSAGE] };
     default:
       return {};
   }

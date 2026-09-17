@@ -177,21 +177,27 @@ function call(
   return Effect.runPromise(runHostedTool(name, input, context, seams, turn));
 }
 
-test("an ask is offered the catalog under the hosted policy, an observation the same set plus announce", () => {
+test("an ask is offered the catalog under the hosted policy, an observation the same set plus announce and less the message send", () => {
   const ask = hostedToolDeclarations(ASK.trigger, LOUD).map((declared) => declared.name);
   const observation = hostedToolDeclarations(OBSERVATION.trigger, LOUD).map(
     (declared) => declared.name,
   );
   assert.equal(ask.includes(BRAIN_TOOL.ANNOUNCE), false);
   assert.equal(observation.includes(BRAIN_TOOL.ANNOUNCE), true);
+  // The send carries an ask to an agent and nothing else: an observation's lines are the
+  // developer's own words to that agent, and a message sent into the chat would come back the
+  // next minute as one of them.
+  assert.equal(ask.includes(ACTION_TOOL.SEND_SESSION_MESSAGE), true);
+  assert.equal(observation.includes(ACTION_TOOL.SEND_SESSION_MESSAGE), false);
   assert.deepEqual(
     observation.filter((name) => name !== BRAIN_TOOL.ANNOUNCE),
-    ask,
+    ask.filter((name) => name !== ACTION_TOOL.SEND_SESSION_MESSAGE),
   );
   assert.equal(ask.includes(ACTION_TOOL.OPEN_SESSION), false);
   // A child's task is answered in words like an ask and is offered the ask's set less the
   // session tools, so delegation stands one level deep; a child's completion is a note handed
-  // to the requester like an observation and is offered that set.
+  // to the requester and is offered the ask's set plus announce, the send included, since what
+  // it reads is a child's report and not a chat's own lines.
   const sessionTools: readonly string[] = [
     BRAIN_TOOL.SESSIONS_SPAWN,
     BRAIN_TOOL.SUBAGENTS,
@@ -202,12 +208,40 @@ test("an ask is offered the catalog under the hosted policy, an observation the 
     hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_TASK, LOUD).map((declared) => declared.name),
     ask.filter((name) => !sessionTools.includes(name)),
   );
-  assert.deepEqual(
-    hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_COMPLETION, LOUD).map(
-      (declared) => declared.name,
-    ),
-    observation,
+  const childCompletion = hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_COMPLETION, LOUD).map(
+    (declared) => declared.name,
   );
+  assert.equal(childCompletion.includes(BRAIN_TOOL.ANNOUNCE), true);
+  assert.equal(childCompletion.includes(ACTION_TOOL.SEND_SESSION_MESSAGE), true);
+  assert.deepEqual(
+    childCompletion.filter((name) => name !== BRAIN_TOOL.ANNOUNCE),
+    ask,
+  );
+});
+
+test("an observation turn's call of the message send is refused as no tool of its own, before admission or the carrier", async () => {
+  const { seams, executed } = fakes();
+  assert.equal(
+    hostedToolDeclarations(OBSERVATION.trigger, LOUD).some(
+      (declared) => declared.name === ACTION_TOOL.SEND_SESSION_MESSAGE,
+    ),
+    false,
+  );
+  const answer = await Effect.runPromise(
+    runHostedTool(
+      ACTION_TOOL.SEND_SESSION_MESSAGE,
+      {
+        provider_id: "conductor",
+        provider_session_id: SESSION_UUID,
+        text: "the developer said so",
+      },
+      eveContext(),
+      seams,
+      OBSERVATION,
+    ),
+  );
+  assert.deepEqual(answer, { status: "rejected", reason: ACTION_REFUSAL.NO_TOOL });
+  assert.deepEqual(executed, []);
 });
 
 test("a quiet account's observation turn is offered the same set less announce; an ask's set does not change", () => {
