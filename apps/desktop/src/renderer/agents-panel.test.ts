@@ -499,15 +499,27 @@ test("the turns of either kind are drawn as the thread draws its own, under the 
   }
 });
 
-test("a transcript not yet read says it is loading inside the scroller, and one read with nothing says so", () => {
+test("a transcript not yet read holds the shape of a thread inside the scroller, and one read with nothing says so", () => {
   const child = { conversationId: OPEN_CHILD.conversationId, kind: TRANSCRIPT_KIND.CHILD };
   const unread = renderTranscript({ transcript: { ...child, settled: false, groups: [] } });
   const scroll = unread.indexOf('class="conversation-scroll"');
-  const loading = unread.indexOf("Loading…");
+  const loading = unread.indexOf('class="conversation-skeleton"');
   assert.ok(scroll >= 0 && loading > scroll);
+  // The wait is the Sessions list's: placeholder bubbles hidden from a reader,
+  // pulsing on the loop a capture holds, under one status line that says the
+  // page is reading rather than that nothing was said or that a thread stands.
+  assert.ok(
+    unread.includes('<span class="visually-hidden" role="status">Reading the transcript</span>'),
+  );
+  const bubbles = unread.match(/class="conversation-skeleton-bubble"/g) ?? [];
+  assert.equal(bubbles.length, 4);
+  assert.ok(unread.includes('data-speaker="you" aria-hidden="true" style="--row-index:1"'));
+  assert.ok(unread.includes('data-speaker="luke" aria-hidden="true" style="--row-index:2"'));
+  assert.ok(!unread.includes("Loading…"));
   assert.ok(!unread.includes("Nothing said yet"));
+  assert.ok(!unread.includes('<ol class="conversation-list">'));
   const none = renderTranscript();
-  assert.ok(none.includes("Loading…"));
+  assert.ok(none.includes("Reading the transcript"));
   assert.ok(!none.includes("Nothing said yet"));
   // Another conversation's transcript still standing is not this page's, read
   // or not; nor is this conversation's under another kind.
@@ -519,13 +531,14 @@ test("a transcript not yet read says it is loading inside the scroller, and one 
       transcript: { ...transcript, settled: true, groups: SINGLE_TURN },
     });
     assert.ok(other.includes('class="conversation-scroll"'));
-    assert.ok(other.includes("Loading…"));
+    assert.ok(other.includes("Reading the transcript"));
     assert.ok(!other.includes('<ol class="conversation-list">'));
     assert.ok(!other.includes("Nothing said yet"));
   }
   const empty = renderTranscript({ transcript: { ...child, settled: true, groups: [] } });
   assert.ok(empty.includes("Nothing said yet"));
-  assert.ok(!empty.includes("Loading…"));
+  assert.ok(!empty.includes("Reading the transcript"));
+  assert.ok(!empty.includes('class="conversation-skeleton"'));
   assert.ok(!empty.includes('class="conversation-scroll"'));
 });
 
