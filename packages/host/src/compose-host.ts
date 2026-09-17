@@ -36,7 +36,7 @@ import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./
 import { createGatewayService } from "./service.js";
 
 /** The seven concerns, by the name each is built under. */
-export const HOST_CONCERN = {
+const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   DEVICES: "devices",
@@ -46,14 +46,14 @@ export const HOST_CONCERN = {
   LIVE: "live",
 } as const;
 
-export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
+type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
 
 /**
  * The order the launch has to keep: the account is read before anything
  * gated on it, and the loops are armed only once every owner of one has
  * started. The quit is this order reversed.
  */
-export const HOST_START_ORDER: readonly HostConcern[] = [
+const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.SETTINGS,
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.DEVICES,

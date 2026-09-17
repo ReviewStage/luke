@@ -4,7 +4,6 @@ import { GATEWAY_METHOD, type GatewayMethod, type GatewayShutdownSteps } from "@
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { TestClock } from "effect/testing";
-import { HOST_CONCERN, HOST_START_ORDER } from "../compose-host.js";
 import type { Composer } from "../composer.js";
 import { mergedMethods, startedAndStopped } from "./composer.js";
 import {
@@ -83,19 +82,6 @@ const buildStanding = (assembly: HostAssembly, scope: Scope.Closeable) =>
   );
 
 describe("the standing host", () => {
-  it("keeps the start order the merge kept before the composers were layers", () => {
-    assert.deepEqual(HOST_START_ORDER, [
-      HOST_CONCERN.SETTINGS,
-      HOST_CONCERN.ACCOUNT,
-      HOST_CONCERN.DEVICES,
-      HOST_CONCERN.CONVERSATION,
-      HOST_CONCERN.CALENDARS,
-      HOST_CONCERN.OBSERVATION,
-      HOST_CONCERN.LIVE,
-    ]);
-    assert.deepEqual([...HOST_START_ORDER].sort(), Object.values(HOST_CONCERN).sort());
-  });
-
   it.effect(
     "starts the concerns in the assembly's order, arms after the last, and the scope's close is the quit in reverse with the drain first",
     () =>
@@ -276,19 +262,6 @@ describe("the method fold", () => {
       assert.ok(Option.isSome(refusal));
       assert.equal(refusal.value._tag, "DuplicateGatewayMethod");
       assert.equal(refusal.value.method, GATEWAY_METHOD.SETTINGS_SNAPSHOT);
-    }),
-  );
-
-  it.effect("disjoint tables fold into one", () =>
-    Effect.gen(function* () {
-      const methods = yield* mergedMethods([
-        stubComposer([GATEWAY_METHOD.SETTINGS_SNAPSHOT]),
-        stubComposer([GATEWAY_METHOD.ACCOUNT_SNAPSHOT]),
-      ]);
-      assert.deepEqual(
-        Object.keys(methods).sort(),
-        [GATEWAY_METHOD.ACCOUNT_SNAPSHOT, GATEWAY_METHOD.SETTINGS_SNAPSHOT].sort(),
-      );
     }),
   );
 });

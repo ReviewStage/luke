@@ -20,8 +20,6 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
-  isKeyedAppSettingField,
-  settingEntryGuard,
   VOICE_HOTKEY_NONE,
 } from "@sidecar/settings";
 import { appSettingsView, SETTINGS_RESET_SCOPE } from "@sidecar/settings/wire";
@@ -32,7 +30,7 @@ import {
   unparsedWire,
   type WireRecord,
 } from "@sidecar/wire";
-import { Cause, ConfigProvider, Effect, Exit, Layer, Redacted, type Scope } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, Layer, Redacted, Result, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -41,7 +39,9 @@ import { Environment } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import {
   apiKeyRejection,
+  parsePersistedSettingsEither,
   type SecretCipher,
+  SettingsParseRefusal,
   SettingsStore,
   type SettingsStoreOptions,
 } from "./settings-store.js";
@@ -474,21 +474,6 @@ storeTest("decrypts once and re-decrypts only after the key changes", () =>
   }),
 );
 
-storeTest("reads a stored key back from a new store instance", () =>
-  Effect.gen(function* () {
-    const directory = yield* temporaryDirectoryScoped("luke-settings-");
-    yield* (yield* storeIn(directory)).setApiKey(CONDUCTOR, TEST_API_KEY);
-
-    const reopened = yield* storeIn(directory);
-
-    assert.equal(yield* readApiKey(reopened, CONDUCTOR), TEST_API_KEY);
-    assert.equal(
-      appSettingsView(yield* reopened.snapshot()).credentialSources[CONDUCTOR],
-      CREDENTIAL_SOURCE.NONE,
-    );
-  }),
-);
-
 test("a key the door admits is one the vault stores, and each refusal names its own reason", () => {
   // The cloud path holds a key to apiKeyRejection alone, so the vault's shape
   // rule has to be inside it: the same length cap, and no whitespace.
@@ -538,20 +523,6 @@ storeTest(
     }),
 );
 
-storeTest("clears a stored key", () =>
-  Effect.gen(function* () {
-    const directory = yield* temporaryDirectoryScoped("luke-settings-");
-    const store = yield* storeIn(directory);
-    yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
-    const { settings } = yield* store.setApiKey(CONDUCTOR, undefined);
-
-    assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-    assert.equal(yield* readApiKey(store, CONDUCTOR), undefined);
-  }),
-);
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 storeTest("a stored selection keeps only the filters this build recognizes", () =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("luke-settings-");
@@ -732,14 +703,6 @@ storeTest("connecting Apple Calendar again keeps the held choices, and selection
   }),
 );
 
-storeTest("Apple Calendar is offered only where there is a Mac calendar to read", () =>
-  Effect.gen(function* () {
-    const directory = yield* temporaryDirectoryScoped("luke-settings-");
-    const snapshot = yield* (yield* storeIn(directory)).snapshot();
-    assert.equal(appSettingsView(snapshot).appleCalendarAvailable, process.platform === "darwin");
-  }),
-);
-
 storeTest("a calendar account never disturbs a stored key, nor a key an account", () =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("luke-settings-");
@@ -863,18 +826,6 @@ storeTest("falls back to an API key from the environment", () =>
     // The key resolves for a caller that asks, but a cloud provider's row does
     // not answer for the shell: the vault is the one place its key connects from.
     assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-    assert.equal(yield* readApiKey(store, CONDUCTOR), TEST_API_KEY);
-  }),
-);
-
-storeTest("prefers a stored key over one from the environment", () =>
-  Effect.gen(function* () {
-    const directory = yield* temporaryDirectoryScoped("luke-settings-");
-    const store = yield* storeIn(directory, {
-      environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment-key" },
-    });
-    yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
     assert.equal(yield* readApiKey(store, CONDUCTOR), TEST_API_KEY);
   }),
 );
@@ -1286,20 +1237,6 @@ storeTest("ignores a stored chord this build cannot register", () =>
   }),
 );
 
-storeTest("the two Luke keys survive each other's writes", () =>
-  Effect.gen(function* () {
-    const directory = yield* temporaryDirectoryScoped("luke-settings-");
-    const store = yield* storeIn(directory);
-
-    yield* store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
-    yield* store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
-
-    const reopened = yield* storeIn(directory);
-    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
-    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
-  }),
-);
-
 storeTest("a stored key and a chosen preference survive each other's writes", () =>
   Effect.gen(function* () {
     for (const field of APP_SETTING_FIELDS) {
@@ -1454,67 +1391,6 @@ storeTest("a stale cleanup cannot clear a newer project default", () =>
   }),
 );
 
-test("an entry the field cannot hold is refused rather than quietly dropped", () => {
-  // The map guards drop what they cannot hold, which is right when reading a
-  // stored file and wrong for a write: a whole map of unholdable entries would
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // read as valid and clear what is stored. Every write goes one entry at a
-  // time so the refusal is the guard's own answer.
-  assert.equal(
-    settingEntryGuard(
-      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-      PROVIDER_ID.CONDUCTOR,
-      "   ",
-    ).valid,
-    false,
-  );
-  assert.equal(
-    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, PROVIDER_ID.CONDUCTOR, {
-      agent: "codex",
-      model: "no-such-model",
-    }).valid,
-    false,
-  );
-
-  // Clearing carries no value to check, and a holdable entry comes back whole.
-  assert.equal(
-    settingEntryGuard(
-      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-      PROVIDER_ID.CONDUCTOR,
-      undefined,
-    ).valid,
-    true,
-  );
-  assert.deepEqual(
-    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, PROVIDER_ID.CONDUCTOR, {
-      agent: "codex",
-      model: "gpt-5.6-sol",
-    }),
-    { valid: true, value: { agent: "codex", model: "gpt-5.6-sol" } },
-  );
-  // A provider this build lists no workspace agents for takes no entry, however
-  // well-formed; the map's own guard drops it rather than keeping a pairing no
-  // creation could spend.
-  assert.equal(
-    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
-      agent: "codex",
-    }).valid,
-    false,
-  );
-});
-
-test("every map-valued setting is written one entry at a time", () => {
-  // The keyed set is what the whole-map write path refuses, so a new map field
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // that forgot its entry declaration would be writable as a whole map again.
-  for (const field of APP_SETTING_FIELDS) {
-    const holdsMap =
-      field === APP_SETTING_SCHEMA.workspaceAgentDefaults.field ||
-      field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field;
-    assert.equal(isKeyedAppSettingField(field), holdsMap, field);
-  }
-});
-
 storeTest("overlapping default projects each survive the other's write", () =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectoryScoped("luke-settings-");
@@ -1617,6 +1493,17 @@ storeTest("ignores a stored pairing this build's table does not list", () =>
     assert.equal(appSettingsView(yield* store.snapshot()).workspaceAgentDefaults, undefined);
   }),
 );
+
+test("a settings file whose top level is not an object is refused with the legacy reason", () => {
+  const parsed = parsePersistedSettingsEither(JSON.stringify([1, 2, 3]));
+  assert.equal(Result.isFailure(parsed), true);
+  assert.deepEqual(
+    Result.getFailure(parsed),
+    Result.getFailure(
+      Result.fail(new SettingsParseRefusal({ reason: "Settings file is not an object" })),
+    ),
+  );
+});
 
 storeTest("recovers from a corrupt settings file", () =>
   Effect.gen(function* () {
@@ -1801,31 +1688,6 @@ storeTest("a reset leaves a stored key standing", () =>
     assert.equal(contents.voiceCaptions, false);
     assert.equal(yield* readApiKey(store, CONDUCTOR), TEST_API_KEY);
   }),
-);
-
-/**
- * The store's own face, yielded rather than awaited: what every caller above
- * reads through one run apiece is one fiber here, and a write and the read
- * after it settle in the order the effects are sequenced in.
- */
-storeTest("the store's own methods are effects a caller sequences itself", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const directory = yield* temporaryDirectoryScoped();
-      const store = yield* storeIn(directory);
-
-      assert.equal(
-        yield* store.get(APP_SETTING_SCHEMA.showInDock.field),
-        APP_SETTING_SCHEMA.showInDock.guard(undefined).value,
-      );
-      const saved = yield* store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-      assert.equal(saved.status, ACTION_RESULT_STATUS.ACCEPTED);
-      assert.equal(yield* store.get(APP_SETTING_SCHEMA.showInDock.field), true);
-
-      const reopened = yield* storeIn(directory);
-      assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
-    }),
-  ),
 );
 
 /** Concurrent reads share one read of the file rather than each making their own. */

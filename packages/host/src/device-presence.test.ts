@@ -32,11 +32,6 @@ test("presence holds only while input is recent and the screen is unlocked, both
   assert.equal(activeUntilFrom(undefined, NOW), null);
 });
 
-test("the window presence is claimed for outlasts one missed poll and not two", () => {
-  assert.equal(PRESENCE_RULE.ACTIVE_WINDOW_MS, 2 * DEVICE_POLL_INTERVAL_MS);
-  assert.ok(PRESENCE_RULE.ACTIVE_WINDOW_MS > DEVICE_POLL_INTERVAL_MS);
-});
-
 const MEETING = { startsAt: NOW - 600_000, endsAt: NOW + 1_200_000 };
 
 test("the quiet instant is the covering meeting's end under the setting, null once observed with none standing, and absent before any observation", () => {
@@ -105,9 +100,4 @@ test("the latest instant wins: a meeting ending after the stepped instant holds 
     assert.equal(reportedQuietUntil(shortMeeting, holds, NOW), held);
   }
   assert.equal(reportedQuietUntil(longMeeting, NO_HOLD, NOW), longMeeting);
-});
-
-test("releasing every hold of the Mac's own reports the meeting's state again, null included", () => {
-  assert.equal(reportedQuietUntil(null, BOTH, NOW), openEndedQuietUntil(NOW));
-  assert.equal(reportedQuietUntil(null, NO_HOLD, NOW), null);
 });

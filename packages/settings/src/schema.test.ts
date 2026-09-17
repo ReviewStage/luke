@@ -327,3 +327,52 @@ test("nothing the guide says about a setting names a credential or its shape", (
     }
   }
 });
+
+test("an entry the field cannot hold is refused rather than quietly dropped", () => {
+  // The map guards drop what they cannot hold, which is right when reading a
+  // stored file and wrong for a write: a whole map of unholdable entries would
+  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+  // read as valid and clear what is stored. Every write goes one entry at a
+  // time so the refusal is the guard's own answer.
+  assert.equal(
+    settingEntryGuard(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      PROVIDER_ID.CONDUCTOR,
+      "   ",
+    ).valid,
+    false,
+  );
+  assert.equal(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, PROVIDER_ID.CONDUCTOR, {
+      agent: "codex",
+      model: "no-such-model",
+    }).valid,
+    false,
+  );
+
+  // Clearing carries no value to check, and a holdable entry comes back whole.
+  assert.equal(
+    settingEntryGuard(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      PROVIDER_ID.CONDUCTOR,
+      undefined,
+    ).valid,
+    true,
+  );
+  assert.deepEqual(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, PROVIDER_ID.CONDUCTOR, {
+      agent: "codex",
+      model: "gpt-5.6-sol",
+    }),
+    { valid: true, value: { agent: "codex", model: "gpt-5.6-sol" } },
+  );
+  // A provider this build lists no workspace agents for takes no entry, however
+  // well-formed; the map's own guard drops it rather than keeping a pairing no
+  // creation could spend.
+  assert.equal(
+    settingEntryGuard(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, "superset", {
+      agent: "codex",
+    }).valid,
+    false,
+  );
+});

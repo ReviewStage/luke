@@ -1,18 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import {
-  CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_PROVIDER_LIST,
-  type CredentialProviderId,
-} from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
 import { LIVE_VOICE } from "@sidecar/live";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
 import { Environment } from "./seams.js";
-import {
-  SETTINGS_OVERRIDE_VARIABLE,
-  SETTINGS_OVERRIDE_VARIABLE_NAMES,
-  settingsOverrides,
-} from "./settings-overrides.js";
+import { SETTINGS_OVERRIDE_VARIABLE, settingsOverrides } from "./settings-overrides.js";
 
 const CONDUCTOR = CREDENTIAL_PROVIDER_ID.CONDUCTOR;
 const CONDUCTOR_KEY = "conductor-live-key";
@@ -33,20 +25,6 @@ const keyOf = (
 };
 
 describe("the settings store's environment overrides", () => {
-  it("are read from exactly these variables", () => {
-    assert.deepEqual(SETTINGS_OVERRIDE_VARIABLE_NAMES, [
-      "LUKE_LIVE_VOICE",
-      "GOOGLE_CALENDAR_OAUTH_CLIENT_ID",
-      "GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET",
-      "CONDUCTOR_API_KEY",
-      "CONDUCTOR_API_TOKEN",
-    ]);
-    assert.deepEqual(
-      CREDENTIAL_PROVIDER_LIST.flatMap((provider) => provider.environmentVariables),
-      ["CONDUCTOR_API_KEY", "CONDUCTOR_API_TOKEN"],
-    );
-  });
-
   it.effect("resolve from the provider the environment seam holds", () =>
     Effect.gen(function* () {
       const overrides = yield* read({

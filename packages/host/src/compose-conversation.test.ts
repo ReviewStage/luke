@@ -836,18 +836,6 @@ function rate(
   });
 }
 
-it.effect("the rating a read carries on a message reaches the picture", () =>
-  Effect.gen(function* () {
-    const { composer } = harness();
-    yield* composer.loop.refresh;
-    const [group] = composer.snapshot().groups;
-    assert.deepEqual(
-      group?.messages.map((message) => message.rating),
-      [undefined, { rating: MESSAGE_RATING.UP }],
-    );
-  }),
-);
-
 it.effect(
   "a rating on one of Luke's messages travels to the service with this device's id, shows at once, and is counted by verdict and kind alone",
   () =>

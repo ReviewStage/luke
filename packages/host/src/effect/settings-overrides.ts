@@ -34,15 +34,6 @@ export const SETTINGS_OVERRIDE_VARIABLE = {
   GOOGLE_CALENDAR_CLIENT_SECRET: GOOGLE_CALENDAR_SIGN_IN_ENVIRONMENT.CLIENT_SECRET,
 } as const;
 
-/**
- * The whole set of names the store reads, the credential providers' own key
- * variables included, in the order each registration lists them.
- */
-export const SETTINGS_OVERRIDE_VARIABLE_NAMES: readonly string[] = [
-  ...Object.values(SETTINGS_OVERRIDE_VARIABLE),
-  ...CREDENTIAL_PROVIDER_LIST.flatMap((provider) => provider.environmentVariables),
-];
-
 /** What the environment answered, resolved into what the store reads it for. */
 export interface SettingsEnvironmentOverrides {
   /** The launch voice, already held to the ones the API speaks. */

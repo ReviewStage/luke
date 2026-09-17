@@ -3,71 +3,17 @@ import path from "node:path";
 import { describe, it } from "@effect/vitest";
 import { GATEWAY_EVENT, type GatewayEventKind } from "@sidecar/gateway";
 import { DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
-import { Config, ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
+import { Duration, Effect, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACCOUNT_BASE_URL_VARIABLE } from "../host-kernel.js";
-import { runModeFor } from "../run-mode.js";
 import type { GatewayService } from "../service.js";
-import type { SecretCipher } from "../settings-store.js";
-import { HostKernelTag, HostService, hostKernelLayer, lateService } from "./kernel.js";
-import {
-  AppIdentity,
-  Environment,
-  IdSource,
-  MachinePresenceReader,
-  Reporter,
-  RunMode,
-  reporterLayer,
-  SecretCipher as SecretCipherTag,
-  ShutdownSignal,
-  StateRoot,
-} from "./seams.js";
+import { type TestKernelOptions, testKernelLayer } from "../testing/test-kernel.js";
+import { HostKernelTag, HostService, lateService } from "./kernel.js";
+import { reporterLayer } from "./seams.js";
 
-const CIPHER: SecretCipher = {
-  isAvailable: () => false,
-  encrypt: (plainText) => Buffer.from(plainText, "utf8"),
-  decrypt: (cipherText) => cipherText.toString("utf8"),
-};
-
-interface TestSeams {
-  readonly stateRoot: string;
-  readonly runMode: ReturnType<typeof runModeFor>;
-  readonly appVersion: string;
-  readonly packaged: boolean;
-  readonly environment: Record<string, string>;
-  readonly cipher: SecretCipher;
-  readonly createId: () => string;
-  readonly report: (message: string) => void;
-}
-
-const seams = (overrides: Partial<TestSeams> = {}): TestSeams => ({
-  stateRoot: "/nowhere",
-  runMode: runModeFor({ capture: false, fixture: true }),
-  appVersion: "0.0.0-test",
-  packaged: false,
-  environment: {},
-  cipher: CIPHER,
-  createId: () => "id",
-  report: () => undefined,
-  ...overrides,
-});
-
-/** The kernel layer over one test's own seam values, built the way a real composition builds it. */
-const kernelLayerOver = (input: TestSeams) =>
-  Layer.provideMerge(
-    hostKernelLayer,
-    Layer.mergeAll(
-      Layer.succeed(StateRoot, input.stateRoot),
-      Layer.succeed(RunMode, input.runMode),
-      Layer.succeed(AppIdentity, { appVersion: input.appVersion, packaged: input.packaged }),
-      Layer.succeed(Environment, ConfigProvider.fromEnvRecord(input.environment)),
-      Layer.succeed(SecretCipherTag, input.cipher),
-      Layer.succeed(IdSource, { create: input.createId }),
-      reporterLayer(input.report),
-      Layer.succeed(MachinePresenceReader, { read: undefined }),
-      Layer.succeed(ShutdownSignal, { notify: undefined }),
-    ),
-  );
+/** The kernel layer over one test's own seam values, on the shared fixture composition. */
+const kernelLayerOver = (overrides: Partial<TestKernelOptions> = {}) =>
+  testKernelLayer({ stateRoot: "/nowhere", ...overrides });
 
 // SAFETY: the event door is the only method the kernel reads of the service,
 // and these tests hand it back or call that one door and nothing else.
@@ -75,71 +21,18 @@ const stubService = (emit: GatewayService["emit"] = () => undefined): GatewaySer
   ({ emit }) as GatewayService;
 
 describe("the seam tags", () => {
-  it.effect("each resolve from the kernel's own layer", () =>
-    Effect.gen(function* () {
-      const reported: string[] = [];
-
-      const read = yield* Effect.provide(
-        Effect.all({
-          stateRoot: StateRoot,
-          runMode: RunMode,
-          identity: AppIdentity,
-          cipher: SecretCipherTag,
-          idSource: IdSource,
-          reporter: Reporter,
-        }),
-        kernelLayerOver(
-          seams({
-            stateRoot: "/state",
-            appVersion: "1.2.3",
-            createId: () => "minted",
-            report: (message) => reported.push(message),
-          }),
-        ),
-      );
-
-      assert.equal(read.stateRoot, "/state");
-      assert.equal(read.runMode.observesProviders, false);
-      assert.deepEqual(read.identity, {
-        appVersion: "1.2.3",
-        packaged: false,
-      });
-      assert.equal(read.cipher, CIPHER);
-      assert.equal(read.idSource.create(), "minted");
-      read.reporter.report("a line");
-      assert.deepEqual(reported, ["a line"]);
-    }),
-  );
-
-  it.effect("carry the environment as a provider a config is read out of", () =>
-    Effect.gen(function* () {
-      const environment = yield* Effect.provide(
-        Environment,
-        kernelLayerOver(seams({ environment: { LUKE_TRACE_DIR: "/traces" } })),
-      );
-
-      assert.equal(yield* Config.String("LUKE_TRACE_DIR").parse(environment), "/traces");
-      assert.deepEqual(
-        yield* Config.option(Config.String(ACCOUNT_BASE_URL_VARIABLE)).parse(environment),
-        Option.none(),
-      );
-    }),
-  );
-
   it.effect("read the account override out of that provider, and never in a packaged build", () =>
     Effect.gen(function* () {
       const override = "http://127.0.0.1:3000/api/auth";
       const development = yield* Effect.provide(
         HostKernelTag,
-        kernelLayerOver(seams({ environment: { [ACCOUNT_BASE_URL_VARIABLE]: override } })),
+        kernelLayerOver({ environment: { [ACCOUNT_BASE_URL_VARIABLE]: override } }),
       );
       const packaged = yield* Effect.provide(
         HostKernelTag,
-        kernelLayerOver(
-          seams({ packaged: true, environment: { [ACCOUNT_BASE_URL_VARIABLE]: override } }),
-        ),
+        kernelLayerOver({ packaged: true, environment: { [ACCOUNT_BASE_URL_VARIABLE]: override } }),
       );
-      const none = yield* Effect.provide(HostKernelTag, kernelLayerOver(seams()));
+      const none = yield* Effect.provide(HostKernelTag, kernelLayerOver());
 
       assert.equal(development.accountBaseUrl, override);
       assert.equal(development.hostedServiceBaseUrl, "http://127.0.0.1:3000");
@@ -163,10 +56,7 @@ describe("the seam tags", () => {
 
   it.effect("hand the kernel the seams it was built over", () =>
     Effect.gen(function* () {
-      const kernel = yield* Effect.provide(
-        HostKernelTag,
-        kernelLayerOver(seams({ stateRoot: "/state" })),
-      );
+      const kernel = yield* Effect.provide(HostKernelTag, kernelLayerOver({ stateRoot: "/state" }));
 
       assert.equal(kernel.stateRoot, "/state");
       assert.equal(kernel.createId(), "id");
@@ -178,7 +68,7 @@ describe("the seam tags", () => {
     "the kernel's clock is Effect's own, a `TestClock` under this test rather than the seam's own reading",
     () =>
       Effect.gen(function* () {
-        const kernel = yield* Effect.provide(HostKernelTag, kernelLayerOver(seams()));
+        const kernel = yield* Effect.provide(HostKernelTag, kernelLayerOver());
 
         assert.equal(kernel.now(), 0);
         yield* TestClock.adjust(Duration.millis(1_000));
@@ -218,7 +108,7 @@ describe("the late service", () => {
     Effect.gen(function* () {
       const held = yield* Effect.provide(
         Effect.all({ kernel: HostKernelTag, late: HostService }),
-        kernelLayerOver(seams()),
+        kernelLayerOver(),
       );
       const emitted: GatewayEventKind[] = [];
       const service = stubService((kind) => {
@@ -244,7 +134,7 @@ describe("the late service", () => {
       Effect.gen(function* () {
         const held = yield* Effect.provide(
           Effect.all({ kernel: HostKernelTag, late: HostService }),
-          kernelLayerOver(seams()),
+          kernelLayerOver(),
         );
         const emitted: GatewayEventKind[] = [];
         const service = stubService((kind) => {

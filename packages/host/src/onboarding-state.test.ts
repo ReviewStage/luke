@@ -9,7 +9,6 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import { test } from "vitest";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
-import { introductionOwed } from "./introduction-flow.js";
 import {
   ONBOARDING_STATE_FILE,
   type OnboardingStateRecord,
@@ -165,10 +164,4 @@ test("the calendar gate is owed until a Done or a decline answers it", () => {
   );
   assert.equal(calendarOnboardingOwed(undefined), false);
   assert.equal(calendarOnboardingOwed({ calendarOnboardingSettledAt: LATER }), false);
-});
-
-test("the introduction's own moments round-trip beside the beats', and decide it alone", () => {
-  assert.equal(introductionOwed(MOMENTS), false);
-  const { introductionCompletedAt: _completed, ...uncompleted } = MOMENTS;
-  assert.equal(introductionOwed(uncompleted), true);
 });

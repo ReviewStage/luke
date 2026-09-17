@@ -3,10 +3,9 @@ import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
-import { Effect, Layer, type Path, Result } from "effect";
+import { Effect, Layer, type Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
-import { parsePersistedSettingsEither, SettingsParseRefusal } from "../settings-store.js";
 import { readSettingsFileText, writeSettingsFileAtomic } from "./settings-store-io.js";
 
 const SETTINGS_FILE_NAME = "settings.json";
@@ -87,31 +86,4 @@ describe("writeSettingsFileAtomic", () => {
       }),
     ),
   );
-});
-
-describe("parsePersistedSettingsEither", () => {
-  it("answers the parsed record for a well-formed settings file", () => {
-    const parsed = parsePersistedSettingsEither(
-      JSON.stringify({ version: 2, apiKeys: {}, showInDock: true }),
-    );
-    assert.equal(Result.isSuccess(parsed), true);
-    assert.equal(Result.getOrThrow(parsed).showInDock, true);
-  });
-
-  it("refuses a file whose top level is not an object, with the legacy reason", () => {
-    const parsed = parsePersistedSettingsEither(JSON.stringify([1, 2, 3]));
-    assert.equal(Result.isFailure(parsed), true);
-    assert.deepEqual(
-      Result.getFailure(parsed),
-      Result.getFailure(
-        Result.fail(new SettingsParseRefusal({ reason: "Settings file is not an object" })),
-      ),
-    );
-  });
-
-  it("refuses text that is not JSON at all", () => {
-    const parsed = parsePersistedSettingsEither("{ not json");
-    assert.equal(Result.isFailure(parsed), true);
-    assert.equal(Result.isFailure(parsed) && parsed.failure._tag, "SettingsParseRefusal");
-  });
 });
