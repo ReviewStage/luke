@@ -59,7 +59,7 @@ export { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength, TOOL_GROUP } from "
 const BRAIN_TOOL_TYPE = "function";
 
 /** The brain's own tools, in the order the catalog lists them. */
-export const BRAIN_TOOLS: readonly ToolModule<WireRecord, ToolContext>[] = [
+const BRAIN_TOOLS: readonly ToolModule<WireRecord, ToolContext>[] = [
   ...READ_TOOLS,
   ANNOUNCE_TOOL,
   ...WORKSPACE_TOOLS,

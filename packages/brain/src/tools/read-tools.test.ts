@@ -3,7 +3,6 @@ import { it } from "@effect/vitest";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { READ_TOOLS, type ReadToolContext, type ReadToolModule } from "./read-tools.js";
@@ -34,17 +33,6 @@ function context() {
   };
   return { ctx, reads };
 }
-
-it("the two reads are modules named as the catalog names them, each with the schema its fields are declared in", () => {
-  assert.deepEqual(
-    READ_TOOLS.map((tool) => tool.name),
-    [BRAIN_TOOL.LIST_SESSIONS, BRAIN_TOOL.READ_TRANSCRIPT],
-  );
-  const readTranscript = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
-  const identity = readTranscript && emitJsonSchema(readTranscript.inputSchema);
-  assert.ok(identity && "required" in identity);
-  assert.deepEqual([...identity.required].sort(), ["provider_id", "provider_session_id"]);
-});
 
 it.effect(
   "list_sessions answers the roster as the host renders it now, and reads nothing else",

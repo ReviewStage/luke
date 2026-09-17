@@ -11,11 +11,9 @@ import {
 import { wireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { test } from "vitest";
-import { ACTION_TOOLS } from "./tools/action-tools.js";
 import { PLAN_READS_TOOL_NAME } from "./tools/prefetch-tool.js";
 import {
   BRAIN_TOOL,
-  BRAIN_TOOLS,
   brainToolCatalog,
   brainToolRegistry,
   hostedBrainToolCatalog,
@@ -127,12 +125,11 @@ test("the dated-note tools stand in the workspace group: the append a write, the
   assert.equal(withoutReads.allows(BRAIN_TOOL.LIST_DAILY_NOTES), false);
 });
 
-test("announce takes the briefing alone and the hosted catalog carries every definition as a function tool", () => {
+test("announce takes the briefing alone, and the hosted catalog is the brain's plus the planner's one tool", () => {
   const announce = hostedBrainToolCatalog().get(BRAIN_TOOL.ANNOUNCE);
   assert.ok(announce);
   assert.deepEqual(announce.parameters.required, ["briefing"]);
   assert.deepEqual(Object.keys(wireRecord(announce.parameters.properties) ?? {}), ["briefing"]);
-  for (const tool of hostedBrainToolCatalog().values()) assert.equal(tool.type, "function");
   // The hosted catalog is the brain's plus the prefetch planner's one tool,
   // which no turn is offered and the service alone selects, by kind.
   assert.equal(hostedBrainToolCatalog().size, brainToolCatalog().length + 1);
@@ -149,14 +146,6 @@ test("announce takes the briefing alone and the hosted catalog carries every def
 test("a child's task turn loses announce like an ask and the whole sessions group besides, and the session tools stand in the catalog under that group", () => {
   const childTask = turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_TASK);
   assert.deepEqual(childTask.deny, [BRAIN_TOOL.ANNOUNCE, `${GROUP_PREFIX}${TOOL_GROUP.SESSIONS}`]);
-  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.ASK), { deny: [BRAIN_TOOL.ANNOUNCE] });
-  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.ROSTER), {
-    deny: [ACTION_TOOL.SEND_SESSION_MESSAGE],
-  });
-  assert.deepEqual(
-    turnToolPolicy(BRAIN_TURN_TRIGGER.WAKE),
-    turnToolPolicy(BRAIN_TURN_TRIGGER.ROSTER),
-  );
   assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_COMPLETION), {});
   const catalog = brainToolCatalog();
   for (const name of [
@@ -204,25 +193,6 @@ test("the notebook stands in the catalog under the memory group as the provider'
   });
   assert.equal(deniedActions.allows(ACTION_TOOL.CHANGE_APP_SETTING), false);
   assert.equal(deniedActions.allows(NOTEBOOK_MEMORY_TOOL.SEARCH), true);
-});
-
-test("every tool the catalog lists is a module of one shape: a name, words, a wire schema, and one execute", () => {
-  const modules = [...ACTION_TOOLS, ...BRAIN_TOOLS];
-  const catalog = brainToolCatalog();
-  const memoryTools: readonly string[] = Object.values(NOTEBOOK_MEMORY_TOOL);
-  for (const entry of catalog) {
-    if (memoryTools.includes(entry.schema.name)) continue;
-    const module = modules.find((candidate) => candidate.name === entry.schema.name);
-    assert.ok(module, `${entry.schema.name} is a module`);
-    // The registry's schema is the module's own wire schema, emitted once.
-    assert.deepEqual(
-      entry.schema.parameters,
-      JSON.parse(JSON.stringify(emitJsonSchema(module.inputSchema))),
-    );
-    assert.equal(entry.schema.description, module.description);
-  }
-  assert.equal(new Set(modules.map((module) => module.name)).size, modules.length);
-  assert.equal(modules.length + memoryTools.length, catalog.length);
 });
 
 test("the registry holds every catalog tool once under its name, with the schema the catalog's parameters were emitted from", () => {

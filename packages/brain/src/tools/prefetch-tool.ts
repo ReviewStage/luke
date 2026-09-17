@@ -18,7 +18,7 @@ import { BRAIN_TOOL } from "./names.js";
 export const PLAN_READS_TOOL_NAME = "plan_reads";
 
 /** The most reads one plan may name: one transcript and one notebook search. */
-export const PLAN_READS_MAXIMUM = 2;
+const PLAN_READS_MAXIMUM = 2;
 
 /** The two reads a plan may name, by the tool each becomes in the turn's input. */
 export const PREFETCH_READ_KIND = {
@@ -67,7 +67,7 @@ const PLAN_READS_FIELDS = EffectSchema.Struct({
 });
 
 /** Effect's `Schema` is invariant in its decoded type, so the concrete struct is erased to the module shape's type. */
-export const PLAN_READS_INPUT: EffectSchema.Codec<unknown, UnparsedWireValue> = EffectSchema.make(
+const PLAN_READS_INPUT: EffectSchema.Codec<unknown, UnparsedWireValue> = EffectSchema.make(
   PLAN_READS_FIELDS.ast,
 );
 

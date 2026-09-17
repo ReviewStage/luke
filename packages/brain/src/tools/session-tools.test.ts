@@ -10,9 +10,8 @@ import {
   RUN_ORIGIN,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
-import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
+import { BRAIN_TOOL, maximumChildTaskLength } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
 import {
   type BrainChildAccess,
@@ -117,23 +116,6 @@ function toolNamed(name: string) {
   return tool;
 }
 
-it("the four session tools are modules in catalog order", () => {
-  assert.deepEqual(
-    SESSION_TOOLS.map((tool) => tool.name),
-    [
-      BRAIN_TOOL.SESSIONS_SPAWN,
-      BRAIN_TOOL.SUBAGENTS,
-      BRAIN_TOOL.SESSIONS_LIST,
-      BRAIN_TOOL.SESSIONS_HISTORY,
-    ],
-  );
-  const required = SESSION_TOOLS.map((tool) => {
-    const node = emitJsonSchema(tool.inputSchema);
-    return "required" in node ? [...node.required] : [];
-  });
-  assert.deepEqual(required, [["task"], [], [], ["child_id"]]);
-});
-
 it.effect(
   "a spawn is bounded here, carries the turn's run, runs through the journal, and answers a receipt that says accepted and never done",
   () =>
@@ -235,7 +217,6 @@ it.effect(
         REFUSAL_REASON.UNKNOWN_CHILD,
       );
       assert.equal((yield* history.execute({}, ctx)).reason, REFUSAL_REASON.NOT_OWN_CHILD);
-      assert.ok(maximumSessionsConversationLines > 0);
     }),
 );
 

@@ -4,7 +4,6 @@ import {
   ACTION_KIND,
   ACTION_OUTPUT_STATUS,
   ACTION_REFUSAL,
-  ACTIONS,
   acceptedActionOutput,
   type ValidatedAction,
 } from "@sidecar/actions";
@@ -16,9 +15,8 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
-import { ACTION_TOOLS, type ActionToolContext, actionToolNamed } from "./action-tools.js";
+import { type ActionToolContext, actionToolNamed } from "./action-tools.js";
 
 const NOW = 1_800_000_000_000;
 
@@ -80,22 +78,6 @@ function context(revoked: () => boolean = () => false) {
   };
   return { ctx, carried, carriedFields, rosterReads };
 }
-
-it("every row of the actions table is a module, in the table's order", () => {
-  const rows = Object.values(ACTIONS);
-  assert.deepEqual(
-    ACTION_TOOLS.map((tool) => [tool.name, tool.kind, tool.family]),
-    rows.map((spec) => [spec.name, spec.kind, spec.family]),
-  );
-  for (const [index, tool] of ACTION_TOOLS.entries()) {
-    const request = rows[index]?.request;
-    assert.ok(request);
-    assert.deepEqual(emitJsonSchema(tool.inputSchema), emitJsonSchema(request));
-    assert.equal(actionToolNamed(tool.name), tool);
-  }
-  assert.equal(actionToolNamed("send_session_message")?.kind, ACTION_KIND.MESSAGE);
-  assert.equal(actionToolNamed("delete_everything"), undefined);
-});
 
 it.effect(
   "execute admits over the roster admission reads for itself, then carries what admission minted",

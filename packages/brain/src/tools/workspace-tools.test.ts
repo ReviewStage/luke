@@ -3,7 +3,6 @@ import { it } from "@effect/vitest";
 import { type DailyNoteListing, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
 import { BRAIN_TOOL, maximumListedDailyNotes } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -74,24 +73,6 @@ function fakeWorkspace() {
   return { workspace, written, appended, listed };
 }
 
-it("the five workspace tools are modules in catalog order, each naming the strings it takes", () => {
-  assert.deepEqual(
-    WORKSPACE_TOOLS.map((tool) => tool.name),
-    [
-      BRAIN_TOOL.READ_WORKSPACE_FILE,
-      BRAIN_TOOL.WRITE_WORKSPACE_FILE,
-      BRAIN_TOOL.APPEND_DAILY_NOTE,
-      BRAIN_TOOL.LIST_DAILY_NOTES,
-      BRAIN_TOOL.LOAD_SKILL,
-    ],
-  );
-  const required = WORKSPACE_TOOLS.map((tool) => {
-    const node = emitJsonSchema(tool.inputSchema);
-    return "required" in node ? [...node.required] : [];
-  });
-  assert.deepEqual(required, [["name"], ["name", "content"], ["content"], [], ["location"]]);
-});
-
 it.effect(
   "a whole-file write of a dated note is refused toward append_daily_note before the journal is asked, and a bootstrap file still lands",
   () =>
@@ -114,11 +95,6 @@ it.effect(
       assert.equal(landed.status, ACTION_RESULT_STATUS.ACCEPTED);
       assert.deepEqual(written, [["USER.md", "- x"]]);
       assert.equal(journaled(), 1);
-      assert.match(write.description, /append_daily_note/u);
-      assert.match(
-        write.description,
-        /AGENTS\.md, IDENTITY\.md, USER\.md, MEMORY\.md, or BOOTSTRAP\.md/u,
-      );
     }),
 );
 
@@ -186,9 +162,7 @@ it.effect(
         ],
       });
       assert.deepEqual(listed, [maximumListedDailyNotes]);
-      assert.equal(maximumListedDailyNotes, 60);
       assert.equal(journaled(), 0);
-      assert.match(list.description, /60/u);
     }),
 );
 

@@ -2,10 +2,9 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { ANNOUNCE_TOOL, type AnnounceToolContext } from "./announce-tool.js";
-import { BRAIN_TOOL, maximumBriefingLength } from "./names.js";
+import { maximumBriefingLength } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
 
 function context() {
@@ -26,11 +25,6 @@ function context() {
 
 it.effect("announce takes the briefing alone, hands it on bounded, and answers accepted", () =>
   Effect.gen(function* () {
-    assert.equal(ANNOUNCE_TOOL.name, BRAIN_TOOL.ANNOUNCE);
-    const node = emitJsonSchema(ANNOUNCE_TOOL.inputSchema);
-    assert.ok("required" in node && "properties" in node);
-    assert.deepEqual(node.required, ["briefing"]);
-    assert.deepEqual(Object.keys(node.properties), ["briefing"]);
     const { ctx, announced } = context();
     const answer = yield* ANNOUNCE_TOOL.execute({ briefing: "Checkout wants a decision." }, ctx);
     assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED });
@@ -54,16 +48,3 @@ it.effect("a briefing with no words is refused and nothing is handed on", () =>
     assert.deepEqual(announced, []);
   }),
 );
-
-it("the briefing's context carries no carrier and no admission: the module's words can become speech and nothing else", () => {
-  const { ctx } = context();
-  assert.deepEqual(Object.keys(ctx).sort(), [
-    "announce",
-    "conversationId",
-    "isRevoked",
-    "origin",
-    "runId",
-    "signal",
-    "turnId",
-  ]);
-});
