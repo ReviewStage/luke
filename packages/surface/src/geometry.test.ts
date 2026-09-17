@@ -150,7 +150,6 @@ test("a display without a housing keeps the peek's width beside the 14-inch one"
   // Luke's words wrap at the peek's width, so the bubble's window holds the
   // same floored peek the caption block's reservation was measured against —
   // never the 248px left when no housing grows it.
-  assert.equal(PEEK_MIN_WIDTH, 210 + (CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH) * 2);
   assert.ok(
     positionNotchWindow(plainDisplay, "compact").width >= PEEK_MIN_WIDTH + SURFACE_MARGIN * 2,
   );

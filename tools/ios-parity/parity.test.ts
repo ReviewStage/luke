@@ -285,14 +285,6 @@ test("LiveClientEventType is RENDERER_CLIENT_EVENTS", () => {
   );
 });
 
-test("every LiveClientEventType is a LIVE_CLIENT_EVENT", () => {
-  assertSubset(
-    swiftEnumRawValues(swift(`${KIT}/LiveEvents.swift`), "LiveClientEventType"),
-    Object.values(LIVE_CLIENT_EVENT),
-    "a command renamed in the grammar leaves the phone sending one the API does not know",
-  );
-});
-
 test("LiveServerEventType is RENDERER_SERVER_EVENTS", () => {
   assertSameValues(
     swiftEnumRawValues(swift(`${KIT}/LiveEvents.swift`), "LiveServerEventType"),

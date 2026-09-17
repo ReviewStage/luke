@@ -37,3 +37,4 @@ export {
   settleJsonSchemaGoldenSet,
 } from "./json-schema-golden.js";
 export { temporaryDirectory } from "./temporary-directory.js";
+export { settleTextGolden } from "./text-golden.js";

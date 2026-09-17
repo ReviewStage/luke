@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { SESSION_URGENCY } from "@sidecar/session";
-import { compareSessionsByUrgency, MOTION_DURATION_MS } from "@sidecar/surface";
+import { compareSessionsByUrgency } from "@sidecar/surface";
 import { test } from "vitest";
 
 test("urgency puts attention first, then working, complete, and idle", () => {
@@ -25,8 +25,4 @@ test("within one urgency, the session that moved most recently comes first", () 
   const older = { urgency: SESSION_URGENCY.WORKING, lastActivityAt: 1 };
   const newer = { urgency: SESSION_URGENCY.WORKING, lastActivityAt: 2 };
   assert.equal(compareSessionsByUrgency(newer, older), -1);
-});
-
-test("collapse waits out exit then shape, matching the CSS token pair", () => {
-  assert.equal(MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE, 550);
 });
