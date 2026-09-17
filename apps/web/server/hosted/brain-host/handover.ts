@@ -25,7 +25,13 @@ import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationTarget } from "../store/index.js";
 import type { BrainHostTurn } from "./bounds.js";
-import { EVE_SEND_OUTCOME, type EveMessage, type EveSessions } from "./eve-sessions.js";
+import {
+  describeUnreachable,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+  type EveUnreachable,
+} from "./eve-sessions.js";
 import {
   claimRuntimeSession,
   lockConversationRow,
@@ -74,13 +80,29 @@ type Opening =
 
 type SendOutcome = (typeof EVE_SEND_OUTCOME)[keyof typeof EVE_SEND_OUTCOME];
 
+/** An eve that could not be reached, said with what the client knows of it; the turn is not handed over. */
+function unreachable(seams: { readonly report: (message: string) => void }, what: string) {
+  return (failure: EveUnreachable) => {
+    seams.report(`eve could not be reached for ${what}: ${describeUnreachable(failure)}.`);
+    return Effect.succeed(undefined);
+  };
+}
+
 /** eve's answer to the message sent into the session, a refusal said here and a retirement left to the caller. */
 const sendInto = /* @__PURE__ */ Effect.fn("sendInto")(function* <Turn extends BrainHostTurn>(
   seams: HandoverSeams<Turn>,
   sessionId: string,
   message: EveMessage<Turn>,
 ): Effect.fn.Return<SendOutcome> {
-  const sent = yield* Effect.promise(() => seams.eve.send(sessionId, message));
+  const sent = yield* seams.eve
+    .send(sessionId, message)
+    .pipe(
+      Effect.catchTag(
+        "EveUnreachable",
+        unreachable(seams, `a ${message.turn} turn on conversation ${message.conversationId}`),
+      ),
+    );
+  if (sent === undefined) return EVE_SEND_OUTCOME.FAILED;
   if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
     seams.report(
       `eve refused a ${message.turn} turn on conversation ${message.conversationId} with status ${sent.status}.`,
@@ -95,7 +117,15 @@ const openSession = /* @__PURE__ */ Effect.fn("openSession")(function* <Turn ext
   target: ConversationTarget,
   message: EveMessage<Turn>,
 ): Effect.fn.Return<Opening, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  const opened = yield* Effect.promise(() => seams.eve.open(message));
+  const opened = yield* seams.eve
+    .open(message)
+    .pipe(
+      Effect.catchTag(
+        "EveUnreachable",
+        unreachable(seams, `a session for conversation ${target.conversationId}`),
+      ),
+    );
+  if (opened === undefined) return { outcome: OPENING.NOTHING };
   if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
     yield* claimRuntimeSession(target, opened.sessionId, new Date(seams.now()));
     return { outcome: OPENING.OPENED };

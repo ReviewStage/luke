@@ -27,8 +27,10 @@ import {
   type EveMessage,
   type EveSessions,
   type EveSessionsOptions,
+  type EveUnreachable,
 } from "../server/hosted/brain-host/eve-sessions";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { eveUnreachable } from "./support/no-network";
 import { insertConversation, insertMessage } from "./support/store-rows";
 
 /**
@@ -102,12 +104,13 @@ async function delegating(): Promise<{ userId: string; parentId: string; message
   return { userId, parentId, messageId };
 }
 
-type Opened = Awaited<ReturnType<EveSessions<ChildTurn>["open"]>>;
+type Opened = Effect.Success<ReturnType<EveSessions<ChildTurn>["open"]>>;
+type Answer = () => Effect.Effect<Opened, EveUnreachable>;
 
 const ACCEPTING: Opened = { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: SESSION_ID };
 
 /** A fake eve recording how it was composed and what it was handed, answering every open as the test says. */
-function fakeEve(answer: () => Promise<Opened> = () => Promise.resolve(ACCEPTING)) {
+function fakeEve(answer: Answer = () => Effect.succeed(ACCEPTING)) {
   const composed: EveSessionsOptions[] = [];
   const opened: EveMessage<ChildTurn>[] = [];
   const eve: ChildOpenerSeams["eve"] = (options) => {
@@ -251,9 +254,7 @@ test("a deployment with no secret or no origin opens nothing and inserts nothing
 
 test("a refused open and an open that never answered each stamp the child they opened", async () => {
   const fixture = await delegating();
-  const refusing = fakeEve(() =>
-    Promise.resolve({ outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }),
-  );
+  const refusing = fakeEve(() => Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }));
   const refused = seams({ eve: refusing.eve });
   assert.deepEqual(await database.run(openChild(refused, spawn(fixture))), {
     ok: false,
@@ -262,7 +263,7 @@ test("a refused open and an open that never answered each stamp the child they o
   assert.equal(refusing.opened.length, 1);
   assert.match(refused.reports[0] ?? "", /status 503/);
 
-  const throwing = fakeEve(() => Promise.reject(new Error("fixture: eve unreachable")));
+  const throwing = fakeEve(() => eveUnreachable(ORIGIN));
   const unreachable = seams({ eve: throwing.eve });
   assert.deepEqual(await database.run(openChild(unreachable, spawn(fixture))), {
     ok: false,
@@ -288,19 +289,23 @@ test("a refused open and an open that never answered each stamp the child they o
 test("a session that claimed the child before eve's answer was read is the child's, whatever eve answered", async () => {
   const fixture = await delegating();
   const CLAIMED = "wrun_01M0000000000000000CLAIMED";
-  const claiming = fakeEve(async () => {
-    // eve started the session and its start claimed the row, and then the answer was lost.
-    const [message] = claiming.opened;
-    assert.ok(message);
-    await database.run(
-      claimRuntimeSession(
-        { userId: fixture.userId, conversationId: message.conversationId },
-        CLAIMED,
-        new Date(NOW),
-      ),
-    );
-    throw new Error("fixture: the answer was lost");
-  });
+  const claiming = fakeEve(() =>
+    Effect.gen(function* () {
+      // eve started the session and its start claimed the row, and then the answer was lost.
+      const [message] = claiming.opened;
+      assert.ok(message);
+      yield* Effect.promise(() =>
+        database.run(
+          claimRuntimeSession(
+            { userId: fixture.userId, conversationId: message.conversationId },
+            CLAIMED,
+            new Date(NOW),
+          ),
+        ),
+      );
+      return yield* eveUnreachable(ORIGIN);
+    }),
+  );
   const opener = seams({ eve: claiming.eve });
   const answer = await database.run(openChild(opener, spawn(fixture)));
   assert.equal(answer.ok, true);
@@ -313,7 +318,7 @@ test("a session that claimed the child before eve's answer was read is the child
 
 test("an open interrupted before eve answered stamps the child on its way out", async () => {
   const fixture = await delegating();
-  const hanging = fakeEve(() => new Promise<Opened>(() => undefined));
+  const hanging = fakeEve(() => Effect.never);
   const opener = seams({ eve: hanging.eve });
   await database.run(
     Effect.gen(function* () {

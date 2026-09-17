@@ -147,13 +147,17 @@ it.effect(
       assert.equal(await asks.named(other, earlier.id), undefined);
       assert.equal(await asks.latestSession(owner, conversationId), undefined);
 
-      await asks.dispatchOnce({ userId: owner, conversationId }, earlier.id, async () => ({
-        sessionId: "wrun_02_newer",
-      }));
-      await asks.dispatchOnce({ userId: owner, conversationId }, later.id, async () => ({
-        sessionId: "wrun_01_older",
-        deliveryId: "delivery-2",
-      }));
+      await asks.dispatchOnce({ userId: owner, conversationId }, earlier.id, () =>
+        Effect.succeed({
+          sessionId: "wrun_02_newer",
+        }),
+      );
+      await asks.dispatchOnce({ userId: owner, conversationId }, later.id, () =>
+        Effect.succeed({
+          sessionId: "wrun_01_older",
+          deliveryId: "delivery-2",
+        }),
+      );
       assert.equal(await asks.latestSession(owner, conversationId), "wrun_02_newer");
       assert.equal(await asks.latestSession(other, conversationId), undefined);
     }),
@@ -167,16 +171,20 @@ it.effect(
       const conversationId = await conversation(userId);
       const ask = await asks.record(write(userId, conversationId));
       const turnId = randomUUID();
-      await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => ({
-        sessionId: "wrun_1",
-        turnId,
-      }));
+      await asks.dispatchOnce({ userId, conversationId }, ask.id, () =>
+        Effect.succeed({
+          sessionId: "wrun_1",
+          turnId,
+        }),
+      );
       let ran = 0;
       const after = dispatchedRow(
-        await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
-          ran += 1;
-          return { sessionId: "wrun_2", deliveryId: "delivery-1" };
-        }),
+        await asks.dispatchOnce({ userId, conversationId }, ask.id, () =>
+          Effect.sync(() => {
+            ran += 1;
+            return { sessionId: "wrun_2", deliveryId: "delivery-1" };
+          }),
+        ),
       );
       assert.equal(ran, 0);
       assert.equal(after.sessionId, "wrun_1");
@@ -185,10 +193,8 @@ it.effect(
       const undispatched = await asks.record(write(userId, conversationId));
       assert.equal(
         dispatchedRow(
-          await asks.dispatchOnce(
-            { userId, conversationId },
-            undispatched.id,
-            async () => undefined,
+          await asks.dispatchOnce({ userId, conversationId }, undispatched.id, () =>
+            Effect.succeed(undefined),
           ),
         ).sessionId,
         undefined,
@@ -210,18 +216,24 @@ it.effect(
       const waiting = await asks.record(write(userId, conversationId));
       const alsoWaiting = await asks.record(write(userId, conversationId));
       const unrelated = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, waiting.id, async () => ({
-        sessionId: "wrun_1",
-        deliveryId: "delivery-a",
-      }));
-      await asks.dispatchOnce(target, alsoWaiting.id, async () => ({
-        sessionId: "wrun_1",
-        deliveryId: "delivery-b",
-      }));
-      await asks.dispatchOnce(target, unrelated.id, async () => ({
-        sessionId: "wrun_1",
-        deliveryId: "delivery-c",
-      }));
+      await asks.dispatchOnce(target, waiting.id, () =>
+        Effect.succeed({
+          sessionId: "wrun_1",
+          deliveryId: "delivery-a",
+        }),
+      );
+      await asks.dispatchOnce(target, alsoWaiting.id, () =>
+        Effect.succeed({
+          sessionId: "wrun_1",
+          deliveryId: "delivery-b",
+        }),
+      );
+      await asks.dispatchOnce(target, unrelated.id, () =>
+        Effect.succeed({
+          sessionId: "wrun_1",
+          deliveryId: "delivery-c",
+        }),
+      );
       const turnId = randomUUID();
 
       const bound = await asks.bindDeliveries(target, ["delivery-a", "delivery-b"], turnId);
@@ -248,19 +260,22 @@ function eveAccepting(
   const eve = {
     deliveries,
     opens: 0,
-    async open() {
-      eve.opens += 1;
-      await new Promise<void>((resolve) => setTimeout(resolve, 5));
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId };
-    },
-    async send() {
-      const deliveryId = `delivery-${deliveries.length + 1}`;
-      deliveries.push(deliveryId);
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId };
-    },
-    async cancel() {
-      return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
-    },
+    // The open takes a moment on the runtime's own clock, so two dispatches in flight together
+    // meet at the conversation's lock rather than one answering before the other asks.
+    open: () =>
+      Effect.sync(() => {
+        eve.opens += 1;
+      }).pipe(
+        Effect.andThen(Effect.sleep("5 millis")),
+        Effect.as({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId }),
+      ),
+    send: () =>
+      Effect.sync(() => {
+        const deliveryId = `delivery-${deliveries.length + 1}`;
+        deliveries.push(deliveryId);
+        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId };
+      }),
+    cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED }),
   };
   return eve;
 }
@@ -301,14 +316,18 @@ it.effect(
       const sessionId = `wrun_${randomUUID()}`;
       const stamped = await asks.record(write(userId, conversationId));
       const quiet = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, stamped.id, async () => ({
-        sessionId,
-        deliveryId: "delivery-s",
-      }));
-      await asks.dispatchOnce(target, quiet.id, async () => ({
-        sessionId,
-        deliveryId: "delivery-q",
-      }));
+      await asks.dispatchOnce(target, stamped.id, () =>
+        Effect.succeed({
+          sessionId,
+          deliveryId: "delivery-s",
+        }),
+      );
+      await asks.dispatchOnce(target, quiet.id, () =>
+        Effect.succeed({
+          sessionId,
+          deliveryId: "delivery-q",
+        }),
+      );
       await asks.cancelRequested(stamped.id, new Date(NOW));
 
       const stops: (readonly [string, string, string, string])[] = [];
@@ -358,10 +377,12 @@ it.effect(
 
       // A stop that throws leaves the start unrecorded, so the start eve emits again carries it.
       const failing = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, failing.id, async () => ({
-        sessionId,
-        deliveryId: "delivery-f",
-      }));
+      await asks.dispatchOnce(target, failing.id, () =>
+        Effect.succeed({
+          sessionId,
+          deliveryId: "delivery-f",
+        }),
+      );
       await asks.cancelRequested(failing.id, new Date(NOW));
       throwOnce = true;
       await assert.rejects(database.run(relay.handle(start("turn_3", ["delivery-f"]), standing)));
@@ -378,7 +399,9 @@ it.effect(
       // for a start to name; its Stop is carried by the start that names that turn all the same.
       const opener = await asks.record(write(userId, conversationId));
       const openingTurn = hostTurnId(sessionId, "turn_0");
-      await asks.dispatchOnce(target, opener.id, async () => ({ sessionId, turnId: openingTurn }));
+      await asks.dispatchOnce(target, opener.id, () =>
+        Effect.succeed({ sessionId, turnId: openingTurn }),
+      );
       await asks.cancelRequested(opener.id, new Date(NOW));
       await database.run(relay.handle(start("turn_0", []), standing));
       assert.deepEqual(stops[2], [conversationId, sessionId, "turn_0", openingTurn]);
@@ -414,16 +437,18 @@ it.effect(
       };
       const turnId = hostTurnId(sessionId, "turn_9");
       const waiting = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, waiting.id, async () => ({
-        sessionId,
-        deliveryId: "delivery-w",
-      }));
+      await asks.dispatchOnce(target, waiting.id, () =>
+        Effect.succeed({
+          sessionId,
+          deliveryId: "delivery-w",
+        }),
+      );
       const cancels: (readonly [string, string | undefined])[] = [];
       const eve = {
         ...eveAccepting(sessionId),
-        async cancel(session: string, eveTurnId?: string) {
+        cancel(session: string, eveTurnId?: string) {
           cancels.push([session, eveTurnId]);
-          return { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
+          return Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED });
         },
       };
       // The start lands between the Stop's read and its stamp: the turn row is written and the ask
@@ -467,10 +492,12 @@ it.effect(
       // The other order in the same run: the Stop stamps first and finds nothing bound, so it cancels
       // nothing itself; the start that binds the ask afterwards reads the stamp and carries it.
       const later = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, later.id, async () => ({
-        sessionId,
-        deliveryId: "delivery-l",
-      }));
+      await asks.dispatchOnce(target, later.id, () =>
+        Effect.succeed({
+          sessionId,
+          deliveryId: "delivery-l",
+        }),
+      );
       const stampedFirst = await database.run(
         stopAsk(
           { store: database.store, asks: askEffects, writer, eve, now: () => NOW },
@@ -518,10 +545,12 @@ it.effect(
       // finds the stamp standing and answers it without a cancel of its own, which unscoped could reach
       // the turn queued next.
       const honoured = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, honoured.id, async () => ({
-        sessionId,
-        deliveryId: "delivery-h",
-      }));
+      await asks.dispatchOnce(target, honoured.id, () =>
+        Effect.succeed({
+          sessionId,
+          deliveryId: "delivery-h",
+        }),
+      );
       const honouredTurn = hostTurnId(sessionId, "turn_11");
       const honouredBeforeStamp = {
         ...askEffects,
@@ -708,10 +737,12 @@ it.effect(
       const ask = await asks.record(write(userId, conversationId));
       await stampConversationDeletedAt(conversationId, new Date(NOW));
       let dispatched = 0;
-      const outcome = await asks.dispatchOnce({ userId, conversationId }, ask.id, async () => {
-        dispatched += 1;
-        return { sessionId: "wrun_never" };
-      });
+      const outcome = await asks.dispatchOnce({ userId, conversationId }, ask.id, () =>
+        Effect.sync(() => {
+          dispatched += 1;
+          return { sessionId: "wrun_never" };
+        }),
+      );
       assert.equal(outcome, ASK_DISPATCH_REFUSAL.NO_CONVERSATION);
       assert.equal(dispatched, 0);
       assert.equal((await asks.named(userId, ask.id))?.sessionId, undefined);

@@ -5,6 +5,7 @@ import { abandonChildConversation, openChildConversation } from "../store/childr
 import type { ConversationTarget } from "../store/index.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import {
+  describeUnreachable,
   EVE_CALLER,
   EVE_SEND_OUTCOME,
   type EveSessions,
@@ -119,24 +120,24 @@ export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
   // eve's open is a request over the network: an answer refusing it and a call that never answered
   // are the same child not opened, said with what is known of each; a caller ending before eve
   // answers stamps the row on its way out.
-  const sessionId = yield* Effect.tryPromise({
-    try: () =>
-      eve.open({ conversationId: childId, turn: BRAIN_HOST_TURN.CHILD_TASK, message: spawn.task }),
-    catch: (cause) => String(cause),
-  }).pipe(
-    Effect.map((opened) => {
-      if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) return opened.sessionId;
-      seams.report(
-        `eve refused to open a session for child ${childId} with status ${opened.status}.`,
-      );
-      return undefined;
-    }),
-    Effect.catch((failure) => {
-      seams.report(`A session for child ${childId} could not be opened: ${failure}.`);
-      return Effect.succeed(undefined);
-    }),
-    Effect.onInterrupt(() => Effect.ignore(abandon)),
-  );
+  const sessionId = yield* eve
+    .open({ conversationId: childId, turn: BRAIN_HOST_TURN.CHILD_TASK, message: spawn.task })
+    .pipe(
+      Effect.map((opened) => {
+        if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) return opened.sessionId;
+        seams.report(
+          `eve refused to open a session for child ${childId} with status ${opened.status}.`,
+        );
+        return undefined;
+      }),
+      Effect.catchTag("EveUnreachable", (failure) => {
+        seams.report(
+          `A session for child ${childId} could not be opened: ${describeUnreachable(failure)}.`,
+        );
+        return Effect.succeed(undefined);
+      }),
+      Effect.onInterrupt(() => Effect.ignore(abandon)),
+    );
   if (sessionId === undefined) {
     if (yield* abandon) return { ok: false, refusal: CHILD_OPEN_REFUSAL.EVE_REFUSED };
     // The row was claimed before the answer was read: eve started the session, whatever it answered.

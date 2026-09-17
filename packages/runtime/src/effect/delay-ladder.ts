@@ -13,7 +13,7 @@ import { type Duration, Schedule } from "effect";
 export type DelayLadder = readonly [Duration.Duration, ...Duration.Duration[]];
 
 /** The ladder as a schedule whose output is the delay it decided on. */
-export function delayLadder(delays: DelayLadder): Schedule.Schedule<Duration.Duration, undefined> {
+export function delayLadder(delays: DelayLadder): Schedule.Schedule<Duration.Duration> {
   return delays
     .map((delay) => Schedule.duration(delay))
     .reduce((earlier, later) => Schedule.concat(earlier, later));
