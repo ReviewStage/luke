@@ -38,7 +38,7 @@ test("follow-ups queue behind a turn under way, and the account bearer is checke
   assert.equal(Array.isArray(channel.auth), false);
 });
 
-test("the hosted policy withholds the machine's tools and skills, keeps the notebook's reads and writes, offers delegation, and offers announce only to an observation", () => {
+test("the hosted policy withholds the machine's tools and skills, keeps the notebook's reads and writes, offers delegation, offers announce only to an observation, and the message send only to an ask", () => {
   const ask = hostedTurnPolicy(BRAIN_TURN_TRIGGER.ASK);
   const observation = hostedTurnPolicy(BRAIN_TURN_TRIGGER.ROSTER);
   const askNames = ask.allowed.map((tool) => tool.schema.name);
@@ -56,7 +56,7 @@ test("the hosted policy withholds the machine's tools and skills, keeps the note
     assert.equal(observationNames.includes(denied), false);
   }
   for (const kept of [
-    ACTION_TOOL.SEND_SESSION_MESSAGE,
+    ACTION_TOOL.RUN_SESSION_CONTROL,
     BRAIN_TOOL.LIST_SESSIONS,
     BRAIN_TOOL.READ_TRANSCRIPT,
     BRAIN_TOOL.READ_WORKSPACE_FILE,
@@ -75,6 +75,11 @@ test("the hosted policy withholds the machine's tools and skills, keeps the note
   }
   assert.equal(askNames.includes(BRAIN_TOOL.ANNOUNCE), false);
   assert.equal(observationNames.includes(BRAIN_TOOL.ANNOUNCE), true);
+  // An observation's lines are the developer's own words to their agent, and a message Luke
+  // sent into the chat would come back as one of them: the send carries an ask and nothing else.
+  assert.equal(askNames.includes(ACTION_TOOL.SEND_SESSION_MESSAGE), true);
+  assert.equal(observationNames.includes(ACTION_TOOL.SEND_SESSION_MESSAGE), false);
+  assert.equal(observation.deniedBy(ACTION_TOOL.SEND_SESSION_MESSAGE), TOOL_POLICY_LAYER.TURN);
 });
 
 test("a child's task is offered the ask's set less the session tools: it cannot spawn, announce, list, read, or cancel, and keeps the reads, actions, workspace, and memory", () => {
