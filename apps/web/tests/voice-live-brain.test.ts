@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import {
   LIVE_BRAIN_RUN_END,
@@ -8,6 +7,7 @@ import {
   LIVE_BRAIN_SUBMISSION,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
+import { arrival } from "@sidecar/voice/testing";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
 import { Duration, Effect, Exit, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -61,6 +61,13 @@ const NOW = 1_800_000_000_000;
  * against it would expire under load before the turn's first event arrives.
  */
 const POLL_MS = 5;
+/**
+ * The follow keeps time on the store runtime's clock, which is the real one,
+ * so this suite runs under `it.live`: a wait for an event is on the event
+ * itself (`arrived`), and a wait of several polls after the last one is the
+ * suite's one plain sleep, asserting that nothing more arrives.
+ */
+const QUIET_POLLS = { AFTER_END: 6, AFTER_REFUSAL: 4, AFTER_STOP: 8 } as const;
 const QUICK = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.minutes(1) };
 /** The same cadence with the bound close enough to reach inside a test. */
 const BOUNDED = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.millis(150) };
@@ -132,6 +139,8 @@ interface Stand {
   readonly eve: FakeEve;
   readonly brain: HostedLiveBrain;
   readonly events: LiveBrainRunEvent[];
+  /** Settles once at least `count` run events have reached the listener, on the events themselves. */
+  readonly arrived: (count: number) => Effect.Effect<void>;
   readonly reports: string[];
   /** The socket's own scope as the attachment opens one; closing it interrupts every follow under way. */
   readonly stop: () => Promise<void>;
@@ -159,7 +168,20 @@ async function stand(
     ),
   );
   brain.onRunEvent((event) => events.push(event));
-  return { eve, brain, events, reports, stop: () => database.run(Scope.close(scope, Exit.void)) };
+  const arrived = (count: number) =>
+    arrival(
+      (notify) => brain.onRunEvent(notify),
+      () => events.length >= count,
+      `${count} run events`,
+    );
+  return {
+    eve,
+    brain,
+    events,
+    reports,
+    arrived,
+    stop: () => database.run(Scope.close(scope, Exit.void)),
+  };
 }
 
 /** The eve session an accepted ask was handed to, from the record; a follow-up would read it the same way. */
@@ -173,56 +195,48 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
   for (const event of events) await database.run(relay.handle(event, standing));
 }
 
-async function until(predicate: () => boolean, what: string): Promise<void> {
-  for (let attempt = 0; attempt < 400; attempt += 1) {
-    if (predicate()) return;
-    await sleep(5);
-  }
-  assert.fail(`timed out waiting for ${what}`);
-}
-
-it.effect(
+it.live(
   "a spoken ask goes through the ask door under the spoken origin with the submission id as its client id, answers the ask's id as the run, and a retry of the submission finds the same run with eve reached once",
   () =>
-    Effect.promise(async () => {
-      const target = await account();
-      const f = await stand(target);
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
       const submissionId = randomUUID();
       const ask = { submissionId, question: "Developer: what needs me?" };
 
-      const accepted = await database.run(f.brain.submitAsk(ask));
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(ask)));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       assert.deepEqual(
         f.eve.opened.map((message) => [message.conversationId, message.turn, message.message]),
         [[target.conversationId, BRAIN_HOST_TURN.SPOKEN, ask.question]],
       );
-      const recorded = await asks.named(target.userId, accepted.runId);
+      const recorded = yield* Effect.promise(() => asks.named(target.userId, accepted.runId));
       assert.deepEqual(
         [recorded?.origin, recorded?.clientId, recorded?.conversationId],
         [ASK_ORIGIN.SPOKEN, submissionId, target.conversationId],
       );
 
-      const again = await database.run(f.brain.submitAsk(ask));
+      const again = yield* Effect.promise(() => database.run(f.brain.submitAsk(ask)));
       assert.deepEqual(again, accepted);
       assert.equal(f.eve.opened.length, 1);
-      await f.stop();
+      yield* Effect.promise(() => f.stop());
     }),
 );
 
-it.effect(
+it.live(
   "an accepted ask's turn is followed from the record: the slow step, the settled mark, the sentences, and the end reach the service under the ask's id, exactly once, however many times the submission was retried",
   () =>
-    Effect.promise(async () => {
-      const target = await account();
-      const f = await stand(target);
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
       const ask = { submissionId: randomUUID(), question: "q" };
-      const accepted = await database.run(f.brain.submitAsk(ask));
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(ask)));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-      assert.deepEqual(await database.run(f.brain.submitAsk(ask)), accepted);
+      assert.deepEqual(yield* Effect.promise(() => database.run(f.brain.submitAsk(ask))), accepted);
       const standing: RelayStanding = {
-        sessionId: await sessionOf(target, accepted.runId),
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
         target,
         kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
@@ -231,11 +245,11 @@ it.effect(
       };
       const events = spokenTurn(FIRST_EVE_TURN, NOW);
       const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
-      await play(events.slice(0, requested), standing);
-      await until(() => f.events.length === 1, "the slow step");
-      await play(events.slice(requested), standing);
-      await until(() => f.events.length === 5, "the turn's end");
-      await sleep(POLL_MS * 6);
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* f.arrived(1);
+      yield* Effect.promise(() => play(events.slice(requested), standing));
+      yield* f.arrived(5);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
 
       assert.deepEqual(
         f.events.map((event) => event.kind),
@@ -266,19 +280,19 @@ it.effect(
         LIVE_BRAIN_RUN_END.COMPLETED,
       );
       assert.deepEqual(f.reports, []);
-      await f.stop();
+      yield* Effect.promise(() => f.stop());
     }),
 );
 
-it.effect(
+it.live(
   "a refusal at the door is spoken as the build's own note for it, and every refusal has one",
   () =>
-    Effect.promise(async () => {
-      const target = await account();
-      const f = await stand(target);
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
       f.eve.failNext = 502;
-      const refused = await database.run(
-        f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+      const refused = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
       );
       assert.deepEqual(refused, {
         outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
@@ -288,38 +302,38 @@ it.effect(
         Object.keys(HOSTED_ASK_REFUSAL_NOTE).sort(),
         Object.values(ASK_REFUSAL).sort(),
       );
-      await sleep(POLL_MS * 4);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_REFUSAL);
       assert.deepEqual(f.events, []);
-      await f.stop();
+      yield* Effect.promise(() => f.stop());
     }),
 );
 
-it.effect(
+it.live(
   "an ask whose turn never starts is told as failed at the follow bound, once, and the bound is reported",
   () =>
-    Effect.promise(async () => {
-      const target = await account();
-      const f = await stand(target, BOUNDED);
-      const accepted = await database.run(
-        f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target, BOUNDED));
+      const accepted = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
       );
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-      await until(() => f.events.length === 1, "the follow bound");
-      await sleep(POLL_MS * 6);
+      yield* f.arrived(1);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
       assert.deepEqual(f.events, [
         { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
       ]);
       assert.equal(f.reports.length, 1);
-      await f.stop();
+      yield* Effect.promise(() => f.stop());
     }),
 );
 
-it.effect(
+it.live(
   "a journal the store cannot read ends the ask as failed, once, and is reported, never told as a completed end with no sentences",
   () =>
-    Effect.promise(async () => {
-      const target = await account();
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
       const unreadable: MessageListRead = {
         ok: false,
         refusal: SCHEMA_REFUSAL.MALFORMED,
@@ -327,77 +341,83 @@ it.effect(
         seq: 0,
         path: [],
       };
-      const f = await stand(target, QUICK, {
-        turns: database.store.turns,
-        messages: { ...database.store.messages, byClientId: () => Effect.succeed(unreadable) },
-      });
-      const accepted = await database.run(
-        f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+      const f = yield* Effect.promise(() =>
+        stand(target, QUICK, {
+          turns: database.store.turns,
+          messages: { ...database.store.messages, byClientId: () => Effect.succeed(unreadable) },
+        }),
+      );
+      const accepted = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
       );
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-      await play(spokenTurn(FIRST_EVE_TURN, NOW), {
-        sessionId: await sessionOf(target, accepted.runId),
+      const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
+      yield* Effect.promise(() =>
+        play(spokenTurn(FIRST_EVE_TURN, NOW), {
+          sessionId,
+          target,
+          kind: CONVERSATION_KIND.MAIN,
+          turn: BRAIN_HOST_TURN.SPOKEN,
+          model: "scripted-model",
+          state: memoryRelayState(),
+        }),
+      );
+      yield* f.arrived(1);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      assert.deepEqual(f.events, [
+        { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
+      ]);
+      assert.equal(f.reports.length, 1);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live("an ask the record no longer holds ends as failed rather than being followed forever", () =>
+  Effect.gen(function* () {
+    const target = yield* Effect.promise(() => account());
+    const f = yield* Effect.promise(() => stand(target));
+    const accepted = yield* Effect.promise(() =>
+      database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
+    );
+    assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+    if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+    yield* Effect.promise(() => deleteConversation(database.run, target.conversationId));
+    yield* f.arrived(1);
+    assert.deepEqual(f.events, [
+      { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
+    ]);
+    yield* Effect.promise(() => f.stop());
+  }),
+);
+
+it.live("stop ends every follow: a turn that completes after it reaches no listener", () =>
+  Effect.gen(function* () {
+    const target = yield* Effect.promise(() => account());
+    const f = yield* Effect.promise(() => stand(target));
+    const accepted = yield* Effect.promise(() =>
+      database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
+    );
+    assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+    if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+    yield* Effect.promise(() => f.stop());
+    const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
+    yield* Effect.promise(() =>
+      play(spokenTurn(FIRST_EVE_TURN, NOW), {
+        sessionId,
         target,
         kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
-      });
-      await until(() => f.events.length >= 1, "the unreadable journal's end");
-      await sleep(POLL_MS * 6);
-      assert.deepEqual(f.events, [
-        { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
-      ]);
-      assert.equal(f.reports.length, 1);
-      await f.stop();
-    }),
-);
-
-it.effect(
-  "an ask the record no longer holds ends as failed rather than being followed forever",
-  () =>
-    Effect.promise(async () => {
-      const target = await account();
-      const f = await stand(target);
-      const accepted = await database.run(
-        f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
-      );
-      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
-      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-      await deleteConversation(database.run, target.conversationId);
-      await until(() => f.events.length === 1, "the lost ask's end");
-      assert.deepEqual(f.events, [
-        { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
-      ]);
-      await f.stop();
-    }),
-);
-
-it.effect("stop ends every follow: a turn that completes after it reaches no listener", () =>
-  Effect.promise(async () => {
-    const target = await account();
-    const f = await stand(target);
-    const accepted = await database.run(
-      f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+      }),
     );
-    assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
-    if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-    await f.stop();
-    await play(spokenTurn(FIRST_EVE_TURN, NOW), {
-      sessionId: await sessionOf(target, accepted.runId),
-      target,
-      kind: CONVERSATION_KIND.MAIN,
-      turn: BRAIN_HOST_TURN.SPOKEN,
-      model: "scripted-model",
-      state: memoryRelayState(),
-    });
-    await sleep(POLL_MS * 8);
+    yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_STOP);
     assert.deepEqual(f.events, []);
   }),
 );
 
-it.effect("the stream's vocabulary and the service's are one set of words on each side", () =>
+it.live("the stream's vocabulary and the service's are one set of words on each side", () =>
   Effect.sync(() => {
     assert.deepEqual(
       Object.values(TURN_EVENT_KIND).sort(),
