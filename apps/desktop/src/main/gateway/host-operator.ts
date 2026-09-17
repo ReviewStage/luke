@@ -54,7 +54,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Effect, Option, Result } from "effect";
+import { Clock, Effect, Option, Result, Schema } from "effect";
 import {
   type AgentsSnapshot,
   agentsSnapshotSchema,
@@ -121,36 +121,42 @@ export interface HostOperator {
     field: Field,
     value: AppSettingValue<Field>,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, Error>;
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
   updateSettingEntry<Field extends KeyedAppSettingField>(
     field: Field,
     key: string,
     value: SettingEntryValue<Field> | undefined,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, Error>;
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
   resetSettings(
     scope: SettingsResetScope,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, Error>;
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
   setProviderApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, Error>;
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, Error>;
+  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, HostUnreachableRefusal>;
   cancelSignIn(): Effect.Effect<void>;
-  signOut(): Effect.Effect<AccountSnapshot, Error>;
-  deleteAccount(): Effect.Effect<AccountSnapshot, Error>;
-  connectGoogleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult, Error>;
+  signOut(): Effect.Effect<AccountSnapshot, HostUnreachableRefusal>;
+  deleteAccount(): Effect.Effect<AccountSnapshot, HostUnreachableRefusal>;
+  connectGoogleCalendar(
+    reporter: string,
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
   cancelGoogleCalendarSignIn(): Effect.Effect<void>;
   reopenGoogleCalendarSignIn(): Effect.Effect<void>;
   removeCalendarAccount(
     accountId: string,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, Error>;
-  connectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult, Error>;
-  disconnectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult, Error>;
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
+  connectAppleCalendar(
+    reporter: string,
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
+  disconnectAppleCalendar(
+    reporter: string,
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
   appleCalendarAccessStatus(): Effect.Effect<Option.Option<AppleCalendarAccess>>;
   cancelAppleCalendarConnect(): Effect.Effect<void>;
   refreshCalendars(): Effect.Effect<void>;
@@ -159,7 +165,7 @@ export interface HostOperator {
     calendarId: string,
     selected: boolean,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, Error>;
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
   sessionRoster(): Effect.Effect<{ sessions: readonly Session[]; settled: boolean }>;
   openSession(identity: SessionIdentity): Effect.Effect<ActionResult>;
   openSessionApplication(
@@ -254,6 +260,22 @@ interface HostOperatorOptions {
 const HOST_UNREACHABLE_REFUSAL = "Luke's runtime is not reachable right now.";
 
 /**
+ * The host answered nothing a row could draw and this client holds no
+ * snapshot to refuse over, so the row fails rather than answers: the act
+ * router words it with the kind's own sentence. A Schema error, modelled on
+ * the Gateway's own refusals, because the operator's answers are what the
+ * panel's IPC reads back.
+ */
+export class HostUnreachableRefusal extends Schema.TaggedError<HostUnreachableRefusal>()(
+  "HostUnreachableRefusal",
+  { message: Schema.String },
+) {}
+
+function hostUnreachable(): HostUnreachableRefusal {
+  return new HostUnreachableRefusal({ message: HOST_UNREACHABLE_REFUSAL });
+}
+
+/**
  * The host's answers are the same structured-clone payloads the windows
  * already receive over the bridge, carried through the protocol as JSON. The
  * readers below check the field the client itself decides on and hand the
@@ -280,12 +302,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
 
   const settingsResult = (
     result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<SettingsUpdateResult, Error> =>
+  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal> =>
     Effect.flatMap(result, (answer) => {
       const parsed = answered<SettingsUpdateResult>(record(answer));
       if (parsed?.settings !== undefined) return Effect.succeed(parsed);
       const settings = options.lastSettings();
-      if (!settings) return Effect.fail(new Error(HOST_UNREACHABLE_REFUSAL));
+      if (!settings) return Effect.fail(hostUnreachable());
       return Effect.succeed<SettingsUpdateResult>({
         status: ACTION_RESULT_STATUS.REJECTED,
         settings,
@@ -295,10 +317,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
 
   const accountResult = (
     result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<AccountSnapshot, Error> =>
+  ): Effect.Effect<AccountSnapshot, HostUnreachableRefusal> =>
     Effect.flatMap(result, (answer) => {
       const account = answered<AccountSnapshot>(record(answer)?.account);
-      return account ? Effect.succeed(account) : Effect.fail(new Error(HOST_UNREACHABLE_REFUSAL));
+      return account ? Effect.succeed(account) : Effect.fail(hostUnreachable());
     });
 
   const actionResult = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<ActionResult> =>

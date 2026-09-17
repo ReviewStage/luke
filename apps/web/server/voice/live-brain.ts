@@ -221,11 +221,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("hostedLiveBrain")(func
       ),
       Effect.catchCause((cause) => {
         if (Cause.hasInterruptsOnly(cause)) return Effect.void;
-        const failure = Cause.squash(cause);
         return Effect.sync(() => {
-          options.report(
-            `Following a spoken ask failed: ${failure instanceof Error ? failure.message : String(failure)}`,
-          );
+          options.report(`Following a spoken ask failed: ${Cause.pretty(cause)}`);
           endFailed(askId);
         });
       }),

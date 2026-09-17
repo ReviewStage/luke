@@ -11,7 +11,7 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import type { AccountToken } from "./account-token.js";
+import type { AccountRefreshFailed, AccountToken } from "./account-token.js";
 
 const ACCOUNT_CALL_DEFAULTS = {
   REQUEST_TIMEOUT_MS: 10_000,
@@ -43,7 +43,7 @@ export interface CallCredential {
    */
   authorization?: () => Effect.Effect<string | undefined>;
   /** Asks whoever owns the credential to renew it; one with nothing to renew omits this. */
-  renew?: () => Effect.Effect<void, unknown>;
+  renew?: () => Effect.Effect<void, AccountRefreshFailed>;
   /**
    * Who the credential answers for, as an opaque identity. Read before an
    * attempt and again before its one retry, because the retry re-reads the

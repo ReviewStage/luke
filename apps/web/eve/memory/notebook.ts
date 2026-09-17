@@ -1,3 +1,5 @@
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
+import { Effect } from "effect";
 import { defineMemory, defineMemoryProvider } from "eve/memory";
 import { actedForAccount } from "../../server/hosted/brain-host/auth.js";
 import { productionBrainHostSeams } from "../../server/hosted/brain-host/production.js";
@@ -32,12 +34,12 @@ export default defineMemory({
     },
     capture: {
       "compaction.requested": (capture) =>
-        runWeb(host.flush(capture, seams.scriptedModel() ? scriptedModel() : undefined)).then(
-          () => undefined,
-          (error: Error) => {
-            console.warn(`The memory flush could not be run: ${error.message}`);
-          },
-        ),
+        runWeb(
+          catchAllButInterrupt(
+            host.flush(capture, seams.scriptedModel() ? scriptedModel() : undefined),
+            (cause) => Effect.logWarning("The memory flush could not be run", cause),
+          ),
+        ).then(() => undefined),
     },
   }),
 });

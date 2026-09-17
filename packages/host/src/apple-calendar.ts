@@ -21,7 +21,7 @@ import {
   type UnparsedWireValue,
   unparsedWire,
 } from "@sidecar/wire";
-import { Clock, Duration, Effect, Result } from "effect";
+import { Clock, Data, Duration, Effect, Result } from "effect";
 
 const ACCESS_WORDS = new Set<string>(Object.values(APPLE_CALENDAR_ACCESS));
 
@@ -75,6 +75,26 @@ interface AppleCalendarAccessOutcome {
   failure?: string;
 }
 
+export const CALENDAR_HELPER_FAILURE = {
+  /** The helper did not run to an answer: no node holds it, it timed out, or it exited failing. */
+  HELPER_RUN: "helper-run",
+  /** The helper answered, but not with a report this reader will trust. */
+  UNREADABLE_REPORT: "unreadable-report",
+} as const;
+
+export type CalendarHelperFailureKind =
+  (typeof CALENDAR_HELPER_FAILURE)[keyof typeof CALENDAR_HELPER_FAILURE];
+
+/**
+ * One helper read that did not land, as the failure channel every read here
+ * fails with: which of the two ways it failed, and the sentence the calendar
+ * row shows beside what the Mac last saw.
+ */
+export class CalendarHelperFailure extends Data.TaggedError("CalendarHelperFailure")<{
+  readonly failure: CalendarHelperFailureKind;
+  readonly message: string;
+}> {}
+
 /**
  * Runs one helper invocation and answers with its stdout. Injectable so tests
  * exercise the reader without a Mac or a binary.
@@ -82,7 +102,7 @@ interface AppleCalendarAccessOutcome {
 export type AppleCalendarHelperRun = (
   helperArguments: readonly string[],
   timeoutMs: number,
-) => Effect.Effect<string, unknown>;
+) => Effect.Effect<string, CalendarHelperFailure>;
 
 interface AppleCalendarReaderOptions {
   /**
@@ -105,6 +125,8 @@ interface ParsedHelperReport {
   failure?: string;
 }
 
+const UNREADABLE_REPORT_MESSAGE = "the calendar helper answered unreadably";
+
 /**
  * The helper's JSON document as this reader will trust it: an access word it
  * knows, and a calendar list bounded exactly the way the Google list is —
@@ -115,12 +137,12 @@ export function parseHelperReport(output: string): ParsedHelperReport {
   try {
     payload = unparsedWire(JSON.parse(output));
   } catch {
-    throw new Error("the calendar helper answered unreadably");
+    throw new Error(UNREADABLE_REPORT_MESSAGE);
   }
   const report = readWireRecord(payload);
-  if (!report) throw new Error("the calendar helper answered unreadably");
+  if (!report) throw new Error(UNREADABLE_REPORT_MESSAGE);
   const access = appleCalendarAccessWord(report.access);
-  if (!access) throw new Error("the calendar helper answered unreadably");
+  if (!access) throw new Error(UNREADABLE_REPORT_MESSAGE);
   const listed = Array.isArray(report.calendars) ? report.calendars : [];
   const calendars: AccountCalendar[] = [];
   for (const entry of listed) {
@@ -229,14 +251,12 @@ export class AppleCalendarReader {
       // A read that merely failed — the helper crashed, or answered
       // unreadably — says nothing about the user's intent, so what the Mac
       // last showed stands, with the why beside it.
-      const error = attempt.failure;
-      const message = error instanceof Error ? error.message : String(error);
       return {
         accountId: APPLE_CALENDAR_ID,
         calendars: this.#lastObservation?.calendars ?? [],
         meetings: this.#lastObservation?.meetings ?? [],
         ...(this.#lastObservation?.revoked ? { revoked: true } : undefined),
-        failure: `${APPLE_CALENDAR_ID}: ${message}`,
+        failure: `${APPLE_CALENDAR_ID}: ${attempt.failure.message}`,
       };
     });
   }
@@ -246,7 +266,7 @@ export class AppleCalendarReader {
    * connect press consults, so the panel only stands down for a dialog that
    * will actually appear.
    */
-  status(): Effect.Effect<AppleCalendarAccess, unknown> {
+  status(): Effect.Effect<AppleCalendarAccess, CalendarHelperFailure> {
     return Effect.map(
       this.#runHelperEffect([HELPER_COMMAND.STATUS], OBSERVE_TIMEOUT_MS),
       (report) => report.access,
@@ -260,7 +280,7 @@ export class AppleCalendarReader {
    * needs — how far the grant went, the calendar list, and the calendar new
    * events land on.
    */
-  requestAccess(): Effect.Effect<AppleCalendarAccessOutcome, unknown> {
+  requestAccess(): Effect.Effect<AppleCalendarAccessOutcome, CalendarHelperFailure> {
     return Effect.map(
       this.#runHelperEffect([HELPER_COMMAND.REQUEST_ACCESS], REQUEST_ACCESS_TIMEOUT_MS),
       (report) => ({
@@ -285,7 +305,7 @@ export class AppleCalendarReader {
   obtainAccess(options: {
     openSystemSettings: () => void;
     superseded: () => boolean;
-  }): Effect.Effect<AppleCalendarAccessOutcome, unknown> {
+  }): Effect.Effect<AppleCalendarAccessOutcome, CalendarHelperFailure> {
     return Effect.gen({ self: this }, function* () {
       let outcome = yield* this.requestAccess();
       // A cancel that landed while the dialog stood ends the flow here: the
@@ -317,17 +337,24 @@ export class AppleCalendarReader {
   #runHelperEffect(
     helperArguments: readonly string[],
     timeoutMs: number,
-  ): Effect.Effect<ParsedHelperReport, unknown> {
+  ): Effect.Effect<ParsedHelperReport, CalendarHelperFailure> {
     return this.#runHelper(helperArguments, timeoutMs).pipe(
       Effect.flatMap((output) =>
-        Effect.try({ try: () => parseHelperReport(output), catch: (error) => error }),
+        Effect.try({
+          try: () => parseHelperReport(output),
+          catch: () =>
+            new CalendarHelperFailure({
+              failure: CALENDAR_HELPER_FAILURE.UNREADABLE_REPORT,
+              message: UNREADABLE_REPORT_MESSAGE,
+            }),
+        }),
       ),
     );
   }
 
   #observeConnection(
     connection: AppleCalendarConnection,
-  ): Effect.Effect<AppleCalendarObservation, unknown> {
+  ): Effect.Effect<AppleCalendarObservation, CalendarHelperFailure> {
     return Effect.gen({ self: this }, function* () {
       const now = yield* Clock.currentTimeMillis;
       // The same window the Google free/busy read keeps to, so the two

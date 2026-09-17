@@ -1,4 +1,4 @@
-import { HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
+import { type AccountRefreshFailed, HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
 import type { LiveDiagnostics } from "@sidecar/live";
 import { APP_SETTING_SCHEMA, type AppSettingField, type AppSettingValue } from "@sidecar/settings";
 import { Effect } from "effect";
@@ -44,7 +44,7 @@ export interface VoiceCapabilityAssemblerOptions {
    * would have nowhere to speak from.
    */
   openSocket?: OpenSocket;
-  refreshAccount: () => Effect.Effect<void, unknown>;
+  refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
   /** This installation's device row id, for the hosted session's handshake; absent or answering nothing, the handshake names no device. */
   deviceId?: () => string | undefined;
   report?: (message: string) => void;

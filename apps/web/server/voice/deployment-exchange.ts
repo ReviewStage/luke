@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Effect, type Layer } from "effect";
+import { Data, Effect, type Layer } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
@@ -52,10 +52,15 @@ interface DeploymentExchangeSeams {
 }
 
 /** The deployment names no secret or origin the exchange could stand under; every session is refused on it. */
-class ExchangeUnconfigured extends Error {
-  constructor(missing: string) {
-    super(`the hosted exchange cannot stand: ${missing} is not configured`);
-  }
+class ExchangeUnconfigured extends Data.TaggedError("ExchangeUnconfigured")<{
+  readonly message: string;
+}> {}
+
+/** The refusal for one missing configuration value, worded for the deployment's log. */
+function exchangeUnconfigured(missing: string): ExchangeUnconfigured {
+  return new ExchangeUnconfigured({
+    message: `the hosted exchange cannot stand: ${missing} is not configured`,
+  });
 }
 
 const EXCHANGE_CONFIGURATION = {
@@ -73,15 +78,15 @@ function configuredSeams(
 > {
   const encryptionSecret = seams.encryptionSecret();
   if (encryptionSecret === undefined) {
-    return Effect.fail(new ExchangeUnconfigured(EXCHANGE_CONFIGURATION.ENCRYPTION_SECRET));
+    return Effect.fail(exchangeUnconfigured(EXCHANGE_CONFIGURATION.ENCRYPTION_SECRET));
   }
   const deploymentSecret = seams.deploymentSecret();
   if (deploymentSecret === undefined) {
-    return Effect.fail(new ExchangeUnconfigured(EXCHANGE_CONFIGURATION.DEPLOYMENT_SECRET));
+    return Effect.fail(exchangeUnconfigured(EXCHANGE_CONFIGURATION.DEPLOYMENT_SECRET));
   }
   const origin = seams.eveOrigin();
   if (origin === undefined) {
-    return Effect.fail(new ExchangeUnconfigured(EXCHANGE_CONFIGURATION.EVE_ORIGIN));
+    return Effect.fail(exchangeUnconfigured(EXCHANGE_CONFIGURATION.EVE_ORIGIN));
   }
   return Effect.succeed({ encryptionSecret, deploymentSecret, origin });
 }

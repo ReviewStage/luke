@@ -8,8 +8,18 @@ import { test } from "vitest";
 import {
   type AppleCalendarConnection,
   AppleCalendarReader,
+  CALENDAR_HELPER_FAILURE,
+  CalendarHelperFailure,
   parseHelperReport,
 } from "./apple-calendar.js";
+
+/** The helper failing to run at all, as the composer words a node that answered no text. */
+function helperWentAway(): CalendarHelperFailure {
+  return new CalendarHelperFailure({
+    failure: CALENDAR_HELPER_FAILURE.HELPER_RUN,
+    message: "helper went away",
+  });
+}
 
 const NOW = Date.parse("2026-08-19T12:00:00Z");
 
@@ -21,7 +31,7 @@ interface RecordedRun {
 /** The reader with a fake helper, so no Mac and no binary is ever needed. */
 function readerFor(options: {
   connection?: AppleCalendarConnection;
-  answer: (helperArguments: readonly string[]) => string | Error;
+  answer: (helperArguments: readonly string[]) => string | CalendarHelperFailure;
 }) {
   const runs: RecordedRun[] = [];
   const reader = new AppleCalendarReader({
@@ -30,7 +40,9 @@ function readerFor(options: {
       Effect.suspend(() => {
         runs.push({ helperArguments, timeoutMs });
         const answer = options.answer(helperArguments);
-        return answer instanceof Error ? Effect.fail(answer) : Effect.succeed(answer);
+        return answer instanceof CalendarHelperFailure
+          ? Effect.fail(answer)
+          : Effect.succeed(answer);
       }),
   });
   return { reader, runs };
@@ -137,7 +149,7 @@ test("the list is bounded the way the Google list is", () => {
 it.effect("access withdrawn empties the calendar rather than standing what it held", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    let answer: () => string | Error = fullAccessAnswer;
+    let answer: () => string | CalendarHelperFailure = fullAccessAnswer;
     const { reader } = readerFor({
       connection: { selectedCalendarIds: ["work"] },
       answer: () => answer(),
@@ -158,7 +170,7 @@ it.effect("access withdrawn empties the calendar rather than standing what it he
     // A transient failure after the withdrawal stands the emptiness — and the
     // withdrawal itself — never resurrecting what it took, nor dressing the
     // row back up as connected.
-    answer = () => new Error("helper went away");
+    answer = () => helperWentAway();
     const failed = yield* reader.observe();
     assert.deepEqual(failed?.meetings, []);
     assert.equal(failed?.revoked, true);
@@ -168,14 +180,14 @@ it.effect("access withdrawn empties the calendar rather than standing what it he
 it.effect("a helper that fails or answers unreadably stands the last observation", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    let answer: () => string | Error = fullAccessAnswer;
+    let answer: () => string | CalendarHelperFailure = fullAccessAnswer;
     const { reader } = readerFor({
       connection: { selectedCalendarIds: ["work"] },
       answer: () => answer(),
     });
     const first = yield* reader.observe();
 
-    answer = () => new Error("helper went away");
+    answer = () => helperWentAway();
     const failed = yield* reader.observe();
     assert.deepEqual(failed?.meetings, first?.meetings);
 
@@ -191,7 +203,7 @@ it.effect("forget clears what a failing pass would otherwise stand", () =>
     let healthy = true;
     const { reader } = readerFor({
       connection: { selectedCalendarIds: ["work"] },
-      answer: () => (healthy ? fullAccessAnswer() : new Error("helper went away")),
+      answer: () => (healthy ? fullAccessAnswer() : helperWentAway()),
     });
     yield* reader.observe();
     reader.forget();

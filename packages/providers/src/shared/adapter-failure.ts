@@ -8,7 +8,7 @@
  */
 
 import { unlessInterrupted } from "@sidecar/runtime/effect";
-import { Cause, Effect, Option } from "effect";
+import { Cause, Effect, Option, Schema } from "effect";
 
 export const ADAPTER_FAILURE = {
   /** The credential or login was rejected: observed state clears. */
@@ -27,15 +27,16 @@ export const ADAPTER_FAILURE = {
 
 export type AdapterFailureKind = (typeof ADAPTER_FAILURE)[keyof typeof ADAPTER_FAILURE];
 
-export class AdapterFailure extends Error {
-  readonly failure: AdapterFailureKind;
-
-  constructor(failure: AdapterFailureKind, message: string) {
-    super(message);
-    this.name = "AdapterFailure";
-    this.failure = failure;
-  }
-}
+/**
+ * One observation's failure as the typed channel every adapter fails with:
+ * which kind it is, and a sentence for a person. A Schema error rather than a
+ * plain one because the web's observation pass reads it from the provider
+ * package across the hosted seam, so its shape is a contract and not a class.
+ */
+export class AdapterFailure extends Schema.TaggedError<AdapterFailure>()("AdapterFailure", {
+  failure: Schema.Literals(Object.values(ADAPTER_FAILURE)),
+  message: Schema.String,
+}) {}
 
 /**
  * Whether this failure clears what the last pass observed. Nothing read under

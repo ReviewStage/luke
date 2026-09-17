@@ -1,5 +1,7 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { hostedQuotaSchema } from "@sidecar/hosted";
 import { type LanguageModel, type LanguageModelMiddleware, wrapLanguageModel } from "ai";
+import { Effect, Schema } from "effect";
 import type { HostedSpend } from "../quota.js";
 
 /**
@@ -11,15 +13,22 @@ import type { HostedSpend } from "../quota.js";
  * its reason rather than the model's.
  */
 
-/** Thrown in place of an inference the meter refused; eve reports it as the turn's failure. */
-export class HostedQuotaExceeded extends Error {
-  readonly spend: HostedSpend;
-  constructor(spend: HostedSpend) {
-    super("The account's daily hosted allowance is spent.");
-    this.name = "HostedQuotaExceeded";
-    this.spend = spend;
-  }
-}
+const QUOTA_EXCEEDED_MESSAGE = "The account's daily hosted allowance is spent.";
+
+/**
+ * Thrown in place of an inference the meter refused; eve reports its
+ * `message` as the turn's failure. A Schema error because the spend it carries
+ * is the service's own wire shape, read back where the turn's failure is.
+ */
+export class HostedQuotaExceeded extends Schema.TaggedError<HostedQuotaExceeded>()(
+  "HostedQuotaExceeded",
+  {
+    spend: Schema.Struct({ allowed: Schema.Boolean, quota: hostedQuotaSchema }),
+    message: Schema.String.pipe(
+      Schema.withConstructorDefault(Effect.succeed(QUOTA_EXCEEDED_MESSAGE)),
+    ),
+  },
+) {}
 
 /** Spends one hosted use; answers whether the inference may run. */
 export type MeterSpend = () => Promise<HostedSpend>;
@@ -27,7 +36,7 @@ export type MeterSpend = () => Promise<HostedSpend>;
 function meteredMiddleware(spend: MeterSpend): LanguageModelMiddleware {
   const admit = async () => {
     const spent = await spend();
-    if (!spent.allowed) throw new HostedQuotaExceeded(spent);
+    if (!spent.allowed) throw new HostedQuotaExceeded({ spend: spent });
   };
   return {
     async wrapGenerate({ doGenerate }) {

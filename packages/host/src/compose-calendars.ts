@@ -31,6 +31,8 @@ import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
   AppleCalendarReader,
+  CALENDAR_HELPER_FAILURE,
+  CalendarHelperFailure,
 } from "./apple-calendar.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -176,11 +178,21 @@ export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(fu
       }),
       (result) => {
         if (result.status !== NODE_CAPABILITY_STATUS.OK) {
-          return Effect.fail(new Error(result.reason));
+          return Effect.fail(
+            new CalendarHelperFailure({
+              failure: CALENDAR_HELPER_FAILURE.HELPER_RUN,
+              message: result.reason,
+            }),
+          );
         }
         return isWireString(result.value)
           ? Effect.succeed(result.value)
-          : Effect.fail(new Error("the helper answered no text"));
+          : Effect.fail(
+              new CalendarHelperFailure({
+                failure: CALENDAR_HELPER_FAILURE.UNREADABLE_REPORT,
+                message: "the helper answered no text",
+              }),
+            );
       },
     );
   const appleCalendar = new AppleCalendarReader({
@@ -470,9 +482,7 @@ export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(fu
       const access = Result.getOrUndefined(probed);
       if (Result.isFailure(probed) && !appleAccessProbeFailing) {
         const error = probed.failure;
-        report(
-          `Calendar access probe failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        report(`Calendar access probe failed: ${error.message}`);
       }
       appleAccessProbeFailing = access === undefined;
       if (access === undefined) return;

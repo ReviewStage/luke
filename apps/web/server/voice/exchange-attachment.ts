@@ -1,4 +1,5 @@
-import { Effect, type Schema, type Scope } from "effect";
+import { Data, Effect, type Schema, type Scope } from "effect";
+
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
@@ -50,11 +51,11 @@ interface ExchangeAttachmentDeps {
 const NO_ENTRIES: HostedLiveExchangeOptions["conversationEntries"] = () => [];
 
 /** A session whose sideband the exchange could not stand on; the service refuses the session on it. */
-class ExchangeCannotStand extends Error {
-  constructor() {
-    super("the exchange could not stand on the session's sideband");
-  }
-}
+class ExchangeCannotStand extends Data.TaggedError("ExchangeCannotStand")<{
+  readonly message: string;
+}> {}
+
+const EXCHANGE_CANNOT_STAND_MESSAGE = "the exchange could not stand on the session's sideband";
 
 export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttachment {
   return (
@@ -90,7 +91,10 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         attach: () => upstreamSideband(session.sideband),
         started: session.started,
       });
-      if (!adopted) return yield* Effect.fail(new ExchangeCannotStand());
+      if (!adopted)
+        return yield* Effect.fail(
+          new ExchangeCannotStand({ message: EXCHANGE_CANNOT_STAND_MESSAGE }),
+        );
       // The look at the account's open offers runs for as long as the session stands; the scope's close ends it.
       yield* exchange.briefings.start;
       return exchange;
