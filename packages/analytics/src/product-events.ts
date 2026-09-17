@@ -222,11 +222,12 @@ export const PRODUCT_SETTINGS_VIEW = {
 export type ProductSettingsView =
   (typeof PRODUCT_SETTINGS_VIEW)[keyof typeof PRODUCT_SETTINGS_VIEW];
 
-/** Which list a search field was summoned over, never what was typed into it. */
+/** Which list a search field was summoned over — the Conversation thread and an agent's transcript apart — never what was typed into it. */
 export const PRODUCT_SEARCH_SURFACE = {
   SESSIONS: "sessions",
   SETTINGS: "settings",
   CONVERSATION: "conversation",
+  TRANSCRIPT: "transcript",
 } as const;
 
 type ProductSearchSurface = (typeof PRODUCT_SEARCH_SURFACE)[keyof typeof PRODUCT_SEARCH_SURFACE];

@@ -26,7 +26,7 @@ import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { ConductorKeyGate, type ConductorKeyGateControl } from "./conductor-key-gate";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationClearButton, ConversationPanel } from "./conversation-panel";
-import { ConversationSearchButton } from "./conversation-search";
+import { CONVERSATION_SEARCH_SUBJECT, ConversationSearchButton } from "./conversation-search";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -267,9 +267,10 @@ interface PanelBodyProps {
   onSettingsSearchToggle: () => void;
   /**
    * Whether the Conversation search is offered: the thread page showing with
-   * turns in it. Decided by the app rather than here, because whoever offers
-   * the button also has to be the one that closes the field when it stops
-   * offering it, and the field's open state is the app's.
+   * turns in it, or a transcript page whose transcript has landed with turns.
+   * Decided by the app rather than here, because whoever offers the button
+   * also has to be the one that closes the field when it stops offering it,
+   * and the field's open state is the app's.
    */
   offerConversationSearch: boolean;
   conversationSearchOpen: boolean;
@@ -433,10 +434,16 @@ export function PanelBody({
             {tab === PANEL_TAB.SETTINGS ? (
               <SettingsSearchButton open={settingsSearchOpen} onToggle={onSettingsSearchToggle} />
             ) : null}
-            {/* The thread's own magnifier, in the same spot a third time. */}
+            {/* The thread's own magnifier, in the same spot a third time; a
+                transcript page's wears the transcript's words. */}
             {offerConversationSearch ? (
               <ConversationSearchButton
                 open={conversationSearchOpen}
+                subject={
+                  transcriptRow === undefined
+                    ? CONVERSATION_SEARCH_SUBJECT.CONVERSATION
+                    : CONVERSATION_SEARCH_SUBJECT.TRANSCRIPT
+                }
                 onToggle={onConversationSearchToggle}
               />
             ) : null}
@@ -490,6 +497,9 @@ export function PanelBody({
           now={now}
           onOpenChat={onOpenChat}
           onBack={() => onConversationPageChange(CONVERSATION_PAGE.AGENTS)}
+          searchOpen={conversationSearchOpen}
+          onSearchClose={onConversationSearchClose}
+          onSearchEngaged={onFieldEngaged}
         />
       ) : conversationTab ? (
         <ConversationPanel
