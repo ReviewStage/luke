@@ -100,6 +100,17 @@ test("every action kind the fixtures carry composes an action row, and a brain t
   const other = toolRow(part("frobnicate_widget", { a: 1 }, answered({})), FIXTURE_ROSTER);
   assert.equal(other.kind, TOOL_ROW_KIND.OTHER);
   assert.deepEqual(other.runs, [{ text: "Ran frobnicate widget" }]);
+  // An announce composes a row of its own kind quoting the briefing it carried, the way a sent message's row quotes its text.
+  const announced = toolRow(
+    part("announce", { briefing: "Two sessions finished." }, answered({ status: "accepted" })),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(announced.kind, TOOL_ROW_KIND.ANNOUNCE);
+  assert.equal(isActionRowKind(announced.kind), false);
+  assert.equal(announced.status, TOOL_ROW_STATUS.ACCEPTED);
+  assert.deepEqual(announced.runs, [{ text: 'Announced: "Two sessions finished."' }]);
+  const unworded = toolRow(part("announce", {}, answered({ status: "accepted" })), FIXTURE_ROSTER);
+  assert.deepEqual(unworded.runs, [{ text: "Announced" }]);
 });
 
 test("the brain's own tools are worded by their arguments, never their answers, and a refusal says why", () => {
