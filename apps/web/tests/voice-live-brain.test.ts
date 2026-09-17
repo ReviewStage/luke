@@ -9,7 +9,7 @@ import {
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
-import { Effect, Exit, Scope } from "effect";
+import { Duration, Effect, Exit, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
@@ -60,9 +60,10 @@ const NOW = 1_800_000_000_000;
  * Postgres shared with every other job, so a bound measured in milliseconds
  * against it would expire under load before the turn's first event arrives.
  */
-const QUICK = { POLL_MS: 5, FOLLOW_MS: 60_000 };
+const POLL_MS = 5;
+const QUICK = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.minutes(1) };
 /** The same cadence with the bound close enough to reach inside a test. */
-const BOUNDED = { POLL_MS: 5, FOLLOW_MS: 150 };
+const BOUNDED = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.millis(150) };
 
 const writer = await database.run(
   storeWriter({
@@ -231,7 +232,7 @@ it.effect(
       await until(() => f.events.length === 1, "the slow step");
       await play(events.slice(requested), standing);
       await until(() => f.events.length === 5, "the turn's end");
-      await sleep(QUICK.POLL_MS * 6);
+      await sleep(POLL_MS * 6);
 
       assert.deepEqual(
         f.events.map((event) => event.kind),
@@ -284,7 +285,7 @@ it.effect(
         Object.keys(HOSTED_ASK_REFUSAL_NOTE).sort(),
         Object.values(ASK_REFUSAL).sort(),
       );
-      await sleep(QUICK.POLL_MS * 4);
+      await sleep(POLL_MS * 4);
       assert.deepEqual(f.events, []);
       await f.stop();
     }),
@@ -302,7 +303,7 @@ it.effect(
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       await until(() => f.events.length === 1, "the follow bound");
-      await sleep(QUICK.POLL_MS * 6);
+      await sleep(POLL_MS * 6);
       assert.deepEqual(f.events, [
         { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
       ]);
@@ -341,7 +342,7 @@ it.effect(
         state: memoryRelayState(),
       });
       await until(() => f.events.length >= 1, "the unreadable journal's end");
-      await sleep(QUICK.POLL_MS * 6);
+      await sleep(POLL_MS * 6);
       assert.deepEqual(f.events, [
         { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: accepted.runId, end: LIVE_BRAIN_RUN_END.FAILED },
       ]);
@@ -388,7 +389,7 @@ it.effect("stop ends every follow: a turn that completes after it reaches no lis
       model: "scripted-model",
       state: memoryRelayState(),
     });
-    await sleep(QUICK.POLL_MS * 8);
+    await sleep(POLL_MS * 8);
     assert.deepEqual(f.events, []);
   }),
 );

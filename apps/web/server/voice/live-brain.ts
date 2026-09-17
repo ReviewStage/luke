@@ -55,12 +55,12 @@ import { projectTurnEvents } from "../hosted/turn-event-stream.js";
 
 const LIVE_BRAIN_FOLLOW_BOUNDS = {
   /** How often the record is read again while an ask's turn runs: the measured step boundary hosted is about 300 ms. */
-  POLL_MS: 250,
+  POLL: Duration.millis(250),
   /** How long an ask is followed before it is given up as failed: past eve's own turn deadline, with room for one queued turn ahead of it. */
-  FOLLOW_MS: 10 * 60_000,
+  FOLLOW: Duration.minutes(10),
 } as const;
 
-type FollowBounds = Readonly<Record<keyof typeof LIVE_BRAIN_FOLLOW_BOUNDS, number>>;
+type FollowBounds = Readonly<Record<keyof typeof LIVE_BRAIN_FOLLOW_BOUNDS, Duration.Duration>>;
 
 /**
  * What is said aloud for an ask the door refused, fixed by the build and
@@ -201,10 +201,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("hostedLiveBrain")(func
     if (followed.has(askId)) return Effect.void;
     followed.add(askId);
     const told = { seq: 0 };
-    const cadence = Schedule.spaced(Duration.millis(bounds.POLL_MS)).pipe(
+    const cadence = Schedule.spaced(bounds.POLL).pipe(
       Schedule.setInputType<boolean>(),
       Schedule.while(({ input }) => !input),
-      Schedule.upTo({ duration: Duration.millis(bounds.FOLLOW_MS) }),
+      Schedule.upTo({ duration: bounds.FOLLOW }),
       // Whichever of the two ends the follow — the turn saying it ended or
       // the bound elapsing — the repeat answers with the last look's own
       // word on it rather than the schedule's count.

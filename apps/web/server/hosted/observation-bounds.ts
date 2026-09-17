@@ -11,6 +11,8 @@
  * bundle test asserts no function bundle reaches eve.
  */
 
+import { Duration } from "effect";
+
 /** Where Vercel's scheduler calls, fixed here so the cron entry can be checked against it. */
 export const OBSERVATION_TICK_PATH = "/api/observation/tick";
 
@@ -26,7 +28,7 @@ export const OBSERVATION_TICK = {
    * settles under the function's own cap even when its last batch spends
    * every second a pass may.
    */
-  BUDGET_MS: 50_000,
+  BUDGET_MS: Duration.toMillis(Duration.seconds(50)),
   /**
    * The longest one account's pass may run before the tick counts it failed
    * and moves on: the adapter's whole 429 budget and a request deadline
@@ -35,7 +37,7 @@ export const OBSERVATION_TICK = {
    * longer waits on it, and the attempt the pass recorded at its start is
    * what keeps the account from heading the next tick's order.
    */
-  PASS_DEADLINE_MS: 25_000,
+  PASS_DEADLINE_MS: Duration.toMillis(Duration.seconds(25)),
   /** The function duration the tick's bundle declares; the budget leaves headroom under it. */
   MAX_DURATION_SECONDS: 60,
   /** The most accounts one tick lists; the least recently attempted come first, so nobody starves. */
@@ -43,5 +45,5 @@ export const OBSERVATION_TICK = {
   /** Accounts observed at once; each is a fan of provider requests of its own. */
   CONCURRENCY: 4,
   /** How recently an account must have been seen to be observed on the schedule. */
-  ACCOUNT_SEEN_WITHIN_MS: 7 * 24 * 60 * 60 * 1000,
+  ACCOUNT_SEEN_WITHIN_MS: Duration.toMillis(Duration.days(7)),
 } as const;

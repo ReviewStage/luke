@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, lte } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { Duration, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { user } from "../../db/auth-schema.js";
@@ -25,7 +25,7 @@ import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
  */
 
 /** How long a cleared conversation's rows stand before the purge takes them. */
-export const CLEARED_CONVERSATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+export const CLEARED_CONVERSATION_RETENTION_MS = Duration.toMillis(Duration.days(30));
 
 export interface ClearOutcome {
   /** The main conversation the Clear stamped, and every descendant stamped with it; empty when none stood. */

@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import { DAY_MS } from "../core.js";
 import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,
@@ -32,7 +33,6 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 /** How many complete weeks the account calendar reaches back past the current one. */
 const CALENDAR_COMPLETE_WEEKS = 52;
 
-const DAY_MS = 86_400_000;
 const DAYS_PER_WEEK = 7;
 
 /**
