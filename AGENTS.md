@@ -175,6 +175,57 @@ in for the missing job before the first release.
   and `PRIVACY.md` says each in as many words under "Briefing notifications" and
   the Apple line of "Who we send it to".
 
+## Testing
+
+```
+./scripts/check.sh                       # everything CI runs
+pnpm exec vitest run <path>              # one file
+pnpm --filter @luke/web test:store       # store tests on a real Postgres
+pnpm --filter @luke/web test:agent       # offline brain eval, scripted model
+```
+
+`check.sh` must exit 0. A Mac or UI change also needs `./scripts/verify.sh`
+evidence; CI builds nothing for the Mac.
+
+- Every behavior change ships with a test that fails without it, same PR.
+- Use the smallest layer that catches the bug: a type or lint rule, then a
+  test through the module's public export, then a real Postgres or child
+  process (`test:store`), then `verify.sh` evidence for a Mac, a window, or
+  a live provider.
+- Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
+  No network, personal data, live provider, or real clock. They pass alone
+  and in any order.
+- Prefer the real implementation, then a fake, then a stub. A double is a
+  test `Layer` on the subject's `Context.Tag` at a process boundary: provider
+  HTTP, Apple, the model, the OS, the clock.
+- Assert what a caller observes, never private state or call counts.
+- Use the shared builders before inline setup: `packages/host/src/testing/`,
+  `apps/web/tests/support/`, `packages/wire/src/testing/`,
+  `packages/providers/src/testing/`, and `temporaryDirectory` from
+  `@sidecar/runtime/testing`.
+- Effect tests use `it.effect` and `TestClock.adjust`. `Effect.run*`,
+  `Runtime.run*`, and `ManagedRuntime.make` in a test file fail lint
+  (`testing/no-runner`); `setTimeout`, `setInterval`, `Effect.sleep`, and
+  `it.live` fail lint (`testing/no-real-time`).
+- Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
+  helpers, with the diff explained in the PR.
+- Never loosen, delete, or skip a test to go green. `.only`, `.skip`,
+  `.todo`, and `it.flakyTest` fail lint (`testing/no-focus-or-retry`). Fix
+  or delete a flaky test.
+- Do not write change-detector tests: an expected value computed by the code
+  under test or pasted from its output; a test of a getter, constant, type,
+  re-export, or Schema round-trip on a valid value; a test that only asserts
+  a fake was called; a private function exported for a test.
+
+`tools/oxlint/testing/test-edges.json` holds the files not yet on these rules:
+`runnerHoldouts` and `realTimeHoldouts` only shrink and are deleted with their
+last entry. `liveClockTests` is permanent, for a subject that is a real socket
+or process timeout; `it.live` is allowed only there, and each entry is named
+here with its reason:
+
+- `packages/gateway/src/node-invocations.test.ts`: a real Gateway socket's
+  reconnection and in-flight timeout.
+
 ## Effect idioms
 
 Effect is the repository's infrastructure library, replacing what used to be
