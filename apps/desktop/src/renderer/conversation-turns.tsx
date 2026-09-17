@@ -61,11 +61,11 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result, Schema } from "effect";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { agentTitle, subagentTitle } from "./agent-title";
 import { ConversationCopyButton } from "./conversation-copy";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
-import { ConversationMessageMenu } from "./conversation-menu";
+import { CONVERSATION_MENU_OPEN_ATTRIBUTE, ConversationMessageMenu } from "./conversation-menu";
 import { ConversationRatingControl, type RatedMessageDraft } from "./conversation-rating";
 import {
   CONVERSATION_ENTRY_SPEAKER,
@@ -126,7 +126,7 @@ import { ThinkingDots } from "./thinking-dots";
  */
 
 /** What each kind of row is to a reader: who it speaks for, and the name read before it. */
-interface RowVoice {
+export interface RowVoice {
   readonly speaker: ConversationEntrySpeaker;
   readonly label: string;
 }
@@ -243,6 +243,75 @@ function RowStamp({ at }: { at: number }): React.JSX.Element {
   );
 }
 
+/**
+ * The attribute a message's word rows wear, so a pressed search result can
+ * find the rows of the message it named once the thread is drawn again. The
+ * id is the stored message's own, the one the rating and the readings key on.
+ */
+export const CONVERSATION_MESSAGE_ATTRIBUTE = "data-conversation-message";
+
+/**
+ * What the Conversation search asks of the rows drawn for one message: the
+ * anchor they wear so a pressed result can find them — the thread's rows
+ * only, since a result standing in the thread's place must not be what the
+ * landing finds — the words to mark in their bubbles, and whether theirs is
+ * the message a result landed on.
+ */
+interface RowSearch {
+  readonly anchor: string | undefined;
+  readonly highlight: readonly string[] | undefined;
+  readonly landed: boolean;
+}
+
+/** The attributes a message's word rows wear for the search: its anchor where it has one, and the landing while it stands. */
+function rowSearchAttributes(search: RowSearch | undefined) {
+  return search === undefined
+    ? undefined
+    : {
+        [CONVERSATION_MESSAGE_ATTRIBUTE]: search.anchor,
+        "data-search-landed": search.landed ? "true" : undefined,
+      };
+}
+
+/** What the press over a search result's words is called, for the keyboard and the screen reader. */
+const WORDS_PRESS_LABEL = "Show in the conversation";
+
+/**
+ * The press a search result offers: one unseen button over its words — the
+ * bubble, or the quiet words under his face — so the words stay words rather
+ * than the contents of a button, and the row's margin, its stamp, and its
+ * own controls beside the bubble are left alone. It stands first under the
+ * words' ground, so the words paint over it and a press on them falls
+ * through to it. A press that began while the row's menu stood open is the
+ * menu's light dismiss and nothing more: the platform closes the sheet on
+ * the pointer's lift, before the click arrives, so what stood at the
+ * pointer's fall is what decides.
+ */
+function WordsPress({ onPress }: { onPress: () => void }): React.JSX.Element {
+  const dismissing = useRef(false);
+  return (
+    <button
+      type="button"
+      className="conversation-words-press"
+      aria-label={WORDS_PRESS_LABEL}
+      title={WORDS_PRESS_LABEL}
+      onPointerDown={(event) => {
+        // The press stands first under the words' ground, which also holds the menu.
+        const ground = event.currentTarget.parentElement;
+        dismissing.current =
+          ground?.querySelector(`.conversation-menu[${CONVERSATION_MENU_OPEN_ATTRIBUTE}]`) !== null;
+      }}
+      onClick={() => {
+        if (dismissing.current) {
+          dismissing.current = false;
+          return;
+        }
+        onPress();
+      }}
+    />
+  );
+}
+
 function BubbleRow({
   voice,
   words,
@@ -250,6 +319,8 @@ function BubbleRow({
   copy = true,
   reading = false,
   rating,
+  search,
+  press,
 }: {
   voice: RowVoice;
   words: string;
@@ -259,17 +330,27 @@ function BubbleRow({
   reading?: boolean;
   /** The rating control, behind the ellipsis on the last words of one of Luke's messages and nowhere else. */
   rating?: React.ReactNode;
+  /** The search's anchor and marks for the row's message; absent on a line still being said, which has no id yet. */
+  search?: RowSearch | undefined;
+  /** The press over the bubble, where the row is a search result. */
+  press?: () => void;
 }): React.JSX.Element {
   return (
     <li
       className="conversation-entry"
       data-speaker={voice.speaker}
       data-reading={reading ? "true" : undefined}
+      {...rowSearchAttributes(search)}
     >
       <small className="visually-hidden">{voice.label}</small>
       <div className="conversation-message">
         <span className="conversation-bubble">
-          <MarkdownMessage words={words} className="conversation-words" />
+          {press === undefined ? null : <WordsPress onPress={press} />}
+          <MarkdownMessage
+            words={words}
+            className="conversation-words"
+            highlight={search?.highlight}
+          />
           {copy ? <ConversationCopyButton words={words} /> : null}
           {rating === undefined ? null : (
             <ConversationMessageMenu>{rating}</ConversationMessageMenu>
@@ -404,6 +485,8 @@ function OwnWordsRow({
   at,
   lead,
   rating,
+  search,
+  press,
 }: {
   words: string;
   at: number;
@@ -411,6 +494,10 @@ function OwnWordsRow({
   lead?: React.ReactNode;
   /** The rating control, behind the ellipsis on the last words of the message and nowhere else. */
   rating?: React.ReactNode;
+  /** The search's anchor and marks for the row's message. */
+  search: RowSearch;
+  /** The press over the words, where the row is a search result. */
+  press?: () => void;
 }): React.JSX.Element {
   return (
     <li
@@ -418,6 +505,7 @@ function OwnWordsRow({
       data-speaker={VOICE.OWN.speaker}
       data-judgment={JUDGMENT.OWN}
       data-own-words="true"
+      {...rowSearchAttributes(search)}
     >
       <small className="visually-hidden">{VOICE.OWN.label}</small>
       <div className="conversation-message">
@@ -426,8 +514,13 @@ function OwnWordsRow({
             <WingFace />
           </span>
           <span className="conversation-action-body">
+            {press === undefined ? null : <WordsPress onPress={press} />}
             {lead}
-            <MarkdownMessage words={words} className="conversation-words" />
+            <MarkdownMessage
+              words={words}
+              className="conversation-words"
+              highlight={search.highlight}
+            />
             {rating === undefined ? null : (
               <ConversationMessageMenu>{rating}</ConversationMessageMenu>
             )}
@@ -1130,12 +1223,18 @@ function messageRows(
   roster: readonly SessionView[],
   rating: RatingContext,
   readings: Readings,
+  marks: ConversationSearchMarks | undefined,
   onOpenChat?: (identity: SessionIdentity) => void,
   lead?: React.ReactNode,
   /** The chip naming the observed agent, for a group from an observed session; its announcement folds around it. */
   sourceChip?: React.ReactNode,
 ): readonly React.JSX.Element[] {
   const { message } = view;
+  const search: RowSearch = {
+    anchor: message.id,
+    highlight: marks?.tokens,
+    landed: marks?.landed === message.id,
+  };
   if (message.role === MESSAGE_ROLE.USER) {
     const voice = userVoice(message);
     const words = userWords(message);
@@ -1153,6 +1252,7 @@ function messageRows(
         words={words}
         at={view.placedAt}
         copy={voice === VOICE.YOU}
+        search={search}
       />,
     ];
   }
@@ -1174,6 +1274,7 @@ function messageRows(
         at={view.placedAt}
         reading={true}
         rating={last ? ratingControl(source, words, rating) : undefined}
+        search={search}
       />,
     ];
   }
@@ -1213,6 +1314,7 @@ function messageRows(
             at={view.placedAt}
             lead={index === leadAt ? lead : undefined}
             rating={placed}
+            search={search}
           />
         ) : (
           <BubbleRow
@@ -1221,6 +1323,7 @@ function messageRows(
             words={part.text}
             at={view.placedAt}
             rating={placed}
+            search={search}
           />
         ),
       );
@@ -1257,6 +1360,7 @@ function messageRows(
             words={words}
             at={view.placedAt}
             rating={placed}
+            search={search}
           />,
         );
         return;
@@ -1279,6 +1383,252 @@ function messageRows(
     />,
     ...rows,
   ];
+}
+
+/**
+ * What the Conversation search asks of the thread while one stands: the
+ * query's words, marked wherever they land in a bubble, and the message a
+ * pressed result landed on, whose rows wear the landing.
+ */
+export interface ConversationSearchMarks {
+  readonly tokens: readonly string[];
+  readonly landed: string | undefined;
+}
+
+/** How the thread draws a message's words, which is how a search result draws them too: a bubble on its speaker's side, or Luke's quiet words on his own judgment under his face. */
+export const CONVERSATION_SEARCH_ROW = { BUBBLE: "bubble", OWN: "own" } as const;
+
+export type ConversationSearchRow =
+  (typeof CONVERSATION_SEARCH_ROW)[keyof typeof CONVERSATION_SEARCH_ROW];
+
+/**
+ * The rating a result carries, as the thread's row carries it: the message
+ * the verdict is of (the reading's source, for words the voice said), the
+ * words the draft quotes, and the ask the turn answered.
+ */
+interface ConversationSearchRating {
+  readonly view: ConversationViewMessage;
+  readonly words: string;
+  readonly ask: string | undefined;
+}
+
+/** One message the Conversation search can find, and what its result draws: the row the thread draws its words as, the words, and the row's own controls. */
+export interface ConversationSearchEntry {
+  /** The stored message's id, which its rows wear as their anchor. */
+  readonly messageId: string;
+  /** Which row the thread draws the words as. */
+  readonly row: ConversationSearchRow;
+  /** Whose the row is, as the thread reads it: the speaker's side, and the name read before it. */
+  readonly voice: RowVoice;
+  /** When the thread places it, which dates the result and orders it. */
+  readonly at: number;
+  /** Every bubble the message draws, joined as paragraphs: what the query is read against and what the result draws. */
+  readonly words: string;
+  /** Whether the thread's row carries the copy control: the developer's ask and Luke's bubbles do, a note and his own-judgment words do not. */
+  readonly copy: boolean;
+  /** The rating the thread's row carries on the message's last words, where it carries one. */
+  readonly rated: ConversationSearchRating | undefined;
+}
+
+/** The words one part draws, and the row they are drawn as. */
+interface DrawnWords {
+  readonly row: ConversationSearchRow;
+  readonly voice: RowVoice;
+  readonly copy: boolean;
+  readonly text: string;
+}
+
+const LUKE_BUBBLE = { row: CONVERSATION_SEARCH_ROW.BUBBLE, voice: VOICE.LUKE, copy: true } as const;
+
+/**
+ * The words one message draws as bubbles, joined as paragraphs, drawn as the
+ * thread draws them — or nothing for a message that draws no words. Decided
+ * by the same branches `messageRows` draws by, so the search reads exactly
+ * what the thread shows: the developer's ask and the brain's note, unless the
+ * note is an observed chat's lines folded under a count; the voice's reading
+ * of a message in the thread; and otherwise the text parts and briefings that
+ * are not his thinking — the text of a turn the voice answered, and a briefing
+ * a device read aloud, both fold as his written working and are not words
+ * said, and so does an observed session's briefing, which folds as the
+ * brain's proposal with the agent's chip inside. A briefing is otherwise
+ * drawn in Luke's own bubble whatever the turn's judgment, and text on his
+ * own judgment under his face, so a message that draws both is drawn as its
+ * first words are. The row's controls follow the
+ * same rows: the copy where the thread's row has one, and the rating the
+ * thread puts on the message's last words — of the reading's source for words
+ * the voice said, on the last of that source's readings — with the ask the
+ * turn answered, so a thumbs down in the results drafts what it would in the
+ * thread.
+ */
+function searchEntryOf(
+  view: ConversationViewMessage,
+  judgment: Judgment,
+  aloud: boolean,
+  observed: boolean,
+  readings: Readings,
+  ask: string | undefined,
+): ConversationSearchEntry | undefined {
+  const { message } = view;
+  const entry = (
+    drawn: readonly DrawnWords[],
+    rated: ConversationSearchRating | undefined,
+  ): ConversationSearchEntry | undefined => {
+    const [first] = drawn;
+    const words = drawn.map((part) => part.text).join("\n\n");
+    if (first === undefined || words.length === 0) return undefined;
+    return {
+      messageId: message.id,
+      row: first.row,
+      voice: first.voice,
+      at: view.placedAt,
+      words,
+      copy: first.copy,
+      rated,
+    };
+  };
+  if (message.role === MESSAGE_ROLE.USER) {
+    const words = userWords(message);
+    if (
+      message.metadata.author === MESSAGE_AUTHOR.BRAIN &&
+      observedMessagesOf(words) !== undefined
+    ) {
+      return undefined;
+    }
+    const voice = userVoice(message);
+    return entry(
+      [{ row: CONVERSATION_SEARCH_ROW.BUBBLE, voice, copy: voice === VOICE.YOU, text: words }],
+      undefined,
+    );
+  }
+  if (message.role === MESSAGE_ROLE.SYSTEM) return undefined;
+  const readFrom = readFromOf(view);
+  const source = readFrom === undefined ? undefined : readings.byId.get(readFrom);
+  if (source !== undefined) {
+    const words = spokenWords(message);
+    const last = readings.readOf.get(source.message.id)?.at(-1) === view;
+    return entry(
+      [{ ...LUKE_BUBBLE, text: words }],
+      last ? { view: source, words, ask } : undefined,
+    );
+  }
+  const readAloud = (readings.readOf.get(message.id)?.length ?? 0) > 0;
+  const thinking = aloud && message.metadata.author === MESSAGE_AUTHOR.BRAIN;
+  const described = new Map<string, ConversationViewToolPart>(
+    view.tools.map((tool) => [tool.toolCallId, tool]),
+  );
+  const spoken =
+    judgment === JUDGMENT.OWN
+      ? { row: CONVERSATION_SEARCH_ROW.OWN, voice: VOICE.OWN, copy: false }
+      : LUKE_BUBBLE;
+  const drawn: DrawnWords[] = [];
+  for (const part of message.parts) {
+    if (isTextPart(part)) {
+      if (!thinking) drawn.push({ ...spoken, text: part.text });
+      continue;
+    }
+    // An observed session's briefing folds as the brain's proposal, and a
+    // briefing a device read aloud folds as his written working: neither is
+    // words said.
+    if (observed || readAloud || !isStoredToolPart(part)) continue;
+    if (described.get(part.toolCallId)?.kind !== CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) continue;
+    const briefing = announcedWords(part);
+    if (briefing !== undefined) drawn.push({ ...LUKE_BUBBLE, text: briefing });
+  }
+  const lastWordsAt = message.parts.findLastIndex((part: StoredPart) =>
+    drawsWords(part, described, thinking),
+  );
+  const rated =
+    lastWordsAt === -1 || readAloud
+      ? undefined
+      : { view, words: quotedWords(message, message.parts[lastWordsAt]), ask };
+  return entry(drawn, rated);
+}
+
+/**
+ * One search result, drawn as the thread draws the message: the same bubble
+ * on the same side, or the same quiet words under his face, with the query's
+ * words marked, the row's stamp in the pull column, and the row's own copy
+ * and rating where the thread's row has them, so a result is the message it
+ * leads to in every way but where it stands. Its words are the press.
+ */
+export function ConversationSearchHitRow({
+  entry,
+  tokens,
+  onOpen,
+  onOfferRatingFeedback,
+}: {
+  entry: ConversationSearchEntry;
+  /** The query's words, marked where they land. */
+  tokens: readonly string[];
+  /** The row's press, which lands the thread on the message. */
+  onOpen: (entry: ConversationSearchEntry) => void;
+  /** Opens the feedback composer on the draft a thumbs down offers; absent where no composer can be offered. */
+  onOfferRatingFeedback?: (draft: string) => void;
+}): React.JSX.Element {
+  // No anchor: the landing seeks the thread's rows, and a result standing in
+  // the thread's place at the moment of the press must not be what it finds.
+  const search: RowSearch = { anchor: undefined, highlight: tokens, landed: false };
+  const press = () => onOpen(entry);
+  const rating =
+    entry.rated === undefined
+      ? undefined
+      : ratingControl(entry.rated.view, entry.rated.words, {
+          ask: entry.rated.ask,
+          onOfferFeedback: onOfferRatingFeedback,
+        });
+  return entry.row === CONVERSATION_SEARCH_ROW.OWN ? (
+    <OwnWordsRow words={entry.words} at={entry.at} rating={rating} search={search} press={press} />
+  ) : (
+    <BubbleRow
+      voice={entry.voice}
+      words={entry.words}
+      at={entry.at}
+      copy={entry.copy}
+      rating={rating}
+      search={search}
+      press={press}
+    />
+  );
+}
+
+/**
+ * Every message the thread draws words for, in the thread's own order: the
+ * corpus the Conversation search reads, composed here beside the rows so
+ * what is searched and what is drawn are decided once.
+ */
+export function conversationSearchEntries(
+  groups: readonly ConversationViewTurnGroup[],
+): readonly ConversationSearchEntry[] {
+  const readings = readingsOf(groups);
+  const entries: ConversationSearchEntry[] = [];
+  // The ask a rated reply answered is the developer's latest words in the
+  // same turn before it, wherever the turn's groups stand — the thread's own
+  // reading, so the results' thumbs draft what the thread's would.
+  const asks = new Map<string, string>();
+  for (const group of groups) {
+    const judgment = judgmentOf(group.turn);
+    const aloud = answeredAloud(group.turn);
+    const observed = group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED;
+    for (const view of group.messages) {
+      const entry = searchEntryOf(
+        view,
+        judgment,
+        aloud,
+        observed,
+        readings,
+        asks.get(group.turnId),
+      );
+      if (entry !== undefined) entries.push(entry);
+      if (
+        judgment === JUDGMENT.ASK &&
+        view.message.role === MESSAGE_ROLE.USER &&
+        view.message.metadata.author === MESSAGE_AUTHOR.DEVELOPER
+      ) {
+        asks.set(group.turnId, userWords(view.message));
+      }
+    }
+  }
+  return entries;
 }
 
 /** The user-facing voice for each kind of line still being said, before the record it settles into arrives. */
@@ -1410,6 +1760,7 @@ export function ConversationTurns({
   onOfferRatingFeedback,
   now,
   live = [],
+  search,
   children,
 }: {
   groups: readonly ConversationViewTurnGroup[];
@@ -1436,6 +1787,8 @@ export function ConversationTurns({
   now: number;
   /** The lines still being said, each with the instant its row will be placed at where the record has told one. */
   live?: readonly PlacedLiveEntry[];
+  /** The standing search's words to mark and the message it landed on; absent while no search stands. */
+  search?: ConversationSearchMarks | undefined;
   /** Rows drawn after the last turn, inside the same list. */
   children?: React.ReactNode;
 }): React.JSX.Element {
@@ -1518,6 +1871,7 @@ export function ConversationTurns({
               onOfferFeedback: onOfferRatingFeedback,
             },
             readings,
+            search,
             onOpenChat,
             completedChild !== undefined && message === led ? (
               <SubagentChip

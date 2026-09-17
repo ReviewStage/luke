@@ -32,6 +32,7 @@ import { CONVERSATION_PAGE, transcriptListed } from "./agents-panel";
 import type { CalendarGateControl } from "./calendar-gate";
 import type { ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
+import { CONVERSATION_SEARCH_INPUT_ID } from "./conversation-search";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
 import { NotchWings } from "./notch-wings";
@@ -164,6 +165,18 @@ export function App(): React.JSX.Element {
   // magnifier beside the tab bar answers for it, and its query lives with the
   // field in the settings panel — closing here is what lets that query go.
   const [settingsSearchOpen, setSettingsSearchOpen] = useState(false);
+  // The conversation search's field, on the same terms: the magnifier beside
+  // the tab bar answers for it, and its query lives with the field in the
+  // conversation panel. It is offered exactly while the thread page shows
+  // with turns in it — the tab is not part of the closing rule, so a search
+  // held while another tab shows waits where the developer left it, but
+  // leaving the thread page or emptying the thread closes it, by the sessions
+  // search's own rule that a field nobody can see must not hold a query.
+  const [conversationSearchOpen, setConversationSearchOpen] = useState(false);
+  const conversationThreadDrawn =
+    conversationPage === CONVERSATION_PAGE.THREAD && (state?.conversation.groups.length ?? 0) > 0;
+  const offerConversationSearch = tab === PANEL_TAB.CONVERSATION && conversationThreadDrawn;
+  if (conversationSearchOpen && !conversationThreadDrawn) setConversationSearchOpen(false);
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -301,9 +314,11 @@ export function App(): React.JSX.Element {
       credentialHeld.current || feedbackHeld.current || consentConnectHeld.current,
     onNotPanel: () => {
       sessions.closeOptions();
-      // The settings search closes with the shape it was opened on, taking
-      // its query with it: no search survives the panel closing.
+      // The settings and conversation searches close with the shape they
+      // were opened on, taking their queries with them: no search survives
+      // the panel closing.
       setSettingsSearchOpen(false);
+      setConversationSearchOpen(false);
     },
     onCapsuleList: () => {
       // The order goes back when the panel does, so the top row keeps
@@ -458,6 +473,22 @@ export function App(): React.JSX.Element {
    * clears it the render it finds the field closed.
    */
   const closeSettingsSearch = useCallback(() => setSettingsSearchOpen(false), []);
+
+  /**
+   * The conversation search summons, from its magnifier beside the tab bar or
+   * Command-F over the thread: the field opens at the head of the thread and
+   * the caret follows the same frame-by-frame seek the other two need.
+   */
+  const openConversationSearch = useCallback(() => {
+    setConversationSearchOpen(true);
+    focusSearchField(CONVERSATION_SEARCH_INPUT_ID);
+    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+      search_surface: PRODUCT_SEARCH_SURFACE.CONVERSATION,
+    });
+  }, []);
+
+  /** Closing it lets go of its query on the settings search's own terms: the panel clears the field the render it finds it closed. */
+  const closeConversationSearch = useCallback(() => setConversationSearchOpen(false), []);
 
   // A capture run stages its conversation from the launch profile, since no
   // voice window stands in one: who is heard, and for the muted run the hint
@@ -654,6 +685,8 @@ export function App(): React.JSX.Element {
         event.preventDefault();
         if (tab === PANEL_TAB.SETTINGS) openSettingsSearch();
         else if (tab === PANEL_TAB.SESSIONS) sessions.openSearch();
+        // Only the thread page has a search so far; the Agents pages take the chord as nothing.
+        else if (offerConversationSearch) openConversationSearch();
         return;
       }
       if (event.key !== "Escape") return;
@@ -706,6 +739,8 @@ export function App(): React.JSX.Element {
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      // The thread's search field is the nearer layer than the thread itself.
+      else if (tab === PANEL_TAB.CONVERSATION && conversationSearchOpen) closeConversationSearch();
       // A transcript unwinds to the list it was opened from, and the list to the thread.
       else if (
         tab === PANEL_TAB.CONVERSATION &&
@@ -723,9 +758,13 @@ export function App(): React.JSX.Element {
     changeConversationPage,
     changeMode,
     changeTab,
+    closeConversationSearch,
     closeSettingsSearch,
     conversationPage,
+    conversationSearchOpen,
     feedback.control.dismiss,
+    offerConversationSearch,
+    openConversationSearch,
     openSettingsSearch,
     presentation,
     sessions.closeOptions,
@@ -969,6 +1008,12 @@ export function App(): React.JSX.Element {
             onSettingsSearchToggle={() =>
               settingsSearchOpen ? closeSettingsSearch() : openSettingsSearch()
             }
+            offerConversationSearch={offerConversationSearch}
+            conversationSearchOpen={conversationSearchOpen}
+            onConversationSearchToggle={() =>
+              conversationSearchOpen ? closeConversationSearch() : openConversationSearch()
+            }
+            onConversationSearchClose={closeConversationSearch}
             tab={tab}
             onTabChange={changeTab}
             settings={{

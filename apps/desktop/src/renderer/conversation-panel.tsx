@@ -4,7 +4,18 @@ import type { ConversationViewSnapshot, SessionIdentity } from "@sidecar/session
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationListeningRow } from "./conversation-rows";
-import { ConversationTurns } from "./conversation-turns";
+import {
+  ConversationSearch,
+  ConversationSearchResults,
+  landOnConversationMessage,
+  searchConversation,
+} from "./conversation-search";
+import {
+  type ConversationSearchEntry,
+  type ConversationSearchMarks,
+  ConversationTurns,
+  conversationSearchEntries,
+} from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
 import { prefersReducedMotion } from "./use-reduced-motion";
@@ -230,6 +241,9 @@ export function ConversationPanel({
   live = [],
   spokenAskPending = false,
   now,
+  searchOpen = false,
+  onSearchClose,
+  onSearchEngaged,
 }: {
   /** The Conversation as the host's reads of the service compose it: the turn groups, and whether a read has landed. */
   view: ConversationViewSnapshot;
@@ -272,6 +286,12 @@ export function ConversationPanel({
    * holds the developer's place before anything is written.
    */
   spokenAskPending?: boolean;
+  /** Whether the search field stands at the head of the thread; the app opens and closes it, as it does the other tabs'. */
+  searchOpen?: boolean;
+  /** The field's own way out — Escape on an empty query. */
+  onSearchClose?: () => void;
+  /** Reports someone being part-way through a search, so the panel holds for them. */
+  onSearchEngaged?: (engaged: boolean) => void;
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement | null>(null);
   const [following, setFollowing] = useState(true);
@@ -290,7 +310,54 @@ export function ConversationPanel({
   const seek = useRef<TailSeek | undefined>(undefined);
   const thread = view.groups.length > 0 || live.length > 0 || spokenAskPending;
   const olderStands = view.hasOlder === true && onLoadOlder !== undefined;
-
+  // The query someone typed into the search field, and the message a pressed
+  // result landed the thread on. Held here rather than above because nothing
+  // else answers to them — and corrected during the render that discovers
+  // the field closed, the settings search's own rule, because a query
+  // belongs to the field it was typed in.
+  const [query, setQuery] = useState("");
+  const [landed, setLanded] = useState<string | undefined>(undefined);
+  if (!searchOpen && (query !== "" || landed !== undefined)) {
+    setQuery("");
+    setLanded(undefined);
+  }
+  // Built only while a query stands: an empty field searches nothing.
+  const search =
+    searchOpen && query !== ""
+      ? searchConversation(conversationSearchEntries(view.groups), query)
+      : undefined;
+  const marks: ConversationSearchMarks | undefined =
+    search === undefined ? undefined : { tokens: search.tokens, landed };
+  // The results stand in the thread's place until one is pressed, and the
+  // thread stands behind them — laid out, unseen, and out of reach — so its
+  // scroller keeps the reader's place and the paging keeps its anchor, and
+  // nothing has to be put back when they leave. A changed query is a new
+  // question, so it brings them back.
+  const resultsShowing = search !== undefined && landed === undefined;
+  const changeQuery = (next: string) => {
+    setQuery(next);
+    setLanded(undefined);
+  };
+  // A pressed result is the search answered: the thread comes forward with
+  // the query's words marked, and the view follows to the message itself.
+  // The landing is a place of the reader's choosing, so the tail is let go
+  // of before the thread comes forward: the stream must not drag them off
+  // the message, and the way back down is offered. Fire-and-forget like the
+  // session search's summons — the seek gives itself up after its own frame
+  // limit.
+  const landingScroll = useRef(false);
+  const land = (entry: ConversationSearchEntry) => {
+    setFollowing(false);
+    setLanded(entry.messageId);
+    landOnConversationMessage(entry.messageId, {
+      before: () => {
+        landingScroll.current = true;
+      },
+      after: () => {
+        landingScroll.current = false;
+      },
+    });
+  };
   useEffect(() => {
     if (thread) return;
     seek.current = undefined;
@@ -298,14 +365,18 @@ export function ConversationPanel({
   }, [thread]);
 
   // Words landing while a press is still carrying the reader down move the
-  // tail they are carried to, not the reader.
+  // tail they are carried to, not the reader. The search's chrome moves the
+  // tail too — the pill takes its room from the thread, and the thread
+  // standing behind the results is sized to the whole view — so a follower
+  // is pinned again as the field opens and closes and as the results come and
+  // go, or they would be left a pill's height short with no way down offered.
   useLayoutEffect(() => {
     if (!thread || !followingRef.current) return;
     const element = list.current;
     if (!element) return;
     if (seek.current === undefined) pinConversationTail(element);
     else seekConversationTail(element);
-  }, [thread, view, live, spokenAskPending]);
+  }, [thread, view, live, spokenAskPending, searchOpen, resultsShowing]);
 
   // After the tail is pinned, so a following reader is never moved twice.
   useLayoutEffect(() => {
@@ -373,10 +444,18 @@ export function ConversationPanel({
     if (!element) return;
     const metrics = scrollMetrics(element);
     if (seekUnderway(metrics)) return;
-    setFollowing((standing) => {
-      const next = followsConversationTail(metrics);
-      return standing === next ? standing : next;
-    });
+    // The landing's scroll is the seek's and not the reader's: where it put
+    // them says nothing about whether they follow the tail, and a landed
+    // message within the slack of the tail must not be dragged off by the
+    // next line said. The head it may have brought them to is still the
+    // head, though, and a reader put there has no way to scroll up for the
+    // page a scroll there would fetch.
+    if (!landingScroll.current) {
+      setFollowing((standing) => {
+        const next = followsConversationTail(metrics);
+        return standing === next ? standing : next;
+      });
+    }
     if (reachesConversationHead(metrics)) askForOlder();
   };
 
@@ -407,8 +486,38 @@ export function ConversationPanel({
       id={panelPanelId(PANEL_TAB.CONVERSATION)}
       aria-labelledby={panelTabId(PANEL_TAB.CONVERSATION)}
     >
+      {searchOpen && thread ? (
+        <ConversationSearch
+          query={query}
+          search={search}
+          onQueryChange={changeQuery}
+          onEnter={() => {
+            // The first result shown: the newest group's oldest message.
+            const first = search?.groups[0]?.[0];
+            if (first !== undefined) land(first);
+          }}
+          onClose={() => onSearchClose?.()}
+          onEngagedChange={(engaged) => {
+            onSearchEngaged?.(engaged);
+            // The caret back in the field is someone asking to see the
+            // results again, whatever message the last press landed on.
+            if (engaged) setLanded(undefined);
+          }}
+        />
+      ) : null}
+      {search !== undefined && resultsShowing ? (
+        <ConversationSearchResults
+          search={search}
+          now={now}
+          onOpen={land}
+          {...(onOfferRatingFeedback ? { onOfferRatingFeedback } : undefined)}
+        />
+      ) : null}
       {thread ? (
-        <div className="conversation-thread">
+        <div
+          className="conversation-thread"
+          data-behind-results={resultsShowing ? "true" : undefined}
+        >
           <div
             className="conversation-scroll"
             ref={list}
@@ -431,6 +540,7 @@ export function ConversationPanel({
                 {...(onOpenAgent ? { onOpenAgent } : undefined)}
                 {...(onOfferRatingFeedback ? { onOfferRatingFeedback } : undefined)}
                 live={live}
+                search={marks}
               >
                 {/* After the lines still being said: the newest spoken turn's
                     place, held while its first words are still on the service's
