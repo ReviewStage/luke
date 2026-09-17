@@ -29,10 +29,12 @@ import {
   type SchemaRead,
   type SchemaRefusal,
   type StoredUIMessage,
+  TURN_ORIGIN,
   TURN_STATUS,
   UNREGISTERED_TOOL_PART,
   unparsedWire,
   type WireBoundaryInput,
+  WireValueSchema,
 } from "../../core.js";
 import { db } from "../../db/query.js";
 import { conversations, events, messages, turns } from "../../db/storage-schema.js";
@@ -66,10 +68,10 @@ import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./d
  * `db/storage-schema.ts` declares and its row a `Schema` decodes rather than
  * trusts. Two things follow from the builder. A projection names its own
  * fields, so a result schema is spelled in the same words the rest of the
- * module is; and the vocabulary a text column is declared to hold — a turn's
- * origin and status, an event's kind, a message's role — is the schema
- * module's `$type<>()` rather than a cast at the row, which is what the four
- * `as` casts here used to stand in for. What the builder cannot spell is a
+ * module is; and the vocabulary a text column holds — a turn's origin and
+ * status, an event's kind, a message's role — is read as the literals the
+ * writer alone spells into it, so a row holding a word this build does not
+ * know is refused rather than trusted. What the builder cannot spell is a
  * named `sql` fragment inside the one rendered statement: the instant a turn
  * last changed, its text form, the jsonb key test behind `compaction`, and
  * the revision-first ordering of a messages page. The one thing still a
@@ -80,27 +82,22 @@ import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./d
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
 type MessageReadFailure = SqlError | Schema.SchemaError;
 
-/**
- * A text column whose vocabulary a schema module declares with `$type<>()`,
- * read back as the union the column is declared to hold. The declaration is
- * where the trust sits, which is where Drizzle's own `$type<>()` put it; a
- * read below therefore holds a row's field to being text and to no more,
- * exactly as it did when it cast one, and names the union in one place
- * instead of at every row.
- */
-const readsText = Schema.is(Schema.String);
-
-const declaredTextColumn = <Vocabulary extends string>(): Schema.Codec<Vocabulary> =>
-  Schema.declare((input): input is Vocabulary => readsText(input));
+/** The vocabularies the text columns hold, as the writer spells them; a row outside one is refused. */
+const TurnOriginSchema = Schema.Literals(Object.values(TURN_ORIGIN));
+const TurnStatusSchema = Schema.Literals(Object.values(TURN_STATUS));
+const ConversationEventKindSchema = Schema.Literals(Object.values(CONVERSATION_EVENT_KIND));
+const MessageRoleSchema = Schema.Literals(Object.values(MESSAGE_ROLE));
 
 /** The most rows one read answers; a device with more to take asks again from the last sequence it took. */
 const MAXIMUM_READ_PAGE = 200;
 
-export interface SequenceCursor {
-  /** Rows after this sequence; absent or zero for the conversation's beginning. */
-  readonly after?: number;
-  readonly limit?: number;
-}
+const SequenceCursorSchema = Schema.Struct({
+  // Rows after this sequence; absent or zero for the conversation's beginning.
+  after: Schema.optionalKey(Schema.Number),
+  limit: Schema.optionalKey(Schema.Number),
+});
+
+export type SequenceCursor = typeof SequenceCursorSchema.Type;
 
 /**
  * A message read's cursor, with the window a read may cut it to: only rows
@@ -109,16 +106,17 @@ export interface SequenceCursor {
  * cursor still lands on the last row taken; the rows before it are never
  * read and never travel, while the conversation itself stands untouched.
  */
-export interface MessageCursor extends SequenceCursor {
-  readonly since?: Date;
-  /**
-   * Also the rows at or before `after` written in place under a journal
-   * revision past this one: the running turn's journal as it streams, and
-   * once more as it finishes. Those rows are answered first, in the order
-   * they were written, so a page cut among them can name where it stopped.
-   */
-  readonly revisionAfter?: number;
-}
+const MessageCursorSchema = Schema.Struct({
+  ...SequenceCursorSchema.fields,
+  since: Schema.optionalKey(Schema.Date),
+  // Also the rows at or before `after` written in place under a journal
+  // revision past this one: the running turn's journal as it streams, and
+  // once more as it finishes. Those rows are answered first, in the order
+  // they were written, so a page cut among them can name where it stopped.
+  revisionAfter: Schema.optionalKey(Schema.Number),
+});
+
+export type MessageCursor = typeof MessageCursorSchema.Type;
 
 export interface StoredMessageRecord {
   readonly id: string;
@@ -158,11 +156,13 @@ export type MessageListRead =
  * and sequence to break a tie between two conversations' rows placed at one
  * instant. The next page reads the rows before it in the same order.
  */
-interface HistoryPosition {
-  readonly placedAt: string;
-  readonly conversationId: string;
-  readonly seq: number;
-}
+const HistoryPositionSchema = Schema.Struct({
+  placedAt: Schema.String,
+  conversationId: Schema.String,
+  seq: Schema.Number,
+});
+
+type HistoryPosition = typeof HistoryPositionSchema.Type;
 
 /**
  * What a history read is over: each standing conversation, and for one under
@@ -170,16 +170,20 @@ interface HistoryPosition {
  * The read is one select across them all, newest first, so a page holds the
  * newest rows of the view whichever conversation wrote them.
  */
-export interface HistoryWindow {
-  readonly conversationId: string;
-  readonly since?: Date;
-}
+const HistoryWindowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  since: Schema.optionalKey(Schema.Date),
+});
+
+export type HistoryWindow = typeof HistoryWindowSchema.Type;
 
 /** A history read's cursor: the rows before this position, or the newest rows where none is given. */
-export interface HistoryCursor {
-  readonly before?: HistoryPosition;
-  readonly limit?: number;
-}
+const HistoryCursorSchema = Schema.Struct({
+  before: Schema.optionalKey(HistoryPositionSchema),
+  limit: Schema.optionalKey(Schema.Number),
+});
+
+export type HistoryCursor = typeof HistoryCursorSchema.Type;
 
 /**
  * A history page: its rows oldest first, as a forward page's are, the
@@ -296,9 +300,9 @@ const SELECTED_MESSAGE_FIELDS = {
   seq: EpochMillisColumnSchema,
   turnId: Schema.NullOr(Schema.String),
   clientId: Schema.String,
-  role: Schema.String,
-  parts: Schema.Any,
-  metadata: Schema.NullOr(Schema.Any),
+  role: MessageRoleSchema,
+  parts: WireValueSchema,
+  metadata: Schema.NullOr(WireValueSchema),
   createdAt: InstantColumnSchema,
   placedAt: InstantColumnSchema,
   finishedAt: Schema.NullOr(InstantColumnSchema),
@@ -402,7 +406,7 @@ const findSelectedMessages = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,
     userId: Schema.String,
-    cursor: Schema.Any,
+    cursor: MessageCursorSchema,
   }),
   Result: SelectedMessageRowSchema,
   execute: selectMessages,
@@ -445,8 +449,8 @@ const placedBefore = (before: HistoryPosition) => {
 const findSelectedMessagesBefore = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    windows: Schema.Any,
-    cursor: Schema.Any,
+    windows: Schema.Array(HistoryWindowSchema),
+    cursor: HistoryCursorSchema,
   }),
   Result: SelectedHistoryRowSchema,
   execute: (options: {
@@ -687,9 +691,9 @@ const EventRowSchema = Schema.Struct({
   conversationId: Schema.String,
   seq: EpochMillisColumnSchema,
   messageId: Schema.String,
-  kind: declaredTextColumn<(typeof events.$inferSelect)["kind"]>(),
+  kind: ConversationEventKindSchema,
   deviceId: Schema.NullOr(Schema.String),
-  payload: Schema.NullOr(Schema.Any),
+  payload: Schema.NullOr(WireValueSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -851,8 +855,8 @@ const TurnRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   conversationId: Schema.String,
-  origin: declaredTextColumn<(typeof turns.$inferSelect)["origin"]>(),
-  status: declaredTextColumn<(typeof turns.$inferSelect)["status"]>(),
+  origin: TurnOriginSchema,
+  status: TurnStatusSchema,
   /** eve's own id for the turn, `turn_<n>` within its session, where the relay queued the row at eve's start; the opener's inbox row and a row from before the column names none. */
   eveTurnId: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
@@ -860,7 +864,7 @@ const TurnRowSchema = Schema.Struct({
   promptHash: Schema.NullOr(Schema.String),
   toolSetHash: Schema.NullOr(Schema.String),
   responseIds: Schema.NullOr(Schema.Array(Schema.String)),
-  usage: Schema.NullOr(Schema.Any),
+  usage: Schema.NullOr(WireValueSchema),
   queuedAt: InstantColumnSchema,
   startedAt: Schema.NullOr(InstantColumnSchema),
   settledAt: Schema.NullOr(InstantColumnSchema),
@@ -990,7 +994,7 @@ export function latestTurnPosition(
  */
 const AuthorshipRowSchema = Schema.Struct({
   conversationId: Schema.String,
-  role: declaredTextColumn<(typeof messages.$inferSelect)["role"]>(),
+  role: MessageRoleSchema,
   compaction: Schema.Boolean,
 });
 
@@ -1038,7 +1042,7 @@ const RatingRowSchema = Schema.Struct({
   id: Schema.String,
   seq: EpochMillisColumnSchema,
   deviceId: Schema.NullOr(Schema.String),
-  payload: Schema.Any,
+  payload: WireValueSchema,
   createdAt: InstantColumnSchema,
 });
 

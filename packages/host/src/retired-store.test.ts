@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { NodeFileSystem } from "@effect/platform-node";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
-import { Effect } from "effect";
+import { Effect, Layer, type Path } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as PlatformError from "effect/PlatformError";
 import { removeRetiredStore } from "./retired-store.js";
 
-const withRoot = <A>(run: (root: string) => Effect.Effect<A, never, FileSystem.FileSystem>) =>
+const withRoot = <A>(
+  run: (root: string) => Effect.Effect<A, never, FileSystem.FileSystem | Path.Path>,
+) =>
   Effect.scoped(Effect.flatMap(temporaryDirectoryScoped("luke-retired-store-"), run)).pipe(
-    Effect.provide(NodeFileSystem.layer),
+    Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
   );
 
 it.effect(
@@ -86,7 +88,7 @@ it.effect(
       });
 
       yield* removeRetiredStore({ agentRoot, report: (message) => reports.push(message) }).pipe(
-        Effect.provide(busy),
+        Effect.provide(Layer.merge(busy, NodePath.layer)),
       );
 
       assert.deepEqual(removed, [

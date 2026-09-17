@@ -7,9 +7,10 @@
  * the same way it drives every other Effect timer.
  */
 
-import { NodeFileSystem } from "@effect/platform-node";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { ConfigProvider, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import { type HostKernelTag, type HostService, hostKernelLayer } from "../effect/kernel.js";
 import {
   AppIdentity,
@@ -66,8 +67,9 @@ const testSeamLayers = (seams: HostSeams) =>
 /** Every seam `hostAssemblyLayer`/`hostStandingLayer` need, over a fixture state root. */
 export const testKernelLayer = (
   options: TestKernelOptions,
-): Layer.Layer<HostKernelTag | HostService | HostSeamTags | FileSystem.FileSystem> =>
-  Layer.merge(
+): Layer.Layer<HostKernelTag | HostService | HostSeamTags | FileSystem.FileSystem | Path.Path> =>
+  Layer.mergeAll(
     Layer.provideMerge(hostKernelLayer, testSeamLayers(testKernelSeams(options))),
     NodeFileSystem.layer,
+    NodePath.layer,
   );

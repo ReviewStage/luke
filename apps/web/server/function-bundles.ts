@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { join, posix, relative, sep } from "node:path";
+import { Schema } from "effect";
 import type { BuildOptions, Metafile, Plugin } from "esbuild";
 import type { FunctionDefinition } from "./function-durations.js";
 import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./function-layout.js";
@@ -67,7 +68,13 @@ export const FUNCTION_EXTERNALS_FILE = join("server", "function-externals.json")
 export const FUNCTION_METAFILE = join(FUNCTION_BUNDLE_DIRECTORY, "metafile.json");
 
 /** Each bundle's external imports, keyed by its file under `dist-functions/`, each set sorted. */
-export type BundleExternals = Readonly<Record<string, readonly string[]>>;
+const BundleExternalsSchema = Schema.Record(Schema.String, Schema.Array(Schema.String));
+
+export type BundleExternals = typeof BundleExternalsSchema.Type;
+
+const decodeBundleExternals = Schema.decodeUnknownSync(
+  Schema.fromJsonString(BundleExternalsSchema),
+);
 
 /** How one bundle's externals differ from the recorded set. */
 export interface ExternalsDrift {
@@ -221,8 +228,7 @@ export function externalsByBundle(metafile: Metafile, web: string) {
 
 /** The recorded external set of every bundle, as committed. */
 export async function expectedExternals(web: string): Promise<BundleExternals> {
-  // SAFETY: the file is this app's own committed map, written by `functions:externals`; the sets below are compared as data.
-  return JSON.parse(await readFile(join(web, FUNCTION_EXTERNALS_FILE), "utf8")) as BundleExternals;
+  return decodeBundleExternals(await readFile(join(web, FUNCTION_EXTERNALS_FILE), "utf8"));
 }
 
 /** The committed map's text, stable under regeneration: bundles sorted, each set sorted. */

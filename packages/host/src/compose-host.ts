@@ -11,6 +11,7 @@ import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
+import type * as Path from "effect/Path";
 import { composeAccount } from "./compose-account.js";
 import { composeCalendars } from "./compose-calendars.js";
 import { composeConversation } from "./compose-conversation.js";
@@ -83,6 +84,7 @@ export const hostAssemblyLayer: Layer.Layer<
   | MachinePresenceReader
   | ShutdownSignal
   | FileSystem.FileSystem
+  | Path.Path
 > = Layer.effect(
   HostAssemblyTag,
   Effect.gen(function* () {
