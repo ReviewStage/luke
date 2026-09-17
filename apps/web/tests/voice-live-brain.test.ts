@@ -99,20 +99,24 @@ function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
     failNext: undefined,
-    async open(message) {
+    open(message) {
       eve.opened.push(message);
       if (eve.failNext !== undefined) {
         const status = eve.failNext;
         eve.failNext = undefined;
-        return { outcome: EVE_SEND_OUTCOME.FAILED, status };
+        return Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status });
       }
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: mintSession() };
+      return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: mintSession() });
     },
-    async send(sessionId) {
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId: "delivery-1" };
+    send(sessionId) {
+      return Effect.succeed({
+        outcome: EVE_SEND_OUTCOME.ACCEPTED,
+        sessionId,
+        deliveryId: "delivery-1",
+      });
     },
-    async cancel() {
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED };
+    cancel() {
+      return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED });
     },
   };
   return eve;

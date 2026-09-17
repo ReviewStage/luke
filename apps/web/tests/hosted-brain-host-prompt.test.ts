@@ -24,6 +24,7 @@ import { type ConversationTarget, promptHashOf, storeWriter } from "../server/ho
 import { toolSetHashOf } from "../server/hosted/store/content-addressed";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { noNetwork } from "./support/no-network";
 import { insertConversation, readTurnById, readTurnsByConversation } from "./support/store-rows";
 
 /**
@@ -173,13 +174,15 @@ async function relayTurn(
     assert.equal(admitted.ok, true);
     if (!admitted.ok) throw new Error("not admitted");
     await database.run(
-      host.relay(
-        event,
-        admitted,
-        { id: session.id, auth: session.auth, turn: { id: eveTurnId, sequence } },
-        session.state,
-        prompt,
-      ),
+      host
+        .relay(
+          event,
+          admitted,
+          { id: session.id, auth: session.auth, turn: { id: eveTurnId, sequence } },
+          session.state,
+          prompt,
+        )
+        .pipe(Effect.provide(noNetwork)),
     );
   }
   return hostTurnId(session.id, eveTurnId);

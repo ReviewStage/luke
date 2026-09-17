@@ -396,10 +396,12 @@ it.effect(
         const stream = new Stream(randomUUID());
         await write(target, stream.started(BRAIN_TURN_ORIGIN.SPOKEN));
         await holds(`${exchange}: turn started`, settled + 1);
-        await asks.dispatchOnce(target, ask.id, async () => ({
-          sessionId: `wrun_${exchange}`,
-          turnId: stream.turnId,
-        }));
+        await asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({
+            sessionId: `wrun_${exchange}`,
+            turnId: stream.turnId,
+          }),
+        );
         assert.deepEqual(await database.run(writer.attachAskLines(target, stream.turnId)), {
           ok: true,
           attached: [line.id],
@@ -462,10 +464,12 @@ it.effect(
       });
       const late = new Stream(randomUUID());
       await write(target, late.started(BRAIN_TURN_ORIGIN.SPOKEN));
-      await asks.dispatchOnce(target, lateAsk.id, async () => ({
-        sessionId: "wrun_3",
-        turnId: late.turnId,
-      }));
+      await asks.dispatchOnce(target, lateAsk.id, () =>
+        Effect.succeed({
+          sessionId: "wrun_3",
+          turnId: late.turnId,
+        }),
+      );
       assert.deepEqual(await database.run(writer.attachAskLines(target, late.turnId)), {
         ok: true,
         attached: [],

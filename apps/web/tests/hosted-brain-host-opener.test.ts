@@ -126,7 +126,7 @@ function linesOf(message: EveMessage<ScheduledTurn>): readonly string[] {
   return body;
 }
 
-type Answer = (handed: Handed) => Awaited<ReturnType<EveSessions<ScheduledTurn>["send"]>>;
+type Answer = (handed: Handed) => Effect.Success<ReturnType<EveSessions<ScheduledTurn>["send"]>>;
 
 const ACCEPTING: Answer = () => ({
   outcome: EVE_SEND_OUTCOME.ACCEPTED,
@@ -138,18 +138,20 @@ const ACCEPTING: Answer = () => ({
 function fakeEve(answer: Answer = ACCEPTING) {
   const handed: Handed[] = [];
   const eve: EveSessions<ScheduledTurn> = {
-    async open(message) {
+    open(message) {
       const record: Handed = { kind: "open", message };
       handed.push(record);
       const answered = answer(record);
-      return answered.outcome === EVE_SEND_OUTCOME.RETIRED
-        ? { outcome: EVE_SEND_OUTCOME.FAILED, status: 409 }
-        : answered;
+      return Effect.succeed(
+        answered.outcome === EVE_SEND_OUTCOME.RETIRED
+          ? { outcome: EVE_SEND_OUTCOME.FAILED, status: 409 }
+          : answered,
+      );
     },
-    async send(sessionId, message) {
+    send(sessionId, message) {
       const record: Handed = { kind: "send", sessionId, message };
       handed.push(record);
-      return answer(record);
+      return Effect.succeed(answer(record));
     },
     cancel: () => {
       throw new Error("the opener cancels nothing");

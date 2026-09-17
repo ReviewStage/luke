@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { Effect } from "effect";
-import { EVE_CALLER, type EveSessions, eveSessions } from "../hosted/brain-host/eve-sessions.js";
+import { Effect, type Layer } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import {
+  EVE_CALLER,
+  type EveSessions,
+  type EveSessionsComposer,
+  eveSessionsComposer,
+} from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { payloadKeyRing } from "../hosted/encryption.js";
 import { storeWriter } from "../hosted/store/index.js";
@@ -32,6 +39,13 @@ interface DeploymentExchangeSeams {
   readonly eveOrigin: () => string | undefined;
   /** eve as the deployment reaches it for one account; a test hands in a fake, the function composes the real client below. */
   readonly eve?: (accountId: string) => EveSessions;
+  /**
+   * The `HttpClient` eve's client is composed over. The exchange stands inside
+   * the voice service, whose effects ask for the store's client alone, so the
+   * web runtime's client is not in reach here; absent, the same fetch layer
+   * the service's upstream reaches OpenAI through (`openai.ts`) stands.
+   */
+  readonly httpClient?: Layer.Layer<HttpClient.HttpClient>;
   readonly now: () => number;
   /** Where a standing exchange's own reports go, each named with the route and the platform of the session it stood on. */
   readonly report: (report: ExchangeReport) => void;
@@ -72,6 +86,19 @@ function configuredSeams(
   return Effect.succeed({ encryptionSecret, deploymentSecret, origin });
 }
 
+/** eve as the deployment reaches it for one account, under the deployment's own secret on the origin eve answers on. */
+function deploymentEve(
+  compose: EveSessionsComposer,
+  origin: string,
+  deploymentSecret: string,
+): (accountId: string) => EveSessions {
+  return (accountId) =>
+    compose({
+      origin,
+      caller: { kind: EVE_CALLER.DEPLOYMENT, secret: deploymentSecret, account: accountId },
+    });
+}
+
 export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAttachment {
   // The composition that stood is kept and one that failed is not, so the
   // next session tries again and a store unreachable for one session does
@@ -83,16 +110,19 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
     // The writer's composition probes every declared output schema, so a warm
     // instance pays that walk once rather than once per session.
     const writer = yield* storeWriter({ tools: CATALOG_TOOL_SET });
+    // eve's client is composed once per instance too, over the client the seam names; a test's
+    // fake eve stands in its place and composes none.
+    const eve =
+      seams.eve ??
+      deploymentEve(
+        yield* Effect.provide(eveSessionsComposer, seams.httpClient ?? FetchHttpClient.layer),
+        origin,
+        deploymentSecret,
+      );
     return exchangeAttachment({
       context: { keys: payloadKeyRing(encryptionSecret) },
       writer,
-      eve:
-        seams.eve ??
-        ((accountId) =>
-          eveSessions({
-            origin,
-            caller: { kind: EVE_CALLER.DEPLOYMENT, secret: deploymentSecret, account: accountId },
-          })),
+      eve,
       // Nobody on the service reads the session's phases: the device reads
       // its own from the frames the relay forwards, and the record is the
       // exchange's own.

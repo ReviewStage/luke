@@ -1,6 +1,11 @@
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { auth } from "./auth.js";
@@ -15,7 +20,7 @@ import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
 import { sweepChildCompletions } from "./hosted/brain-host/child-completion.js";
 import { tickEveOrigin } from "./hosted/brain-host/eve-origin.js";
-import { EVE_CALLER, eveSessions } from "./hosted/brain-host/eve-sessions.js";
+import { EVE_CALLER, eveSessionsComposer } from "./hosted/brain-host/eve-sessions.js";
 import {
   NOTHING_OPENED,
   openAccountTurns,
@@ -275,8 +280,14 @@ const eventsEffect = /* @__PURE__ */ Effect.fn("eventsEffect")(function* (
  */
 const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")(function* (
   request: Request,
-): Effect.fn.Return<Response, unknown, SqlClient.SqlClient | HostedEnvironment> {
+): Effect.fn.Return<
+  Response,
+  unknown,
+  SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient
+> {
   const environment = yield* HostedEnvironment;
+  // eve's client is composed from the edge's `HttpClient` once for the tick, for every account it visits.
+  const eve = yield* eveSessionsComposer;
   const encryptionSecret = environment.providerKeyEncryptionSecret
     ? Redacted.value(environment.providerKeyEncryptionSecret)
     : undefined;
@@ -351,7 +362,7 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
         return yield* openAccountTurns(
           {
             store,
-            eve: eveSessions<ScheduledTurn>({
+            eve: eve<ScheduledTurn>({
               origin: eveOrigin,
               caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },
             }),
@@ -381,7 +392,7 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
         {
           deploymentSecret: () => cronSecret,
           eveOrigin: () => eveOrigin,
-          eve: eveSessions,
+          eve,
           tools: CATALOG_TOOL_SET,
           now: Date.now,
           report: (message) => console.warn(message),
@@ -402,7 +413,9 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
  * unreachable in production, since `vercel.json` sends each function only
  * its own path, but the same shape `auth-app.ts` answers with.
  */
-export function observationApp(): WebRoutes<SqlClient.SqlClient | HostedEnvironment> {
+export function observationApp(): WebRoutes<
+  SqlClient.SqlClient | HostedEnvironment | HttpClient.HttpClient
+> {
   return Layer.mergeAll(
     // `ANY_METHOD`, not `GET`/`POST`: each handler decides its own method
     // refusal, as it did before conversion, so a request to the right path on
