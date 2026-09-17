@@ -6,10 +6,7 @@
  * skill matches.
  */
 
-import type { Result } from "effect";
-
 /** What a workspace tool answers when asked to load one skill's whole instructions. */
-export type SkillLoad = Result.Result<
-  { readonly instructions: string; readonly truncated: boolean },
-  string
->;
+export type SkillLoad =
+  | { readonly ok: true; readonly instructions: string; readonly truncated: boolean }
+  | { readonly ok: false; readonly reason: string };

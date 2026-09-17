@@ -235,13 +235,13 @@ const LOAD_SKILL: WorkspaceToolModule = {
       if (!isWireString(input.location)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
       const location = input.location;
       const loaded = yield* workspace.loadSkill(location);
-      return Result.isSuccess(loaded)
+      return loaded.ok
         ? {
             status: ACTION_RESULT_STATUS.ACCEPTED,
-            instructions: loaded.success.instructions,
-            truncated: loaded.success.truncated,
+            instructions: loaded.instructions,
+            truncated: loaded.truncated,
           }
-        : rejection(loaded.failure);
+        : rejection(loaded.reason);
     });
   },
 };

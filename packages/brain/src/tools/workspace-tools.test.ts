@@ -69,7 +69,7 @@ function fakeWorkspace() {
         listed.push(limit);
         return LISTED;
       }),
-    loadSkill: () => Effect.succeed(Result.succeed({ instructions: "do it", truncated: false })),
+    loadSkill: () => Effect.succeed({ ok: true, instructions: "do it", truncated: false }),
   };
   return { workspace, written, appended, listed };
 }

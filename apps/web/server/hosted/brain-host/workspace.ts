@@ -133,7 +133,7 @@ export function hostedWorkspaceAccess(
           : Result.succeed({ path, chars: landed.length });
       }),
     listNotes: (limit) => run(store.workspace.listNotes(userId, limit)),
-    loadSkill: () => Effect.succeed(Result.fail(NO_SKILLS)),
+    loadSkill: () => Effect.succeed({ ok: false, reason: NO_SKILLS }),
   };
 }
 

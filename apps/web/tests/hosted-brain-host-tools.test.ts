@@ -139,7 +139,7 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
       write: () => Effect.succeed(Result.fail("not written in these tests")),
       append: () => Effect.succeed(Result.fail("not appended in these tests")),
       listNotes: () => Effect.succeed([]),
-      loadSkill: () => Effect.succeed(Result.fail("no skills")),
+      loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
     },
     now: () => NOW,
   };
@@ -345,7 +345,7 @@ test("a created workspace keeps the created session identity in its action envel
       write: () => Effect.succeed(Result.fail("not written in these tests")),
       append: () => Effect.succeed(Result.fail("not appended in these tests")),
       listNotes: () => Effect.succeed([]),
-      loadSkill: () => Effect.succeed(Result.fail("no skills")),
+      loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
     },
     now: () => NOW,
   };
@@ -424,7 +424,7 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
       write: () => Effect.succeed(Result.fail("not written in these tests")),
       append: () => Effect.succeed(Result.fail("not appended in these tests")),
       listNotes: () => Effect.succeed([]),
-      loadSkill: () => Effect.succeed(Result.fail("no skills")),
+      loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
     },
     now: () => NOW,
   };
