@@ -330,6 +330,13 @@
       "when": 1790300000000,
       "tag": "0047_dead_asks_question",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1790325000000,
+      "tag": "0048_observed_session_standing",
+      "breakpoints": true
     }
   ]
 }

@@ -109,11 +109,12 @@ export const conversations = pgTable(
     expectsCompletion: boolean("expects_completion").notNull().default(true),
   },
   (table) => [
-    uniqueIndex("conversations_observed_session").on(
-      table.userId,
-      table.providerId,
-      table.providerSessionId,
-    ),
+    // One standing observed conversation per session per account: a stamped row is a session the
+    // pass retired once the roster stopped listing it, and a returning session opens a fresh row
+    // beside it, so the index covers the standing rows alone.
+    uniqueIndex("conversations_observed_session")
+      .on(table.userId, table.providerId, table.providerSessionId)
+      .where(sql`${table.deletedAt} is null`),
     // One main stands per account at a time: Clear stamps the old one and opens the next in one
     // transaction, and a first-use creation lands one; this index is what refuses a second standing
     // main whatever path raced to it, so reads never silently pick one of two. The predicate is

@@ -12,7 +12,7 @@ import { payloadKeyRing } from "../server/hosted/encryption";
 import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
 import { readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
-import { countRowsWhere, deleteUser, insertDevice } from "./support/store-rows";
+import { countRowsWhere, deleteUser, insertDevice, instantColumn } from "./support/store-rows";
 
 /** Synthetic fixtures: no real title, branch, or transcript anywhere. */
 
@@ -291,6 +291,104 @@ test("an observed conversation is opened on its session's first diff and stands 
       .where(eq(conversations.id, opened)),
   );
   assert.deepEqual(row, { kind: CONVERSATION_KIND.OBSERVED, providerSessionId: "s-observed-1" });
+});
+
+test("retiring departed observed conversations stamps the sessions the roster no longer lists, per provider and per account, descendants with them, and lets a returning session open afresh", async () => {
+  const userId = await database.createUser();
+  const other = await database.createUser();
+  const { directory, roster } = database.store;
+  const session = (providerSessionId: string, providerId = "conductor") => ({
+    providerId,
+    providerSessionId,
+  });
+  const listed = await database.run(directory.observed(userId, session("s-retire-listed"), NOW));
+  const departed = await database.run(
+    directory.observed(userId, session("s-retire-departed"), NOW),
+  );
+  const elsewhere = await database.run(
+    directory.observed(userId, session("s-retire-other", "other-provider"), NOW),
+  );
+  const theirs = await database.run(directory.observed(other, session("s-retire-departed"), NOW));
+  assert.ok(listed && departed && elsewhere && theirs);
+  const [child] = await database.run(
+    db
+      .insert(conversations)
+      .values({
+        userId,
+        kind: CONVERSATION_KIND.CHILD,
+        parentConversationId: departed,
+        createdAt: new Date(NOW),
+        lastActivityAt: new Date(NOW),
+      })
+      .returning({ id: conversations.id }),
+  );
+  assert.ok(child);
+  const stampedAt = async (id: string) => {
+    const [row] = await database.run(
+      db
+        .select({ deletedAt: conversations.deletedAt })
+        .from(conversations)
+        .where(eq(conversations.id, id)),
+    );
+    // The two dialects read a timestamptz back differently, so the instant is compared as millis.
+    return row?.deletedAt == null ? undefined : instantColumn(row.deletedAt).getTime();
+  };
+
+  // Only the conductor slice is read: the other provider's row is not this pass's to retire.
+  const retired = await database.run(
+    roster.retireDeparted(
+      userId,
+      [{ providerId: "conductor", sessionIds: ["s-retire-listed"] }],
+      NOW + 1,
+    ),
+  );
+  assert.deepEqual([...retired].sort(), [departed, child.id].sort());
+  assert.equal(await stampedAt(listed), undefined);
+  assert.equal(await stampedAt(elsewhere), undefined);
+  assert.equal(await stampedAt(theirs), undefined);
+  assert.equal(await stampedAt(departed), NOW + 1);
+  assert.equal(await stampedAt(child.id), NOW + 1);
+  assert.deepEqual(
+    (await database.run(directory.standing(userId)))
+      .filter((conversation) => conversation.kind === CONVERSATION_KIND.OBSERVED)
+      .map((conversation) => conversation.id)
+      .sort(),
+    [listed, elsewhere].sort(),
+  );
+
+  // A second pass over the same roster finds nothing more to stamp.
+  assert.deepEqual(
+    await database.run(
+      roster.retireDeparted(
+        userId,
+        [{ providerId: "conductor", sessionIds: ["s-retire-listed"] }],
+        NOW + 2,
+      ),
+    ),
+    [],
+  );
+
+  // The session listed again opens a fresh row beside the stamped one, which the old index refused.
+  const reopened = await database.run(
+    directory.observed(userId, session("s-retire-departed"), NOW + 3),
+  );
+  assert.ok(reopened);
+  assert.notEqual(reopened, departed);
+  assert.equal(await stampedAt(reopened), undefined);
+
+  // A provider listing no session at all retires every row of its own.
+  const emptied = await database.run(
+    roster.retireDeparted(
+      userId,
+      [
+        { providerId: "conductor", sessionIds: [] },
+        { providerId: "other-provider", sessionIds: [] },
+      ],
+      NOW + 4,
+    ),
+  );
+  assert.deepEqual([...emptied].sort(), [listed, reopened, elsewhere].sort());
+  assert.equal(await stampedAt(theirs), undefined);
 });
 
 test("an observed conversation keeps the session's title and workspace as the roster last showed them: written on the open, refreshed on a wake that names them, left standing by one that does not", async () => {

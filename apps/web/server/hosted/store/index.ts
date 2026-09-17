@@ -35,6 +35,8 @@ import {
 } from "./message-reads.js";
 import {
   type ObservedSessionNaming,
+  retireDepartedObservedConversations,
+  type StandingProviderSessions,
   standingObservedConversation,
 } from "./observed-conversations.js";
 import {
@@ -159,7 +161,7 @@ export interface HostedStore {
   directory: {
     /** The view's conversations: the standing main and every standing observed conversation, with their counters. */
     standing(userId: string): HostedStoreEffect<readonly StandingConversation[]>;
-    /** The observed conversation for one session, opened on its first diff and standing after, its naming kept level with the roster's where one is handed; nothing where a stamped row blocks it. */
+    /** The observed conversation for one session, opened on its first diff and standing while the roster lists the session, its naming kept level with the roster's where one is handed; a retired session opens a fresh row. */
     observed(
       userId: string,
       identity: SessionIdentity,
@@ -258,6 +260,16 @@ export interface HostedStore {
       from: number | undefined,
       now: number,
     ): HostedStoreEffect<boolean>;
+    /**
+     * Retires the conversation of every observed chat the roster no longer
+     * lists, per provider the pass read, on the terms of a Clear: stamped now,
+     * hidden from every read, purged thirty days on. Answers the ids stamped.
+     */
+    retireDeparted(
+      userId: string,
+      standing: readonly StandingProviderSessions[],
+      now: number,
+    ): HostedStoreEffect<readonly string[]>;
     pass(userId: string): HostedStoreEffect<ObservationPassRecord | undefined>;
     recordPass(
       userId: string,
@@ -333,6 +345,8 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
         advanceRosterSnapshot(sealFor(userId), userId, snapshot, previousObservedAt),
       mark: (userId) => readTranscriptMark(userId),
       keepMark: (userId, mark, from, now) => keepTranscriptMark(userId, mark, from, new Date(now)),
+      retireDeparted: (userId, standing, now) =>
+        retireDepartedObservedConversations(userId, standing, new Date(now)),
       pass: (userId) => readObservationPass(userId),
       recordPass: (userId, attempt) => recordObservationPass(userId, attempt),
       forgetIneligible: (eligibility) => forgetObservationIneligible(eligibility),

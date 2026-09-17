@@ -369,7 +369,11 @@ service on your account about once a minute, and draws its rows from nothing
 else); beside it we keep one instant per account, the point up to which Luke
 has been told of your chats' changes, and one position per chat marking where
 his last read of it ended. The roster is replaced on every pass; nothing older
-is kept.
+is kept. The conversation Luke keeps for a chat he has been told about stands
+while Conductor lists that chat; once a pass no longer lists it, because you
+archived or deleted the chat or its workspace, that conversation is retired,
+shown on no device from then on, and deleted 30 days later by the same purge
+that follows Clear. A chat listed again gets a fresh conversation.
 Observation stops, and the stored roster, the instant, and the positions are
 deleted, when you delete the synced key, when you have not signed in for 7
 days, and alongside your account if you delete that.

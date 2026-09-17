@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import type { ObservationStore } from "../../server/hosted/observation-pass";
 import type { RosterSnapshotRecord } from "../../server/hosted/store";
+import type { StandingProviderSessions } from "../../server/hosted/store/observed-conversations";
 import type { ObservationPassRecord } from "../../server/hosted/store/roster-snapshot";
 
 /**
@@ -16,6 +17,12 @@ export interface MemoryObservationStore extends ObservationStore {
   passes: Map<string, ObservationPassRecord>;
   /** Every `advance` this store took, in order, so a test can see what a pass wrote. */
   advances: Array<{ userId: string; observedAt: number }>;
+  /** Every `retireDeparted` this store took, in order, so a test can see which sessions a pass kept standing. */
+  retirements: Array<{
+    userId: string;
+    standing: readonly StandingProviderSessions[];
+    now: number;
+  }>;
 }
 
 /** A body the fake's `read` refuses to open, standing in for a seal under a key the ring no longer holds. */
@@ -26,11 +33,13 @@ export function memoryObservationStore(): MemoryObservationStore {
   const marks = new Map<string, number>();
   const passes = new Map<string, ObservationPassRecord>();
   const advances: MemoryObservationStore["advances"] = [];
+  const retirements: MemoryObservationStore["retirements"] = [];
   return {
     snapshots,
     marks,
     passes,
     advances,
+    retirements,
     roster: {
       read: (userId) =>
         Effect.sync(() => {
@@ -56,6 +65,11 @@ export function memoryObservationStore(): MemoryObservationStore {
           if (marks.get(userId) !== from) return false;
           marks.set(userId, mark);
           return true;
+        }),
+      retireDeparted: (userId, standing, now) =>
+        Effect.sync(() => {
+          retirements.push({ userId, standing, now });
+          return [];
         }),
       pass: (userId) => Effect.sync(() => passes.get(userId)),
       recordPass: (userId, attempt) =>

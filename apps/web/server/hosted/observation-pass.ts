@@ -30,7 +30,10 @@ import type { VaultKeyRow } from "./vault-route.js";
  * recorded as failed for that user, never as a partial roster. The same pass
  * runs from the scheduled tick, from an observe request that asked for a
  * fresh read or found no snapshot yet, and from an action for a user with no
- * snapshot, so every path stores the roster one way.
+ * snapshot, so every path stores the roster one way. A pass whose snapshot
+ * landed also retires the conversation of every observed chat the roster no
+ * longer lists; a retire that failed does not fail the pass, since the next
+ * pass reads the same roster and retires the same rows.
  */
 
 /** The slice of the store an observation pass reaches. */
@@ -257,6 +260,18 @@ export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot"
     }
     return outcome;
   }
+  // The roster this pass landed is what the observed conversations stand
+  // against: a chat it no longer lists is retired, per provider it read.
+  yield* optionally(
+    store.roster.retireDeparted(
+      userId,
+      roster.providers.map((provider) => ({
+        providerId: provider.providerId,
+        sessionIds: provider.observations.map((observation) => observation.providerSessionId),
+      })),
+      now,
+    ),
+  );
   return { complete: true, roster, observedAt: now };
 });
 
