@@ -156,8 +156,7 @@
                 "enum": [
                   "typed",
                   "spoken",
-                  "roster_diff",
-                  "hold_release",
+                  "transcript_change",
                   "child",
                   "child_completion"
                 ]

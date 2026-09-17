@@ -52,7 +52,7 @@ const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.T
 const BRAIN_REPLY = { author: MESSAGE_AUTHOR.BRAIN } as const;
 const ROSTER_LOOK = {
   author: MESSAGE_AUTHOR.BRAIN,
-  source: OBSERVATION_SOURCE.ROSTER_LOOK,
+  source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
 } as const;
 const SESSION = {
   providerId: "conductor",
@@ -199,7 +199,7 @@ async function observedAnnouncing(userId: string, offset: number, session = "a")
   const turn = await insertTurn(database.run, {
     userId,
     conversationId: observed,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.SETTLED,
     queuedAt: at(offset),
     startedAt: at(offset + 200),
