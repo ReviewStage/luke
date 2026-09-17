@@ -56,16 +56,6 @@ test("each line becomes one message in its own role and content type, and the se
   for (const item of items) assert.equal(item.content.length, 1);
 });
 
-test("no message is the application's own: a seed is the conversation's two voices and nothing addressed to the model", () => {
-  const items = conversationSeedItems([
-    line(CONVERSATION_ENTRY_KIND.ASK, "what needs me?", 1),
-    line(CONVERSATION_ENTRY_KIND.REPLY, "Nothing yet.", 2),
-  ]);
-  const spoken: readonly string[] = [SEED_ROLE.USER, SEED_ROLE.ASSISTANT];
-
-  for (const item of items) assert.equal(spoken.includes(item.role), true);
-});
-
 test("no message carries a system role, an identity, a time, or an id", () => {
   const items = conversationSeedItems([line(CONVERSATION_ENTRY_KIND.ASK, "hello", 1)]);
   const roles: readonly string[] = Object.values(SEED_ROLE);

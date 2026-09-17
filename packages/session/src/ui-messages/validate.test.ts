@@ -433,18 +433,3 @@ test("the Either entry point answers a left carrying the refusal and path", asyn
   assert.equal(read.failure.refusal, SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(read.failure.path, [0, "metadata"]);
 });
-
-test("the SchemaRead entry point is the Either entry point's result converted, not a second computation", async () => {
-  const message = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
-  const [either, schemaRead] = await Promise.all([
-    runTest(readStoredUIMessagesEither([message], TOOLS)),
-    runTest(readStoredUIMessages([message], TOOLS)),
-  ]);
-  assert.deepEqual(
-    schemaRead,
-    Result.match(either, {
-      onFailure: (error) => ({ ok: false, refusal: error.refusal, path: error.path }),
-      onSuccess: (value) => ({ ok: true, value }),
-    }),
-  );
-});

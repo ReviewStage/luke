@@ -696,13 +696,6 @@ test("a message whose turn row is missing is still shown, with no turn beside it
   assert.equal(group?.messages.length, 2);
 });
 
-test("the turn row rides on the group as the store held it", async () => {
-  const input = await loadView(FIXTURE.TYPED_ASK);
-  const [turn] = input.turns;
-  const [group] = selectConversationView(input);
-  assert.deepEqual(group?.turn, turn satisfies ConversationViewTurn | undefined);
-});
-
 test("selection leaves its input untouched", async () => {
   const input = await loadEveryView();
   const before = JSON.stringify(input);

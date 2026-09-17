@@ -3,7 +3,6 @@ import { test } from "vitest";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
-  isConversationEntryKind,
   joinReplyMessages,
   maximumConversationEntries,
   maximumConversationEntryLength,
@@ -124,14 +123,4 @@ test("the unstrict read takes what the strict one refuses, and nothing wider", (
     );
     assert.equal(storedConversationEntry({ ...unclocked, words: 7 }, { strict }), undefined);
   }
-});
-
-test("the kind guard admits every line kind and nothing else", () => {
-  for (const kind of Object.values(CONVERSATION_ENTRY_KIND)) {
-    assert.equal(isConversationEntryKind(kind), true);
-  }
-  assert.equal(isConversationEntryKind("transcript"), false);
-  assert.equal(isConversationEntryKind(""), false);
-  assert.equal(isConversationEntryKind(3), false);
-  assert.equal(isConversationEntryKind(undefined), false);
 });

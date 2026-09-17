@@ -47,7 +47,7 @@ const UNSUPPORTED_ACTION_RESULT = Schema.Struct({
   reason: Schema.String,
 });
 
-export const ActionResultSchema = Schema.Union([
+const ActionResultSchema = Schema.Union([
   ACCEPTED_ACTION_RESULT,
   REJECTED_ACTION_RESULT,
   UNSUPPORTED_ACTION_RESULT,

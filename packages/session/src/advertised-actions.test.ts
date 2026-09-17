@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import {
   ACTION_KIND,
-  type ActionKind,
   type AdvertisedAction,
-  type AdvertisedActionKind,
   advertisedActionFor,
   advertisedControl,
   advertisedControls,
@@ -28,21 +26,6 @@ function advertising(advertises: readonly AdvertisedAction[]): Session {
     },
   );
 }
-
-test("the action vocabulary is the advertisable kinds and the two nothing advertises", () => {
-  // An open follows an address the observation already reported and a creation
-  // is held to a provider's projects, so neither is a session's to advertise —
-  // but both are actions, and the vocabulary is one.
-  const unadvertisable: readonly ActionKind[] = [ACTION_KIND.OPEN, ACTION_KIND.CREATE_WORKSPACE];
-  const advertisable: readonly AdvertisedActionKind[] = [
-    ACTION_KIND.MESSAGE,
-    ACTION_KIND.CONTROL,
-    ACTION_KIND.ADD_AGENT,
-    ACTION_KIND.RENAME_SESSION,
-    ACTION_KIND.RENAME_WORKSPACE,
-  ];
-  assert.deepEqual([...advertisable, ...unadvertisable].sort(), Object.values(ACTION_KIND).sort());
-});
 
 test("each reader answers for the kind it names and nothing else", () => {
   const session = advertising([

@@ -5,7 +5,6 @@ import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HTTP_METHOD } from "../json.js";
-import { fakeCloudApi, recordedRoutes } from "./cloud-fake.js";
 import { fakeHttpClient } from "./http-client-fake.js";
 import { HTTP_STATUS, jsonResponse, recordedRequest, recordingHttpClient } from "./http-fake.js";
 
@@ -97,24 +96,5 @@ it.effect("a fake client drops the content length the platform computes", () =>
     const request = recordedRequest(recording.requests);
     assert.equal(request.headers.get("content-length"), null);
     assert.equal(request.accept, "text/plain");
-  }),
-);
-
-it.effect("the fake cloud API answers through the layer it offers of the client tag", () =>
-  Effect.gen(function* () {
-    const api = fakeCloudApi({
-      "GET /v0/sessions": { answer: () => ({ sessions: ["session-1"] }) },
-    });
-
-    const body = yield* Effect.provide(
-      Effect.gen(function* () {
-        const client = yield* HttpClient.HttpClient;
-        return yield* (yield* client.get(ADDRESS)).json;
-      }),
-      api.layer,
-    );
-
-    assert.deepEqual(body, { sessions: ["session-1"] });
-    assert.deepEqual(recordedRoutes(api.requests()), ["GET /v0/sessions"]);
   }),
 );

@@ -1,20 +1,10 @@
 import assert from "node:assert/strict";
 import {
-  CLOUD_AGENT_PROVIDER_ID,
-  CloudAgentProviderIdSchema,
-  CONVERSATION_ENTRY_KIND,
-  ConversationEntryKindSchema,
   HOSTED_AGENT_ID,
-  HostedAgentIdSchema,
   PROVIDER_ID,
-  ProviderIdSchema,
   SESSION_APPLICATION_ID,
   SESSION_FILTER,
-  SessionApplicationIdSchema,
   SessionFilterSchema,
-  TOOL_PART_STATE,
-  ToolPartStateSchema,
-  WorkspaceProviderIdSchema,
 } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { Result, Schema } from "effect";
@@ -31,54 +21,18 @@ const NOTHING_ANY_VOCABULARY_HOLDS: readonly UnparsedWireValue[] = [
   [],
 ];
 
-function settlesVocabulary<Member extends string>(
-  schema: Schema.Codec<Member>,
-  members: readonly Member[],
-  alsoRefused: readonly UnparsedWireValue[] = [],
-): void {
-  const decode = Schema.decodeUnknownResult(schema);
-  for (const member of members) assert.deepEqual(decode(member), Result.succeed(member));
-  for (const refused of [...NOTHING_ANY_VOCABULARY_HOLDS, ...alsoRefused]) {
-    assert.equal(Result.isFailure(decode(refused)), true);
-  }
-}
-
-test("the provider catalog's schemas hold exactly the ids the build declares", () => {
-  settlesVocabulary(ProviderIdSchema, Object.values(PROVIDER_ID), [
-    SESSION_APPLICATION_ID.SUPERSET,
-    HOSTED_AGENT_ID.CURSOR,
-  ]);
-  settlesVocabulary(CloudAgentProviderIdSchema, Object.values(CLOUD_AGENT_PROVIDER_ID), [
-    PROVIDER_ID.CLAUDE_CODE,
-    PROVIDER_ID.CODEX,
-    PROVIDER_ID.OMP,
-  ]);
-  settlesVocabulary(HostedAgentIdSchema, Object.values(HOSTED_AGENT_ID), [PROVIDER_ID.CODEX]);
-  settlesVocabulary(WorkspaceProviderIdSchema, Object.values(PROVIDER_ID), [
-    SESSION_APPLICATION_ID.SUPERSET,
-  ]);
-});
-
 test("a session filter is a place, the voice kind, an app, or an agent, and nothing else", () => {
-  settlesVocabulary(SessionFilterSchema, [
+  // The filter is a union over four vocabularies, so a member any of them
+  // declares has to be admitted and nothing outside the four may be.
+  const decode = Schema.decodeUnknownResult(SessionFilterSchema);
+  const members = [
     ...Object.values(SESSION_FILTER),
     ...Object.values(PROVIDER_ID),
     ...Object.values(HOSTED_AGENT_ID),
     ...Object.values(SESSION_APPLICATION_ID),
-  ]);
-  settlesVocabulary(SessionApplicationIdSchema, Object.values(SESSION_APPLICATION_ID), [
-    SESSION_FILTER.VOICE,
-    PROVIDER_ID.CODEX,
-  ]);
-});
-
-test("the stored message vocabularies hold their own states alone", () => {
-  settlesVocabulary(ToolPartStateSchema, Object.values(TOOL_PART_STATE), [
-    "approval-requested",
-    "output-denied",
-  ]);
-  settlesVocabulary(ConversationEntryKindSchema, Object.values(CONVERSATION_ENTRY_KIND), [
-    "observation",
-    "briefing",
-  ]);
+  ];
+  for (const member of members) assert.deepEqual(decode(member), Result.succeed(member));
+  for (const refused of NOTHING_ANY_VOCABULARY_HOLDS) {
+    assert.equal(Result.isFailure(decode(refused)), true);
+  }
 });

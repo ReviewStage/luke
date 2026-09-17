@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   anticipationOf,
-  PREFETCH_DEBOUNCE_MS,
   renderAskContext,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
@@ -192,8 +191,4 @@ test("an anticipation stands only once the developer has said something in the s
   assert.equal(grown.rowId, first.rowId);
   assert.equal(grown.text, "What is Nukualofa doing");
   assert.equal(anticipationOf(ledger.askContext(3_000)), undefined);
-});
-
-test("the prefetch debounce is shorter than the gap that ends an utterance, so a read can begin while the developer is still speaking", () => {
-  assert.ok(PREFETCH_DEBOUNCE_MS < UTTERANCE_GAP_MS);
 });

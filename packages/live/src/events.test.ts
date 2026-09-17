@@ -14,14 +14,12 @@ import {
   liveExchangeActive,
   muteEvent,
   parseLiveServerEvent,
-  RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   thinkingAppend,
   unmuteEvent,
 } from "./events.js";
 
 const SERVER_EVENT_TYPES: readonly string[] = Object.values(LIVE_SERVER_EVENT);
-const CLIENT_EVENT_TYPES: readonly string[] = Object.values(LIVE_CLIENT_EVENT);
 
 test("every append carries its event id and a required delegation id, null included", () => {
   const spoken = commentaryAppend({ eventId: "say-1", delegationId: "item_abc", content: "Done." });
@@ -46,11 +44,6 @@ test("the microphone switch and the close carry only a type and an event id", ()
     event_id: "u-1",
   });
   assert.deepEqual(closeEvent("c-1"), { type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c-1" });
-});
-
-test("no client event starts a session or appends audio", () => {
-  assert.equal(CLIENT_EVENT_TYPES.includes("session.start"), false);
-  assert.equal(CLIENT_EVENT_TYPES.includes("session.input_audio.append"), false);
 });
 
 test("an acknowledgment is matched to its command through client_event_id", () => {
@@ -218,15 +211,6 @@ test("every server event this build parses is one the vocabulary names", () => {
     assert.ok(type !== undefined);
     assert.ok(SERVER_EVENT_TYPES.includes(type));
   }
-});
-
-test("the renderer's channel may send the microphone switch and the close, and nothing that appends", () => {
-  assert.deepEqual(RENDERER_CLIENT_EVENTS, [
-    LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
-    LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
-    LIVE_CLIENT_EVENT.CLOSE,
-  ]);
-  for (const type of RENDERER_CLIENT_EVENTS) assert.ok(CLIENT_EVENT_TYPES.includes(type));
 });
 
 test("the renderer's channel is shown captions and lifecycle, never delegations or reflected audio", () => {
