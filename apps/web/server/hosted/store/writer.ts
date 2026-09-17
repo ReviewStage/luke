@@ -657,7 +657,10 @@ const findSettledTurn = SqlSchema.findOneOption({
  * The briefing whose speech began inside a span of one voice session's clock:
  * the `speech.spoken` event names the session and the instant on its clock
  * the voice followed the briefing's append, and Luke's utterance covering
- * that instant is the briefing read aloud. The mark stands in the briefing's
+ * that instant is the briefing read aloud — the utterance the instant begins
+ * or falls inside, and never the one that ends on it, since two utterances
+ * cut back to back share that endpoint and the mark is where the voice's own
+ * words began after the append. The mark stands in the briefing's
  * own conversation, which is an observed session's where a per-workspace
  * agent announced, so the look runs over every conversation of the account
  * rather than the one the utterance is written to — the account's
@@ -697,7 +700,7 @@ const findBriefingSpokenWithin = SqlSchema.findOneOption({
           eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN),
           sql`${SPEECH_EVENT_VOICE_SESSION_ID} = ${request.voiceSessionId}`,
           sql`${SPEECH_EVENT_AT_MS} >= ${request.fromMs}`,
-          sql`${SPEECH_EVENT_AT_MS} <= ${request.toMs}`,
+          sql`${SPEECH_EVENT_AT_MS} < ${request.toMs}`,
         ),
       )
       .orderBy(desc(events.createdAt), desc(events.conversationId), desc(events.seq))

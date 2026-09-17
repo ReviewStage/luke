@@ -1118,9 +1118,10 @@ interface SourcedMessage {
  * mark says this voice session began saying it inside the reading's span,
  * since one breath may carry two agents' briefings and the record names one.
  * A briefing is said by one reading: the one the record names, else the one
- * of the session's rows holding the mark's instant that began latest, since
- * the mark is where the voice's own words began after the append and two
- * utterances cut back to back may share an endpoint. By a message's id, the
+ * of the session's rows the mark's instant begins or falls inside — never
+ * one that ends on it, since two utterances cut back to back share that
+ * endpoint and the mark is where the voice's own words began after the
+ * append — the latest to begin where spans overlap. By a message's id, the
  * readings that said it, in thread order, and every message by its id with
  * its source, so a reading finds what it said and where it came from
  * wherever in the thread that message stands.
@@ -1211,12 +1212,11 @@ function readingsOf(groups: readonly ConversationViewTurnGroup[]): Readings {
 
 /**
  * The one reading that said a briefing the record names no reading for: of
- * the rows cut from the session that began saying it, those whose span holds
- * the mark's instant, and of those the one that began latest, since the mark
- * is where the voice's own words began after the append and the utterance
- * before it may end on that same instant. Two beginning together — a record
- * that cannot happen, but one the type allows — settle on the first in
- * thread order.
+ * the rows cut from the session that began saying it, those whose span the
+ * mark's instant begins or falls inside, the end excluded as the store
+ * excludes it, and of those the one that began latest. Two beginning
+ * together — a record that cannot happen, but one the type allows — settle
+ * on the first in thread order.
  */
 function readingSaying(
   briefing: ConversationViewMessage,
@@ -1227,7 +1227,7 @@ function readingSaying(
   let saying: Reading | undefined;
   for (const reading of readingsBySession.get(spokenAt.voiceSessionId) ?? []) {
     const { fromMs, toMs } = reading.span;
-    if (spokenAt.atMs < fromMs || spokenAt.atMs > toMs) continue;
+    if (spokenAt.atMs < fromMs || spokenAt.atMs >= toMs) continue;
     if (saying === undefined || fromMs > saying.span.fromMs) saying = reading;
   }
   return saying?.view;
@@ -1270,6 +1270,7 @@ function briefingFolds(
               />
             }
             words={words}
+            at={view.placedAt}
             rating={undefined}
           />
         ) : (
@@ -1667,15 +1668,15 @@ function searchEntryOf(
     );
   }
   if (message.role === MESSAGE_ROLE.SYSTEM) return undefined;
-  const readFrom = readFromOf(view);
-  const source = readFrom === undefined ? undefined : readings.byId.get(readFrom);
-  if (source !== undefined) {
+  // The voice's reading, rated as the thread rates it: the record's source where it names one, else itself.
+  const said = readings.saidBy.get(message.id);
+  if (said !== undefined) {
     const words = spokenWords(message);
-    const last = readings.readOf.get(source.message.id)?.at(-1) === view;
-    return entry(
-      [{ ...LUKE_BUBBLE, text: words }],
-      last ? { view: source, words, ask } : undefined,
-    );
+    const readFrom = readFromOf(view);
+    const named = readFrom === undefined ? undefined : readings.byId.get(readFrom);
+    const rated = named?.view ?? view;
+    const last = named === undefined || readings.readOf.get(rated.message.id)?.at(-1) === view;
+    return entry([{ ...LUKE_BUBBLE, text: words }], last ? { view: rated, words, ask } : undefined);
   }
   const readAloud = (readings.readOf.get(message.id)?.length ?? 0) > 0;
   const thinking = aloud && message.metadata.author === MESSAGE_AUTHOR.BRAIN;

@@ -791,6 +791,24 @@ test("a briefing a per-workspace agent announced in its own observed conversatio
     to_ms: 3200,
     read_from: firstBriefing,
   });
+  // Words of Luke's cut back to back with that utterance, ending on the instant
+  // it began, were written after the mark stood and are read from nothing: the
+  // mark is where the briefing's own words began, not where the words before ended.
+  await database.run(voice.consume(live, said("Okay.", 1500, 2000)));
+  assert.deepEqual(
+    await database.run(voice.upsertSpokenRow(live, lukeRow("luke-1500", 1500, 2000))),
+    WRITTEN,
+  );
+  const acknowledgment = (await spokenAsks(live.conversation)).find(
+    (row) => row.clientId === "luke-1500",
+  );
+  assert.deepEqual(acknowledgment?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: sessionId,
+    from_ms: 1500,
+    to_ms: 2000,
+  });
   // The mark stands in the agent's conversation, not main's.
   assert.deepEqual(
     (await speechEvents(first)).map((event) => event.kind),
