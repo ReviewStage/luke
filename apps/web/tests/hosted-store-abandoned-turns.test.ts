@@ -35,9 +35,7 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = Date.parse("2026-09-16T12:00:00.000Z");
-const writer = await database.run(
-  storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
-);
+const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
 
 interface TurnFixture {
   readonly status?: TurnInsertRow["status"];

@@ -1,5 +1,5 @@
 import { isTextUIPart } from "ai";
-import { Effect, Result } from "effect";
+import { Clock, Effect, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   type BrainChildAccess,
@@ -101,7 +101,6 @@ export interface HostedChildrenSeams {
   /** The opener's own seams; a cancel reaches eve through the same client and caller a spawn does. */
   readonly opener: ChildOpenerSeams;
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
-  readonly now: () => number;
 }
 
 /** Whether a child still counts against a limit: accepted or running, not yet ended. */
@@ -258,7 +257,11 @@ export function hostedChildAccess(
           // bound, and a session starting for it late meets a cleared conversation and is refused.
           // A turn that started since the read leaves it standing, and the cancel is not done.
           if (child.turnId === null) {
-            const dropped = yield* dropChildConversation(userId, childId, new Date(seams.now()));
+            const dropped = yield* dropChildConversation(
+              userId,
+              childId,
+              new Date(yield* Clock.currentTimeMillis),
+            );
             return dropped ? { ok: true, remaining: [] } : notCancelled;
           }
           if (child.eveTurnId !== null) {
@@ -290,7 +293,7 @@ export function hostedChildAccess(
           }
           const stamped = yield* seams.writer.requestTurnCancel(
             { userId, conversationId: childId },
-            { turnId: child.turnId, at: new Date(seams.now()) },
+            { turnId: child.turnId, at: new Date(yield* Clock.currentTimeMillis) },
           );
           return Result.isSuccess(stamped) ? { ok: true, remaining: [] } : notCancelled;
         }),

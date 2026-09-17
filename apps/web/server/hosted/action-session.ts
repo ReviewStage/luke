@@ -1,4 +1,4 @@
-import { Effect, Option, Redacted, Result, type Schema } from "effect";
+import { Clock, Effect, Option, Redacted, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -322,15 +322,17 @@ export const handleSessionAction = /* @__PURE__ */ Effect.fn("handleSessionActio
  */
 function routeRoster(route: HostedVaultRoute): SessionActionOptions["roster"] {
   return (userId, providerId, secret) =>
-    rosterForAction({
-      userId,
-      providerId,
-      secret,
-      store: route.store(secret),
-      readVaultKeys: route.readVaultKeys,
-      seams: {},
-      now: Date.now(),
-    });
+    Effect.flatMap(Clock.currentTimeMillis, (now) =>
+      rosterForAction({
+        userId,
+        providerId,
+        secret,
+        store: route.store(secret),
+        readVaultKeys: route.readVaultKeys,
+        seams: {},
+        now,
+      }),
+    );
 }
 
 /** The six actions, each as the one thing its route names. */

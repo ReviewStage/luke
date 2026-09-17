@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   ADMIN_ERROR,
@@ -83,7 +83,6 @@ export function buildAdminDayDetail(
 export interface AdminDayOptions {
   request: Request;
   readDay: (day: string, now: number, scope: AdminMetricsScope) => AdminSeamEffect<AdminDayDetail>;
-  now?: () => number;
 }
 
 /**
@@ -103,9 +102,10 @@ export function handleAdminDay(
     return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_DAY));
   }
 
-  const now = (options.now ?? Date.now)();
-  return options.readDay(day, now, adminMetricsScope(request.url)).pipe(
-    Effect.map((detail) => jsonResponse(ADMIN_HTTP_STATUS.OK, detail)),
-    Effect.catchCause((cause) => unavailableSeam("admin day read failed", cause)),
+  return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    options.readDay(day, now, adminMetricsScope(request.url)).pipe(
+      Effect.map((detail) => jsonResponse(ADMIN_HTTP_STATUS.OK, detail)),
+      Effect.catchCause((cause) => unavailableSeam("admin day read failed", cause)),
+    ),
   );
 }

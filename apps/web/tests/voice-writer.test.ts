@@ -54,7 +54,7 @@ import {
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 
-const database = await openHostedStoreTestDatabase();
+const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
 const TOOLS: ToolSet = {
@@ -65,7 +65,7 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const store = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
+const store = await database.run(storeWriter({ tools: TOOLS }));
 const record = voiceSessionRecord(() => NOW);
 const speech = { writer: store };
 /** The installation the fixture sessions belong to, which is the device a briefing must be claimed by before its speech is marked. */

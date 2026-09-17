@@ -1,3 +1,4 @@
+import { clockAt } from "@sidecar/wire/testing";
 import { Layer, type Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { type DevicesVaultSeams, devicesVaultApp } from "../../server/devices-vault-app.js";
@@ -14,6 +15,8 @@ export interface DevicesVaultCall extends DevicesVaultSeams {
   request: Request;
   /** Absent, or blank, means the vault is off, the way the environment's own absence does. */
   encryptionSecret?: Redacted.Redacted | undefined;
+  /** The instant the group's `Clock` reads; the live clock when absent. */
+  instant?: number | undefined;
 }
 
 export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
@@ -37,6 +40,7 @@ export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
           apnsCredentials: undefined,
         }),
       ),
+      HttpRouter.provideRequest(call.instant === undefined ? Layer.empty : clockAt(call.instant)),
     ),
     { disableLogger: true },
   );

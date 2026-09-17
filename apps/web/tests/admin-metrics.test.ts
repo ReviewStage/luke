@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { atInstant } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import {
@@ -442,7 +443,7 @@ test("integration health reads presence, in a fixed order, never a value", () =>
 
 /** One read answered the way a function answers it, over a client that refuses every statement. */
 const answer = (options: Parameters<typeof handleAdminMetrics>[0]) =>
-  runWithoutDatabase(handleAdminMetrics(options));
+  runWithoutDatabase(atInstant(NOON_UTC)(handleAdminMetrics(options)));
 
 function metricsRequest(method = "GET"): Request {
   return new Request("https://luke.test/api/admin/metrics", { method });
@@ -459,7 +460,6 @@ test("the read answers a whole document past the gate", async () => {
   const ok = await answer({
     request: metricsRequest(),
     readMetrics: (now) => Effect.succeed(emptyMetrics(now)),
-    now: () => NOON_UTC,
   });
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get("cache-control"), "no-store");

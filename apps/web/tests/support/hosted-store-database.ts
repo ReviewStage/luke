@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { PGlite } from "@electric-sql/pglite";
+import { atInstant } from "@sidecar/wire/testing";
 import { Effect, Layer, ManagedRuntime, Redacted } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -55,12 +56,20 @@ export const TEST_PAYLOAD_SECRET = Redacted.make("c".repeat(64));
 /** What every test user is called; the column is not null and no test reads it. */
 export const TEST_USER_NAME = "Test User";
 
-export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestDatabase> {
+interface HostedStoreTestDatabaseOptions {
+  /** The instant `run` pins the clock to, for a test that asserts what the writers stamp; unpinned, the real clock. */
+  readonly at?: number;
+}
+
+export async function openHostedStoreTestDatabase({
+  at,
+}: HostedStoreTestDatabaseOptions = {}): Promise<HostedStoreTestDatabase> {
   const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
   const opened = connectionString ? await openNodePostgres(connectionString) : await openPglite();
   const keys = payloadKeyRing(TEST_PAYLOAD_SECRET);
   const runtime = ManagedRuntime.make(opened.sql);
-  const run: HostedStoreTestRun = (effect) => runtime.runPromise(effect);
+  const run: HostedStoreTestRun = (effect) =>
+    runtime.runPromise(at === undefined ? effect : atInstant(at)(effect));
   return {
     sql: opened.sql,
     run,

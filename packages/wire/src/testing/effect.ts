@@ -1,4 +1,4 @@
-import { Effect, type Layer } from "effect";
+import { Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 
 /**
@@ -31,3 +31,7 @@ export const atInstant =
   (millis: number) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.provide(Effect.andThen(TestClock.setTime(millis), effect), TestClock.layer());
+
+/** The same clock as a Layer, for a handler a test reaches through a router rather than an Effect. */
+export const clockAt = (millis: number): Layer.Layer<TestClock.TestClock> =>
+  Layer.provideMerge(Layer.effectDiscard(TestClock.setTime(millis)), TestClock.layer());

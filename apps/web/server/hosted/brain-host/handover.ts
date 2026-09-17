@@ -20,7 +20,7 @@
  * same claim its own start makes so the two agree whichever lands first.
  */
 
-import { Effect, type Schema } from "effect";
+import { Clock, Effect, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationTarget } from "../store/index.js";
@@ -40,7 +40,6 @@ import {
 
 export interface HandoverSeams<Turn extends BrainHostTurn> {
   readonly eve: EveSessions<Turn>;
-  readonly now: () => number;
   /** Where a refusal is said; a handover never throws into its caller's pass. */
   readonly report: (message: string) => void;
 }
@@ -127,7 +126,7 @@ const openSession = /* @__PURE__ */ Effect.fn("openSession")(function* <Turn ext
     );
   if (opened === undefined) return { outcome: OPENING.NOTHING };
   if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
-    yield* claimRuntimeSession(target, opened.sessionId, new Date(seams.now()));
+    yield* claimRuntimeSession(target, opened.sessionId, new Date(yield* Clock.currentTimeMillis));
     return { outcome: OPENING.OPENED };
   }
   seams.report(

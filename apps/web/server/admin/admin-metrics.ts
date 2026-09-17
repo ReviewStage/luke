@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { DAY_MS } from "../core.js";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
@@ -447,7 +447,6 @@ export interface AdminMetricsOptions {
     scope: AdminMetricsScope,
     windowDays: AdminMetricsWindow,
   ) => AdminSeamEffect<AdminMetrics>;
-  now?: () => number;
 }
 
 /**
@@ -469,9 +468,10 @@ export function handleAdminMetrics(
     return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
   }
 
-  const now = (options.now ?? Date.now)();
-  return options.readMetrics(now, adminMetricsScope(request.url), windowDays).pipe(
-    Effect.map((metrics) => jsonResponse(ADMIN_HTTP_STATUS.OK, metrics)),
-    Effect.catchCause((cause) => unavailableSeam("admin metrics read failed", cause)),
+  return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    options.readMetrics(now, adminMetricsScope(request.url), windowDays).pipe(
+      Effect.map((metrics) => jsonResponse(ADMIN_HTTP_STATUS.OK, metrics)),
+      Effect.catchCause((cause) => unavailableSeam("admin metrics read failed", cause)),
+    ),
   );
 }

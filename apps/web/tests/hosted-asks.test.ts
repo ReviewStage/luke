@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import { atInstant } from "@sidecar/wire/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -287,7 +288,7 @@ it.effect(
       const userId = await database.createUser();
       const conversationId = await conversation(userId);
       const eve = eveAccepting(`wrun_${randomUUID()}`);
-      const seams = { asks: askEffects, eve, now: () => NOW };
+      const seams = { asks: askEffects, eve };
       const input = {
         userId,
         conversationId,
@@ -332,9 +333,7 @@ it.effect(
 
       const stops: (readonly [string, string, string, string])[] = [];
       let throwOnce = false;
-      const writer = await database.run(
-        storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
-      );
+      const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
       const relay = new StreamRelay({
         writer,
         asks: askEffects,
@@ -422,9 +421,7 @@ it.effect(
       const target = { userId, conversationId };
       const sessionId = `wrun_${randomUUID()}`;
       await setConversationRuntimeSessionId(conversationId, sessionId);
-      const writer = await database.run(
-        storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
-      );
+      const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
       const writes = {
         enqueueTurn: (
           target: Parameters<typeof writer.enqueueTurn>[0],
@@ -471,16 +468,17 @@ it.effect(
           }),
       };
       const outcome = await database.run(
-        stopAsk(
-          {
-            store: database.store,
-            asks: bindingBeforeStamp,
-            writer,
-            eve,
-            now: () => NOW,
-          },
-          userId,
-          waiting.id,
+        atInstant(NOW)(
+          stopAsk(
+            {
+              store: database.store,
+              asks: bindingBeforeStamp,
+              writer,
+              eve,
+            },
+            userId,
+            waiting.id,
+          ),
         ),
       );
       assert.ok(Result.isSuccess(outcome));
@@ -498,10 +496,8 @@ it.effect(
         }),
       );
       const stampedFirst = await database.run(
-        stopAsk(
-          { store: database.store, asks: askEffects, writer, eve, now: () => NOW },
-          userId,
-          later.id,
+        atInstant(NOW)(
+          stopAsk({ store: database.store, asks: askEffects, writer, eve }, userId, later.id),
         ),
       );
       assert.ok(Result.isSuccess(stampedFirst));
@@ -570,16 +566,17 @@ it.effect(
           }),
       };
       const afterHonour = await database.run(
-        stopAsk(
-          {
-            store: database.store,
-            asks: honouredBeforeStamp,
-            writer,
-            eve,
-            now: () => NOW,
-          },
-          userId,
-          honoured.id,
+        atInstant(NOW)(
+          stopAsk(
+            {
+              store: database.store,
+              asks: honouredBeforeStamp,
+              writer,
+              eve,
+            },
+            userId,
+            honoured.id,
+          ),
         ),
       );
       assert.deepEqual(
@@ -590,10 +587,8 @@ it.effect(
 
       // A second Stop on a running turn already stamped is a repeat: eve is not asked again.
       const again = await database.run(
-        stopAsk(
-          { store: database.store, asks: askEffects, writer, eve, now: () => NOW + 1 },
-          userId,
-          waiting.id,
+        atInstant(NOW + 1)(
+          stopAsk({ store: database.store, asks: askEffects, writer, eve }, userId, waiting.id),
         ),
       );
       assert.deepEqual(Result.isSuccess(again) && again.success.cancelRequestedAt, NOW);
@@ -610,7 +605,7 @@ it.effect(
       const sessionId = `wrun_${randomUUID()}`;
       await setConversationRuntimeSessionId(conversationId, sessionId);
       const eve = eveAccepting(sessionId);
-      const seams = { asks: askEffects, eve, now: () => NOW };
+      const seams = { asks: askEffects, eve };
       const reads = { store: database.store, asks: askEffects };
       const clientId = randomUUID();
       const accepted = await database.run(
@@ -629,9 +624,7 @@ it.effect(
       assert.equal(queued?.answer.status, TURN_STATUS.QUEUED);
       assert.equal(queued?.answer.turnId, undefined);
 
-      const writer = await database.run(
-        storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
-      );
+      const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
       const relay = new StreamRelay({
         writer,
         asks: askEffects,
@@ -702,7 +695,7 @@ it.effect(
       const userId = await database.createUser();
       const conversationId = await conversation(userId);
       const eve = eveAccepting(`wrun_${randomUUID()}`);
-      const seams = { asks: askEffects, eve, now: () => NOW };
+      const seams = { asks: askEffects, eve };
       const ask = (clientId: string) =>
         database.run(
           acceptAsk(seams, {
@@ -769,7 +762,7 @@ it.effect(
       };
       const outcome = await database.run(
         acceptAsk(
-          { asks: clearingBeforeDispatch, eve, now: () => NOW },
+          { asks: clearingBeforeDispatch, eve },
           {
             userId,
             conversationId,

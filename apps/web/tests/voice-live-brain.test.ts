@@ -68,7 +68,6 @@ const BOUNDED = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.millis(150) }
 const writer = await database.run(
   storeWriter({
     tools: CATALOG_TOOL_SET,
-    now: () => new Date(NOW),
   }),
 );
 const askEffects = askRecord();
@@ -151,7 +150,7 @@ async function stand(
     Scope.provide(
       hostedLiveBrain({
         userId: target.userId,
-        asks: { asks: askEffects, eve, now: () => NOW },
+        asks: { asks: askEffects, eve },
         store,
         report: (message) => reports.push(message),
         bounds,

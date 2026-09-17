@@ -76,18 +76,17 @@ import { noDatabase } from "./support/no-database";
  * will stand on; the routes read nothing of it the table will not hold.
  */
 
-const database = await openHostedStoreTestDatabase();
+const NOW = 1_800_000_000_000;
+const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
 /** The store writer over the test database, for the one write a Stop makes on a turn's row. */
 const writer = await database.run(
   storeWriter({
     tools: CATALOG_TOOL_SET,
-    now: () => new Date(NOW),
   }),
 );
 
-const NOW = 1_800_000_000_000;
 const ORIGIN = "https://luke.test";
 const CLIENT_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 
@@ -263,7 +262,6 @@ type CancelOptions = Parameters<typeof handleBrainTurnCancel>[0];
 interface Harness {
   readonly asks: ReturnType<typeof memoryAsks>;
   readonly eve: FakeEve;
-  clock: number;
   options(request: Request, userId: string | undefined): CancelOptions;
 }
 
@@ -273,7 +271,6 @@ function harness(): Harness {
   const built: Harness = {
     asks,
     eve,
-    clock: NOW,
     options: (request, userId) => ({
       request,
       resolveUserId: () => Effect.succeed(Option.fromUndefinedOr(userId)),
@@ -284,7 +281,6 @@ function harness(): Harness {
         eve.bearers.push(authorization);
         return eve;
       },
-      now: () => built.clock,
     }),
   };
   return built;
@@ -925,7 +921,6 @@ test("the in-process ask answers what the ask route answers: the same record aga
     run: database.run,
     asks: h.asks,
     eve: h.eve,
-    now: () => h.clock,
   };
   const routed = parse(
     hostedBrainAskAnswerSchema,
@@ -1034,7 +1029,6 @@ test("the in-process Stop answers what the cancel route answers: for a running t
     asks: h.asks,
     writer,
     eve: h.eve,
-    now: () => h.clock,
   };
 
   for (const id of [running, asked.id]) {
@@ -1095,7 +1089,6 @@ test("a Stop cancels only the turn it was aimed at: the intended turn ending whi
     asks: h.asks,
     writer,
     eve: h.eve,
-    now: () => h.clock,
   };
   const outcome = await database.run(stopAsk(seams, userId, intended));
   assert.ok(Result.isSuccess(outcome));
@@ -1127,7 +1120,6 @@ test("a running row that names no eve turn takes the stamp alone: eve is asked n
     asks: h.asks,
     writer,
     eve: h.eve,
-    now: () => h.clock,
   };
   const outcome = await database.run(stopAsk(seams, userId, unnamed));
   assert.deepEqual(Result.isSuccess(outcome) && outcome.success.cancelRequestedAt, NOW);

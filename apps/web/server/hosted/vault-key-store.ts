@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -126,7 +126,9 @@ export function storeVaultKey(
   providerId: string,
   ciphertext: string,
 ): Effect.Effect<void, VaultKeyFailure, SqlClient.SqlClient> {
-  return upsertKey({ userId, providerId, ciphertext, updatedAt: new Date() });
+  return Effect.flatMap(DateTime.nowAsDate, (updatedAt) =>
+    upsertKey({ userId, providerId, ciphertext, updatedAt }),
+  );
 }
 
 const UserIdRowSchema = Schema.Struct({ userId: Schema.String });

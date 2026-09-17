@@ -33,7 +33,7 @@
 
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { isTextUIPart, type ToolSet } from "ai";
-import { Cause, Effect, type Redacted, type Schema } from "effect";
+import { Cause, Clock, Effect, type Redacted, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { childCompletionInputText, MESSAGE_ROLE } from "../../core.js";
@@ -56,7 +56,6 @@ export interface ChildCompletionSeams {
   readonly eve: (options: EveSessionsOptions) => EveSessions<CompletionTurn>;
   /** The tool registry the child's journal is read back under. */
   readonly tools: ToolSet;
-  readonly now: () => number;
   /** Where a refusal is said; a delivery never throws into the relay's turn or the tick. */
   readonly report: (message: string) => void;
 }
@@ -107,7 +106,7 @@ export const deliverChildCompletion = /* @__PURE__ */ Effect.fn("deliverChildCom
       );
       return CHILD_COMPLETION_DELIVERY.NOTHING;
     }
-    const claimed = yield* claimChildCompletion(child, new Date(seams.now()));
+    const claimed = yield* claimChildCompletion(child, new Date(yield* Clock.currentTimeMillis));
     if (claimed === undefined) return CHILD_COMPLETION_DELIVERY.NOTHING;
     if (!claimed.expectsCompletion) return CHILD_COMPLETION_DELIVERY.WITHHELD;
     const eve = seams.eve({
@@ -126,10 +125,10 @@ export const deliverChildCompletion = /* @__PURE__ */ Effect.fn("deliverChildCom
           result: yield* finalReplyOf(seams.tools, child, claimed.turnId),
           failure: claimed.failure ?? undefined,
         },
-        seams.now(),
+        yield* Clock.currentTimeMillis,
       );
       return yield* handToEve(
-        { eve, now: seams.now, report: seams.report },
+        { eve, report: seams.report },
         claimed.parent,
         BRAIN_HOST_TURN.CHILD_COMPLETION,
         words,

@@ -81,11 +81,10 @@ import {
  * turns page behind cursors of their own.
  */
 
-const database = await openHostedStoreTestDatabase();
+const NOW = Date.parse("2026-09-10T12:00:00.000Z");
+const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
-const writer = await database.run(
-  storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
-);
+const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
 
 /**
  * The developer's spoken line as the voice writer leaves it since the ledger
@@ -114,7 +113,6 @@ async function spokenLine(
   return { ok: true, id: written.success.id };
 }
 
-const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const SESSION = {
   providerId: "conductor",
   providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
@@ -1285,7 +1283,6 @@ it.effect(
           resolveUserId: () => Effect.succeedSome(userId),
           store: database.store,
           touchDevice: () => Effect.succeed(false),
-          now: () => NOW,
         }),
       );
       const head = parse(

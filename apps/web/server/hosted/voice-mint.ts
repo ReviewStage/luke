@@ -1,5 +1,5 @@
 import { isLiveVoice } from "@sidecar/live";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   HOSTED_WS_BASE_URL,
@@ -79,7 +79,6 @@ export interface RealtimeConnectionMintOptions {
   preferences: VoiceMintPreferences;
   /** Builds the session document this endpoint mints with. */
   clientSecretRequest: (options: RealtimeSessionOptions) => OpenAiPostBody;
-  now?: (() => number) | undefined;
   timeoutMs?: number | undefined;
 }
 
@@ -127,8 +126,8 @@ export function mintRealtimeConnection(
             payload as UnparsedWireValue,
             options.model ?? REALTIME_DEFAULTS.MODEL,
           );
-    const now = options.now ?? Date.now;
-    if (!credential || !realtimeCredentialIsUsable(credential, now())) return { failure: {} };
+    const now = yield* Clock.currentTimeMillis;
+    if (!credential || !realtimeCredentialIsUsable(credential, now)) return { failure: {} };
 
     return {
       connection: {

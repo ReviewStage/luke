@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { atInstant } from "@sidecar/wire/testing";
 import { eq } from "drizzle-orm";
 import { Effect, Redacted, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -56,10 +57,10 @@ import {
  * shares one database on CI.
  */
 
-const database = await openHostedStoreTestDatabase();
+const NOW = Date.parse("2026-09-15T10:00:00.000Z");
+const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
-const NOW = Date.parse("2026-09-15T10:00:00.000Z");
 const ORIGIN = "https://luke.test";
 const SECRET = Redacted.make("deployment-secret-fixture");
 const PARENT_SESSION = "wrun_01M000000000000000000PARENT";
@@ -108,7 +109,6 @@ function seams(
     eveOrigin: () => ORIGIN,
     eve: fakeEve().eve,
     tools: CATALOG_TOOL_SET,
-    now: () => NOW,
     report: (message) => reports.push(message),
     ...overrides,
     reports,
@@ -246,9 +246,9 @@ test("a settled child's completion is stamped, then sent once into the parent's 
   assert.deepEqual(s.reports, []);
 
   // The relay's end re-emitted, or the sweep a minute later: the stamp stands and nothing is sent again.
-  const again = seams({ eve: eve.eve, now: () => NOW + 60_000 });
+  const again = seams({ eve: eve.eve });
   assert.equal(
-    await database.run(deliverChildCompletion(again, child)),
+    await database.run(atInstant(NOW + 60_000)(deliverChildCompletion(again, child))),
     CHILD_COMPLETION_DELIVERY.NOTHING,
   );
   assert.equal(await stampOf(child), NOW);

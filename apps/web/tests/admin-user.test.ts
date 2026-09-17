@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { atInstant } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { ADMIN_TREND_DAYS, lastNDayKeys } from "../server/admin/admin-metrics";
@@ -21,7 +22,7 @@ import { runWithoutDatabase } from "./support/no-database";
 
 /** One read answered the way a function answers it, over a client that refuses every statement. */
 const answer = (options: Parameters<typeof handleAdminUser>[0]) =>
-  runWithoutDatabase(handleAdminUser(options));
+  runWithoutDatabase(atInstant(NOON_UTC)(handleAdminUser(options)));
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
@@ -243,7 +244,6 @@ test("the read answers 400, 404, and 200 as distinct outcomes", async () => {
   const ok = await answer({
     request: userRequest(),
     readUser,
-    now: () => NOON_UTC,
   });
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get("cache-control"), "no-store");

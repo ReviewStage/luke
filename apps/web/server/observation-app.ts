@@ -1,5 +1,5 @@
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
-import { Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -345,7 +345,7 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
           secret: encryptionSecret,
           store,
           seams: {},
-          now: Date.now(),
+          now: yield* Clock.currentTimeMillis,
         });
         return { complete: outcome.complete };
       });
@@ -393,7 +393,6 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
           eveOrigin: () => eveOrigin,
           eve,
           tools: CATALOG_TOOL_SET,
-          now: Date.now,
           report: (message) => console.warn(message),
         },
         userId,

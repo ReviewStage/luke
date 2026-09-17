@@ -11,6 +11,7 @@ import type { ConversationViewMessage } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
+import { atInstant } from "@sidecar/wire/testing";
 import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { afterAll, test } from "vitest";
 import {
@@ -43,7 +44,10 @@ import {
 } from "../server/hosted/resource-reads";
 import { storeWriter } from "../server/hosted/store";
 import { standingObservedConversation } from "../server/hosted/store/observed-conversations";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  type HostedStoreTestRun,
+  openHostedStoreTestDatabase,
+} from "./support/hosted-store-database";
 
 /**
  * What one Mac's polling costs the service in a minute, counted through the
@@ -66,10 +70,10 @@ const POLL = { INTERVAL_MS: 5_000, PER_MINUTE: 12 } as const;
 
 let clock = Date.parse("2026-09-12T12:00:00.000Z");
 const now = () => clock;
+/** Runs an effect on this test's clock, so what the writer stamps is `clock` as it then stands. */
+const run: HostedStoreTestRun = (effect) => database.run(atInstant(clock)(effect));
 
-const writer = await database.run(
-  storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(now()) }),
-);
+const writer = await run(storeWriter({ tools: CATALOG_TOOL_SET }));
 
 const READ_PATH = {
   MESSAGES: "/api/conversation/messages",
@@ -112,7 +116,7 @@ async function answered<Value, Encoded>(
 async function readPage(answer: ConversationMessagesAnswer): Promise<ReadMessagesPage> {
   const groups: ReadTurnGroup[] = [];
   for (const group of answer.groups) {
-    const read = await database.run(
+    const read = await run(
       readStoredUIMessages(
         group.messages.map((message) => message.message),
         CATALOG_TOOL_SET,
@@ -181,7 +185,7 @@ class Mac {
     let eventsReads = 0;
     let turnsReads = 0;
     const signal = await answered(
-      await database.run(
+      await run(
         handleChanges({
           request: new Request(`https://luke.test${READ_PATH.CHANGES}`, {
             method: "POST",
@@ -191,7 +195,6 @@ class Mac {
           resolveUserId: () => Effect.succeedSome(this.userId),
           store: database.store,
           touchDevice: () => Effect.succeed(false),
-          now,
         }),
       ),
       changesAnswerSchema,
@@ -201,7 +204,7 @@ class Mac {
       for (let pages = 0; pages < MAX_PAGES_PER_POLL; pages += 1) {
         messagesReads += 1;
         const answer = await answered(
-          await database.run(
+          await run(
             handleConversationMessages(
               options(this.userId, request(READ_PATH.MESSAGES, this.sync.cursors().messages)),
             ),
@@ -216,7 +219,7 @@ class Mac {
     if (signal.events !== cursors.events) {
       eventsReads += 1;
       const answer = await answered(
-        await database.run(
+        await run(
           handleConversationEvents(
             options(this.userId, request(READ_PATH.EVENTS, this.sync.cursors().events)),
           ),
@@ -228,7 +231,7 @@ class Mac {
     if (signal.turns !== cursors.turns) {
       turnsReads += 1;
       const answer = await answered(
-        await database.run(
+        await run(
           handleBrainTurns(
             options(this.userId, request(READ_PATH.TURNS, this.sync.cursors().turns)),
           ),
@@ -330,14 +333,14 @@ function since(before: PollCost, after: PollCost): PollCost {
 
 test("an open observation journal costs no Mac on the account a read until it is written, and then one read per write, the finish included", async () => {
   const userId = await database.createUser();
-  const conversationId = await database.run(standingMain(userId, new Date(now())));
+  const conversationId = await run(standingMain(userId, new Date(now())));
   const target = { userId, conversationId };
   const macs = [new Mac(userId), new Mac(userId)];
   const write = async (
     conversation: { readonly userId: string; readonly conversationId: string },
     event: BrainRunEvent,
   ) => {
-    const result = await database.run(writer.consume(conversation, event));
+    const result = await run(writer.consume(conversation, event));
     assert.ok(Result.isSuccess(result), JSON.stringify(result));
   };
   const everyMac = async (act: (mac: Mac) => Promise<void>) => {
@@ -357,9 +360,7 @@ test("an open observation journal costs no Mac on the account a read until it is
 
   // An observation turn on an observed conversation opens its journal and does not end.
   clock += POLL.INTERVAL_MS;
-  const observedId = await database.run(
-    standingObservedConversation(userId, SESSION, new Date(now())),
-  );
+  const observedId = await run(standingObservedConversation(userId, SESSION, new Date(now())));
   assert.ok(observedId !== undefined);
   const observation = new Stream(randomUUID());
   await write(
@@ -404,12 +405,12 @@ test("an open observation journal costs no Mac on the account a read until it is
 
 test("a spoken turn's journal in the main is carried once per write to it, its parts as they then stand, and once more settled", async () => {
   const userId = await database.createUser();
-  const conversationId = await database.run(standingMain(userId, new Date(now())));
+  const conversationId = await run(standingMain(userId, new Date(now())));
   const target = { userId, conversationId };
   const mac = new Mac(userId);
   await mac.poll();
   const write = async (event: BrainRunEvent) => {
-    const result = await database.run(writer.consume(target, event));
+    const result = await run(writer.consume(target, event));
     assert.ok(Result.isSuccess(result), JSON.stringify(result));
   };
   /** The journal as this Mac holds it: the types of its parts. */

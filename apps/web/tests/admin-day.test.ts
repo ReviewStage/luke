@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { atInstant } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import {
@@ -21,7 +22,7 @@ import { runWithoutDatabase } from "./support/no-database";
 
 /** One read answered the way a function answers it, over a client that refuses every statement. */
 const answer = (options: Parameters<typeof handleAdminDay>[0]) =>
-  runWithoutDatabase(handleAdminDay(options));
+  runWithoutDatabase(atInstant(NOON_UTC)(handleAdminDay(options)));
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 const DAY = "2026-08-14";
@@ -112,7 +113,6 @@ test("the read answers 400 for no real day and 200 past it", async () => {
   const ok = await answer({
     request: dayRequest(),
     readDay,
-    now: () => NOON_UTC,
   });
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get("cache-control"), "no-store");

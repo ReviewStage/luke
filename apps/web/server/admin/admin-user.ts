@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { DAY_MS } from "../core.js";
 import {
@@ -174,7 +174,6 @@ export interface AdminUserOptions {
     now: number,
     windowDays: AdminMetricsWindow,
   ) => AdminSeamEffect<AdminUserDetail | undefined>;
-  now?: () => number;
 }
 
 /**
@@ -202,13 +201,14 @@ export function handleAdminUser(
     return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
   }
 
-  const now = (options.now ?? Date.now)();
-  return options.readUser(userId, now, windowDays).pipe(
-    Effect.map((detail) =>
-      detail === undefined
-        ? errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND)
-        : jsonResponse(ADMIN_HTTP_STATUS.OK, detail),
+  return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    options.readUser(userId, now, windowDays).pipe(
+      Effect.map((detail) =>
+        detail === undefined
+          ? errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND)
+          : jsonResponse(ADMIN_HTTP_STATUS.OK, detail),
+      ),
+      Effect.catchCause((cause) => unavailableSeam("admin user read failed", cause)),
     ),
-    Effect.catchCause((cause) => unavailableSeam("admin user read failed", cause)),
   );
 }

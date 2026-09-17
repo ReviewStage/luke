@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { atInstant, fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Option } from "effect";
 import { ConnectionError, SqlError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
@@ -81,9 +81,13 @@ function options(overrides: Partial<EventsOptions> = {}): EventsOptions {
     request: eventsRequest({ events: [LAUNCH] }),
     projectApiKey: PROJECT_KEY,
     resolveUserId,
-    now: () => NOW,
     ...overrides,
   };
+}
+
+/** The handler run at the test's one instant, which the batch's timestamps are clamped against. */
+function events(options: EventsOptions) {
+  return atInstant(NOW)(handleEvents(options));
 }
 
 /** Each test gets its own account, because the rate-limit map outlives one. */
@@ -97,7 +101,7 @@ function freshUser(): EventsOptions["resolveUserId"] {
 test("only POST is answered, and nothing is forwarded without a key or a token", async () => {
   const wrongMethod = upstream();
   const rejectedMethod = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: new Request("https://luke.test/api/events"),
         httpClient: wrongMethod.layer,
@@ -111,7 +115,7 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
   const keyless = upstream();
   let resolved = 0;
   const unconfigured = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         projectApiKey: "   ",
         httpClient: keyless.layer,
@@ -132,7 +136,7 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
 
   const anonymous = upstream();
   const refused = await runWithoutDatabase(
-    handleEvents(options({ resolveUserId: () => Effect.succeedNone, httpClient: anonymous.layer })),
+    events(options({ resolveUserId: () => Effect.succeedNone, httpClient: anonymous.layer })),
   );
   assert.equal(refused.status, 401);
   assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
@@ -142,7 +146,7 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
 test("a malformed or oversized body is refused, the oversized one before parsing", async () => {
   const malformed = upstream();
   const unreadable = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: rawEventsRequest("{not json"),
         httpClient: malformed.layer,
@@ -154,7 +158,7 @@ test("a malformed or oversized body is refused, the oversized one before parsing
   assert.equal((await unreadable.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
 
   const strange = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: eventsRequest({ events: [{ name: "app:sneak", at: NOW, properties: {} }] }),
         httpClient: malformed.layer,
@@ -165,7 +169,7 @@ test("a malformed or oversized body is refused, the oversized one before parsing
   assert.equal(strange.status, 400);
 
   const overLimit = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: eventsRequest({
           events: Array.from({ length: PRODUCT_EVENT_BATCH_LIMIT + 1 }, () => LAUNCH),
@@ -179,7 +183,7 @@ test("a malformed or oversized body is refused, the oversized one before parsing
 
   // Valid JSON, but past the byte ceiling: refused without being parsed at all.
   const huge = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: rawEventsRequest(`{"events":[],"pad":"${"x".repeat(20_000)}"}`),
         httpClient: malformed.layer,
@@ -194,7 +198,7 @@ test("a malformed or oversized body is refused, the oversized one before parsing
 test("the resolved account is the distinct id, whatever the body tried to say", async () => {
   const posthog = upstream();
   const response = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: eventsRequest({
           distinct_id: "someone-else",
@@ -244,7 +248,7 @@ test("the resolved account is the distinct id, whatever the body tried to say", 
 test("the forwarded document matches the processor's documented batch shape", async () => {
   const posthog = upstream();
   await runWithoutDatabase(
-    handleEvents(options({ httpClient: posthog.layer, resolveUserId: freshUser() })),
+    events(options({ httpClient: posthog.layer, resolveUserId: freshUser() })),
   );
 
   const { request: forwarded, items } = onlyBatch(posthog.forwarded);
@@ -264,7 +268,7 @@ test("the client header selects the $lib tag, and anything else is the desktop",
   for (const client of [PRODUCT_EVENT_CLIENT.IOS, PRODUCT_EVENT_CLIENT.WATCHOS]) {
     const posted = upstream();
     await runWithoutDatabase(
-      handleEvents(
+      events(
         options({
           request: new Request("https://luke.test/api/events", {
             method: "POST",
@@ -288,7 +292,7 @@ test("the client header selects the $lib tag, and anything else is the desktop",
   // A header outside the set cannot put its own words in the tag.
   const forged = upstream();
   await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: new Request("https://luke.test/api/events", {
           method: "POST",
@@ -312,7 +316,7 @@ test("the client header selects the $lib tag, and anything else is the desktop",
 test("the account's name and address ride as person properties, once per batch", async () => {
   const posthog = upstream();
   await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: eventsRequest({ events: [LAUNCH, LAUNCH] }),
         readPerson: () => Effect.succeed({ name: "Ada", email: "ada@example.test" }),
@@ -338,14 +342,14 @@ test("the account's name and address ride as person properties, once per batch",
 test("a deployment that reads no person, or fails to, still records the counts", async () => {
   const withoutSeam = upstream();
   const anonymous = await runWithoutDatabase(
-    handleEvents(options({ httpClient: withoutSeam.layer, resolveUserId: freshUser() })),
+    events(options({ httpClient: withoutSeam.layer, resolveUserId: freshUser() })),
   );
   assert.equal(anonymous.status, 202);
   assert.equal(itemAt(onlyBatch(withoutSeam.forwarded).items, 0).properties.$set, undefined);
 
   const failing = upstream();
   const survived = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         readPerson: () =>
           Effect.fail(
@@ -365,7 +369,7 @@ test("a deployment that reads no person, or fails to, still records the counts",
 test("nothing the request body says can name the person", async () => {
   const posthog = upstream();
   await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: eventsRequest({
           events: [
@@ -386,7 +390,7 @@ test("nothing the request body says can name the person", async () => {
 test("a wrong desktop clock is clamped to the reader's own window", async () => {
   const posthog = upstream();
   await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         request: eventsRequest({
           events: [
@@ -410,7 +414,7 @@ test("past the per-account brake the batch is refused rather than forwarded", as
   const resolveUserId = freshUser();
   const send = () =>
     runWithoutDatabase(
-      handleEvents(
+      events(
         options({
           request: eventsRequest({ events: Array.from({ length: 50 }, () => LAUNCH) }),
           httpClient: posthog.layer,
@@ -433,7 +437,7 @@ test("past the per-account brake the batch is refused rather than forwarded", as
 test("an upstream refusal answers 502 carrying its status and nothing else", async () => {
   const refusing = upstream(400);
   const response = await runWithoutDatabase(
-    handleEvents(options({ httpClient: refusing.layer, resolveUserId: freshUser() })),
+    events(options({ httpClient: refusing.layer, resolveUserId: freshUser() })),
   );
   assert.equal(response.status, 502);
   assert.deepEqual(await response.json(), {
@@ -442,7 +446,7 @@ test("an upstream refusal answers 502 carrying its status and nothing else", asy
   });
 
   const unreachable = await runWithoutDatabase(
-    handleEvents(
+    events(
       options({
         httpClient: fakeHttpClientLayer(async () => {
           throw new Error("network down");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { CLOUD_AGENT_PROVIDER_ID, PROVIDER_ID } from "../server/core";
 import {
@@ -110,7 +110,7 @@ it.layer(testSqlClient)("the vault's key rows", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser();
-        const before = Date.now();
+        const writtenAt = yield* Clock.currentTimeMillis;
         yield* storeVaultKey(userId, VAULT_PROVIDER_ID, CIPHERTEXT);
 
         const listing = yield* listVaultKeys(userId);
@@ -118,8 +118,8 @@ it.layer(testSqlClient)("the vault's key rows", (it) => {
         const [row] = listing;
         assert.equal(row?.providerId, VAULT_PROVIDER_ID);
         assert.ok(row !== undefined && row.updatedAt instanceof Date);
-        // The row was written by the statement above, so its instant stands at or after the one read before it.
-        assert.ok(row !== undefined && row.updatedAt.getTime() >= before - 1000);
+        // The row is stamped by the write above, from the clock the test reads.
+        assert.equal(row?.updatedAt.getTime(), writtenAt);
         assert.deepEqual(Object.keys(row ?? {}).sort(), ["providerId", "updatedAt"]);
       }),
   );

@@ -55,7 +55,7 @@ function options(overrides: Partial<MintCall> = {}) {
     request: mintRequest(),
     apiKey: API_KEY,
     spendIntroduction: () => Effect.succeed(OPEN),
-    now: () => NOW,
+    instant: NOW,
     ...overrides,
   };
 }

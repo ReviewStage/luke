@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Clock, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { AdminViewer } from "./admin-access.js";
 import {
@@ -131,7 +131,6 @@ export interface AdminUsersOptions {
     windowDays: AdminMetricsWindow,
     search: string | undefined,
   ) => AdminSeamEffect<AdminUserList>;
-  now?: () => number;
 }
 
 /**
@@ -154,11 +153,18 @@ export function handleAdminUsers(
     return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_SEARCH));
   }
 
-  const now = (options.now ?? Date.now)();
-  return options
-    .readUsers(now, adminMetricsScope(request.url), options.viewer.userId, windowDays, search.term)
-    .pipe(
-      Effect.map((users) => jsonResponse(ADMIN_HTTP_STATUS.OK, users)),
-      Effect.catchCause((cause) => unavailableSeam("admin users read failed", cause)),
-    );
+  return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+    options
+      .readUsers(
+        now,
+        adminMetricsScope(request.url),
+        options.viewer.userId,
+        windowDays,
+        search.term,
+      )
+      .pipe(
+        Effect.map((users) => jsonResponse(ADMIN_HTTP_STATUS.OK, users)),
+        Effect.catchCause((cause) => unavailableSeam("admin users read failed", cause)),
+      ),
+  );
 }

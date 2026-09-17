@@ -67,7 +67,6 @@ afterAll(() => database.close());
 const writer = await database.run(
   storeWriter({
     tools: CATALOG_TOOL_SET,
-    now: () => new Date(NOW),
   }),
 );
 

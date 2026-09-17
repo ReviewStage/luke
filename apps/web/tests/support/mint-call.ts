@@ -1,3 +1,4 @@
+import { clockAt } from "@sidecar/wire/testing";
 import { Effect, Layer, Redacted } from "effect";
 import { FetchHttpClient, HttpRouter } from "effect/unstable/http";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -27,6 +28,8 @@ export interface MintCall extends Partial<VoiceMintSeams>, Partial<IntroductionM
   apiKey?: string | undefined;
   model?: string | undefined;
   httpClient?: Layer.Layer<HttpClient.HttpClient> | undefined;
+  /** The instant the group's `Clock` reads; the live clock when absent. */
+  instant?: number | undefined;
 }
 
 /** Which group a test's request is for, which is the path it names. */
@@ -67,6 +70,7 @@ export function mintAnswer(call: MintCall): Promise<Response> {
       ),
       HttpRouter.provideRequest(call.httpClient ?? FetchHttpClient.layer),
       HttpRouter.provideRequest(noDatabase),
+      HttpRouter.provideRequest(call.instant === undefined ? Layer.empty : clockAt(call.instant)),
     ),
     { disableLogger: true },
   );

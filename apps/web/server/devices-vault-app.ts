@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Layer, Option, type Redacted, Result } from "effect";
+import {
+  Clock,
+  Effect,
+  type Schema as EffectSchema,
+  Layer,
+  Option,
+  type Redacted,
+  Result,
+} from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -74,7 +82,6 @@ export interface DevicesVaultSeams extends DeviceSeams {
   storeKey: (userId: string, providerId: string, ciphertext: string) => VaultKeyEffect<void>;
   listKeys: (userId: string) => VaultKeyEffect<{ providerId: string; updatedAt: Date }[]>;
   deleteKey: (userId: string, providerId: string) => VaultKeyEffect<boolean>;
-  now?: () => number;
   mintId?: () => string;
 }
 
@@ -123,7 +130,6 @@ const devicesEffect = /* @__PURE__ */ Effect.fn("devicesEffect")(
       return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     }
     const userId = yield* bearerUserId(seams);
-    const now = seams.now ?? Date.now;
     if (!(yield* deviceBrake.check(userId))) {
       return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
     }
@@ -138,7 +144,12 @@ const devicesEffect = /* @__PURE__ */ Effect.fn("devicesEffect")(
         push: pushAddress(body),
       };
       const { deviceId } = yield* hostedStoreOrUnavailable(
-        seams.registerDevice(userId, registration, mintId, new Date(now())),
+        seams.registerDevice(
+          userId,
+          registration,
+          mintId,
+          new Date(yield* Clock.currentTimeMillis),
+        ),
       );
       return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deviceId });
     }
@@ -146,7 +157,7 @@ const devicesEffect = /* @__PURE__ */ Effect.fn("devicesEffect")(
     if (method === DEVICE_METHOD.HEARTBEAT) {
       const body = yield* decodeBody(deviceHeartbeatRequestSchema, payload);
       const seen = yield* hostedStoreOrUnavailable(
-        seams.touchDevice(userId, heartbeatFrom(body), new Date(now())),
+        seams.touchDevice(userId, heartbeatFrom(body), new Date(yield* Clock.currentTimeMillis)),
       );
       return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { seen });
     }
