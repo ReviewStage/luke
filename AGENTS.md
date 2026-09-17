@@ -177,106 +177,58 @@ in for the missing job before the first release.
 
 ## Testing
 
-Run tests with:
-
 ```
-./scripts/check.sh                       # everything CI runs, portable
+./scripts/check.sh                       # everything CI runs
 pnpm exec vitest run <path>              # one file
-pnpm exec vitest run --shard=<n>/4       # one CI shard
 pnpm --filter @luke/web test:store       # store tests on a real Postgres
 pnpm --filter @luke/web test:agent       # offline brain eval, scripted model
 ```
 
-`./scripts/check.sh` must exit 0 before a PR is done. A Mac or UI change also
-needs `./scripts/verify.sh` evidence, since CI builds nothing for the Mac.
+`check.sh` must exit 0. A Mac or UI change also needs `./scripts/verify.sh`
+evidence; CI builds nothing for the Mac.
 
-### Rules
-
-- Every behavior change ships in the same PR as a test that fails without it.
-- Pick the smallest layer that catches the bug: a type or lint rule if one
-  can state it; a small test through the module's public export; two real
-  modules with a double only at a process boundary; a medium test when a
-  real Postgres or child process is needed; `verify.sh` evidence when a
-  Mac, an Electron window, or a live provider is needed.
-- Small tests (the default) touch one process, `TestClock`, a temp dir they
-  made, and PGlite in process. Nothing else.
-- Medium tests may reach a real Postgres on localhost, a spawned process, or
-  a loopback socket. They run through `test:store` or are `liveClockTests`.
-- Large tests (a Mac, a window, a provider's live API) are `verify.sh`
-  evidence or an offline eval. They never run in `check.sh`.
-- Prefer the real implementation when it is fast, deterministic, and simple
-  to build. Then a fake, then a stub. Assert on a double being called only
-  when no state can be observed.
-- A double is a test `Layer` on the subject's `Context.Tag`, at a process
-  boundary: provider HTTP, Apple, the model, the OS, the clock.
-- Do not use mocking frameworks. `vi.mock`, `vi.doMock`, `vi.spyOn`,
-  `vi.fn`, and `vi.mocked` fail lint (`testing/no-module-mocks`).
-  `vi.stubEnv` is allowed.
-- Test through the public API. Assert what a caller observes, never private
-  state.
-- Use the shared builders before writing inline setup:
-  `packages/host/src/testing/test-kernel.ts` (a host),
-  `apps/web/tests/support/*` (hosted store, eve turns, voice fakes),
-  `packages/wire/src/testing/*` (HTTP and cloud fakes, JSON Schema golden),
-  `packages/providers/src/testing/provider-contract.ts` (a provider), and
-  `temporaryDirectory` from `@sidecar/runtime/testing` (never `mkdtemp`).
-- Write Effect tests with `it.effect` and advance time with
-  `TestClock.adjust`. `Effect.run*`, `Runtime.run*`, and
-  `ManagedRuntime.make` in a test file fail lint (`testing/no-runner`).
-- No real time in tests. `setTimeout`, `setInterval`, a `new Promise` around
-  a timer, `Effect.sleep`, and `it.live` fail lint (`testing/no-real-time`).
-- Tests are hermetic: no personal data, live provider, network, clock, or
-  path outside the temp dir they made. They pass alone and in any order.
-- Goldens change only under `LUKE_UPDATE_FIXTURES=1`, read by the shared
-  helpers alone (`packages/wire/src/testing/json-schema-golden.ts`,
-  `packages/providers/src/testing/fixture-recording.ts`,
-  `apps/web/tests/support/response-golden.ts`). Explain the diff in the PR.
-- Fixtures are synthetic. No recorded session, transcript, or account of a
-  real person.
-- Never assert a model's words. Test the deterministic ring around it (tool
-  schemas, the turn envelope, what a settled call writes, what the relay
-  sends); judgment is the offline `test:agent` eval.
+- Every behavior change ships with a test that fails without it, same PR.
+- Use the smallest layer that catches the bug: a type or lint rule, then a
+  test through the module's public export, then a real Postgres or child
+  process (`test:store`), then `verify.sh` evidence for a Mac, a window, or
+  a live provider.
+- Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
+  No network, personal data, live provider, or real clock. They pass alone
+  and in any order.
+- Prefer the real implementation, then a fake, then a stub. A double is a
+  test `Layer` on the subject's `Context.Tag` at a process boundary: provider
+  HTTP, Apple, the model, the OS, the clock.
+- No mocking frameworks: `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.fn`,
+  `vi.mocked` fail lint (`testing/no-module-mocks`). `vi.stubEnv` is fine.
+- Assert what a caller observes, never private state or call counts.
+- Use the shared builders before inline setup: `packages/host/src/testing/`,
+  `apps/web/tests/support/`, `packages/wire/src/testing/`,
+  `packages/providers/src/testing/`, and `temporaryDirectory` from
+  `@sidecar/runtime/testing`.
+- Effect tests use `it.effect` and `TestClock.adjust`. `Effect.run*`,
+  `Runtime.run*`, and `ManagedRuntime.make` in a test file fail lint
+  (`testing/no-runner`); `setTimeout`, `setInterval`, `Effect.sleep`, and
+  `it.live` fail lint (`testing/no-real-time`).
+- Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
+  helpers, with the diff explained in the PR. Fixtures are synthetic.
+- Never assert a model's words. Judgment is the offline `test:agent` eval.
 - Never loosen, delete, or skip a test to go green. `.only`, `.skip`,
-  `.todo`, `it.flakyTest`, and a `retry` option fail lint
-  (`testing/no-focus-or-retry`). `it.skipIf(reason)` is allowed.
-- Fix or delete a flaky test. Never retry it.
-- Keep tests DAMP, not DRY: each test reads whole on its own; shared helpers
-  are builders, not assertions.
+  `.todo`, `it.flakyTest`, and `retry` fail lint (`testing/no-focus-or-retry`).
+  Fix or delete a flaky test; never retry it.
+- Do not write change-detector tests: an expected value computed by the code
+  under test or pasted from its output; a test of a getter, constant, type,
+  re-export, or Schema round-trip on a valid value; a test that only asserts
+  a fake was called; a private function exported for a test; a claim another
+  test already makes.
 
-### Do not write
-
-Change-detector tests break on any refactor and catch no bug:
-
-- An expected value computed by the code under test or pasted from its output.
-- A test of a getter, constant, type, re-export, or Schema round-trip on a
-  valid value.
-- A test that only asserts a fake was called.
-- A private function exported so a test can reach it.
-- A claim another test already makes.
-
-### Holdouts
-
-`tools/oxlint/testing/test-edges.json` lists, by repo-relative path, the test
-files not yet on these rules: `runnerHoldouts` (`testing/no-runner`) and
-`realTimeHoldouts` (`testing/no-real-time`) only shrink and are deleted with
-their last entry; a file that comes to comply leaves the list in the same PR.
-`liveClockTests` is permanent: tests whose subject is a real socket or
-process timeout, each named here with its reason. `it.live` is allowed only
-in those files. `scripts/repository-checks.sh` fails on a holdout that no
-longer violates its rule or a `liveClockTests` entry this section does not
-name.
+`tools/oxlint/testing/test-edges.json` holds the files not yet on these rules:
+`runnerHoldouts` and `realTimeHoldouts` only shrink and are deleted with their
+last entry. `liveClockTests` is permanent, for a subject that is a real socket
+or process timeout; `it.live` is allowed only there, and each entry is named
+here with its reason:
 
 - `packages/gateway/src/node-invocations.test.ts`: a real Gateway socket's
-  reconnection and in-flight timeout, which no `TestClock` drives.
-
-### Platforms
-
-- Desktop: main and renderer logic are small tests. A window, motion, or
-  appearance change is `verify.sh` evidence.
-- Web: routes are tested through their `HttpRouter` over a fake `SqlClient`
-  or PGlite; store tests run again on Postgres in `test:store`.
-- iOS: logic is `apps/ios/LukeTests` in Xcode on a Mac;
-  `ios-project.test.mjs` beside it checks the project file on Linux.
+  reconnection and in-flight timeout.
 
 ## Effect idioms
 
