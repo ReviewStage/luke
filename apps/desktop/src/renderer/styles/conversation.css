@@ -443,6 +443,13 @@
   overflow-wrap: anywhere;
 }
 
+/* Inside an observed-messages note's fold the chip naming the chat stands
+   first, on a line of its own above the lines, as the source chip does inside
+   a briefing's fold. */
+.conversation-observed > .conversation-action-chip {
+  margin: 4px 0 0;
+}
+
 /* The date over a line that followed a long silence, in the quiet voice the
    requested actions use, with the day set apart from the time the way iMessage
    sets it. It stands still under the pull as Luke's rows do, in the room the

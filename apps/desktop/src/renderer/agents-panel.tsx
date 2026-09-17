@@ -35,13 +35,13 @@ import {
   landOnConversationMessage,
   searchConversation,
 } from "./conversation-search";
-import type { ToolRowChip } from "./conversation-tool-row";
 import {
   type ConversationSearchEntry,
   type ConversationSearchMarks,
   ConversationTurns,
   conversationSearchEntries,
   SessionChip,
+  sessionChip,
 } from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
@@ -189,32 +189,6 @@ export function agentTranscriptRow(
     title: agentTitle(agent, roster),
     status: agent.status,
     session: { providerId: agent.providerId, providerSessionId: agent.providerSessionId },
-  };
-}
-
-/**
- * The chip the transcript page's header wears for an agent's session, built
- * as an action row's is: the roster's own title, mark, and identity while it
- * holds the session, pressable exactly when the session's own row is, and
- * that press opens the chat in the provider; once the roster has let the
- * session go, the title the row wore under the provider's mark, a name
- * alone, since a press could reach nothing. Read from the roster where it is
- * drawn, so a session the roster lets go while its page is open stops being
- * a press there too. The Agents list's rows wear no such chip: a row is one
- * press, and it opens the transcript.
- */
-function headerChip(
-  identity: SessionIdentity,
-  title: string,
-  roster: readonly SessionView[],
-): ToolRowChip {
-  const session = agentSession(identity, roster);
-  if (session === undefined) return { text: title, markId: identity.providerId, openable: false };
-  return {
-    text: session.title,
-    markId: session.agentId ?? session.providerId,
-    identity,
-    openable: session.openable,
   };
 }
 
@@ -580,7 +554,7 @@ export function AgentTranscriptPanel({
             open.title
           ) : (
             <SessionChip
-              chip={headerChip(open.session, open.title, roster)}
+              chip={sessionChip(open.session, open.title, roster)}
               onOpenChat={onOpenChat}
             />
           )}
@@ -636,6 +610,7 @@ export function AgentTranscriptPanel({
                   now={now}
                   onOpenChat={onOpenChat}
                   search={marks}
+                  {...(open.session ? { session: open.session } : undefined)}
                 />
               </div>
             ) : (

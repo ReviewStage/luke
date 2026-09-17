@@ -821,20 +821,72 @@ const OBSERVED_TEXT = observedMessagesText(
   FIXTURE_NOW - 60_000,
 );
 
-test("an observed-messages note names the chat and counts its lines on a fold that holds them", () => {
-  const markup = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, OBSERVED_TEXT));
+/** The chat the fixture note came from, as the transcript page knows it: the session the roster holds. */
+const OBSERVED_CHAT: SessionIdentity = {
+  providerId: "conductor",
+  providerSessionId: FIXTURE_SESSION.HELD,
+};
+
+const OBSERVED_CHIP_BUTTON = `<button type="button" class="conversation-action-chip" aria-label="Open ${FIXTURE_TITLE.HELD}">`;
+
+test("an observed-messages note opens on the same two words for every chat, with the chat's own chip first inside the fold above its lines", () => {
+  const groups = userRowGroups(MESSAGE_AUTHOR.BRAIN, OBSERVED_TEXT);
+  const markup = render(groups, OPEN, { session: OBSERVED_CHAT });
   assert.equal(count(markup, "data-speaker", "event"), 1);
-  // Lines, not messages: the first message spans two, and the row keeps no boundary.
-  assert.equal(count(markup, "data-observed-messages", "3"), 1);
+  assert.equal(count(markup, "data-observed-messages", "true"), 1);
   assert.equal(markup.split(OBSERVED_FOLD_OPENING).length - 1, 1);
-  assert.ok(markup.includes("<span>Fix the login redirect — 3 new lines</span>"));
-  // The cut line stands first among the lines and is not counted.
+  const fold = markup.slice(markup.indexOf(OBSERVED_FOLD_OPENING));
+  const summaryEnd = fold.indexOf("</summary>");
+  assert.ok(summaryEnd > 0);
+  // The line says what the fold holds and never how much: the lines are not
+  // messages, and a chat's first look holds its recent history rather than news.
+  assert.ok(fold.slice(0, summaryEnd).includes("<span>New messages</span>"));
+  assert.ok(!fold.slice(0, summaryEnd).includes("Fix the login redirect"));
+  assert.ok(!markup.includes("new line"));
+  // The chip is the session's own, named by the roster while it holds it and
+  // not by the envelope, standing between the line and the lines.
+  const chipAt = fold.indexOf(OBSERVED_CHIP_BUTTON);
+  const linesAt = fold.indexOf("<pre>");
+  assert.ok(summaryEnd < chipAt && chipAt < linesAt);
+  assert.ok(fold.includes(`${FIXTURE_TITLE.HELD}</button>`));
+  assert.ok(!fold.includes("Fix the login redirect"));
+  // The cut line stands first among the lines, as the brain wrote it.
   assert.ok(
     markup.includes(
       `<pre><code>${OBSERVED_MESSAGES_CUT}\nagent: The redirect now keeps\nthe query string.\nuser: Ship it.</code></pre>`,
     ),
   );
-  // A chat the roster no longer holds is named as the brain named it, and one line is singular.
+  // Pressed, the chip opens the chat in its provider, as the transcript page's header does.
+  const openedChats: SessionIdentity[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  act(() => {
+    createRoot(container).render(
+      createElement(ConversationTurns, {
+        groups,
+        roster: FIXTURE_ROSTER,
+        now: FIXTURE_NOW,
+        session: OBSERVED_CHAT,
+        onOpenChat: (identity) => void openedChats.push(identity),
+      }),
+    );
+  });
+  const chip = container.querySelector(".conversation-observed > .conversation-action-chip");
+  assert.ok(chip instanceof HTMLButtonElement);
+  act(() => {
+    chip.click();
+  });
+  assert.deepEqual(openedChats, [OBSERVED_CHAT]);
+  // A session the roster has let go is named as the envelope named it, under
+  // the provider's mark and as a name alone, since a press could reach nothing.
+  const departed = render(groups, OPEN, {
+    session: { providerId: "conductor", providerSessionId: FIXTURE_SESSION.DEPARTED },
+  });
+  assert.ok(departed.includes("Fix the login redirect</span>"));
+  assert.ok(!departed.includes('conversation-action-chip" aria-label'));
+  // A thread that stands for no session names the chat as the brain did, a
+  // name alone and no mark; the note is the brain's, so it carries no copy
+  // control and no menu.
   const unheld = render(
     userRowGroups(
       MESSAGE_AUTHOR.BRAIN,
@@ -849,10 +901,14 @@ test("an observed-messages note names the chat and counts its lines on a fold th
         FIXTURE_NOW - 60_000,
       ),
     ),
+    OPEN,
   );
-  assert.ok(unheld.includes("<span>chat a1b2c3d4-0000-4000-8000-000000000002 — 1 new line</span>"));
+  assert.ok(
+    unheld.includes(
+      '<span class="conversation-action-chip">chat a1b2c3d4-0000-4000-8000-000000000002</span>',
+    ),
+  );
   assert.ok(unheld.includes("<pre><code>agent: Done.</code></pre>"));
-  // The note is the brain's, so it carries no copy control and no menu.
   assert.equal(count(markup, "class", "conversation-copy"), 0);
   assert.equal(count(markup, "class", "conversation-more-button"), 0);
 });

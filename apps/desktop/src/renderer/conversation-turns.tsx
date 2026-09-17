@@ -2,7 +2,6 @@ import {
   BRAIN_INPUT_MARKER,
   CHILD_COMPLETION_FIELD,
   ENVELOPE_SEPARATOR,
-  OBSERVED_MESSAGES_CUT,
 } from "@sidecar/brain/input-items";
 import type { AgentRead, ChildRead } from "@sidecar/hosted/reads-wire";
 import {
@@ -62,7 +61,7 @@ import {
 import { readEither } from "@sidecar/wire/effect";
 import { Result, Schema } from "effect";
 import { useRef, useState } from "react";
-import { agentTitle, subagentTitle } from "./agent-title";
+import { agentSession, agentTitle, subagentTitle } from "./agent-title";
 import { ConversationCopyButton } from "./conversation-copy";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { CONVERSATION_MENU_OPEN_ATTRIBUTE, ConversationMessageMenu } from "./conversation-menu";
@@ -600,6 +599,32 @@ export function SessionChip({
   );
 }
 
+/**
+ * The chip a page or a note wears for the session it stands for, built as an
+ * action row's is: the roster's own title, mark, and identity while it holds
+ * the session, pressable exactly when the session's own row is, and that
+ * press opens the chat in the provider; once the roster has let the session
+ * go, the title the caller kept under the provider's mark, a name alone,
+ * since a press could reach nothing. Read from the roster where it is drawn,
+ * so a session the roster lets go while its page is open stops being a press
+ * there too. Worn by the transcript page's header, and inside the fold of an
+ * observed-messages note for the chat whose lines it holds.
+ */
+export function sessionChip(
+  identity: SessionIdentity,
+  title: string,
+  roster: readonly SessionView[],
+): ToolRowChip {
+  const session = agentSession(identity, roster);
+  if (session === undefined) return { text: title, markId: identity.providerId, openable: false };
+  return {
+    text: session.title,
+    markId: session.agentId ?? session.providerId,
+    identity,
+    openable: session.openable,
+  };
+}
+
 /** The agents list's row for a session, by session identity, while the list still names it. */
 function listedAgent(
   session: SessionIdentity,
@@ -997,12 +1022,10 @@ function userVoice(
  * the words it is.
  */
 interface ObservedMessages {
-  /** The chat as the envelope names it. */
+  /** The chat as the envelope names it: what its chip falls back to once the roster no longer holds the session. */
   readonly title: string;
   /** The lines the chat gained, the cut line among them where the brain wrote one. */
   readonly lines: readonly string[];
-  /** How many lines are the chat's own, the cut line not among them. Lines, not messages: a message may span several, and the row keeps no boundary between them. */
-  readonly count: number;
 }
 
 /** The parts an envelope holds: the provider, the chat's name, and its instant at the least; a workspace at the most. */
@@ -1037,35 +1060,52 @@ function observedMessagesOf(text: string): ObservedMessages | undefined {
   if (!after.startsWith(" ") || !isInstant(after.slice(1))) return undefined;
   const title = envelopeTitle(envelope);
   if (title === undefined) return undefined;
-  const cut = lines[0] === OBSERVED_MESSAGES_CUT ? 1 : 0;
-  return { title, lines, count: lines.length - cut };
+  return { title, lines };
 }
 
-function linesCount(count: number): string {
-  return count === 1 ? "1 new line" : `${count} new lines`;
+/**
+ * The line an observed-messages note opens on, the same for every note:
+ * what the fold holds and never how much, since the lines are not messages
+ * — one may span several — and a chat's first look holds its recent history
+ * rather than news, so any count would mislead.
+ */
+const OBSERVED_MESSAGES_LABEL = "New messages";
+
+/** The chip an observed-messages note wears for its chat: the session's own where the thread knows the session, else the name the envelope kept, a name alone. */
+function observedChatChip(
+  observed: ObservedMessages,
+  chat: SessionIdentity | undefined,
+  roster: readonly SessionView[],
+): ToolRowChip {
+  return chat === undefined
+    ? { text: observed.title, openable: false }
+    : sessionChip(chat, observed.title, roster);
 }
 
 /**
  * The messages a chat gained that opened one of Luke's own turns, drawn as a
- * note rather than the lines they are: the chat's name and how many lines it
- * gained, on the line of a fold drawn like the tool calls', closed until
- * pressed, with the lines themselves preformatted behind it, so what woke
- * him stays readable when the count is not enough. Lines rather than
- * messages, because a message may span several and the row keeps no boundary
- * between them. It carries no copy control, as no note of the brain's does.
+ * note rather than the lines they are: one fold drawn like the tool calls',
+ * closed until pressed, opening on the same two words for every such note,
+ * with the chip naming the chat first inside it, above the lines themselves
+ * preformatted behind it, so what woke him stays readable and the chat it
+ * came from is one press away, as it is from the transcript page's header.
+ * It carries no copy control, as no note of the brain's does.
  */
 function ObservedMessagesRow({
   observed,
+  chat,
   at,
 }: {
   observed: ObservedMessages;
+  /** The chip naming the chat, drawn first inside the fold. */
+  chat: React.ReactNode;
   at: number;
 }): React.JSX.Element {
   return (
     <li
       className="conversation-entry"
       data-speaker={VOICE.NOTE.speaker}
-      data-observed-messages={observed.count}
+      data-observed-messages="true"
     >
       <small className="visually-hidden">{VOICE.NOTE.label}</small>
       <div className="conversation-message">
@@ -1073,8 +1113,9 @@ function ObservedMessagesRow({
           <details className="conversation-observed">
             <summary className="conversation-turn-summary">
               <ChevronIcon />
-              <span>{`${observed.title} — ${linesCount(observed.count)}`}</span>
+              <span>{OBSERVED_MESSAGES_LABEL}</span>
             </summary>
+            {chat}
             <div className="markdown">
               <pre>
                 <code>{observed.lines.join("\n")}</code>
@@ -1234,6 +1275,8 @@ function messageRows(
   lead?: React.ReactNode,
   /** The chip naming the observed agent, for a group from an observed session; its announcement folds around it. */
   sourceChip?: React.ReactNode,
+  /** The session whose transcript the row stands in, so an observed-messages note's chip opens its chat; absent where the thread knows none. */
+  chat?: SessionIdentity,
 ): readonly React.JSX.Element[] {
   const { message } = view;
   const search: RowSearch = {
@@ -1249,7 +1292,19 @@ function messageRows(
     const observed =
       message.metadata.author === MESSAGE_AUTHOR.BRAIN ? observedMessagesOf(words) : undefined;
     if (observed !== undefined) {
-      return [<ObservedMessagesRow key={message.id} observed={observed} at={view.placedAt} />];
+      return [
+        <ObservedMessagesRow
+          key={message.id}
+          observed={observed}
+          at={view.placedAt}
+          chat={
+            <SessionChip
+              chip={observedChatChip(observed, chat, roster)}
+              {...(onOpenChat ? { onOpenChat } : undefined)}
+            />
+          }
+        />,
+      ];
     }
     return [
       <BubbleRow
@@ -1760,6 +1815,7 @@ export function ConversationTurns({
   groups,
   roster = [],
   subagents = [],
+  session,
   onOpenChat,
   onOpenChild,
   agents = [],
@@ -1771,6 +1827,12 @@ export function ConversationTurns({
   children,
 }: {
   groups: readonly ConversationViewTurnGroup[];
+  /**
+   * The session this thread is the transcript of, on an agent's page, so an
+   * observed-messages note's chip opens its chat the way the page's header
+   * does; absent for the main thread, which is the transcript of no session.
+   */
+  session?: SessionIdentity;
   /**
    * The sessions as the roster holds them now, so a chip names a session by
    * its current title while the roster still holds it and offers its press
@@ -1852,6 +1914,9 @@ export function ConversationTurns({
               }
             : undefined;
         const folded = naming !== undefined && onlyBriefings(group);
+        // A note's chat is the group's own session where the group came from one, else the thread's.
+        const chat =
+          group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED ? group.source.session : session;
         // A child's completion leads Luke's first words on it with the chip
         // naming the child: the first of his messages in the turn with words,
         // since one that only called tools has no words to lead.
@@ -1888,6 +1953,7 @@ export function ConversationTurns({
               />
             ) : undefined,
             naming === undefined ? undefined : <SourceChip {...naming} />,
+            chat,
           );
           if (
             judgment === JUDGMENT.ASK &&
