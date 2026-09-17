@@ -82,7 +82,7 @@ type TurnFailure = BrainRequestFailure;
 /** The one failure word the fixtures need, typed against the run's own set so a misspelling fails to compile. */
 const MODEL_FAILURE: TurnFailure = "model";
 
-const database = await openHostedStoreTestDatabase();
+const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
 /** The envelope any call may answer with: its effect unknown. Every declared output schema admits it. */
@@ -132,7 +132,7 @@ const TYPED_ASK: UserMessageMetadata = {
   channel: MESSAGE_CHANNEL.TYPED,
 };
 
-const writer = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
+const writer = await database.run(storeWriter({ tools: TOOLS }));
 
 /** Messages as they cross into the reader: their JSON shape, which is what a row holds. */
 function asWire(stored: readonly UIMessage[]): UnparsedWireValue {

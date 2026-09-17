@@ -134,7 +134,6 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
           readVaultKeys: () => Effect.succeed(KEY_ROWS),
           store: () => store,
           httpClient: api.layer,
-          now: () => TEST_TIME,
         }),
       ),
     ),
@@ -156,7 +155,6 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
           httpClient: fakeHttpClientLayer(async () => {
             throw new Error("a stored roster is not re-observed");
           }),
-          now: () => TEST_TIME + 60_000,
         }),
       ),
     ),
@@ -177,7 +175,6 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
           readVaultKeys: () => Effect.succeed(KEY_ROWS),
           store: () => store,
           httpClient: conductorApi().layer,
-          now: () => TEST_TIME,
         }),
       ),
     ),
@@ -194,7 +191,6 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
           readVaultKeys: () => Effect.succeed(replaced),
           store: () => store,
           httpClient: api.layer,
-          now: () => TEST_TIME + 1_000,
         }),
       ),
     ),
@@ -218,7 +214,6 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
           readVaultKeys: () => Effect.succeed(KEY_ROWS),
           store: () => store,
           httpClient: working.layer,
-          now: () => TEST_TIME,
         }),
       ),
     ),
@@ -233,7 +228,6 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
           readVaultKeys: () => Effect.succeed(KEY_ROWS),
           store: () => store,
           httpClient: idle.layer,
-          now: () => TEST_TIME + 1_000,
         }),
       ),
     ),
@@ -259,7 +253,6 @@ test("a pass the provider refuses answers what stood before, and stores no roste
           readVaultKeys: () => Effect.succeed(KEY_ROWS),
           store: () => store,
           httpClient: api.layer,
-          now: () => TEST_TIME,
         }),
       ),
     ),
@@ -273,7 +266,6 @@ test("a pass the provider refuses answers what stood before, and stores no roste
           readVaultKeys: () => Effect.succeed(KEY_ROWS),
           store: () => store,
           httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 401 })),
-          now: () => TEST_TIME + 1_000,
         }),
       ),
     ),
@@ -554,8 +546,6 @@ test("readVaultKeys is called with the resolved user id", async () => {
 // --- Rate brake ---
 
 test("fresh reads return 429 after too many in the same window, while stored reads are not braked", async () => {
-  // now() stays fixed so all calls land in the same window.
-  const now = () => 1_000_000;
   // A userId unique to this test run avoids cross-test pollution of the module-level counter.
   const userId = `ratelimit-${Date.now()}-${process.pid}`;
   const store = memoryObservationStore();
@@ -567,7 +557,6 @@ test("fresh reads return 429 after too many in the same window, while stored rea
       readVaultKeys: () => Effect.succeed(KEY_ROWS),
       store: () => store,
       httpClient: api.layer,
-      now,
     });
 
   // MAX_REQUESTS_PER_WINDOW is 10; the 11th should be rate-limited.
@@ -586,7 +575,6 @@ test("fresh reads return 429 after too many in the same window, while stored rea
         resolveUserId: () => Effect.succeedSome(userId),
         readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
-        now,
       }),
     ),
   );

@@ -63,7 +63,7 @@ function voice(overrides: Partial<MintCall> = {}) {
     apiKey: API_KEY,
     resolveUserId: () => Effect.succeedSome("user-1"),
     spend: () => Effect.succeed(OPEN_SPEND),
-    now: () => NOW,
+    instant: NOW,
     httpClient: upstream(minted),
     ...overrides,
   };
@@ -74,7 +74,7 @@ function introduction(overrides: Partial<MintCall> = {}) {
     request: mintRequest(HOSTED_SERVICE_PATH.INTRODUCTION_MINT),
     apiKey: API_KEY,
     spendIntroduction: () => Effect.succeed(OPEN_INTRODUCTION),
-    now: () => NOW,
+    instant: NOW,
     httpClient: upstream(minted),
     ...overrides,
   };

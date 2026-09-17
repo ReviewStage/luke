@@ -12,6 +12,7 @@ import type { ConversationViewMessage, ConversationViewSnapshot } from "@sidecar
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
+import { atInstant } from "@sidecar/wire/testing";
 import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll } from "vitest";
@@ -56,7 +57,10 @@ import { askRecord } from "../server/hosted/store/asks";
 import { standingObservedConversation } from "../server/hosted/store/observed-conversations";
 import { TRANSCRIPT_SPEAKER } from "../server/live";
 import { voiceSessionRecord } from "../server/voice/session-record";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import {
+  type HostedStoreTestRun,
+  openHostedStoreTestDatabase,
+} from "./support/hosted-store-database";
 import { heard, said } from "./support/live-events";
 
 /**
@@ -82,13 +86,13 @@ afterAll(() => database.close());
 
 let clock = Date.parse("2026-09-12T12:00:00.000Z");
 const now = () => clock;
+/** Runs an effect on this test's clock, so what the writer stamps is `clock` as it then stands. */
+const run: HostedStoreTestRun = (effect) => database.run(atInstant(clock)(effect));
 function tick(): void {
   clock += 1000;
 }
 
-const writer = await database.run(
-  storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(now()) }),
-);
+const writer = await run(storeWriter({ tools: CATALOG_TOOL_SET }));
 
 const VOICE_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE } as const;
 
@@ -106,13 +110,11 @@ async function spokenLine(
   metadata: SpokenAskMetadata,
 ): Promise<{ readonly ok: true; readonly id: string }> {
   const rowId = `line-${delegationId}`;
-  const written = await database.run(
+  const written = await run(
     writer.upsertSpokenRow(target, { role: MESSAGE_ROLE.USER, clientId: rowId, text, metadata }),
   );
   assert.ok(written.ok);
-  const attached = await database.run(
-    writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }),
-  );
+  const attached = await run(writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }));
   assert.ok(attached.ok);
   assert.deepEqual(attached.attached, [written.id]);
   return { ok: true, id: written.id };
@@ -160,7 +162,7 @@ async function answered<Value, Encoded>(
 async function readPage(answer: ConversationMessagesAnswer): Promise<ReadMessagesPage> {
   const groups: ReadTurnGroup[] = [];
   for (const group of answer.groups) {
-    const read = await database.run(
+    const read = await run(
       readStoredUIMessages(
         group.messages.map((message) => message.message),
         CATALOG_TOOL_SET,
@@ -220,7 +222,7 @@ class Mac {
 
   async poll(label: string): Promise<ConversationViewSnapshot> {
     const signal = await answered(
-      await database.run(
+      await run(
         handleChanges({
           request: new Request(`https://luke.test${READ_PATH.CHANGES}`, {
             method: "POST",
@@ -230,7 +232,6 @@ class Mac {
           resolveUserId: () => Effect.succeedSome(this.userId),
           store: database.store,
           touchDevice: () => Effect.succeed(false),
-          now,
         }),
       ),
       changesAnswerSchema,
@@ -239,7 +240,7 @@ class Mac {
     if (signal.messages !== cursors.messages) {
       for (let pages = 0; pages < MAX_PAGES_PER_POLL; pages += 1) {
         const answer = await answered(
-          await database.run(
+          await run(
             handleConversationMessages(
               options(this.userId, request(READ_PATH.MESSAGES, this.sync.cursors().messages)),
             ),
@@ -252,7 +253,7 @@ class Mac {
     }
     if (signal.events !== cursors.events) {
       const answer = await answered(
-        await database.run(
+        await run(
           handleConversationEvents(
             options(this.userId, request(READ_PATH.EVENTS, this.sync.cursors().events)),
           ),
@@ -263,7 +264,7 @@ class Mac {
     }
     if (signal.turns !== cursors.turns) {
       const answer = await answered(
-        await database.run(
+        await run(
           handleBrainTurns(
             options(this.userId, request(READ_PATH.TURNS, this.sync.cursors().turns)),
           ),
@@ -339,17 +340,16 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const userId = await database.createUser();
-      const conversationId = await database.run(standingMain(userId, new Date(now())));
+      const conversationId = await run(standingMain(userId, new Date(now())));
       const target = { userId, conversationId };
       const askEffects = askRecord();
       const asks = {
-        record: (write: Parameters<typeof askEffects.record>[0]) =>
-          database.run(askEffects.record(write)),
+        record: (write: Parameters<typeof askEffects.record>[0]) => run(askEffects.record(write)),
         dispatchOnce: (
           target: Parameters<typeof askEffects.dispatchOnce>[0],
           id: string,
           dispatch: Parameters<typeof askEffects.dispatchOnce>[2],
-        ) => database.run(askEffects.dispatchOnce(target, id, dispatch)),
+        ) => run(askEffects.dispatchOnce(target, id, dispatch)),
       };
       const mac = new Mac(userId);
 
@@ -369,7 +369,7 @@ it.effect(
         conversation: { readonly userId: string; readonly conversationId: string },
         event: BrainRunEvent,
       ): Promise<void> {
-        const result = await database.run(writer.consume(conversation, event));
+        const result = await run(writer.consume(conversation, event));
         assert.ok(result.ok, JSON.stringify(result));
       }
 
@@ -400,7 +400,7 @@ it.effect(
           sessionId: `wrun_${exchange}`,
           turnId: stream.turnId,
         }));
-        assert.deepEqual(await database.run(writer.attachAskLines(target, stream.turnId)), {
+        assert.deepEqual(await run(writer.attachAskLines(target, stream.turnId)), {
           ok: true,
           attached: [line.id],
         });
@@ -425,9 +425,7 @@ it.effect(
 
       // An observed conversation's observation turn opens its journal and leaves it open through the next exchange.
       tick();
-      const observedId = await database.run(
-        standingObservedConversation(userId, SESSION, new Date(now())),
-      );
+      const observedId = await run(standingObservedConversation(userId, SESSION, new Date(now())));
       assert.ok(observedId !== undefined);
       const observed = { userId, conversationId: observedId };
       const observation = new Stream(randomUUID());
@@ -441,12 +439,12 @@ it.effect(
       // before the journal however late its row lands.
       tick();
       const lateSessionId = `sess_${randomUUID()}`;
-      const lateVoiceSession = await database.run(
+      const lateVoiceSession = await run(
         voiceSessionRecord(now).register({ userId, sessionId: lateSessionId }),
       );
       assert.ok(lateVoiceSession !== undefined);
       // The session's clock starts on this test's clock, as the register's default would on the database's.
-      await database.run(
+      await run(
         Effect.gen(function* () {
           const sql = yield* SqlClient.SqlClient;
           yield* sql`update voice_sessions set started_at = ${new Date(now())} where id = ${lateVoiceSession}`;
@@ -466,7 +464,7 @@ it.effect(
         sessionId: "wrun_3",
         turnId: late.turnId,
       }));
-      assert.deepEqual(await database.run(writer.attachAskLines(target, late.turnId)), {
+      assert.deepEqual(await run(writer.attachAskLines(target, late.turnId)), {
         ok: true,
         attached: [],
       });
@@ -513,7 +511,7 @@ it.effect(
       // and nothing leaves it.
       tick();
       const liveSessionId = `sess_${randomUUID()}`;
-      await database.run(voiceSessionRecord(now).register({ userId, sessionId: liveSessionId }));
+      await run(voiceSessionRecord(now).register({ userId, sessionId: liveSessionId }));
       const voice = voiceWriter({ store: writer });
       const live = { userId, liveSessionId, conversation: target };
       for (const event of [
@@ -522,13 +520,13 @@ it.effect(
         said("The fixture agent,", 3600, 4800),
         said(" on a permission prompt.", 4700, 6000),
       ]) {
-        const result = await database.run(voice.consume(live, event));
+        const result = await run(voice.consume(live, event));
         assert.ok(result.ok, JSON.stringify(result));
       }
       // Segments alone move nothing the panel draws.
       await holds("spoken: segments", 3);
       tick();
-      const lineWritten = await database.run(
+      const lineWritten = await run(
         voice.upsertSpokenRow(live, {
           rowId: "developer-row",
           speaker: TRANSCRIPT_SPEAKER.USER,
@@ -557,7 +555,7 @@ it.effect(
         mac.log,
       );
       tick();
-      const replyWritten = await database.run(
+      const replyWritten = await run(
         voice.upsertSpokenRow(live, {
           rowId: "luke-row",
           speaker: TRANSCRIPT_SPEAKER.ASSISTANT,

@@ -236,7 +236,6 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange"
     asks: {
       asks: askRecord(),
       eve: options.eve,
-      now: options.now,
     },
     store,
     report,

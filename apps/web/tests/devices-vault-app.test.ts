@@ -78,7 +78,6 @@ function seamsFor(overrides: Partial<DevicesVaultSeams> = {}) {
   const seams: DevicesVaultSeams = {
     resolveUserId: (authorization) =>
       Effect.succeed(Option.fromUndefinedOr(authorization?.replace("Bearer ", "") || undefined)),
-    now: () => NOON,
     mintId: () => DEVICE_ID,
     registerDevice: (userId, registration, mintId, now) =>
       Effect.sync(() => {
@@ -118,7 +117,12 @@ function answer(
   /** `null` asks for no secret at all; a default parameter cannot say that, since it also fires on `undefined`. */
   secret: string | null = SECRET,
 ): Promise<Response> {
-  const call: DevicesVaultCall = { ...seams, request, encryptionSecret: secret ?? undefined };
+  const call: DevicesVaultCall = {
+    ...seams,
+    request,
+    encryptionSecret: secret ?? undefined,
+    instant: NOON,
+  };
   return devicesVaultAnswer(call);
 }
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { CLOUD_AGENT_PROVIDER_ID, PROVIDER_ID } from "../server/core";
 import {
@@ -38,6 +39,7 @@ const OTHER_PROVIDER_ID = PROVIDER_ID.CLAUDE_CODE;
 
 /** An opaque stand-in for a sealed key; nothing here reads it as one. */
 const CIPHERTEXT = "sealed-one";
+const WRITTEN_AT = Date.parse("2026-09-15T10:00:00.000Z");
 const REPLACEMENT = "sealed-two";
 
 const openUser = () =>
@@ -110,7 +112,7 @@ it.layer(testSqlClient)("the vault's key rows", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser();
-        const before = Date.now();
+        yield* TestClock.setTime(WRITTEN_AT);
         yield* storeVaultKey(userId, VAULT_PROVIDER_ID, CIPHERTEXT);
 
         const listing = yield* listVaultKeys(userId);
@@ -118,8 +120,8 @@ it.layer(testSqlClient)("the vault's key rows", (it) => {
         const [row] = listing;
         assert.equal(row?.providerId, VAULT_PROVIDER_ID);
         assert.ok(row !== undefined && row.updatedAt instanceof Date);
-        // The row was written by the statement above, so its instant stands at or after the one read before it.
-        assert.ok(row !== undefined && row.updatedAt.getTime() >= before - 1000);
+        // The row is stamped by the write above, from the clock the test set.
+        assert.equal(row?.updatedAt.getTime(), WRITTEN_AT);
         assert.deepEqual(Object.keys(row ?? {}).sort(), ["providerId", "updatedAt"]);
       }),
   );

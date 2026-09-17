@@ -72,18 +72,17 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  * will stand on; the routes read nothing of it the table will not hold.
  */
 
-const database = await openHostedStoreTestDatabase();
+const NOW = 1_800_000_000_000;
+const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
 /** The store writer over the test database, for the one write a Stop makes on a turn's row. */
 const writer = await database.run(
   storeWriter({
     tools: CATALOG_TOOL_SET,
-    now: () => new Date(NOW),
   }),
 );
 
-const NOW = 1_800_000_000_000;
 const ORIGIN = "https://luke.test";
 const CLIENT_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 

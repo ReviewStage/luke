@@ -90,7 +90,6 @@ const ACKNOWLEDGMENT_OF: ReadonlyMap<LiveClientEvent["type"], LiveServerEventTyp
 const writer = await database.run(
   storeWriter({
     tools: CATALOG_TOOL_SET,
-    now: () => new Date(NOW),
   }),
 );
 const askEffects = askRecord();

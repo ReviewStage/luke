@@ -29,7 +29,6 @@ import {
 
 /** What a mint needs of the deployment beyond the environment's own key. */
 export interface MintSeams {
-  now?: (() => number) | undefined;
   timeoutMs?: number | undefined;
 }
 
@@ -93,7 +92,6 @@ export function mintOptions(
     model,
     preferences: read,
     clientSecretRequest,
-    now: seams.now,
     timeoutMs: seams.timeoutMs,
   };
 }

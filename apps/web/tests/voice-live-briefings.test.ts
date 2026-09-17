@@ -59,7 +59,6 @@ const NOW = 1_800_000_000_000;
 const writer = await database.run(
   storeWriter({
     tools: CATALOG_TOOL_SET,
-    now: () => new Date(NOW),
   }),
 );
 const relay = new StreamRelay({

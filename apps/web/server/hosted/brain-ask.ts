@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, Option, Result } from "effect";
+import { Clock, Effect, Schema as EffectSchema, Option, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -106,6 +106,7 @@ export interface BrainAskOptions {
   asks: AskRecord;
   /** eve as the caller reaches it, under the caller's own bearer. */
   eve: (authorization: string) => EveSessions;
+  /** The long poll's clock and its wait, one seam: both go together when the wait becomes `Effect.sleep`. */
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
 }
@@ -266,12 +267,11 @@ export interface AskInput extends HostedBrainAskRequest {
   readonly userId: string;
 }
 
-/** What accepting an ask needs: the store's runner, the ask record built over it, eve as the caller reaches it, and the clock. */
+/** What accepting an ask needs: the ask record built over the store's runner, and eve as the caller reaches it. */
 export interface AskSeams {
   readonly asks: AskRecord;
   /** eve under whatever credential the caller holds: the route forwards the account's bearer, the voice function reaches eve as the deployment. */
   readonly eve: EveSessions;
-  readonly now: () => number;
 }
 
 /**
@@ -288,7 +288,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
   input: AskInput,
 ): Effect.fn.Return<AskOutcome, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
   const { userId, question, origin, clientId } = input;
-  const now = new Date(seams.now());
+  const now = new Date(yield* Clock.currentTimeMillis);
   let conversationId: string;
   if (input.conversationId !== undefined) {
     if (!(yield* conversationOwnedBy(userId, input.conversationId))) {
@@ -370,7 +370,6 @@ export const handleBrainAsk = /* @__PURE__ */ Effect.fn("handleBrainAsk")(functi
     {
       asks: options.asks,
       eve: options.eve(admitted.authorization),
-      now: options.now ?? Date.now,
     },
     { ...request.success, userId: admitted.userId },
   );
@@ -429,12 +428,11 @@ type StopOutcome =
   | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.NOT_RUNNING }
   | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.UPSTREAM; readonly status: number };
 
-/** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, eve as the caller reaches it, and the clock. */
+/** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, and eve as the caller reaches it. */
 interface StopSeams extends AskStandingReads {
   readonly asks: Pick<AskRecord, "named" | "cancelRequested">;
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
   readonly eve: EveSessions;
-  readonly now: () => number;
 }
 
 /**
@@ -458,7 +456,7 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
   if (standing === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
   if (TERMINAL_TURN_STATUSES.has(standing.answer.status))
     return { ok: true, answer: standing.answer };
-  const at = new Date(seams.now());
+  const at = new Date(yield* Clock.currentTimeMillis);
   let turn: StoredTurnRecord;
   if (standing.turn === undefined) {
     yield* seams.asks.cancelRequested(standing.ask.id, at);
@@ -527,7 +525,6 @@ export const handleBrainTurnCancel = /* @__PURE__ */ Effect.fn("handleBrainTurnC
       asks: options.asks,
       writer: options.writer,
       eve: options.eve(admitted.authorization),
-      now: options.now ?? Date.now,
     },
     admitted.userId,
     id,

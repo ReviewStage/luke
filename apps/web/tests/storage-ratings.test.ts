@@ -29,15 +29,15 @@ import {
  * does not own, and a message the account owns but Luke did not write.
  */
 
-const database = await openHostedStoreTestDatabase();
+const NOW = new Date("2026-09-11T09:00:00.000Z");
+const database = await openHostedStoreTestDatabase({ at: NOW.getTime() });
 afterAll(() => database.close());
 
-const NOW = new Date("2026-09-11T09:00:00.000Z");
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 const OTHER_DEVICE_ID = "7d2f3f25-ab1c-4d3e-9f4a-1b2c3d4e5f61";
 
 const store: RatingStore = {
-  writer: await database.run(storeWriter({ tools: {}, now: () => NOW })),
+  writer: await database.run(storeWriter({ tools: {} })),
 };
 
 /** A main with the developer's ask, an observation note of the brain's, and Luke's reply. */

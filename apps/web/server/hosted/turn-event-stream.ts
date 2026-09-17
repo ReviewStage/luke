@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, Result, type Schema, Stream } from "effect";
+import { Clock, Effect, Option, Result, type Schema, Stream } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -174,7 +174,6 @@ export interface TurnEventStreamOptions {
   request: Request;
   resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "turns" | "messages">;
-  now?: () => number;
   sleep?: (ms: number) => Effect.Effect<void>;
   /** The stream's own bounds, narrowed by a test so an attachment lapses in milliseconds rather than minutes. */
   bounds?: Partial<TurnEventStreamBounds>;
@@ -252,7 +251,6 @@ export const handleTurnEventStream = /* @__PURE__ */ Effect.fn("handleTurnEventS
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
   const userId = account.value;
-  const now = options.now ?? Date.now;
   if (!(yield* streamBrake.check(userId))) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }
@@ -264,7 +262,7 @@ export const handleTurnEventStream = /* @__PURE__ */ Effect.fn("handleTurnEventS
   const bounds = { ...TURN_EVENT_STREAM_BOUNDS, ...options.bounds };
   const sleep = options.sleep ?? ((ms: number) => Effect.sleep(ms));
   const encoder = new TextEncoder();
-  const attachedAt = now();
+  const attachedAt = yield* Clock.currentTimeMillis;
   // The client's side of the connection can end two ways: the stream's own
   // cancel, which interrupts the fiber reading below it, and the request's
   // abort, which the next read of the attachment sees and stops on.
@@ -285,20 +283,20 @@ export const handleTurnEventStream = /* @__PURE__ */ Effect.fn("handleTurnEventS
         if (gone()) return none;
         const events = yield* lookAtTurn(store, userId, turn.id);
         if (events === undefined || gone()) return none;
+        const now = yield* Clock.currentTimeMillis;
         const fresh = events.slice(attachment.told);
         const told = fresh.at(-1)?.seq ?? attachment.told;
-        const quietSince = fresh.length > 0 ? now() : attachment.quietSince;
+        const quietSince = fresh.length > 0 ? now : attachment.quietSince;
         const written = fresh.map((event) => encodeTurnEventFrame(event));
         const last =
-          events.at(-1)?.kind === TURN_EVENT_KIND.ENDED ||
-          now() - attachedAt >= bounds.ATTACHMENT_MS;
-        const heartbeat = !last && now() - quietSince >= bounds.HEARTBEAT_MS;
+          events.at(-1)?.kind === TURN_EVENT_KIND.ENDED || now - attachedAt >= bounds.ATTACHMENT_MS;
+        const heartbeat = !last && now - quietSince >= bounds.HEARTBEAT_MS;
         if (heartbeat) written.push(TURN_EVENT_STREAM.HEARTBEAT_FRAME);
         return [
           written,
           Option.some({
             told,
-            quietSince: heartbeat ? now() : quietSince,
+            quietSince: heartbeat ? now : quietSince,
             polled: true,
             last,
           } satisfies Attachment),

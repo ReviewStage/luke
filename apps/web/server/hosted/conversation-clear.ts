@@ -1,4 +1,4 @@
-import { Effect, Option, type Schema } from "effect";
+import { Clock, Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationClearAnswer } from "../core.js";
@@ -38,7 +38,6 @@ interface ConversationClearOptions {
   request: Request;
   resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "main">;
-  now?: () => number;
 }
 
 export const handleConversationClear = /* @__PURE__ */ Effect.fn("handleConversationClear")(
@@ -46,7 +45,6 @@ export const handleConversationClear = /* @__PURE__ */ Effect.fn("handleConversa
     options: ConversationClearOptions,
   ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
     const { request, resolveUserId, store } = options;
-    const now = options.now ?? Date.now;
     if (request.method !== CLEAR_METHOD) {
       return errorResponse(
         HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
@@ -61,7 +59,7 @@ export const handleConversationClear = /* @__PURE__ */ Effect.fn("handleConversa
     if (!(yield* clearBrake.check(userId))) {
       return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
     }
-    const openedAt = now();
+    const openedAt = yield* Clock.currentTimeMillis;
     const outcome = yield* store.main.clear(userId, new Date(openedAt));
     const answer: ConversationClearAnswer = {
       opened: outcome.opened,

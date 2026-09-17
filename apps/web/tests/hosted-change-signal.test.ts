@@ -19,6 +19,7 @@ import {
   type WireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
+import { atInstant } from "@sidecar/wire/testing";
 import { sql } from "drizzle-orm";
 import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { afterAll, test } from "vitest";
@@ -81,8 +82,12 @@ function options(userId: string, request: Request) {
     resolveUserId: () => Effect.succeedSome(userId),
     store: database.store,
     touchDevice: seams.touchDevice,
-    now: () => NOW,
   };
+}
+
+/** The handler run at the test's one instant, which is what the device's last-seen is stamped with. */
+function changes(options: Parameters<typeof handleChanges>[0]) {
+  return atInstant(NOW)(handleChanges(options));
 }
 
 async function deviceRow(id: string) {
@@ -137,13 +142,13 @@ test("the gate order is method, bearer, and body, and a refused request moves no
   const before = await deviceRow(DEVICE_ID);
 
   const wrongMethod = await database.run(
-    handleChanges(options(userId, changesRequest(undefined, "GET"))),
+    changes(options(userId, changesRequest(undefined, "GET"))),
   );
   assert.equal(wrongMethod.status, 405);
   assert.equal((await wrongMethod.json()).error, HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
 
   const anonymous = await database.run(
-    handleChanges({
+    changes({
       ...options(userId, changesRequest({ deviceId: DEVICE_ID }, "POST", false)),
       resolveUserId: () => Effect.succeedNone,
     }),
@@ -158,7 +163,7 @@ test("the gate order is method, bearer, and body, and a refused request moves no
     { deviceId: DEVICE_ID, quietUntil: "later" },
   ];
   for (const body of malformed) {
-    const refused = await database.run(handleChanges(options(userId, changesRequest(body))));
+    const refused = await database.run(changes(options(userId, changesRequest(body))));
     assert.equal(refused.status, 400, JSON.stringify(body));
     assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
   }
@@ -171,7 +176,7 @@ test("a poll moves the device's last-seen, presence, and quiet instants as repor
 
   const reported = await answered(
     await database.run(
-      handleChanges(
+      changes(
         options(
           userId,
           changesRequest({
@@ -191,7 +196,7 @@ test("a poll moves the device's last-seen, presence, and quiet instants as repor
 
   await answered(
     await database.run(
-      handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID, quietUntil: null }))),
+      changes(options(userId, changesRequest({ deviceId: DEVICE_ID, quietUntil: null }))),
     ),
   );
   const unquieted = await deviceRow(DEVICE_ID);
@@ -200,16 +205,14 @@ test("a poll moves the device's last-seen, presence, and quiet instants as repor
 
   await answered(
     await database.run(
-      handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID, activeUntil: null }))),
+      changes(options(userId, changesRequest({ deviceId: DEVICE_ID, activeUntil: null }))),
     ),
   );
   assert.equal((await deviceRow(DEVICE_ID)).activeUntil, null);
 
   await answered(
     await database.run(
-      handleChanges(
-        options(userId, changesRequest({ deviceId: DEVICE_ID, quietUntil: NOW + 900_000 })),
-      ),
+      changes(options(userId, changesRequest({ deviceId: DEVICE_ID, quietUntil: NOW + 900_000 }))),
     ),
   );
   await registerDevice(userId, INSTALLATION_ID, DEVICE_ID);
@@ -223,7 +226,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   await registerDevice(stranger, "0f8fad5b-d9cb-469f-a165-70867728950f", STRANGER_DEVICE_ID);
 
   const empty = await answered(
-    await database.run(handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
+    await database.run(changes(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
   );
   assert.deepEqual(positionsOf(empty.messages), []);
   assert.deepEqual(positionsOf(empty.events), []);
@@ -289,7 +292,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   await database.run(database.store.roster.write(userId, { body: "{}", observedAt: NOW - 30_000 }));
 
   const heads = await answered(
-    await database.run(handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
+    await database.run(changes(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
   );
   assert.deepEqual(
     sorted(positionsOf(heads.messages)),
@@ -331,9 +334,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   );
 
   const misnamed = await answered(
-    await database.run(
-      handleChanges(options(userId, changesRequest({ deviceId: STRANGER_DEVICE_ID }))),
-    ),
+    await database.run(changes(options(userId, changesRequest({ deviceId: STRANGER_DEVICE_ID })))),
   );
   assert.equal(misnamed.seen, false);
   assert.equal(misnamed.messages, heads.messages);
@@ -346,7 +347,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     parts: [{ type: "text", text: "ask, edited" }],
   });
   const written = await answered(
-    await database.run(handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
+    await database.run(changes(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
   );
   assert.deepEqual(sorted(positionsOf(written.messages)), sorted(positionsOf(heads.messages)));
   assert.deepEqual(
@@ -373,7 +374,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     ),
   );
   const observing = await answered(
-    await database.run(handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
+    await database.run(changes(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
   );
   assert.deepEqual(parse(agentsHeadSchema, observing.agents ?? ""), {
     changedAt: "2026-09-10 12:00:00.5+00",
@@ -382,7 +383,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
 
   const { opened } = await database.run(database.store.main.clear(userId, new Date(NOW + 1000)));
   const cleared = await answered(
-    await database.run(handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
+    await database.run(changes(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
   );
   assert.deepEqual(
     sorted(positionsOf(cleared.messages)),

@@ -1,6 +1,6 @@
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { user } from "../db/auth-schema.js";
@@ -284,10 +284,10 @@ export function writeAccountPreferences(
   userId: string,
   preferences: AccountPreferences,
 ): Effect.Effect<Date, AccountSeamFailure, SqlClient.SqlClient> {
-  const updatedAt = new Date();
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        const updatedAt = yield* DateTime.nowAsDate;
         yield* upsertPreference({
           userId,
           voice: preferences.voice ?? null,

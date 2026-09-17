@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
+import { atInstant } from "@sidecar/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
@@ -133,7 +134,6 @@ function tickOptions(
         recorded.ran.push(`children:${userId}`);
         return COMPLETED;
       }),
-    now: () => TICK_TIME,
     ...overrides,
   };
   return { options, recorded };
@@ -141,7 +141,7 @@ function tickOptions(
 
 /** The tick, run over a client that refuses every statement — nothing here ever reaches one. */
 function runTick(options: ObservationTickOptions): Promise<Response> {
-  return runWithoutDatabase(handleObservationTick(options));
+  return runWithoutDatabase(atInstant(TICK_TIME)(handleObservationTick(options)));
 }
 
 test("the tick is off without CRON_SECRET or the encryption secret, and refuses a wrong bearer", async () => {
@@ -236,16 +236,12 @@ test("a pass that throws is counted as failed and does not end the tick", async 
 });
 
 test("a tick starts a batch only while a whole pass deadline still fits its budget, and reports the accounts it could not reach", async () => {
-  let now = TICK_TIME;
   const accounts = Array.from({ length: OBSERVATION_TICK.CONCURRENCY * 3 }, (_, i) => `user-${i}`);
   const { options, recorded } = tickOptions(
-    { now: () => now, budgetMs: 10_000, passDeadlineMs: 1_000 },
+    { budgetMs: 1_500, passDeadlineMs: 1_000 },
     accounts,
-    () =>
-      Effect.sync(() => {
-        now += 3_000;
-        return { complete: true };
-      }),
+    // Each pass moves the clock less than its deadline, so what ends the tick is the budget alone.
+    () => Effect.as(TestClock.adjust(Duration.millis(200)), { complete: true }),
   );
 
   const response = await runTick(options);

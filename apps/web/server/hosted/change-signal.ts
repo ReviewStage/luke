@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, Result, type Schema } from "effect";
+import { Clock, Effect, Option, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -64,7 +64,6 @@ interface ChangeSignalOptions {
   resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "directory" | "turns" | "roster">;
   touchDevice: DeviceSeams["touchDevice"];
-  now?: () => number;
 }
 
 /** An instant as the request carried it: a date, `null` to clear, absent to leave. */
@@ -77,7 +76,6 @@ export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function
   options: ChangeSignalOptions,
 ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const { request, resolveUserId, store } = options;
-  const now = options.now ?? Date.now;
 
   if (request.method !== CHANGES_METHOD) {
     return errorResponse(
@@ -112,7 +110,7 @@ export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function
         : undefined),
       push: undefined,
     },
-    new Date(now()),
+    new Date(yield* Clock.currentTimeMillis),
   );
 
   const [standing, latestTurn, childrenHead, agentsHead, rosterObservedAt] = yield* Effect.all([

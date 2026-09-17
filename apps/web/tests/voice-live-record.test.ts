@@ -79,7 +79,7 @@ const TOOLS: ToolSet = {
   }),
 };
 
-const store = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
+const store = await database.run(storeWriter({ tools: TOOLS }));
 const sessionRecord = voiceSessionRecord(() => NOW);
 const writer = voiceWriter({ store });
 

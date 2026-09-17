@@ -10,7 +10,7 @@ import {
 } from "ai";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Effect, Option, Schema } from "effect";
+import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -144,7 +144,6 @@ export interface ConversationTarget {
 interface StoreWriterOptions {
   /** The catalog's `tool()` declarations by name: what a stored tool part may name, and what its input is held to. */
   readonly tools: ToolSet;
-  readonly now?: () => Date;
 }
 
 /** What one write did: landed, found its row already standing, or had nothing to do for this kind. */
@@ -1100,7 +1099,8 @@ function toolPartOf(
 
 interface WriterContext {
   readonly tools: ToolSet;
-  readonly now: () => Date;
+  /** The instant this locked write stamps every row it touches. */
+  readonly now: Date;
   readonly target: ConversationTarget;
 }
 
@@ -1152,7 +1152,7 @@ const allocateMessageSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<number, WriteFailure, SqlClient.SqlClient> {
   const row = yield* allocateMessageSequence({
     conversationId: context.target.conversationId,
-    now: context.now(),
+    now: context.now,
   });
   const allocated = yield* required(row, "the conversation vanished under its own lock");
   return allocated.next - 1;
@@ -1226,7 +1226,7 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
   const seq = yield* allocateMessageSeq(context);
   const metadata: StoredMessageMetadata | undefined =
     row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
-  const createdAt = context.now();
+  const createdAt = context.now;
   const placedAt = yield* placedInstant(context, metadata, createdAt);
   const inserted = yield* insertMessageRow({
     userId: context.target.userId,
@@ -1490,7 +1490,7 @@ const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
       clientId: message.id,
       turnId: event.turnId,
       message,
-      finishedAt: context.now(),
+      finishedAt: context.now,
     });
     return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
   }
@@ -1507,7 +1507,7 @@ const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
     conversationId: context.target.conversationId,
     parts: message.parts,
     metadata: nullable(message.metadata),
-    finishedAt: context.now(),
+    finishedAt: context.now,
   });
   yield* moveJournalBehindWhatFollowed(context, row.id);
   return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
@@ -1576,7 +1576,7 @@ const enqueueTurn = /* @__PURE__ */ Effect.fn("enqueueTurn")(function* (
     reasoningEffort: nullable(enqueue.reasoningEffort),
     promptHash: nullable(enqueue.promptHash),
     toolSetHash: nullable(enqueue.toolSetHash),
-    queuedAt: context.now(),
+    queuedAt: context.now,
   });
   return { ok: true, turnId, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
@@ -1643,7 +1643,7 @@ const recordUserMessage = /* @__PURE__ */ Effect.fn("recordUserMessage")(functio
     clientId: write.clientId,
     turnId: write.turnId,
     message: read.message,
-    finishedAt: context.now(),
+    finishedAt: context.now,
   });
   return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
@@ -1690,7 +1690,7 @@ const upsertSpokenRow = /* @__PURE__ */ Effect.fn("upsertSpokenRow")(function* (
       clientId: write.clientId,
       turnId: source.turnId,
       message: read.message,
-      finishedAt: context.now(),
+      finishedAt: context.now,
     });
     return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
   }
@@ -1699,7 +1699,7 @@ const upsertSpokenRow = /* @__PURE__ */ Effect.fn("upsertSpokenRow")(function* (
     conversationId: context.target.conversationId,
     parts: read.message.parts,
     metadata: read.message.role === MESSAGE_ROLE.SYSTEM ? null : read.message.metadata,
-    finishedAt: context.now(),
+    finishedAt: context.now,
   });
   return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
@@ -1768,7 +1768,7 @@ function readAloudFrom(
       Option.isSome(turn) &&
       TERMINAL_TURN_STATUSES.has(turn.value.status) &&
       settledAt !== null &&
-      context.now().getTime() - settledAt.getTime() <= READ_ALOUD_WINDOW_MS;
+      context.now.getTime() - settledAt.getTime() <= READ_ALOUD_WINDOW_MS;
     const journal = settled ? yield* messageByClientId(context, turnId) : Option.none();
     const readFrom = Option.isSome(journal) ? journal.value.id : undefined;
     // The row joins the turn while the turn still runs — words said around the
@@ -2112,7 +2112,7 @@ const recordEvent = /* @__PURE__ */ Effect.fn("recordEvent")(function* (
     kind: event.kind,
     deviceId: nullable(event.deviceId),
     payload: nullable(event.payload),
-    createdAt: context.now(),
+    createdAt: context.now,
   });
   const written = yield* required(inserted, "the event insert answered no row");
   return { ok: true, id: written.id, seq };
@@ -2124,14 +2124,13 @@ const recordEvent = /* @__PURE__ */ Effect.fn("recordEvent")(function* (
  * it would leave a dispatched call's row unreadable, so the writer refuses to
  * exist over such a catalog rather than writing one.
  */
-export function storeWriter({
-  tools,
-  now = () => new Date(),
-}: StoreWriterOptions): Effect.Effect<StoreWriter> {
+export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreWriter> {
   /**
    * Runs one write under the conversation's row lock, or answers that no such
    * conversation stands for this account: none by that id, or one Clear
-   * already stamped, which is read by nothing and so written by nothing.
+   * already stamped, which is read by nothing and so written by nothing. The
+   * write's instant is read from the clock once the lock is held, so every
+   * row one write stamps carries the same one.
    */
   function underConversation<Result>(
     target: ConversationTarget,
@@ -2139,11 +2138,12 @@ export function storeWriter({
   ): Write<Result | typeof NO_CONVERSATION> {
     return Effect.flatMap(SqlClient.SqlClient, (client) =>
       client.withTransaction(
-        Effect.flatMap(
-          lockConversation(target),
-          (locked): Write<Result | typeof NO_CONVERSATION> =>
-            Option.isNone(locked) ? Effect.succeed(NO_CONVERSATION) : write({ tools, now, target }),
-        ),
+        Effect.gen(function* () {
+          const locked = yield* lockConversation(target);
+          if (Option.isNone(locked)) return NO_CONVERSATION;
+          const now = yield* DateTime.nowAsDate;
+          return yield* write({ tools, now, target });
+        }),
       ),
     );
   }

@@ -62,7 +62,7 @@ function options(overrides: Partial<MintCall> = {}) {
     apiKey: API_KEY,
     resolveUserId: () => Effect.succeedSome("user-1"),
     spend: () => Effect.succeed(OPEN_SPEND),
-    now: () => NOW,
+    instant: NOW,
     ...overrides,
   };
 }

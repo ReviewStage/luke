@@ -1,4 +1,4 @@
-import { Effect, type Layer, Option, type Schema } from "effect";
+import { Clock, Effect, type Layer, Option, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -47,7 +47,6 @@ export interface ObserveOptions
   store: (secret: string) => ObservationStore;
   /** Injected in tests; production uses the platform's own fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  now?: () => number;
 }
 
 /**
@@ -97,7 +96,7 @@ export const handleObserve = /* @__PURE__ */ Effect.fn("handleObserve")(function
     }
   }
 
-  const now = (options.now ?? Date.now)();
+  const now = yield* Clock.currentTimeMillis;
   if (!(yield* observeBrake.check(userId))) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }

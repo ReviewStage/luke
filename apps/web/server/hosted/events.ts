@@ -1,4 +1,4 @@
-import { Effect, type Layer, Option, type Schema } from "effect";
+import { Clock, Effect, type Layer, Option, type Schema } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -70,7 +70,6 @@ export interface EventsOptions {
     userId: string,
   ) => Effect.Effect<PosthogPerson | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  now?: () => number;
   timeoutMs?: number;
 }
 
@@ -168,7 +167,7 @@ export function handleEvents(
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
 
-    const now = (options.now ?? Date.now)();
+    const now = yield* Clock.currentTimeMillis;
     if (!(yield* eventsBrake.check(userId, events.length))) {
       return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
     }

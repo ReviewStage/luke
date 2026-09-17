@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { atInstant } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
@@ -27,7 +28,7 @@ import { runWithoutDatabase } from "./support/no-database";
 
 /** One read answered the way a function answers it, over a client that refuses every statement. */
 const answer = (options: Parameters<typeof handleAdminUsers>[0]) =>
-  runWithoutDatabase(handleAdminUsers(options));
+  runWithoutDatabase(atInstant(NOON_UTC)(handleAdminUsers(options)));
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
@@ -123,7 +124,6 @@ test("the read answers a whole roster past the gate", async () => {
     request: usersRequest(),
     viewer: ADMIN_VIEWER,
     readUsers,
-    now: () => NOON_UTC,
   });
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get("cache-control"), "no-store");

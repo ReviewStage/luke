@@ -1,4 +1,4 @@
-import { Duration, Effect, Fiber } from "effect";
+import { Clock, Duration, Effect, Fiber } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   type ChildCompletionSweepOutcome,
@@ -116,7 +116,6 @@ export interface ObservationTickOptions extends ObservationTickReads {
    * pass that read nothing would be written down as an account with nothing.
    */
   encryptionSecret: string | undefined;
-  now?: () => number;
   budgetMs?: number;
   passDeadlineMs?: number;
 }
@@ -230,8 +229,7 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
 
-  const now = options.now ?? Date.now;
-  const startedAt = now();
+  const startedAt = yield* Clock.currentTimeMillis;
   const budgetMs = options.budgetMs ?? OBSERVATION_TICK.BUDGET_MS;
   const passDeadlineMs = options.passDeadlineMs ?? OBSERVATION_TICK.PASS_DEADLINE_MS;
   const seenAfter = startedAt - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
@@ -256,7 +254,7 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
     turns: NOTHING_OPENED,
   };
   for (let index = 0; index < accounts.length; index += OBSERVATION_TICK.CONCURRENCY) {
-    if (now() - startedAt + passDeadlineMs > budgetMs) {
+    if ((yield* Clock.currentTimeMillis) - startedAt + passDeadlineMs > budgetMs) {
       answer.exhausted = true;
       break;
     }

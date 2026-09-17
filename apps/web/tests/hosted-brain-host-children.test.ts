@@ -67,10 +67,10 @@ import {
  * account is one the test created.
  */
 
-const database = await openHostedStoreTestDatabase();
+const NOW = Date.parse("2026-09-15T10:00:00.000Z");
+const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
-const NOW = Date.parse("2026-09-15T10:00:00.000Z");
 const ORIGIN = "https://luke.test";
 const SECRET = "deployment-secret-fixture";
 const SESSION_ID = "wrun_01M000000000000000000CHILD";
@@ -174,7 +174,6 @@ function seamsOf(
       ...overrides,
     },
     writer,
-    now: () => NOW,
     reports,
   };
 }
