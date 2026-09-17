@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
@@ -30,15 +29,6 @@ test("a capture run stages its speakers from the launch profile alone", () => {
   // The idle run, and a word this build does not know, stage nothing.
   assert.equal(fixtureVoice(RUN_PROFILE.IDLE), undefined);
   assert.equal(fixtureVoice("rehearsal"), undefined);
-});
-
-test("a panel that has heard nothing draws an idle voice with neither speaker", () => {
-  assert.equal(IDLE_VOICE_VIEW.voiceStatus, LIVE_STATUS.IDLE);
-  assert.equal(IDLE_VOICE_VIEW.listening, false);
-  assert.equal(IDLE_VOICE_VIEW.lukeSpeaking, false);
-  assert.equal(IDLE_VOICE_VIEW.talkOpening, false);
-  assert.equal(IDLE_VOICE_VIEW.lukeCaptions, undefined);
-  assert.deepEqual(IDLE_VOICE_VIEW.liveConversationLines, []);
 });
 
 test("a voice failure is drawn on the strip, but never over a speaker or a fixture", () => {

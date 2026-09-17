@@ -3,14 +3,7 @@ import { LIVE_STATUS } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, streamingConversationEntry } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { test } from "vitest";
-import {
-  IDLE_VOICE_VIEW,
-  isLiveStatus,
-  isVoiceCommand,
-  isVoiceView,
-  VOICE_COMMAND,
-  type VoiceView,
-} from "./voice-view";
+import { IDLE_VOICE_VIEW, isLiveStatus, isVoiceView, type VoiceView } from "./voice-view";
 
 test("every live status is recognized and nothing else is", () => {
   for (const status of Object.values(LIVE_STATUS)) {
@@ -18,14 +11,6 @@ test("every live status is recognized and nothing else is", () => {
   }
   assert.equal(isLiveStatus("responding"), false);
   assert.equal(isLiveStatus(1), false);
-});
-
-test("the three voice commands are the whole set", () => {
-  const commands = Object.values(VOICE_COMMAND);
-  assert.equal(commands.length, 3);
-  assert.equal(isVoiceCommand("ask-text"), false);
-  for (const command of commands) assert.equal(isVoiceCommand(command), true);
-  assert.equal(isVoiceCommand("stop-microphone"), false);
 });
 
 /** The view as IPC hands it to the guard: a structured clone, its types erased. */

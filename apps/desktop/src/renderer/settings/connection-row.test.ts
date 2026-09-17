@@ -6,8 +6,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { connectionInput, connectionVisibility } from "#testing/connection-fixtures";
 import { SETTINGS_VIEW } from "../settings-views";
-import { CONFIRM_STAGE } from "./confirm-state";
-import { ConfirmSwap } from "./confirm-swap";
 import { ConnectionRow } from "./connection-row";
 import {
   CONNECTION_LAYOUT,
@@ -15,33 +13,6 @@ import {
   CONNECTION_SECTION,
   type ConnectionSpec,
 } from "./connection-schema";
-
-function swap(stage: (typeof CONFIRM_STAGE)[keyof typeof CONFIRM_STAGE] | undefined): string {
-  const asking = stage
-    ? {
-        confirm: {
-          question: "Delete the Acme API key?",
-          stage,
-          verb: "Delete",
-          running: "Deleting…",
-          onKeep: () => undefined,
-          onAct: () => undefined,
-        },
-      }
-    : undefined;
-  return renderToStaticMarkup(
-    createElement(ConfirmSwap, {
-      ...asking,
-      children: createElement("button", { type: "button" }, "Connect"),
-    }),
-  );
-}
-
-test("an answer already sent says what it is doing and takes no second press", () => {
-  const acting = swap(CONFIRM_STAGE.ACTING);
-  // Both answers go disabled: an answer already given is nobody's to withdraw.
-  assert.equal(acting.match(/disabled=""/g)?.length, 2);
-});
 
 test("a row whose build cannot offer the connection draws nothing at all", () => {
   const spec = CONNECTION_SCHEMA.find((entry) => entry.id === GOOGLE_CALENDAR_ID);

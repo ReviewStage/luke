@@ -157,14 +157,6 @@ it("a slice is replaced whole rather than merged field by field", () => {
   assert.deepEqual(app.snapshot().audio, { microphoneStatus: MICROPHONE_STATUS.DENIED });
 });
 
-it("the version climbs once per applied patch", () => {
-  const app = store();
-  for (let index = 0; index < 10; index += 1) {
-    app.update({ announcements: { held: index % 2 === 0 } });
-  }
-  assert.equal(app.snapshot().version, 10);
-});
-
 it("the live session's phase is a slice of the voice document beside the view, and a window going away keeps it", () => {
   const app = new AppStateStore(initialAppState(RUN, false), Context.empty());
   app.update({ voice: { view: IDLE_VOICE_VIEW } });

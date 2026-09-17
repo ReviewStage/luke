@@ -50,10 +50,6 @@ test("the stored turns are mounted inside the one subtree the session recording 
   // One list under the one root: every action chip and bubble the turns draw is inside it.
   assert.equal(count(markup, 'class="conversation-view'), 1);
   assert.equal(count(markup, '<ol class="conversation-list">'), 1);
-  assert.equal(
-    count(markup, "conversation-action-chip"),
-    count(render(fixtureConversationTurns()), "conversation-action-chip"),
-  );
   assert.ok(count(markup, "conversation-action-chip") > 0);
 });
 

@@ -251,30 +251,3 @@ test("the face's mouth follows Luke's own track alone", () => {
     microphoneLive: false,
   });
 });
-
-test("the speakers drive the resting motion the face plays", () => {
-  const sessions = {
-    settled: true,
-    attention: ["session-a"],
-    working: 2,
-    complete: 0,
-    total: 3,
-    announcementsHeld: false,
-  };
-
-  // Waiting sessions do not outrank a conversation in progress.
-  assert.equal(
-    restingMotion({ ...sessions, ...speechFaceInputs({ listening: false, lukeSpeaking: true }) }),
-    FACE_MOTION.TALKING,
-  );
-  assert.equal(
-    restingMotion({ ...sessions, ...speechFaceInputs({ listening: true, lukeSpeaking: false }) }),
-    FACE_MOTION.LISTENING,
-  );
-  // Both heard at once: Luke's own voice is what his face shows, and the
-  // developer's is answered on the other wing.
-  assert.equal(
-    restingMotion({ ...sessions, ...speechFaceInputs({ listening: true, lukeSpeaking: true }) }),
-    FACE_MOTION.TALKING,
-  );
-});

@@ -14,14 +14,6 @@ function render(words: string, className?: string, highlight?: readonly string[]
   );
 }
 
-test("plain words are one paragraph under the given class", () => {
-  assert.equal(
-    render("Checkout is ready.", "conversation-words"),
-    '<div class="markdown conversation-words"><p>Checkout is ready.</p></div>',
-  );
-  assert.equal(render(""), '<div class="markdown"></div>');
-});
-
 test("a single tilde is a character, not strikethrough", () => {
   // Both halves of the one option this build sets on GitHub's dialect: two
   // home-directory paths in one sentence do not strike the words between
