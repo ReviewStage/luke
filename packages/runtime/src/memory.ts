@@ -1,6 +1,6 @@
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import type { Effect, Schema } from "effect";
-import type { ToolExecutionContext } from "./execution.js";
+import type { ToolExecutionContext, ToolHostUnavailable } from "./execution.js";
 import type { RunOrigin } from "./identifiers.js";
 import type { TOOL_EFFECT } from "./registry.js";
 
@@ -110,7 +110,11 @@ export interface MemoryTool {
   readonly description: string;
   readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
   readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
-  execute(input: WireRecord, context: MemoryToolContext): Effect.Effect<WireRecord>;
+  /** Carries one call; a host seam the call reached and could not answer is the one failure it may end in. */
+  execute(
+    input: WireRecord,
+    context: MemoryToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable>;
 }
 
 export interface MemoryProvider {

@@ -1,4 +1,5 @@
 import { maximumIdentifierLength } from "@sidecar/actions";
+import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
@@ -21,7 +22,7 @@ export interface ReadToolContext extends ToolContext {
   /** The roster as the host renders it now, and the identities a named session is held to. */
   readonly roster: { readonly text: string; readonly identities: readonly SessionIdentity[] };
   /** Reads one observed session's whole tail through the host, bounded there; the identity is one the roster holds. */
-  readTranscript(identity: SessionIdentity): Effect.Effect<WireRecord>;
+  readTranscript(identity: SessionIdentity): Effect.Effect<WireRecord, ToolHostUnavailable>;
 }
 
 export type ReadToolModule = ToolModule<WireRecord, ReadToolContext>;
@@ -74,7 +75,10 @@ const READ_TRANSCRIPT: ReadToolModule = {
     "session answers with the developer's messages and the agent's replies, never its tool " +
     "activity; any other cloud session returns a refusal.",
   inputSchema: READ_TRANSCRIPT_INPUT,
-  execute(input: WireRecord, context: ReadToolContext): Effect.Effect<WireRecord> {
+  execute(
+    input: WireRecord,
+    context: ReadToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.suspend(() => {
       const named = identityFromRecord(input);
       const observed =

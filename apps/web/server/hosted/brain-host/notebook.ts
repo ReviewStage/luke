@@ -10,7 +10,7 @@ import {
 } from "@sidecar/memory";
 import { Effect, type Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_RESULT_STATUS,
@@ -20,6 +20,7 @@ import {
   WORKSPACE_FILE,
 } from "../../core.js";
 import type { HostedStore } from "../store/index.js";
+import { type StoreFailure, toolHostSeam } from "../store-failure.js";
 import type { HostedEmbedder } from "./embedding.js";
 
 /**
@@ -118,20 +119,17 @@ function resultRecord(result: RankedPassage): WireRecord {
 }
 
 /**
- * The notebook's two reads over the account's rows. `NotebookMemoryAccess`
- * answers `Effect<WireRecord>`, but a row is read over `SqlClient` and the
- * embeddings call over `HttpClient`, so the request's own two are provided
- * here and `Effect.orDie` stands for the error the contract has nowhere to
- * say: a row this service cannot read is not a refusal the model is offered
- * a reason for.
+ * The notebook's two reads over the account's rows. A row is read over
+ * `SqlClient` and the embeddings call over `HttpClient`, so the request's own
+ * two are provided here, and a row this service cannot read fails the access
+ * as the tool contract's own unavailability, logged where its cause is known;
+ * the tool run answers the call as rejected, never with the failure's words.
  */
 export function hostedNotebookAccess(seams: HostedNotebookSeams): NotebookMemoryAccess {
   const { store, userId } = seams;
   const embedBatch = seams.embedBatch ?? NOTEBOOK_SEARCH.EMBED_BATCH;
-  const run = <A>(
-    effect: Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>,
-  ): Effect.Effect<A> =>
-    Effect.orDie(Effect.provideService(effect, SqlClient.SqlClient, seams.client));
+  const run = <A>(effect: Effect.Effect<A, StoreFailure, SqlClient.SqlClient>) =>
+    toolHostSeam(seams.client, effect);
 
   /** Every notebook file of the account, opened, with its passages cut. */
   const gather = Effect.gen(function* () {

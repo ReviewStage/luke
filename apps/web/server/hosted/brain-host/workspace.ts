@@ -1,5 +1,5 @@
 import { Effect, Result, type Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   appendedDailyNote,
@@ -27,6 +27,7 @@ import {
   workspaceFileBound,
 } from "../../core.js";
 import type { HostedStore } from "../store/index.js";
+import { type StoreFailure, toolHostSeam } from "../store-failure.js";
 import { BRAIN_HOST } from "./bounds.js";
 
 /**
@@ -76,11 +77,11 @@ const NO_SKILLS = "not loaded: this agent lists no skills";
 /**
  * The workspace tools' reach: the rows, each cut or refused at its file's
  * own bound exactly as the files are, with no skills to load.
- * `BrainWorkspaceAccess` answers `Effect<A, never, never>`, but a row is read
- * over `SqlClient`, so the request's own client is provided into each read
- * here and `Effect.orDie` stands for the error the contract has nowhere to
- * say — a row this service cannot read is not a refusal the model is offered
- * a reason for. An append names today's note by the host's clock and revises
+ * A row is read over `SqlClient`, so the request's own client is provided
+ * into each read here, and a row this service cannot read fails the access as
+ * the tool contract's own unavailability, logged where its cause is known;
+ * the tool run answers the call as rejected, never with the failure's words.
+ * An append names today's note by the host's clock and revises
  * it in the store's one transaction: the revision declines, leaving the note
  * as it was, where the entry would grow it past the note's own bound, and the
  * refusal names that bound.
@@ -91,9 +92,8 @@ export function hostedWorkspaceAccess(
   userId: string,
   now: () => number,
 ): BrainWorkspaceAccess {
-  const run = <A>(
-    effect: Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>,
-  ): Effect.Effect<A> => Effect.orDie(Effect.provideService(effect, SqlClient.SqlClient, client));
+  const run = <A>(effect: Effect.Effect<A, StoreFailure, SqlClient.SqlClient>) =>
+    toolHostSeam(client, effect);
   return {
     read: (name) =>
       Effect.gen(function* () {

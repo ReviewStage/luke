@@ -9,6 +9,7 @@ import {
   hostedJsonResponse,
   hostedMethod,
   hostedNotFoundRoute,
+  hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import {
@@ -63,7 +64,7 @@ const voiceMint = /* @__PURE__ */ Effect.fn("voiceMint")(function* (seams: Voice
   const environment = yield* HostedEnvironment;
   const userId = yield* signedIn(seams);
   const read = yield* mintPreferences();
-  const spend = yield* Effect.orDie(seams.spend(userId));
+  const spend = yield* refusingMint(hostedStoreOrUnavailable(seams.spend(userId)));
   if (!spend.allowed) return yield* Effect.fail(quotaExhausted(spend));
   const connection = yield* mintedConnection(
     mintOptions(seams, apiKey, environment.realtimeModel, read, realtimeClientSecretRequest),

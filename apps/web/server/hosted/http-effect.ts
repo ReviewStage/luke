@@ -4,6 +4,7 @@ import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
+import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
  * The hosted response vocabulary as the schemas an `HttpApi` group declares
@@ -77,6 +78,22 @@ export const HOSTED_REFUSAL = {
   REQUEST_TOO_LARGE: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
   UNAVAILABLE: { error: HOSTED_API_ERROR.UNAVAILABLE },
 } as const satisfies Record<string, HostedRefusal>;
+
+/**
+ * A store read or write the handler cannot answer without: its failure is
+ * logged and the request is refused as unavailable, since a database the
+ * service cannot reach is an outage the caller may retry and not a defect of
+ * the route. `mapError` touches the typed channel alone, so an interruption
+ * of the request's fiber passes through untouched.
+ */
+export function hostedStoreOrUnavailable<A, R>(
+  effect: Effect.Effect<A, StoreFailure, R>,
+): Effect.Effect<A, HostedRefusal, R> {
+  return effect.pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+}
 
 /** A refusal as the response an `HttpApp` answers with outside an `HttpApi` group. */
 export function hostedRefusalResponse(

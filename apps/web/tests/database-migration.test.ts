@@ -68,7 +68,9 @@ it.effect("an unlock failure still closes the database connection", () =>
 
     const exit = yield* Effect.exit(withMigrationLock(connection, Effect.void));
 
-    assert.equal(Exit.isFailure(exit), true);
+    // The unlock is tolerated: the lock is the session's and goes with the
+    // connection, so the migration still succeeds and the connection still closes.
+    assert.equal(Exit.isSuccess(exit), true);
     assert.deepEqual(events, ["connect", "lock", "unlock", "end"]);
   }),
 );

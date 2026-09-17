@@ -26,6 +26,7 @@ import {
 } from "../hosted/brain-ask.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import type { HostedStore } from "../hosted/store/index.js";
+import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-event-stream.js";
 
 /**
@@ -252,7 +253,22 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("hostedLiveBrain")(func
         }
         yield* follow(outcome.success.id);
         return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.success.id };
-      }).pipe(Effect.provideService(SqlClient.SqlClient, sql), Effect.orDie);
+      }).pipe(
+        Effect.provideService(SqlClient.SqlClient, sql),
+        // The ask's rows could not be read or written: the refusal is the
+        // store's own standing sentence, the failure is written down where
+        // its cause is known, and the session goes on.
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() =>
+          Effect.sync(() => {
+            options.report("A spoken ask could not be written down; it is refused");
+            return {
+              outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+              refusal: HOSTED_ASK_REFUSAL_NOTE[ASK_REFUSAL.STORE],
+            };
+          }),
+        ),
+      );
     },
     onRunEvent(listener) {
       listeners.add(listener);

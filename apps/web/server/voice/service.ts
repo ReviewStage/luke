@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -474,6 +475,24 @@ export class VoiceService {
     );
   }
 
+  /**
+   * A write of the session's own rows that never holds the session up: a
+   * failure is written down by its route alone, the line `#session` writes
+   * for the same row, and an interruption is the session ending and passes.
+   */
+  #written<A, E, R>(
+    route: VoiceRoute,
+    write: Effect.Effect<A, E, R>,
+  ): Effect.Effect<void, never, R> {
+    return Effect.asVoid(
+      catchAllButInterrupt(write, () =>
+        Effect.sync(() => {
+          this.#log({ event: LOG_EVENT.SESSION_FAILED, route });
+        }),
+      ),
+    );
+  }
+
   /** Who an upgrade admits before any socket stands, or the status it is refused with. */
   #admit(request: IncomingMessage, route: VoiceRoute | undefined): UpgradeDecision {
     if (this.#upstream === undefined) {
@@ -615,12 +634,13 @@ export class VoiceService {
         onUsageUpdated:
           accountId === undefined
             ? undefined
-            : (seconds) => Effect.ignore(this.#record.noteUsage({ sessionId, seconds })),
+            : (seconds) => this.#written(route, this.#record.noteUsage({ sessionId, seconds })),
         onSessionClosed:
           accountId === undefined
             ? undefined
             : (closed) =>
-                Effect.ignore(
+                this.#written(
+                  route,
                   Effect.gen({ self: this }, function* () {
                     yield* this.#record.close({
                       sessionId,

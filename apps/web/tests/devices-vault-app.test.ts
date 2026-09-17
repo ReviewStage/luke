@@ -3,6 +3,7 @@ import path from "node:path";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
 import { Effect, Option } from "effect";
+import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import type { DevicesVaultSeams } from "../server/devices-vault-app.js";
 import type { DeviceHeartbeat, DeviceRegistration } from "../server/hosted/devices.js";
@@ -58,6 +59,13 @@ function vaultKeysRequest(method = "GET"): Request {
     headers: { authorization: "Bearer user-1" },
   });
 }
+
+const STORE_UNAVAILABLE = new SqlError({
+  reason: new UnknownError({
+    cause: new Error("the fixture's database is unreachable"),
+    message: "connection refused",
+  }),
+});
 
 interface Recorded {
   registrations: { userId: string; registration: DeviceRegistration; now: Date }[];
@@ -617,6 +625,24 @@ const EXCHANGES: readonly Exchange[] = [
     encryptionSecret: { value: undefined },
     request: () =>
       vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
+  },
+  // The store itself is unreachable: the write is refused as unavailable
+  // rather than answered as stored, and the register never mints a device.
+  {
+    name: "vault-store-unavailable",
+    seams: { storeKey: () => Effect.fail(STORE_UNAVAILABLE) },
+    request: () =>
+      vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
+  },
+  {
+    name: "register-store-unavailable",
+    seams: { registerDevice: () => Effect.fail(STORE_UNAVAILABLE) },
+    request: () =>
+      devicesRequest(
+        "POST",
+        { installationId: INSTALLATION_ID, platform: DEVICE_PLATFORM.MACOS },
+        "user-golden",
+      ),
   },
   { name: "route-not-found", request: () => new Request("https://luke.test/api/not-a-route") },
 ];

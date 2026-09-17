@@ -18,6 +18,7 @@ import {
   hostedMethod,
   hostedNotFoundRoute,
   hostedRefusalResponse,
+  hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
@@ -109,7 +110,7 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("accountDeleteEndpoint")
   yield* hostedMethod(HTTP_METHOD.POST);
   const userId = yield* resolvedUserId(seams);
   yield* forgetAnalytics(userId);
-  yield* Effect.orDie(seams.deleteUser(userId));
+  yield* hostedStoreOrUnavailable(seams.deleteUser(userId));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
 
@@ -122,7 +123,7 @@ const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("preferencesReadEndpoi
   HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
 > {
   const userId = yield* resolvedUserId(seams);
-  const row = yield* Effect.orDie(seams.readPreferences(userId));
+  const row = yield* hostedStoreOrUnavailable(seams.readPreferences(userId));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     preferences: row?.preferences ?? {},
     ...(row ? { updatedAt: row.updatedAt.getTime() } : undefined),
@@ -147,7 +148,7 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("preferencesWriteEndp
   const preferences = accountPreferencesFromWire(body.preferences);
   if (preferences === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 
-  const updatedAt = yield* Effect.orDie(seams.writePreferences(userId, preferences));
+  const updatedAt = yield* hostedStoreOrUnavailable(seams.writePreferences(userId, preferences));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     preferences,
     updatedAt: updatedAt.getTime(),

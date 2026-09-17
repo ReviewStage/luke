@@ -4,6 +4,7 @@ import type {
   ChildSpawnReceipt,
   ConversationRecord,
   SessionKey,
+  ToolHostUnavailable,
 } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
@@ -54,21 +55,26 @@ interface BrainChildSpawnAsk {
 export interface BrainChildAccess {
   /** The conversation these tools belong to, which the listing marks current. */
   readonly sessionKey: SessionKey;
-  spawn(ask: BrainChildSpawnAsk): Effect.Effect<ChildSpawnOutcome>;
+  spawn(ask: BrainChildSpawnAsk): Effect.Effect<ChildSpawnOutcome, ToolHostUnavailable>;
   /** This conversation's children, as their records stand. */
-  list(): Effect.Effect<readonly ChildRunRecord[]>;
+  list(): Effect.Effect<readonly ChildRunRecord[], ToolHostUnavailable>;
   /** Cancels one of this conversation's children; nothing for a child that is not its own. */
-  cancel(childId: string): Effect.Effect<ChildCancellation | undefined>;
-  conversations(): Effect.Effect<readonly ConversationRecord[]>;
+  cancel(childId: string): Effect.Effect<ChildCancellation | undefined, ToolHostUnavailable>;
+  conversations(): Effect.Effect<readonly ConversationRecord[], ToolHostUnavailable>;
   /** One of this conversation's children's conversation lines, most recent last; nothing for a child that is not its own. */
-  lines(childId: string, limit: number): Effect.Effect<readonly string[] | undefined>;
+  lines(
+    childId: string,
+    limit: number,
+  ): Effect.Effect<readonly string[] | undefined, ToolHostUnavailable>;
 }
 
 export interface SessionToolContext extends ToolContext {
   /** Delegation, when the host wired it; absent, every session tool refuses. */
   readonly children: BrainChildAccess | undefined;
   /** Records an effect before it runs and its result before the model reads it; the executor's journal. */
-  journal(effect: Effect.Effect<WireRecord>): Effect.Effect<WireRecord>;
+  journal(
+    effect: Effect.Effect<WireRecord, ToolHostUnavailable>,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable>;
 }
 
 export type SessionToolModule = ToolModule<WireRecord, SessionToolContext>;
@@ -204,7 +210,10 @@ const SESSIONS_SPAWN: SessionToolModule = {
     "arrives in this conversation as its own item. A child starts with a clean transcript and " +
     "knows only its task, so brief it in full.",
   inputSchema: SESSIONS_SPAWN_INPUT,
-  execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
+  execute(
+    input: WireRecord,
+    context: SessionToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.suspend(() => {
       const children = context.children;
       if (!children) return Effect.succeed(rejection(REFUSAL_REASON.NO_CHILDREN));
@@ -231,7 +240,10 @@ const SUBAGENTS: SessionToolModule = {
     "it was accepted and settled, and why a failed one failed — or cancel one by id. Check status only when " +
     "debugging; completions arrive on their own.",
   inputSchema: SUBAGENTS_INPUT,
-  execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
+  execute(
+    input: WireRecord,
+    context: SessionToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.gen(function* () {
       const children = context.children;
       if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
@@ -260,7 +272,10 @@ const SESSIONS_LIST: SessionToolModule = {
     "conversations — by key, kind, name, and last activity. These " +
     "are your own conversations, not the coding agents the roster lists.",
   inputSchema: SESSIONS_LIST_INPUT,
-  execute(_input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
+  execute(
+    _input: WireRecord,
+    context: SessionToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.gen(function* () {
       const children = context.children;
       if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);
@@ -277,7 +292,10 @@ const SESSIONS_HISTORY: SessionToolModule = {
     "Read the recent history of one child this conversation asked for, most recent last, " +
     `bounded to ${maximumSessionsConversationLines} lines. Only a child of this conversation answers.`,
   inputSchema: SESSIONS_HISTORY_INPUT,
-  execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
+  execute(
+    input: WireRecord,
+    context: SessionToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.gen(function* () {
       const children = context.children;
       if (!children) return rejection(REFUSAL_REASON.NO_CHILDREN);

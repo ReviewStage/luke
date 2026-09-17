@@ -1,3 +1,4 @@
+import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
 import { and, eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -37,9 +38,11 @@ interface TranscriptReadSeams {
   readonly client: SqlClient.SqlClient;
   readonly userId: string;
   /** The roster as the snapshot holds it now, read again for every read. */
-  readonly roster: () => Effect.Effect<HostedRoster>;
-  /** The provider's plugin over the account's own key, built once per provider per host. */
-  readonly pluginFor: (providerId: CloudAgentProviderId) => Effect.Effect<SessionProviderPlugin>;
+  readonly roster: () => Effect.Effect<HostedRoster, ToolHostUnavailable>;
+  /** The provider's plugin over the account's own key, built once per provider per host; unbuilt where the key could not be read. */
+  readonly pluginFor: (
+    providerId: CloudAgentProviderId,
+  ) => Effect.Effect<SessionProviderPlugin, ToolHostUnavailable>;
   readonly now: () => number;
 }
 
@@ -60,17 +63,20 @@ export interface TranscriptDeltaReading {
 }
 
 export interface HostedTranscriptReads {
-  /** The whole tail, as the tool answers it: the provider's result, whatever its status; the tool has nowhere to say a failure, so a row it cannot read dies. */
-  whole(identity: SessionIdentity): Effect.Effect<WireRecord>;
+  /** The whole tail, as the tool answers it: the provider's result, whatever its status; a row it cannot read fails as the tool contract's own unavailability. */
+  whole(identity: SessionIdentity): Effect.Effect<WireRecord, ToolHostUnavailable>;
   /** What the session gained since the cursor kept for it; nothing for a session no observation turn reads. Keeps no bookmark. */
   since(
     identity: SessionIdentity,
-  ): Effect.Effect<TranscriptDeltaReading | undefined, SqlError | Schema.SchemaError>;
+  ): Effect.Effect<
+    TranscriptDeltaReading | undefined,
+    SqlError | Schema.SchemaError | ToolHostUnavailable
+  >;
   /** Which of the roster's chats under the provider gained transcript since the instant, as the provider answers it; no words. */
   changedSince(
     providerId: CloudAgentProviderId,
     since: number | undefined,
-  ): Effect.Effect<ProviderTranscriptChangesResult>;
+  ): Effect.Effect<ProviderTranscriptChangesResult, ToolHostUnavailable>;
 }
 
 /**
