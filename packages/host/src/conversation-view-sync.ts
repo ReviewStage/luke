@@ -57,15 +57,13 @@ import { Result } from "effect";
  */
 
 /**
- * How much of the Conversation one device keeps in memory and hands its
- * windows: the newest turns, whole. A device reads the thread from its tail
- * and pages back through its history only as far as its reader looks, so the
- * bound is on what has been looked at rather than on what the account holds;
- * a picture that reaches it lets its oldest groups go and pages back no
- * further, since a page read past a group let go of would leave a hole.
+ * How many turns one device keeps in memory and hands its windows on every
+ * publish. History pages in from the service as the reader scrolls, so this
+ * bounds payload rather than reach; a picture that reaches it lets its oldest
+ * groups go and pages back no further.
  */
 export const CONVERSATION_VIEW_BOUNDS = {
-  MAX_GROUPS: 1000,
+  MAX_GROUPS: 400,
 } as const;
 
 /** Where this device's read of each resource stands; absent before the first page of that resource. */
