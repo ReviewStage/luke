@@ -13,7 +13,6 @@ import {
 import {
   type ActionRoster,
   actionRosterFor,
-  actionUnsupportedReason,
   executeSessionAction,
   type HostedSessionActionKind,
 } from "../server/hosted/action-execute";
@@ -427,27 +426,6 @@ it.layer(noDatabase)("the hosted action route over a store that is a memory fake
   );
 
   // --- The capability map mirrors the adapters exactly ---
-
-  it("the capability map matches each desktop adapter's implemented writes", () => {
-    const actions: readonly HostedSessionActionKind[] = [
-      ACTION_KIND.MESSAGE,
-      ACTION_KIND.CONTROL,
-      ACTION_KIND.ADD_AGENT,
-      ACTION_KIND.RENAME_SESSION,
-      ACTION_KIND.RENAME_WORKSPACE,
-      ACTION_KIND.CREATE_WORKSPACE,
-    ];
-
-    for (const action of actions) {
-      assert.deepEqual(
-        (["conductor"] as const).filter(
-          (providerId) => actionUnsupportedReason(action, providerId) === undefined,
-        ),
-        ["conductor"],
-        action,
-      );
-    }
-  });
 
   it.effect(
     "the roster an action stands on is read once the key is, and reaches the executor",

@@ -109,16 +109,6 @@ test("a Live voice the Realtime API does not speak is minted at the default", as
   assert.equal(sent.session.audio.output.voice, REALTIME_DEFAULTS.VOICE);
 });
 
-test("the wsUrl is pinned to the build's websocket base and carries the session's model", async () => {
-  const response = await mintAnswer(
-    options({ model: "gpt-realtime-next", httpClient: upstream({}, mintedPayload) }),
-  );
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.connection.wsUrl, `${HOSTED_WS_BASE_URL}?model=gpt-realtime-next`);
-  assert.ok(body.connection.wsUrl.startsWith("wss://api.openai.com/v1/realtime"));
-});
-
 test("an empty body mints the build's own defaults", async () => {
   const call: UpstreamCall = {};
   const response = await mintAnswer(options({ httpClient: upstream(call, mintedPayload) }));

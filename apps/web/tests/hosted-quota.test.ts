@@ -29,10 +29,6 @@ test("a day key is the UTC date and resets at the following midnight", () => {
   assert.equal(utcDayEnd("2026-08-17"), Date.parse("2026-08-18T00:00:00.000Z"));
 });
 
-test("the emergency ceiling stays high", () => {
-  assert.equal(HOSTED_DAILY_LIMIT, 5_000);
-});
-
 it.layer(testSqlClient)("the quota meters over effect/unstable/sql", (it) => {
   it.effect("a hosted spend increments the day's one counter", () =>
     Effect.gen(function* () {

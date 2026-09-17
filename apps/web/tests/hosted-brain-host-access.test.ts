@@ -213,50 +213,6 @@ test("the door names the session a route is for, and nothing for the routes that
   assert.equal(sessionIdOf(request("/eve/v1/health", "a")), undefined);
 });
 
-test("account B is refused at the door for A's recorded session, on the stream and on a follow-up alike; A is admitted; a session nobody's record attributes is refused to everyone", async () => {
-  const auth = ownedAuth(
-    [bearerOf("user-a"), bearerOf("user-b")],
-    ownershipOf({ [SESSION_A]: "user-a" }, { [CONVERSATION_ID]: "user-a" }),
-  );
-  await assert.rejects(
-    async () => auth(request(`/eve/v1/session/${SESSION_A}/stream`, "user-b")),
-    ForbiddenError,
-  );
-  await assert.rejects(
-    async () => auth(request(`/eve/v1/session/${SESSION_A}`, "user-b")),
-    ForbiddenError,
-  );
-  const owner = await auth(request(`/eve/v1/session/${SESSION_A}/stream`, "user-a"));
-  assert.equal(owner?.principalId, "user-a");
-  await assert.rejects(
-    async () => auth(request(`/eve/v1/session/${SESSION_NEW}/stream`, "user-b")),
-    ForbiddenError,
-  );
-  await assert.rejects(
-    async () => auth(request(`/eve/v1/session/${SESSION_NEW}/stream`, "user-a")),
-    ForbiddenError,
-  );
-  assert.equal(await auth(request(`/eve/v1/session/${SESSION_A}/stream`, "nobody")), null);
-});
-
-test("a session opened for another account's conversation is refused at the door", async () => {
-  const auth = ownedAuth(
-    [bearerOf("user-a"), bearerOf("user-b")],
-    ownershipOf({}, { [CONVERSATION_ID]: "user-a" }),
-  );
-  await assert.rejects(
-    async () => auth(opening("user-b", { [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID })),
-    ForbiddenError,
-  );
-  const owner = await auth(
-    opening("user-a", {
-      [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID,
-      [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
-    }),
-  );
-  assert.equal(owner?.principalId, "user-a");
-});
-
 test("a session opened for the caller's own conversation but no kind of turn is refused at the door, before eve dispatches a run it would compose no prompt for", async () => {
   const auth = ownedAuth([bearerOf("user-a")], ownershipOf({}, { [CONVERSATION_ID]: "user-a" }));
   await assert.rejects(

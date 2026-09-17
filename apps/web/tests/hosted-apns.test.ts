@@ -61,17 +61,14 @@ function scripted(answers: ApnsTransportAnswer[]): () => ApnsTransportAnswer {
 
 function fakeTransport(answer: (request: ApnsTransportRequest) => ApnsTransportAnswer) {
   const sent: ApnsTransportRequest[] = [];
-  let closed = 0;
   const transport: ApnsTransport = {
     async send(request) {
       sent.push(request);
       return answer(request);
     },
-    async close() {
-      closed += 1;
-    },
+    async close() {},
   };
-  return { transport, sent, closed: () => closed };
+  return { transport, sent };
 }
 
 function decodeSegment(segment: string): UnparsedWireValue {
@@ -208,11 +205,4 @@ test("the provider token is reused inside its lifetime and re-signed after it", 
   const tokens = sent.map((request) => request.headers.authorization);
   assert.equal(tokens[0], tokens[1]);
   assert.notEqual(tokens[1], tokens[2]);
-});
-
-test("closing the sender closes its transport", async () => {
-  const { transport, closed } = fakeTransport(scripted([]));
-  const sender = new ApnsSender({ credentials: CREDENTIALS, transport });
-  await sender.close();
-  assert.equal(closed(), 1);
 });

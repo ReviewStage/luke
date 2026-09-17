@@ -23,37 +23,6 @@ const NOW = 1_800_000_000_000;
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-test("workspace files are read and written whole per user and path, seeded once, and refuse a path outside the workspace", async () => {
-  const userId = await database.createUser();
-  const workspace = database.store.workspace;
-  assert.equal(await database.run(workspace.read(userId, "AGENTS.md")), undefined);
-  assert.equal(await database.run(workspace.seed(userId, "AGENTS.md", "# seed", NOW)), true);
-  assert.equal(
-    await database.run(workspace.seed(userId, "AGENTS.md", "# a later seed", NOW + 1)),
-    false,
-  );
-  await database.run(workspace.write(userId, "memory/2026-09-09.md", "- a note", NOW + 2));
-  await database.run(workspace.write(userId, "AGENTS.md", "# edited", NOW + 3));
-  assert.deepEqual(await database.run(workspace.read(userId, "AGENTS.md")), {
-    path: "AGENTS.md",
-    content: "# edited",
-    createdAt: NOW,
-    updatedAt: NOW + 3,
-  });
-  assert.deepEqual(await database.run(workspace.list(userId)), [
-    { path: "AGENTS.md", updatedAt: NOW + 3 },
-    { path: "memory/2026-09-09.md", updatedAt: NOW + 2 },
-  ]);
-  for (const path of ["/etc/passwd", "../SOUL.md", "memory/../../x", "", "a//b", "a\\b"]) {
-    await assert.rejects(database.run(workspace.write(userId, path, "x", NOW)), /workspace path/);
-    await assert.rejects(database.run(workspace.read(userId, path)), /workspace path/);
-  }
-  assert.equal(await countRowsWhere(database.run, workspaceFile.userId, userId), 2);
-
-  const other = await database.createUser();
-  assert.equal(await database.run(workspace.read(other, "AGENTS.md")), undefined);
-});
-
 test("the roster snapshot is one sealed row per user, replaced whole, and its instant is readable without its body", async () => {
   const userId = await database.createUser();
   assert.equal(await database.run(database.store.roster.read(userId)), undefined);

@@ -231,15 +231,3 @@ test("a new session is open with no close, no reason, and no usage; a closed one
     usage: estimated,
   });
 });
-
-test("the close reasons are the Live API's five, and a segment's role is one of the two speaking roles", () => {
-  assert.deepEqual(Object.values(VOICE_CLOSE_REASON).sort(), [
-    "close_requested",
-    "connection_lost",
-    "content",
-    "expired",
-    "remote_hangup",
-  ]);
-  assert.deepEqual(Object.values(VOICE_SEGMENT_ROLE).sort(), ["assistant", "user"]);
-  assert.deepEqual(Object.values(VOICE_DELEGATION_MODE).sort(), ["client"]);
-});

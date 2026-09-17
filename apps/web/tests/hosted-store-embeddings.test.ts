@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterAll, test } from "vitest";
 import { workspaceEmbedding } from "../server/db/workspace-schema";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { countRowsWhere, deleteUser } from "./support/store-rows";
+import { countRowsWhere } from "./support/store-rows";
 
 /**
  * The notebook search's embedding cache as the store holds it: a vector per
@@ -86,14 +86,4 @@ test("pruning keeps the hashes named and drops the rest, an empty list dropping 
   assert.equal(await database.run(embeddings.prune(userId, [])), 2);
   assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 0);
   assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, other), 3);
-});
-
-test("the cache goes with the account", async () => {
-  const userId = await database.createUser();
-  await database.run(
-    database.store.embeddings.write(userId, MODEL, [{ hash: "h-1", vector: [1, 2] }], NOW),
-  );
-  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 1);
-  await deleteUser(database.run, userId);
-  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 0);
 });

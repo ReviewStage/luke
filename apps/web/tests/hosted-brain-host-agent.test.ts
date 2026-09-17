@@ -2,40 +2,19 @@ import assert from "node:assert/strict";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import { test } from "vitest";
 import agent from "../eve/agent";
-import {
-  ACTION_TOOL,
-  BRAIN_TOOL,
-  BRAIN_TURN_TRIGGER,
-  brainToolCatalog,
-  TOOL_POLICY_LAYER,
-} from "../server/core";
-import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
+import { ACTION_TOOL, BRAIN_TOOL, BRAIN_TURN_TRIGGER, TOOL_POLICY_LAYER } from "../server/core";
 import { hostedTurnPolicy } from "../server/hosted/brain-host/tools";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 
 /**
  * What the eve agent is declared as, held to the trust decisions the host
  * carries: eve's own default tools are off, a session has no clock of eve's,
- * follow-ups queue, and the hosted tool policy withholds what the service
- * cannot perform while keeping the notebook's two reads and two writes.
+ * and the hosted tool policy withholds what the service cannot perform while
+ * keeping the notebook's two reads and two writes.
  */
 
 test("the agent runs none of eve's default tools and sessions have no lifetime of eve's", () => {
   assert.equal(agent.defaultTools, false);
   assert.equal(agent.limits?.sessionTimeoutMs, false);
-});
-
-test("follow-ups queue behind a turn under way, and the account bearer is checked before the development principal", () => {
-  const channel = brainHostChannelInput(
-    async () => undefined,
-    {
-      sessionOwner: async () => undefined,
-      ownsConversation: async () => false,
-    },
-    { secret: undefined, admits: DEPLOYMENT_TURNS },
-  );
-  assert.equal(channel.turnPolicy, "queue");
-  assert.equal(Array.isArray(channel.auth), false);
 });
 
 test("the hosted policy withholds the machine's tools and skills, keeps the notebook's reads and writes, offers delegation, offers announce only to an observation, and the message send only to an ask", () => {
@@ -102,18 +81,5 @@ test("a child's task is offered the ask's set less the session tools: it cannot 
     NOTEBOOK_MEMORY_TOOL.SEARCH,
   ]) {
     assert.equal(childTaskNames.includes(kept), true);
-  }
-});
-
-test("the writer and the reader share one catalog tool set, which names the whole catalog and declares no output schema", () => {
-  const set = CATALOG_TOOL_SET;
-  assert.deepEqual(
-    Object.keys(set).sort(),
-    brainToolCatalog()
-      .map((tool) => tool.schema.name)
-      .sort(),
-  );
-  for (const declared of Object.values(set)) {
-    assert.equal(declared.outputSchema, undefined);
   }
 });

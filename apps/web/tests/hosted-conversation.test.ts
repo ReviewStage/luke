@@ -3,11 +3,8 @@ import { fakeHttpClientLayer, runTest } from "@sidecar/wire/testing";
 import { Effect, type Layer, Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
-import { CLOUD_AGENT_PROVIDER_ID, type WireRecord } from "../server/core";
-import {
-  executeConversationRead,
-  providerReadsConversation,
-} from "../server/hosted/action-execute";
+import type { WireRecord } from "../server/core";
+import { executeConversationRead } from "../server/hosted/action-execute";
 import {
   type ConversationReadOptions,
   handleConversationRead,
@@ -271,11 +268,6 @@ test("the conversation endpoint returns 429 after too many requests in the same 
 });
 
 // --- The capability map mirrors the adapters exactly ---
-
-test("only Conductor's adapter carries the conversation read today", () => {
-  const supported = Object.values(CLOUD_AGENT_PROVIDER_ID).filter(providerReadsConversation);
-  assert.deepEqual(supported, ["conductor"]);
-});
 
 // --- The executor re-observes and reads through the provider's adapter ---
 

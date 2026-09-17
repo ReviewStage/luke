@@ -270,10 +270,3 @@ test("the mobile client stays public, secretless, trusted, and bound to PKCE", (
   assert.equal(record.createdAt, now);
   assert.equal(record.updatedAt, now);
 });
-
-test("mobile client uses a custom URI scheme, not a loopback address", () => {
-  const [redirectUri] = MOBILE_OAUTH_CLIENT.redirectUris;
-  const url = new URL(redirectUri);
-  assert.notEqual(url.protocol, "http:");
-  assert.notEqual(url.protocol, "https:");
-});

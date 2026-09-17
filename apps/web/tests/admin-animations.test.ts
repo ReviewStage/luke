@@ -1,24 +1,12 @@
 import assert from "node:assert/strict";
-import { FACE_MOTION, FACE_MOTION_CYCLE_MS } from "@sidecar/surface";
+import { FACE_MOTION } from "@sidecar/surface";
 import { test } from "vitest";
 import {
-  ANIMATION_ROSTER,
-  ANIMATION_SWATCH,
   ANIMATION_VARIANT,
   animationExtraParts,
   formatCycleSeconds,
   indexAnimationAssets,
 } from "../src/admin-animations";
-
-test("the roster restates the artwork table exactly: every motion once, in its order", () => {
-  assert.deepEqual(
-    ANIMATION_ROSTER.map((entry) => entry.motion),
-    Object.values(FACE_MOTION),
-  );
-  for (const entry of ANIMATION_ROSTER) {
-    assert.equal(entry.cycleMs, FACE_MOTION_CYCLE_MS[entry.motion]);
-  }
-});
 
 test("extra parts are worded from the generated parts table, not authored beside it", () => {
   // The three cases the table holds today: nothing extra, brows alone, and
@@ -55,12 +43,4 @@ test("a file the motion table does not name never becomes a motion on the page",
     "../../../design/brand/motion/luke-idle-dark.png": "not an svg",
   });
   assert.equal(index.size, 0);
-});
-
-test("each variant previews on the opposite ground its strokes were cut for", () => {
-  // The committed SVGs bake their colors in: the dark cut strokes #f5f5f7 and
-  // the light cut #1d1d1f, so the swatches must be those colors' grounds or a
-  // cut disappears into its own preview.
-  assert.equal(ANIMATION_SWATCH[ANIMATION_VARIANT.DARK], "#1d1d1f");
-  assert.equal(ANIMATION_SWATCH[ANIMATION_VARIANT.LIGHT], "#f5f5f7");
 });

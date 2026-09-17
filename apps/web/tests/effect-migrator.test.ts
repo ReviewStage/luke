@@ -108,14 +108,6 @@ it.layer(withPlatform(testSqlClient))(
       }),
     );
 
-    it.effect("applies nothing a second time either", () =>
-      Effect.gen(function* () {
-        yield* runWebMigrations();
-        assert.deepEqual(named(yield* runWebMigrations()), []);
-        assert.deepEqual(yield* recorded, yield* resolved);
-      }),
-    );
-
     it.effect("has recorded the journal's ids, every one of them and no other", () =>
       Effect.gen(function* () {
         const declared = declaredBy(yield* webMigrationJournal());

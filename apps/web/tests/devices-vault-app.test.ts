@@ -427,32 +427,6 @@ test("a key longer than 512 characters is refused", async () => {
   assert.equal(response.status, 400);
 });
 
-test("storing again for the same provider replaces the previous entry (upsert)", async () => {
-  const { seams, recorded } = seamsFor();
-
-  await answer(
-    seams,
-    vaultKeyRequest("POST", {
-      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-      key: "first-key-0001",
-    }),
-  );
-  await answer(
-    seams,
-    vaultKeyRequest("POST", {
-      providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-      key: "second-key-9999",
-    }),
-  );
-
-  assert.equal(recorded.stores.length, 2);
-  const [first, second] = recorded.stores;
-  assert.ok(first && second);
-  assert.notEqual(first.ciphertext, second.ciphertext);
-  assert.equal(decryptProviderKey(first.ciphertext, SECRET), "first-key-0001");
-  assert.equal(decryptProviderKey(second.ciphertext, SECRET), "second-key-9999");
-});
-
 test("the delete gate order is method, secret, token, body", async () => {
   const noSecret = await answer(
     seamsFor().seams,

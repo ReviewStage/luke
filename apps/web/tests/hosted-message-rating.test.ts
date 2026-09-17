@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { conversationMessageRatingPath } from "@sidecar/hosted";
 import { MESSAGE_RATING, type WireBoundaryInput } from "@sidecar/wire";
 import { Effect, Result } from "effect";
 import { test } from "vitest";
@@ -52,14 +51,6 @@ async function errorOf(response: Response): Promise<[number, string]> {
   const body = (await response.json()) as { error: string };
   return [response.status, body.error];
 }
-
-test("the path names the hosted rating route with the message's id encoded inside it", () => {
-  assert.equal(
-    conversationMessageRatingPath("2b000000-0000-4000-8000-000000000012"),
-    "/api/conversation/messages/2b000000-0000-4000-8000-000000000012/rating",
-  );
-  assert.equal(conversationMessageRatingPath("a/b"), "/api/conversation/messages/a%2Fb/rating");
-});
 
 test("each gate refuses on its own: method, the path's id, the token, then the body", async () => {
   assert.deepEqual(

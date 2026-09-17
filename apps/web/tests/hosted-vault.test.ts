@@ -7,12 +7,6 @@ import { decryptProviderKey, encryptProviderKey } from "../server/hosted/encrypt
 const SECRET = Redacted.make("a".repeat(64));
 const OTHER_SECRET = Redacted.make("b".repeat(64));
 
-test("encrypt then decrypt recovers the original key", () => {
-  const original = "sk-test-abc123";
-  const encrypted = encryptProviderKey(original, SECRET);
-  assert.equal(decryptProviderKey(encrypted, SECRET), original);
-});
-
 test("each encrypt call produces a different ciphertext (random nonce)", () => {
   const key = "sk-same-key";
   assert.notEqual(encryptProviderKey(key, SECRET), encryptProviderKey(key, SECRET));

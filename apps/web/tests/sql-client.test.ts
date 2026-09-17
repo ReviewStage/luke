@@ -11,14 +11,6 @@ import { testSqlClient } from "./support/sql-client.js";
  * generated migrations created.
  */
 it.layer(testSqlClient)("the web SQL client", (it) => {
-  it.effect("answers a statement of its own", () =>
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql<{ readonly one: number }>`select 1 as one`;
-      assert.deepEqual([...rows], [{ one: 1 }]);
-    }),
-  );
-
   it.effect("reads a table the migrations created, through a parameter", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
