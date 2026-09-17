@@ -472,14 +472,16 @@ fi
 # clock an `it.effect` test drives, and a plain vitest test's own wait is a
 # package-owned helper beside the suite that needs it, never a shared runtime
 # export.
-temporary_directory_holdouts=$(node -e '
-  const edges = require(process.argv[1]);
-  for (const one of edges.temporaryDirectoryHoldouts ?? []) console.log(`${process.argv[2]}/${one}:`);
-' "$SIDECAR_REPO_ROOT/tools/oxlint/testing/test-edges.json" "$SIDECAR_REPO_ROOT")
 hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' --include='*.test.mts' \
     --exclude-dir=node_modules 'mkdtemp' \
     "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" |
-    grep -vFf <(printf '%s\n' "$temporary_directory_holdouts") || true)
+    node -e '
+      // Held-out files are dropped by whole path, as a set rather than a
+      // grep pattern file: an empty list is an empty set and drops nothing.
+      const held = new Set((require(process.argv[1]).temporaryDirectoryHoldouts ?? []).map((one) => `${process.argv[2]}/${one}`));
+      const lines = require("node:fs").readFileSync(0, "utf8").split("\n").filter((line) => line !== "");
+      process.stdout.write(lines.filter((line) => !held.has(line.slice(0, line.indexOf(":")))).join("\n"));
+    ' "$SIDECAR_REPO_ROOT/tools/oxlint/testing/test-edges.json" "$SIDECAR_REPO_ROOT" || true)
 if [[ -n "$hand_rolled_fixtures" ]]; then
     printf 'error: test files import temporaryDirectory from @sidecar/runtime/testing rather than hand-rolling it:\n%s\n' \
         "$hand_rolled_fixtures" >&2
