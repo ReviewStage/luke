@@ -364,7 +364,11 @@ test("a created workspace keeps the created session identity in its action envel
 });
 
 test("the carrier hands the stored agent pairing to a creation and a spawn, and to nothing else", async () => {
-  const executed: { kind: string; agentSelection?: WorkspaceAgentSelection }[] = [];
+  const executed: {
+    kind: string;
+    fields: WireRecord;
+    agentSelection?: WorkspaceAgentSelection;
+  }[] = [];
   const roster = () =>
     Effect.succeed(
       hostedRosterFrom(
@@ -397,6 +401,7 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
       Effect.sync(() => {
         executed.push({
           kind: input.kind,
+          fields: input.fields,
           ...(input.agentSelection === undefined
             ? undefined
             : { agentSelection: input.agentSelection }),
@@ -424,10 +429,16 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
     now: () => NOW,
   };
 
+  // The call names a model, an effort, and an agent of its own, as the
+  // production record showed the brain doing on every creation. None is a
+  // field the tool declares, so none reaches admission or the execution.
   const created = await call(seams, ASK, ACTION_TOOL.CREATE_WORKSPACE, {
     provider_id: "conductor",
     project_id: "project-1",
     name: "Checkout",
+    agent: "codex",
+    model: "gpt-5.6-terra",
+    effort: "high",
   });
   assert.equal(created.status, ACTION_OUTPUT_STATUS.ACCEPTED);
   const messaged = await call(seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
@@ -437,11 +448,18 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
   });
   assert.equal(messaged.status, ACTION_OUTPUT_STATUS.ACCEPTED);
 
-  // The pairing is read for the creation alone; the execution decides whether
-  // it rides, since a model the ask named outranks it there.
+  // The pairing is read for the creation alone and rides it, since the fields
+  // the execution admits again carry no model to outrank it.
   assert.deepEqual(executed, [
-    { kind: ACTION_KIND.CREATE_WORKSPACE, agentSelection: stored },
-    { kind: ACTION_KIND.MESSAGE },
+    {
+      kind: ACTION_KIND.CREATE_WORKSPACE,
+      fields: { provider_id: "conductor", project_id: "project-1", name: "Checkout" },
+      agentSelection: stored,
+    },
+    {
+      kind: ACTION_KIND.MESSAGE,
+      fields: { provider_id: "conductor", provider_session_id: SESSION_UUID, text: "hello" },
+    },
   ]);
 });
 

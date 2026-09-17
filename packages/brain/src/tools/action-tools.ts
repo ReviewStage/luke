@@ -6,6 +6,7 @@ import {
   type ActionOutputEnvelope,
   type AdmitContext,
   admitEffect,
+  declaredFields,
   refusedActionOutput,
   type ToolSpec,
   type ValidatedAction,
@@ -36,8 +37,12 @@ export type ActionAdmissionReads = Omit<AdmitContext, "origin" | "guard">;
 
 export interface ActionToolContext extends ToolContext {
   readonly admission: ActionAdmissionReads;
-  /** Carries an action admission minted, and nothing else has the type to be carried. */
-  carry(action: ValidatedAction): Effect.Effect<ActionOutputEnvelope>;
+  /**
+   * Carries an action admission minted, and nothing else has the type to be
+   * carried, with the call's fields as the tool declared them, for a host
+   * whose execution admits the action once more.
+   */
+  carry(action: ValidatedAction, fields: WireRecord): Effect.Effect<ActionOutputEnvelope>;
 }
 
 export interface ActionToolModule extends ToolModule<ActionOutputEnvelope, ActionToolContext> {
@@ -55,9 +60,13 @@ function defineActionTool(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolM
     execute(input: WireRecord, context: ActionToolContext): Effect.Effect<ActionOutputEnvelope> {
       return Effect.gen(function* () {
         if (context.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER);
+        // Only the fields the tool declared reach admission: a key the model
+        // added of its own is dropped here, so a creation carries no model
+        // however the call was written.
+        const fields = declaredFields(spec, input);
         const admitted = yield* Effect.result(
           admitEffect(
-            { kind: spec.kind, fields: input },
+            { kind: spec.kind, fields },
             { ...context.admission, origin: context.origin, guard: context },
           ),
         );
@@ -65,7 +74,7 @@ function defineActionTool(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolM
         // Asked once more after admission's own reads, so an action whose turn
         // ended while the roster was refreshing is refused rather than carried.
         if (context.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER);
-        return yield* context.carry(admitted.success);
+        return yield* context.carry(admitted.success, fields);
       });
     },
   };

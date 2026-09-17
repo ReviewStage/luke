@@ -83,10 +83,6 @@ const createWorkspace = Schema.Struct({
     "The target ID of the host, exactly as the projects list gives it, and only for a " +
       "project whose line carries a target_id; a project listed without one takes none.",
   ),
-  agent: optionalText(
-    "The agent kind, only when the developer named one for this workspace; omit it " +
-      "otherwise, so the developer's saved default decides.",
-  ),
   name: optionalText(
     "The workspace's name: the developer's own when they chose one, otherwise a short, " +
       "specific name composed from what the workspace is for, in a few words with no " +
@@ -95,14 +91,6 @@ const createWorkspace = Schema.Struct({
     MAXIMUM_WORKSPACE_NAME_LENGTH,
   ),
   task: optionalText("An optional opening task.", MAXIMUM_SESSION_MESSAGE_LENGTH),
-  model: optionalText(
-    "The model, only when the developer named one for this agent, by the name they said; " +
-      "omit it otherwise, so the developer's saved default decides, and never supply a guess.",
-  ),
-  effort: optionalText(
-    "The effort level, only when the developer named one beside a model they named; omit " +
-      "it otherwise, so the developer's saved default decides.",
-  ),
 });
 
 const ACTION_GOLDENS = [

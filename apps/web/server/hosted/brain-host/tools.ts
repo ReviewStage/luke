@@ -242,7 +242,7 @@ function runOf(
           return yield* named.module.execute(fields, {
             ...standing,
             admission,
-            carry: (action) => seams.carrier.carry(action, fields, standing),
+            carry: (action, declared) => seams.carrier.carry(action, declared, standing),
           });
         });
     case "read":

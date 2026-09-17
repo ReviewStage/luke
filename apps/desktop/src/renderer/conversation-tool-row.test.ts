@@ -376,7 +376,7 @@ test("a control's kind and label come from the envelope, never from the call", (
 });
 
 test("a creation's chip is the session its answer named, by the roster once it holds it", () => {
-  const input = { provider_id: PROVIDER, name: FIXTURE_TITLE.CREATED, agent: AGENT };
+  const input = { provider_id: PROVIDER, name: FIXTURE_TITLE.CREATED };
   const landed = toolRow(
     part(
       "create_workspace",
@@ -406,12 +406,13 @@ test("a creation's chip is the session its answer named, by the roster once it h
   );
   assert.deepEqual(chipOf(unlanded), {
     text: FIXTURE_TITLE.CREATED,
-    markId: AGENT,
+    markId: PROVIDER,
     openable: false,
   });
 
   // The answer named a session the roster does not hold, and the call named nothing: the chip
-  // is still the session, opened by identity, under the agent the call asked for.
+  // is still the session, opened by identity, under the provider's mark. A row stored when the
+  // call still declared an agent reads the same, since the key is outside the declaration now.
   const departed = toolRow(
     part(
       "create_workspace",
@@ -426,7 +427,7 @@ test("a creation's chip is the session its answer named, by the roster once it h
   );
   assert.deepEqual(chipOf(departed), {
     text: UNNAMED_SESSION,
-    markId: AGENT,
+    markId: PROVIDER,
     identity: { providerId: PROVIDER, providerSessionId: "created-then-archived" },
     openable: false,
   });
