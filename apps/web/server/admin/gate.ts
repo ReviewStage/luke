@@ -1,3 +1,4 @@
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { Cause, Effect } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
@@ -43,11 +44,13 @@ export function adminViewerGate(options: {
       return yield* refuse(ADMIN_REFUSAL.METHOD_NOT_ALLOWED);
     }
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const viewer = yield* options.resolveViewer(request).pipe(
-      Effect.tapCause((cause) =>
+    // A request the client dropped or the function's deadline ended is no
+    // outage: an interruption passes through, logged and answered as nothing.
+    const viewer = yield* catchAllButInterrupt(options.resolveViewer(request), (cause) =>
+      Effect.andThen(
         Effect.sync(() => console.error("admin viewer resolution failed", Cause.squash(cause))),
+        Effect.fail(adminRefusalResponse(ADMIN_REFUSAL.UNAVAILABLE)),
       ),
-      Effect.catchCause(() => Effect.fail(adminRefusalResponse(ADMIN_REFUSAL.UNAVAILABLE))),
     );
     if (!viewer) return yield* refuse(ADMIN_REFUSAL.NOT_SIGNED_IN);
     if (!isAdminRole(viewer.role)) return yield* refuse(ADMIN_REFUSAL.NOT_AUTHORIZED);

@@ -13,8 +13,9 @@ import {
 } from "@sidecar/session";
 import { Effect, Predicate } from "effect";
 import { type AdapterFailure, tolerateItemFailureEffect } from "../shared/adapter-failure.js";
-import type { CloudRequest } from "../shared/cloud-wire.js";
 import {
+  CLOUD_ADAPTER_DEFAULTS,
+  type CloudRequest,
   knownValue,
   recordsFromPage,
   repositoryLabel,
@@ -116,7 +117,7 @@ export const conductorObservations = /* @__PURE__ */ Effect.fn("conductorObserva
           tolerateItemFailureEffect(workspaceLifecycle(request, workspace.id)),
           (lifecycle) => (lifecycle ? ([workspace.id, lifecycle] as const) : undefined),
         ),
-      { concurrency: "unbounded" },
+      { concurrency: CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY },
     )).filter(Predicate.isNotUndefined),
   );
   const openWorkspaces = workspaces.filter((workspace) => {
@@ -127,7 +128,7 @@ export const conductorObservations = /* @__PURE__ */ Effect.fn("conductorObserva
   const sessions = (yield* Effect.forEach(
     openWorkspaces,
     (workspace) => tolerateItemFailureEffect(listSessions(request, workspace)),
-    { concurrency: "unbounded" },
+    { concurrency: CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY },
   ))
     .filter(Predicate.isNotUndefined)
     .flat();
@@ -145,7 +146,7 @@ export const conductorObservations = /* @__PURE__ */ Effect.fn("conductorObserva
       Effect.forEach(
         sessions,
         (session) => tolerateItemFailureEffect(sessionStatus(request, session.id)),
-        { concurrency: "unbounded" },
+        { concurrency: CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY },
       ),
     ],
     { concurrency: "unbounded" },

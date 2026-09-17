@@ -119,21 +119,23 @@ const messageOf = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
 /**
- * Gathering, under its bound: the loser of the race is interrupted, and the
- * handler is cleared whichever won, since the connection outlives this wait.
+ * Gathering, under its bound: a wait the deadline reaches first is
+ * interrupted, and the handler is cleared either way, since the connection
+ * outlives this wait.
  */
 const gatherIce = (connection: LivePeerConnection): Effect.Effect<void> =>
   connection.iceGatheringState === ICE_GATHERING_COMPLETE
     ? Effect.void
-    : Effect.race(
+    : Effect.timeoutOption(
         Effect.callback<void>((resume) => {
           connection.onicegatheringstatechange = () => {
             if (connection.iceGatheringState !== ICE_GATHERING_COMPLETE) return;
             resume(Effect.void);
           };
         }),
-        Effect.sleep(Duration.millis(ICE_GATHERING_TIMEOUT_MS)),
+        Duration.millis(ICE_GATHERING_TIMEOUT_MS),
       ).pipe(
+        Effect.asVoid,
         Effect.ensuring(
           Effect.sync(() => {
             connection.onicegatheringstatechange = null;

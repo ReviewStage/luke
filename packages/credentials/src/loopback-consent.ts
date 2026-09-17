@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
-import { Deferred, Duration, Effect, Exit, Option, Result, type Scope } from "effect";
+import { Deferred, Duration, Effect, Exit, Option, Result, type Scope, Semaphore } from "effect";
 import * as HttpServer from "effect/unstable/http/HttpServer";
 import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
@@ -279,7 +279,8 @@ const serveConsent = /* @__PURE__ */ Effect.fnUntraced(function* (
 export function loopbackConsent<Grant extends object>(
   options: LoopbackConsentOptions<Grant>,
 ): LoopbackConsent<Grant> {
-  let running = false;
+  /** One trip at a time: a second ask while one stands is answered, not queued behind it. */
+  const standing = Semaphore.makeUnsafe(1);
   let abandon: (() => void) | undefined;
   let reopenPage: (() => void) | undefined;
 
@@ -427,22 +428,20 @@ export function loopbackConsent<Grant extends object>(
   });
 
   function signInEffect(): Effect.Effect<LoopbackConsentOutcome<Grant>, never, Scope.Scope> {
-    return Effect.suspend(() => {
-      if (running) {
-        return Effect.succeed<LoopbackConsentOutcome<Grant>>({
-          reason: SHARED_REASON.ALREADY_WAITING,
-        });
-      }
-      running = true;
-      return Effect.ensuring(
-        trip(),
-        Effect.sync(() => {
-          running = false;
-          abandon = undefined;
-          reopenPage = undefined;
-        }),
-      );
-    });
+    return Effect.map(
+      standing.withPermitsIfAvailable(1)(
+        Effect.ensuring(
+          trip(),
+          Effect.sync(() => {
+            abandon = undefined;
+            reopenPage = undefined;
+          }),
+        ),
+      ),
+      Option.getOrElse(
+        (): LoopbackConsentOutcome<Grant> => ({ reason: SHARED_REASON.ALREADY_WAITING }),
+      ),
+    );
   }
 
   return {
