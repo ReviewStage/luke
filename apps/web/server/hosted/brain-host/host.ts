@@ -3,6 +3,7 @@ import {
   type MemoryHousekeepingResult,
   skippedHousekeeping,
 } from "@sidecar/memory";
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import type { LanguageModel } from "ai";
 import { Cause, Effect, type Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -523,8 +524,10 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           workspace: hostedWorkspaceAccess(client, seams.store(), userId, seams.now),
           now: seams.now,
         });
-      }).pipe(
-        Effect.catchCause((cause) =>
+      }).pipe((flush) =>
+        // A flush the caller cancelled did not fail: an interruption passes
+        // through rather than standing as a durable refusal reason.
+        catchAllButInterrupt(flush, (cause) =>
           Effect.sync(() => {
             console.warn(`The memory flush could not run: ${Cause.pretty(cause)}`);
             return failedHousekeeping(MEMORY_FLUSH_REFUSAL.HOST_FAILED);
