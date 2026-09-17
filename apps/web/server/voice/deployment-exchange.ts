@@ -73,7 +73,7 @@ const EXCHANGE_CONFIGURATION = {
 function configuredSeams(
   seams: DeploymentExchangeSeams,
 ): Effect.Effect<
-  { encryptionSecret: string; deploymentSecret: string; origin: string },
+  { encryptionSecret: Redacted.Redacted; deploymentSecret: Redacted.Redacted; origin: string },
   ExchangeUnconfigured
 > {
   const encryptionSecret = seams.encryptionSecret();

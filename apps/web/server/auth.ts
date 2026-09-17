@@ -1,5 +1,6 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
 import { Redacted } from "effect";
 import { USER_ROLE } from "./admin/admin-access.js";
@@ -19,11 +20,25 @@ const MOBILE_OAUTH_CLIENT_ID = MOBILE_OAUTH_CLIENT.id;
 const deployment = authDeployment(process.env);
 const secrets = authSecrets(process.env);
 // Note that a missing session secret is reported once, as the module loads,
-// because Better Auth refuses it only when a request reaches it and the log
-// line is what says why sign-in is refused on this deployment.
+// and refused on every request below, because Better Auth left to itself
+// would sign sessions under its built-in default secret outside production.
 if (secrets.sessionSecret === undefined) {
-  console.error("BETTER_AUTH_SECRET is not set; the auth service will refuse to sign sessions.");
+  console.error("BETTER_AUTH_SECRET is not set; the auth service will refuse every request.");
 }
+
+/**
+ * Runs ahead of every endpoint, whether reached through the HTTP handler or
+ * `auth.api`, and refuses them all while the deployment holds no session
+ * secret: nothing is signed, verified, or handed out under a secret that is
+ * not this deployment's own. The module still loads, as every function
+ * bundle must with nothing configured.
+ */
+const refuseWithoutSessionSecret = createAuthMiddleware(async () => {
+  if (secrets.sessionSecret !== undefined) return;
+  throw new APIError("SERVICE_UNAVAILABLE", {
+    message: "The auth service is not configured on this deployment.",
+  });
+});
 
 /** The one place a social secret is revealed: handed to Better Auth, which puts it on the provider's token request. */
 function socialProvider(client: SocialClient, scope: readonly string[]) {
@@ -39,6 +54,7 @@ export const auth = betterAuth({
   baseURL: deployment.baseURL,
   trustedOrigins: deployment.trustedOrigins,
   secret: secrets.sessionSecret === undefined ? undefined : Redacted.value(secrets.sessionSecret),
+  hooks: { before: refuseWithoutSessionSecret },
   database: authDatabaseAdapter(authDatabase),
   account: ACCOUNT_TOKEN_STORAGE,
   // Admin access is a plain-text `role` on the user, managed by Better Auth:
