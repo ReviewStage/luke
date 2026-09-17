@@ -54,7 +54,7 @@ import {
   SESSION_STANDING,
 } from "./conversation.js";
 import { readWorkspaceDefaults } from "./defaults.js";
-import { EVE_CALLER, eveSessions } from "./eve-sessions.js";
+import { EVE_CALLER, type EveSessionsComposer, eveSessionsComposer } from "./eve-sessions.js";
 import { hostTurnId } from "./ids.js";
 import { flushMemory, MEMORY_FLUSH_REFUSAL } from "./memory-flush.js";
 import { meteredModel, openAiBrainModel } from "./model.js";
@@ -207,23 +207,29 @@ export interface BrainHost {
   ): Effect.Effect<MemoryHousekeepingResult, never, SqlClient.SqlClient>;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
-  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
+  /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed; over the edge's `HttpClient` too, for the Stop and the child completion the relay carries to eve. */
   relay(
     event: MessageStreamEvent,
     admitted: AdmittedConversation,
     session: SessionContext["session"],
     state: RelayStateStore,
     prompt: SessionPromptRecord,
-  ): HostEffect<void>;
+  ): Effect.Effect<
+    void,
+    SqlError | Schema.SchemaError,
+    SqlClient.SqlClient | HttpClient.HttpClient
+  >;
 }
 
 export function brainHost(seams: BrainHostSeams): BrainHost {
   /**
    * The relay as eve's own stream handler: it holds no state of its own, so
    * one stands per event rather than one per host, and every seam it reaches
-   * is the store's own effect on the fiber the event arrived on.
+   * is the store's own effect on the fiber the event arrived on. eve's client
+   * is composed from the constructor the event's fiber read off the edge's
+   * `HttpClient`, once per event, the way `runTool` hands the same client on.
    */
-  const relayOver = (writer: StoreWriter) =>
+  const relayOver = (writer: StoreWriter, eve: EveSessionsComposer) =>
     new StreamRelay({
       writer,
       asks: askRecord(),
@@ -240,13 +246,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             );
             return Effect.void;
           }
-          const eve = eveSessions({
-            origin,
-            caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: target.userId },
-          });
           return carryStop(
             {
-              eve,
+              eve: eve({
+                origin,
+                caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: target.userId },
+              }),
               writer,
               now: seams.now,
               report: (message) => console.warn(message),
@@ -267,7 +272,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             {
               deploymentSecret: seams.deploymentSecret,
               eveOrigin: seams.eveOrigin,
-              eve: eveSessions,
+              eve,
               tools: CATALOG_TOOL_SET,
               now: seams.now,
               report: (message) => console.warn(message),
@@ -503,7 +508,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
               opener: {
                 deploymentSecret: seams.deploymentSecret,
                 eveOrigin: seams.eveOrigin,
-                eve: eveSessions,
+                eve: yield* eveSessionsComposer,
                 now: seams.now,
                 report: (message) => console.warn(message),
               },
@@ -580,7 +585,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
               )
             : undefined;
         const writer = yield* seams.writer();
-        yield* relayOver(writer).handle(event, {
+        yield* relayOver(writer, yield* eveSessionsComposer).handle(event, {
           sessionId: session.id,
           target: admitted.target,
           kind: admitted.kind,

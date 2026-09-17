@@ -1,4 +1,5 @@
 import type { Effect } from "effect";
+import type { HttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
@@ -38,10 +39,13 @@ async function deploymentStore(): Promise<HostedStore | undefined> {
  * one of the edges `apps/web` runs an effect at: a `Route` answers Vercel a
  * promise, and the handler is built over the ambient client and answered by
  * `runWeb` on the web's own runtime, so every read and write of one request
- * lands on one connection.
+ * lands on one connection; the edge's `HttpClient` is there too, for the one
+ * route that composes eve's client from it.
  */
 export function hostedStoreRoute(
-  handler: (route: HostedStoreRoute) => Effect.Effect<Response, unknown, SqlClient.SqlClient>,
+  handler: (
+    route: HostedStoreRoute,
+  ) => Effect.Effect<Response, unknown, SqlClient.SqlClient | HttpClient.HttpClient>,
 ): Route {
   return {
     fetch: async (request) => {

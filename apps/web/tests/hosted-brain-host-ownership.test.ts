@@ -29,6 +29,7 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { noNetwork } from "./support/no-network";
 import {
   insertConversation,
   readConversationById,
@@ -191,13 +192,15 @@ async function hookedEvent(
   const admitted = await database.run(host.admit(auth, sessionId));
   if (!admitted.ok) return false;
   await database.run(
-    host.relay(
-      event,
-      admitted,
-      { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
-      state,
-      {},
-    ),
+    host
+      .relay(
+        event,
+        admitted,
+        { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
+        state,
+        {},
+      )
+      .pipe(Effect.provide(noNetwork)),
   );
   return true;
 }

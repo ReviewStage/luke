@@ -10,16 +10,16 @@ const NOW = 1_800_000_000_000;
 const target = { userId: "user-1", conversationId: "conversation-1" };
 
 /** A writer that records the stamps asked of it and a report that records what was said; no stamp reaches a connection, so the suite opens no database. */
-function harness(outcome: Awaited<ReturnType<StopCarrierSeams["eve"]["cancel"]>>) {
+function harness(outcome: Effect.Success<ReturnType<StopCarrierSeams["eve"]["cancel"]>>) {
   const cancels: (readonly [string, string | undefined])[] = [];
   const stamps: (readonly [string, number])[] = [];
   const reports: string[] = [];
   const seams: StopCarrierSeams = {
     eve: {
       cancel: (sessionId, eveTurnId) =>
-        Promise.resolve(outcome).then((answered) => {
+        Effect.sync(() => {
           cancels.push([sessionId, eveTurnId]);
-          return answered;
+          return outcome;
         }),
     },
     writer: {

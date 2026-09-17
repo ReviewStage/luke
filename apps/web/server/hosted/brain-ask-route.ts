@@ -1,9 +1,9 @@
-import type { Effect } from "effect";
+import { Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { Route } from "../route.js";
 import { type BrainAskOptions, handleBrainAsk, handleBrainTurn } from "./brain-ask.js";
 import { eveOrigin } from "./brain-host/eve-origin.js";
-import { EVE_CALLER, eveSessions } from "./brain-host/eve-sessions.js";
+import { EVE_CALLER, eveSessionsComposer } from "./brain-host/eve-sessions.js";
 import { askRecord } from "./store/asks.js";
 import { hostedStoreRoute } from "./store-route.js";
 
@@ -11,7 +11,8 @@ import { hostedStoreRoute } from "./store-route.js";
  * The ask routes as functions: the store route's bearer and store, the ask
  * record over the same ambient client, and eve reached on the request's own
  * origin, unless `LUKE_EVE_ORIGIN` names another, as the account whose bearer
- * the request carries. These routes sit beside the store routes rather than in the brain
+ * the request carries, over the edge's `HttpClient` read once per request
+ * ahead of the handler. These routes sit beside the store routes rather than in the brain
  * contract's group: that group is gated by the hosted tier's OpenAI key,
  * which must not gate a dispatch to eve.
  */
@@ -24,18 +25,20 @@ export function brainAskRoute<Options extends BrainAskOptions>(
   widen: (options: BrainAskOptions) => Options,
 ): Route {
   return hostedStoreRoute(({ request, resolveUserId, store }) =>
-    handler(
-      widen({
-        request,
-        resolveUserId,
-        store,
-        asks,
-        eve: (authorization) =>
-          eveSessions({
-            origin: eveOrigin(new URL(request.url).origin),
-            caller: { kind: EVE_CALLER.ACCOUNT, authorization },
-          }),
-      }),
+    Effect.flatMap(eveSessionsComposer, (compose) =>
+      handler(
+        widen({
+          request,
+          resolveUserId,
+          store,
+          asks,
+          eve: (authorization) =>
+            compose({
+              origin: eveOrigin(new URL(request.url).origin),
+              caller: { kind: EVE_CALLER.ACCOUNT, authorization },
+            }),
+        }),
+      ),
     ),
   );
 }

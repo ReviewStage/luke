@@ -1,11 +1,16 @@
+/**
+ * eve-sessions.ts -- the host's three calls into eve's session routes, as effects on the edge's HttpClient.
+ */
+
+import { delayLadder } from "@sidecar/runtime/effect";
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Result } from "effect";
-import {
-  EXCESS_KEYS,
-  type UnparsedWireValue,
-  unparsedWire,
-  type WireBoundaryInput,
-} from "../../core.js";
+import { Data, Duration, Effect, Schema as EffectSchema, Result } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
 /**
@@ -36,6 +41,17 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * opened for nothing, which the claim lets the older one lose, and never two
  * sessions writing one conversation. Reopening is never eve's: the host
  * decides it, under that claim.
+ *
+ * Every call is an effect on the `HttpClient` the web runtime builds once
+ * per instance, read here once at composition rather than on each call, so
+ * the client a caller holds answers `Effect<Outcome, EveUnreachable>` and
+ * requires nothing: the seams that take a constructor (the children, the
+ * child opener, the child completion) stay synchronous, and the tests that
+ * hand a fake eve stand on no client at all. A call eve answered, whatever
+ * the status, is an outcome; a call that never reached eve or was never
+ * answered whole — no address, a refused connection, a failed handshake, a
+ * redirect, a dropped body — is `EveUnreachable`, typed so each caller
+ * decides against its own refusal rather than dying mid-transaction.
  */
 
 /** eve's session routes, as `door.ts` also spells them; a path is composed from these and nothing else. */
@@ -57,10 +73,26 @@ const EVE_SESSION_NOT_ACTIVE = "session_not_active";
  * dependency bump is the moment to check the table still matches. A session
  * not active past the last wait is retired.
  */
-const SESSION_NOT_ACTIVE_RETRY_MS = [250, 500, 1_000] as const;
+const SESSION_NOT_ACTIVE_RETRY = delayLadder([
+  Duration.millis(250),
+  Duration.millis(500),
+  Duration.millis(1_000),
+]);
 
 const ACCEPTED_STATUS = 202;
 const CONFLICT_STATUS = 409;
+/** The statuses `Response.ok` names, which is what a cancel's answer was read under. */
+const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
+const JSON_CONTENT_TYPE = "application/json";
+
+/**
+ * What the fetch under the runtime's client is handed for an eve call: a
+ * redirect is an error, never followed, because the caller's bearer travels
+ * on the request and a followed redirect would carry it to whatever answered.
+ * The service is read from the calling fiber at each request, so it is
+ * provided around each call rather than to the client the runtime built.
+ */
+const EVE_REQUEST_INIT: RequestInit = { redirect: "error" };
 
 const trimmedText = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
 
@@ -84,6 +116,28 @@ const cancelAnswer = EffectSchema.Struct({
 
 /** Every answer eve hands back is read with the keys this build does not name dropped. */
 const DROPPING_EXCESS = { excess: EXCESS_KEYS.DROP } as const;
+
+/** eve was not reached, or never answered whole; the client's own error says which, for the operator. */
+export class EveUnreachable extends Data.TaggedError("EveUnreachable")<{
+  readonly cause: HttpClientError.HttpClientError;
+}> {}
+
+/**
+ * The failure in the words a report carries: the client's own, and beneath a
+ * transport failure the platform's, which is where a refused connection or a
+ * failed handshake says what it was.
+ */
+export function describeUnreachable(failure: EveUnreachable): string {
+  const reason = failure.cause.reason;
+  const beneath =
+    reason._tag === "TransportError" && reason.cause !== undefined
+      ? `: ${String(reason.cause)}`
+      : "";
+  return `${failure.cause.message}${beneath}`;
+}
+
+/** A follow-up eve answered `session_not_active`; the retry schedule's own input, and never a caller's. */
+class EveSessionNotActive extends Data.TaggedError("EveSessionNotActive") {}
 
 /** How eve answered a call: what it accepted, a session it no longer runs, or an answer this build cannot read as either. */
 export const EVE_SEND_OUTCOME = {
@@ -127,9 +181,9 @@ export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
 
 export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
   /** Opens a session over the conversation with its first message; eve's answer names the session, whose first turn is the message's. */
-  open(message: EveMessage<Turn>): Promise<EveOpened>;
+  open(message: EveMessage<Turn>): Effect.Effect<EveOpened, EveUnreachable>;
   /** Hands a message to the session the conversation runs in; eve's answer names the delivery its turn's events will carry. */
-  send(sessionId: string, message: EveMessage<Turn>): Promise<EveSent>;
+  send(sessionId: string, message: EveMessage<Turn>): Effect.Effect<EveSent, EveUnreachable>;
   /**
    * Asks eve to cancel exactly the turn named, by eve's own id for it. A turn
    * no longer under way answers `no_active_turn` and the session's next turn
@@ -137,7 +191,7 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
    * turn under way, because between a caller's read and eve's answer that
    * turn can be the one queued after the one the caller meant.
    */
-  cancel(sessionId: string, eveTurnId: string): Promise<EveCancelled>;
+  cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
 }
 
 /** What the host posts to eve: the message a turn opens with, or the turn a cancel is scoped to. */
@@ -170,9 +224,12 @@ export interface EveSessionsOptions {
   /** The origin eve answers on; the deployment's own, where its rewrites carry `/eve/v1/*` into the eve service. */
   readonly origin: string;
   readonly caller: EveCaller;
-  readonly fetch?: typeof fetch;
-  readonly sleep?: (ms: number) => Promise<void>;
 }
+
+/** The constructor over one fiber's client: every seam handed eve's client composes it for a caller through this. */
+export type EveSessionsComposer = <Turn extends BrainHostTurn = BrainHostTurn>(
+  options: EveSessionsOptions,
+) => EveSessions<Turn>;
 
 /** The headers a caller's identity travels as: the bearer, and for the deployment the account beside it. */
 function callerHeaders(caller: EveCaller) {
@@ -187,84 +244,134 @@ function callerHeaders(caller: EveCaller) {
   }
 }
 
-/** The whole body as eve wrote it, or nothing for one that is not JSON. */
-async function bodyOf(response: Response): Promise<UnparsedWireValue> {
-  try {
-    // SAFETY: eve's own JSON answer; the schema read that follows is what holds it to a shape.
-    return unparsedWire((await response.json()) as WireBoundaryInput);
-  } catch {
-    return unparsedWire(undefined);
-  }
+/** The whole body as eve wrote it, or nothing for one that is not JSON or was not read whole. */
+function bodyOf(response: HttpClientResponse.HttpClientResponse): Effect.Effect<UnparsedWireValue> {
+  return response.json.pipe(
+    Effect.map((body) => unparsedWire(body)),
+    Effect.orElseSucceed(() => unparsedWire(undefined)),
+  );
 }
 
-export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
+/** The status and the body of one call eve answered; a call it did not answer is `EveUnreachable`. */
+interface EveAnswer {
+  readonly status: number;
+  readonly body: UnparsedWireValue;
+}
+
+/** One POST to eve as the client answers it; a call it did not answer is `EveUnreachable`. */
+function postToEve(
+  client: HttpClient.HttpClient,
+  url: URL,
+  headers: Readonly<Record<string, string>>,
+  body: EvePostBody,
+): Effect.Effect<EveAnswer, EveUnreachable> {
+  return client
+    .execute(
+      HttpClientRequest.post(url, { headers }).pipe(
+        HttpClientRequest.bodyText(JSON.stringify(body), JSON_CONTENT_TYPE),
+      ),
+    )
+    .pipe(
+      Effect.flatMap((response) =>
+        Effect.map(bodyOf(response), (read) => ({ status: response.status, body: read })),
+      ),
+      Effect.scoped,
+      Effect.provideService(FetchHttpClient.RequestInit, EVE_REQUEST_INIT),
+      Effect.mapError((cause) => new EveUnreachable({ cause })),
+    );
+}
+
+function readOpened({ status, body }: EveAnswer): EveOpened {
+  const opened = readEither(openedSession, DROPPING_EXCESS)(body);
+  if (status !== ACCEPTED_STATUS || Result.isFailure(opened)) {
+    return { outcome: EVE_SEND_OUTCOME.FAILED, status };
+  }
+  return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.success.sessionId };
+}
+
+/** A follow-up as eve answered it; a not-active session is the retry's failure rather than an outcome. */
+function readSent({ status, body }: EveAnswer): Effect.Effect<EveSent, EveSessionNotActive> {
+  if (status === CONFLICT_STATUS) {
+    const refused = readEither(refusedSend, DROPPING_EXCESS)(body);
+    if (Result.isSuccess(refused) && refused.success.code === EVE_SESSION_NOT_ACTIVE) {
+      return Effect.fail(new EveSessionNotActive());
+    }
+  }
+  const accepted = readEither(acceptedDelivery, DROPPING_EXCESS)(body);
+  if (status !== ACCEPTED_STATUS || Result.isFailure(accepted)) {
+    return Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status });
+  }
+  return Effect.succeed({
+    outcome: EVE_SEND_OUTCOME.ACCEPTED,
+    sessionId: accepted.success.sessionId,
+    deliveryId: accepted.success.deliveryId,
+  });
+}
+
+function readCancelled({ status, body }: EveAnswer): EveCancelled {
+  const answer = readEither(cancelAnswer, DROPPING_EXCESS)(body);
+  if (status < OK_STATUS.FIRST || status > OK_STATUS.LAST || Result.isFailure(answer)) {
+    return { outcome: EVE_CANCEL_OUTCOME.FAILED, status };
+  }
+  return answer.success.status === EVE_CANCEL_STATUS.ACCEPTED
+    ? { outcome: EVE_CANCEL_OUTCOME.ACCEPTED }
+    : { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
+}
+
+function sessionsOver<Turn extends BrainHostTurn>(
+  client: HttpClient.HttpClient,
   options: EveSessionsOptions,
 ): EveSessions<Turn> {
-  const call = options.fetch ?? fetch;
-  const sleep =
-    options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const identity = callerHeaders(options.caller);
   const post = (path: string, headers: Readonly<Record<string, string>>, body: EvePostBody) =>
-    call(new URL(path, options.origin), {
-      method: "POST",
-      headers: {
-        ...identity,
-        "content-type": "application/json",
-        ...headers,
-      },
-      body: JSON.stringify(body),
-      redirect: "error",
-    });
+    postToEve(client, new URL(path, options.origin), { ...identity, ...headers }, body);
   const turnHeaders = (message: EveMessage<Turn>) => ({
     [BRAIN_HOST_HEADER.CONVERSATION]: message.conversationId,
     [BRAIN_HOST_HEADER.TURN]: message.turn,
   });
   return {
-    async open(message) {
-      const response = await post(EVE_SESSION_PATH, turnHeaders(message), {
-        message: message.message,
-      });
-      const opened = readEither(openedSession, DROPPING_EXCESS)(await bodyOf(response));
-      if (response.status !== ACCEPTED_STATUS || Result.isFailure(opened)) {
-        return { outcome: EVE_SEND_OUTCOME.FAILED, status: response.status };
-      }
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.success.sessionId };
-    },
-    async send(sessionId, message) {
-      for (let attempt = 0; ; attempt += 1) {
-        const response = await post(sessionPath(sessionId), turnHeaders(message), {
-          message: message.message,
-        });
-        const body = await bodyOf(response);
-        if (response.status === CONFLICT_STATUS) {
-          const refused = readEither(refusedSend, DROPPING_EXCESS)(body);
-          if (Result.isSuccess(refused) && refused.success.code === EVE_SESSION_NOT_ACTIVE) {
-            const wait = SESSION_NOT_ACTIVE_RETRY_MS[attempt];
-            if (wait === undefined) return { outcome: EVE_SEND_OUTCOME.RETIRED };
-            await sleep(wait);
-            continue;
-          }
-        }
-        const accepted = readEither(acceptedDelivery, DROPPING_EXCESS)(body);
-        if (response.status !== ACCEPTED_STATUS || Result.isFailure(accepted)) {
-          return { outcome: EVE_SEND_OUTCOME.FAILED, status: response.status };
-        }
-        return {
-          outcome: EVE_SEND_OUTCOME.ACCEPTED,
-          sessionId: accepted.success.sessionId,
-          deliveryId: accepted.success.deliveryId,
-        };
-      }
-    },
-    async cancel(sessionId, eveTurnId) {
-      const response = await post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId });
-      const answer = readEither(cancelAnswer, DROPPING_EXCESS)(await bodyOf(response));
-      if (!response.ok || Result.isFailure(answer)) {
-        return { outcome: EVE_CANCEL_OUTCOME.FAILED, status: response.status };
-      }
-      return answer.success.status === EVE_CANCEL_STATUS.ACCEPTED
-        ? { outcome: EVE_CANCEL_OUTCOME.ACCEPTED }
-        : { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
-    },
+    open: (message) =>
+      Effect.map(
+        post(EVE_SESSION_PATH, turnHeaders(message), { message: message.message }),
+        readOpened,
+      ),
+    // The not-active follow-up is tried again on the ladder above, and one still not active past
+    // its last wait is the retirement the caller reads; an unreachable eve is retried nowhere.
+    send: (sessionId, message) =>
+      post(sessionPath(sessionId), turnHeaders(message), { message: message.message }).pipe(
+        Effect.flatMap(readSent),
+        Effect.retry({
+          schedule: SESSION_NOT_ACTIVE_RETRY,
+          while: (failure) => failure._tag === "EveSessionNotActive",
+        }),
+        Effect.catchTag("EveSessionNotActive", () =>
+          Effect.succeed({ outcome: EVE_SEND_OUTCOME.RETIRED }),
+        ),
+      ),
+    cancel: (sessionId, eveTurnId) =>
+      Effect.map(
+        post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId }),
+        readCancelled,
+      ),
   };
+}
+
+/**
+ * The constructor over the calling fiber's `HttpClient`, read once: a
+ * composing edge holds the constructor and hands it to the seams that
+ * compose eve's client for one caller at a time.
+ */
+export const eveSessionsComposer: Effect.Effect<EveSessionsComposer, never, HttpClient.HttpClient> =
+  Effect.map(
+    HttpClient.HttpClient,
+    (client): EveSessionsComposer =>
+      (options) =>
+        sessionsOver(client, options),
+  );
+
+/** eve's client for one caller, over the calling fiber's `HttpClient`. */
+export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
+  options: EveSessionsOptions,
+): Effect.Effect<EveSessions<Turn>, never, HttpClient.HttpClient> {
+  return Effect.map(eveSessionsComposer, (compose) => compose<Turn>(options));
 }

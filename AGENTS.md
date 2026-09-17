@@ -229,10 +229,9 @@ memory flush), and `apps/web/eve/tools/brain.ts` — each
 an edge because eve drives them through promise-shaped hooks of its own and
 an authored file is where this deployment runs what it hands eve. Not
 every seam under `apps/web/server/hosted/` is an effect down to its floor:
-`hosted/store/asks.ts`'s `dispatchAskOnce` awaits eve's own HTTP client
-inside an `Effect.promise`, `hosted/brain-host/production.ts`'s `spend` is
+`hosted/brain-host/production.ts`'s `spend` is
 the AI SDK's async middleware, and `hosted/brain-host/door.ts`'s
-`SessionOwnership` speaks eve's own `AuthFn<Request>` — three promise-shaped
+`SessionOwnership` speaks eve's own `AuthFn<Request>` — two promise-shaped
 foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape

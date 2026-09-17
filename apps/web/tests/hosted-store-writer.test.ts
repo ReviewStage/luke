@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { type ToolSet, tool, type UIMessage } from "ai";
 import { eq } from "drizzle-orm";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -1473,7 +1473,9 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
       }),
     );
     await database.run(
-      asks.dispatchOnce(target, ask.id, async () => ({ sessionId: `wrun_${clientId}`, turnId })),
+      asks.dispatchOnce(target, ask.id, () =>
+        Effect.succeed({ sessionId: `wrun_${clientId}`, turnId }),
+      ),
     );
   };
 
@@ -1563,7 +1565,9 @@ test("the turn's answer closes the journal behind what landed while the turn ran
     }),
   );
   await database.run(
-    asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: stream.turnId })),
+    asks.dispatchOnce(target, ask.id, () =>
+      Effect.succeed({ sessionId: "wrun_1", turnId: stream.turnId }),
+    ),
   );
   await feed(target, [
     stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
@@ -1668,7 +1672,9 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
 
   // The dispatch names the turn, eve starts it and tells the received message: the relay attaches.
   await database.run(
-    asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: stream.turnId })),
+    asks.dispatchOnce(target, ask.id, () =>
+      Effect.succeed({ sessionId: "wrun_1", turnId: stream.turnId }),
+    ),
   );
   await feed(target, [
     stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
@@ -1817,7 +1823,9 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
   const stream = new Stream();
   await feed(target, [stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK)]);
   await database.run(
-    asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_4", turnId: stream.turnId })),
+    asks.dispatchOnce(target, ask.id, () =>
+      Effect.succeed({ sessionId: "wrun_4", turnId: stream.turnId }),
+    ),
   );
   await feed(target, [stream.step(1)]);
   const journal = (await storedMessages(target)).find((row) => row.clientId === stream.turnId);
