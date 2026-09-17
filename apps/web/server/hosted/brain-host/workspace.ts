@@ -1,4 +1,4 @@
-import { Effect, type Schema } from "effect";
+import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -98,19 +98,19 @@ export function hostedWorkspaceAccess(
     read: (name) =>
       Effect.gen(function* () {
         const path = hostedWorkspacePath(name);
-        if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
+        if (!path) return Result.fail(WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE);
         const row = yield* run(store.workspace.read(userId, path));
-        if (!row) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND };
-        return { ok: true, content: row.content.slice(0, workspaceFileBound(path)) };
+        if (!row) return Result.fail(WORKSPACE_FILE_REFUSAL.NOT_FOUND);
+        return Result.succeed({ content: row.content.slice(0, workspaceFileBound(path)) });
       }),
     write: (name, content) =>
       Effect.gen(function* () {
         const path = hostedWorkspacePath(name);
-        if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
+        if (!path) return Result.fail(WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE);
         const bound = workspaceFileBound(path);
-        if (content.length > bound) return { ok: false, reason: tooLargeRefusal(bound) };
+        if (content.length > bound) return Result.fail(tooLargeRefusal(bound));
         yield* run(store.workspace.write(userId, path, content, now()));
-        return { ok: true, chars: content.length };
+        return Result.succeed({ chars: content.length });
       }),
     append: (entry) =>
       Effect.gen(function* () {
@@ -129,11 +129,11 @@ export function hostedWorkspaceAccess(
           ),
         );
         return landed === undefined
-          ? { ok: false, reason: tooLargeRefusal(bound) }
-          : { ok: true, path, chars: landed.length };
+          ? Result.fail(tooLargeRefusal(bound))
+          : Result.succeed({ path, chars: landed.length });
       }),
     listNotes: (limit) => run(store.workspace.listNotes(userId, limit)),
-    loadSkill: () => Effect.succeed({ ok: false, reason: NO_SKILLS }),
+    loadSkill: () => Effect.succeed(Result.fail(NO_SKILLS)),
   };
 }
 

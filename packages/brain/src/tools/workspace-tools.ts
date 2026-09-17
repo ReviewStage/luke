@@ -16,7 +16,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, SchemaTransformation } from "effect";
+import { Effect, Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { BRAIN_TOOL, maximumListedDailyNotes } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -124,9 +124,9 @@ const READ_WORKSPACE_FILE: WorkspaceToolModule = {
       if (!isWireString(input.name)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
       const name = input.name;
       const read = yield* workspace.read(name);
-      return read.ok
-        ? { status: ACTION_RESULT_STATUS.ACCEPTED, content: read.content }
-        : rejection(read.reason);
+      return Result.isSuccess(read)
+        ? { status: ACTION_RESULT_STATUS.ACCEPTED, content: read.success.content }
+        : rejection(read.failure);
     });
   },
 };
@@ -157,9 +157,9 @@ const WRITE_WORKSPACE_FILE: WorkspaceToolModule = {
       }
       return context.journal(
         Effect.map(workspace.write(name, content), (written) =>
-          written.ok
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED, chars: written.chars }
-            : rejection(written.reason),
+          Result.isSuccess(written)
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED, chars: written.success.chars }
+            : rejection(written.failure),
         ),
       );
     });
@@ -187,9 +187,13 @@ const APPEND_DAILY_NOTE: WorkspaceToolModule = {
       if (entry.length === 0) return Effect.succeed(rejection(REFUSAL_REASON.EMPTY_NOTE));
       return context.journal(
         Effect.map(workspace.append(entry), (appended) =>
-          appended.ok
-            ? { status: ACTION_RESULT_STATUS.ACCEPTED, path: appended.path, chars: appended.chars }
-            : rejection(appended.reason),
+          Result.isSuccess(appended)
+            ? {
+                status: ACTION_RESULT_STATUS.ACCEPTED,
+                path: appended.success.path,
+                chars: appended.success.chars,
+              }
+            : rejection(appended.failure),
         ),
       );
     });
@@ -231,13 +235,13 @@ const LOAD_SKILL: WorkspaceToolModule = {
       if (!isWireString(input.location)) return rejection(REFUSAL_REASON.MALFORMED_ARGUMENTS);
       const location = input.location;
       const loaded = yield* workspace.loadSkill(location);
-      return loaded.ok
+      return Result.isSuccess(loaded)
         ? {
             status: ACTION_RESULT_STATUS.ACCEPTED,
-            instructions: loaded.instructions,
-            truncated: loaded.truncated,
+            instructions: loaded.success.instructions,
+            truncated: loaded.success.truncated,
           }
-        : rejection(loaded.reason);
+        : rejection(loaded.failure);
     });
   },
 };

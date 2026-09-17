@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import {
@@ -66,22 +66,24 @@ test("a curated file is refused past its own budget with the budget named, and t
   await database.run(seedHostedWorkspace(database.store, userId, NOW));
   const access = await accessFor(userId);
   const seeded = await database.run(access.read(WORKSPACE_FILE.MEMORY));
-  assert.equal(seeded.ok, true);
+  assert.ok(Result.isSuccess(seeded));
 
   const refused = await database.run(
     access.write(WORKSPACE_FILE.MEMORY, "m".repeat(MEMORY_BUDGET + 1)),
   );
-  assert.deepEqual(refused, { ok: false, reason: tooLargeRefusal(MEMORY_BUDGET) });
-  assert.match(refused.ok ? "" : refused.reason, /4000 characters/u);
-  assert.ok(!refused.ok && refused.reason.startsWith(WORKSPACE_FILE_REFUSAL.TOO_LARGE));
+  assert.deepEqual(refused, Result.fail(tooLargeRefusal(MEMORY_BUDGET)));
+  assert.match(Result.isFailure(refused) ? refused.failure : "", /4000 characters/u);
+  assert.ok(
+    Result.isFailure(refused) && refused.failure.startsWith(WORKSPACE_FILE_REFUSAL.TOO_LARGE),
+  );
   assert.deepEqual(await database.run(access.read(WORKSPACE_FILE.MEMORY)), seeded);
 
   const written = await database.run(access.write(WORKSPACE_FILE.USER, "u".repeat(USER_BUDGET)));
-  assert.deepEqual(written, { ok: true, chars: USER_BUDGET });
-  assert.deepEqual(await database.run(access.read(WORKSPACE_FILE.USER)), {
-    ok: true,
-    content: "u".repeat(USER_BUDGET),
-  });
+  assert.deepEqual(written, Result.succeed({ chars: USER_BUDGET }));
+  assert.deepEqual(
+    await database.run(access.read(WORKSPACE_FILE.USER)),
+    Result.succeed({ content: "u".repeat(USER_BUDGET) }),
+  );
 });
 
 test("an instruction file and a dated note stand under the per-file bound, not the curated budget", async () => {
@@ -91,19 +93,19 @@ test("an instruction file and a dated note stand under the per-file bound, not t
   const agents = await database.run(
     access.write(WORKSPACE_FILE.AGENTS, "a".repeat(USER_BUDGET + 1)),
   );
-  assert.deepEqual(agents, { ok: true, chars: USER_BUDGET + 1 });
+  assert.deepEqual(agents, Result.succeed({ chars: USER_BUDGET + 1 }));
   const note = await database.run(access.write(NOTE_PATH, "n".repeat(MEMORY_BUDGET + 1)));
-  assert.deepEqual(note, { ok: true, chars: MEMORY_BUDGET + 1 });
+  assert.deepEqual(note, Result.succeed({ chars: MEMORY_BUDGET + 1 }));
 
   const tooLarge = await database.run(
     access.write(WORKSPACE_FILE.AGENTS, "a".repeat(PER_FILE + 1)),
   );
-  assert.deepEqual(tooLarge, { ok: false, reason: tooLargeRefusal(PER_FILE) });
-  assert.match(tooLarge.ok ? "" : tooLarge.reason, /20000 characters/u);
-  assert.deepEqual(await database.run(access.read(WORKSPACE_FILE.AGENTS)), {
-    ok: true,
-    content: "a".repeat(USER_BUDGET + 1),
-  });
+  assert.deepEqual(tooLarge, Result.fail(tooLargeRefusal(PER_FILE)));
+  assert.match(Result.isFailure(tooLarge) ? tooLarge.failure : "", /20000 characters/u);
+  assert.deepEqual(
+    await database.run(access.read(WORKSPACE_FILE.AGENTS)),
+    Result.succeed({ content: "a".repeat(USER_BUDGET + 1) }),
+  );
 });
 
 test("a row past its file's bound is read cut at that bound, and the prompt composes it cut and says so", async () => {
@@ -122,14 +124,14 @@ test("a row past its file's bound is read cut at that bound, and the prompt comp
   );
   const access = await accessFor(userId);
 
-  assert.deepEqual(await database.run(access.read(WORKSPACE_FILE.USER)), {
-    ok: true,
-    content: "u".repeat(USER_BUDGET),
-  });
-  assert.deepEqual(await database.run(access.read(WORKSPACE_FILE.AGENTS)), {
-    ok: true,
-    content: "a".repeat(USER_BUDGET + 250),
-  });
+  assert.deepEqual(
+    await database.run(access.read(WORKSPACE_FILE.USER)),
+    Result.succeed({ content: "u".repeat(USER_BUDGET) }),
+  );
+  assert.deepEqual(
+    await database.run(access.read(WORKSPACE_FILE.AGENTS)),
+    Result.succeed({ content: "a".repeat(USER_BUDGET + 250) }),
+  );
 
   const built = await database.run(
     hostedPrompt(database.store, userId, { policy: hostedTurnPolicy(BRAIN_TURN_TRIGGER.ASK) }),
@@ -146,26 +148,23 @@ test("an append creates today's note by the host's clock, grows it after a blank
   let now = NOON;
   const access = await accessFor(userId, () => now);
 
-  assert.deepEqual(await database.run(access.append("- decided: notch")), {
-    ok: true,
-    path: NOTE_PATH,
-    chars: "- decided: notch".length,
-  });
-  assert.deepEqual(await database.run(access.append("- tests green")), {
-    ok: true,
-    path: NOTE_PATH,
-    chars: "- decided: notch\n\n- tests green".length,
-  });
-  assert.deepEqual(await database.run(access.read(NOTE_PATH)), {
-    ok: true,
-    content: "- decided: notch\n\n- tests green",
-  });
+  assert.deepEqual(
+    await database.run(access.append("- decided: notch")),
+    Result.succeed({ path: NOTE_PATH, chars: "- decided: notch".length }),
+  );
+  assert.deepEqual(
+    await database.run(access.append("- tests green")),
+    Result.succeed({ path: NOTE_PATH, chars: "- decided: notch\n\n- tests green".length }),
+  );
+  assert.deepEqual(
+    await database.run(access.read(NOTE_PATH)),
+    Result.succeed({ content: "- decided: notch\n\n- tests green" }),
+  );
   now = NOON + 24 * 60 * 60 * 1000;
-  assert.deepEqual(await database.run(access.append("- next day")), {
-    ok: true,
-    path: "memory/2026-09-16.md",
-    chars: "- next day".length,
-  });
+  assert.deepEqual(
+    await database.run(access.append("- next day")),
+    Result.succeed({ path: "memory/2026-09-16.md", chars: "- next day".length }),
+  );
   assert.deepEqual(await database.run(access.listNotes(60)), [
     { path: "memory/2026-09-16.md", chars: "- next day".length },
     { path: NOTE_PATH, chars: "- decided: notch\n\n- tests green".length },
@@ -182,31 +181,30 @@ test("an entry that would grow the note past the note's own bound is refused wit
   const userId = await database.createUser();
   const access = await accessFor(userId, () => NOON);
   const nearlyFull = "x".repeat(PER_FILE - 10);
-  assert.equal((await database.run(access.append(nearlyFull))).ok, true);
-  assert.deepEqual(await database.run(access.append("- ten chars or more")), {
-    ok: false,
-    reason: tooLargeRefusal(PER_FILE),
-  });
+  assert.ok(Result.isSuccess(await database.run(access.append(nearlyFull))));
+  assert.deepEqual(
+    await database.run(access.append("- ten chars or more")),
+    Result.fail(tooLargeRefusal(PER_FILE)),
+  );
   assert.deepEqual(await database.run(access.listNotes(60)), [
     { path: NOTE_PATH, chars: nearlyFull.length },
   ]);
   // An entry that fits exactly lands: the bound is inclusive.
   const fitting = "y".repeat(8);
-  assert.deepEqual(await database.run(access.append(fitting)), {
-    ok: true,
-    path: NOTE_PATH,
-    chars: PER_FILE,
-  });
+  assert.deepEqual(
+    await database.run(access.append(fitting)),
+    Result.succeed({ path: NOTE_PATH, chars: PER_FILE }),
+  );
   // An account that never appended lists nothing, and a first entry past the bound creates no note.
   const other = await database.createUser();
   const otherAccess = await accessFor(other, () => NOON);
   const oversize = "z".repeat(PER_FILE + 1);
-  assert.equal((await database.run(otherAccess.append(oversize))).ok, false);
+  assert.ok(Result.isFailure(await database.run(otherAccess.append(oversize))));
   assert.deepEqual(await database.run(otherAccess.listNotes(60)), []);
-  assert.deepEqual(await database.run(otherAccess.read(NOTE_PATH)), {
-    ok: false,
-    reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND,
-  });
+  assert.deepEqual(
+    await database.run(otherAccess.read(NOTE_PATH)),
+    Result.fail(WORKSPACE_FILE_REFUSAL.NOT_FOUND),
+  );
 });
 
 test("appends in flight together for one account all land, none losing another's entry", async () => {
@@ -215,7 +213,8 @@ test("appends in flight together for one account all land, none losing another's
   const entries = ["- a", "- b", "- c", "- d", "- e", "- f", "- g", "- h"];
   await Promise.all(entries.map((entry) => database.run(access.append(entry))));
   const read = await database.run(access.read(NOTE_PATH));
-  assert.ok(read.ok);
-  for (const entry of entries) assert.ok(read.content.includes(entry), entry);
-  assert.equal(read.content.split("\n\n").length, entries.length);
+  assert.ok(Result.isSuccess(read));
+  if (!Result.isSuccess(read)) return;
+  for (const entry of entries) assert.ok(read.success.content.includes(entry), entry);
+  assert.equal(read.success.content.split("\n\n").length, entries.length);
 });

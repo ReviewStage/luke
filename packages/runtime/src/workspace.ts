@@ -12,6 +12,8 @@
  * data, and the tools bounded to it can name nothing outside it.
  */
 
+import type { Result } from "effect";
+
 export const WORKSPACE_FILE = {
   AGENTS: "AGENTS.md",
   IDENTITY: "IDENTITY.md",
@@ -192,18 +194,16 @@ export function tooLargeRefusal(bound: number): string {
   return `${WORKSPACE_FILE_REFUSAL.TOO_LARGE} of ${bound} characters; read it back, condense, and rewrite to fit`;
 }
 
-export type WorkspaceReadResult =
-  | { readonly ok: true; readonly content: string }
-  | { readonly ok: false; readonly reason: string };
+/** A workspace file's content, or the reason it was not read; the reason is the tool's own rejection text. */
+export type WorkspaceReadResult = Result.Result<{ readonly content: string }, string>;
 
-export type WorkspaceWriteResult =
-  | { readonly ok: true; readonly chars: number }
-  | { readonly ok: false; readonly reason: string };
+export type WorkspaceWriteResult = Result.Result<{ readonly chars: number }, string>;
 
 /** What an append to the day's note answers: the note's path and its length once the entry landed, or the refusal. */
-export type WorkspaceAppendResult =
-  | { readonly ok: true; readonly path: string; readonly chars: number }
-  | { readonly ok: false; readonly reason: string };
+export type WorkspaceAppendResult = Result.Result<
+  { readonly path: string; readonly chars: number },
+  string
+>;
 
 /** One dated note as a listing names it: its path under `memory/` and how many characters it holds, never a word of it. */
 export interface DailyNoteListing {
