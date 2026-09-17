@@ -688,15 +688,20 @@ export class VoiceService {
     if (attachment === undefined) return Effect.succeed(NO_EXCHANGE);
     return Effect.gen({ self: this }, function* () {
       const scope = yield* Scope.fork(yield* Effect.scope);
-      const stop = Scope.close(scope, Exit.void);
-      const stood = yield* Effect.exit(Scope.provide(attachment(session), scope));
-      if (Exit.isFailure(stood)) {
-        yield* stop;
+      const failed = Effect.sync(() => {
         this.#log({
           event: LOG_EVENT.EXCHANGE_FAILED,
           route: session.route,
           platform: session.platform,
         });
+      });
+      // A stop that fails is the service's to report and never the session's
+      // to inherit: the refusal, the relay's own ending, and the session's
+      // log line all follow it whatever it did.
+      const stop = Effect.catchCause(Scope.close(scope, Exit.void), () => failed);
+      const stood = yield* Effect.exit(Scope.provide(attachment(session), scope));
+      if (Exit.isFailure(stood)) {
+        yield* Effect.andThen(stop, failed);
         return { refused: true } as const;
       }
       const exchange = stood.value;
