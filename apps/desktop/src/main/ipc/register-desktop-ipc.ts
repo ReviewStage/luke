@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { Effect, Option } from "effect";
 import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -179,7 +180,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       if (!sender.panel || sender.introduction) {
         throw new ActRefused(ACT[ACT_KIND.NOTEBOOK_READ].refusal);
       }
-      return operator.host.readNotebook();
+      return Effect.map(operator.host.readNotebook(), Option.getOrUndefined);
     },
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
     [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
