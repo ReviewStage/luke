@@ -128,9 +128,7 @@ export class AgentTraceWriter {
       // is one more way the trace could not be written, said the same way.
       const work = yield* serialQueue<FileSystem.FileSystem>({
         onDefect: (cause) =>
-          Effect.sync(() =>
-            report(`Agent trace could not be written: ${String(Cause.squash(cause))}\n`),
-          ),
+          Effect.sync(() => report(`Agent trace could not be written: ${Cause.pretty(cause)}\n`)),
       });
       return new AgentTraceWriter({ ...options, report }, file, now, work);
     });

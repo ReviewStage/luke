@@ -54,9 +54,8 @@ export const removeRetiredStore = (
           fileSystem.remove(target, { recursive: true, force: true }),
           (cause) =>
             Effect.sync(() => {
-              const reason = Cause.squash(cause);
               options.report(
-                `The retired conversation store could not be removed at ${target}: ${reason instanceof Error ? reason.message : String(reason)}`,
+                `The retired conversation store could not be removed at ${target}: ${Cause.pretty(cause)}`,
               );
             }),
         );

@@ -1,4 +1,4 @@
-import { ConfigProvider, Effect, Layer, ManagedRuntime } from "effect";
+import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { webSqlClient } from "./db/sql-client.js";
@@ -14,6 +14,17 @@ import { hostedEnvironment } from "./hosted/environment.js";
  * a test that sets one and disposes the runtime gets the environment it set.
  */
 const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv()));
+
+/**
+ * Where an `Effect.log*` on this runtime goes: one JSON object per line on the
+ * console, which Vercel's log drain parses into a structured entry, with the
+ * level, the annotations, the enclosing spans, and the cause a log line was
+ * handed rendered as fields rather than folded into the message. v4 states the
+ * whole active set of loggers rather than swapping one out of it, so the
+ * tracer's logger is named beside the JSON one: it is what puts a line on the
+ * span it was written under, the one trace surface the service keeps.
+ */
+const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
 
 /**
  * The services every web function's effects run against. A function reaches
@@ -32,9 +43,12 @@ const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.
  * `repository-checks.sh` keeps that specifier out of `api/`, where the stubs
  * that re-export a bundle stand, rather than out of the bundle itself.
  */
-const webServices = Layer.mergeAll(FetchHttpClient.layer, webSqlClient, hostedEnvironment).pipe(
-  Layer.provide(webConfigProvider),
-);
+const webServices = Layer.mergeAll(
+  FetchHttpClient.layer,
+  webSqlClient,
+  hostedEnvironment,
+  webLogger,
+).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run at this edge may require. */
 export type WebServices = Layer.Success<typeof webServices>;

@@ -1,5 +1,5 @@
 import { unlessInterrupted } from "@sidecar/runtime/effect";
-import { Cause, Effect, type Schema } from "effect";
+import { type Cause, Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "./http.js";
@@ -32,9 +32,9 @@ export function unavailableSeam<Failure>(
   cause: Cause.Cause<Failure>,
 ): Effect.Effect<Response> {
   return unlessInterrupted(cause, (other) =>
-    Effect.sync(() => {
-      console.error(message, Cause.squash(other));
-      return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-    }),
+    Effect.as(
+      Effect.logError(message, other),
+      errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE),
+    ),
   );
 }
