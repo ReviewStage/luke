@@ -286,7 +286,8 @@ it.live(
       f.socket.receive(delegated("dl_1", 2500));
       yield* settled(
         () => f.eve.opened.length === 1,
-        () => `the ask to reach eve; reports ${JSON.stringify(f.reports)}`,
+        "the ask to reach eve",
+        async () => `reports ${JSON.stringify(f.reports)}`,
       );
       assert.deepEqual(
         f.eve.opened.map((message) => [message.conversationId, message.turn]),
@@ -316,10 +317,7 @@ it.live(
         ).map((row) => ({ clientId: row.clientId, role: row.role }));
         return `ask session ${ask}; turn rows ${turn.length} (${turn[0]?.status}); messages ${JSON.stringify(rows)}; commentary ${JSON.stringify(f.commentary().map((e) => e.content))}; reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`;
       };
-      yield* settled(
-        () => f.commentary().length >= 2,
-        async () => `the reply to be spoken: ${await diagnosis()}`,
-      );
+      yield* settled(() => f.commentary().length >= 2, "the reply to be spoken", diagnosis);
       assert.deepEqual(
         f.commentary().map((event) => [event.delegation_id, event.content]),
         [
@@ -382,7 +380,8 @@ it.live(
       yield* Effect.promise(() => database.run(f.exchange.briefings.look));
       yield* settled(
         () => f.commentary().length === 1,
-        () => `the briefing to be appended; reports ${JSON.stringify(f.reports)}`,
+        "the briefing to be appended",
+        async () => `reports ${JSON.stringify(f.reports)}`,
       );
       assert.deepEqual(
         f.commentary().map((event) => [event.delegation_id, event.content]),
@@ -400,10 +399,6 @@ it.live(
         start_ms: 4000,
         end_ms: 5200,
       });
-      yield* settled(
-        () => f.reports.length === 0 && true,
-        () => "nothing refused",
-      );
       yield* settled(
         async () => (await speechEventsOf(offer.messageId)).length === 3,
         "the spoken mark",

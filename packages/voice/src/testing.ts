@@ -40,12 +40,14 @@ export function onFakeChange(listener: () => void): () => void {
 
 /**
  * Polls `ready` on a `Schedule` until it answers true, or fails naming what
- * it waited for: the wait for a condition nothing announces, such as a row a
- * real database has to land, on whatever clock the test keeps.
+ * it waited for, with `diagnose`'s reading of the fixtures behind it where a
+ * suite offers one: the wait for a condition nothing announces, such as a row
+ * a real database has to land, on whatever clock the test keeps.
  */
 export function polled(
   ready: () => boolean | Promise<boolean>,
-  waitedFor: string | (() => string | Promise<string>),
+  waitedFor: string,
+  diagnose?: () => Promise<string>,
 ): Effect.Effect<void> {
   return Effect.repeat(
     Effect.promise(async () => ready()),
@@ -57,8 +59,8 @@ export function polled(
     Effect.flatMap((answered) =>
       Effect.promise(async () => {
         if (answered) return;
-        const what = typeof waitedFor === "string" ? waitedFor : await waitedFor();
-        assert.fail(`timed out waiting for ${what}`);
+        const detail = diagnose ? `: ${await diagnose()}` : "";
+        assert.fail(`timed out waiting for ${waitedFor}${detail}`);
       }),
     ),
   );
