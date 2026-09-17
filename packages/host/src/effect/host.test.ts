@@ -3,6 +3,7 @@ import { describe, it } from "@effect/vitest";
 import { GATEWAY_METHOD, type GatewayMethod, type GatewayShutdownSteps } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { HOST_CONCERN, HOST_START_ORDER } from "../compose-host.js";
 import type { Composer } from "../composer.js";
 import { mergedMethods, startedAndStopped } from "./composer.js";
@@ -298,6 +299,8 @@ describe("the drain", () => {
     persisted: number;
   }
 
+  const DEADLINE_MS = 50;
+
   const hangingSteps = (counts: Counted): GatewayShutdownSteps => ({
     closeAdmissions: Effect.sync(() => {
       counts.admissionsClosed += 1;
@@ -311,9 +314,10 @@ describe("the drain", () => {
   });
 
   // The drain runs on the clock of whoever asked for it, now that no promise
-  // door detaches it onto the default runtime, and what these two measure is
-  // the deadline itself rather than a schedule a test drives.
-  it.live(
+  // door detaches it onto the default runtime, so the deadline is the test
+  // clock's to reach: the ask is forked, the clock advanced past it, and the
+  // report is what the fork answers.
+  it.effect(
     "past its deadline counts what did not settle rather than waiting on it, and runs once for every ask",
     () =>
       Effect.gen(function* () {
@@ -321,21 +325,24 @@ describe("the drain", () => {
         const reports: string[] = [];
         const drain = yield* hostDrain(hangingSteps(counts), (message) => reports.push(message));
 
-        const first = yield* drain({ deadlineMs: 0 });
+        const asked = yield* Effect.forkChild(drain({ deadlineMs: DEADLINE_MS }));
+        yield* TestClock.adjust(DEADLINE_MS);
+        const first = yield* Fiber.join(asked);
         assert.equal(first.settled, false);
         assert.deepEqual(first.cancelled, ["run-1"]);
         assert.equal(first.unresolved, 3);
         assert.deepEqual(counts, { admissionsClosed: 1, persisted: 1 });
         assert.equal(reports.length, 1);
 
-        const again = yield* drain({ deadlineMs: 50 });
+        // A second ask, with a longer deadline, is answered from the first without waiting on it.
+        const again = yield* drain({ deadlineMs: DEADLINE_MS * 2 });
         assert.equal(again, first);
         assert.deepEqual(counts, { admissionsClosed: 1, persisted: 1 });
         assert.equal(reports.length, 1);
       }),
   );
 
-  it.live("steps that fail are the named refusal, reported once and answered to every ask", () =>
+  it.effect("steps that fail are the named refusal, reported once and answered to every ask", () =>
     Effect.gen(function* () {
       const reports: string[] = [];
       const broken = new Error("the envelopes could not be read");

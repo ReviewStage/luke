@@ -114,28 +114,26 @@ it.effect(
     }),
 );
 
-/** Gives the event loop real turns until `condition` holds, for a condition only the network can settle. */
-function waitOnTheNetwork(condition: () => boolean, rounds = 400): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    for (let round = 0; round < rounds; round += 1) {
-      if (condition()) return;
-      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
-    }
-    assert.ok(condition(), "the condition did not hold in time");
-  });
-}
-
-/** An endpoint that accepts the upgrade request and never answers it, so the handshake stands until the client gives it up. */
+/**
+ * An endpoint that accepts the upgrade request and never answers it, so the
+ * handshake stands until the client gives it up. What the network settles is
+ * awaited as the server's own events, the connection and the end of it, rather
+ * than polled on a clock.
+ */
 async function serverThatNeverAnswers() {
   const httpServer = http.createServer();
   const held = new Set<Duplex>();
   let ended = 0;
-  httpServer.on("upgrade", (_request, socket) => {
-    held.add(socket);
-    socket.on("end", () => {
-      ended += 1;
+  const connected = once(httpServer, "upgrade");
+  const firstEnd = new Promise<void>((resolve) => {
+    httpServer.on("upgrade", (_request, socket) => {
+      held.add(socket);
+      socket.on("end", () => {
+        ended += 1;
+        resolve();
+      });
+      socket.resume();
     });
-    socket.resume();
   });
   httpServer.listen(0, "127.0.0.1");
   await once(httpServer, "listening");
@@ -143,8 +141,8 @@ async function serverThatNeverAnswers() {
   const { port } = httpServer.address() as AddressInfo;
   return {
     url: `ws://127.0.0.1:${port}/v1/live/sessions/sess_1/attach`,
-    connected: () => held.size,
-    ended: () => ended,
+    connected: () => connected.then(() => held.size),
+    firstEnd: () => firstEnd.then(() => ended),
     close: async () => {
       for (const socket of held) socket.destroy();
       httpServer.close();
@@ -160,12 +158,11 @@ it.effect(
       const remote = yield* Effect.promise(() => serverThatNeverAnswers());
       try {
         const opening = yield* Effect.forkChild(openSocketOverWs(remote.url, {}));
-        yield* waitOnTheNetwork(() => remote.connected() === 1);
+        assert.equal(yield* Effect.promise(remote.connected), 1);
         yield* Fiber.interrupt(opening);
         assert.equal(Exit.hasInterrupts(yield* Fiber.await(opening)), true);
         // The handshake the interrupted attempt began is given up rather than left standing.
-        yield* waitOnTheNetwork(() => remote.ended() === 1);
-        assert.equal(remote.ended(), 1);
+        assert.equal(yield* Effect.promise(remote.firstEnd), 1);
       } finally {
         yield* Effect.promise(() => remote.close());
       }

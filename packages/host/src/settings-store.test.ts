@@ -3,9 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import type { CalendarAccountCredential } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
-import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_SOURCE, SECRET_STORAGE } from "@sidecar/credentials/vocabulary";
 import { VAULT_KEY_MAX_LENGTH, vaultKeyIsStorable } from "@sidecar/hosted";
 import { LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
@@ -17,25 +16,15 @@ import {
   type WorkspaceAgentSelection,
 } from "@sidecar/session";
 import {
-  type AccountPreferenceField,
-  type AccountPreferences,
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
   isKeyedAppSettingField,
-  type KeyedAppSettingField,
-  type SettingEntryValue,
   settingEntryGuard,
   VOICE_HOTKEY_NONE,
 } from "@sidecar/settings";
-import {
-  type AppSettings,
-  appSettingsView,
-  SETTINGS_RESET_SCOPE,
-  type SettingsResetScope,
-  type SettingsUpdateResult,
-} from "@sidecar/settings/wire";
+import { appSettingsView, SETTINGS_RESET_SCOPE } from "@sidecar/settings/wire";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACTION_RESULT_STATUS,
@@ -43,23 +32,18 @@ import {
   unparsedWire,
   type WireRecord,
 } from "@sidecar/wire";
-import { temporaryDirectory } from "@sidecar/wire/testing";
-import { ConfigProvider, Context, Effect, Layer, Redacted } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, Layer, Redacted, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import type { PlatformError } from "effect/PlatformError";
 import { test } from "vitest";
-import type { AppleCalendarConnection } from "./apple-calendar.js";
 import { Environment } from "./effect/seams.js";
-import {
-  type SettingsEnvironmentOverrides,
-  settingsOverrides,
-} from "./effect/settings-overrides.js";
+import { settingsOverrides } from "./effect/settings-overrides.js";
 import {
   apiKeyRejection,
   type SecretCipher,
   SettingsStore,
   type SettingsStoreOptions,
-  type StoredAccount,
 } from "./settings-store.js";
 
 const TEST_API_KEY = "conductor-live-key";
@@ -139,82 +123,18 @@ function expectedPersistedSettings(overrides: WireRecord = {}): UnparsedWireValu
   );
 }
 
-/** The file system every store this suite opens reads and writes through. */
-const FILE_SYSTEM: FileSystem.FileSystem = Effect.runSync(
-  Effect.provide(FileSystem.FileSystem, NodeFileSystem.layer),
-);
-
-/** The path service beside it, on the same terms. */
-const PATH: Path.Path = Effect.runSync(Effect.provide(Path.Path, NodePath.layer));
+/** The file system and path services every store this suite opens reads and writes through. */
+const PLATFORM = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 
 /**
- * The services this suite's own promise face runs the store's effects under: the
- * store's own methods are effects, and this suite holds them as the promises
- * its assertions are written against. `settings-store-awaited.ts` once
- * answered production callers the same shape by name and is now deleted;
- * this is that shape kept for the suite alone, where the run-outside-an-edge
- * rule does not reach (tests are exempt by extension).
+ * One test of the store: its effects yielded in the order they are written, on
+ * the Node file system, in a scope that takes the directories it made with it.
  */
-const SERVICES: Context.Context<never> = Context.empty();
-
-/**
- * The store's own methods, as this suite's assertions are written against
- * them — every one this file calls, never the store's whole face.
- */
-interface PromisedSettingsStore {
-  get<Field extends AppSettingField>(field: Field): Promise<AppSettingValue<Field>>;
-  set<Field extends AppSettingField>(
-    field: Field,
-    value: AppSettingValue<Field>,
-  ): Promise<SettingsUpdateResult>;
-  setEntry<Field extends KeyedAppSettingField>(
-    field: Field,
-    key: string,
-    value: SettingEntryValue<Field> | undefined,
-  ): Promise<SettingsUpdateResult>;
-  clearEntryIfUnchanged<Field extends KeyedAppSettingField>(
-    field: Field,
-    key: string,
-    expected: SettingEntryValue<Field>,
-  ): Promise<SettingsUpdateResult & { cleared: boolean }>;
-  snapshot(): Promise<AppSettings>;
-  resetSettings(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
-  readAccount(): Promise<StoredAccount | undefined>;
-  setAccount(account: StoredAccount): Promise<AccountSnapshot>;
-  clearAccount(): Promise<AccountSnapshot>;
-  accountPreferences(): Promise<AccountPreferences>;
-  applyAccountPreferences(
-    settings: AccountPreferences,
-    expected?: { accountEmail: string; preferences: AccountPreferences },
-  ): Promise<SettingsUpdateResult & { changed: readonly AccountPreferenceField[] }>;
-  accountPreferencesSyncBaseline(accountEmail: string): Promise<AccountPreferences | undefined>;
-  setAccountPreferencesSyncBaseline(
-    accountEmail: string,
-    preferences: AccountPreferences,
-  ): Promise<boolean>;
-  readApiKey(providerId: CredentialProviderId): Promise<string | undefined>;
-  readStoredApiKey(providerId: CredentialProviderId): Promise<string | undefined>;
-  retireStoredApiKeys(): Promise<boolean>;
-  setApiKey(
-    providerId: CredentialProviderId,
-    apiKey: string | undefined,
-  ): Promise<SettingsUpdateResult>;
-  readCalendarAccounts(): Promise<readonly CalendarAccountCredential[]>;
-  addCalendarAccount(
-    accountId: string,
-    refreshToken: string,
-    selectedCalendarIds: readonly string[],
-  ): Promise<SettingsUpdateResult>;
-  removeCalendarAccount(accountId: string): Promise<SettingsUpdateResult>;
-  setCalendarSelected(
-    accountId: string,
-    calendarId: string,
-    selected: boolean,
-  ): Promise<SettingsUpdateResult>;
-  connectAppleCalendar(selectedCalendarIds: readonly string[]): Promise<SettingsUpdateResult>;
-  disconnectAppleCalendar(): Promise<SettingsUpdateResult>;
-  calendarConnectionStored(): Promise<boolean>;
-  readAppleCalendarConnection(): Promise<AppleCalendarConnection | undefined>;
+function storeTest(
+  name: string,
+  body: () => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path | Scope.Scope>,
+): void {
+  it.effect(name, () => Effect.scoped(body()).pipe(Effect.provide(PLATFORM)));
 }
 
 /** The store hands a key out sealed; the assertions here are written against the string it seals. */
@@ -222,90 +142,71 @@ function revealed(key: Redacted.Redacted | undefined): string | undefined {
   return key === undefined ? undefined : Redacted.value(key);
 }
 
-function awaitedStoreOf(
+function readApiKey(
   store: SettingsStore,
-  services: Context.Context<never>,
-): PromisedSettingsStore {
-  const awaited = <Value>(effect: Effect.Effect<Value, unknown>): Promise<Value> =>
-    Effect.runPromiseWith(services)(effect);
-  return {
-    get: (field) => awaited(store.get(field)),
-    set: (field, value) => awaited(store.set(field, value)),
-    setEntry: (field, key, value) => awaited(store.setEntry(field, key, value)),
-    clearEntryIfUnchanged: (field, key, expected) =>
-      awaited(store.clearEntryIfUnchanged(field, key, expected)),
-    snapshot: () => awaited(store.snapshot()),
-    resetSettings: (scope) => awaited(store.resetSettings(scope)),
-    readAccount: () => awaited(store.readAccount()),
-    setAccount: (account) => awaited(store.setAccount(account)),
-    clearAccount: () => awaited(store.clearAccount()),
-    accountPreferences: () => awaited(store.accountPreferences()),
-    applyAccountPreferences: (settings, expected) =>
-      awaited(store.applyAccountPreferences(settings, expected)),
-    accountPreferencesSyncBaseline: (accountEmail) =>
-      awaited(store.accountPreferencesSyncBaseline(accountEmail)),
-    setAccountPreferencesSyncBaseline: (accountEmail, preferences) =>
-      awaited(store.setAccountPreferencesSyncBaseline(accountEmail, preferences)),
-    readApiKey: (providerId) => awaited(Effect.map(store.readApiKey(providerId), revealed)),
-    readStoredApiKey: (providerId) =>
-      awaited(Effect.map(store.readStoredApiKey(providerId), revealed)),
-    retireStoredApiKeys: () => awaited(store.retireStoredApiKeys()),
-    setApiKey: (providerId, apiKey) => awaited(store.setApiKey(providerId, apiKey)),
-    readCalendarAccounts: () => awaited(store.readCalendarAccounts()),
-    addCalendarAccount: (accountId, refreshToken, selectedCalendarIds) =>
-      awaited(store.addCalendarAccount(accountId, refreshToken, selectedCalendarIds)),
-    removeCalendarAccount: (accountId) => awaited(store.removeCalendarAccount(accountId)),
-    setCalendarSelected: (accountId, calendarId, selected) =>
-      awaited(store.setCalendarSelected(accountId, calendarId, selected)),
-    connectAppleCalendar: (selectedCalendarIds) =>
-      awaited(store.connectAppleCalendar(selectedCalendarIds)),
-    disconnectAppleCalendar: () => awaited(store.disconnectAppleCalendar()),
-    calendarConnectionStored: () => awaited(store.calendarConnectionStored()),
-    readAppleCalendarConnection: () => awaited(store.readAppleCalendarConnection()),
-  };
+  providerId: CredentialProviderId,
+): Effect.Effect<string | undefined, PlatformError> {
+  return Effect.map(store.readApiKey(providerId), revealed);
 }
 
-function overridesFor(environment: NodeJS.ProcessEnv): SettingsEnvironmentOverrides {
-  return Effect.runSync(
-    Effect.provide(
-      settingsOverrides,
-      Layer.succeed(Environment, ConfigProvider.fromEnvRecord(environment)),
-    ),
+function readStoredApiKey(
+  store: SettingsStore,
+  providerId: CredentialProviderId,
+): Effect.Effect<string | undefined, PlatformError> {
+  return Effect.map(store.readStoredApiKey(providerId), revealed);
+}
+
+function overridesFor(environment: NodeJS.ProcessEnv) {
+  return Effect.provide(
+    settingsOverrides,
+    Layer.succeed(Environment, ConfigProvider.fromEnvRecord(environment)),
   );
+}
+
+interface StoreFixture {
+  cipher?: SecretCipher;
+  environment?: NodeJS.ProcessEnv;
+  vaultKeyHeld?: SettingsStoreOptions["vaultKeyHeld"];
+}
+
+/** A store's seams over one directory: the fixture cipher and environment, and the platform the test runs on. */
+function storeOptions(
+  directory: string,
+  options: StoreFixture = {},
+): Effect.Effect<SettingsStoreOptions, unknown, FileSystem.FileSystem | Path.Path> {
+  return Effect.gen(function* () {
+    return {
+      directory: () => directory,
+      cipher: options.cipher ?? testCipher(),
+      overrides: yield* overridesFor(options.environment ?? {}),
+      vaultKeyHeld: options.vaultKeyHeld ?? (() => false),
+      fileSystem: yield* FileSystem.FileSystem,
+      path: yield* Path.Path,
+    };
+  });
 }
 
 function storeIn(
   directory: string,
-  options: {
-    cipher?: SecretCipher;
-    environment?: NodeJS.ProcessEnv;
-    vaultKeyHeld?: SettingsStoreOptions["vaultKeyHeld"];
-  } = {},
-): PromisedSettingsStore {
-  const config: SettingsStoreOptions = {
-    directory: () => directory,
-    cipher: options.cipher ?? testCipher(),
-    overrides: overridesFor(options.environment ?? {}),
-    vaultKeyHeld: options.vaultKeyHeld ?? (() => false),
-    fileSystem: FILE_SYSTEM,
-    path: PATH,
-  };
-  return awaitedStoreOf(new SettingsStore(config), SERVICES);
+  options: StoreFixture = {},
+): Effect.Effect<SettingsStore, unknown, FileSystem.FileSystem | Path.Path> {
+  return Effect.map(storeOptions(directory, options), (config) => new SettingsStore(config));
 }
 
-test("a failed first load is retried before a later write", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
-      showInDock: true,
-    }),
-  );
-  let directoryReads = 0;
-  const store = awaitedStoreOf(
-    new SettingsStore({
+storeTest("a failed first load is retried before a later write", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({
+        version: 2,
+        apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
+        showInDock: true,
+      }),
+    );
+    let directoryReads = 0;
+    const store = new SettingsStore({
+      ...(yield* storeOptions(directory)),
       directory: () => {
         directoryReads += 1;
         if (directoryReads === 1) {
@@ -313,42 +214,44 @@ test("a failed first load is retried before a later write", async (t) => {
         }
         return directory;
       },
-      cipher: testCipher(),
-      overrides: overridesFor({}),
-      vaultKeyHeld: () => false,
-      fileSystem: FILE_SYSTEM,
-      path: PATH,
-    }),
-    SERVICES,
+    });
+
+    const refused = yield* Effect.exit(store.get(APP_SETTING_SCHEMA.showInDock.field));
+    assert.ok(Exit.isFailure(refused));
+    assert.match(String(Cause.squash(refused.cause)), /permission denied/);
+    yield* store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
+
+    const reopened = yield* storeIn(directory);
+    assert.equal(yield* readApiKey(reopened, CONDUCTOR), TEST_API_KEY);
+    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.duckOtherMedia.field), false);
+  }),
+);
+
+function readWorkspaceAgentDefault(store: SettingsStore, providerId: ProviderId) {
+  return Effect.map(
+    store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field),
+    (defaults) => defaults?.[providerId],
   );
-
-  await assert.rejects(store.get(APP_SETTING_SCHEMA.showInDock.field), /permission denied/);
-  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
-
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.duckOtherMedia.field), false);
-});
-
-async function readWorkspaceAgentDefault(store: PromisedSettingsStore, providerId: ProviderId) {
-  return (await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[providerId];
 }
 
-async function setWorkspaceAgentDefault(
-  store: PromisedSettingsStore,
+function setWorkspaceAgentDefault(
+  store: SettingsStore,
   providerId: ProviderId,
   selection: WorkspaceAgentSelection | undefined,
 ) {
   return store.setEntry(APP_SETTING_SCHEMA.workspaceAgentDefaults.field, providerId, selection);
 }
 
-async function readWorkspaceProjectDefault(store: PromisedSettingsStore, providerId: ProviderId) {
-  return (await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[providerId];
+function readWorkspaceProjectDefault(store: SettingsStore, providerId: ProviderId) {
+  return Effect.map(
+    store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+    (defaults) => defaults?.[providerId],
+  );
 }
 
-async function setWorkspaceProjectDefault(
-  store: PromisedSettingsStore,
+function setWorkspaceProjectDefault(
+  store: SettingsStore,
   providerId: ProviderId,
   providerProjectId: string | undefined,
 ) {
@@ -359,8 +262,18 @@ async function setWorkspaceProjectDefault(
   );
 }
 
-async function readSettingsFile(directory: string): Promise<string> {
-  return fs.readFile(path.join(directory, SETTINGS_FILE_NAME), "utf8");
+/** The file as it stands, or the error the read answered: a test asks for the second where nothing was written. */
+function readSettingsFile(directory: string): Effect.Effect<string, unknown> {
+  return Effect.tryPromise({
+    try: () => fs.readFile(path.join(directory, SETTINGS_FILE_NAME), "utf8"),
+    catch: (error) => error,
+  });
+}
+
+function writeSettingsFile(directory: string, contents: string): Effect.Effect<void> {
+  return Effect.promise(() =>
+    fs.writeFile(path.join(directory, SETTINGS_FILE_NAME), contents, "utf8"),
+  );
 }
 
 /**
@@ -403,165 +316,178 @@ const RESOLVED_FIELDS = new Set<AppSettingField>([
 /** A number is no setting's shape, so one file corrupts every field at once. */
 const CORRUPT_VALUE = 7;
 
-test("every setting starts at its default, survives a reopen, and can be cleared", async (t) => {
-  for (const field of APP_SETTING_FIELDS) {
-    const fallback = APP_SETTING_SCHEMA[field].guard(undefined).value;
-    const sample = SAMPLE_VALUE[field];
-    const directory = await temporaryDirectory(t, "luke-settings-");
-    const store = storeIn(directory);
+storeTest("every setting starts at its default, survives a reopen, and can be cleared", () =>
+  Effect.gen(function* () {
+    for (const field of APP_SETTING_FIELDS) {
+      const fallback = APP_SETTING_SCHEMA[field].guard(undefined).value;
+      const sample = SAMPLE_VALUE[field];
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory);
 
-    assert.deepEqual(await store.get(field), fallback, `${field} did not start at its default`);
+      assert.deepEqual(yield* store.get(field), fallback, `${field} did not start at its default`);
 
-    const written = await store.set(field, sample);
-    assert.equal(written.reason, undefined, field);
-    assert.deepEqual(await store.get(field), sample, field);
-    assert.deepEqual(
-      await storeIn(directory).get(field),
-      sample,
-      `${field} did not survive a reopen`,
-    );
-    if (!RESOLVED_FIELDS.has(field)) {
+      const written = yield* store.set(field, sample);
+      assert.equal(written.reason, undefined, field);
+      assert.deepEqual(yield* store.get(field), sample, field);
       assert.deepEqual(
-        appSettingsView(written.settings)[field],
+        yield* (yield* storeIn(directory)).get(field),
         sample,
-        `${field} was not drawn as it was stored`,
+        `${field} did not survive a reopen`,
       );
-    }
+      if (!RESOLVED_FIELDS.has(field)) {
+        assert.deepEqual(
+          appSettingsView(written.settings)[field],
+          sample,
+          `${field} was not drawn as it was stored`,
+        );
+      }
 
-    // Clearing is the absence of a choice, not a stored empty value, so a
-    // setting that can be unset reads as unset again from a reopened file.
-    if (APP_SETTING_SCHEMA[field].guard(undefined).valid) {
-      await store.set(field, undefined);
+      // Clearing is the absence of a choice, not a stored empty value, so a
+      // setting that can be unset reads as unset again from a reopened file.
+      if (APP_SETTING_SCHEMA[field].guard(undefined).valid) {
+        yield* store.set(field, undefined);
+        assert.deepEqual(
+          yield* (yield* storeIn(directory)).get(field),
+          fallback,
+          `${field} did not clear back to its default`,
+        );
+      }
+    }
+  }),
+);
+
+storeTest("every setting reads as its default when the file holds a shape it cannot be", () =>
+  Effect.gen(function* () {
+    for (const field of APP_SETTING_FIELDS) {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      yield* writeSettingsFile(
+        directory,
+        JSON.stringify({ version: 2, apiKeys: {}, [field]: CORRUPT_VALUE }),
+      );
+
       assert.deepEqual(
-        await storeIn(directory).get(field),
-        fallback,
-        `${field} did not clear back to its default`,
+        yield* (yield* storeIn(directory)).get(field),
+        APP_SETTING_SCHEMA[field].guard(undefined).value,
+        `${field} honoured a value it cannot hold`,
       );
     }
-  }
-});
+  }),
+);
 
-test("every setting reads as its default when the file holds a shape it cannot be", async (t) => {
-  for (const field of APP_SETTING_FIELDS) {
-    const directory = await temporaryDirectory(t, "luke-settings-");
-    await fs.writeFile(
-      path.join(directory, SETTINGS_FILE_NAME),
-      JSON.stringify({ version: 2, apiKeys: {}, [field]: CORRUPT_VALUE }),
-      "utf8",
-    );
+storeTest("no setting's write reaches the cipher, and none disturbs a stored key", () =>
+  Effect.gen(function* () {
+    for (const field of APP_SETTING_FIELDS) {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const cipher = countingCipher();
+      const store = yield* storeIn(directory, { cipher });
+      yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
+      const protectingTheKey = { ...cipher.calls };
 
-    assert.deepEqual(
-      await storeIn(directory).get(field),
-      APP_SETTING_SCHEMA[field].guard(undefined).value,
-      `${field} honoured a value it cannot hold`,
-    );
-  }
-});
+      yield* store.set(field, SAMPLE_VALUE[field]);
 
-test("no setting's write reaches the cipher, and none disturbs a stored key", async (t) => {
-  for (const field of APP_SETTING_FIELDS) {
-    const directory = await temporaryDirectory(t, "luke-settings-");
-    const cipher = countingCipher();
-    const store = storeIn(directory, { cipher });
-    await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-    const protectingTheKey = { ...cipher.calls };
+      // A preference is not a credential, so choosing one must reach the
+      // Keychain not at all — and never raise its permission dialog.
+      assert.deepEqual(cipher.calls, protectingTheKey, `${field} reached the cipher`);
+      assert.equal(
+        yield* readApiKey(yield* storeIn(directory), CONDUCTOR),
+        TEST_API_KEY,
+        `${field} disturbed a stored key`,
+      );
+    }
+  }),
+);
 
-    await store.set(field, SAMPLE_VALUE[field]);
+storeTest("stores an API key encrypted, private to the owner, and never in a snapshot", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-    // A preference is not a credential, so choosing one must reach the
-    // Keychain not at all — and never raise its permission dialog.
-    assert.deepEqual(cipher.calls, protectingTheKey, `${field} reached the cipher`);
-    assert.equal(
-      await storeIn(directory).readApiKey(CONDUCTOR),
-      TEST_API_KEY,
-      `${field} disturbed a stored key`,
-    );
-  }
-});
+    const { settings, reason } = yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
+    const stats = yield* Effect.promise(() => fs.stat(path.join(directory, SETTINGS_FILE_NAME)));
 
-test("stores an API key encrypted, private to the owner, and never in a snapshot", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+    assert.equal(reason, undefined);
+    // A cloud provider's row answers for the vault, never for the file: a key
+    // still kept here is one the migration has yet to hand over.
+    assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
+    assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.AVAILABLE);
+    assert.equal(stats.mode & 0o777, 0o600);
+    assert.equal(yield* readApiKey(store, CONDUCTOR), TEST_API_KEY);
+  }),
+);
 
-  const { settings, reason } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  const stats = await fs.stat(path.join(directory, SETTINGS_FILE_NAME));
+storeTest("round-trips an encrypted account without exposing either token in snapshots", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    const account = {
+      accessToken: "access-token-secret",
+      refreshToken: "refresh-token-secret",
+      email: "developer@example.com",
+      name: "Developer",
+      provider: "github" as const,
+    };
 
-  assert.equal(reason, undefined);
-  // A cloud provider's row answers for the vault, never for the file: a key
-  // still kept here is one the migration has yet to hand over.
-  assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.AVAILABLE);
-  assert.equal(stats.mode & 0o777, 0o600);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
-});
+    const snapshot = yield* store.setAccount(account);
+    const reopened = yield* storeIn(directory);
 
-test("round-trips an encrypted account without exposing either token in snapshots", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  const account = {
-    accessToken: "access-token-secret",
-    refreshToken: "refresh-token-secret",
-    email: "developer@example.com",
-    name: "Developer",
-    provider: "github" as const,
-  };
+    assert.deepEqual(snapshot, {
+      status: ACCOUNT_STATUS.SIGNED_IN,
+      email: account.email,
+      name: account.name,
+      provider: account.provider,
+    });
+    assert.deepEqual(yield* reopened.readAccount(), account);
+  }),
+);
 
-  const snapshot = await store.setAccount(account);
-  const reopened = storeIn(directory);
-
-  assert.deepEqual(snapshot, {
-    status: ACCOUNT_STATUS.SIGNED_IN,
-    email: account.email,
-    name: account.name,
-    provider: account.provider,
-  });
-  assert.deepEqual(await reopened.readAccount(), account);
-});
-
-test("decrypts once and re-decrypts only after the key changes", async (t) => {
-  // The observation timer reads the credential every few seconds, so decrypting
-  // on each read would reach the OS keychain thousands of times a day.
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  let decryptions = 0;
-  const cipher = testCipher();
-  const store = storeIn(directory, {
-    cipher: {
-      ...cipher,
-      decrypt: (cipherText) => {
-        decryptions += 1;
-        return cipher.decrypt(cipherText);
+storeTest("decrypts once and re-decrypts only after the key changes", () =>
+  Effect.gen(function* () {
+    // The observation timer reads the credential every few seconds, so decrypting
+    // on each read would reach the OS keychain thousands of times a day.
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    let decryptions = 0;
+    const cipher = testCipher();
+    const store = yield* storeIn(directory, {
+      cipher: {
+        ...cipher,
+        decrypt: (cipherText) => {
+          decryptions += 1;
+          return cipher.decrypt(cipherText);
+        },
       },
-    },
-  });
-  await store.setApiKey(CONDUCTOR, "conductor-stored-key");
+    });
+    yield* store.setApiKey(CONDUCTOR, "conductor-stored-key");
 
-  // The snapshot a save answers with reports a cloud provider's key from the
-  // vault and resolves nothing locally, so the first read is the one decrypt.
-  await store.readApiKey(CONDUCTOR);
-  const afterFirstRead = decryptions;
-  assert.equal(afterFirstRead, 1);
-  for (let read = 0; read < 5; read += 1) await store.readApiKey(CONDUCTOR);
-  const afterReads = decryptions;
-  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
-  await store.readApiKey(CONDUCTOR);
+    // The snapshot a save answers with reports a cloud provider's key from the
+    // vault and resolves nothing locally, so the first read is the one decrypt.
+    yield* readApiKey(store, CONDUCTOR);
+    const afterFirstRead = decryptions;
+    assert.equal(afterFirstRead, 1);
+    for (let read = 0; read < 5; read += 1) yield* readApiKey(store, CONDUCTOR);
+    const afterReads = decryptions;
+    yield* store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+    yield* readApiKey(store, CONDUCTOR);
 
-  assert.equal(afterReads, afterFirstRead, "a repeated read decrypted again");
-  assert.ok(decryptions > afterReads, "a replaced key was not re-read");
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-replacement-key");
-});
+    assert.equal(afterReads, afterFirstRead, "a repeated read decrypted again");
+    assert.ok(decryptions > afterReads, "a replaced key was not re-read");
+    assert.equal(yield* readApiKey(store, CONDUCTOR), "conductor-replacement-key");
+  }),
+);
 
-test("reads a stored key back from a new store instance", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
+storeTest("reads a stored key back from a new store instance", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* (yield* storeIn(directory)).setApiKey(CONDUCTOR, TEST_API_KEY);
 
-  const reopened = storeIn(directory);
+    const reopened = yield* storeIn(directory);
 
-  assert.equal(await reopened.readApiKey(CONDUCTOR), TEST_API_KEY);
-  assert.equal(
-    appSettingsView(await reopened.snapshot()).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.NONE,
-  );
-});
+    assert.equal(yield* readApiKey(reopened, CONDUCTOR), TEST_API_KEY);
+    assert.equal(
+      appSettingsView(yield* reopened.snapshot()).credentialSources[CONDUCTOR],
+      CREDENTIAL_SOURCE.NONE,
+    );
+  }),
+);
 
 test("a key the door admits is one the vault stores, and each refusal names its own reason", () => {
   // The cloud path holds a key to apiKeyRejection alone, so the vault's shape
@@ -577,341 +503,400 @@ test("a key the door admits is one the vault stores, and each refusal names its 
   }
 });
 
-test("a cloud provider's source is the vault's answer for the account signed in, whatever this Mac holds or reads", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const held = storeIn(directory, {
-    environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
-    vaultKeyHeld: () => true,
-  });
-  // The vault's list is the account's: signed out, a held key is nobody's to show.
-  assert.equal(
-    appSettingsView(await held.snapshot()).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.NONE,
-  );
-  await held.setAccount({
-    accessToken: "access-token-secret",
-    refreshToken: "refresh-token-secret",
-    email: "developer@example.com",
-    name: "Developer",
-    provider: "github",
-  });
-  assert.equal(
-    appSettingsView(await held.snapshot()).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.SERVICE,
-  );
-  const unheld = storeIn(directory, {
-    environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
-  });
-  assert.equal(
-    appSettingsView(await unheld.snapshot()).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.NONE,
-  );
-});
-
-test("clears a stored key", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-
-  const { settings } = await store.setApiKey(CONDUCTOR, undefined);
-
-  assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
-});
-
-// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a stored selection keeps only the filters this build recognizes", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: {},
-      sessionFilters: ["local", "a-future-builds-filter", 7, "local", PROVIDER_ID.CODEX],
+storeTest(
+  "a cloud provider's source is the vault's answer for the account signed in, whatever this Mac holds or reads",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const held = yield* storeIn(directory, {
+        environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
+        vaultKeyHeld: () => true,
+      });
+      // The vault's list is the account's: signed out, a held key is nobody's to show.
+      assert.equal(
+        appSettingsView(yield* held.snapshot()).credentialSources[CONDUCTOR],
+        CREDENTIAL_SOURCE.NONE,
+      );
+      yield* held.setAccount({
+        accessToken: "access-token-secret",
+        refreshToken: "refresh-token-secret",
+        email: "developer@example.com",
+        name: "Developer",
+        provider: "github",
+      });
+      assert.equal(
+        appSettingsView(yield* held.snapshot()).credentialSources[CONDUCTOR],
+        CREDENTIAL_SOURCE.SERVICE,
+      );
+      const unheld = yield* storeIn(directory, {
+        environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
+      });
+      assert.equal(
+        appSettingsView(yield* unheld.snapshot()).credentialSources[CONDUCTOR],
+        CREDENTIAL_SOURCE.NONE,
+      );
     }),
-    "utf8",
-  );
+);
 
-  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).sessionFilters, [
-    SESSION_FILTER.LOCAL,
-    PROVIDER_ID.CODEX,
-  ]);
-});
+storeTest("clears a stored key", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
+
+    const { settings } = yield* store.setApiKey(CONDUCTOR, undefined);
+
+    assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
+    assert.equal(yield* readApiKey(store, CONDUCTOR), undefined);
+  }),
+);
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("a stored query of nothing but whitespace reads as unset rather than narrowing", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, sessionSearchQuery: "   " }),
-    "utf8",
-  );
+storeTest("a stored selection keeps only the filters this build recognizes", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({
+        version: 2,
+        apiKeys: {},
+        sessionFilters: ["local", "a-future-builds-filter", 7, "local", PROVIDER_ID.CODEX],
+      }),
+    );
 
-  assert.equal(appSettingsView(await storeIn(directory).snapshot()).sessionSearchQuery, undefined);
-});
+    assert.deepEqual(
+      appSettingsView(yield* (yield* storeIn(directory)).snapshot()).sessionFilters,
+      [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX],
+    );
+  }),
+);
 
-test("a stored connection answers presence without touching any grant", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+// SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+storeTest("a stored query of nothing but whitespace reads as unset rather than narrowing", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({ version: 2, apiKeys: {}, sessionSearchQuery: "   " }),
+    );
 
-  assert.equal(await store.calendarConnectionStored(), false);
-  await store.connectAppleCalendar(["home"]);
-  assert.equal(await store.calendarConnectionStored(), true);
-  await store.disconnectAppleCalendar();
-  assert.equal(await store.calendarConnectionStored(), false);
-  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
-  assert.equal(await store.calendarConnectionStored(), true);
-});
+    assert.equal(
+      appSettingsView(yield* (yield* storeIn(directory)).snapshot()).sessionSearchQuery,
+      undefined,
+    );
+  }),
+);
 
-test("a calendar account stores its grant encrypted and survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+storeTest("a stored connection answers presence without touching any grant", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-  assert.deepEqual(await store.readCalendarAccounts(), []);
-  const stored = await store.addCalendarAccount("dev@example.com", "1//grant-from-sign-in", [
-    "dev@example.com",
-  ]);
+    assert.equal(yield* store.calendarConnectionStored(), false);
+    yield* store.connectAppleCalendar(["home"]);
+    assert.equal(yield* store.calendarConnectionStored(), true);
+    yield* store.disconnectAppleCalendar();
+    assert.equal(yield* store.calendarConnectionStored(), false);
+    yield* store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
+    assert.equal(yield* store.calendarConnectionStored(), true);
+  }),
+);
 
-  assert.equal(stored.reason, undefined);
-  assert.deepEqual(appSettingsView(stored.settings).calendarAccounts, [
-    { id: "dev@example.com", selectedCalendarIds: ["dev@example.com"] },
-  ]);
-  // At rest the grant is ciphertext, never the plain token.
-  const persisted = JSON.parse(await readSettingsFile(directory));
-  assert.equal(persisted.calendarAccounts[0].token, sealed("1//grant-from-sign-in"));
-  // The account outlives the run that stored it, grant and choices together.
-  assert.deepEqual(await storeIn(directory).readCalendarAccounts(), [
-    {
-      id: "dev@example.com",
-      refreshToken: "1//grant-from-sign-in",
-      selectedCalendarIds: ["dev@example.com"],
-    },
-  ]);
-});
+storeTest("a calendar account stores its grant encrypted and survives a reopen", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-test("accounts stand side by side, and reconnecting one keeps its choices", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+    assert.deepEqual(yield* store.readCalendarAccounts(), []);
+    const stored = yield* store.addCalendarAccount("dev@example.com", "1//grant-from-sign-in", [
+      "dev@example.com",
+    ]);
 
-  await store.addCalendarAccount("work@example.com", "1//work-grant", ["work@example.com"]);
-  await store.addCalendarAccount("home@example.com", "1//home-grant", ["home@example.com"]);
-  await store.setCalendarSelected("work@example.com", "team-calendar", true);
-  // Signing into work again replaces the grant, not the user's choices.
-  await store.addCalendarAccount("work@example.com", "1//fresh-work-grant", ["work@example.com"]);
+    assert.equal(stored.reason, undefined);
+    assert.deepEqual(appSettingsView(stored.settings).calendarAccounts, [
+      { id: "dev@example.com", selectedCalendarIds: ["dev@example.com"] },
+    ]);
+    // At rest the grant is ciphertext, never the plain token.
+    const persisted = JSON.parse(yield* readSettingsFile(directory));
+    assert.equal(persisted.calendarAccounts[0].token, sealed("1//grant-from-sign-in"));
+    // The account outlives the run that stored it, grant and choices together.
+    assert.deepEqual(yield* (yield* storeIn(directory)).readCalendarAccounts(), [
+      {
+        id: "dev@example.com",
+        refreshToken: "1//grant-from-sign-in",
+        selectedCalendarIds: ["dev@example.com"],
+      },
+    ]);
+  }),
+);
 
-  const accounts = await store.readCalendarAccounts();
-  assert.deepEqual(accounts, [
-    {
-      id: "work@example.com",
-      refreshToken: "1//fresh-work-grant",
-      selectedCalendarIds: ["work@example.com", "team-calendar"],
-    },
-    {
-      id: "home@example.com",
-      refreshToken: "1//home-grant",
-      selectedCalendarIds: ["home@example.com"],
-    },
-  ]);
-});
+storeTest("accounts stand side by side, and reconnecting one keeps its choices", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-test("selection changes one calendar on one account, and removal takes the grant with it", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
+    yield* store.addCalendarAccount("work@example.com", "1//work-grant", ["work@example.com"]);
+    yield* store.addCalendarAccount("home@example.com", "1//home-grant", ["home@example.com"]);
+    yield* store.setCalendarSelected("work@example.com", "team-calendar", true);
+    // Signing into work again replaces the grant, not the user's choices.
+    yield* store.addCalendarAccount("work@example.com", "1//fresh-work-grant", [
+      "work@example.com",
+    ]);
 
-  await store.setCalendarSelected("dev@example.com", "team-calendar", true);
-  await store.setCalendarSelected("dev@example.com", "dev@example.com", false);
-  const unknown = await store.setCalendarSelected("nobody@example.com", "team-calendar", true);
-  assert.equal(unknown.reason, "That calendar account is not connected.");
+    const accounts = yield* store.readCalendarAccounts();
+    assert.deepEqual(accounts, [
+      {
+        id: "work@example.com",
+        refreshToken: "1//fresh-work-grant",
+        selectedCalendarIds: ["work@example.com", "team-calendar"],
+      },
+      {
+        id: "home@example.com",
+        refreshToken: "1//home-grant",
+        selectedCalendarIds: ["home@example.com"],
+      },
+    ]);
+  }),
+);
 
-  assert.deepEqual((await store.readCalendarAccounts())[0]?.selectedCalendarIds, ["team-calendar"]);
+storeTest(
+  "selection changes one calendar on one account, and removal takes the grant with it",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory);
+      yield* store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
 
-  const removed = await store.removeCalendarAccount("dev@example.com");
-  assert.deepEqual(appSettingsView(removed.settings).calendarAccounts, []);
-  assert.deepEqual(await store.readCalendarAccounts(), []);
-  // Nothing empty is written down: a file with no accounts carries no field.
-  assert.equal(JSON.parse(await readSettingsFile(directory)).calendarAccounts, undefined);
-});
+      yield* store.setCalendarSelected("dev@example.com", "team-calendar", true);
+      yield* store.setCalendarSelected("dev@example.com", "dev@example.com", false);
+      const unknown = yield* store.setCalendarSelected("nobody@example.com", "team-calendar", true);
+      assert.equal(unknown.reason, "That calendar account is not connected.");
 
-test("the Apple Calendar connection stores only the choice and survives a reopen", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+      assert.deepEqual((yield* store.readCalendarAccounts())[0]?.selectedCalendarIds, [
+        "team-calendar",
+      ]);
 
-  assert.equal(await store.readAppleCalendarConnection(), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).appleCalendar, undefined);
+      const removed = yield* store.removeCalendarAccount("dev@example.com");
+      assert.deepEqual(appSettingsView(removed.settings).calendarAccounts, []);
+      assert.deepEqual(yield* store.readCalendarAccounts(), []);
+      // Nothing empty is written down: a file with no accounts carries no field.
+      assert.equal(JSON.parse(yield* readSettingsFile(directory)).calendarAccounts, undefined);
+    }),
+);
 
-  const connected = await store.connectAppleCalendar(["home", "work"]);
-  assert.equal(connected.reason, undefined);
-  assert.deepEqual(appSettingsView(connected.settings).appleCalendar, {
-    id: "apple-calendar",
-    selectedCalendarIds: ["home", "work"],
-  });
-  // Nothing secret is at rest: the file carries the choice and no token, so
-  // nothing here ever reaches the cipher.
-  const persisted = JSON.parse(await readSettingsFile(directory));
-  assert.deepEqual(persisted.appleCalendar, { calendars: ["home", "work"] });
-  // The connection outlives the run that stored it.
-  assert.deepEqual(await storeIn(directory).readAppleCalendarConnection(), {
-    selectedCalendarIds: ["home", "work"],
-  });
-});
+storeTest("the Apple Calendar connection stores only the choice and survives a reopen", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-test("connecting Apple Calendar again keeps the held choices, and selection edits them", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.connectAppleCalendar(["default-calendar"]);
-  // Asking to connect while connected is not a fresh mind about the choices.
-  await store.connectAppleCalendar(["another"]);
-  // The Apple selection goes through the same door as every account's,
-  // routed by the fixed id, so callers never learn it is stored apart.
-  await store.setCalendarSelected("apple-calendar", "team", true);
-  await store.setCalendarSelected("apple-calendar", "default-calendar", false);
-  assert.deepEqual(await store.readAppleCalendarConnection(), { selectedCalendarIds: ["team"] });
+    assert.equal(yield* store.readAppleCalendarConnection(), undefined);
+    assert.equal(appSettingsView(yield* store.snapshot()).appleCalendar, undefined);
 
-  const disconnected = await store.disconnectAppleCalendar();
-  assert.equal(appSettingsView(disconnected.settings).appleCalendar, undefined);
-  assert.equal(await store.readAppleCalendarConnection(), undefined);
-  const idle = await store.setCalendarSelected("apple-calendar", "team", true);
-  assert.equal(idle.reason, "Apple Calendar is not connected.");
-  // Nothing empty is written down: a disconnected file carries no field.
-  assert.equal(JSON.parse(await readSettingsFile(directory)).appleCalendar, undefined);
-});
+    const connected = yield* store.connectAppleCalendar(["home", "work"]);
+    assert.equal(connected.reason, undefined);
+    assert.deepEqual(appSettingsView(connected.settings).appleCalendar, {
+      id: "apple-calendar",
+      selectedCalendarIds: ["home", "work"],
+    });
+    // Nothing secret is at rest: the file carries the choice and no token, so
+    // nothing here ever reaches the cipher.
+    const persisted = JSON.parse(yield* readSettingsFile(directory));
+    assert.deepEqual(persisted.appleCalendar, { calendars: ["home", "work"] });
+    // The connection outlives the run that stored it.
+    assert.deepEqual(yield* (yield* storeIn(directory)).readAppleCalendarConnection(), {
+      selectedCalendarIds: ["home", "work"],
+    });
+  }),
+);
 
-test("Apple Calendar is offered only where there is a Mac calendar to read", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const snapshot = await storeIn(directory).snapshot();
-  assert.equal(appSettingsView(snapshot).appleCalendarAvailable, process.platform === "darwin");
-});
+storeTest("connecting Apple Calendar again keeps the held choices, and selection edits them", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    yield* store.connectAppleCalendar(["default-calendar"]);
+    // Asking to connect while connected is not a fresh mind about the choices.
+    yield* store.connectAppleCalendar(["another"]);
+    // The Apple selection goes through the same door as every account's,
+    // routed by the fixed id, so callers never learn it is stored apart.
+    yield* store.setCalendarSelected("apple-calendar", "team", true);
+    yield* store.setCalendarSelected("apple-calendar", "default-calendar", false);
+    assert.deepEqual(yield* store.readAppleCalendarConnection(), { selectedCalendarIds: ["team"] });
 
-test("a calendar account never disturbs a stored key, nor a key an account", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+    const disconnected = yield* store.disconnectAppleCalendar();
+    assert.equal(appSettingsView(disconnected.settings).appleCalendar, undefined);
+    assert.equal(yield* store.readAppleCalendarConnection(), undefined);
+    const idle = yield* store.setCalendarSelected("apple-calendar", "team", true);
+    assert.equal(idle.reason, "Apple Calendar is not connected.");
+    // Nothing empty is written down: a disconnected file carries no field.
+    assert.equal(JSON.parse(yield* readSettingsFile(directory)).appleCalendar, undefined);
+  }),
+);
 
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  await store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
-  await store.setApiKey(CONDUCTOR, undefined);
+storeTest("Apple Calendar is offered only where there is a Mac calendar to read", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const snapshot = yield* (yield* storeIn(directory)).snapshot();
+    assert.equal(appSettingsView(snapshot).appleCalendarAvailable, process.platform === "darwin");
+  }),
+);
 
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), undefined);
-  assert.equal((await reopened.readCalendarAccounts()).length, 1);
-});
+storeTest("a calendar account never disturbs a stored key, nor a key an account", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-test("a stored key outranks the environment fallback in a read, and clearing it returns the read to the environment", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, {
-    environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
-  });
+    yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
+    yield* store.addCalendarAccount("dev@example.com", "1//grant", ["dev@example.com"]);
+    yield* store.setApiKey(CONDUCTOR, undefined);
 
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-environment");
-  await store.setApiKey(CONDUCTOR, "conductor-stored-key");
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
-  // The stored key alone is Luke's to send anywhere; the environment's is
-  // the shell's, and a caller that asks for what is stored is told so.
-  assert.equal(await store.readStoredApiKey(CONDUCTOR), "conductor-stored-key");
+    const reopened = yield* storeIn(directory);
+    assert.equal(yield* readApiKey(reopened, CONDUCTOR), undefined);
+    assert.equal((yield* reopened.readCalendarAccounts()).length, 1);
+  }),
+);
 
-  // Clearing the stored key does not clear the environment, which was never
-  // Luke's to hold.
-  await store.setApiKey(CONDUCTOR, undefined);
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-environment");
-  assert.equal(await store.readStoredApiKey(CONDUCTOR), undefined);
-  // A cloud provider's row answers for the vault, never for a key this Mac
-  // holds or reads from its shell.
-  assert.equal(
-    appSettingsView(await store.snapshot()).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.NONE,
-  );
-});
+storeTest(
+  "a stored key outranks the environment fallback in a read, and clearing it returns the read to the environment",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory, {
+        environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
+      });
 
-test("a launch drops the ciphertext of a provider this build no longer names, and keeps the rest", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.setApiKey(CONDUCTOR, "conductor-stored-key");
-  // The developer's own OpenAI key, as a build before LUKE-205 stored it.
-  const contents = JSON.parse(await readSettingsFile(directory));
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ ...contents, apiKeys: { ...contents.apiKeys, openai: sealed("sk-retired") } }),
-    "utf8",
-  );
+      assert.equal(yield* readApiKey(store, CONDUCTOR), "conductor-environment");
+      yield* store.setApiKey(CONDUCTOR, "conductor-stored-key");
+      assert.equal(yield* readApiKey(store, CONDUCTOR), "conductor-stored-key");
+      // The stored key alone is Luke's to send anywhere; the environment's is
+      // the shell's, and a caller that asks for what is stored is told so.
+      assert.equal(yield* readStoredApiKey(store, CONDUCTOR), "conductor-stored-key");
 
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.retireStoredApiKeys(), true, "the file moved");
-  assert.deepEqual(
-    JSON.parse(await readSettingsFile(directory)),
-    expectedPersistedSettings({ apiKeys: { [CONDUCTOR]: sealed("conductor-stored-key") } }),
-  );
-  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-stored-key");
-  // Nothing left to drop is no write at all.
-  assert.equal(await reopened.retireStoredApiKeys(), false);
-});
+      // Clearing the stored key does not clear the environment, which was never
+      // Luke's to hold.
+      yield* store.setApiKey(CONDUCTOR, undefined);
+      assert.equal(yield* readApiKey(store, CONDUCTOR), "conductor-environment");
+      assert.equal(yield* readStoredApiKey(store, CONDUCTOR), undefined);
+      // A cloud provider's row answers for the vault, never for a key this Mac
+      // holds or reads from its shell.
+      assert.equal(
+        appSettingsView(yield* store.snapshot()).credentialSources[CONDUCTOR],
+        CREDENTIAL_SOURCE.NONE,
+      );
+    }),
+);
 
-test("the last of two overlapping saves of one key is what the file keeps", async (t) => {
-  // Each settings row carries its own busy flag, so a save can begin before
-  // the one before it has landed; the write gate orders them.
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+storeTest(
+  "a launch drops the ciphertext of a provider this build no longer names, and keeps the rest",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory);
+      yield* store.setApiKey(CONDUCTOR, "conductor-stored-key");
+      // The developer's own OpenAI key, as a build before LUKE-205 stored it.
+      const contents = JSON.parse(yield* readSettingsFile(directory));
+      yield* writeSettingsFile(
+        directory,
+        JSON.stringify({
+          ...contents,
+          apiKeys: { ...contents.apiKeys, openai: sealed("sk-retired") },
+        }),
+      );
 
-  await Promise.all([
-    store.setApiKey(CONDUCTOR, "conductor-first-key"),
-    store.setApiKey(CONDUCTOR, "conductor-stored-key"),
-  ]);
+      const reopened = yield* storeIn(directory);
+      assert.equal(yield* reopened.retireStoredApiKeys(), true, "the file moved");
+      assert.deepEqual(
+        JSON.parse(yield* readSettingsFile(directory)),
+        expectedPersistedSettings({ apiKeys: { [CONDUCTOR]: sealed("conductor-stored-key") } }),
+      );
+      assert.equal(yield* readApiKey(reopened, CONDUCTOR), "conductor-stored-key");
+      // Nothing left to drop is no write at all.
+      assert.equal(yield* reopened.retireStoredApiKeys(), false);
+    }),
+);
 
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
-  assert.deepEqual(
-    JSON.parse(await readSettingsFile(directory)),
-    expectedPersistedSettings({ apiKeys: { [CONDUCTOR]: sealed("conductor-stored-key") } }),
-  );
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-stored-key");
-});
+storeTest("the last of two overlapping saves of one key is what the file keeps", () =>
+  Effect.gen(function* () {
+    // Each settings row carries its own busy flag, so a save can begin before
+    // the one before it has landed; the write gate orders them.
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-test("reports nothing for a provider the registry does not name", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const unknown = "no-such-service" as CredentialProviderId;
+    yield* Effect.all(
+      [
+        store.setApiKey(CONDUCTOR, "conductor-first-key"),
+        store.setApiKey(CONDUCTOR, "conductor-stored-key"),
+      ],
+      { concurrency: "unbounded" },
+    );
 
-  assert.equal(await store.readApiKey(unknown), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).credentialSources[unknown], undefined);
-});
+    assert.equal(yield* readApiKey(store, CONDUCTOR), "conductor-stored-key");
+    assert.deepEqual(
+      JSON.parse(yield* readSettingsFile(directory)),
+      expectedPersistedSettings({ apiKeys: { [CONDUCTOR]: sealed("conductor-stored-key") } }),
+    );
+    const reopened = yield* storeIn(directory);
+    assert.equal(yield* readApiKey(reopened, CONDUCTOR), "conductor-stored-key");
+  }),
+);
 
-test("falls back to an API key from the environment", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, {
-    environment: { [TEST_ENVIRONMENT_VARIABLE.API_TOKEN]: `  ${TEST_API_KEY}  ` },
-  });
+storeTest("reports nothing for a provider the registry does not name", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    const unknown = "no-such-service" as CredentialProviderId;
 
-  const settings = appSettingsView(await store.snapshot());
+    assert.equal(yield* readApiKey(store, unknown), undefined);
+    assert.equal(appSettingsView(yield* store.snapshot()).credentialSources[unknown], undefined);
+  }),
+);
 
-  // The key resolves for a caller that asks, but a cloud provider's row does
-  // not answer for the shell: the vault is the one place its key connects from.
-  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
-});
+storeTest("falls back to an API key from the environment", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory, {
+      environment: { [TEST_ENVIRONMENT_VARIABLE.API_TOKEN]: `  ${TEST_API_KEY}  ` },
+    });
 
-test("prefers a stored key over one from the environment", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, {
-    environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment-key" },
-  });
-  await store.setApiKey(CONDUCTOR, TEST_API_KEY);
+    const settings = appSettingsView(yield* store.snapshot());
 
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
-});
+    // The key resolves for a caller that asks, but a cloud provider's row does
+    // not answer for the shell: the vault is the one place its key connects from.
+    assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
+    assert.equal(yield* readApiKey(store, CONDUCTOR), TEST_API_KEY);
+  }),
+);
 
-test("rejects a key that cannot be sent as an authorization header", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+storeTest("prefers a stored key over one from the environment", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory, {
+      environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment-key" },
+    });
+    yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
 
-  for (const candidate of ["short", "key with spaces", "k".repeat(513)]) {
-    // The store answers with the rule's own reason rather than one of its
-    // own, and a refused key leaves the file it would have been written to
-    // uncreated.
-    assert.equal((await store.setApiKey(CONDUCTOR, candidate)).reason, apiKeyRejection(candidate));
-  }
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
-  await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
-});
+    assert.equal(yield* readApiKey(store, CONDUCTOR), TEST_API_KEY);
+  }),
+);
+
+storeTest("rejects a key that cannot be sent as an authorization header", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+
+    for (const candidate of ["short", "key with spaces", "k".repeat(513)]) {
+      // The store answers with the rule's own reason rather than one of its
+      // own, and a refused key leaves the file it would have been written to
+      // uncreated.
+      assert.equal(
+        (yield* store.setApiKey(CONDUCTOR, candidate)).reason,
+        apiKeyRejection(candidate),
+      );
+    }
+    assert.equal(yield* readApiKey(store, CONDUCTOR), undefined);
+    assert.match(String(yield* Effect.flip(readSettingsFile(directory))), /ENOENT/);
+  }),
+);
 
 test("holds a key only in the form its provider says it issues", () => {
   // A credential in a form the provider no longer accepts would be refused on
@@ -929,479 +914,545 @@ test("holds a key only in the form its provider says it issues", () => {
   assert.equal(apiKeyRejection("legacy-third-cloud-key"), undefined);
 });
 
-test("refuses to store a key when encrypted storage is unavailable", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { cipher: testCipher(false) });
+storeTest("refuses to store a key when encrypted storage is unavailable", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory, { cipher: testCipher(false) });
 
-  const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.UNAVAILABLE);
-  assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-  await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
-});
+    const { settings } = yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
+    assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.UNAVAILABLE);
+    assert.equal(appSettingsView(settings).credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
+    assert.match(String(yield* Effect.flip(readSettingsFile(directory))), /ENOENT/);
+  }),
+);
 
-test("asks the cipher nothing on a launch with no key to protect", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
+storeTest("asks the cipher nothing on a launch with no key to protect", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const cipher = countingCipher();
+    const store = yield* storeIn(directory, { cipher });
 
-  const settings = appSettingsView(await store.snapshot());
+    const settings = appSettingsView(yield* store.snapshot());
 
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  // Nothing has asked, so nothing is claimed either way.
-  assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
-});
+    assert.equal(yield* readApiKey(store, CONDUCTOR), undefined);
+    assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+    // Nothing has asked, so nothing is claimed either way.
+    assert.equal(settings.secretStorage, SECRET_STORAGE.UNKNOWN);
+  }),
+);
 
-test("asks the cipher nothing to clear a key", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
+storeTest("asks the cipher nothing to clear a key", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const cipher = countingCipher();
+    const store = yield* storeIn(directory, { cipher });
 
-  const { settings, reason } = await store.setApiKey(CONDUCTOR, undefined);
+    const { settings, reason } = yield* store.setApiKey(CONDUCTOR, undefined);
 
-  assert.equal(reason, undefined);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.UNKNOWN);
-});
+    assert.equal(reason, undefined);
+    assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+    assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.UNKNOWN);
+  }),
+);
 
-test("asks once when a key is stored and reports that answer from then on", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
+storeTest("asks once when a key is stored and reports that answer from then on", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const cipher = countingCipher();
+    const store = yield* storeIn(directory, { cipher });
 
-  const { settings } = await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-  const afterwards = appSettingsView(await store.snapshot());
-  await store.setApiKey(CONDUCTOR, `${TEST_API_KEY}-rotated`);
+    const { settings } = yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
+    const afterwards = appSettingsView(yield* store.snapshot());
+    yield* store.setApiKey(CONDUCTOR, `${TEST_API_KEY}-rotated`);
 
-  assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.AVAILABLE);
-  assert.equal(afterwards.secretStorage, SECRET_STORAGE.AVAILABLE);
-  // Once per run, however many keys pass through it.
-  assert.equal(cipher.calls.isAvailable, 1);
-});
+    assert.equal(appSettingsView(settings).secretStorage, SECRET_STORAGE.AVAILABLE);
+    assert.equal(afterwards.secretStorage, SECRET_STORAGE.AVAILABLE);
+    // Once per run, however many keys pass through it.
+    assert.equal(cipher.calls.isAvailable, 1);
+  }),
+);
 
-test("decrypts a stored key without asking whether storage is available", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
+storeTest("decrypts a stored key without asking whether storage is available", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* (yield* storeIn(directory)).setApiKey(CONDUCTOR, TEST_API_KEY);
+    const cipher = countingCipher();
+    const store = yield* storeIn(directory, { cipher });
 
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
-  // Recovering a key the user has is the one reason to reach the Keychain on a
-  // launch, and it is reason enough on its own.
-  assert.equal(cipher.calls.decrypt, 1);
-  assert.equal(cipher.calls.isAvailable, 0);
-});
+    assert.equal(yield* readApiKey(store, CONDUCTOR), TEST_API_KEY);
+    // Recovering a key the user has is the one reason to reach the Keychain on a
+    // launch, and it is reason enough on its own.
+    assert.equal(cipher.calls.decrypt, 1);
+    assert.equal(cipher.calls.isAvailable, 0);
+  }),
+);
 
-test("ignores a stored key that can no longer be decrypted", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: { [CONDUCTOR]: Buffer.from("rotated").toString("base64") },
-    }),
-  );
-
-  const store = storeIn(directory);
-
-  assert.equal(await store.readApiKey(CONDUCTOR), undefined);
-  assert.equal(
-    appSettingsView(await store.snapshot()).credentialSources[CONDUCTOR],
-    CREDENTIAL_SOURCE.NONE,
-  );
-});
-
-test("carries a key belonging to a provider this build does not know", async (t) => {
-  // A file written by a newer build must not lose credentials to an older one.
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: { "later-cloud": sealed("later-cloud-key") } }),
-  );
-
-  await storeIn(directory).setApiKey(CONDUCTOR, TEST_API_KEY);
-  const persisted: unknown = JSON.parse(await readSettingsFile(directory));
-
-  assert.deepEqual(
-    persisted,
-    expectedPersistedSettings({
-      apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
-    }),
-  );
-});
-
-test("decides the Dock icon from the file alone, never the keychain", async (t) => {
-  // The icon is drawn at launch from this answer, so a locked or slow
-  // Keychain — which decrypting a stored key can wait on — must not be able to
-  // delay it.
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
-      showInDock: true,
-    }),
-  );
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(await store.get(APP_SETTING_SCHEMA.showInDock.field), true);
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-});
-
-test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, {
-    environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
-  });
-
-  assert.equal(appSettingsView(await store.snapshot()).voice, LIVE_VOICE.SAGE);
-  // The environment names the voice only until the user does, so it is
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // reported in the snapshot but never as something the user stored.
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
-  assert.equal(appSettingsView(await store.snapshot()).voice, LIVE_VOICE.MARIN);
-
-  await store.set(APP_SETTING_SCHEMA.voice.field, undefined);
-  assert.equal(appSettingsView(await store.snapshot()).voice, LIVE_VOICE.SAGE);
-});
-
-test("ignores a stored or environment voice this build does not offer", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, voice: "baritone" }),
-  );
-  const store = storeIn(directory, { environment: { LUKE_LIVE_VOICE: "baritone" } });
-
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).voice, LIVE_DEFAULTS.VOICE);
-});
-
-test("account preferences extraction excludes resolved defaults and local-only preferences", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, {
-    environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
-  });
-
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.CEDAR);
-
-  assert.deepEqual(await store.accountPreferences(), {
-    voice: LIVE_VOICE.CEDAR,
-  });
-});
-
-test("applies account preferences to disk and restores them from a new store", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "project-local");
-
-  const result = await store.applyAccountPreferences({
-    voice: LIVE_VOICE.MARIN,
-    workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol" } },
-  });
-
-  assert.deepEqual(result.changed, [
-    APP_SETTING_SCHEMA.voice.field,
-    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-    APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-  ]);
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), VOICE_HOTKEY_NONE);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.MARIN);
-  assert.equal(await readWorkspaceProjectDefault(reopened, PROVIDER_ID.CONDUCTOR), undefined);
-  assert.deepEqual(await readWorkspaceAgentDefault(reopened, PROVIDER_ID.CONDUCTOR), {
-    agent: "codex",
-    model: "gpt-5.6-sol",
-  });
-});
-
-test("merges hosted account preferences around concurrent local preference edits", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  const account = {
-    accessToken: "access-token-secret",
-    refreshToken: "refresh-token-secret",
-    email: "developer@example.com",
-    name: "Developer",
-    provider: "github" as const,
-  };
-  await store.setAccount(account);
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
-  const expected = await store.accountPreferences();
-
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.ECHO);
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "local-project");
-  const result = await store.applyAccountPreferences(
-    {
-      voice: LIVE_VOICE.MARIN,
-      defaultWorkspaceProvider: PROVIDER_ID.CODEX,
-      workspaceProjectDefaults: { [PROVIDER_ID.CODEX]: "remote-project" },
-    },
-    { accountEmail: account.email, preferences: expected },
-  );
-
-  assert.deepEqual(result.changed, [
-    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-  ]);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.ECHO);
-  assert.equal(
-    await store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    PROVIDER_ID.CODEX,
-  );
-  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), "local-project");
-  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CODEX), "remote-project");
-});
-
-test("keeps local account preference edits across a failed hosted write and restart", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const account = {
-    accessToken: "access-token-secret",
-    refreshToken: "refresh-token-secret",
-    email: "developer@example.com",
-    name: "Developer",
-    provider: "github" as const,
-  };
-  const store = storeIn(directory);
-  await store.setAccount(account);
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
-  await store.setAccountPreferencesSyncBaseline(account.email, await store.accountPreferences());
-
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.ECHO);
-  const reopened = storeIn(directory);
-  const baseline = await reopened.accountPreferencesSyncBaseline(account.email);
-  assert.deepEqual(baseline, { voice: LIVE_VOICE.SAGE });
-  const result = await reopened.applyAccountPreferences(
-    { voice: LIVE_VOICE.SAGE, defaultWorkspaceProvider: PROVIDER_ID.CODEX },
-    { accountEmail: account.email, preferences: baseline ?? {} },
-  );
-
-  assert.deepEqual(result.changed, [APP_SETTING_SCHEMA.defaultWorkspaceProvider.field]);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.ECHO);
-  assert.equal(
-    await reopened.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    PROVIDER_ID.CODEX,
-  );
-});
-
-test("skips a guarded account preference apply after account sign-out", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  const account = {
-    accessToken: "access-token-secret",
-    refreshToken: "refresh-token-secret",
-    email: "developer@example.com",
-    name: "Developer",
-    provider: "github" as const,
-  };
-  await store.setAccount(account);
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "local-project");
-  const expected = await store.accountPreferences();
-
-  await store.clearAccount();
-  const result = await store.applyAccountPreferences(
-    { voice: LIVE_VOICE.MARIN },
-    { accountEmail: account.email, preferences: expected },
-  );
-
-  assert.deepEqual(result.changed, []);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
-  assert.equal(await store.accountPreferencesSyncBaseline(account.email), undefined);
-});
-
-test("stores a deleted talk key as the none token and reads it back", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-
-  const { settings, reason } = await store.set(
-    APP_SETTING_SCHEMA.voiceHotkey.field,
-    VOICE_HOTKEY_NONE,
-  );
-
-  assert.equal(reason, undefined);
-  // A deletion is a choice, not an absence: unlike a reset it survives the
-  // file being reopened, or the key would come back on the next launch.
-  assert.equal(appSettingsView(settings).voiceHotkey, VOICE_HOTKEY_NONE);
-  assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field),
-    VOICE_HOTKEY_NONE,
-  );
-});
-
-test("ignores a stored chord this build cannot register", async (t) => {
-  for (const field of [APP_SETTING_SCHEMA.voiceHotkey.field, APP_SETTING_SCHEMA.stopHotkey.field]) {
-    const directory = await temporaryDirectory(t, "luke-settings-");
-    await fs.writeFile(
-      path.join(directory, SETTINGS_FILE_NAME),
-      JSON.stringify({ version: 2, apiKeys: {}, [field]: "F13" }),
+storeTest("ignores a stored key that can no longer be decrypted", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* (yield* storeIn(directory)).setApiKey(CONDUCTOR, TEST_API_KEY);
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({
+        version: 2,
+        apiKeys: { [CONDUCTOR]: Buffer.from("rotated").toString("base64") },
+      }),
     );
-    const store = storeIn(directory);
 
-    // A hand-edited chord the registrars would refuse is dropped rather than
-    // carried: honouring it would claim a key nothing was ever told about.
-    assert.equal(await store.get(field), undefined, field);
-    assert.equal(appSettingsView(await store.snapshot())[field], undefined, field);
-  }
-});
+    const store = yield* storeIn(directory);
 
-test("the two Luke keys survive each other's writes", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+    assert.equal(yield* readApiKey(store, CONDUCTOR), undefined);
+    assert.equal(
+      appSettingsView(yield* store.snapshot()).credentialSources[CONDUCTOR],
+      CREDENTIAL_SOURCE.NONE,
+    );
+  }),
+);
 
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
-  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
+storeTest("carries a key belonging to a provider this build does not know", () =>
+  Effect.gen(function* () {
+    // A file written by a newer build must not lose credentials to an older one.
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({ version: 2, apiKeys: { "later-cloud": sealed("later-cloud-key") } }),
+    );
 
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
-});
+    yield* (yield* storeIn(directory)).setApiKey(CONDUCTOR, TEST_API_KEY);
+    const persisted: unknown = JSON.parse(yield* readSettingsFile(directory));
 
-test("a stored key and a chosen preference survive each other's writes", async (t) => {
-  for (const field of APP_SETTING_FIELDS) {
-    const directory = await temporaryDirectory(t, "luke-settings-");
-    const store = storeIn(directory);
+    assert.deepEqual(
+      persisted,
+      expectedPersistedSettings({
+        apiKeys: { "later-cloud": sealed("later-cloud-key"), [CONDUCTOR]: sealed(TEST_API_KEY) },
+      }),
+    );
+  }),
+);
 
-    await store.setApiKey(CONDUCTOR, TEST_API_KEY);
-    await store.set(field, SAMPLE_VALUE[field]);
-    await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+storeTest("decides the Dock icon from the file alone, never the keychain", () =>
+  Effect.gen(function* () {
+    // The icon is drawn at launch from this answer, so a locked or slow
+    // Keychain — which decrypting a stored key can wait on — must not be able to
+    // delay it.
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({
+        version: 2,
+        apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
+        showInDock: true,
+      }),
+    );
+    const cipher = countingCipher();
+    const store = yield* storeIn(directory, { cipher });
 
-    const reopened = storeIn(directory);
-    assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-replacement-key");
-    assert.deepEqual(await reopened.get(field), SAMPLE_VALUE[field], `${field} did not survive`);
-  }
-});
+    assert.equal(yield* store.get(APP_SETTING_SCHEMA.showInDock.field), true);
+    assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  }),
+);
 
-test("ignores a stored form this build does not draw", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, formFactor: "hexagon" }),
-  );
+storeTest(
+  "prefers the chosen voice over the environment, and the environment over the default",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory, {
+        environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
+      });
 
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
-  assert.equal(
-    appSettingsView(await storeIn(directory).snapshot()).formFactor,
-    PANEL_FORM_FACTOR.BUBBLE,
-  );
-});
+      assert.equal(appSettingsView(yield* store.snapshot()).voice, LIVE_VOICE.SAGE);
+      // The environment names the voice only until the user does, so it is
+      // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+      // reported in the snapshot but never as something the user stored.
+      assert.equal(yield* store.get(APP_SETTING_SCHEMA.voice.field), undefined);
 
-test("ignores a stored default provider this build does not know", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, defaultWorkspaceProvider: "someone-else" }),
-  );
+      yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
+      assert.equal(appSettingsView(yield* store.snapshot()).voice, LIVE_VOICE.MARIN);
 
-  assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    undefined,
-  );
-  assert.equal(
-    appSettingsView(await storeIn(directory).snapshot()).defaultWorkspaceProvider,
-    undefined,
-  );
-});
+      yield* store.set(APP_SETTING_SCHEMA.voice.field, undefined);
+      assert.equal(appSettingsView(yield* store.snapshot()).voice, LIVE_VOICE.SAGE);
+    }),
+);
 
-test("lets the first creation choose each provider's project until one is chosen", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+storeTest("ignores a stored or environment voice this build does not offer", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({ version: 2, apiKeys: {}, voice: "baritone" }),
+    );
+    const store = yield* storeIn(directory, { environment: { LUKE_LIVE_VOICE: "baritone" } });
 
-  // Unset on purpose, the provider default's own terms: the default is always
-  // a choice the user made — by hand or by their first creation there.
-  assert.equal(appSettingsView(await store.snapshot()).workspaceProjectDefaults, undefined);
-  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
+    assert.equal(yield* store.get(APP_SETTING_SCHEMA.voice.field), undefined);
+    assert.equal(appSettingsView(yield* store.snapshot()).voice, LIVE_DEFAULTS.VOICE);
+  }),
+);
 
-  const { settings, reason } = await setWorkspaceProjectDefault(
-    store,
-    PROVIDER_ID.CONDUCTOR,
-    "proj-1",
-  );
+storeTest(
+  "account preferences extraction excludes resolved defaults and local-only preferences",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory, {
+        environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
+      });
 
-  assert.equal(reason, undefined);
-  assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
-    [PROVIDER_ID.CONDUCTOR]: "proj-1",
-  });
-  // The choice outlives the run that heard it.
-  assert.equal(
-    await readWorkspaceProjectDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
-    "proj-1",
-  );
+      yield* store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+      yield* store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
+      yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.CEDAR);
 
-  // Clearing returns that one provider to its first creation choosing.
-  const cleared = await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
-  assert.equal(appSettingsView(cleared.settings).workspaceProjectDefaults, undefined);
-  assert.equal(
-    await readWorkspaceProjectDefault(storeIn(directory), PROVIDER_ID.CONDUCTOR),
-    undefined,
-  );
-});
+      assert.deepEqual(yield* store.accountPreferences(), {
+        voice: LIVE_VOICE.CEDAR,
+      });
+    }),
+);
 
-test("keeps one provider's default project apart from another's", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+storeTest("applies account preferences to disk and restores them from a new store", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    yield* store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+    yield* store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
+    yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "project-local");
 
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
-  const { settings } = await setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2");
+    const result = yield* store.applyAccountPreferences({
+      voice: LIVE_VOICE.MARIN,
+      workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol" } },
+    });
 
-  assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
-    [PROVIDER_ID.CONDUCTOR]: "proj-1",
-    [PROVIDER_ID.CODEX]: "proj-2",
-  });
+    assert.deepEqual(result.changed, [
+      APP_SETTING_SCHEMA.voice.field,
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+    ]);
+    const reopened = yield* storeIn(directory);
+    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), VOICE_HOTKEY_NONE);
+    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.MARIN);
+    assert.equal(yield* readWorkspaceProjectDefault(reopened, PROVIDER_ID.CONDUCTOR), undefined);
+    assert.deepEqual(yield* readWorkspaceAgentDefault(reopened, PROVIDER_ID.CONDUCTOR), {
+      agent: "codex",
+      model: "gpt-5.6-sol",
+    });
+  }),
+);
 
-  const cleared = await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
-  assert.deepEqual(appSettingsView(cleared.settings).workspaceProjectDefaults, {
-    [PROVIDER_ID.CODEX]: "proj-2",
-  });
-});
+storeTest("merges hosted account preferences around concurrent local preference edits", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    const account = {
+      accessToken: "access-token-secret",
+      refreshToken: "refresh-token-secret",
+      email: "developer@example.com",
+      name: "Developer",
+      provider: "github" as const,
+    };
+    yield* store.setAccount(account);
+    yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
+    const expected = yield* store.accountPreferences();
 
-test("forgetting a default no provider offers survives the reload it was written for", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-gone");
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2");
+    yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.ECHO);
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "local-project");
+    const result = yield* store.applyAccountPreferences(
+      {
+        voice: LIVE_VOICE.MARIN,
+        defaultWorkspaceProvider: PROVIDER_ID.CODEX,
+        workspaceProjectDefaults: { [PROVIDER_ID.CODEX]: "remote-project" },
+      },
+      { accountEmail: account.email, preferences: expected },
+    );
 
-  // The write the observation pass makes when a provider stops offering the
-  // project a default names. It has to reach the file, not just the snapshot:
-  // the entry it forgets is one an earlier launch wrote.
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
+    assert.deepEqual(result.changed, [
+      APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+    ]);
+    assert.equal(yield* store.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.ECHO);
+    assert.equal(
+      yield* store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+      PROVIDER_ID.CODEX,
+    );
+    assert.equal(yield* readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), "local-project");
+    assert.equal(yield* readWorkspaceProjectDefault(store, PROVIDER_ID.CODEX), "remote-project");
+  }),
+);
 
-  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
-    [PROVIDER_ID.CODEX]: "proj-2",
-  });
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-});
+storeTest("keeps local account preference edits across a failed hosted write and restart", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const account = {
+      accessToken: "access-token-secret",
+      refreshToken: "refresh-token-secret",
+      email: "developer@example.com",
+      name: "Developer",
+      provider: "github" as const,
+    };
+    const store = yield* storeIn(directory);
+    yield* store.setAccount(account);
+    yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
+    yield* store.setAccountPreferencesSyncBaseline(
+      account.email,
+      yield* store.accountPreferences(),
+    );
 
-test("a stale cleanup cannot clear a newer project default", async (t) => {
-  const store = storeIn(await temporaryDirectory(t, "luke-settings-"));
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-old");
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-new");
+    yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.ECHO);
+    const reopened = yield* storeIn(directory);
+    const baseline = yield* reopened.accountPreferencesSyncBaseline(account.email);
+    assert.deepEqual(baseline, { voice: LIVE_VOICE.SAGE });
+    const result = yield* reopened.applyAccountPreferences(
+      { voice: LIVE_VOICE.SAGE, defaultWorkspaceProvider: PROVIDER_ID.CODEX },
+      { accountEmail: account.email, preferences: baseline ?? {} },
+    );
 
-  const stale = await store.clearEntryIfUnchanged(
-    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-    PROVIDER_ID.CONDUCTOR,
-    "proj-old",
-  );
+    assert.deepEqual(result.changed, [APP_SETTING_SCHEMA.defaultWorkspaceProvider.field]);
+    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.ECHO);
+    assert.equal(
+      yield* reopened.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+      PROVIDER_ID.CODEX,
+    );
+  }),
+);
 
-  assert.equal(stale.cleared, false);
-  assert.equal(
-    appSettingsView(stale.settings).workspaceProjectDefaults?.[PROVIDER_ID.CONDUCTOR],
-    "proj-new",
-  );
-});
+storeTest("skips a guarded account preference apply after account sign-out", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    const account = {
+      accessToken: "access-token-secret",
+      refreshToken: "refresh-token-secret",
+      email: "developer@example.com",
+      name: "Developer",
+      provider: "github" as const,
+    };
+    yield* store.setAccount(account);
+    yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "local-project");
+    const expected = yield* store.accountPreferences();
+
+    yield* store.clearAccount();
+    const result = yield* store.applyAccountPreferences(
+      { voice: LIVE_VOICE.MARIN },
+      { accountEmail: account.email, preferences: expected },
+    );
+
+    assert.deepEqual(result.changed, []);
+    assert.equal(yield* store.get(APP_SETTING_SCHEMA.voice.field), undefined);
+    assert.equal(yield* readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
+    assert.equal(yield* store.accountPreferencesSyncBaseline(account.email), undefined);
+  }),
+);
+
+storeTest("stores a deleted talk key as the none token and reads it back", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+
+    const { settings, reason } = yield* store.set(
+      APP_SETTING_SCHEMA.voiceHotkey.field,
+      VOICE_HOTKEY_NONE,
+    );
+
+    assert.equal(reason, undefined);
+    // A deletion is a choice, not an absence: unlike a reset it survives the
+    // file being reopened, or the key would come back on the next launch.
+    assert.equal(appSettingsView(settings).voiceHotkey, VOICE_HOTKEY_NONE);
+    assert.equal(
+      yield* (yield* storeIn(directory)).get(APP_SETTING_SCHEMA.voiceHotkey.field),
+      VOICE_HOTKEY_NONE,
+    );
+  }),
+);
+
+storeTest("ignores a stored chord this build cannot register", () =>
+  Effect.gen(function* () {
+    for (const field of [
+      APP_SETTING_SCHEMA.voiceHotkey.field,
+      APP_SETTING_SCHEMA.stopHotkey.field,
+    ]) {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      yield* writeSettingsFile(
+        directory,
+        JSON.stringify({ version: 2, apiKeys: {}, [field]: "F13" }),
+      );
+      const store = yield* storeIn(directory);
+
+      // A hand-edited chord the registrars would refuse is dropped rather than
+      // carried: honouring it would claim a key nothing was ever told about.
+      assert.equal(yield* store.get(field), undefined, field);
+      assert.equal(appSettingsView(yield* store.snapshot())[field], undefined, field);
+    }
+  }),
+);
+
+storeTest("the two Luke keys survive each other's writes", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+
+    yield* store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Control+Alt+Space");
+    yield* store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
+
+    const reopened = yield* storeIn(directory);
+    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
+    assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
+  }),
+);
+
+storeTest("a stored key and a chosen preference survive each other's writes", () =>
+  Effect.gen(function* () {
+    for (const field of APP_SETTING_FIELDS) {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory);
+
+      yield* store.setApiKey(CONDUCTOR, TEST_API_KEY);
+      yield* store.set(field, SAMPLE_VALUE[field]);
+      yield* store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+
+      const reopened = yield* storeIn(directory);
+      assert.equal(yield* readApiKey(reopened, CONDUCTOR), "conductor-replacement-key");
+      assert.deepEqual(yield* reopened.get(field), SAMPLE_VALUE[field], `${field} did not survive`);
+    }
+  }),
+);
+
+storeTest("ignores a stored form this build does not draw", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({ version: 2, apiKeys: {}, formFactor: "hexagon" }),
+    );
+
+    assert.equal(
+      yield* (yield* storeIn(directory)).get(APP_SETTING_SCHEMA.formFactor.field),
+      undefined,
+    );
+    assert.equal(
+      appSettingsView(yield* (yield* storeIn(directory)).snapshot()).formFactor,
+      PANEL_FORM_FACTOR.BUBBLE,
+    );
+  }),
+);
+
+storeTest("ignores a stored default provider this build does not know", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({ version: 2, apiKeys: {}, defaultWorkspaceProvider: "someone-else" }),
+    );
+
+    assert.equal(
+      yield* (yield* storeIn(directory)).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
+      undefined,
+    );
+    assert.equal(
+      appSettingsView(yield* (yield* storeIn(directory)).snapshot()).defaultWorkspaceProvider,
+      undefined,
+    );
+  }),
+);
+
+storeTest("lets the first creation choose each provider's project until one is chosen", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+
+    // Unset on purpose, the provider default's own terms: the default is always
+    // a choice the user made — by hand or by their first creation there.
+    assert.equal(appSettingsView(yield* store.snapshot()).workspaceProjectDefaults, undefined);
+    assert.equal(yield* readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
+
+    const { settings, reason } = yield* setWorkspaceProjectDefault(
+      store,
+      PROVIDER_ID.CONDUCTOR,
+      "proj-1",
+    );
+
+    assert.equal(reason, undefined);
+    assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
+      [PROVIDER_ID.CONDUCTOR]: "proj-1",
+    });
+    // The choice outlives the run that heard it.
+    assert.equal(
+      yield* readWorkspaceProjectDefault(yield* storeIn(directory), PROVIDER_ID.CONDUCTOR),
+      "proj-1",
+    );
+
+    // Clearing returns that one provider to its first creation choosing.
+    const cleared = yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
+    assert.equal(appSettingsView(cleared.settings).workspaceProjectDefaults, undefined);
+    assert.equal(
+      yield* readWorkspaceProjectDefault(yield* storeIn(directory), PROVIDER_ID.CONDUCTOR),
+      undefined,
+    );
+  }),
+);
+
+storeTest("keeps one provider's default project apart from another's", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
+    const { settings } = yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2");
+
+    assert.deepEqual(appSettingsView(settings).workspaceProjectDefaults, {
+      [PROVIDER_ID.CONDUCTOR]: "proj-1",
+      [PROVIDER_ID.CODEX]: "proj-2",
+    });
+
+    const cleared = yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
+    assert.deepEqual(appSettingsView(cleared.settings).workspaceProjectDefaults, {
+      [PROVIDER_ID.CODEX]: "proj-2",
+    });
+  }),
+);
+
+storeTest("forgetting a default no provider offers survives the reload it was written for", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const cipher = countingCipher();
+    const store = yield* storeIn(directory, { cipher });
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-gone");
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2");
+
+    // The write the observation pass makes when a provider stops offering the
+    // project a default names. It has to reach the file, not just the snapshot:
+    // the entry it forgets is one an earlier launch wrote.
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined);
+
+    assert.deepEqual(
+      appSettingsView(yield* (yield* storeIn(directory)).snapshot()).workspaceProjectDefaults,
+      {
+        [PROVIDER_ID.CODEX]: "proj-2",
+      },
+    );
+    assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  }),
+);
+
+storeTest("a stale cleanup cannot clear a newer project default", () =>
+  Effect.gen(function* () {
+    const store = yield* storeIn(yield* temporaryDirectoryScoped("luke-settings-"));
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-old");
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-new");
+
+    const stale = yield* store.clearEntryIfUnchanged(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      PROVIDER_ID.CONDUCTOR,
+      "proj-old",
+    );
+
+    assert.equal(stale.cleared, false);
+    assert.equal(
+      appSettingsView(stale.settings).workspaceProjectDefaults?.[PROVIDER_ID.CONDUCTOR],
+      "proj-new",
+    );
+  }),
+);
 
 test("an entry the field cannot hold is refused rather than quietly dropped", () => {
   // The map guards drop what they cannot hold, which is right when reading a
@@ -1464,260 +1515,304 @@ test("every map-valued setting is written one entry at a time", () => {
   }
 });
 
-test("overlapping default projects each survive the other's write", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
+storeTest("overlapping default projects each survive the other's write", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-  // Both start before either lands, the way two provider rows saved in quick
-  // succession do. The merge belongs to the store for exactly this reason: a
-  // caller holding the map it read before the first write would put that stale
-  // copy back, and the later write would drop the other provider's choice.
-  await Promise.all([
-    setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1"),
-    setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2"),
-  ]);
+    // Both start before either lands, the way two provider rows saved in quick
+    // succession do. The merge belongs to the store for exactly this reason: a
+    // caller holding the map it read before the first write would put that stale
+    // copy back, and the later write would drop the other provider's choice.
+    yield* Effect.all(
+      [
+        setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1"),
+        setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2"),
+      ],
+      { concurrency: "unbounded" },
+    );
 
-  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
-    [PROVIDER_ID.CONDUCTOR]: "proj-1",
-    [PROVIDER_ID.CODEX]: "proj-2",
-  });
-});
-
-test("an overlapping clear forgets its own entry and no other", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
-
-  // A row cleared while another row is being saved forgets one entry, never
-  // the map the clear was composed against.
-  await Promise.all([
-    setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined),
-    setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2"),
-  ]);
-
-  assert.deepEqual(appSettingsView(await storeIn(directory).snapshot()).workspaceProjectDefaults, {
-    [PROVIDER_ID.CODEX]: "proj-2",
-  });
-});
-
-test("ignores stored default projects this store cannot hold", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: {},
-      workspaceProjectDefaults: {
-        // A provider this build does not know, a value that is not an id at
-        // all, an empty one, and one too long to be an id: each names nowhere
-        // a creation ask could be steered.
-        "someone-else": "proj-1",
-        conductor: 7,
-        cursor: "   ",
-        codex: "x".repeat(501),
+    assert.deepEqual(
+      appSettingsView(yield* (yield* storeIn(directory)).snapshot()).workspaceProjectDefaults,
+      {
+        [PROVIDER_ID.CONDUCTOR]: "proj-1",
+        [PROVIDER_ID.CODEX]: "proj-2",
       },
-    }),
-  );
+    );
+  }),
+);
 
-  const store = storeIn(directory);
-  assert.equal(await readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).workspaceProjectDefaults, undefined);
-});
+storeTest("an overlapping clear forgets its own entry and no other", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
 
-test("ignores a stored pairing this build's table does not list", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: {},
-      workspaceAgentDefaults: {
-        // A listed model under an effort its agent does not document, a
-        // provider the table documents nothing for, and a provider this build
-        // does not know: each names a request no endpoint takes.
-        conductor: { agent: "claude", model: "sonnet", effort: "sideways" },
-        cursor: { agent: "cursor", model: "composer-2.5" },
-        "someone-else": { agent: "claude", model: "sonnet" },
+    // A row cleared while another row is being saved forgets one entry, never
+    // the map the clear was composed against.
+    yield* Effect.all(
+      [
+        setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, undefined),
+        setWorkspaceProjectDefault(store, PROVIDER_ID.CODEX, "proj-2"),
+      ],
+      { concurrency: "unbounded" },
+    );
+
+    assert.deepEqual(
+      appSettingsView(yield* (yield* storeIn(directory)).snapshot()).workspaceProjectDefaults,
+      {
+        [PROVIDER_ID.CODEX]: "proj-2",
       },
+    );
+  }),
+);
+
+storeTest("ignores stored default projects this store cannot hold", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({
+        version: 2,
+        apiKeys: {},
+        workspaceProjectDefaults: {
+          // A provider this build does not know, a value that is not an id at
+          // all, an empty one, and one too long to be an id: each names nowhere
+          // a creation ask could be steered.
+          "someone-else": "proj-1",
+          conductor: 7,
+          cursor: "   ",
+          codex: "x".repeat(501),
+        },
+      }),
+    );
+
+    const store = yield* storeIn(directory);
+    assert.equal(yield* readWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
+    assert.equal(appSettingsView(yield* store.snapshot()).workspaceProjectDefaults, undefined);
+  }),
+);
+
+storeTest("ignores a stored pairing this build's table does not list", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({
+        version: 2,
+        apiKeys: {},
+        workspaceAgentDefaults: {
+          // A listed model under an effort its agent does not document, a
+          // provider the table documents nothing for, and a provider this build
+          // does not know: each names a request no endpoint takes.
+          conductor: { agent: "claude", model: "sonnet", effort: "sideways" },
+          cursor: { agent: "cursor", model: "composer-2.5" },
+          "someone-else": { agent: "claude", model: "sonnet" },
+        },
+      }),
+    );
+
+    const store = yield* storeIn(directory);
+    assert.equal(yield* readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
+    assert.equal(appSettingsView(yield* store.snapshot()).workspaceAgentDefaults, undefined);
+  }),
+);
+
+storeTest("recovers from a corrupt settings file", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(directory, "{ not json");
+    const store = yield* storeIn(directory);
+
+    const { status, settings } = yield* store.setApiKey(CONDUCTOR, "conductor-stored-key");
+
+    assert.equal(status, ACTION_RESULT_STATUS.ACCEPTED);
+    assert.ok(appSettingsView(settings));
+    assert.equal(yield* readApiKey(store, CONDUCTOR), "conductor-stored-key");
+  }),
+);
+
+storeTest("a voice reset forgets the voice, captions, and duck in one action", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.CEDAR);
+    yield* store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
+    yield* store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
+
+    const { settings, reason } = yield* store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+    assert.equal(reason, undefined);
+    assert.equal(appSettingsView(settings).voice, LIVE_DEFAULTS.VOICE);
+    assert.equal(appSettingsView(settings).voiceCaptions, false);
+    assert.equal(appSettingsView(settings).duckOtherMedia, true);
+    // The choices are forgotten rather than restated, so a default that moves
+    // in a later build moves these settings with it.
+    assert.equal(yield* (yield* storeIn(directory)).get(APP_SETTING_SCHEMA.voice.field), undefined);
+  }),
+);
+
+storeTest(
+  "a voice reset returns to the environment's voice where one stands behind the choice",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory, {
+        environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
+      });
+      yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
+
+      const { settings } = yield* store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+      // Forgetting the choice is the reset's whole meaning: what stands afterwards
+      // is whatever would have stood had none been made.
+      assert.equal(appSettingsView(settings).voice, LIVE_VOICE.SAGE);
+      assert.equal(yield* store.get(APP_SETTING_SCHEMA.voice.field), undefined);
     }),
-  );
+);
 
-  const store = storeIn(directory);
-  assert.equal(await readWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).workspaceAgentDefaults, undefined);
-});
+storeTest("an appearance reset returns Luke's stances without touching the voice page", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    yield* store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+    yield* store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
+    yield* store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH);
+    yield* store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
 
-test("recovers from a corrupt settings file", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(path.join(directory, SETTINGS_FILE_NAME), "{ not json");
-  const store = storeIn(directory);
+    const { settings, reason } = yield* store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
 
-  const { status, settings } = await store.setApiKey(CONDUCTOR, "conductor-stored-key");
+    assert.equal(reason, undefined);
+    assert.equal(appSettingsView(settings).showInDock, false);
+    assert.equal(appSettingsView(settings).showOnAllDisplays, false);
+    assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.BUBBLE);
+    assert.equal(
+      yield* (yield* storeIn(directory)).get(APP_SETTING_SCHEMA.formFactor.field),
+      undefined,
+    );
+    // One scope's reset is that scope's alone.
+    assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);
+  }),
+);
 
-  assert.equal(status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.ok(appSettingsView(settings));
-  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
-});
+storeTest("a shortcuts reset forgets both chords at once", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
+    yield* store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
+    yield* store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
 
-test("a voice reset forgets the voice, captions, and duck in one action", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.CEDAR);
-  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
-  await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
+    const { settings, reason } = yield* store.resetSettings(SETTINGS_RESET_SCOPE.SHORTCUTS);
 
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+    assert.equal(reason, undefined);
+    assert.equal(appSettingsView(settings).voiceHotkey, undefined);
+    assert.equal(appSettingsView(settings).stopHotkey, undefined);
+    assert.equal(
+      yield* (yield* storeIn(directory)).get(APP_SETTING_SCHEMA.voiceHotkey.field),
+      undefined,
+    );
+    assert.equal(
+      yield* (yield* storeIn(directory)).get(APP_SETTING_SCHEMA.stopHotkey.field),
+      undefined,
+    );
+  }),
+);
 
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).voice, LIVE_DEFAULTS.VOICE);
-  assert.equal(appSettingsView(settings).voiceCaptions, false);
-  assert.equal(appSettingsView(settings).duckOtherMedia, true);
-  // The choices are forgotten rather than restated, so a default that moves
-  // in a later build moves these settings with it.
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voice.field), undefined);
-});
+storeTest(
+  "a workspaces reset forgets the provider and project defaults but never the agent pairing",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = yield* storeIn(directory);
+      const pairing = { agent: "claude", model: "sonnet" };
+      yield* store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR);
+      yield* setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
+      yield* setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, pairing);
 
-test("a voice reset returns to the environment's voice where one stands behind the choice", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, {
-    environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
-  });
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
+      const { settings, reason } = yield* store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES);
 
-  const { settings } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
-
-  // Forgetting the choice is the reset's whole meaning: what stands afterwards
-  // is whatever would have stood had none been made.
-  assert.equal(appSettingsView(settings).voice, LIVE_VOICE.SAGE);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-});
-
-test("an appearance reset returns Luke's stances without touching the voice page", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-  await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
-  await store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH);
-  await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
-
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).showInDock, false);
-  assert.equal(appSettingsView(settings).showOnAllDisplays, false);
-  assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.BUBBLE);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
-  // One scope's reset is that scope's alone.
-  assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);
-});
-
-test("a shortcuts reset forgets both chords at once", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, "Shift+Command+L");
-  await store.set(APP_SETTING_SCHEMA.stopHotkey.field, "Control+Alt+X");
-
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.SHORTCUTS);
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).voiceHotkey, undefined);
-  assert.equal(appSettingsView(settings).stopHotkey, undefined);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
-});
-
-test("a workspaces reset forgets the provider and project defaults but never the agent pairing", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-  const pairing = { agent: "claude", model: "sonnet" };
-  await store.set(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field, PROVIDER_ID.CONDUCTOR);
-  await setWorkspaceProjectDefault(store, PROVIDER_ID.CONDUCTOR, "proj-1");
-  await setWorkspaceAgentDefault(store, PROVIDER_ID.CONDUCTOR, pairing);
-
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.WORKSPACES);
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).defaultWorkspaceProvider, undefined);
-  assert.equal(appSettingsView(settings).workspaceProjectDefaults, undefined);
-  // Agent choices live on their provider rows, whose own menus offer the
-  // defaults — no reset here may reach either one.
-  assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults, {
-    [PROVIDER_ID.CONDUCTOR]: pairing,
-  });
-});
-
-test("a reset of settings already at their defaults writes nothing", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory);
-
-  const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
-
-  assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).voice, LIVE_DEFAULTS.VOICE);
-  // Nothing changed, so no file was created — the same silence every setter
-  // keeps when asked for the value it already holds.
-  await assert.rejects(readSettingsFile(directory));
-});
-
-test("a reset never touches the cipher", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-  await store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
-
-  await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
-
-  // A preference is not a credential, so resetting a page of them never
-  // reaches the Keychain — and never raises its permission dialog.
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-});
-
-test("a reset leaves a stored key standing", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({
-      version: 2,
-      apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
-      voiceCaptions: true,
-      duckOtherMedia: true,
-      preferBuiltInMicrophone: true,
-      showInDock: false,
-      showOnAllDisplays: false,
+      assert.equal(reason, undefined);
+      assert.equal(appSettingsView(settings).defaultWorkspaceProvider, undefined);
+      assert.equal(appSettingsView(settings).workspaceProjectDefaults, undefined);
+      // Agent choices live on their provider rows, whose own menus offer the
+      // defaults — no reset here may reach either one.
+      assert.deepEqual(appSettingsView(settings).workspaceAgentDefaults, {
+        [PROVIDER_ID.CONDUCTOR]: pairing,
+      });
     }),
-  );
-  const store = storeIn(directory);
+);
 
-  await store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+storeTest("a reset of settings already at their defaults writes nothing", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const store = yield* storeIn(directory);
 
-  // No scope reaches a credential: the ciphertext rides the write untouched.
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  const contents = JSON.parse(await readSettingsFile(directory)) as {
-    apiKeys: Record<string, string>;
-    voiceCaptions: boolean;
-  };
-  assert.deepEqual(contents.apiKeys, { [CONDUCTOR]: sealed(TEST_API_KEY) });
-  assert.equal(contents.voiceCaptions, false);
-  assert.equal(await store.readApiKey(CONDUCTOR), TEST_API_KEY);
-});
+    const { settings, reason } = yield* store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+    assert.equal(reason, undefined);
+    assert.equal(appSettingsView(settings).voice, LIVE_DEFAULTS.VOICE);
+    // Nothing changed, so no file was created — the same silence every setter
+    // keeps when asked for the value it already holds.
+    yield* Effect.flip(readSettingsFile(directory));
+  }),
+);
+
+storeTest("a reset never touches the cipher", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    const cipher = countingCipher();
+    const store = yield* storeIn(directory, { cipher });
+    yield* store.set(APP_SETTING_SCHEMA.voiceCaptions.field, true);
+
+    yield* store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+    // A preference is not a credential, so resetting a page of them never
+    // reaches the Keychain — and never raises its permission dialog.
+    assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
+  }),
+);
+
+storeTest("a reset leaves a stored key standing", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectoryScoped("luke-settings-");
+    yield* writeSettingsFile(
+      directory,
+      JSON.stringify({
+        version: 2,
+        apiKeys: { [CONDUCTOR]: sealed(TEST_API_KEY) },
+        voiceCaptions: true,
+        duckOtherMedia: true,
+        preferBuiltInMicrophone: true,
+        showInDock: false,
+        showOnAllDisplays: false,
+      }),
+    );
+    const store = yield* storeIn(directory);
+
+    yield* store.resetSettings(SETTINGS_RESET_SCOPE.VOICE);
+
+    // No scope reaches a credential: the ciphertext rides the write untouched.
+    // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
+    const contents = JSON.parse(yield* readSettingsFile(directory)) as {
+      apiKeys: Record<string, string>;
+      voiceCaptions: boolean;
+    };
+    assert.deepEqual(contents.apiKeys, { [CONDUCTOR]: sealed(TEST_API_KEY) });
+    assert.equal(contents.voiceCaptions, false);
+    assert.equal(yield* readApiKey(store, CONDUCTOR), TEST_API_KEY);
+  }),
+);
 
 /**
  * The store's own face, yielded rather than awaited: what every caller above
  * reads through one run apiece is one fiber here, and a write and the read
  * after it settle in the order the effects are sequenced in.
  */
-it.effect("the store's own methods are effects a caller sequences itself", () =>
+storeTest("the store's own methods are effects a caller sequences itself", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped();
-      const store = new SettingsStore({
-        directory: () => directory,
-        cipher: testCipher(),
-        overrides: overridesFor({}),
-        vaultKeyHeld: () => false,
-        fileSystem: FILE_SYSTEM,
-        path: PATH,
-      });
+      const store = yield* storeIn(directory);
 
       assert.equal(
         yield* store.get(APP_SETTING_SCHEMA.showInDock.field),
@@ -1727,35 +1822,24 @@ it.effect("the store's own methods are effects a caller sequences itself", () =>
       assert.equal(saved.status, ACTION_RESULT_STATUS.ACCEPTED);
       assert.equal(yield* store.get(APP_SETTING_SCHEMA.showInDock.field), true);
 
-      const reopened = new SettingsStore({
-        directory: () => directory,
-        cipher: testCipher(),
-        overrides: overridesFor({}),
-        vaultKeyHeld: () => false,
-        fileSystem: FILE_SYSTEM,
-        path: PATH,
-      });
+      const reopened = yield* storeIn(directory);
       assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
     }),
-  ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+  ),
 );
 
 /** Concurrent reads share one read of the file rather than each making their own. */
-it.effect("concurrent reads of an unread store read the file once", () =>
+storeTest("concurrent reads of an unread store read the file once", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const directory = yield* temporaryDirectoryScoped();
       let directoryReads = 0;
       const store = new SettingsStore({
+        ...(yield* storeOptions(directory)),
         directory: () => {
           directoryReads += 1;
           return directory;
         },
-        cipher: testCipher(),
-        overrides: overridesFor({}),
-        vaultKeyHeld: () => false,
-        fileSystem: FILE_SYSTEM,
-        path: PATH,
       });
 
       yield* Effect.all(
@@ -1769,5 +1853,5 @@ it.effect("concurrent reads of an unread store read the file once", () =>
 
       assert.equal(directoryReads, 1);
     }),
-  ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+  ),
 );
