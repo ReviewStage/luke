@@ -428,6 +428,22 @@ test("a child's completion leads Luke's words with a chip naming the child, pres
       '<span class="conversation-action-chip conversation-subagent-chip">Sub-agent: Audit the release notes</span>',
     ),
   );
+  // On an agent's transcript page the same turn's words are Luke's bubble,
+  // and the chip still leads them, inside the bubble ahead of the words.
+  const paged = renderCompletion(groups, {
+    subagents: [COMPLETED_CHILD],
+    onOpenChild: open,
+    session: { providerId: "conductor", providerSessionId: FIXTURE_SESSION.HELD },
+  });
+  assert.equal(count(paged, "data-own-words", "true"), 0);
+  assert.equal(paged.split(SUBAGENT_CHIP_BUTTON).length - 1, 1);
+  const pagedBubble = entries(paged).find((row) => row.includes("conversation-subagent-chip"));
+  assert.ok(pagedBubble);
+  assert.ok(
+    pagedBubble.includes('data-speaker="luke"') && pagedBubble.includes("conversation-bubble"),
+  );
+  const pagedChipAt = pagedBubble.indexOf("conversation-subagent-chip");
+  assert.ok(pagedChipAt > 0 && pagedChipAt < pagedBubble.indexOf("The audit found"));
   // Every other turn, the developer's and Luke's own alike, wears none.
   const others = renderCompletion(fixtureConversationTurns(), {
     subagents: [COMPLETED_CHILD],

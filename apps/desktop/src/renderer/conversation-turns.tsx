@@ -324,6 +324,7 @@ function BubbleRow({
   at,
   copy = true,
   reading = false,
+  lead,
   rating,
   search,
   press,
@@ -332,6 +333,8 @@ function BubbleRow({
   words: string;
   at: number;
   copy?: boolean;
+  /** What stands before the words inside the bubble: the chip naming the child whose completion the turn answered, on a transcript page. */
+  lead?: React.ReactNode;
   /** Whether the words are what Luke's voice said of a message folded above them. */
   reading?: boolean;
   /** The rating control, behind the ellipsis on the last words of one of Luke's messages and nowhere else. */
@@ -352,6 +355,7 @@ function BubbleRow({
       <div className="conversation-message">
         <span className="conversation-bubble">
           {press === undefined ? null : <WordsPress onPress={press} />}
+          {lead}
           <MarkdownMessage
             words={words}
             className="conversation-words"
@@ -1398,6 +1402,7 @@ function messageRows(
             voice={VOICE.LUKE}
             words={part.text}
             at={view.placedAt}
+            lead={index === leadAt ? lead : undefined}
             rating={placed}
             search={search}
           />
