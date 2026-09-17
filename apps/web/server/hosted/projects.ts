@@ -1,4 +1,4 @@
-import { Clock, Effect, type Layer, Option, type Schema } from "effect";
+import { Clock, Effect, type Layer, Option, type Redacted, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -41,7 +41,7 @@ export interface ProjectsOptions
     "request" | "resolveUserId" | "encryptionSecret" | "readVaultKeys"
   > {
   /** The store the snapshot is read from and, on a live pass, written to. */
-  store: (secret: string) => ObservationStore;
+  store: (secret: Redacted.Redacted) => ObservationStore;
   /** Injected in tests; production uses the platform's own fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
 }
@@ -74,8 +74,8 @@ export const handleProjects = /* @__PURE__ */ Effect.fn("handleProjects")(functi
   }
   const userId = account.value;
 
-  const secret = (encryptionSecret ?? "").trim();
-  if (!secret) {
+  const secret = encryptionSecret;
+  if (secret === undefined) {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
 

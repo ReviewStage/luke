@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, type Redacted } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   type BrainRoster,
@@ -70,7 +70,7 @@ export function readHostedRoster(
   store: ObservationStore,
   userId: string,
   rows: readonly VaultKeyRow[],
-  secret: string,
+  secret: Redacted.Redacted,
 ): Effect.Effect<HostedRoster, never, SqlClient.SqlClient> {
   return Effect.map(storedRoster(store, userId, rows, secret), (stored) =>
     hostedRosterFrom(stored?.roster, stored?.observedAt),

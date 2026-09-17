@@ -1,9 +1,11 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
+import { Redacted } from "effect";
 import { USER_ROLE } from "./admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
-import { authDeployment } from "./auth-deployment.js";
+import { authDeployment, authSecrets, type SocialClient } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,
@@ -16,12 +18,43 @@ const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
 const MOBILE_OAUTH_CLIENT_ID = MOBILE_OAUTH_CLIENT.id;
 
 const deployment = authDeployment(process.env);
+const secrets = authSecrets(process.env);
+// Note that a missing session secret is reported once, as the module loads,
+// and refused on every request below, because Better Auth left to itself
+// would sign sessions under its built-in default secret outside production.
+if (secrets.sessionSecret === undefined) {
+  console.error("BETTER_AUTH_SECRET is not set; the auth service will refuse every request.");
+}
+
+/**
+ * Runs ahead of every endpoint, whether reached through the HTTP handler or
+ * `auth.api`, and refuses them all while the deployment holds no session
+ * secret: nothing is signed, verified, or handed out under a secret that is
+ * not this deployment's own. The module still loads, as every function
+ * bundle must with nothing configured.
+ */
+const refuseWithoutSessionSecret = createAuthMiddleware(async () => {
+  if (secrets.sessionSecret !== undefined) return;
+  throw new APIError("SERVICE_UNAVAILABLE", {
+    message: "The auth service is not configured on this deployment.",
+  });
+});
+
+/** The one place a social secret is revealed: handed to Better Auth, which puts it on the provider's token request. */
+function socialProvider(client: SocialClient, scope: readonly string[]) {
+  return {
+    clientId: client.clientId,
+    clientSecret: client.clientSecret === undefined ? "" : Redacted.value(client.clientSecret),
+    scope: [...scope],
+  };
+}
 
 export const auth = betterAuth({
   appName: "Luke",
   baseURL: deployment.baseURL,
   trustedOrigins: deployment.trustedOrigins,
-  secret: process.env.BETTER_AUTH_SECRET,
+  secret: secrets.sessionSecret === undefined ? undefined : Redacted.value(secrets.sessionSecret),
+  hooks: { before: refuseWithoutSessionSecret },
   database: authDatabaseAdapter(authDatabase),
   account: ACCOUNT_TOKEN_STORAGE,
   // Admin access is a plain-text `role` on the user, managed by Better Auth:
@@ -36,16 +69,8 @@ export const auth = betterAuth({
   },
   disabledPaths: ["/token"],
   socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-      scope: ["email", "profile"],
-    },
-    github: {
-      clientId: process.env.GITHUB_CLIENT_ID ?? "",
-      clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
-      scope: ["read:user", "user:email"],
-    },
+    google: socialProvider(secrets.google, ["email", "profile"]),
+    github: socialProvider(secrets.github, ["read:user", "user:email"]),
   },
   plugins: [
     // Ahead of the social sign-in it rewrites, and of the provider plugin whose

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { Redacted } from "effect";
 import { test } from "vitest";
 import { decryptProviderKey, encryptProviderKey } from "../server/hosted/encryption";
 
 // A valid 32-byte secret as 64 hex chars.
-const SECRET = "a".repeat(64);
-const OTHER_SECRET = "b".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
+const OTHER_SECRET = Redacted.make("b".repeat(64));
 
 test("encrypt then decrypt recovers the original key", () => {
   const original = "sk-test-abc123";
@@ -23,5 +24,5 @@ test("decrypting with the wrong secret throws", () => {
 });
 
 test("a secret that is not 64 hex chars throws at encrypt time", () => {
-  assert.throws(() => encryptProviderKey("key", "tooshort"));
+  assert.throws(() => encryptProviderKey("key", Redacted.make("tooshort")));
 });

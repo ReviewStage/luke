@@ -1,5 +1,5 @@
 import { withFallback } from "@sidecar/runtime/effect";
-import { Clock, Duration, Effect, Fiber } from "effect";
+import { Clock, Duration, Effect, Fiber, type Redacted } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   type ChildCompletionSweepOutcome,
@@ -109,14 +109,15 @@ interface ObservationTickReads {
 
 export interface ObservationTickOptions extends ObservationTickReads {
   request: Request;
-  /** The value of CRON_SECRET; undefined means the env var is absent and the schedule is off. */
-  cronSecret: string | undefined;
+  /** CRON_SECRET, sealed; undefined means the env var is absent or blank and the schedule is off. */
+  cronSecret: Redacted.Redacted | undefined;
   /**
-   * The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var
-   * is absent, and a tick that cannot read a key must not run at all, since a
-   * pass that read nothing would be written down as an account with nothing.
+   * PROVIDER_KEY_ENCRYPTION_SECRET, sealed; undefined means the env var is
+   * absent or blank, and a tick that cannot read a key must not run at all,
+   * since a pass that read nothing would be written down as an account with
+   * nothing.
    */
-  encryptionSecret: string | undefined;
+  encryptionSecret: Redacted.Redacted | undefined;
   budgetMs?: number;
   passDeadlineMs?: number;
 }
@@ -206,8 +207,8 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
     );
   }
 
-  const secret = options.cronSecret?.trim();
-  if (!secret || !options.encryptionSecret?.trim()) {
+  const secret = options.cronSecret;
+  if (secret === undefined || options.encryptionSecret === undefined) {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
   if (!bearerMatchesSecret(request, secret)) {

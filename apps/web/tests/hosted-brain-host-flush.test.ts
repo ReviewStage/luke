@@ -3,7 +3,7 @@ import { MEMORY_FLUSH_DEFAULTS, MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/mem
 import type { ModelMessage } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Redacted, Schema } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { MemoryCompactionRequestedContext } from "eve/memory";
 import { afterAll, test } from "vitest";
@@ -42,7 +42,7 @@ import { insertConversation, readMessagesByConversation } from "./support/store-
 /** 2027-01-15T08:00:00Z; the day's note is `memory/2027-01-15.md`. */
 const NOW = 1_800_000_000_000;
 const NOTE_PATH = "memory/2027-01-15.md";
-const TEST_VAULT_SECRET = "v".repeat(64);
+const TEST_VAULT_SECRET = Redacted.make("v".repeat(64));
 const SESSION_ID = "wrun_01MFLUSH0000000000000001";
 const OTHER_SESSION_ID = "wrun_01MFLUSH0000000000000002";
 
@@ -63,7 +63,7 @@ function unreached(name: string): () => never {
 
 const seams: BrainHostSeams = {
   eveOrigin: () => undefined,
-  store: () => database.store,
+  store: () => Effect.succeed(database.store),
   writer: () => Effect.succeed(writer),
   userInfo: () => Effect.succeed(undefined),
   ownership: {
@@ -77,13 +77,13 @@ const seams: BrainHostSeams = {
   scriptedModel: () => false,
   spend: unreached("spend"),
   vaultRows: () => Effect.succeed([]),
-  vaultSecret: () => TEST_VAULT_SECRET,
+  vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
   providerKey: unreached("providerKey"),
   executeAction: unreached("executeAction"),
   now: () => NOW,
 };
 
-const host: BrainHost = brainHost(seams);
+const host: BrainHost = Effect.runSync(brainHost(seams));
 
 function principal(id: string, attributes: Readonly<Record<string, string>>): SessionAuthContext {
   return { principalId: id, principalType: "user", authenticator: "test", attributes };

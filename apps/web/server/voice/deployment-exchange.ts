@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Data, Effect, type Layer } from "effect";
+import { Data, Effect, type Layer, type Redacted } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
@@ -32,9 +32,9 @@ import type { ExchangeAttachment, ExchangeReport } from "./live-exchange.js";
 
 interface DeploymentExchangeSeams {
   /** The secret the store's sealed rows open under; nothing means the hosted tier is off. */
-  readonly encryptionSecret: () => string | undefined;
+  readonly encryptionSecret: () => Redacted.Redacted | undefined;
   /** The secret the deployment acts for an account under at eve's door, the tick's own; nothing refuses every session. */
-  readonly deploymentSecret: () => string | undefined;
+  readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on; nothing refuses every session. */
   readonly eveOrigin: () => string | undefined;
   /** eve as the deployment reaches it for one account; a test hands in a fake, the function composes the real client below. */
@@ -73,7 +73,7 @@ const EXCHANGE_CONFIGURATION = {
 function configuredSeams(
   seams: DeploymentExchangeSeams,
 ): Effect.Effect<
-  { encryptionSecret: string; deploymentSecret: string; origin: string },
+  { encryptionSecret: Redacted.Redacted; deploymentSecret: Redacted.Redacted; origin: string },
   ExchangeUnconfigured
 > {
   const encryptionSecret = seams.encryptionSecret();
@@ -95,7 +95,7 @@ function configuredSeams(
 function deploymentEve(
   compose: EveSessionsComposer,
   origin: string,
-  deploymentSecret: string,
+  deploymentSecret: Redacted.Redacted,
 ): (accountId: string) => EveSessions {
   return (accountId) =>
     compose({

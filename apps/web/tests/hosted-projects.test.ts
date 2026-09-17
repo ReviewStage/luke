@@ -3,7 +3,7 @@ import { hostedProjectsAnswerSchema } from "@sidecar/hosted";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, type Schema as EffectSchema, Result } from "effect";
+import { Effect, type Schema as EffectSchema, Redacted, Result } from "effect";
 import { test } from "vitest";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -21,7 +21,7 @@ function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
-const SECRET = "a".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
 
 function projectsRequest(): Request {
   return new Request("https://luke.test/api/projects", {

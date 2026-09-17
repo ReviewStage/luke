@@ -7,6 +7,7 @@ import {
   Effect,
   Fiber,
   ManagedRuntime,
+  Redacted,
   Result,
   Schedule,
   Schema,
@@ -82,7 +83,7 @@ const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
 const ORIGIN = "https://luke.test";
-const SECRET = "deployment-secret-fixture";
+const SECRET = Redacted.make("deployment-secret-fixture");
 const SESSION_ID = "wrun_01M000000000000000000CHILD";
 const EVE_TURN_ID = "turn_3";
 

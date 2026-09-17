@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
-import { Effect, Option } from "effect";
+import { Effect, Option, Redacted } from "effect";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import type { DevicesVaultSeams } from "../server/devices-vault-app.js";
@@ -30,7 +30,7 @@ const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const TOKEN = "0a".repeat(32);
 const NOON = Date.parse("2026-09-09T12:00:00.000Z");
-const SECRET = "a".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
 const NOW_DATE = new Date("2026-08-28T00:00:00.000Z");
 
 type Body = Record<string, string | number | null>;
@@ -123,7 +123,7 @@ function answer(
   seams: DevicesVaultSeams,
   request: Request,
   /** `null` asks for no secret at all; a default parameter cannot say that, since it also fires on `undefined`. */
-  secret: string | null = SECRET,
+  secret: Redacted.Redacted | null = SECRET,
 ): Promise<Response> {
   const call: DevicesVaultCall = {
     ...seams,
@@ -355,13 +355,6 @@ test("the vault store gate order is method, secret, token, body", async () => {
   );
   assert.equal(noSecret.status, 503);
   assert.equal((await noSecret.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
-
-  const blankSecret = await answer(
-    seamsFor().seams,
-    vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
-    "   ",
-  );
-  assert.equal(blankSecret.status, 503);
 
   const anonymous = await answer(
     seamsFor({ resolveUserId: () => Effect.succeedNone }).seams,
@@ -650,7 +643,11 @@ const EXCHANGES: readonly Exchange[] = [
 test("the group's bytes are pinned per exchange", async () => {
   for (const exchange of EXCHANGES) {
     const { seams } = seamsFor(exchange.seams);
-    const secret = exchange.encryptionSecret ? (exchange.encryptionSecret.value ?? null) : SECRET;
+    const secret = exchange.encryptionSecret
+      ? exchange.encryptionSecret.value === undefined
+        ? null
+        : Redacted.make(exchange.encryptionSecret.value)
+      : SECRET;
     const response = await answer(seams, exchange.request(), secret);
     await settleResponseGolden(GOLDEN_ROOT, exchange.name, await recordedResponse(response));
   }

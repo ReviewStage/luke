@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { atInstant } from "@sidecar/wire/testing";
 import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Redacted, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
 import {
@@ -62,7 +62,7 @@ const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
 const ORIGIN = "https://luke.test";
-const SECRET = "deployment-secret-fixture";
+const SECRET = Redacted.make("deployment-secret-fixture");
 const PARENT_SESSION = "wrun_01M000000000000000000PARENT";
 const OPENED_SESSION = "wrun_01M000000000000000000OPENED";
 

@@ -1,5 +1,5 @@
 import { type ProviderSessionObservation, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
-import type { Effect, Layer } from "effect";
+import type { Effect, Layer, Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
 import { conductorActions } from "./actions.js";
@@ -18,7 +18,7 @@ import {
 } from "./vocabulary.js";
 
 export interface ConductorPluginOptions {
-  readApiKey: () => Effect.Effect<string | undefined>;
+  readApiKey: () => Effect.Effect<Redacted.Redacted | undefined>;
   baseUrl?: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;

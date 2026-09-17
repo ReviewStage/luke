@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 import { test } from "vitest";
 import { HTTP_STATUS } from "../server/core";
 import { hostedEmbedder } from "../server/hosted/brain-host/embedding";
@@ -37,7 +37,7 @@ function answer(data: readonly ReturnType<typeof embedding>[]): Response {
 
 function embed(texts: readonly string[], respond: (seen: Seen) => Response | Promise<Response>) {
   const seen: Seen[] = [];
-  const embedder = hostedEmbedder("sk-test-not-a-real-key");
+  const embedder = hostedEmbedder(Redacted.make("sk-test-not-a-real-key"));
   const vectors = Effect.runPromise(
     Effect.provide(
       embedder.embed(texts),

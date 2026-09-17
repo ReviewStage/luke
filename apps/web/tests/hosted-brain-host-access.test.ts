@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Result } from "effect";
+import { Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -374,7 +374,7 @@ test("a conversation runs in one session: the recorded one is admitted, another 
 /** The deployment acting for an account: admitted for its turns on a message and refused, under its own secret, for everything else. */
 
 const CRON_SECRET = "cron-secret-1";
-const DEPLOYMENT = { secret: CRON_SECRET, admits: DEPLOYMENT_TURNS };
+const DEPLOYMENT = { secret: Redacted.make(CRON_SECRET), admits: DEPLOYMENT_TURNS };
 
 /** A request under the deployment's secret naming the account, on the message route, for the kind of turn given. */
 function scheduled(

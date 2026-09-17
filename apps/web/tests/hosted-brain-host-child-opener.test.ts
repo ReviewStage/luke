@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Result, Schema } from "effect";
+import { Effect, Fiber, Redacted, Result, Schema } from "effect";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
@@ -46,7 +46,7 @@ afterAll(() => database.close());
 
 const NOW = Date.parse("2026-09-15T09:00:00.000Z");
 const ORIGIN = "https://luke.test";
-const SECRET = "deployment-secret-fixture";
+const SECRET = Redacted.make("deployment-secret-fixture");
 const SESSION_ID = "wrun_01M000000000000000000CHILD";
 
 const ChildRowSchema = Schema.Struct({

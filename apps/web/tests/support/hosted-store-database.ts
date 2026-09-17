@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { PGlite } from "@electric-sql/pglite";
 import { atInstant } from "@sidecar/wire/testing";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime, Redacted } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { user } from "../../server/db/auth-schema";
@@ -51,7 +51,7 @@ interface HostedStoreTestDatabase {
   close(): Promise<void>;
 }
 
-export const TEST_PAYLOAD_SECRET = "c".repeat(64);
+export const TEST_PAYLOAD_SECRET = Redacted.make("c".repeat(64));
 
 /** What every test user is called; the column is not null and no test reads it. */
 export const TEST_USER_NAME = "Test User";

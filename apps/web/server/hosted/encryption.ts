@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { Redacted } from "effect";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 
 const ALGORITHM = "aes-256-gcm";
@@ -10,8 +11,9 @@ export const VAULT_ENCRYPTION_ENVIRONMENT = {
   SECRET: "PROVIDER_KEY_ENCRYPTION_SECRET",
 } as const;
 
-function secretBuffer(secret: string): Buffer {
-  const buf = Buffer.from(secret, "hex");
+/** The one place the vault secret is revealed: into the cipher's key bytes. */
+function secretBuffer(secret: Redacted.Redacted): Buffer {
+  const buf = Buffer.from(Redacted.value(secret).trim(), "hex");
   if (buf.length !== 32) {
     throw new Error(
       "PROVIDER_KEY_ENCRYPTION_SECRET must be 64 hex characters (32 bytes); generate with: openssl rand -hex 32",
@@ -25,7 +27,7 @@ function secretBuffer(secret: string): Buffer {
  * || authTag). The nonce is random per call; the auth tag provides integrity.
  * `secret` must be a 64-character hex string (32 bytes).
  */
-export function encryptProviderKey(plaintext: string, secret: string): string {
+export function encryptProviderKey(plaintext: string, secret: Redacted.Redacted): string {
   const key = secretBuffer(secret);
   const nonce = randomBytes(NONCE_BYTES);
   const cipher = createCipheriv(ALGORITHM, key, nonce);
@@ -39,7 +41,7 @@ export function encryptProviderKey(plaintext: string, secret: string): string {
  * does not verify — meaning the ciphertext has been tampered with or the
  * wrong secret was supplied.
  */
-export function decryptProviderKey(encoded: string, secret: string): string {
+export function decryptProviderKey(encoded: string, secret: Redacted.Redacted): string {
   const key = secretBuffer(secret);
   const buf = Buffer.from(encoded, "base64");
   const nonce = buf.subarray(0, NONCE_BYTES);
@@ -51,16 +53,18 @@ export function decryptProviderKey(encoded: string, secret: string): string {
 }
 
 /**
- * The trimmed secret, or the 503 every endpoint that needs one answers
- * without it. Its absence is a kill switch for the whole vault, so the
- * refusal is the same wherever it is read.
+ * The secret, or the 503 every endpoint that needs one answers without it.
+ * Its absence is a kill switch for the whole vault, so the refusal is the
+ * same wherever it is read; a blank one was already dropped where the
+ * environment was read.
  */
-export function secretOrUnavailable(secret: string | undefined): { secret: string } | Response {
-  const trimmed = secret?.trim();
-  if (!trimmed) {
+export function secretOrUnavailable(
+  secret: Redacted.Redacted | undefined,
+): { secret: Redacted.Redacted } | Response {
+  if (secret === undefined) {
     return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
   }
-  return { secret: trimmed };
+  return { secret };
 }
 
 /**
@@ -75,12 +79,12 @@ const CURRENT_PAYLOAD_KEY_ID: PayloadKeyId = 1;
 export interface PayloadKeyRing {
   /** The key new envelopes are sealed under. */
   readonly current: PayloadKeyId;
-  /** Every key an envelope on record may name, the current one included; each a 64-character hex secret. */
-  readonly keys: ReadonlyMap<PayloadKeyId, string>;
+  /** Every key an envelope on record may name, the current one included; each a 64-character hex secret, sealed. */
+  readonly keys: ReadonlyMap<PayloadKeyId, Redacted.Redacted>;
 }
 
 /** The ring this build runs on: the vault's secret as key 1, and nothing older. */
-export function payloadKeyRing(secret: string): PayloadKeyRing {
+export function payloadKeyRing(secret: Redacted.Redacted): PayloadKeyRing {
   return { current: CURRENT_PAYLOAD_KEY_ID, keys: new Map([[CURRENT_PAYLOAD_KEY_ID, secret]]) };
 }
 

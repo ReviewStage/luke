@@ -11,6 +11,7 @@
     "apps/web/eve/agent.ts",
     "apps/web/eve/channels/eve.ts",
     "apps/web/eve/hooks/store.ts",
+    "apps/web/eve/host.ts",
     "apps/web/eve/instructions/prompt.ts",
     "apps/web/eve/instructions/seed.ts",
     "apps/web/eve/memory/notebook.ts",

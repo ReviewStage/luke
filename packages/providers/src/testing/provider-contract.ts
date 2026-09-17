@@ -41,7 +41,7 @@ import {
   runTest,
   temporaryDirectory,
 } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 import { type TestContext, test } from "vitest";
 import {
   assertGoldenJson,
@@ -68,7 +68,7 @@ interface ProviderFixtureInput {
   readonly home: string;
   readonly minimumRefreshIntervalMs: number;
   /** Answers `undefined` for the no-key cases, and dies for the unreadable one. */
-  readonly readApiKey: () => Effect.Effect<string | undefined>;
+  readonly readApiKey: () => Effect.Effect<Redacted.Redacted | undefined>;
   /**
    * The fake backing this fixture's recorded `api/` routes. Every provider is
    * handed one, whatever it is observed by: it throws for a request the
@@ -337,7 +337,7 @@ interface ContractCase {
 }
 
 interface CaseOptions {
-  readonly readApiKey?: () => Effect.Effect<string | undefined>;
+  readonly readApiKey?: () => Effect.Effect<Redacted.Redacted | undefined>;
   readonly minimumRefreshIntervalMs?: number;
 }
 
@@ -375,7 +375,9 @@ export function describeProviderContract(
     const plugin = await factory({
       home,
       minimumRefreshIntervalMs: options.minimumRefreshIntervalMs ?? 0,
-      readApiKey: options.readApiKey ?? (() => Effect.succeed(apiKey)),
+      readApiKey:
+        options.readApiKey ??
+        (() => Effect.succeed(apiKey === undefined ? undefined : Redacted.make(apiKey))),
       api,
       sql: async (name) =>
         (await fs.readFile(path.join(root, "db", `${name}.sql`), "utf8")).replaceAll(

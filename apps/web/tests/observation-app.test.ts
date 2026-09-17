@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { Redacted } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
@@ -34,7 +35,7 @@ process.env.DATABASE_URL ??= PLACEHOLDER_DATABASE_URL;
 const { observationApp } = await import("../server/observation-app.js");
 
 const ORIGIN = "https://luke.test";
-const ENCRYPTION_SECRET = "a".repeat(64);
+const ENCRYPTION_SECRET = Redacted.make("a".repeat(64));
 
 interface Exchange {
   name: string;

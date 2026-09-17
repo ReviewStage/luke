@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 import { decryptProviderKey } from "./encryption.js";
 import type { VaultKeyRow } from "./vault-route.js";
 
@@ -9,11 +9,11 @@ import type { VaultKeyRow } from "./vault-route.js";
  * the pass answers what it could reach.
  */
 
-/** Opens one provider's stored key on demand, or answers that there is none. */
+/** Opens one provider's stored key on demand, sealed for the header it will ride, or answers that there is none. */
 export function readApiKeyFor(
   rows: readonly VaultKeyRow[],
-  secret: string,
-): (providerId: string) => () => Effect.Effect<string | undefined> {
+  secret: Redacted.Redacted,
+): (providerId: string) => () => Effect.Effect<Redacted.Redacted | undefined> {
   const ciphertextByProviderId = new Map<string, string>(
     rows.map((row) => [row.providerId, row.ciphertext]),
   );
@@ -22,7 +22,7 @@ export function readApiKeyFor(
       const ciphertext = ciphertextByProviderId.get(providerId);
       if (!ciphertext) return undefined;
       try {
-        return decryptProviderKey(ciphertext, secret);
+        return Redacted.make(decryptProviderKey(ciphertext, secret));
       } catch {
         return undefined;
       }
