@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { LiveServerEvent } from "@sidecar/live";
 import type { WireRecord } from "@sidecar/wire";
-import { Duration, Effect, type Scope, Stream } from "effect";
+import { Duration, Effect, Schedule, type Scope, Stream } from "effect";
 import { type HeldSocket, holdSocket, type SocketHold } from "./held-socket.js";
 import type {
   LiveSideband,
@@ -13,6 +13,56 @@ import type {
 
 /** How long a wait on an announced arrival stands before it fails, on the clock the test keeps. */
 const ARRIVAL_BOUND = Duration.seconds(2);
+
+const POLL = {
+  SPACING: Duration.millis(5),
+  ATTEMPTS: 400,
+} as const;
+
+const changeListeners = new Set<() => void>();
+
+/** Tells every waiter that a fake moved: a socket sent or was closed, a seam opened one, a reading heard one. */
+function announceChange(): void {
+  for (const listener of [...changeListeners]) listener();
+}
+
+/**
+ * Hears every change of every fake in this module, so a wait on a condition
+ * over them (`arrival(onFakeChange, ...)`) is woken by the change itself and
+ * polls nothing.
+ */
+export function onFakeChange(listener: () => void): () => void {
+  changeListeners.add(listener);
+  return () => {
+    changeListeners.delete(listener);
+  };
+}
+
+/**
+ * Polls `ready` on a `Schedule` until it answers true, or fails naming what
+ * it waited for: the wait for a condition nothing announces, such as a row a
+ * real database has to land, on whatever clock the test keeps.
+ */
+export function polled(
+  ready: () => boolean | Promise<boolean>,
+  waitedFor: string | (() => string | Promise<string>),
+): Effect.Effect<void> {
+  return Effect.repeat(
+    Effect.promise(async () => ready()),
+    {
+      schedule: Schedule.spaced(POLL.SPACING).pipe(Schedule.upTo({ times: POLL.ATTEMPTS })),
+      until: (answered: boolean): boolean => answered,
+    },
+  ).pipe(
+    Effect.flatMap((answered) =>
+      Effect.promise(async () => {
+        if (answered) return;
+        const what = typeof waitedFor === "string" ? waitedFor : await waitedFor();
+        assert.fail(`timed out waiting for ${what}`);
+      }),
+    ),
+  );
+}
 
 /**
  * Waits for `ready` to hold, told by `subscribe` each time something arrives,
@@ -52,17 +102,19 @@ export function arrival(
  */
 export class FakeLiveSocket implements HeldSocket {
   readonly sent: string[] = [];
+  /** Every frame and close the far side delivered, in order, so a test can wait on a scripted answer's delivery. */
+  readonly received: SocketArrival[] = [];
   closedByClient = false;
   readonly #sentListeners = new Set<(data: string) => void>();
-  readonly #closedListeners = new Set<() => void>();
   readonly #hold: SocketHold = holdSocket({
     send: (data) => {
       this.sent.push(data);
       for (const listener of [...this.#sentListeners]) listener(data);
+      announceChange();
     },
     close: () => {
       this.closedByClient = true;
-      for (const listener of [...this.#closedListeners]) listener();
+      announceChange();
     },
   });
 
@@ -75,14 +127,6 @@ export class FakeLiveSocket implements HeldSocket {
     this.#sentListeners.add(listener);
     return () => {
       this.#sentListeners.delete(listener);
-    };
-  }
-
-  /** Hears the source close the socket, so a test waits on the close rather than a pause. */
-  onClosed(listener: () => void): () => void {
-    this.#closedListeners.add(listener);
-    return () => {
-      this.#closedListeners.delete(listener);
     };
   }
 
@@ -109,11 +153,17 @@ export class FakeLiveSocket implements HeldSocket {
 
   /** Delivers raw text from the far side, for a frame that is not JSON at all. */
   receiveText(data: string): void {
-    this.#hold.hear({ frame: data });
+    this.#hear({ frame: data });
   }
 
   closeFromServer(close: SocketClose = {}): void {
-    this.#hold.hear({ close });
+    this.#hear({ close });
+  }
+
+  #hear(heard: SocketArrival): void {
+    this.received.push(heard);
+    this.#hold.hear(heard);
+    announceChange();
   }
 }
 
@@ -129,15 +179,12 @@ export interface ScriptedSocketSeam {
   openSocket: OpenSocket;
   opens: RecordedOpen[];
   sockets: FakeLiveSocket[];
-  /** Hears each open, so a test waits on the socket rather than a pause. */
-  onOpened(listener: () => void): () => void;
 }
 
 /** An `openSocket` seam that answers each open from a script and records what it was asked; the socket it answers with holds what it hears, as the seam's contract has it, and the script drives it from the far side. */
 export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSeam {
   const opens: RecordedOpen[] = [];
   const sockets: FakeLiveSocket[] = [];
-  const openedListeners = new Set<() => void>();
   let call = 0;
   const openSocket: OpenSocket = (url, headers) =>
     Effect.sync(() => {
@@ -148,28 +195,16 @@ export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSe
       call += 1;
       if (!answer) throw new Error("no scripted opening");
       const opening = answer(socket) ?? { socket };
-      for (const listener of [...openedListeners]) listener();
+      announceChange();
       return opening;
     });
-  return {
-    openSocket,
-    opens,
-    sockets,
-    onOpened: (listener) => {
-      openedListeners.add(listener);
-      return () => {
-        openedListeners.delete(listener);
-      };
-    },
-  };
+  return { openSocket, opens, sockets };
 }
 
 /** What one reader of a sideband heard, in arrival order: the events it read, then the close that ended them. */
 interface SidebandReading {
   readonly events: LiveServerEvent[];
   readonly closes: SocketClose[];
-  /** Hears each arrival once it is on the reading, so a test waits on it rather than a pause. */
-  onArrival(listener: () => void): () => void;
 }
 
 /**
@@ -180,23 +215,13 @@ interface SidebandReading {
 export const readSideband = /* @__PURE__ */ Effect.fnUntraced(function* (
   sideband: LiveSideband,
 ): Effect.fn.Return<SidebandReading, never, Scope.Scope> {
-  const listeners = new Set<() => void>();
-  const reading: SidebandReading = {
-    events: [],
-    closes: [],
-    onArrival: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
+  const reading: SidebandReading = { events: [], closes: [] };
   yield* Effect.forkScoped(
     Stream.runForEach(sideband.arrivals, (heard) =>
       Effect.sync(() => {
         if ("close" in heard) reading.closes.push(heard.close);
         else reading.events.push(heard.event);
-        for (const listener of [...listeners]) listener();
+        announceChange();
       }),
     ),
   );

@@ -28,7 +28,10 @@ import {
 } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
 import {
+  arrival,
   type FakeLiveSocket,
+  onFakeChange,
+  polled,
   readSideband,
   type ScriptedOpening,
   type ScriptedSocketSeam,
@@ -169,7 +172,8 @@ it.live(
       yield* sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_2" });
       assert.equal(socket.sent.length, 2);
       socket.closeFromServer({ code: 1000 });
-      yield* settled(
+      // The detach is the source's own move after the close and no fake announces it, so this one wait polls.
+      yield* polled(
         () => !source.diagnostics().sidebandAttached,
         "the close to detach the sideband",
       );
@@ -345,19 +349,20 @@ function attachedFrame(sessionId = SESSION_ID) {
 
 /**
  * Wall time, whatever clock the test keeps: what the recovering socket does
- * off the test's own fiber happens in real milliseconds, and a test driving
- * the `TestClock` waits for it the same way.
+ * off the test's own fiber happens in real milliseconds, and the one test
+ * that asserts nothing more opens after the `TestClock` ran the delays out
+ * waits this pause for it, since no fake announces an attempt not made.
  */
 const pause = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
 
 /** Waits for the scripted seam to have opened the given number of sockets, or fails. */
 function openedSockets(script: ScriptedSocketSeam, count: number): Effect.Effect<void> {
-  return Effect.promise(async () => {
-    for (let waited = 0; script.sockets.length < count && waited < 200; waited += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
-    }
-    assert.equal(script.sockets.length, count);
-  });
+  return Effect.andThen(
+    settled(() => script.sockets.length >= count, `${count} sockets to have opened`),
+    Effect.sync(() => {
+      assert.equal(script.sockets.length, count);
+    }),
+  );
 }
 
 /** Waits for the socket's close to have reached its listeners, or fails. */
@@ -369,15 +374,10 @@ function closesReported(closes: readonly unknown[]): Effect.Effect<void> {
  * Waits for what a real socket event lands on a reader to have landed, or
  * fails naming what it waited for: a fixed pause raced the event under load
  * and read before it arrived, so every assertion on observed frames waits on
- * the frames themselves.
+ * the fakes' own announcement of the change, and polls nothing.
  */
 function settled(condition: () => boolean, waitedFor: string): Effect.Effect<void> {
-  return Effect.promise(async () => {
-    for (let waited = 0; !condition() && waited < 200; waited += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1));
-    }
-    assert.equal(condition(), true, `waited for ${waitedFor}`);
-  });
+  return arrival(onFakeChange, condition, waitedFor);
 }
 
 function reattaching(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOptions> = {}) {
@@ -414,6 +414,12 @@ it.live(
       assert.deepEqual(read.closes, []);
       assert.equal(source.diagnostics().sidebandAttached, true);
 
+      // The script answers the attach a microtask after the frame; an event delivered ahead of
+      // that answer would be read as the answer, so the event waits behind it as a server's would.
+      yield* settled(
+        () => second.received.length >= 1,
+        "the attach answer on the fresh connection",
+      );
       second.receive({
         type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED,
         event_id: "ev_2",
