@@ -256,8 +256,7 @@ const findDailyNotesForDays = SqlSchema.findAll({
             ),
           ),
         ),
-      )
-      .orderBy(asc(workspaceFile.path)),
+      ),
 });
 
 /** Takes the user's row lock for the transaction, so two revisions of one account's files run one after the other. */
@@ -338,11 +337,17 @@ export function readDailyNotesForDays(
   days: readonly string[],
 ): Effect.Effect<readonly DailyNoteRow[], WorkspaceFileFailure, SqlClient.SqlClient> {
   if (days.length === 0) return Effect.succeed([]);
+  // Note that the rows are ordered here and not by the statement, because
+  // Postgres orders text by its collation, where `-` and `.` do not stand
+  // where they do in code points, and the path order must be one order on
+  // every dialect.
   return Effect.map(findDailyNotesForDays({ userId, days }), (rows) =>
-    rows.filter((row) => {
-      const parsed = parseDailyNoteName(row.path.slice(DAILY_NOTES_PREFIX.length));
-      return parsed !== undefined && days.includes(parsed.day);
-    }),
+    rows
+      .filter((row) => {
+        const parsed = parseDailyNoteName(row.path.slice(DAILY_NOTES_PREFIX.length));
+        return parsed !== undefined && days.includes(parsed.day);
+      })
+      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
   );
 }
 
