@@ -203,25 +203,21 @@ evidence; CI builds nothing for the Mac.
   `apps/web/tests/support/`, `packages/wire/src/testing/`,
   `packages/providers/src/testing/`, and `temporaryDirectory` from
   `@sidecar/runtime/testing`.
-- Effect tests use `it.effect` and `TestClock.adjust`. `Effect.run*`,
-  `Runtime.run*`, and `ManagedRuntime.make` in a test file fail lint
-  (`testing/no-runner`); `setTimeout`, `setInterval`, `Effect.sleep`, and
-  `it.live` fail lint (`testing/no-real-time`).
+- Effect tests use `it.effect` and `TestClock.adjust`, never `Effect.run*`,
+  `Runtime.run*`, or `ManagedRuntime.make` in a test body, and never
+  `setTimeout`, `setInterval`, or `Effect.sleep`. `it.live` is only for a
+  subject that is a real socket or process timeout, named below with its
+  reason.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
   helpers, with the diff explained in the PR.
-- Never loosen, delete, or skip a test to go green. `.only`, `.skip`,
-  `.todo`, and `it.flakyTest` fail lint (`testing/no-focus-or-retry`). Fix
-  or delete a flaky test.
+- Never loosen, delete, or skip a test to go green: no `.only`, `.skip`,
+  `.todo`, or `it.flakyTest`. Fix or delete a flaky test.
 - Do not write change-detector tests: an expected value computed by the code
   under test or pasted from its output; a test of a getter, constant, type,
   re-export, or Schema round-trip on a valid value; a test that only asserts
   a fake was called; a private function exported for a test.
 
-`tools/oxlint/testing/test-edges.json` holds the files not yet on these rules:
-`runnerHoldouts` and `realTimeHoldouts` only shrink and are deleted with their
-last entry. `liveClockTests` is permanent, for a subject that is a real socket
-or process timeout; `it.live` is allowed only there, and each entry is named
-here with its reason:
+The tests allowed `it.live`, each with its reason:
 
 - `packages/gateway/src/node-invocations.test.ts`: a real Gateway socket's
   reconnection and in-flight timeout.
