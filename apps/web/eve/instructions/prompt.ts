@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
 import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
+import { pinnedState } from "../pinned-state.js";
 import { sessionPrompt } from "../session-prompt.js";
 
 /**
@@ -18,18 +19,23 @@ export default defineDynamic({
   events: {
     // The prompt reads the rows and writes nothing, and it resolves on the
     // same event the hook claims the record on, so ownership alone admits it.
-    "session.started": (_event, ctx) =>
-      runWeb(
+    "session.started": (_event, ctx) => {
+      // Pinned before anything awaits: the hash is written after the rows
+      // are read, and a statement can hand the fiber back in another
+      // session's context (`../pinned-state.ts`).
+      const prompt = pinnedState(sessionPrompt);
+      return runWeb(
         Effect.gen(function* () {
           const admitted = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
           if (!admitted.ok) return null;
           const turn = host.turnKindOf(ctx.session.auth);
           if (!turn) return null;
-          const prompt = yield* host.prompt(admitted, turn.trigger);
-          sessionPrompt.update(() => ({ hash: prompt.hash }));
-          return defineInstructions({ content: prompt.text });
+          const composed = yield* host.prompt(admitted, turn.trigger);
+          prompt.update(() => ({ hash: composed.hash }));
+          return defineInstructions({ content: composed.text });
         }),
-      ),
+      );
+    },
     "turn.started": (_event, ctx) =>
       runWeb(
         Effect.gen(function* () {
