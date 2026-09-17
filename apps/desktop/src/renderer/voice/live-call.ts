@@ -377,10 +377,10 @@ export class LiveCall implements LiveVoiceCall {
 
   #awaitStart(): Effect.Effect<boolean> {
     if (this.#started) return Effect.succeed(true);
-    return Effect.race(
-      Deferred.await(this.#announcedStart),
-      Effect.as(Effect.sleep(Duration.millis(SESSION_START_TIMEOUT_MS)), false),
-    );
+    return Effect.timeoutOrElse(Deferred.await(this.#announcedStart), {
+      duration: Duration.millis(SESSION_START_TIMEOUT_MS),
+      orElse: () => Effect.succeed(false),
+    });
   }
 
   #unmuteEffect(): Effect.Effect<boolean> {
@@ -454,9 +454,9 @@ export class LiveCall implements LiveVoiceCall {
         return;
       }
       this.#send(closeEvent(this.#nextId()));
-      yield* Effect.race(
+      yield* Effect.timeoutOption(
         Deferred.await(this.#announcedClose),
-        Effect.sleep(Duration.millis(SESSION_CLOSE_TIMEOUT_MS)),
+        Duration.millis(SESSION_CLOSE_TIMEOUT_MS),
       );
       if (!this.#ended) this.#tearDown(LIVE_STATUS.IDLE);
     });
@@ -481,10 +481,10 @@ export class LiveCall implements LiveVoiceCall {
       const acknowledged = Deferred.makeUnsafe<boolean>();
       this.#pendingSwitch = { eventId, acknowledged };
       this.#send(build(eventId));
-      return Effect.race(
-        Deferred.await(acknowledged),
-        Effect.as(Effect.sleep(Duration.millis(MICROPHONE_ACK_TIMEOUT_MS)), false),
-      ).pipe(
+      return Effect.timeoutOrElse(Deferred.await(acknowledged), {
+        duration: Duration.millis(MICROPHONE_ACK_TIMEOUT_MS),
+        orElse: () => Effect.succeed(false),
+      }).pipe(
         Effect.tap(() =>
           Effect.sync(() => {
             if (this.#pendingSwitch?.eventId === eventId) this.#settleSwitch(false);

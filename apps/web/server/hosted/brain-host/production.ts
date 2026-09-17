@@ -114,9 +114,10 @@ function once<Value>(build: () => Value): () => Value {
 /**
  * The same memoization for a value only an effect can build: the writer's
  * composition probes every declared output schema, so a warm instance pays
- * that walk once rather than once per request.
+ * that walk once rather than once per request, and the host's plugin cache is
+ * built on the first fiber that reaches it.
  */
-function onceComposed<Value>(build: Effect.Effect<Value>): () => Effect.Effect<Value> {
+export function onceComposed<Value>(build: Effect.Effect<Value>): () => Effect.Effect<Value> {
   let built: { value: Value } | undefined;
   return () =>
     Effect.suspend(() =>

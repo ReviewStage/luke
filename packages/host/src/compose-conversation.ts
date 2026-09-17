@@ -48,7 +48,7 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Effect, Result } from "effect";
+import { Effect, Result } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
@@ -686,45 +686,20 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     publishChildTranscript();
   });
 
-  /**
-   * The pass under way, so a caller can wait for one that began after its own
-   * write. A `Deferred` and not a promise: the pass is a fiber of whoever
-   * runs the loop, and what a waiter needs is the instant it settled,
-   * however it settled.
-   */
-  let inFlight: Deferred.Deferred<void> | undefined;
-
-  const settledInFlight = Effect.suspend(() =>
-    inFlight === undefined ? Effect.void : Deferred.await(inFlight),
-  );
-
   const loop = new ObservationLoop({
     gate,
     intervalMs: CONVERSATION_POLL_INTERVAL_MS,
-    run: (generation) =>
-      Effect.gen(function* () {
-        const settled = yield* Deferred.make<void>();
-        inFlight = settled;
-        yield* Effect.ensuring(
-          Effect.provide(poll(generation), FetchHttpClient.layer),
-          Deferred.succeed(settled, undefined),
-        );
-      }),
+    run: (generation) => Effect.provide(poll(generation), FetchHttpClient.layer),
   });
 
   /**
    * Runs a poll that began after this call and waits for it to publish. A pass
-   * already under way may have read before the caller's write landed, so it
-   * is waited out first; the loop then either runs a fresh pass to its end
-   * or, when it had already queued one behind the pass that just finished,
-   * answers at once, and that queued pass — which began after the write — is
-   * what the last wait is for.
+   * already under way may have read before the caller's write landed, so the
+   * refresh queues a follow-up behind it rather than running one, and the
+   * loop's own `settled` is what waits for that follow-up — which began after
+   * the write — to end.
    */
-  const pollAfter: Effect.Effect<void> = Effect.gen(function* () {
-    yield* settledInFlight;
-    yield* loop.refresh;
-    yield* settledInFlight;
-  });
+  const pollAfter: Effect.Effect<void> = Effect.andThen(loop.refresh, loop.settled);
 
   function reset(): void {
     sync.reset();

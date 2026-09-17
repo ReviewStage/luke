@@ -1,3 +1,4 @@
+import { singleFlightEffect } from "@sidecar/runtime/effect";
 import { Cause, Effect, Fiber, PubSub, Result, type Scope, Stream } from "effect";
 import {
   LOOPBACK_CONSENT_CANCELLED,
@@ -7,7 +8,6 @@ import {
   loopbackConsent,
 } from "../loopback-consent.js";
 import { LOOPBACK_CONNECTION_SOURCE, type LoopbackConnectionSource } from "../loopback-page.js";
-import { singleFlightEffect } from "../single-flight.js";
 import {
   ACCOUNT_FAILURE_ACTION,
   type AccountClient,
