@@ -138,7 +138,7 @@ function request(path: string, after: string | undefined): Request {
 }
 
 function options(userId: string, req: Request): ResourceReadOptions {
-  return { request: req, resolveUserId: () => Effect.succeed(userId), store: database.store };
+  return { request: req, resolveUserId: () => Effect.succeedSome(userId), store: database.store };
 }
 
 async function answered<Value, Encoded>(
@@ -225,7 +225,7 @@ class Mac {
             headers: { authorization: "Bearer token-1", "content-type": "application/json" },
             body: JSON.stringify({ deviceId: this.#deviceId }),
           }),
-          resolveUserId: () => Effect.succeed(this.userId),
+          resolveUserId: () => Effect.succeedSome(this.userId),
           store: database.store,
           touchDevice: () => Effect.succeed(false),
           now,

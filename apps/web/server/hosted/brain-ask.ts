@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, Result } from "effect";
+import { Effect, Schema as EffectSchema, Option, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -33,6 +33,7 @@ import {
   jsonResponse,
   readJsonBody,
 } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { makeRateBrake } from "./rate-brake.js";
 import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow } from "./store/asks.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
@@ -100,7 +101,7 @@ const HOST_TURN_OF_ASK_ORIGIN = {
 
 export interface BrainAskOptions {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "turns">;
   asks: AskRecord;
   /** eve as the caller reaches it, under the caller's own bearer. */
@@ -123,11 +124,12 @@ const gate = /* @__PURE__ */ Effect.fnUntraced(function* (
       HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
   }
-  const userId = yield* resolveUserId(request);
+  const account = yield* resolveUserId(request);
   const authorization = request.headers.get("authorization")?.trim();
-  if (!userId || !authorization) {
+  if (Option.isNone(account) || !authorization) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
+  const userId = account.value;
   if (!(yield* askBrake.check(userId))) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }

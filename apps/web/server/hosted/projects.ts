@@ -1,4 +1,4 @@
-import { Effect, type Layer, type Schema } from "effect";
+import { Effect, type Layer, Option, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -69,10 +69,11 @@ export const handleProjects = /* @__PURE__ */ Effect.fn("handleProjects")(functi
     );
   }
 
-  const userId = yield* resolveUserId(request);
-  if (!userId) {
+  const account = yield* resolveUserId(request);
+  if (Option.isNone(account)) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
+  const userId = account.value;
 
   const secret = (encryptionSecret ?? "").trim();
   if (!secret) {

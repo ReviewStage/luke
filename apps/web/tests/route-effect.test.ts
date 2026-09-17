@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { HTTP_METHOD } from "../server/core.js";
@@ -15,6 +15,7 @@ import {
   hostedMethod,
   hostedRefusalResponse,
   readJsonBodyEffect,
+  type UserIdResolver,
 } from "../server/hosted/http-effect.js";
 import { ANY_METHOD, ANY_PATH } from "../server/route.js";
 import { routeFromHttpRouter } from "../server/route-effect.js";
@@ -61,9 +62,7 @@ const AUTHORIZATION = "Bearer token";
  * services are built, so a case naming another key ends the runtime before
  * it asks for the next.
  */
-function gateRoute(
-  resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>,
-) {
+function gateRoute(resolveUserId: UserIdResolver<string | undefined>) {
   return routeFromHttpRouter(
     HttpRouter.add(
       ANY_METHOD,
@@ -75,9 +74,9 @@ function gateRoute(
           return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
         }
         const request = yield* HttpServerRequest.HttpServerRequest;
-        const userId = yield* resolveUserId(request.headers.authorization);
-        if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-        return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { userId });
+        const account = yield* resolveUserId(request.headers.authorization);
+        if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+        return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { userId: account.value });
       }).pipe(Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal)))),
     ),
   );
@@ -122,7 +121,7 @@ test("the route reads a bearer the request carries", async () => {
   const seen: (string | undefined)[] = [];
   const route = gateRoute((authorization) => {
     seen.push(authorization);
-    return Effect.succeed(USER_ID);
+    return Effect.succeedSome(USER_ID);
   });
   const response = await route.fetch(gateRequest("GET"));
   assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
@@ -172,7 +171,11 @@ test("the route built from a route layer answers the gate's own refusals", async
   for (const entry of CASES) {
     vi.stubEnv(OPENAI_API_KEY, entry.apiKey ?? "");
     gate.push(
-      (await gateRoute(() => Effect.succeed(entry.userId)).fetch(gateRequest(entry.method))).status,
+      (
+        await gateRoute(() => Effect.succeed(Option.fromUndefinedOr(entry.userId))).fetch(
+          gateRequest(entry.method),
+        )
+      ).status,
     );
     await disposeWebRuntime();
   }

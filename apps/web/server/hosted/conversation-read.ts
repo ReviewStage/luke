@@ -1,4 +1,4 @@
-import { Effect, type Schema } from "effect";
+import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -89,10 +89,11 @@ export function handleConversationRead(
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
 
-    const userId = yield* resolveUserId(request);
-    if (!userId) {
+    const account = yield* resolveUserId(request);
+    if (Option.isNone(account)) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
+    const userId = account.value;
 
     if (!(yield* conversationBrake.check(userId))) {
       return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);

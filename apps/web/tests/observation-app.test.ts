@@ -111,7 +111,7 @@ const EXCHANGES: readonly Exchange[] = [
             body: "[]",
           }),
           projectApiKey: undefined,
-          resolveUserId: () => Effect.succeed("user-1"),
+          resolveUserId: () => Effect.succeedSome("user-1"),
         }),
       );
     },

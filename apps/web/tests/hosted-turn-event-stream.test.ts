@@ -12,7 +12,7 @@ import {
   TURN_SLOW_STEP,
   type TurnEvent,
 } from "@sidecar/hosted";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -198,7 +198,7 @@ function options(
 ): TurnEventStreamOptions {
   return {
     request: req,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeed(Option.fromUndefinedOr(userId)),
     store: database.store,
     bounds,
   };

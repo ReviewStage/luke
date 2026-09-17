@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Option, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -19,6 +19,7 @@ import {
   jsonResponse,
   readJsonBody,
 } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { makeRateBrake } from "./rate-brake.js";
 import type { HostedStore } from "./store/index.js";
 
@@ -60,7 +61,7 @@ const MAXIMUM_CHANGES_BODY_BYTES = 4_096;
 
 interface ChangeSignalOptions {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "directory" | "turns" | "roster">;
   touchDevice: DeviceSeams["touchDevice"];
   now?: () => number;
@@ -84,10 +85,11 @@ export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function
       HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
   }
-  const userId = yield* resolveUserId(request);
-  if (!userId) {
+  const account = yield* resolveUserId(request);
+  if (Option.isNone(account)) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
+  const userId = account.value;
   if (!(yield* changesBrake.check(userId))) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }

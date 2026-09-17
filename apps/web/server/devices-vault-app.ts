@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Layer, Redacted, Result } from "effect";
+import { Effect, type Schema as EffectSchema, Layer, Option, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -31,6 +31,7 @@ import {
   hostedNotFoundRoute,
   hostedRefusalResponse,
   readJsonBodyEffect,
+  type UserIdResolver,
 } from "./hosted/http-effect.js";
 import { makeRateBrake } from "./hosted/rate-brake.js";
 import type { VaultKeyEffect } from "./hosted/vault-key-store.js";
@@ -68,7 +69,7 @@ const deviceBrake = makeRateBrake({
 
 export interface DevicesVaultSeams extends DeviceSeams {
   /** Reads the signed-in account behind the request's bearer, or nothing. */
-  resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver<string | undefined>;
   storeKey: (userId: string, providerId: string, ciphertext: string) => VaultKeyEffect<void>;
   listKeys: (userId: string) => VaultKeyEffect<{ providerId: string; updatedAt: Date }[]>;
   deleteKey: (userId: string, providerId: string) => VaultKeyEffect<boolean>;
@@ -81,9 +82,9 @@ const bearerUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: Pick<DevicesVaultSeams, "resolveUserId">,
 ): Effect.fn.Return<string, HostedRefusal, HttpServerRequest.HttpServerRequest> {
   const request = yield* HttpServerRequest.HttpServerRequest;
-  const userId = yield* seams.resolveUserId(request.headers.authorization);
-  if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return userId;
+  const account = yield* seams.resolveUserId(request.headers.authorization);
+  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  return account.value;
 });
 
 /** Decodes a wire body through its Effect declaration, refusing anything it does not read. */

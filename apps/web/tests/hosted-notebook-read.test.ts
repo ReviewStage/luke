@@ -3,7 +3,7 @@ import { HOSTED_API_ERROR, NOTEBOOK_READ_BOUNDS, notebookAnswerSchema } from "@s
 
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import { afterAll, test } from "vitest";
 import { dailyNotePath, WORKSPACE_FILE } from "../server/core";
 import {
@@ -37,7 +37,7 @@ function request(method = "GET"): Request {
 function options(userId: string | undefined, req: Request): NotebookReadOptions {
   return {
     request: req,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeed(Option.fromUndefinedOr(userId)),
     store: database.store,
   };
 }

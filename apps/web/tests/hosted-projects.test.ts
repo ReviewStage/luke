@@ -36,7 +36,7 @@ function projectsOptions(
   return {
     request: projectsRequest(),
     encryptionSecret: SECRET,
-    resolveUserId: () => Effect.succeed("user-1"),
+    resolveUserId: () => Effect.succeedSome("user-1"),
     readVaultKeys: (): Effect.Effect<VaultKeyRow[]> => Effect.succeed([]),
     store: () => memoryObservationStore(),
     ...overrides,
@@ -122,7 +122,7 @@ test("the projects gate order is method, token, secret", async () => {
   assert.equal(wrongMethod.status, 405);
 
   const anonymous = await runWithoutDatabase(
-    handleProjects(projectsOptions({ resolveUserId: () => Effect.succeed(undefined) })),
+    handleProjects(projectsOptions({ resolveUserId: () => Effect.succeedNone })),
   );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);

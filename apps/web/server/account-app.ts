@@ -1,6 +1,6 @@
 import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, Option, Redacted } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -18,6 +18,7 @@ import {
   hostedMethod,
   hostedNotFoundRoute,
   hostedRefusalResponse,
+  type UserIdResolver,
 } from "./hosted/http-effect.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
@@ -44,7 +45,7 @@ const HTTP_METHOD = {
 } as const;
 
 export interface AccountAppSeams {
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   /** Deletes the user row; every dependent row cascades with it. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
@@ -57,9 +58,9 @@ const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<string, HostedRefusal, HttpServerRequest.HttpServerRequest> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const userId = yield* seams.resolveUserId(request);
-  if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return userId;
+  const account = yield* seams.resolveUserId(request);
+  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  return account.value;
 });
 
 /**

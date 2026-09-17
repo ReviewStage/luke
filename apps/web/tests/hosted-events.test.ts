@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { ConnectionError, SqlError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import {
@@ -76,7 +76,7 @@ function eventsRequest(body: WireValue): Request {
 }
 
 function options(overrides: Partial<EventsOptions> = {}): EventsOptions {
-  const resolveUserId: EventsOptions["resolveUserId"] = () => Effect.succeed("user-1");
+  const resolveUserId: EventsOptions["resolveUserId"] = () => Effect.succeedSome("user-1");
   return {
     request: eventsRequest({ events: [LAUNCH] }),
     projectApiKey: PROJECT_KEY,
@@ -88,10 +88,10 @@ function options(overrides: Partial<EventsOptions> = {}): EventsOptions {
 
 /** Each test gets its own account, because the rate-limit map outlives one. */
 let accounts = 0;
-function freshUser(): () => Effect.Effect<string | undefined> {
+function freshUser(): EventsOptions["resolveUserId"] {
   accounts += 1;
   const userId = `user-${accounts}`;
-  return () => Effect.succeed(userId);
+  return () => Effect.succeedSome(userId);
 }
 
 test("only POST is answered, and nothing is forwarded without a key or a token", async () => {
@@ -118,7 +118,7 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
         resolveUserId: () =>
           Effect.sync(() => {
             resolved += 1;
-            return "user-1";
+            return Option.some("user-1");
           }),
       }),
     ),
@@ -132,9 +132,7 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
 
   const anonymous = upstream();
   const refused = await runWithoutDatabase(
-    handleEvents(
-      options({ resolveUserId: () => Effect.succeed(undefined), httpClient: anonymous.layer }),
-    ),
+    handleEvents(options({ resolveUserId: () => Effect.succeedNone, httpClient: anonymous.layer })),
   );
   assert.equal(refused.status, 401);
   assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);

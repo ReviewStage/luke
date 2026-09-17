@@ -37,7 +37,7 @@ function ratingRequest(
 function options(overrides: Partial<MessageRatingOptions> = {}): MessageRatingOptions {
   return {
     request: ratingRequest(),
-    resolveUserId: () => Effect.succeed("user-1"),
+    resolveUserId: () => Effect.succeedSome("user-1"),
     rate: () => Effect.succeed({ ok: true, id: "event-1", seq: 7 }),
     ...overrides,
   };
@@ -73,14 +73,14 @@ test("each gate refuses on its own: method, the path's id, the token, then the b
       await runRating(
         options({
           request: ratingRequest(undefined, { messageId: "" }),
-          resolveUserId: () => Effect.succeed(undefined),
+          resolveUserId: () => Effect.succeedNone,
         }),
       ),
     ),
     [400, HOSTED_API_ERROR.INVALID_REQUEST],
   );
   assert.deepEqual(
-    await errorOf(await runRating(options({ resolveUserId: () => Effect.succeed(undefined) }))),
+    await errorOf(await runRating(options({ resolveUserId: () => Effect.succeedNone }))),
     [401, HOSTED_API_ERROR.INVALID_TOKEN],
   );
   const doubled = new URL(ratingRequest().url);
