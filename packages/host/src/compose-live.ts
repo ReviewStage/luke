@@ -111,7 +111,7 @@ const BEAT_KINDS: readonly BeatKind[] = [
  * rather than a finalizer, so a quit ends the session inside its own
  * deadline.
  */
-export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
+export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(function* (
   dependencies: LiveDependencies,
 ): Effect.fn.Return<LiveComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> {
   const { settings, account, observation, calendars } = dependencies;

@@ -202,7 +202,7 @@ function writeReport(
   );
 }
 
-export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange")(function* (
+export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExchange")(function* (
   options: HostedLiveExchangeOptions,
 ): Effect.fn.Return<HostedLiveExchange, never, Scope.Scope | SqlClient.SqlClient> {
   const { userId, liveSessionId, conversationId, context, writer, report } = options;

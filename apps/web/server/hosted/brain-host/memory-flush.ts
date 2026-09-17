@@ -207,7 +207,7 @@ class HousekeepingModelError extends Data.TaggedError("HousekeepingModelError")<
  * workspace, and every way the call can end is an outcome rather than an
  * error. The model's words are read for the silent token and dropped.
  */
-const housekeepingTurn = /* @__PURE__ */ Effect.fn("housekeepingTurn")(function* (
+const housekeepingTurn = /* @__PURE__ */ Effect.fn("web/housekeepingTurn")(function* (
   input: MemoryFlushTurnInput,
 ): Effect.fn.Return<MemoryHousekeepingResult> {
   const module = appendDailyNoteModule();
@@ -399,7 +399,7 @@ const recordFlushOutcome = SqlSchema.void({
  * housekeeping turn per cycle is what the claim guarantees; that the turn
  * stored anything is what the outcome says.
  */
-export const flushMemory = /* @__PURE__ */ Effect.fn("flushMemory")(function* (
+export const flushMemory = /* @__PURE__ */ Effect.fn("web/flushMemory")(function* (
   input: MemoryFlushTurnInput,
 ): Effect.fn.Return<MemoryHousekeepingResult, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const claimed = yield* claimFlushCycle({

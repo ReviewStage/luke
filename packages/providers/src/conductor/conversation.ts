@@ -87,7 +87,7 @@ function messagesPage(
  * The poll: everything newer than the cursor the last answer handed back,
  * walked forward behind the endpoint's own `after` to the fixed bounds.
  */
-const readNewerMessages = /* @__PURE__ */ Effect.fnUntraced(function* (
+const readNewerMessages = /* @__PURE__ */ Effect.fn("providers/readNewerMessages")(function* (
   pass: CloudPass,
   providerSessionId: string,
   afterMessageId: string,
@@ -148,7 +148,7 @@ function newestStoredId(records: readonly WireRecord[]): string | undefined {
  * with where the page began so the next scroll can continue. It never names a
  * poll cursor, because history must not move a poll backward.
  */
-const readConversationPage = /* @__PURE__ */ Effect.fnUntraced(function* (
+const readConversationPage = /* @__PURE__ */ Effect.fn("providers/readConversationPage")(function* (
   pass: CloudPass,
   providerSessionId: string,
   endOffset: number,
@@ -203,7 +203,7 @@ function readTailPage(
   ends: ConductorConversationEnds,
   providerSessionId: string,
 ): Effect.Effect<ProviderConversationResult, AdapterFailure> {
-  const walk = /* @__PURE__ */ Effect.fnUntraced(function* (
+  const walk = /* @__PURE__ */ Effect.fn("providers/walkConductorConversation")(function* (
     from: number,
   ): Effect.fn.Return<{ pages: WalkedPage[]; end: number }, AdapterFailure> {
     const pages: WalkedPage[] = [];
@@ -335,7 +335,9 @@ function transcriptLines(
  * not begin there; a chat with no attributed message yet is not found rather
  * than rendered empty.
  */
-export const readConductorTranscript = /* @__PURE__ */ Effect.fn("readConductorTranscript")(
+export const readConductorTranscript = /* @__PURE__ */ Effect.fn(
+  "providers/readConductorTranscript",
+)(
   function* (
     pass: CloudPass,
     ends: ConductorConversationEnds,
@@ -379,7 +381,7 @@ export const readConductorTranscript = /* @__PURE__ */ Effect.fn("readConductorT
  * back.
  */
 export const readConductorTranscriptSince = /* @__PURE__ */ Effect.fn(
-  "readConductorTranscriptSince",
+  "providers/readConductorTranscriptSince",
 )(
   function* (
     pass: CloudPass,

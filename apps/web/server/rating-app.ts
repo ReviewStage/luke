@@ -26,7 +26,7 @@ type RatingServices = SqlClient.SqlClient;
  * be read to settle. The write it names no tool, so its writer stands over no
  * registry.
  */
-const ratingPassthrough = /* @__PURE__ */ Effect.fn("ratingPassthrough")(
+const ratingPassthrough = /* @__PURE__ */ Effect.fn("web/ratingPassthrough")(
   function* (): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
     never,

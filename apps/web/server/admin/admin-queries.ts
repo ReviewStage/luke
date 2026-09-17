@@ -151,7 +151,7 @@ const findSignupsByDay = SqlSchema.findAll({
       .groupBy(SIGNUP_DAY),
 });
 
-const readUserMetrics = /* @__PURE__ */ Effect.fn("readUserMetrics")(function* (
+const readUserMetrics = /* @__PURE__ */ Effect.fn("web/readUserMetrics")(function* (
   fetchStart: Date,
   scope: AdminMetricsScope,
 ): Effect.fn.Return<AdminMetricsSource["users"], AdminQueryFailure, SqlClient.SqlClient> {
@@ -260,7 +260,7 @@ const findTopUsers = SqlSchema.findAll({
   },
 });
 
-const readUsageMetrics = /* @__PURE__ */ Effect.fn("readUsageMetrics")(function* (
+const readUsageMetrics = /* @__PURE__ */ Effect.fn("web/readUsageMetrics")(function* (
   todayKey: string,
   windowStartDay: string,
   fetchStartDay: string,
@@ -364,7 +364,7 @@ const findCohortActivity = SqlSchema.findAll({
       .groupBy(SIGNUP_WEEK, ACTIVITY_WEEK),
 });
 
-const readRetentionMetrics = /* @__PURE__ */ Effect.fn("readRetentionMetrics")(function* (
+const readRetentionMetrics = /* @__PURE__ */ Effect.fn("web/readRetentionMetrics")(function* (
   now: number,
   scope: AdminMetricsScope,
 ): Effect.fn.Return<AdminMetricsSource["retention"], AdminQueryFailure, SqlClient.SqlClient> {
@@ -429,7 +429,7 @@ const findQuotaLimitedInWindow = SqlSchema.findOneOption({
       ),
 });
 
-const readReliabilityMetrics = /* @__PURE__ */ Effect.fn("readReliabilityMetrics")(function* (
+const readReliabilityMetrics = /* @__PURE__ */ Effect.fn("web/readReliabilityMetrics")(function* (
   todayKey: string,
   windowStartDay: string,
   scope: AdminMetricsScope,

@@ -218,7 +218,7 @@ export function conductorActions(pass: CloudPass): ActionHandlers {
  * named. The task deliberately does not ride the creation: Conductor's
  * creation endpoint documents no prompt field.
  */
-const createWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
+const createWorkspace = /* @__PURE__ */ Effect.fn("providers/createWorkspace")(function* (
   pass: CloudPass,
   input: Parameters<ActionHandlers["createWorkspace"]>[0],
 ): Effect.fn.Return<ProviderWorkspaceResult> {

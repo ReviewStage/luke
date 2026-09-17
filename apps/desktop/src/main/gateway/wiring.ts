@@ -57,7 +57,7 @@ const APPLE_CALENDAR_HELPER_COMMANDS: ReadonlySet<string> = new Set([
   "observe",
 ]);
 
-export const wireGateway = /* @__PURE__ */ Effect.fn("wireGateway")(function* (
+export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(function* (
   dependencies: GatewayWiringDependencies,
 ): Effect.fn.Return<GatewayWiring, never, Scope.Scope> {
   const { transport, state, report } = dependencies;

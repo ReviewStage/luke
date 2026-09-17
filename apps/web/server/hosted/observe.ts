@@ -58,7 +58,7 @@ export interface ObserveOptions
  * same pass the schedule runs, stored the same way. A user with no cloud key
  * has no roster to read or store and is answered empty.
  */
-export const handleObserve = /* @__PURE__ */ Effect.fn("handleObserve")(function* (
+export const handleObserve = /* @__PURE__ */ Effect.fn("web/handleObserve")(function* (
   options: ObserveOptions,
 ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;

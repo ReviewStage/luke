@@ -90,25 +90,27 @@ function agentSelectionOf(row: {
  * pairing rides a creation or a spawn that named no model of its own, exactly
  * as the desktop's settings did before the brain moved to the service.
  */
-export const readWorkspaceDefaults = /* @__PURE__ */ Effect.fn("readWorkspaceDefaults")(function* (
-  userId: string,
-): Effect.fn.Return<HostedWorkspaceDefaults, WorkspaceDefaultsFailure, SqlClient.SqlClient> {
-  const preference = yield* findDefaultProvider(userId);
-  const rows = yield* findWorkspacePreferences(userId);
-  const defaultProjectIds: Partial<Record<string, string>> = {};
-  const agentDefaults: Partial<Record<string, WorkspaceAgentSelection>> = {};
-  for (const row of rows) {
-    if (row.defaultProjectId) defaultProjectIds[row.providerId] = row.defaultProjectId;
-    const selection = agentSelectionOf(row);
-    if (selection) agentDefaults[row.providerId] = selection;
-  }
-  const defaultProviderId = preference.pipe(
-    Option.flatMapNullishOr((row) => row.defaultWorkspaceProvider),
-    Option.getOrUndefined,
-  );
-  return {
-    ...(defaultProviderId ? { defaultProviderId } : undefined),
-    ...(Object.keys(defaultProjectIds).length > 0 ? { defaultProjectIds } : undefined),
-    ...(Object.keys(agentDefaults).length > 0 ? { agentDefaults } : undefined),
-  };
-});
+export const readWorkspaceDefaults = /* @__PURE__ */ Effect.fn("web/readWorkspaceDefaults")(
+  function* (
+    userId: string,
+  ): Effect.fn.Return<HostedWorkspaceDefaults, WorkspaceDefaultsFailure, SqlClient.SqlClient> {
+    const preference = yield* findDefaultProvider(userId);
+    const rows = yield* findWorkspacePreferences(userId);
+    const defaultProjectIds: Partial<Record<string, string>> = {};
+    const agentDefaults: Partial<Record<string, WorkspaceAgentSelection>> = {};
+    for (const row of rows) {
+      if (row.defaultProjectId) defaultProjectIds[row.providerId] = row.defaultProjectId;
+      const selection = agentSelectionOf(row);
+      if (selection) agentDefaults[row.providerId] = selection;
+    }
+    const defaultProviderId = preference.pipe(
+      Option.flatMapNullishOr((row) => row.defaultWorkspaceProvider),
+      Option.getOrUndefined,
+    );
+    return {
+      ...(defaultProviderId ? { defaultProviderId } : undefined),
+      ...(Object.keys(defaultProjectIds).length > 0 ? { defaultProjectIds } : undefined),
+      ...(Object.keys(agentDefaults).length > 0 ? { agentDefaults } : undefined),
+    };
+  },
+);

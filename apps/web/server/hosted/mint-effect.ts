@@ -60,7 +60,7 @@ export function hostedKey(): Effect.Effect<Redacted.Redacted, MintAnswer, Hosted
  * be read at all and one that names something outside the build's sets are
  * the same refusal, and neither has spent anything.
  */
-export const mintPreferences = /* @__PURE__ */ Effect.fn("mintPreferences")(function* (
+export const mintPreferences = /* @__PURE__ */ Effect.fn("web/mintPreferences")(function* (
   strictFields?: readonly string[],
 ): Effect.fn.Return<VoiceMintPreferences, MintAnswer, HttpServerRequest.HttpServerRequest> {
   const request = yield* HttpServerRequest.HttpServerRequest;

@@ -448,7 +448,7 @@ export interface ConversationReadRefusal {
  * adapter's own bounded read of the provider's documented transcript
  * endpoint. The answer is assembled and returned; nothing is stored.
  */
-export const executeConversationRead = /* @__PURE__ */ Effect.fn("executeConversationRead")(
+export const executeConversationRead = /* @__PURE__ */ Effect.fn("web/executeConversationRead")(
   function* (options: {
     providerId: CloudAgentProviderId;
     providerSessionId: string;

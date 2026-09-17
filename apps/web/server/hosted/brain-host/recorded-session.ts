@@ -131,7 +131,7 @@ export function conversationOwnedBy(
  * replayed for a session the conversation has since rotated away from
  * changes nothing. Answers whether the row now records this session.
  */
-export const claimRuntimeSession = /* @__PURE__ */ Effect.fn("claimRuntimeSession")(function* (
+export const claimRuntimeSession = /* @__PURE__ */ Effect.fn("web/claimRuntimeSession")(function* (
   target: ConversationTarget,
   runtimeSessionId: string,
   now: Date,

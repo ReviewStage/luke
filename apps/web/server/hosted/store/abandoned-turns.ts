@@ -78,7 +78,7 @@ export interface AbandonedTurnSweepOptions {
 }
 
 /** Settles every running turn started more than the bound ago as failed for abandonment; answers how many it settled. */
-export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("sweepAbandonedTurns")(function* (
+export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandonedTurns")(function* (
   store: AbandonedTurnSweepStore,
   options: AbandonedTurnSweepOptions,
 ): Effect.fn.Return<number, SqlError | Schema.SchemaError, SqlClient.SqlClient> {

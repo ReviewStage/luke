@@ -143,7 +143,7 @@ interface CalendarsLinks {
  * registration does one level down. The onboarding record is read and
  * written through `FileSystem`, which this composition provides.
  */
-export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(function* (
+export const composeCalendars = /* @__PURE__ */ Effect.fn("host/composeCalendars")(function* (
   dependencies: CalendarsDependencies,
 ): Effect.fn.Return<
   CalendarsComposer,

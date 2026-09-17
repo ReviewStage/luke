@@ -252,7 +252,7 @@ function actionAnswer(executed: ActionExecutionAnswer): Response {
  * caller gets instead: a rejection naming the missing key, or a 503 for a
  * ciphertext this deployment's secret cannot open.
  */
-const apiKeyOrAnswer = /* @__PURE__ */ Effect.fn("apiKeyOrAnswer")(function* (
+const apiKeyOrAnswer = /* @__PURE__ */ Effect.fn("web/apiKeyOrAnswer")(function* (
   readKey: HostedVaultRoute["readKey"],
   userId: string,
   providerId: CloudAgentProviderId,
@@ -277,7 +277,7 @@ const apiKeyOrAnswer = /* @__PURE__ */ Effect.fn("apiKeyOrAnswer")(function* (
 });
 
 /** Admits and delivers one action aimed at a cloud session or project on the user's behalf. */
-export const handleSessionAction = /* @__PURE__ */ Effect.fn("handleSessionAction")(function* (
+export const handleSessionAction = /* @__PURE__ */ Effect.fn("web/handleSessionAction")(function* (
   options: SessionActionOptions,
 ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const admission = yield* admitActionRequest(options);

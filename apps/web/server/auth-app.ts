@@ -63,7 +63,7 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * OAuth callbacks are made of. A HEAD is the exception the helper above
  * covers, since there the record is all the web handler reads.
  */
-const authPassthrough = /* @__PURE__ */ Effect.fn("authPassthrough")(function* (
+const authPassthrough = /* @__PURE__ */ Effect.fn("web/authPassthrough")(function* (
   handle: WebRequestHandler,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,

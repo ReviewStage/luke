@@ -145,7 +145,7 @@ function namingColumns(naming: ObservedSessionNaming | undefined) {
  * has let go) leaves the naming as it stands.
  */
 export const standingObservedConversation = /* @__PURE__ */ Effect.fn(
-  "standingObservedConversation",
+  "web/standingObservedConversation",
 )(function* (
   userId: string,
   identity: SessionIdentity,

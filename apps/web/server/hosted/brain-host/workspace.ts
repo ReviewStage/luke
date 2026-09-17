@@ -58,7 +58,7 @@ function hostedWorkspacePath(name: string): string | undefined {
 }
 
 /** Writes every missing bootstrap file for the user; an existing row, edited or not, is left as it is. */
-export const seedHostedWorkspace = /* @__PURE__ */ Effect.fn("seedHostedWorkspace")(function* (
+export const seedHostedWorkspace = /* @__PURE__ */ Effect.fn("web/seedHostedWorkspace")(function* (
   store: WorkspaceStore,
   userId: string,
   now: number,
@@ -151,7 +151,7 @@ export interface HostedPromptInput {
  * skills and runs in no directory, so those sections are absent rather than
  * invented.
  */
-export const hostedPrompt = /* @__PURE__ */ Effect.fn("hostedPrompt")(function* (
+export const hostedPrompt = /* @__PURE__ */ Effect.fn("web/hostedPrompt")(function* (
   store: WorkspaceStore,
   userId: string,
   input: HostedPromptInput,

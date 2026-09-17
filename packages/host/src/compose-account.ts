@@ -86,7 +86,7 @@ interface AccountDependencies {
  * suspends rather than throwing; the one synchronous reader takes a value the
  * link mirrors.
  */
-export const composeAccount = /* @__PURE__ */ Effect.fn("composeAccount")(function* (
+export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(function* (
   dependencies: AccountDependencies,
 ): Effect.fn.Return<
   AccountComposer,

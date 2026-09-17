@@ -138,7 +138,7 @@ const describeReading = (reading: PreviewReading) =>
   write(`preview: ${reading.kind}${"id" in reading ? ` (record ${reading.id})` : ""}\n`);
 
 /** The address to probe: the one given, or the head's preview once its record has settled; none when Vercel skipped the build. */
-const resolveTarget = /* @__PURE__ */ Effect.fn("resolveTarget")(function* (
+const resolveTarget = /* @__PURE__ */ Effect.fn("web/resolveTarget")(function* (
   bypassSecret: ProbeTarget["bypassSecret"],
 ) {
   const given = addressArgument(process.argv.slice(2));

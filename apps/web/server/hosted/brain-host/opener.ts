@@ -259,100 +259,104 @@ function offered(
 }
 
 /** Opens the account's observation turns for the chats changed since its mark, as the module comment describes. */
-export const openObservationTurns = /* @__PURE__ */ Effect.fn("openObservationTurns")(function* (
-  seams: TurnOpenerSeams,
-  userId: string,
-  options: TurnOpeningOptions = {},
-): Effect.fn.Return<TurnOpeningOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
-  const from = yield* seams.store.roster.mark(userId);
-  const rows = yield* changedChats(seams, userId, from);
-  if (rows === undefined) return NOTHING_OPENED;
-  // A first visit adopts the newest instant the providers answer and wakes nothing; it is made
-  // whatever the bound left, so a bound already spent cannot leave an account unmarked.
-  if (from === undefined) {
-    const newest = rows.at(-1);
-    if (newest !== undefined) {
-      yield* seams.store.roster.keepMark(userId, newest.updatedAt, undefined, seams.now());
+export const openObservationTurns = /* @__PURE__ */ Effect.fn("web/openObservationTurns")(
+  function* (
+    seams: TurnOpenerSeams,
+    userId: string,
+    options: TurnOpeningOptions = {},
+  ): Effect.fn.Return<TurnOpeningOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+    const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
+    const from = yield* seams.store.roster.mark(userId);
+    const rows = yield* changedChats(seams, userId, from);
+    if (rows === undefined) return NOTHING_OPENED;
+    // A first visit adopts the newest instant the providers answer and wakes nothing; it is made
+    // whatever the bound left, so a bound already spent cannot leave an account unmarked.
+    if (from === undefined) {
+      const newest = rows.at(-1);
+      if (newest !== undefined) {
+        yield* seams.store.roster.keepMark(userId, newest.updatedAt, undefined, seams.now());
+      }
+      return NOTHING_OPENED;
     }
-    return NOTHING_OPENED;
-  }
-  if (rows.length === 0 || limit <= 0) return NOTHING_OPENED;
-  const cursors: { identity: SessionIdentity; cursor: string; from: string | undefined }[] = [];
-  let observation = 0;
-  let failed = 0;
-  let visited = 0;
-  // The bound is on turns, so a chat read to no turn does not hold the ones behind it back.
-  for (const chat of rows) {
-    if (observation >= limit || visited >= TURN_OPENER.CHANGED_CHATS_READ) break;
-    visited += 1;
-    const conversationId = yield* seams.store.directory.observed(
-      userId,
-      chat.identity,
-      seams.now(),
-      namingOf(seams.roster, chat),
-    );
-    if (conversationId === undefined) {
-      seams.report(
-        `No observed conversation can stand for ${chat.identity.providerSessionId}; its news is dropped.`,
+    if (rows.length === 0 || limit <= 0) return NOTHING_OPENED;
+    const cursors: { identity: SessionIdentity; cursor: string; from: string | undefined }[] = [];
+    let observation = 0;
+    let failed = 0;
+    let visited = 0;
+    // The bound is on turns, so a chat read to no turn does not hold the ones behind it back.
+    for (const chat of rows) {
+      if (observation >= limit || visited >= TURN_OPENER.CHANGED_CHATS_READ) break;
+      visited += 1;
+      const conversationId = yield* seams.store.directory.observed(
+        userId,
+        chat.identity,
+        seams.now(),
+        namingOf(seams.roster, chat),
       );
-      failed += 1;
-      continue;
-    }
-    // A transcript the provider would not answer ends the visit with nothing committed: the chat
-    // is named by the change and the next tick reads it again, words and all.
-    const read = yield* readDelta(seams, chat.identity);
-    if (read === undefined) return { observation, failed: failed + 1 };
-    // A chat the roster no longer holds has nothing to read; the mark covers its change all the same.
-    if (read.reading === undefined) continue;
-    const { delta, cursor, from: cursorFrom } = read.reading;
-    if (delta.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-      seams.report(
-        `The transcript of ${chat.identity.providerSessionId} was not answered (${delta.status}); the visit ends and the next tick reads it again.`,
+      if (conversationId === undefined) {
+        seams.report(
+          `No observed conversation can stand for ${chat.identity.providerSessionId}; its news is dropped.`,
+        );
+        failed += 1;
+        continue;
+      }
+      // A transcript the provider would not answer ends the visit with nothing committed: the chat
+      // is named by the change and the next tick reads it again, words and all.
+      const read = yield* readDelta(seams, chat.identity);
+      if (read === undefined) return { observation, failed: failed + 1 };
+      // A chat the roster no longer holds has nothing to read; the mark covers its change all the same.
+      if (read.reading === undefined) continue;
+      const { delta, cursor, from: cursorFrom } = read.reading;
+      if (delta.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+        seams.report(
+          `The transcript of ${chat.identity.providerSessionId} was not answered (${delta.status}); the visit ends and the next tick reads it again.`,
+        );
+        return { observation, failed: failed + 1 };
+      }
+      if (cursor !== undefined) cursors.push({ identity: chat.identity, cursor, from: cursorFrom });
+      // Nothing attributed gained — tool calls, thinking — is no message for the room, and no turn.
+      if (delta.lines.length === 0) continue;
+      const words = observedMessagesText(
+        envelopeOf(seams.roster, chat),
+        delta.lines,
+        delta.truncated,
+        seams.now(),
       );
-      return { observation, failed: failed + 1 };
+      const target: ConversationTarget = { userId, conversationId };
+      if (!(yield* offered(seams, target, BRAIN_HOST_TURN.OBSERVATION, words))) {
+        return { observation, failed: failed + 1 };
+      }
+      observation += 1;
     }
-    if (cursor !== undefined) cursors.push({ identity: chat.identity, cursor, from: cursorFrom });
-    // Nothing attributed gained — tool calls, thinking — is no message for the room, and no turn.
-    if (delta.lines.length === 0) continue;
-    const words = observedMessagesText(
-      envelopeOf(seams.roster, chat),
-      delta.lines,
-      delta.truncated,
-      seams.now(),
-    );
-    const target: ConversationTarget = { userId, conversationId };
-    if (!(yield* offered(seams, target, BRAIN_HOST_TURN.OBSERVATION, words))) {
-      return { observation, failed: failed + 1 };
+    const heldBack = rows.slice(visited);
+    if (heldBack.length > 0) {
+      seams.report(
+        `The transcripts of account ${userId} changed for ${heldBack.length} more chats than the opener reads in one tick; the next tick reads them again.`,
+      );
     }
-    observation += 1;
-  }
-  const heldBack = rows.slice(visited);
-  if (heldBack.length > 0) {
-    seams.report(
-      `The transcripts of account ${userId} changed for ${heldBack.length} more chats than the opener reads in one tick; the next tick reads them again.`,
-    );
-  }
-  const next = markAfter(rows.slice(0, visited), heldBack, from);
-  const now = new Date(seams.now());
-  yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
-      Effect.all(
-        [
-          ...cursors.map(({ identity, cursor, from: cursorFrom }) =>
-            keepTranscriptCursor(userId, identity, cursor, cursorFrom, now),
-          ),
-          ...(next !== from ? [seams.store.roster.keepMark(userId, next, from, seams.now())] : []),
-        ],
-        { discard: true },
+    const next = markAfter(rows.slice(0, visited), heldBack, from);
+    const now = new Date(seams.now());
+    yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
+      sql.withTransaction(
+        Effect.all(
+          [
+            ...cursors.map(({ identity, cursor, from: cursorFrom }) =>
+              keepTranscriptCursor(userId, identity, cursor, cursorFrom, now),
+            ),
+            ...(next !== from
+              ? [seams.store.roster.keepMark(userId, next, from, seams.now())]
+              : []),
+          ],
+          { discard: true },
+        ),
       ),
-    ),
-  );
-  return { observation, failed };
-});
+    );
+    return { observation, failed };
+  },
+);
 
 /** One account's opening whole: the changed chats under the bound. Kept as the tick's one door, since what the tick counts is the account's opening and not one read of it. */
-export const openAccountTurns = /* @__PURE__ */ Effect.fn("openAccountTurns")(function* (
+export const openAccountTurns = /* @__PURE__ */ Effect.fn("web/openAccountTurns")(function* (
   seams: TurnOpenerSeams,
   userId: string,
   options: TurnOpeningOptions = {},

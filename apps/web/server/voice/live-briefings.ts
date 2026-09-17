@@ -92,7 +92,7 @@ export interface HostedBriefings {
   readonly start: Effect.Effect<void, never, SqlClient.SqlClient>;
 }
 
-export const hostedBriefings = /* @__PURE__ */ Effect.fn("hostedBriefings")(function* (
+export const hostedBriefings = /* @__PURE__ */ Effect.fn("web/hostedBriefings")(function* (
   options: HostedBriefingsOptions,
 ): Effect.fn.Return<HostedBriefings, never, Scope.Scope | SqlClient.SqlClient> {
   const bounds = { ...HOSTED_BRIEFING_BOUNDS, ...options.bounds };

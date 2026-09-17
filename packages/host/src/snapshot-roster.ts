@@ -32,7 +32,7 @@ interface SnapshotRosterDependencies {
  * does this: the observation loop's own pass is a fiber now, so the read is
  * yielded where the pass runs rather than run to a promise here.
  */
-export const drawSnapshotRoster = /* @__PURE__ */ Effect.fn("drawSnapshotRoster")(function* (
+export const drawSnapshotRoster = /* @__PURE__ */ Effect.fn("host/drawSnapshotRoster")(function* (
   dependencies: SnapshotRosterDependencies,
 ): Effect.fn.Return<void, never, HttpClient.HttpClient> {
   const { client, registry, isCurrent, report } = dependencies;
@@ -89,15 +89,21 @@ export function snapshotProjects(
  * is yielded the same way `drawSnapshotRoster` yields `observe()`, and for
  * the same reason.
  */
-export const drawSnapshotProjects = /* @__PURE__ */ Effect.fn("drawSnapshotProjects")(function* (
-  dependencies: SnapshotProjectsDependencies,
-): Effect.fn.Return<readonly ObservedWorkspaceProject[] | undefined, never, HttpClient.HttpClient> {
-  const { client, isCurrent, report } = dependencies;
-  const answer = yield* client.projects();
-  if (!isCurrent()) return undefined;
-  if (!answer) {
-    report("Workspace projects could not be read; the last list stands.");
-    return undefined;
-  }
-  return snapshotProjects(answer);
-});
+export const drawSnapshotProjects = /* @__PURE__ */ Effect.fn("host/drawSnapshotProjects")(
+  function* (
+    dependencies: SnapshotProjectsDependencies,
+  ): Effect.fn.Return<
+    readonly ObservedWorkspaceProject[] | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
+    const { client, isCurrent, report } = dependencies;
+    const answer = yield* client.projects();
+    if (!isCurrent()) return undefined;
+    if (!answer) {
+      report("Workspace projects could not be read; the last list stands.");
+      return undefined;
+    }
+    return snapshotProjects(answer);
+  },
+);

@@ -454,7 +454,7 @@ const move = /* @__PURE__ */ Effect.fnUntraced(function* (
  * is answered as it stands: the relay tells a settled call once, but the
  * event eve re-emits may reach it again.
  */
-export const offerSpeech = /* @__PURE__ */ Effect.fn("offerSpeech")(function* (
+export const offerSpeech = /* @__PURE__ */ Effect.fn("web/offerSpeech")(function* (
   store: SpeechStore,
   userId: string,
   messageId: string,
@@ -497,7 +497,7 @@ export const offerSpeech = /* @__PURE__ */ Effect.fn("offerSpeech")(function* (
  * re-reads the claim under the conversation's lock and answers the second
  * by name; the partial unique index stands behind that as the backstop.
  */
-export const claimSpeech = /* @__PURE__ */ Effect.fn("claimSpeech")(function* (
+export const claimSpeech = /* @__PURE__ */ Effect.fn("web/claimSpeech")(function* (
   store: SpeechStore,
   userId: string,
   messageId: string,
@@ -643,7 +643,7 @@ const findOfferedMessages = SqlSchema.findAll({
  * message — over standing conversations, oldest offer first, each folded to
  * how it stands now.
  */
-export const openSpeechOffers = /* @__PURE__ */ Effect.fn("openSpeechOffers")(function* (
+export const openSpeechOffers = /* @__PURE__ */ Effect.fn("web/openSpeechOffers")(function* (
   query: OpenSpeechOffersQuery = {},
 ): Effect.fn.Return<readonly SpeechOffer[], SpeechReadFailure, SqlClient.SqlClient> {
   const offered = yield* findOfferedMessages({
@@ -751,7 +751,7 @@ function sweepWrite(
  * instant has passed. A quiet instant on the account is no exception, since
  * the quiet mutes and saves nothing; nothing here reads a briefing's words.
  */
-export const sweepSpeech = /* @__PURE__ */ Effect.fn("sweepSpeech")(function* (
+export const sweepSpeech = /* @__PURE__ */ Effect.fn("web/sweepSpeech")(function* (
   store: SpeechSweepStore,
   options: SpeechSweepOptions,
 ): Effect.fn.Return<SpeechSweepOutcome, SpeechReadFailure, SqlClient.SqlClient> {

@@ -158,7 +158,7 @@ export function hostedMethod(
  * the sender may omit or misstate, and is left the moment the bound is
  * passed, so an oversized request is never held whole.
  */
-export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("readJsonBodyEffect")(function* (
+export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEffect")(function* (
   maximumBytes: number,
 ): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
   const request = yield* HttpServerRequest.HttpServerRequest;

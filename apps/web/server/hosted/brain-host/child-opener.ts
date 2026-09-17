@@ -86,7 +86,7 @@ export type ChildOpened = Result.Result<
 >;
 
 /** Opens one child for the delegation, as the module comment describes. */
-export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
+export const openChild = /* @__PURE__ */ Effect.fn("web/openChild")(function* (
   seams: ChildOpenerSeams,
   spawn: ChildSpawn,
 ): Effect.fn.Return<ChildOpened, SqlError | Schema.SchemaError, SqlClient.SqlClient> {

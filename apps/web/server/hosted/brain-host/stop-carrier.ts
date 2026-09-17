@@ -29,7 +29,7 @@ export interface StopCarrierSeams {
  * same as a refused cancel, and the stamp below is the same store effect every
  * other write here is, on the fiber the event arrived on.
  */
-export const carryStop = /* @__PURE__ */ Effect.fn("carryStop")(function* (
+export const carryStop = /* @__PURE__ */ Effect.fn("web/carryStop")(function* (
   seams: StopCarrierSeams,
   target: ConversationTarget,
   sessionId: string,

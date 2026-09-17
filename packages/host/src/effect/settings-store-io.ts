@@ -39,15 +39,17 @@ function isIgnorableReadFailure(error: PlatformError): boolean {
  * store already treated as "no file yet" rather than an I/O error worth
  * surfacing.
  */
-export const readSettingsFileText = /* @__PURE__ */ Effect.fn("readSettingsFileText")(function* (
-  directory: string,
-): Effect.fn.Return<string | undefined, PlatformError, FileSystem.FileSystem | Path.Path> {
-  const fileSystem = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  return yield* fileSystem
-    .readFileString(path.join(directory, SETTINGS_FILE_NAME))
-    .pipe(Effect.catchIf(isIgnorableReadFailure, () => Effect.succeed(undefined)));
-});
+export const readSettingsFileText = /* @__PURE__ */ Effect.fn("host/readSettingsFileText")(
+  function* (
+    directory: string,
+  ): Effect.fn.Return<string | undefined, PlatformError, FileSystem.FileSystem | Path.Path> {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    return yield* fileSystem
+      .readFileString(path.join(directory, SETTINGS_FILE_NAME))
+      .pipe(Effect.catchIf(isIgnorableReadFailure, () => Effect.succeed(undefined)));
+  },
+);
 
 /**
  * Writes the settings file atomically: the new contents land in a temporary
@@ -57,7 +59,7 @@ export const readSettingsFileText = /* @__PURE__ */ Effect.fn("readSettingsFileT
  * effect when the file is created — a temporary file left behind by an
  * earlier interrupted write would otherwise keep whatever mode it already had.
  */
-export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("writeSettingsFileAtomic")(
+export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("host/writeSettingsFileAtomic")(
   function* (
     directory: string,
     contents: string,

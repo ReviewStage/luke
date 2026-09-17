@@ -63,7 +63,7 @@ export function notebookOrder(paths: readonly string[]): NotebookOrder {
 }
 
 /** GET: the account's notebook, curated files first and the newest notes after, bounded and cut. */
-export const handleBrainNotebook = /* @__PURE__ */ Effect.fn("handleBrainNotebook")(function* (
+export const handleBrainNotebook = /* @__PURE__ */ Effect.fn("web/handleBrainNotebook")(function* (
   options: NotebookReadOptions,
 ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
   const gate = yield* readGate(options);
