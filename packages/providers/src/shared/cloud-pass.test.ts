@@ -23,7 +23,7 @@ import {
   recordingHttpClient,
   runTest,
 } from "@sidecar/wire/testing";
-import { Cause, Duration, Effect, Exit, Fiber, type Layer } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, type Layer, Predicate } from "effect";
 import { TestClock } from "effect/testing";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
@@ -35,7 +35,6 @@ import {
   backoffBudget,
   CLOUD_ADAPTER_DEFAULTS,
   type CloudWriteRoute,
-  isDefined,
   knownValue,
   RATE_LIMIT_BACKOFF,
   RateLimitedRead,
@@ -408,7 +407,7 @@ function accountBoundPlugin(options: {
               if (!isWireString(session)) return undefined;
               return observation(session);
             })
-            .filter(isDefined),
+            .filter(Predicate.isNotUndefined),
       ),
   });
 }

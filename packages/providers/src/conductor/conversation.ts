@@ -11,10 +11,10 @@ import {
   transcriptLine,
 } from "@sidecar/session";
 import { type WireRecord, wholeText } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { ADAPTER_FAILURE, type AdapterFailure } from "../shared/adapter-failure.js";
 import type { CloudPass } from "../shared/cloud-pass.js";
-import { isDefined, recordsFromPage, textFromRecord } from "../shared/cloud-wire.js";
+import { recordsFromPage, textFromRecord } from "../shared/cloud-wire.js";
 import { boundedTranscript } from "../shared/jsonl-transcript.js";
 import { CONDUCTOR_PROVIDER_NAME, UUID_PATTERN } from "./vocabulary.js";
 import {
@@ -170,7 +170,7 @@ const readConversationPage = /* @__PURE__ */ Effect.fnUntraced(function* (
     messages.unshift(
       ...recordsFromPage(body, CONDUCTOR_FIELD.DATA)
         .map(conversationMessageFromRecord)
-        .filter(isDefined),
+        .filter(Predicate.isNotUndefined),
     );
     chunkEnd = chunkStart;
   }
@@ -217,7 +217,7 @@ function readTailPage(
       pages.push({
         offset,
         newestStoredId: newestStoredId(records),
-        messages: records.map(conversationMessageFromRecord).filter(isDefined),
+        messages: records.map(conversationMessageFromRecord).filter(Predicate.isNotUndefined),
         length: records.length,
       });
       offset += records.length;
@@ -246,7 +246,7 @@ function readTailPage(
     // resumes exactly where this read stopped.
     const lastMessageId = walked.pages
       .map((page) => page.newestStoredId)
-      .filter(isDefined)
+      .filter(Predicate.isNotUndefined)
       .at(-1);
     return {
       status: ACTION_RESULT_STATUS.ACCEPTED,
