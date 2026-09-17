@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { test } from "vitest";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { appSettingsWire } from "../../testing/spoken-setting-bridge";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
@@ -76,56 +76,63 @@ const OPEN_AT_LOGIN = {
   payload: { field: APP_SETTING_SCHEMA.openAtLogin.field, value: true },
 } as const;
 
-test("a write the host took, whose client-side effect then failed, is refused with the settings", async () => {
-  const router = rows({
-    applyLoginItem: () => {
-      throw new Error("the login item could not be written");
-    },
-  });
-  assert.deepEqual(await Effect.runPromise(router.performAct(OPEN_AT_LOGIN, PANEL)), {
-    status: "done",
-    value: {
-      status: ACTION_RESULT_STATUS.REJECTED,
-      settings: SETTINGS,
-      reason: ACT[ACT_KIND.SETTING_UPDATE].refusal,
-    },
-  });
-});
+it.effect(
+  "a write the host took, whose client-side effect then failed, is refused with the settings",
+  () =>
+    Effect.gen(function* () {
+      const router = rows({
+        applyLoginItem: () => {
+          throw new Error("the login item could not be written");
+        },
+      });
+      assert.deepEqual(yield* router.performAct(OPEN_AT_LOGIN, PANEL), {
+        status: "done",
+        value: {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          settings: SETTINGS,
+          reason: ACT[ACT_KIND.SETTING_UPDATE].refusal,
+        },
+      });
+    }),
+);
 
-test("a write the host refused is refused with the settings this client last saw", async () => {
-  const router = rows({
-    updateSetting: () =>
-      Effect.fail(new HostUnreachableRefusal({ message: "the host is not reachable" })),
-  });
-  assert.deepEqual(await Effect.runPromise(router.performAct(OPEN_AT_LOGIN, PANEL)), {
-    status: "done",
-    value: {
-      status: ACTION_RESULT_STATUS.REJECTED,
-      settings: SETTINGS,
-      reason: ACT[ACT_KIND.SETTING_UPDATE].refusal,
-    },
-  });
-});
+it.effect("a write the host refused is refused with the settings this client last saw", () =>
+  Effect.gen(function* () {
+    const router = rows({
+      updateSetting: () =>
+        Effect.fail(new HostUnreachableRefusal({ message: "the host is not reachable" })),
+    });
+    assert.deepEqual(yield* router.performAct(OPEN_AT_LOGIN, PANEL), {
+      status: "done",
+      value: {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        settings: SETTINGS,
+        reason: ACT[ACT_KIND.SETTING_UPDATE].refusal,
+      },
+    });
+  }),
+);
 
-test("a client with no snapshot at all refuses through the act's own sentence", async () => {
-  const router = rows({
-    lastSettings: () => undefined,
-    connectGoogleCalendar: () =>
-      Effect.fail(new HostUnreachableRefusal({ message: "the host is not reachable" })),
-  });
-  assert.deepEqual(
-    await Effect.runPromise(router.performAct({ kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE }, PANEL)),
-    {
+it.effect("a client with no snapshot at all refuses through the act's own sentence", () =>
+  Effect.gen(function* () {
+    const router = rows({
+      lastSettings: () => undefined,
+      connectGoogleCalendar: () =>
+        Effect.fail(new HostUnreachableRefusal({ message: "the host is not reachable" })),
+    });
+    assert.deepEqual(yield* router.performAct({ kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE }, PANEL), {
       status: "refused",
       reason: ACT[ACT_KIND.CALENDAR_CONNECT_GOOGLE].refusal,
-    },
-  );
-});
+    });
+  }),
+);
 
-test("a write that landed is answered as the host answered it", async () => {
-  const router = rows({});
-  assert.deepEqual(await Effect.runPromise(router.performAct(OPEN_AT_LOGIN, PANEL)), {
-    status: "done",
-    value: accepted(),
-  });
-});
+it.effect("a write that landed is answered as the host answered it", () =>
+  Effect.gen(function* () {
+    const router = rows({});
+    assert.deepEqual(yield* router.performAct(OPEN_AT_LOGIN, PANEL), {
+      status: "done",
+      value: accepted(),
+    });
+  }),
+);

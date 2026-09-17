@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { runModeFor } from "@sidecar/host";
 import { CONVERSATION_ENTRY_KIND, type LiveConversationLine } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Context, Effect, Option } from "effect";
+import { Context, Deferred, Effect, Fiber, Option } from "effect";
 import type { WebContents } from "electron";
-import { test } from "vitest";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import {
@@ -118,14 +118,12 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
     introduction: false,
   });
   const command = (sender: WebContents) =>
-    Effect.runPromise(
-      router.performAct(
-        { kind: ACT_KIND.VOICE_COMMAND, payload: { command: VOICE_COMMAND.CLEAR_CONVERSATION } },
-        senderOf(sender),
-      ),
+    router.performAct(
+      { kind: ACT_KIND.VOICE_COMMAND, payload: { command: VOICE_COMMAND.CLEAR_CONVERSATION } },
+      senderOf(sender),
     );
   const perform = (sender: WebContents, act: Parameters<typeof router.performAct>[0]) =>
-    Effect.runPromise(router.performAct(act, senderOf(sender)));
+    router.performAct(act, senderOf(sender));
   const report = (sender: WebContents, view: VoiceView) =>
     reports.reportVoiceView({ sender }, view, undefined);
   return {
@@ -151,99 +149,111 @@ function line(rowId: string, words: string, settled: boolean): LiveConversationL
   };
 }
 
-test("the five live session acts reach the host from the voice window alone", async () => {
-  const f = fixture(() => Effect.succeed(true));
-  const offer = "v=0\r\noffer\r\n";
-  assert.deepEqual(
-    await f.perform(f.voiceSender, {
-      kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-      payload: { sdp: offer },
-    }),
-    { status: "done", value: { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" } },
-  );
-  await f.perform(f.voiceSender, {
-    kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
-    payload: { state: "connected" },
-  });
-  await f.perform(f.voiceSender, {
-    kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
-    payload: { idle: true },
-  });
-  assert.deepEqual(await f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
-    status: "done",
-    value: true,
-  });
-  await f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
-  assert.deepEqual(f.liveCalls, [
-    `create:${offer}`,
-    "transport:connected",
-    "activity:true",
-    "stop",
-    "end",
-  ]);
-  // A panel offering an SDP or reporting a transport it does not hold reaches nothing.
-  assert.deepEqual(
-    await f.perform(f.panelSender, {
-      kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-      payload: { sdp: offer },
-    }),
-    { status: "done", value: undefined },
-  );
-  await f.perform(f.panelSender, {
-    kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
-    payload: { idle: false },
-  });
-  assert.deepEqual(await f.perform(f.panelSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
-    status: "done",
-    value: false,
-  });
-  await f.perform(f.panelSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
-  assert.equal(f.liveCalls.length, 5);
-});
-
-test("the voice window is told to clear at the fence, before the disk answers, and the panel hears the disk's answer", async () => {
-  for (const erased of [true, false]) {
-    let fenced = false;
-    let release: ((erased: boolean) => void) | undefined;
-    const f = fixture(() =>
-      Effect.promise(() => {
-        // The row fences in its synchronous prefix, then waits on disk.
-        fenced = true;
-        return new Promise<boolean>((resolve) => {
-          release = resolve;
-        });
+it.effect("the five live session acts reach the host from the voice window alone", () =>
+  Effect.gen(function* () {
+    const f = fixture(() => Effect.succeed(true));
+    const offer = "v=0\r\noffer\r\n";
+    assert.deepEqual(
+      yield* f.perform(f.voiceSender, {
+        kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+        payload: { sdp: offer },
       }),
+      { status: "done", value: { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" } },
     );
-    const outcome = f.command(f.panelSender);
-    assert.equal(fenced, true);
-    assert.deepEqual(f.sentToVoice, [
-      { channel: channels.onVoiceCommand, payload: { command: VOICE_COMMAND.CLEAR_CONVERSATION } },
-    ]);
-    assert.ok(release, "the erasure is waiting on disk");
-    release(erased);
-    assert.deepEqual(await outcome, {
-      status: "done",
-      value: erased ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED,
+    yield* f.perform(f.voiceSender, {
+      kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
+      payload: { state: "connected" },
     });
-    // The command went once; a slow disk does not send it again.
-    assert.equal(f.sentToVoice.length, 1);
-  }
-});
+    yield* f.perform(f.voiceSender, {
+      kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
+      payload: { idle: true },
+    });
+    assert.deepEqual(yield* f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
+      status: "done",
+      value: true,
+    });
+    yield* f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
+    assert.deepEqual(f.liveCalls, [
+      `create:${offer}`,
+      "transport:connected",
+      "activity:true",
+      "stop",
+      "end",
+    ]);
+    // A panel offering an SDP or reporting a transport it does not hold reaches nothing.
+    assert.deepEqual(
+      yield* f.perform(f.panelSender, {
+        kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+        payload: { sdp: offer },
+      }),
+      { status: "done", value: undefined },
+    );
+    yield* f.perform(f.panelSender, {
+      kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
+      payload: { idle: false },
+    });
+    assert.deepEqual(yield* f.perform(f.panelSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
+      status: "done",
+      value: false,
+    });
+    yield* f.perform(f.panelSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
+    assert.equal(f.liveCalls.length, 5);
+  }),
+);
 
-test("a Clear from anything but a panel clears nothing and tells the voice window nothing", async () => {
-  let cleared = 0;
-  const f = fixture(() =>
-    Effect.sync(() => {
-      cleared += 1;
-      return true;
+it.effect(
+  "the voice window is told to clear at the fence, before the disk answers, and the panel hears the disk's answer",
+  () =>
+    Effect.gen(function* () {
+      for (const erased of [true, false]) {
+        let fenced = false;
+        const disk = yield* Deferred.make<boolean>();
+        const f = fixture(() =>
+          Effect.gen(function* () {
+            // The row fences in its synchronous prefix, then waits on disk.
+            fenced = true;
+            return yield* Deferred.await(disk);
+          }),
+        );
+        const outcome = yield* Effect.forkChild(f.command(f.panelSender), {
+          startImmediately: true,
+        });
+        assert.equal(fenced, true);
+        assert.deepEqual(f.sentToVoice, [
+          {
+            channel: channels.onVoiceCommand,
+            payload: { command: VOICE_COMMAND.CLEAR_CONVERSATION },
+          },
+        ]);
+        yield* Deferred.succeed(disk, erased);
+        assert.deepEqual(yield* Fiber.join(outcome), {
+          status: "done",
+          value: erased ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED,
+        });
+        // The command went once; a slow disk does not send it again.
+        assert.equal(f.sentToVoice.length, 1);
+      }
     }),
-  );
-  assert.deepEqual(await f.command(f.voiceSender), { status: "done", value: undefined });
-  assert.equal(cleared, 0);
-  assert.deepEqual(f.sentToVoice, []);
-});
+);
 
-test("the voice window's report is written to the document and asks for a read only when the record moved under a line; a panel's report is ignored", () => {
+it.effect(
+  "a Clear from anything but a panel clears nothing and tells the voice window nothing",
+  () =>
+    Effect.gen(function* () {
+      let cleared = 0;
+      const f = fixture(() =>
+        Effect.sync(() => {
+          cleared += 1;
+          return true;
+        }),
+      );
+      assert.deepEqual(yield* f.command(f.voiceSender), { status: "done", value: undefined });
+      assert.equal(cleared, 0);
+      assert.deepEqual(f.sentToVoice, []);
+    }),
+);
+
+it("the voice window's report is written to the document and asks for a read only when the record moved under a line; a panel's report is ignored", () => {
   const f = fixture(() => Effect.succeed(true));
   const speaking: VoiceView = {
     ...IDLE_VOICE_VIEW,

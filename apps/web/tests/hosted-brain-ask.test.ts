@@ -18,9 +18,8 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Option, Result, Schema } from "effect";
+import { Effect, Fiber, Option, PartitionedSemaphore, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { db } from "../server/db/query";
 import { conversations, turns } from "../server/db/storage-schema";
@@ -105,7 +104,7 @@ function beforeItsTurn(row: AskRow): AskRow {
 /** The ask record as a table would hold it, in memory. */
 function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
   const rows = new Map<string, AskRow>();
-  const inFlight = new Map<string, Promise<void>>();
+  const locks = PartitionedSemaphore.makeUnsafe<string>({ permits: 1 });
   const put = (row: AskRow) => {
     rows.set(row.id, row);
     return row;
@@ -136,31 +135,22 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
       Effect.sync(() => latestSession(userId, conversationId)),
     dispatchOnce: (target, id, dispatch) =>
       // One dispatch at a time per conversation, as the conversation lock serialises them on the real record.
-      Effect.flatMap(Effect.context<SqlClient.SqlClient>(), (context) => {
-        const run = Effect.runPromiseWith(context);
-        const turn = (inFlight.get(target.conversationId) ?? Promise.resolve()).then(async () => {
-          if (!(await run(conversationOwnedBy(target.userId, target.conversationId)))) {
+      locks.withPermit(target.conversationId)(
+        Effect.gen(function* () {
+          if (!(yield* conversationOwnedBy(target.userId, target.conversationId))) {
             return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
           }
           const row = rows.get(id);
           assert.ok(row);
           if (row.sessionId !== undefined) return row;
           const session = newestSession(
-            await run(recordedRuntimeSession(target)),
+            yield* recordedRuntimeSession(target),
             latestSession(target.userId, target.conversationId),
           );
-          const answered = await run(dispatch(session));
+          const answered = yield* dispatch(session);
           return answered === undefined ? row : put({ ...row, ...answered });
-        });
-        inFlight.set(
-          target.conversationId,
-          turn.then(
-            () => undefined,
-            () => undefined,
-          ),
-        );
-        return Effect.promise(() => turn);
-      }),
+        }),
+      ),
     cancelRequested: (id, at) =>
       Effect.sync(() => {
         const row = rows.get(id);

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CHILD_SPAWN_REFUSAL } from "@sidecar/runtime";
 import {
   CHILD_RUN_STATUS,
@@ -11,7 +12,6 @@ import {
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
-import { test } from "vitest";
 import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
 import {
@@ -117,7 +117,7 @@ function toolNamed(name: string) {
   return tool;
 }
 
-test("the four session tools are modules in catalog order", () => {
+it("the four session tools are modules in catalog order", () => {
   assert.deepEqual(
     SESSION_TOOLS.map((tool) => tool.name),
     [
@@ -134,127 +134,125 @@ test("the four session tools are modules in catalog order", () => {
   assert.deepEqual(required, [["task"], [], [], ["child_id"]]);
 });
 
-test("a spawn is bounded here, carries the turn's run, runs through the journal, and answers a receipt that says accepted and never done", async () => {
-  const { children, spawns } = delegation();
-  const { ctx, journaled } = context(children);
-  const spawn = toolNamed(BRAIN_TOOL.SESSIONS_SPAWN);
-  const receipt = await Effect.runPromise(
-    spawn.execute(
-      {
-        task: ` ${"t".repeat(maximumChildTaskLength + 10)} `,
-        label: " summary ",
-        expects_completion: false,
-      },
-      ctx,
-    ),
-  );
-  assert.equal(journaled(), 1);
-  assert.equal(receipt.status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.equal(receipt.accepted, true);
-  assert.equal(receipt.completed, false);
-  assert.equal(receipt.child_id, "child-2");
-  assert.equal(receipt.child_session_key, childSessionKey("child-2"));
-  const [ask] = spawns;
-  assert.ok(ask);
-  assert.equal(ask.task.length, maximumChildTaskLength);
-  assert.equal(ask.label, "summary");
-  assert.equal(ask.expectsCompletion, false);
-  // Unreadable optional fields are left out rather than guessed at; an empty task never reaches the host.
-  await Effect.runPromise(spawn.execute({ task: "look", expects_completion: "yes" }, ctx));
-  const second = spawns[1];
-  assert.ok(second);
-  assert.equal(second.expectsCompletion, undefined);
-  assert.equal(second.label, undefined);
-  const empty = await Effect.runPromise(spawn.execute({ task: "  " }, ctx));
-  assert.equal(empty.reason, REFUSAL_REASON.EMPTY_TASK);
-  assert.equal(spawns.length, 2);
-  const refused = await Effect.runPromise(spawn.execute({ task: "look", label: "refused" }, ctx));
-  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
-  assert.equal(journaled(), 3);
-});
+it.effect(
+  "a spawn is bounded here, carries the turn's run, runs through the journal, and answers a receipt that says accepted and never done",
+  () =>
+    Effect.gen(function* () {
+      const { children, spawns } = delegation();
+      const { ctx, journaled } = context(children);
+      const spawn = toolNamed(BRAIN_TOOL.SESSIONS_SPAWN);
+      const receipt = yield* spawn.execute(
+        {
+          task: ` ${"t".repeat(maximumChildTaskLength + 10)} `,
+          label: " summary ",
+          expects_completion: false,
+        },
+        ctx,
+      );
+      assert.equal(journaled(), 1);
+      assert.equal(receipt.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal(receipt.accepted, true);
+      assert.equal(receipt.completed, false);
+      assert.equal(receipt.child_id, "child-2");
+      assert.equal(receipt.child_session_key, childSessionKey("child-2"));
+      const [ask] = spawns;
+      assert.ok(ask);
+      assert.equal(ask.task.length, maximumChildTaskLength);
+      assert.equal(ask.label, "summary");
+      assert.equal(ask.expectsCompletion, false);
+      // Unreadable optional fields are left out rather than guessed at; an empty task never reaches the host.
+      yield* spawn.execute({ task: "look", expects_completion: "yes" }, ctx);
+      const second = spawns[1];
+      assert.ok(second);
+      assert.equal(second.expectsCompletion, undefined);
+      assert.equal(second.label, undefined);
+      const empty = yield* spawn.execute({ task: "  " }, ctx);
+      assert.equal(empty.reason, REFUSAL_REASON.EMPTY_TASK);
+      assert.equal(spawns.length, 2);
+      const refused = yield* spawn.execute({ task: "look", label: "refused" }, ctx);
+      assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(journaled(), 3);
+    }),
+);
 
-test("subagents lists as a read and cancels through the journal; a child not this conversation's is refused; the listing and the history render the host's typed answers", async () => {
-  const { children, cancelled } = delegation();
-  const { ctx, journaled } = context(children);
-  const subagents = toolNamed(BRAIN_TOOL.SUBAGENTS);
-  const listed = await Effect.runPromise(subagents.execute({}, ctx));
-  assert.equal(journaled(), 0);
-  assert.deepEqual(listed, {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    children: [
-      {
-        child_id: "child-1",
-        label: "summary",
-        status: CHILD_RUN_STATUS.SETTLED,
-        accepted_at: new Date(NOW).toISOString(),
-        settled_at: new Date(NOW + 1_000).toISOString(),
-      },
-      {
-        child_id: "child-0",
-        status: CHILD_RUN_STATUS.FAILED,
-        accepted_at: new Date(NOW - 1_000).toISOString(),
-        settled_at: new Date(NOW).toISOString(),
-        failure: "model",
-      },
-    ],
-  });
-  const cancel = await Effect.runPromise(
-    subagents.execute({ action: "cancel", child_id: "child-1" }, ctx),
-  );
-  assert.deepEqual(cancel, { status: ACTION_RESULT_STATUS.ACCEPTED, cancelled: ["child-1"] });
-  assert.equal(journaled(), 1);
-  const other = await Effect.runPromise(
-    subagents.execute({ action: "cancel", child_id: "someone-elses" }, ctx),
-  );
-  assert.equal(other.reason, REFUSAL_REASON.UNKNOWN_CHILD);
-  const unnamed = await Effect.runPromise(subagents.execute({ action: "cancel" }, ctx));
-  assert.equal(unnamed.reason, REFUSAL_REASON.NOT_OWN_CHILD);
-  assert.deepEqual(cancelled, ["child-1"]);
+it.effect(
+  "subagents lists as a read and cancels through the journal; a child not this conversation's is refused; the listing and the history render the host's typed answers",
+  () =>
+    Effect.gen(function* () {
+      const { children, cancelled } = delegation();
+      const { ctx, journaled } = context(children);
+      const subagents = toolNamed(BRAIN_TOOL.SUBAGENTS);
+      const listed = yield* subagents.execute({}, ctx);
+      assert.equal(journaled(), 0);
+      assert.deepEqual(listed, {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        children: [
+          {
+            child_id: "child-1",
+            label: "summary",
+            status: CHILD_RUN_STATUS.SETTLED,
+            accepted_at: new Date(NOW).toISOString(),
+            settled_at: new Date(NOW + 1_000).toISOString(),
+          },
+          {
+            child_id: "child-0",
+            status: CHILD_RUN_STATUS.FAILED,
+            accepted_at: new Date(NOW - 1_000).toISOString(),
+            settled_at: new Date(NOW).toISOString(),
+            failure: "model",
+          },
+        ],
+      });
+      const cancel = yield* subagents.execute({ action: "cancel", child_id: "child-1" }, ctx);
+      assert.deepEqual(cancel, { status: ACTION_RESULT_STATUS.ACCEPTED, cancelled: ["child-1"] });
+      assert.equal(journaled(), 1);
+      const other = yield* subagents.execute({ action: "cancel", child_id: "someone-elses" }, ctx);
+      assert.equal(other.reason, REFUSAL_REASON.UNKNOWN_CHILD);
+      const unnamed = yield* subagents.execute({ action: "cancel" }, ctx);
+      assert.equal(unnamed.reason, REFUSAL_REASON.NOT_OWN_CHILD);
+      assert.deepEqual(cancelled, ["child-1"]);
 
-  const listing = await Effect.runPromise(toolNamed(BRAIN_TOOL.SESSIONS_LIST).execute({}, ctx));
-  assert.deepEqual(listing, {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    conversations: [
-      {
-        session_key: MAIN_SESSION_KEY,
-        kind: CONVERSATION_KIND.MAIN,
-        name: "main",
-        last_activity_at: new Date(NOW).toISOString(),
-        current: true,
-      },
-    ],
-  });
-  const history = toolNamed(BRAIN_TOOL.SESSIONS_HISTORY);
-  assert.deepEqual(
-    await Effect.runPromise(history.execute({ child_id: "child-1", limit: 999 }, ctx)),
-    {
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      lines: ["ask: hi", "reply: done"],
-    },
-  );
-  assert.equal(
-    (await Effect.runPromise(history.execute({ child_id: "someone-elses" }, ctx))).reason,
-    REFUSAL_REASON.UNKNOWN_CHILD,
-  );
-  assert.equal(
-    (await Effect.runPromise(history.execute({}, ctx))).reason,
-    REFUSAL_REASON.NOT_OWN_CHILD,
-  );
-  assert.ok(maximumSessionsConversationLines > 0);
-});
+      const listing = yield* toolNamed(BRAIN_TOOL.SESSIONS_LIST).execute({}, ctx);
+      assert.deepEqual(listing, {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        conversations: [
+          {
+            session_key: MAIN_SESSION_KEY,
+            kind: CONVERSATION_KIND.MAIN,
+            name: "main",
+            last_activity_at: new Date(NOW).toISOString(),
+            current: true,
+          },
+        ],
+      });
+      const history = toolNamed(BRAIN_TOOL.SESSIONS_HISTORY);
+      assert.deepEqual(yield* history.execute({ child_id: "child-1", limit: 999 }, ctx), {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        lines: ["ask: hi", "reply: done"],
+      });
+      assert.equal(
+        (yield* history.execute({ child_id: "someone-elses" }, ctx)).reason,
+        REFUSAL_REASON.UNKNOWN_CHILD,
+      );
+      assert.equal((yield* history.execute({}, ctx)).reason, REFUSAL_REASON.NOT_OWN_CHILD);
+      assert.ok(maximumSessionsConversationLines > 0);
+    }),
+);
 
-test("with no delegation wired every session tool refuses, and none reaches the journal", async () => {
-  const { ctx, journaled } = context(undefined);
-  const inputs: WireRecord[] = [
-    { task: "look" },
-    { action: "cancel", child_id: "c" },
-    {},
-    { child_id: "c" },
-  ];
-  for (const [index, tool] of SESSION_TOOLS.entries()) {
-    const refused = await Effect.runPromise(tool.execute(inputs[index] ?? {}, ctx));
-    assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
-    assert.equal(refused.reason, REFUSAL_REASON.NO_CHILDREN);
-  }
-  assert.equal(journaled(), 0);
-});
+it.effect("with no delegation wired every session tool refuses, and none reaches the journal", () =>
+  Effect.gen(function* () {
+    const { ctx, journaled } = context(undefined);
+    const inputs: WireRecord[] = [
+      { task: "look" },
+      { action: "cancel", child_id: "c" },
+      {},
+      { child_id: "c" },
+    ];
+    for (const [index, tool] of SESSION_TOOLS.entries()) {
+      const refused = yield* tool.execute(inputs[index] ?? {}, ctx);
+      assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(refused.reason, REFUSAL_REASON.NO_CHILDREN);
+    }
+    assert.equal(journaled(), 0);
+  }),
+);

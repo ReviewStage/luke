@@ -657,17 +657,20 @@ export function deleteUser(run: HostedStoreTestRun, id: string): Promise<void> {
  * belongs to, so one argument names both, and a column renamed under `db/`
  * is a type error at the call site rather than a count that reads zero.
  */
+export function countRows(column: PgColumn, value: string) {
+  return Effect.map(
+    db.select({ count: count() }).from(column.table).where(eq(column, value)),
+    (rows) => Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count,
+  );
+}
+
+/** `countRows` through the promise door, for a suite still written against one. */
 export function countRowsWhere(
   run: HostedStoreTestRun,
   column: PgColumn,
   value: string,
 ): Promise<number> {
-  return run(
-    Effect.map(
-      db.select({ count: count() }).from(column.table).where(eq(column, value)),
-      (rows) => Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count,
-    ),
-  );
+  return run(countRows(column, value));
 }
 
 export interface ProviderCursorRow {
