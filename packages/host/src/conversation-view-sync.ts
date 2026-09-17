@@ -24,6 +24,8 @@ import {
   RATING_EVENT_PAYLOAD,
   type RatingEventPayload,
   SPEECH_OFFERED_EVENT_PAYLOAD,
+  SPEECH_SPOKEN_EVENT_PAYLOAD,
+  type SpeechSpokenEventPayload,
   type StandingRating,
   standingRating,
   unparsedWire,
@@ -133,6 +135,12 @@ interface HeldSpeechEvent {
    * the offered event alone, since a later event is a later state.
    */
   readonly expiresAt?: number;
+  /**
+   * For the spoken mark, which voice session began saying the briefing and
+   * when on that session's clock, as the mark's own payload says; absent
+   * where the payload did not read, and on every other kind.
+   */
+  readonly spoken?: SpeechSpokenEventPayload;
 }
 
 /**
@@ -360,6 +368,8 @@ export class ConversationViewSync {
       if (isSpeechEventKind(event.kind)) {
         const held = this.#speech.get(event.messageId);
         if (held !== undefined && held.seq >= event.seq) continue;
+        const spoken =
+          event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN ? spokenPayload(event) : undefined;
         this.#speech.set(event.messageId, {
           conversationId: event.conversationId,
           kind: event.kind,
@@ -367,6 +377,7 @@ export class ConversationViewSync {
           ...(event.kind === CONVERSATION_EVENT_KIND.SPEECH_OFFERED
             ? { expiresAt: offerExpiresAt(event) }
             : undefined),
+          ...(spoken === undefined ? undefined : { spoken }),
         });
         moved = true;
         continue;
@@ -583,17 +594,29 @@ export class ConversationViewSync {
     return true;
   }
 
+  /**
+   * The message's announcements as the latest speech event held here has
+   * them: unspoken where it is the expiry, and carrying where the speech
+   * began where it is the spoken mark and said so, as the fold the page
+   * answered would have carried them had the event stood when it was read.
+   */
   #withSpeech(message: ConversationViewMessage): ConversationViewMessage {
     const speech = this.#speech.get(message.message.id);
     if (speech === undefined) return message;
     const unspoken = speech.kind === CONVERSATION_EVENT_KIND.SPEECH_EXPIRED;
+    const spokenAt =
+      speech.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN ? speech.spoken : undefined;
     let changed = false;
     const tools: ConversationViewToolPart[] = message.tools.map((tool) => {
-      if (tool.kind !== CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE || tool.unspoken === unspoken) {
+      if (
+        tool.kind !== CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE ||
+        (tool.unspoken === unspoken && sameSpokenAt(tool.spokenAt, spokenAt))
+      ) {
         return tool;
       }
       changed = true;
-      return { ...tool, unspoken };
+      const { spokenAt: _held, ...standing } = tool;
+      return { ...standing, unspoken, ...(spokenAt === undefined ? undefined : { spokenAt }) };
     });
     return changed ? { ...message, tools } : message;
   }
@@ -731,6 +754,20 @@ export class ConversationViewSync {
     }
     return dropped;
   }
+}
+
+function sameSpokenAt(
+  a: SpeechSpokenEventPayload | undefined,
+  b: SpeechSpokenEventPayload | undefined,
+): boolean {
+  return a?.voiceSessionId === b?.voiceSessionId && a?.atMs === b?.atMs;
+}
+
+/** Where the spoken mark says the speech began, or nothing where its payload did not read. */
+function spokenPayload(event: ConversationReadEvent): SpeechSpokenEventPayload | undefined {
+  return event.payload === undefined
+    ? undefined
+    : Result.getOrUndefined(readEither(SPEECH_SPOKEN_EVENT_PAYLOAD)(unparsedWire(event.payload)));
 }
 
 /** The instant an offer stops standing: its payload's, or the offer's own instant where the payload did not read. */

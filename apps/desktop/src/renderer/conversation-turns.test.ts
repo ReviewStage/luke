@@ -1188,6 +1188,243 @@ test("in a spoken turn the brain's words fold as Luke's thinking, a row apart fr
   assert.equal(ratingControls(typed), 1);
 });
 
+test("briefings Luke's voice said from observed agents fold directly above the utterance, each opening on the agent's own pressable chip, wherever their announce calls stand, and a briefing said by nobody folds where it stands", () => {
+  const VOICE_SESSION = "3e000000-0000-4000-8000-000000000001";
+  const at = FIXTURE_NOW - 60_000;
+  const HELD_SESSION: SessionIdentity = {
+    providerId: FIXTURE_AGENT.providerId,
+    providerSessionId: FIXTURE_SESSION.HELD,
+  };
+  const OTHER_SESSION: SessionIdentity = {
+    providerId: FIXTURE_AGENT.providerId,
+    providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e62",
+  };
+  const announced = (
+    id: string,
+    callId: string,
+    briefing: string,
+    placedAt: number,
+    spokenAt?: { voiceSessionId: string; atMs: number },
+  ): ConversationViewMessage => ({
+    message: {
+      id,
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        {
+          type: "tool-announce",
+          toolCallId: callId,
+          state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+          input: { briefing },
+          output: {},
+        },
+      ],
+      metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    },
+    seq: 1,
+    createdAt: placedAt,
+    placedAt,
+    tools: [
+      {
+        toolCallId: callId,
+        toolName: "announce",
+        state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+        kind: CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE,
+        unspoken: false,
+        ...(spokenAt === undefined ? undefined : { spokenAt }),
+      },
+    ],
+  });
+  const observedGroup = (
+    turnId: string,
+    session: SessionIdentity,
+    message: ConversationViewMessage,
+  ): ConversationViewTurnGroup => ({
+    turnId,
+    turn: {
+      id: turnId,
+      origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
+      status: TURN_STATUS.SETTLED,
+      queuedAt: message.placedAt - 2_000,
+      startedAt: message.placedAt - 2_000,
+      settledAt: message.placedAt,
+    },
+    source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session },
+    messages: [message],
+  });
+  const FIRST = "1e000000-0000-4000-8000-000000000601";
+  const SECOND = "1e000000-0000-4000-8000-000000000602";
+  const LATER = "1e000000-0000-4000-8000-000000000603";
+  const READING = "1e000000-0000-4000-8000-000000000604";
+  // Both briefings were begun aloud in one breath: the marks share the instant,
+  // which is where the utterance's own words began.
+  const spokenAt = { voiceSessionId: VOICE_SESSION, atMs: 9_500 };
+  const first = observedGroup(
+    "1e000000-0000-4000-8000-000000000611",
+    HELD_SESSION,
+    announced(FIRST, "call-first", "The ordering fix is in PR 1640.", at + 3_000, spokenAt),
+  );
+  const second = observedGroup(
+    "1e000000-0000-4000-8000-000000000612",
+    OTHER_SESSION,
+    announced(SECOND, "call-second", "The fix belongs in the native build.", at + 4_000, spokenAt),
+  );
+  // A third agent's briefing, begun aloud later than this utterance's span: not this reading's.
+  const later = observedGroup(
+    "1e000000-0000-4000-8000-000000000613",
+    OTHER_SESSION,
+    announced(LATER, "call-later", "Something else entirely.", at + 30_000, {
+      voiceSessionId: VOICE_SESSION,
+      atMs: 40_000,
+    }),
+  );
+  const utterance = (
+    id: string,
+    text: string,
+    fromMs: number,
+    toMs: number,
+    placedAt: number,
+    readFrom?: string,
+  ): ConversationViewTurnGroup => ({
+    turnId: id,
+    turn: undefined,
+    source: { kind: CONVERSATION_VIEW_SOURCE.MAIN },
+    messages: [
+      {
+        message: {
+          id,
+          role: MESSAGE_ROLE.ASSISTANT,
+          parts: [{ type: "text", text, state: "done" }],
+          metadata: {
+            author: MESSAGE_AUTHOR.VOICE_MODEL,
+            channel: MESSAGE_CHANNEL.VOICE,
+            voice_session_id: VOICE_SESSION,
+            from_ms: fromMs,
+            to_ms: toMs,
+            ...(readFrom === undefined ? undefined : { read_from: readFrom }),
+          },
+        },
+        seq: 1,
+        createdAt: placedAt + 4_000,
+        placedAt,
+        tools: [],
+      },
+    ],
+  });
+  // The utterance stands where its words began, which the store may place
+  // ahead of the announce rows: the folds still draw above its bubble. The
+  // words before it were cut back to back with it, ending on the instant it
+  // began, and say no briefing.
+  const acknowledged = utterance(
+    "1e000000-0000-4000-8000-000000000605",
+    "Okay, I've noted that.",
+    6_000,
+    9_500,
+    at + 500,
+  );
+  const reading = (readFrom: string | undefined) =>
+    utterance(
+      READING,
+      "The ordering fix is in PR sixteen forty, and the native build needs xcrun.",
+      9_500,
+      14_000,
+      at + 1_000,
+      readFrom,
+    );
+  const OPEN_AGENT = (agent: AgentRead) => void agent;
+  const markup = render([acknowledged, reading(FIRST), first, second, later], OPEN, {
+    agents: [FIXTURE_AGENT],
+    onOpenAgent: OPEN_AGENT,
+  });
+  // Two folds, then the reading, then the later briefing's fold where its
+  // call stands; the emptied groups head on nothing.
+  const FOLD = "data-observation-announcement";
+  assert.equal(count(markup, FOLD, "true"), 3);
+  assert.equal(count(markup, "data-written", "true"), 0);
+  assert.equal(count(markup, "data-reading", "true"), 1);
+  assert.equal(count(markup, "data-source-session", "true"), 0);
+  assert.equal(count(markup, "data-speaker", CONVERSATION_ENTRY_SPEAKER.LUKE), 2);
+  const rows = entries(markup);
+  assert.deepEqual(
+    rows.map((row) =>
+      row.includes(`${FOLD}="true"`)
+        ? "fold"
+        : row.includes('data-reading="true"')
+          ? "reading"
+          : "bubble",
+    ),
+    ["bubble", "fold", "fold", "reading", "fold"],
+  );
+  const [acknowledgment, firstFold, secondFold, said, laterFold] = rows;
+  assert.ok(acknowledgment?.includes("noted that") && !acknowledgment.includes("PR 1640"));
+  assert.ok(firstFold && secondFold && said && laterFold);
+  // Each fold's line is the one word; inside it, first the chip naming the
+  // agent it came from — the source chip its own group would wear, a press
+  // where the agents list names the agent and a name where it does not —
+  // then the briefing's words.
+  for (const fold of [firstFold, secondFold]) {
+    const summaryEnd = fold.indexOf("</summary>");
+    assert.ok(summaryEnd > 0 && fold.slice(0, summaryEnd).includes("<span>Thinking</span>"));
+    assert.ok(!fold.slice(0, summaryEnd).includes("conversation-source-chip"));
+    const chipAt = fold.indexOf("conversation-source-chip");
+    const wordsAt = fold.indexOf("conversation-thinking-fold-words");
+    assert.ok(summaryEnd < chipAt && chipAt < wordsAt);
+  }
+  assert.ok(firstFold.includes(`aria-label="Open ${FIXTURE_TITLE.HELD}"`));
+  assert.ok(firstFold.includes(`${FIXTURE_TITLE.HELD}</button>`) && firstFold.includes("PR 1640"));
+  assert.equal(secondFold.split(SOURCE_CHIP_BUTTON).length - 1, 0);
+  assert.ok(secondFold.includes(SOURCE_CHIP_NAME));
+  assert.ok(secondFold.includes(`Session ${OTHER_SESSION.providerSessionId.slice(0, 8)}</span>`));
+  assert.ok(secondFold.includes("native build"));
+  assert.ok(said.includes("sixteen forty"));
+  assert.ok(laterFold.includes("Something else entirely"));
+  // The chip inside the fold is the list's own row press: it hands the agent
+  // to the transcript page, and never the session to the provider.
+  const openedAgents: AgentRead[] = [];
+  const openedChats: SessionIdentity[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  act(() => {
+    createRoot(container).render(
+      createElement(ConversationTurns, {
+        groups: [reading(FIRST), first, second],
+        roster: FIXTURE_ROSTER,
+        agents: [FIXTURE_AGENT],
+        now: FIXTURE_NOW,
+        onOpenChat: (identity) => void openedChats.push(identity),
+        onOpenAgent: (agent) => void openedAgents.push(agent),
+      }),
+    );
+  });
+  const chip = container.querySelector(".conversation-thinking-fold .conversation-source-chip");
+  assert.ok(chip instanceof HTMLButtonElement);
+  act(() => {
+    chip.click();
+  });
+  assert.deepEqual(openedAgents, [FIXTURE_AGENT]);
+  assert.deepEqual(openedChats, []);
+  // One rating on the reading, of the message the record names, and none on
+  // a fold it said; the acknowledgment and the later briefing, said by nobody
+  // in the thread, are each rated themselves, the briefing inside its fold.
+  assert.equal(ratingControls(markup), 3);
+  assert.equal(ratingControls(said), 1);
+  assert.equal(ratingControls(firstFold) + ratingControls(secondFold), 0);
+  assert.equal(ratingControls(laterFold), 1);
+  // The record naming no source — an older row, written before the store looked
+  // beyond main — changes only the rating: the span alone folds both briefings
+  // above the reading, and the reading is rated as words of Luke's own.
+  const unnamed = render([reading(undefined), first, second], OPEN, { agents: [FIXTURE_AGENT] });
+  assert.equal(count(unnamed, FOLD, "true"), 2);
+  assert.equal(count(unnamed, "data-reading", "true"), 1);
+  assert.equal(ratingControls(unnamed), 1);
+  assert.ok(entries(unnamed).at(-1)?.includes('data-reading="true"'));
+  // Without the reading in the thread, each briefing folds where its call
+  // stands, rated inside its fold.
+  const unsaid = render([first, second], OPEN, { agents: [FIXTURE_AGENT] });
+  assert.equal(count(unsaid, FOLD, "true"), 2);
+  assert.equal(count(unsaid, "data-reading", "true"), 0);
+  assert.equal(ratingControls(unsaid), 2);
+});
+
 test("a briefing a device read aloud folds as the brain's written words, the reading in its own group is the bubble carrying the briefing's rating, and one nothing said of stays the bubble", () => {
   const ANNOUNCED = "1d000000-0000-4000-8000-000000000501";
   const READING = "1d000000-0000-4000-8000-000000000502";

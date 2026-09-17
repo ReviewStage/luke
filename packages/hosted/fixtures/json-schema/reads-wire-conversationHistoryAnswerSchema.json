@@ -249,6 +249,24 @@
                           },
                           "unspoken": {
                             "type": "boolean"
+                          },
+                          "spokenAt": {
+                            "type": "object",
+                            "properties": {
+                              "voiceSessionId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "atMs": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "voiceSessionId",
+                              "atMs"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [

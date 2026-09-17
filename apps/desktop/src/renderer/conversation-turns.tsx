@@ -52,6 +52,7 @@ import {
   isWireString,
   OBSERVATION_SOURCE,
   recordFromJsonLine,
+  type SpeechSpokenEventPayload,
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnOrigin,
@@ -96,7 +97,10 @@ import { ThinkingDots } from "./thinking-dots";
  * observation's briefing folds like his thinking instead, since it is the
  * brain's proposal and not words anyone heard, with the chip naming the
  * observed agent inside the fold above the words; the recorded spoken text
- * stays below as the voice's own bubble. Every other stored tool call of one assistant
+ * stays below as the voice's own bubble — directly below, since a briefing
+ * the voice said is folded above the utterance that said it, wherever the
+ * announce call itself stands, and draws nothing where it stands. Every
+ * other stored tool call of one assistant
  * message — reads, actions, even one whose tool failed — draws ahead of that
  * message's words, in the call order the message stored them: one call as
  * the row it is, stamped like any other, and two or more inside one fold
@@ -441,8 +445,11 @@ function WrittenRow({ words }: { words: string }): React.JSX.Element {
  * briefing came from stands above the words, so whose session it was is
  * read with the proposal and never as a line of the thread's own. The
  * voice's recorded utterance follows as its own bubble, so the visible
- * spoken text is always what the developer heard; the rating stands inside
- * the fold with the words it is about. The row carries the message's stamp
+ * spoken text is always what the developer heard; where the record or the
+ * spoken mark ties the briefing to that utterance, the fold is drawn
+ * directly above it, wherever the announce call itself stands, and the
+ * rating moves to the utterance; otherwise the rating stands inside the
+ * fold with the words it is about. The row carries the message's stamp
  * on its line, as the tool calls' fold does, since the proposal is dated
  * like every other row of the thread and the bubble it replaced was.
  */
@@ -1098,15 +1105,30 @@ interface RatingContext {
   readonly onOfferFeedback?: ((draft: string) => void) | undefined;
 }
 
+/** A message of the thread beside the source of the group it stands in, so a fold drawn elsewhere still names where it came from. */
+interface SourcedMessage {
+  readonly view: ConversationViewMessage;
+  readonly source: ConversationViewSource;
+}
+
 /**
- * How the thread's rows read one another aloud: by message id, the rows of
- * the voice model's that were read from a message — its reply spoken after
- * its turn, its briefing said — and every message by its id, so a reading
- * finds what it read from wherever in the thread that message stands.
+ * How the thread's rows read one another aloud. By a reading's id — a row of
+ * the voice model's — the messages it said: the one the record names it read
+ * from (its turn's reply, or a briefing), then every briefing whose spoken
+ * mark says this voice session began saying it inside the reading's span,
+ * since one breath may carry two agents' briefings and the record names one.
+ * A briefing is said by one reading: the one the record names, else the one
+ * of the session's rows holding the mark's instant that began latest, since
+ * the mark is where the voice's own words began after the append and two
+ * utterances cut back to back may share an endpoint. By a message's id, the
+ * readings that said it, in thread order, and every message by its id with
+ * its source, so a reading finds what it said and where it came from
+ * wherever in the thread that message stands.
  */
 interface Readings {
+  readonly saidBy: ReadonlyMap<string, readonly SourcedMessage[]>;
   readonly readOf: ReadonlyMap<string, readonly ConversationViewMessage[]>;
-  readonly byId: ReadonlyMap<string, ConversationViewMessage>;
+  readonly byId: ReadonlyMap<string, SourcedMessage>;
 }
 
 /** The message a row of the voice model's was read from, by the id its metadata names; nothing for words of his own. */
@@ -1117,21 +1139,153 @@ function readFromOf(view: ConversationViewMessage): string | undefined {
   return message.metadata.read_from;
 }
 
-/** The readings of the thread, folded once from every group before any row is drawn. */
-function readingsOf(groups: readonly ConversationViewTurnGroup[]): Readings {
-  const readOf = new Map<string, ConversationViewMessage[]>();
-  const byId = new Map<string, ConversationViewMessage>();
-  for (const group of groups) {
-    for (const message of group.messages) {
-      byId.set(message.message.id, message);
-      const from = readFromOf(message);
-      if (from === undefined) continue;
-      const standing = readOf.get(from);
-      if (standing === undefined) readOf.set(from, [message]);
-      else standing.push(message);
+/** The voice session and span a row of the voice model's was cut from, on that session's clock; nothing for any other row. */
+function spokenSpanOf(
+  view: ConversationViewMessage,
+): { readonly voiceSessionId: string; readonly fromMs: number; readonly toMs: number } | undefined {
+  const { message } = view;
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
+  if (message.metadata.author !== MESSAGE_AUTHOR.VOICE_MODEL) return undefined;
+  const { voice_session_id: voiceSessionId, from_ms: fromMs, to_ms: toMs } = message.metadata;
+  if (voiceSessionId === undefined || fromMs === undefined || toMs === undefined) return undefined;
+  return { voiceSessionId, fromMs, toMs };
+}
+
+/** The instant a message's briefing was begun aloud, where its announce part carries the spoken mark's; a message announces at most once. */
+function spokenAtOf(view: ConversationViewMessage): SpeechSpokenEventPayload | undefined {
+  for (const tool of view.tools) {
+    if (tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && tool.spokenAt !== undefined) {
+      return tool.spokenAt;
     }
   }
-  return { readOf, byId };
+  return undefined;
+}
+
+/** A row of the voice model's beside the session and span it was cut from. */
+interface Reading {
+  readonly view: ConversationViewMessage;
+  readonly span: NonNullable<ReturnType<typeof spokenSpanOf>>;
+}
+
+/** The readings of the thread, folded once from every group before any row is drawn. */
+function readingsOf(groups: readonly ConversationViewTurnGroup[]): Readings {
+  const byId = new Map<string, SourcedMessage>();
+  // The briefings said aloud, in thread order, and the readings by the session each was cut from.
+  const spokenBriefings: SourcedMessage[] = [];
+  const readingsBySession = new Map<string, Reading[]>();
+  const saidBy = new Map<string, SourcedMessage[]>();
+  const readOf = new Map<string, ConversationViewMessage[]>();
+  const say = (reading: ConversationViewMessage, said: SourcedMessage) => {
+    const standing = saidBy.get(reading.message.id);
+    if (standing === undefined) saidBy.set(reading.message.id, [said]);
+    else standing.push(said);
+    const readings = readOf.get(said.view.message.id);
+    if (readings === undefined) readOf.set(said.view.message.id, [reading]);
+    else readings.push(reading);
+  };
+  for (const group of groups) {
+    for (const view of group.messages) {
+      const sourced: SourcedMessage = { view, source: group.source };
+      byId.set(view.message.id, sourced);
+      if (spokenAtOf(view) !== undefined) spokenBriefings.push(sourced);
+      const span = spokenSpanOf(view);
+      if (span === undefined) continue;
+      const standing = readingsBySession.get(span.voiceSessionId);
+      if (standing === undefined) readingsBySession.set(span.voiceSessionId, [{ view, span }]);
+      else standing.push({ view, span });
+    }
+  }
+  // What the record names comes first, so it leads the folds above the reading.
+  for (const { view } of byId.values()) {
+    const named = readFromOf(view);
+    const source = named === undefined ? undefined : byId.get(named);
+    if (source !== undefined) say(view, source);
+  }
+  for (const briefing of spokenBriefings) {
+    if (readOf.has(briefing.view.message.id)) continue;
+    const reading = readingSaying(briefing.view, readingsBySession);
+    if (reading !== undefined) say(reading, briefing);
+  }
+  return { saidBy, readOf, byId };
+}
+
+/**
+ * The one reading that said a briefing the record names no reading for: of
+ * the rows cut from the session that began saying it, those whose span holds
+ * the mark's instant, and of those the one that began latest, since the mark
+ * is where the voice's own words began after the append and the utterance
+ * before it may end on that same instant. Two beginning together — a record
+ * that cannot happen, but one the type allows — settle on the first in
+ * thread order.
+ */
+function readingSaying(
+  briefing: ConversationViewMessage,
+  readingsBySession: ReadonlyMap<string, readonly Reading[]>,
+): ConversationViewMessage | undefined {
+  const spokenAt = spokenAtOf(briefing);
+  if (spokenAt === undefined) return undefined;
+  let saying: Reading | undefined;
+  for (const reading of readingsBySession.get(spokenAt.voiceSessionId) ?? []) {
+    const { fromMs, toMs } = reading.span;
+    if (spokenAt.atMs < fromMs || spokenAt.atMs > toMs) continue;
+    if (saying === undefined || fromMs > saying.span.fromMs) saying = reading;
+  }
+  return saying?.view;
+}
+
+/**
+ * The briefings a reading said, folded directly above its bubble in the
+ * order the thread holds them, and nowhere else: an observed agent's as the
+ * Thinking fold its own group would draw, opening on the chip naming the
+ * agent, and main's own as the brain's written words. Neither carries a
+ * rating, since the rating stands on the reading.
+ */
+function briefingFolds(
+  readingId: string,
+  said: readonly SourcedMessage[],
+  naming: AgentNaming,
+): readonly React.JSX.Element[] {
+  const rows: React.JSX.Element[] = [];
+  for (const { view, source } of said) {
+    const announced = new Set(
+      view.tools
+        .filter((tool) => tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE)
+        .map((tool) => tool.toolCallId),
+    );
+    view.message.parts.forEach((part: StoredPart, index) => {
+      if (!isStoredToolPart(part) || !announced.has(part.toolCallId)) return;
+      const words = announcedWords(part);
+      if (words === undefined) return;
+      const key = `${readingId}:${view.message.id}:${index}`;
+      rows.push(
+        source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED ? (
+          <ObservationAnnouncementRow
+            key={key}
+            source={
+              <SourceChip
+                source={source}
+                roster={naming.roster}
+                agents={naming.agents}
+                {...(naming.onOpenAgent ? { onOpenAgent: naming.onOpenAgent } : undefined)}
+              />
+            }
+            words={words}
+            rating={undefined}
+          />
+        ) : (
+          <WrittenRow key={key} words={words} />
+        ),
+      );
+    });
+  }
+  return rows;
+}
+
+/** What the thread names agents by and opens them with, handed to every fold that wears a source chip. */
+interface AgentNaming {
+  readonly roster: readonly SessionView[];
+  readonly agents: readonly AgentRead[];
+  readonly onOpenAgent?: ((agent: AgentRead) => void) | undefined;
 }
 
 /** The text a reading says, for the rating draft that quotes it and the bubble that draws it. */
@@ -1226,7 +1380,7 @@ function messageRows(
   judgment: Judgment,
   pending: boolean,
   aloud: boolean,
-  roster: readonly SessionView[],
+  naming: AgentNaming,
   rating: RatingContext,
   readings: Readings,
   marks: ConversationSearchMarks | undefined,
@@ -1263,23 +1417,30 @@ function messageRows(
     ];
   }
   if (message.role === MESSAGE_ROLE.SYSTEM) return [];
-  // A row of the voice model's read from a message in the thread is the words
-  // actually said: its bubble carries the rating of the message it read from,
-  // on the last of that message's readings, since the rating is of the
-  // brain's judgment and there is one control per message.
-  const readFrom = readFromOf(view);
-  const source = readFrom === undefined ? undefined : readings.byId.get(readFrom);
-  if (source !== undefined) {
+  const { roster } = naming;
+  // A row of the voice model's that said something in the thread is the words
+  // actually said: the briefings it said fold above it, and its bubble carries
+  // the rating of the message the record names it read from, on the last of
+  // that message's readings, since the rating is of the brain's judgment and
+  // there is one control per message. Where the record names none — a
+  // briefing tied to the reading by its spoken mark alone — the reading is
+  // rated as words of Luke's own, as it is when it said nothing in the thread.
+  const said = readings.saidBy.get(message.id);
+  if (said !== undefined) {
     const words = spokenWords(message);
-    const last = readings.readOf.get(source.message.id)?.at(-1) === view;
+    const readFrom = readFromOf(view);
+    const named = readFrom === undefined ? undefined : readings.byId.get(readFrom);
+    const rated = named?.view ?? view;
+    const last = named === undefined || readings.readOf.get(rated.message.id)?.at(-1) === view;
     return [
+      ...briefingFolds(message.id, said, naming),
       <BubbleRow
         key={message.id}
         voice={VOICE.LUKE}
         words={words}
         at={view.placedAt}
         reading={true}
-        rating={last ? ratingControl(source, words, rating) : undefined}
+        rating={last ? ratingControl(rated, words, rating) : undefined}
         search={search}
       />,
     ];
@@ -1343,6 +1504,8 @@ function messageRows(
     const tool = described.get(part.toolCallId);
     if (tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) {
       const words = announcedWords(part);
+      // A briefing Luke's voice said draws nothing here: it folds above the reading.
+      if (words !== undefined && readAloud) return;
       if (words !== undefined && sourceChip !== undefined) {
         rows.push(
           <ObservationAnnouncementRow
@@ -1353,10 +1516,6 @@ function messageRows(
             rating={placed}
           />,
         );
-        return;
-      }
-      if (words !== undefined && readAloud) {
-        rows.push(<WrittenRow key={key} words={words} />);
         return;
       }
       if (words !== undefined) {
@@ -1834,9 +1993,6 @@ export function ConversationTurns({
   return (
     <ol className="conversation-list">
       {groups.flatMap((group) => {
-        const span = groupSpan(group);
-        const dated = opensConversationTimeBreak(previousAt, span.first);
-        previousAt = span.last;
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
         const aloud = answeredAloud(group.turn);
@@ -1872,7 +2028,7 @@ export function ConversationTurns({
             judgment,
             pending,
             aloud,
-            roster,
+            { roster, agents, onOpenAgent },
             {
               ask,
               onOfferFeedback: onOfferRatingFeedback,
@@ -1899,6 +2055,13 @@ export function ConversationTurns({
           }
           return rows;
         });
+        // A group whose every row is drawn elsewhere — an agent's briefing that
+        // Luke's voice said, folded above the utterance — draws nothing here:
+        // no chip over an empty group, and no date over the silence before it.
+        if (drawn.length === 0) return [];
+        const span = groupSpan(group);
+        const dated = opensConversationTimeBreak(previousAt, span.first);
+        previousAt = span.last;
         return [
           ...liveBefore(span.first),
           ...(dated

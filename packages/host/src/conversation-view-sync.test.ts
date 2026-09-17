@@ -151,6 +151,7 @@ function speech(
   seq: number,
   kind: ConversationReadEvent["kind"],
   conversationId = OBSERVED,
+  payload?: ConversationReadEvent["payload"],
 ): ConversationReadEvent {
   return {
     id: `4d000000-0000-4000-8000-${String(seq).padStart(12, "0")}`,
@@ -158,6 +159,7 @@ function speech(
     seq,
     messageId: messageId(messageIdNumber),
     kind,
+    ...(payload === undefined ? undefined : { payload }),
     createdAt: NOW + seq,
   };
 }
@@ -328,6 +330,65 @@ test("the latest speech event on a message decides whether its announcement was 
   assert.equal(heard(), true);
   assert.equal(sync.snapshot().groups[0]?.messages[0]?.rating, undefined);
   assert.equal(sync.cursors().events, "e4");
+});
+
+test("the spoken mark's payload rides onto the announcement as where its speech began, and leaves with a later event", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page(
+      [
+        {
+          turnId: turnId(1),
+          conversationId: OBSERVED,
+          source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
+          messages: [announcement(1, 1, NOW)],
+        },
+      ],
+      "c1",
+      [MAIN, OBSERVED],
+    ),
+  );
+  const spokenAt = () => {
+    const tool = sync.snapshot().groups[0]?.messages[0]?.tools[0];
+    assert.ok(tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE);
+    return tool.spokenAt;
+  };
+  assert.equal(spokenAt(), undefined);
+  const SPOKEN = { voiceSessionId: "3e000000-0000-4000-8000-000000000001", atMs: 4_200 };
+  // The spoken mark arrives after the page: the part now says where the speech began.
+  sync.applyEvents(
+    [speech(1, 2, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, OBSERVED, SPOKEN)],
+    "e1",
+    false,
+  );
+  assert.deepEqual(spokenAt(), SPOKEN);
+  const before = sync.revision;
+  // The same mark read again moves nothing.
+  sync.applyEvents(
+    [speech(1, 2, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, OBSERVED, SPOKEN)],
+    "e2",
+    false,
+  );
+  assert.equal(sync.revision, before);
+  assert.deepEqual(spokenAt(), SPOKEN);
+  // A mark whose payload does not read still says the briefing was heard, and names no instant.
+  sync.applyEvents(
+    [speech(1, 3, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, OBSERVED, { atMs: "soon" })],
+    "e3",
+    false,
+  );
+  assert.equal(spokenAt(), undefined);
+  // The expiry after it is the latest word: unspoken, and no instant.
+  sync.applyEvents(
+    [speech(1, 4, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN, OBSERVED, SPOKEN)],
+    "e4",
+    false,
+  );
+  assert.deepEqual(spokenAt(), SPOKEN);
+  sync.applyEvents([speech(1, 5, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED)], "e5", false);
+  assert.equal(spokenAt(), undefined);
+  const tool = sync.snapshot().groups[0]?.messages[0]?.tools[0];
+  assert.ok(tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && tool.unspoken);
 });
 
 test("the briefings on offer are the messages whose latest speech event is an unexpired offer, read from the events and nothing inferred", () => {

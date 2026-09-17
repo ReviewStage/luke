@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import { type ToolSet, tool } from "ai";
 import { Effect, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -11,6 +12,7 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import {
   type ConversationTarget,
@@ -754,6 +756,92 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
     delegation_id: "dl_pre",
     read_from: briefingId,
   });
+});
+
+test("a briefing a per-workspace agent announced in its own observed conversation is what Luke's utterance in main was read from, and two said in one breath name the newest", async () => {
+  const live = await target();
+  const voice = writer();
+  // The agent's conversation is the account's, standing beside main; its
+  // announce and the spoken mark on it never enter main's own sequence.
+  const agent = async (providerSessionId: string): Promise<ConversationTarget> => ({
+    userId: live.userId,
+    conversationId: await insertConversation(database.run, {
+      userId: live.userId,
+      kind: CONVERSATION_KIND.OBSERVED,
+      providerId: "conductor",
+      providerSessionId,
+    }),
+  });
+  const first = await agent("6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e61");
+  const firstBriefing = await briefing(first);
+  voice.noteAppend(live, { clientEventId: "append-agent-1", messageId: firstBriefing });
+  await database.run(voice.consume(live, appended("append-agent-1", 1000, 1800)));
+  await database.run(voice.consume(live, said("The ordering fix is in.", 2000, 3200)));
+  assert.deepEqual(
+    await database.run(voice.upsertSpokenRow(live, lukeRow("luke-2000", 2000, 3200))),
+    WRITTEN,
+  );
+  const sessionId = await sessionRowId(live.liveSessionId);
+  const [reading] = await spokenAsks(live.conversation);
+  assert.deepEqual(reading?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: sessionId,
+    from_ms: 2000,
+    to_ms: 3200,
+    read_from: firstBriefing,
+  });
+  // The mark stands in the agent's conversation, not main's.
+  assert.deepEqual(
+    (await speechEvents(first)).map((event) => event.kind),
+    [
+      CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+      CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+    ],
+  );
+  assert.deepEqual(await speechEvents(live.conversation), []);
+  // Two agents' briefings appended back to back are both marked spoken by the
+  // one utterance that answered them; the row names one of the two marks, and
+  // the view ties the other to the same utterance by the instant both share.
+  const second = await agent("6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e62");
+  const secondBriefing = await briefing(second);
+  const thirdBriefing = await briefing(first);
+  voice.noteAppend(live, { clientEventId: "append-agent-2", messageId: secondBriefing });
+  voice.noteAppend(live, { clientEventId: "append-agent-3", messageId: thirdBriefing });
+  await database.run(voice.consume(live, appended("append-agent-2", 5000, 5600)));
+  await database.run(voice.consume(live, appended("append-agent-3", 5600, 6100)));
+  await database.run(voice.consume(live, said("Both are through checks.", 7000, 8500)));
+  assert.deepEqual(
+    await database.run(voice.upsertSpokenRow(live, lukeRow("luke-7000", 7000, 8500))),
+    WRITTEN,
+  );
+  const spokenMarks = [...(await speechEvents(first)), ...(await speechEvents(second))].filter(
+    (event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+  );
+  assert.deepEqual(
+    spokenMarks.map((event) => [event.messageId, event.payload]).sort(),
+    [
+      [firstBriefing, { voiceSessionId: sessionId, atMs: 2000 }],
+      [secondBriefing, { voiceSessionId: sessionId, atMs: 7000 }],
+      [thirdBriefing, { voiceSessionId: sessionId, atMs: 7000 }],
+    ].sort(),
+  );
+  // The two marks share the instant, so which is named is the query's stable order, not a recency.
+  const both = (await spokenAsks(live.conversation)).at(-1)?.metadata;
+  const readFrom = (named: string) => ({
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: sessionId,
+    from_ms: 7000,
+    to_ms: 8500,
+    read_from: named,
+  });
+  assert.ok(
+    isDeepStrictEqual(both, readFrom(secondBriefing)) ||
+      isDeepStrictEqual(both, readFrom(thirdBriefing)),
+    JSON.stringify(both),
+  );
 });
 
 test("Luke's later words are his rows too, and so is the brain's reply read aloud, sentence by sentence, beside the turn's journal", async () => {

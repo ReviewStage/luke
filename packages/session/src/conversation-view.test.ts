@@ -303,6 +303,66 @@ test("an announcement is unspoken when its latest speech event is the expiry, wh
   assert.equal(part?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && part.unspoken, true);
 });
 
+test("an announcement carries where its speech began while its latest speech event is the spoken mark with a payload that read, and not otherwise", async () => {
+  const input = await loadView(FIXTURE.OBSERVATION_ANNOUNCED);
+  const announcementId = input.observed[0]?.messages[1]?.message.id ?? "";
+  const SPOKEN = { voiceSessionId: "3e000000-0000-4000-8000-000000000001", atMs: 4_200 };
+  const spokenAtUnder = (events: readonly ConversationViewEvent[]) => {
+    const [group] = selectConversationView({ ...input, events });
+    const [part] = group?.messages[0]?.tools ?? [];
+    assert.equal(part?.kind, CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE);
+    return part?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE ? part.spokenAt : undefined;
+  };
+  const offered: ConversationViewEvent = {
+    messageId: announcementId,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+    seq: 1,
+  };
+  const claimed: ConversationViewEvent = {
+    messageId: announcementId,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
+    seq: 2,
+  };
+  const spoken: ConversationViewEvent = {
+    messageId: announcementId,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+    seq: 3,
+    spoken: SPOKEN,
+  };
+  // The mark rides on the part, whatever order the events arrived in.
+  assert.deepEqual(spokenAtUnder([offered, claimed, spoken]), SPOKEN);
+  assert.deepEqual(spokenAtUnder([spoken, offered, claimed]), SPOKEN);
+  // A rating after it is not a speech event, so the mark still stands.
+  assert.deepEqual(
+    spokenAtUnder([
+      offered,
+      claimed,
+      spoken,
+      { messageId: announcementId, kind: CONVERSATION_EVENT_KIND.RATING, seq: 4 },
+    ]),
+    SPOKEN,
+  );
+  // A spoken mark whose payload did not read still says the briefing was heard, and names no instant.
+  const { spoken: _payload, ...unread } = spoken;
+  assert.equal(spokenAtUnder([offered, claimed, unread]), undefined);
+  // Nothing spoken yet, or the offer expired after the mark: no instant.
+  assert.equal(spokenAtUnder([offered, claimed]), undefined);
+  assert.equal(
+    spokenAtUnder([
+      offered,
+      claimed,
+      spoken,
+      { messageId: announcementId, kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, seq: 4 },
+    ]),
+    undefined,
+  );
+  // Another message's mark is not this one's.
+  assert.equal(
+    spokenAtUnder([{ ...spoken, messageId: "3e000000-0000-4000-8000-000000000099" }]),
+    undefined,
+  );
+});
+
 test("a message carries its latest rating by event sequence, a re-rating replaces it in the view, and an unreadable or withdrawn newest rating folds as none", async () => {
   const input = await loadView(FIXTURE.OBSERVATION_ANNOUNCED);
   const announcementId = input.observed[0]?.messages[1]?.message.id ?? "";

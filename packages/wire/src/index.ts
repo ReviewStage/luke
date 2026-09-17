@@ -22,6 +22,7 @@ export {
   RatingWordSchema,
   SPEECH_EXPIRY_REASON,
   SPEECH_OFFERED_EVENT_PAYLOAD,
+  SPEECH_SPOKEN_EVENT_PAYLOAD,
   type SpeechEventKind,
   type SpeechExpiredEventPayload,
   type SpeechOfferedEventPayload,

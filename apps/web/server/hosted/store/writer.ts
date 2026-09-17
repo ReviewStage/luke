@@ -657,15 +657,25 @@ const findSettledTurn = SqlSchema.findOneOption({
  * The briefing whose speech began inside a span of one voice session's clock:
  * the `speech.spoken` event names the session and the instant on its clock
  * the voice followed the briefing's append, and Luke's utterance covering
- * that instant is the briefing read aloud. A row is read from one message,
- * so where two briefings appended back to back were both marked by one delta
- * and read in one breath, the later is the one the reading names and the
- * earlier keeps its own bubble; two briefings in one utterance is the
- * exception a single link accepts rather than a list it grows for.
+ * that instant is the briefing read aloud. The mark stands in the briefing's
+ * own conversation, which is an observed session's where a per-workspace
+ * agent announced, so the look runs over every conversation of the account
+ * rather than the one the utterance is written to — the account's
+ * conversations first, by their own index, and each one's events by the
+ * index the table keeps on the conversation, since nothing indexes an
+ * event by its owner; the voice session is the account's alone, so nothing
+ * of another's can answer. A row is read from
+ * one message, so where two briefings appended back to back were both marked
+ * by one delta and read in one breath, the newest mark is the one the
+ * reading names, and two marked in the same instant are ordered by their
+ * conversation and sequence: a stable order rather than a recency, since
+ * neither is newer, chosen so the re-read every write makes names the same
+ * message each time. The view ties the other to the same utterance by the
+ * instant the marks share, so a single link here is enough.
  */
 const findBriefingSpokenWithin = SqlSchema.findOneOption({
   Request: Schema.Struct({
-    conversationId: Schema.String,
+    userId: Schema.String,
     voiceSessionId: Schema.String,
     fromMs: Schema.Int,
     toMs: Schema.Int,
@@ -677,14 +687,20 @@ const findBriefingSpokenWithin = SqlSchema.findOneOption({
       .from(events)
       .where(
         and(
-          eq(events.conversationId, request.conversationId),
+          inArray(
+            events.conversationId,
+            db
+              .select({ id: conversations.id })
+              .from(conversations)
+              .where(eq(conversations.userId, request.userId)),
+          ),
           eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN),
           sql`${SPEECH_EVENT_VOICE_SESSION_ID} = ${request.voiceSessionId}`,
           sql`${SPEECH_EVENT_AT_MS} >= ${request.fromMs}`,
           sql`${SPEECH_EVENT_AT_MS} <= ${request.toMs}`,
         ),
       )
-      .orderBy(desc(events.seq))
+      .orderBy(desc(events.createdAt), desc(events.conversationId), desc(events.seq))
       .limit(1),
 });
 
@@ -1728,7 +1744,9 @@ const NOTHING_READ: ReadAloudSource = { turnId: undefined, messageId: undefined 
 
 /**
  * What Luke's utterance was read from, as the record can tell. A briefing
- * whose speech began inside the span comes first, since a briefing is said
+ * whose speech began inside the span comes first, wherever in the account it
+ * was announced (main's own, or a per-workspace agent's observed
+ * conversation), since a briefing is said
  * whatever line stood before it, and the developer's latest line stays a
  * delegation's for as long as no line follows it. Otherwise, under a
  * delegation whose turn is known, the utterance joins that turn while the
@@ -1747,7 +1765,7 @@ function readAloudFrom(
       metadata.to_ms !== undefined
     ) {
       const briefing = yield* findBriefingSpokenWithin({
-        conversationId: context.target.conversationId,
+        userId: context.target.userId,
         voiceSessionId: metadata.voice_session_id,
         fromMs: metadata.from_ms,
         toMs: metadata.to_ms,

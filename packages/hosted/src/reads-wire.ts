@@ -485,12 +485,23 @@ const TOOL_PART_IDENTITY_FIELDS_EFFECT = {
   state: EffectSchema.Literals(TOOL_PART_STATE_NAMES),
 } as const;
 
-/** A tool call as the view decided it, the one fact of its kind the part alone cannot say beside it. */
+/** Where a briefing's speech began, as its spoken mark says: the voice session, and the instant on that session's own clock. */
+const spokenAtSchema = EffectSchema.Struct({
+  voiceSessionId: trimmedText(),
+  atMs: wholeNumber(0),
+});
+
+/**
+ * A tool call as the view decided it, the one fact of its kind the part alone
+ * cannot say beside it; an announcement a voice session said carries where
+ * its speech began, so a reader can find the utterance it was said in.
+ */
 const conversationViewToolPartSchema = EffectSchema.Union([
   EffectSchema.Struct({
     ...TOOL_PART_IDENTITY_FIELDS_EFFECT,
     kind: EffectSchema.Literal(CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE),
     unspoken: EffectSchema.Boolean,
+    spokenAt: EffectSchema.optionalKey(spokenAtSchema),
   }),
   EffectSchema.Struct({
     ...TOOL_PART_IDENTITY_FIELDS_EFFECT,

@@ -55,7 +55,7 @@ export type SpeechOfferedEventPayload = EffectSchema.Schema.Type<
  * and where on that session's own clock the speech began. The device that
  * spoke is the event row's own column.
  */
-const SPEECH_SPOKEN_EVENT_PAYLOAD = EffectSchema.Struct({
+export const SPEECH_SPOKEN_EVENT_PAYLOAD = EffectSchema.Struct({
   voiceSessionId: text,
   atMs: nonNegativeInteger,
 });

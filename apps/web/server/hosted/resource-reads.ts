@@ -38,6 +38,7 @@ import {
   readLimitSchema,
   type SequencePosition,
   type SequenceReadCursor,
+  SPEECH_SPOKEN_EVENT_PAYLOAD,
   selectConversationView,
   sequenceReadCursorSchema,
   type TurnReadCursor,
@@ -364,19 +365,32 @@ function viewTurn(turn: StoredTurnRecord): ConversationViewTurn {
   };
 }
 
+/** An event's payload read under one schema, or nothing where it did not hold to it. */
+function eventPayload<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  event: StoredEventRecord,
+  schema: S,
+): S["Type"] | undefined {
+  // SAFETY: the payload column is jsonb, which the driver hands back as the JSON it holds; the read is the validation.
+  return Result.getOrUndefined(
+    readEither(schema)(unparsedWire(event.payload as WireBoundaryInput)),
+  );
+}
+
 function viewEvent(event: StoredEventRecord): ConversationViewEvent {
   const rating =
     event.kind === CONVERSATION_EVENT_KIND.RATING
-      ? // SAFETY: the payload column is jsonb, which the driver hands back as the JSON it holds; the read is the validation.
-        Result.getOrUndefined(
-          readEither(RATING_EVENT_PAYLOAD)(unparsedWire(event.payload as WireBoundaryInput)),
-        )
+      ? eventPayload(event, RATING_EVENT_PAYLOAD)
+      : undefined;
+  const spoken =
+    event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN
+      ? eventPayload(event, SPEECH_SPOKEN_EVENT_PAYLOAD)
       : undefined;
   return {
     messageId: event.messageId,
     kind: event.kind,
     seq: event.seq,
     ...(rating === undefined ? undefined : { rating }),
+    ...(spoken === undefined ? undefined : { spoken }),
   };
 }
 

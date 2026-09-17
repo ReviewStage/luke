@@ -24,6 +24,7 @@ import {
   isSpeechEventKind,
   MESSAGE_ROLE,
   type RatingEventPayload,
+  type SpeechSpokenEventPayload,
   type StandingRating,
   standingRating,
   type TranscriptKind,
@@ -108,13 +109,16 @@ export interface ConversationViewTurn {
  * rating event carries its verdict where the row's payload read under the
  * vocabulary; one whose payload did not is still the latest rating by
  * sequence and folds as no rating, since an older verdict is not the
- * developer's last word.
+ * developer's last word. A spoken event carries which voice session said the
+ * briefing and where on that session's clock the speech began, where its
+ * payload read; one whose payload did not still marks the briefing heard.
  */
 export interface ConversationViewEvent {
   readonly messageId: string;
   readonly kind: ConversationEventKind;
   readonly seq: number;
   readonly rating?: RatingEventPayload;
+  readonly spoken?: SpeechSpokenEventPayload;
 }
 
 export interface ConversationViewObservedConversation {
@@ -178,9 +182,13 @@ function actionOutcome(part: StoredToolPart): ConversationViewActionOutcome {
  * alone. An announcement is unspoken when the latest speech event on its
  * message is the expiry: its offer lapsed with no device claiming it, so
  * nobody heard it. Any other latest event, or none yet, leaves it standing as
- * a briefing that was or may still be delivered. The events hang on the
- * message, and a turn announces at most once, so every announce part of one
- * message reads the same mark. An action carries its outcome: refused, the
+ * a briefing that was or may still be delivered. Where the latest event is
+ * the spoken mark and it says which voice session began saying the briefing
+ * and when on that session's clock, the part carries that instant, so a
+ * reader can find the utterance of Luke's the briefing was said in: the
+ * spoken row of the same session whose span holds the instant. The events
+ * hang on the message, and a turn announces at most once, so every announce
+ * part of one message reads the same mark. An action carries its outcome: refused, the
  * one case an action draws collapsed like a detail; unknown, when it was
  * dispatched and its effect is uncertain; accepted; or pending.
  */
@@ -188,6 +196,7 @@ export type ConversationViewToolPart =
   | (ToolPartIdentity & {
       readonly kind: typeof CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE;
       readonly unspoken: boolean;
+      readonly spokenAt?: SpeechSpokenEventPayload;
     })
   | (ToolPartIdentity & {
       readonly kind: typeof CONVERSATION_VIEW_TOOL_KIND.ACTION;
@@ -311,12 +320,17 @@ function describeToolPart(
     state: part.state,
   };
   switch (kind) {
-    case CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE:
+    case CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE: {
+      const latest = speech.get(messageId);
+      const spokenAt =
+        latest?.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN ? latest.spoken : undefined;
       return {
         ...identity,
         kind,
-        unspoken: speech.get(messageId)?.kind === CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
+        unspoken: latest?.kind === CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
+        ...(spokenAt === undefined ? undefined : { spokenAt }),
       };
+    }
     case CONVERSATION_VIEW_TOOL_KIND.ACTION:
       return { ...identity, kind, outcome: actionOutcome(part) };
     case CONVERSATION_VIEW_TOOL_KIND.DETAIL:

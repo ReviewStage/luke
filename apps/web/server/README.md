@@ -1527,12 +1527,19 @@ the voice session and span it was cut from, the delegation it followed, and,
 where the store could tell, `read_from`: the message the words were read
 aloud from — the delegation's turn's journal where that turn had settled
 within two minutes of the write, in which case the row joins the turn, or the
-briefing whose `speech.spoken` began inside the span. The desktop draws the
-reading as the bubble, with the message's rating on it; a briefing read from
-folds as Luke's thinking above the reading, where one nothing said of stays
-his bubble, and the journal of a spoken turn folds the same way whether or
-not a reading names it, since what he said of it is the voice's own row. No
-audio is ever stored.
+briefing whose `speech.spoken` began inside the span, looked for across every
+conversation of the account, since a per-workspace agent announces in its own
+observed conversation and the mark stands there. One breath may say two
+agents' briefings, and `read_from` names one; the view carries each spoken
+announcement's `spokenAt` (the mark's voice session and instant), so a reader
+ties every briefing begun inside the reading's span to it. The desktop draws
+the reading as the bubble, with the named message's rating on it; each
+briefing it said folds directly above the reading, wherever its announce call
+stands in the thread — an agent's as the Thinking fold opening on the agent's
+chip, main's own as Luke's written words — and one nothing said of folds or
+stands where its call does. The journal
+of a spoken turn folds where it stands whether or not a reading names it,
+since what he said of it is the voice's own row. No audio is ever stored.
 
 Two writers share those tables and never a column. The voice service's own
 `server/voice/session-record.ts` owns the session row's whole life: it is
