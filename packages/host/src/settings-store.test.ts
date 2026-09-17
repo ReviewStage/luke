@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { NodeFileSystem } from "@effect/platform-node";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { CalendarAccountCredential } from "@sidecar/calendar";
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials";
@@ -46,6 +46,7 @@ import {
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { test } from "vitest";
 import type { AppleCalendarConnection } from "./apple-calendar.js";
 import { Environment } from "./effect/seams.js";
@@ -142,6 +143,9 @@ function expectedPersistedSettings(overrides: WireRecord = {}): UnparsedWireValu
 const FILE_SYSTEM: FileSystem.FileSystem = Effect.runSync(
   Effect.provide(FileSystem.FileSystem, NodeFileSystem.layer),
 );
+
+/** The path service beside it, on the same terms. */
+const PATH: Path.Path = Effect.runSync(Effect.provide(Path.Path, NodePath.layer));
 
 /**
  * The services this suite's own promise face runs the store's effects under: the
@@ -278,6 +282,7 @@ function storeIn(
     overrides: overridesFor(options.environment ?? {}),
     vaultKeyHeld: options.vaultKeyHeld ?? (() => false),
     fileSystem: FILE_SYSTEM,
+    path: PATH,
   };
   return awaitedStoreOf(new SettingsStore(config), SERVICES);
 }
@@ -306,6 +311,7 @@ test("a failed first load is retried before a later write", async (t) => {
       overrides: overridesFor({}),
       vaultKeyHeld: () => false,
       fileSystem: FILE_SYSTEM,
+      path: PATH,
     }),
     SERVICES,
   );
@@ -1704,6 +1710,7 @@ it.effect("the store's own methods are effects a caller sequences itself", () =>
         overrides: overridesFor({}),
         vaultKeyHeld: () => false,
         fileSystem: FILE_SYSTEM,
+        path: PATH,
       });
 
       assert.equal(
@@ -1720,10 +1727,11 @@ it.effect("the store's own methods are effects a caller sequences itself", () =>
         overrides: overridesFor({}),
         vaultKeyHeld: () => false,
         fileSystem: FILE_SYSTEM,
+        path: PATH,
       });
       assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
     }),
-  ).pipe(Effect.provide(NodeFileSystem.layer)),
+  ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );
 
 /** Concurrent reads share one read of the file rather than each making their own. */
@@ -1741,6 +1749,7 @@ it.effect("concurrent reads of an unread store read the file once", () =>
         overrides: overridesFor({}),
         vaultKeyHeld: () => false,
         fileSystem: FILE_SYSTEM,
+        path: PATH,
       });
 
       yield* Effect.all(
@@ -1754,5 +1763,5 @@ it.effect("concurrent reads of an unread store read the file once", () =>
 
       assert.equal(directoryReads, 1);
     }),
-  ).pipe(Effect.provide(NodeFileSystem.layer)),
+  ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );
