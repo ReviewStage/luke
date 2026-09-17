@@ -177,9 +177,8 @@ in for the missing job before the first release.
 
 ## Testing
 
-This is Google's test discipline (*Software Engineering at Google*, chapters
-11 to 14, and Testing on the Toilet) on this repository's tools, and nothing
-beyond it. The mechanical half is the `testing` oxlint plugin under
+A test earns its place by catching a bug a refactor would not. The
+mechanical half of this section is the `testing` oxlint plugin under
 `tools/oxlint/testing/`, whose four rules are named where they apply; every
 other rule is a question a reviewer answers from the diff.
 
