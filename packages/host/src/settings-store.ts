@@ -80,6 +80,9 @@ const API_KEY_LENGTH = {
   MAXIMUM: 512,
 } as const;
 
+/** Providers whose credential source a snapshot resolves at once; a resolution may reach the settings file or the Keychain. */
+const SNAPSHOT_SOURCE_CONCURRENCY = 4;
+
 /** Printable ASCII with no spaces — the bytes an authorization header accepts. */
 const PRINTABLE_ASCII = /^[\x21-\x7e]+$/;
 
@@ -825,6 +828,7 @@ export class SettingsStore {
                 this.#resolveApiKey(provider),
                 (resolved) => [provider.id, resolved.source] as const,
               ),
+        { concurrency: SNAPSHOT_SOURCE_CONCURRENCY },
       );
       return {
         stored: {

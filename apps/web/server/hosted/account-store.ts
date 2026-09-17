@@ -212,18 +212,21 @@ const WorkspacePreferenceWriteSchema = Schema.Struct({
   updatedAt: Schema.Date,
 });
 
-const insertWorkspacePreference = SqlSchema.void({
-  Request: WorkspacePreferenceWriteSchema,
-  execute: (write) =>
-    db.insert(accountWorkspacePreference).values({
-      userId: write.userId,
-      providerId: write.providerId,
-      defaultProjectId: write.defaultProjectId,
-      agent: write.agent,
-      model: write.model,
-      effort: write.effort,
-      updatedAt: write.updatedAt,
-    }),
+/** Every per-provider row in one statement: the transaction holds them together already, and one round-trip writes them as one. */
+const insertWorkspacePreferences = SqlSchema.void({
+  Request: Schema.Array(WorkspacePreferenceWriteSchema),
+  execute: (writes) =>
+    db.insert(accountWorkspacePreference).values(
+      writes.map((write) => ({
+        userId: write.userId,
+        providerId: write.providerId,
+        defaultProjectId: write.defaultProjectId,
+        agent: write.agent,
+        model: write.model,
+        effort: write.effort,
+        updatedAt: write.updatedAt,
+      })),
+    ),
 });
 
 interface WorkspacePreferenceWrite {
@@ -295,11 +298,9 @@ export function writeAccountPreferences(
           updatedAt,
         });
         yield* deleteWorkspacePreferences(userId);
-        yield* Effect.forEach(
-          workspacePreferenceRows(userId, preferences, updatedAt),
-          insertWorkspacePreference,
-          { discard: true },
-        );
+        // Note that an empty insert is skipped rather than rendered, because the builder refuses a statement with no rows.
+        const rows = workspacePreferenceRows(userId, preferences, updatedAt);
+        if (rows.length > 0) yield* insertWorkspacePreferences(rows);
         return updatedAt;
       }),
     ),
