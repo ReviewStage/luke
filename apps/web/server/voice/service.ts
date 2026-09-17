@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import { Effect, FiberSet, type Layer, type Scope } from "effect";
+import { Effect, Exit, FiberSet, type Layer, Scope } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -25,10 +25,9 @@ import {
   LIVE_INPUT_AUDIO_APPEND,
   type LiveClientEvent,
 } from "../live.js";
-import type { WebStoreRun } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
-import type { AttachedExchange, AttachedSession, ExchangeAttachment } from "./live-exchange.js";
+import type { AttachedSession, ExchangeAttachment, HostedLiveExchange } from "./live-exchange.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
 import {
@@ -264,8 +263,6 @@ export interface VoiceServiceOptions {
   accounts: VoiceAccounts;
   /** The `voice_sessions` row of each signed-in session, the device it named among its columns; the introduction, with no account, writes none. */
   record: VoiceSessionRecord;
-  /** The edge's own runner, which every session's one effect is run on; a test hands the runner over its own test database. */
-  run: WebStoreRun;
   /**
    * The hosted exchange to stand on each signed-in session, adopted over the
    * same sideband the relay pipes. The route passes one; absent, as a test
@@ -288,6 +285,14 @@ export interface VoiceServiceOptions {
 
 type UpgradeDecision = Admission | { status: number };
 
+/** The exchange standing on a session, if one was offered, and its stop: the close of the scope it stands in, or nothing where none stands. */
+interface StandingExchange {
+  readonly exchange: HostedLiveExchange | undefined;
+  readonly stop: Effect.Effect<void>;
+}
+
+const NO_EXCHANGE: StandingExchange = { exchange: undefined, stop: Effect.void };
+
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -303,27 +308,25 @@ export class VoiceService {
   readonly #log: Log;
   readonly #accounts: VoiceAccounts;
   readonly #record: VoiceSessionRecord;
-  readonly #run: WebStoreRun;
   readonly #upstream: LiveUpstream | undefined;
   /** What a socket's first frame opens, by its route: the account admitted and spent, the session at OpenAI, the row registered. */
   readonly #opener: SessionOpener;
   readonly #sockets: WebSocketServer;
   /** Every session under way, one fiber each, so a close can wait for each to finalize. */
   readonly #fibers: FiberSet.FiberSet<void>;
-  readonly #begin: (session: Effect.Effect<void>) => void;
+  readonly #begin: (session: Effect.Effect<void, never, SqlClient.SqlClient>) => void;
 
   private constructor(
     options: VoiceServiceOptions,
     upstream: LiveUpstream | undefined,
     sockets: WebSocketServer,
     fibers: FiberSet.FiberSet<void>,
-    begin: (session: Effect.Effect<void>) => void,
+    begin: (session: Effect.Effect<void, never, SqlClient.SqlClient>) => void,
   ) {
     this.#options = options;
     this.#log = options.log ?? standardOutputLog;
     this.#accounts = options.accounts;
     this.#record = options.record;
-    this.#run = options.run;
     this.#upstream = upstream;
     this.#opener = sessionOpener({
       accounts: options.accounts,
@@ -353,10 +356,14 @@ export class VoiceService {
    * the `ws` server close and the set interrupt whatever the drain left, which
    * is nothing a session that ended left behind.
    */
-  static make(options: VoiceServiceOptions): Effect.Effect<VoiceService, never, Scope.Scope> {
+  static make(
+    options: VoiceServiceOptions,
+  ): Effect.Effect<VoiceService, never, Scope.Scope | SqlClient.SqlClient> {
     return Effect.gen(function* () {
       const fibers = yield* FiberSet.make<void>();
-      const fork = yield* FiberSet.runtime(fibers)<never>();
+      // Each session runs over the client the service was built on, so the
+      // session's own effect asks for it rather than a runner of its own.
+      const fork = yield* FiberSet.runtime(fibers)<SqlClient.SqlClient>();
       const sockets = yield* Effect.acquireRelease(
         Effect.sync(
           () =>
@@ -451,18 +458,19 @@ export class VoiceService {
 
   /**
    * One session as a fiber of the service's set: the effect `#serve`
-   * describes, run on the edge's own runner, and the `voice_sessions` write
-   * that could fail it written down by its route alone. A failure there was an
-   * unhandled rejection before this was a fiber, and it says nothing of the
-   * session but that one of its own rows did not land.
+   * describes in a scope of its own, and the `voice_sessions` write that could
+   * fail it written down by its route alone. A failure there was an unhandled
+   * rejection before this was a fiber, and it says nothing of the session but
+   * that one of its own rows did not land.
    */
-  #session(socket: WebSocket, admission: Admission): Effect.Effect<void> {
-    return Effect.catch(
-      Effect.tryPromise(() => this.#run(Effect.scoped(this.#serve(socket, admission)))),
-      () =>
-        Effect.sync(() => {
-          this.#log({ event: LOG_EVENT.SESSION_FAILED, route: admission.route });
-        }),
+  #session(
+    socket: WebSocket,
+    admission: Admission,
+  ): Effect.Effect<void, never, SqlClient.SqlClient> {
+    return Effect.catch(Effect.scoped(this.#serve(socket, admission)), () =>
+      Effect.sync(() => {
+        this.#log({ event: LOG_EVENT.SESSION_FAILED, route: admission.route });
+      }),
     );
   }
 
@@ -532,7 +540,7 @@ export class VoiceService {
       // consumers listen, by both, in order.
       const standing =
         accountId === undefined
-          ? { exchange: undefined }
+          ? NO_EXCHANGE
           : yield* this.#attachExchange({
               route,
               accountId,
@@ -556,7 +564,7 @@ export class VoiceService {
         yield* refuse(HOSTED_API_ERROR.UNAVAILABLE, platform);
         return;
       }
-      const { exchange } = standing;
+      const { exchange, stop: stopExchange } = standing;
       // The device may have gone while the exchange stood: nothing is answered
       // to a socket that is not there, and the exchange ends here rather than
       // being left standing for the invocation. The socket is handed what the
@@ -567,7 +575,7 @@ export class VoiceService {
           replayHeldFrames(sideband, held);
           sideband.resume();
         });
-        if (exchange !== undefined) yield* this.#stopExchange(route, exchange, platform);
+        yield* stopExchange;
         return;
       }
       yield* device.send({ text: JSON.stringify(opened.answer) });
@@ -656,7 +664,7 @@ export class VoiceService {
       // follows and its look, closes the session it holds (already gone, which
       // its sideband reports as the close it held), and waits for every record
       // write already started, so no line begun before the settle is cut.
-      if (exchange !== undefined) yield* this.#stopExchange(route, exchange, platform);
+      yield* stopExchange;
       this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
     });
   }
@@ -667,45 +675,35 @@ export class VoiceService {
    * refusal where one was offered and could not stand, since a session with an
    * exchange offered and none standing would have no one to answer its asks.
    * The attachment builds the sideband and adopts; this service hands it the
-   * socket and reaches nothing of the exchange itself.
+   * socket and reaches nothing of the exchange itself. The exchange stands in
+   * a scope forked from the session's, so it can be stopped ahead of the
+   * session's own close and is closed with the session whatever else happens;
+   * one that could not stand has that scope closed here, so nothing the
+   * attempt acquired outlives the refusal.
    */
   #attachExchange(
     session: AttachedSession,
-  ): Effect.Effect<{ exchange: AttachedExchange | undefined } | { refused: true }> {
+  ): Effect.Effect<StandingExchange | { refused: true }, never, Scope.Scope | SqlClient.SqlClient> {
     const attachment = this.#options.exchange;
-    if (attachment === undefined) return Effect.succeed({ exchange: undefined });
-    return Effect.tryPromise(() => attachment(session)).pipe(
-      Effect.map((exchange) => {
-        if (exchange === undefined) return { exchange: undefined };
-        this.#log({ event: LOG_EVENT.EXCHANGE_ATTACHED, route: session.route });
-        return { exchange };
-      }),
-      Effect.catch(() =>
-        Effect.sync(() => {
-          this.#log({
-            event: LOG_EVENT.EXCHANGE_FAILED,
-            route: session.route,
-            platform: session.platform,
-          });
-          return { refused: true } as const;
-        }),
-      ),
-    );
-  }
-
-  /** The exchange's stop, whose failure is the service's to report and never the relay's to inherit. */
-  #stopExchange(
-    route: VoiceRoute,
-    exchange: AttachedExchange,
-    platform: DevicePlatform | undefined,
-  ): Effect.Effect<void> {
-    return Effect.catch(
-      Effect.tryPromise(() => exchange.stop()),
-      () =>
-        Effect.sync(() => {
-          this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route, platform });
-        }),
-    );
+    if (attachment === undefined) return Effect.succeed(NO_EXCHANGE);
+    return Effect.gen({ self: this }, function* () {
+      const scope = yield* Scope.fork(yield* Effect.scope);
+      const stop = Scope.close(scope, Exit.void);
+      const stood = yield* Effect.exit(Scope.provide(attachment(session), scope));
+      if (Exit.isFailure(stood)) {
+        yield* stop;
+        this.#log({
+          event: LOG_EVENT.EXCHANGE_FAILED,
+          route: session.route,
+          platform: session.platform,
+        });
+        return { refused: true } as const;
+      }
+      const exchange = stood.value;
+      if (exchange === undefined) return NO_EXCHANGE;
+      this.#log({ event: LOG_EVENT.EXCHANGE_ATTACHED, route: session.route });
+      return { exchange, stop };
+    });
   }
 
   /**

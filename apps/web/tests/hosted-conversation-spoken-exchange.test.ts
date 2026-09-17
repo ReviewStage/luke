@@ -160,9 +160,11 @@ async function answered<Value, Encoded>(
 async function readPage(answer: ConversationMessagesAnswer): Promise<ReadMessagesPage> {
   const groups: ReadTurnGroup[] = [];
   for (const group of answer.groups) {
-    const read = await readStoredUIMessages(
-      group.messages.map((message) => message.message),
-      CATALOG_TOOL_SET,
+    const read = await database.run(
+      readStoredUIMessages(
+        group.messages.map((message) => message.message),
+        CATALOG_TOOL_SET,
+      ),
     );
     if (!read.ok) assert.fail(`the registry refused a row: ${read.refusal}`);
     const messages: ConversationViewMessage[] = group.messages.map((message, index) => {

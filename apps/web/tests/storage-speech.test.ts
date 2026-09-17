@@ -175,9 +175,11 @@ async function viewMarksUnspoken(row: Announced): Promise<boolean> {
   const stored = await readMessageById(database.run, row.messageId);
   assert.ok(stored);
   const { id, role, parts, metadata } = stored;
-  const read = await readStoredUIMessages(
-    unparsedWire(JSON.parse(JSON.stringify([{ id, role, parts, metadata }]))),
-    CATALOG_TOOL_SET,
+  const read = await database.run(
+    readStoredUIMessages(
+      unparsedWire(JSON.parse(JSON.stringify([{ id, role, parts, metadata }]))),
+      CATALOG_TOOL_SET,
+    ),
   );
   assert.ok(read.ok);
   const [message] = read.value;

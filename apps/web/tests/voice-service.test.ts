@@ -161,7 +161,6 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
           apiKey: API_KEY,
           accounts,
           record,
-          run: runWithoutDatabase,
           openAiBaseUrl: openAi.baseUrl,
           log: (entry) => {
             log.push(entry);

@@ -67,7 +67,7 @@ interface SettingsWriter {
   write(
     kind: SettingsActKind,
     save: Effect.Effect<SettingsUpdateResult, Error>,
-    apply?: (result: SettingsUpdateResult) => Promise<void> | void,
+    apply?: (result: SettingsUpdateResult) => Effect.Effect<void, unknown>,
   ): Effect.Effect<SettingsUpdateResult, Error>;
   /** A refusal decided here rather than by the host: the settings as they stand, and why. */
   refuse(reason: string): Effect.Effect<SettingsUpdateResult, Error>;
@@ -99,11 +99,7 @@ function settingsWriter(
         // process could not carry leaves the row's switch describing
         // something that did not happen, so the row is answered a refusal it
         // can redraw from rather than a write that only half landed.
-        Effect.tap((saved) =>
-          apply === undefined
-            ? Effect.void
-            : Effect.tryPromise({ try: async () => apply(saved), catch: (error) => error }),
-        ),
+        Effect.tap((saved) => (apply === undefined ? Effect.void : apply(saved))),
         Effect.catch(() => refuse(ACT[kind].refusal)),
         Effect.catchDefect(() => refuse(ACT[kind].refusal)),
       );
@@ -125,17 +121,23 @@ export function settingsActRows(
     mediaDuck,
   });
 
-  /** The side effects this process has hands on; the host applied its own before answering. */
-  async function applyClientSettingSideEffect(
+  /** The side effects this process has hands on; the host applied its own before answering. A row of the table answers a value or a promise, settled by one door. */
+  function applyClientSettingSideEffect(
     field: AppSettingField,
     settings: AppSettings,
     sender: WebContents,
     waitForDeferredEffects = false,
-  ): Promise<void> {
-    await sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({
-      settings,
-      sender,
-      waitForDeferredEffects,
+  ): Effect.Effect<void, unknown> {
+    return Effect.tryPromise({
+      try: () =>
+        Promise.resolve(
+          sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({
+            settings,
+            sender,
+            waitForDeferredEffects,
+          }),
+        ),
+      catch: (error) => error,
     });
   }
 
@@ -168,10 +170,10 @@ export function settingsActRows(
         ACT_KIND.SETTING_UPDATE,
         // SAFETY: the act's own schema parsed this value for this field.
         host.updateSetting(payload.field, payload.value as never, reporterOf(sender)),
-        async (result) => {
-          if (result.reason) return;
-          await applyClientSettingSideEffect(payload.field, result.settings, sender);
-        },
+        (result) =>
+          result.reason
+            ? Effect.void
+            : applyClientSettingSideEffect(payload.field, result.settings, sender),
       );
     },
     [ACT_KIND.SETTING_UPDATE_ENTRY]: ({ field, key, value }, { sender }) =>
@@ -179,23 +181,23 @@ export function settingsActRows(
         ACT_KIND.SETTING_UPDATE_ENTRY,
         // SAFETY: the act's own schema parsed this value for this field and key.
         host.updateSettingEntry(field, key, value as never, reporterOf(sender)),
-        async (result) => {
-          if (result.reason) return;
-          await applyClientSettingSideEffect(field, result.settings, sender);
-        },
+        (result) =>
+          result.reason
+            ? Effect.void
+            : applyClientSettingSideEffect(field, result.settings, sender),
       ),
     [ACT_KIND.SETTINGS_RESET]: ({ scope }, { sender }) =>
-      write(
-        ACT_KIND.SETTINGS_RESET,
-        host.resetSettings(scope, reporterOf(sender)),
-        async (result) => {
-          if (result.reason) return;
-          for (const field of APP_SETTING_FIELDS) {
-            const definition = APP_SETTING_SCHEMA[field];
-            if (!("resetScope" in definition) || definition.resetScope !== scope) continue;
-            await applyClientSettingSideEffect(field, result.settings, sender, true);
-          }
-        },
+      write(ACT_KIND.SETTINGS_RESET, host.resetSettings(scope, reporterOf(sender)), (result) =>
+        result.reason
+          ? Effect.void
+          : Effect.forEach(
+              APP_SETTING_FIELDS.filter((field) => {
+                const definition = APP_SETTING_SCHEMA[field];
+                return "resetScope" in definition && definition.resetScope === scope;
+              }),
+              (field) => applyClientSettingSideEffect(field, result.settings, sender, true),
+              { discard: true },
+            ),
       ),
     ...connectionActRows(dependencies),
   };
