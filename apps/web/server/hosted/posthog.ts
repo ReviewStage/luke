@@ -14,7 +14,7 @@
  */
 
 import { HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
-import { Effect, type Layer } from "effect";
+import { Data, Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { accountCall, callAnswered, fixedBearer, NO_CREDENTIAL } from "../core.js";
 
@@ -121,12 +121,9 @@ export interface PosthogForgetOptions {
 }
 
 /** Why an erasure did not go through: the upstream never answered, or answered with a status that names no key. */
-export class PosthogForgetError extends Error {
-  constructor(reason: string) {
-    super(reason);
-    this.name = "PosthogForgetError";
-  }
-}
+export class PosthogForgetError extends Data.TaggedError("PosthogForgetError")<{
+  readonly message: string;
+}> {}
 
 /**
  * Asks the processor to erase the person behind one distinct id, and the
@@ -155,12 +152,14 @@ export function forgetPosthogPersonEffect(
     (answer) => {
       if (!callAnswered(answer)) {
         return Effect.fail(
-          new PosthogForgetError(`network fault: ${answer.errorName ?? "unknown"}`),
+          new PosthogForgetError({ message: `network fault: ${answer.errorName ?? "unknown"}` }),
         );
       }
       // The status alone diagnoses the refusal; the body could name the key.
       if (!answer.response.ok) {
-        return Effect.fail(new PosthogForgetError(`refused with status ${answer.response.status}`));
+        return Effect.fail(
+          new PosthogForgetError({ message: `refused with status ${answer.response.status}` }),
+        );
       }
       return Effect.void;
     },

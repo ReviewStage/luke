@@ -8,6 +8,7 @@ import {
   ACCOUNT_FAILURE_ACTION,
   AccountClient,
   AccountClientError,
+  AccountTransportError,
   accessTokenNeedsRefresh,
   accountFailureAction,
   accountGateOpen,
@@ -229,7 +230,8 @@ it.effect("a request that outlives its deadline ends as a timeout, never a hang"
     yield* TestClock.adjust(Duration.millis(1_000));
     const error = yield* Fiber.join(refreshing);
 
-    assert.equal(error.name, "TimeoutError");
+    assert.equal(error._tag, "AccountTransportError");
+    assert.equal(error.errorName, "TimeoutError");
   }),
 );
 
@@ -265,7 +267,8 @@ it.effect("a transport that cannot carry the request is an error, never a hang",
 
     const error = yield* Effect.flip(client.refresh("stale"));
 
-    assert.equal(error instanceof AccountClientError, false);
+    assert.equal(error._tag, "AccountTransportError");
+    assert.equal(error.errorName, "HttpClientError");
   }),
 );
 
@@ -281,7 +284,7 @@ it.effect("OAuth errors preserve their status and machine-readable code", () =>
 
     const error = yield* Effect.flip(client.refresh("revoked"));
 
-    assert.ok(error instanceof AccountClientError);
+    assert.equal(error._tag, "AccountClientError");
     assert.equal(error.status, 400);
     assert.equal(error.oauthError, "invalid_grant");
     assert.equal(error.message, "Refresh token was revoked");
@@ -316,37 +319,50 @@ it.effect("invalid token and identity responses are refused", () =>
 
 test("invalid_grant is the only refresh result that signs an account out", () => {
   assert.equal(
-    accountFailureAction(new AccountClientError("revoked", { oauthError: "invalid_grant" })),
+    accountFailureAction(
+      new AccountClientError({ message: "revoked", oauthError: "invalid_grant" }),
+    ),
     ACCOUNT_FAILURE_ACTION.SIGN_OUT,
   );
   assert.equal(
-    accountFailureAction(new AccountClientError("service down", { status: 503 })),
+    accountFailureAction(new AccountClientError({ message: "service down", status: 503 })),
     ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
   );
   assert.equal(
-    accountFailureAction(new TypeError("network failed")),
+    accountFailureAction(
+      new AccountTransportError({ message: "network failed", errorName: "TypeError" }),
+    ),
     ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
   );
   assert.equal(
-    accountFailureAction(new DOMException("timed out", "TimeoutError")),
+    accountFailureAction(
+      new AccountTransportError({ message: "timed out", errorName: "TimeoutError" }),
+    ),
     ACCOUNT_FAILURE_ACTION.KEEP_ACCOUNT,
   );
 });
 
 test("a rejected or expired access token refreshes without signing out", () => {
   assert.equal(
-    accessTokenNeedsRefresh(new AccountClientError("expired", { oauthError: "invalid_scope" })),
+    accessTokenNeedsRefresh(
+      new AccountClientError({ message: "expired", oauthError: "invalid_scope" }),
+    ),
     true,
   );
   assert.equal(
-    accessTokenNeedsRefresh(new AccountClientError("unauthorized", { status: 401 })),
+    accessTokenNeedsRefresh(new AccountClientError({ message: "unauthorized", status: 401 })),
     true,
   );
   assert.equal(
-    accessTokenNeedsRefresh(new AccountClientError("service down", { status: 503 })),
+    accessTokenNeedsRefresh(new AccountClientError({ message: "service down", status: 503 })),
     false,
   );
-  assert.equal(accessTokenNeedsRefresh(new TypeError("network failed")), false);
+  assert.equal(
+    accessTokenNeedsRefresh(
+      new AccountTransportError({ message: "network failed", errorName: "TypeError" }),
+    ),
+    false,
+  );
 });
 
 test("capture and fixture runs bypass the account wall", () => {
@@ -390,7 +406,7 @@ it.effect("an expired token's refusal reads as refresh-and-retry, a service no d
         httpClient: fakeHttpClientLayer(refusal(401)),
       }),
     );
-    assert.equal(expired instanceof AccountClientError, true);
+    assert.equal(expired._tag, "AccountClientError");
     assert.equal(accessTokenNeedsRefresh(expired), true);
 
     const refused = yield* Effect.flip(
@@ -400,7 +416,7 @@ it.effect("an expired token's refusal reads as refresh-and-retry, a service no d
         httpClient: fakeHttpClientLayer(refusal(503)),
       }),
     );
-    assert.equal(refused instanceof AccountClientError, true);
+    assert.equal(refused._tag, "AccountClientError");
     assert.equal(accessTokenNeedsRefresh(refused), false);
   }),
 );
@@ -458,7 +474,13 @@ it.effect("a revocation the service never answers ends on its own deadline", () 
           revoke: () =>
             Effect.timeoutOrElse({
               duration: Duration.seconds(10),
-              orElse: () => Effect.fail(new Error("revocation timed out")),
+              orElse: () =>
+                Effect.fail(
+                  new AccountTransportError({
+                    message: "revocation timed out",
+                    errorName: "TimeoutError",
+                  }),
+                ),
             })(Effect.never),
           onRevokeFailure: (error) => revokeFailures.push(error),
         }),
@@ -483,7 +505,7 @@ it.effect("revocation failure preserves the sign-in failure", () =>
       withIssuedAccountTokens({
         issue: Effect.succeed(ISSUED_TOKENS),
         use: () => Effect.fail(failure),
-        revoke: () => Effect.fail(new Error("revocation failed")),
+        revoke: () => Effect.fail(new AccountClientError({ message: "revocation failed" })),
         onRevokeFailure: (error) => revokeFailures.push(error),
       }),
     );

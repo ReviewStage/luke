@@ -9,7 +9,7 @@ import { test } from "vitest";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { appSettingsWire } from "../../testing/spoken-setting-bridge";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
-import type { HostOperator } from "../gateway/host-operator";
+import { type HostOperator, HostUnreachableRefusal } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
 import type { DockPresence } from "../window/dock-presence";
 import type { HotkeyRegistrar } from "../window/hotkey-registrar";
@@ -94,7 +94,8 @@ test("a write the host took, whose client-side effect then failed, is refused wi
 
 test("a write the host refused is refused with the settings this client last saw", async () => {
   const router = rows({
-    updateSetting: () => Effect.fail(new Error("the host is not reachable")),
+    updateSetting: () =>
+      Effect.fail(new HostUnreachableRefusal({ message: "the host is not reachable" })),
   });
   assert.deepEqual(await Effect.runPromise(router.performAct(OPEN_AT_LOGIN, PANEL)), {
     status: "done",
@@ -109,7 +110,8 @@ test("a write the host refused is refused with the settings this client last saw
 test("a client with no snapshot at all refuses through the act's own sentence", async () => {
   const router = rows({
     lastSettings: () => undefined,
-    connectGoogleCalendar: () => Effect.fail(new Error("the host is not reachable")),
+    connectGoogleCalendar: () =>
+      Effect.fail(new HostUnreachableRefusal({ message: "the host is not reachable" })),
   });
   assert.deepEqual(
     await Effect.runPromise(router.performAct({ kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE }, PANEL)),

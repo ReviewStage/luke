@@ -13,7 +13,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import { HostedVaultClient } from "@sidecar/hosted";
+import { type AccountRefreshFailed, HostedVaultClient } from "@sidecar/hosted";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
@@ -63,7 +63,7 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
  * the graph however much simpler that would be.
  */
 interface SettingsLinks {
-  refreshAccount: () => Effect.Effect<void, unknown>;
+  refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
   /** The vault holds a Conductor key, stored just now or found at sign-in; onboarding's key step is answered. */
   readonly cloudKeyHeld: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;

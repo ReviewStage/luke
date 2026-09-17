@@ -142,7 +142,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // what reaches the service — is the host's to decide.
     [ACT_KIND.CONVERSATION_RATE_MESSAGE]: ({ messageId, rating }, sender) => {
       if (!sender.panel || sender.introduction) {
-        throw new ActRefused(ACT[ACT_KIND.CONVERSATION_RATE_MESSAGE].refusal);
+        throw new ActRefused({ message: ACT[ACT_KIND.CONVERSATION_RATE_MESSAGE].refusal });
       }
       return operator.host.rateConversationMessage(messageId, rating);
     },
@@ -152,7 +152,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // older turns stand and what a page holds are the host's to decide.
     [ACT_KIND.CONVERSATION_LOAD_OLDER]: (_payload, sender) => {
       if (!sender.panel || sender.introduction) {
-        throw new ActRefused(ACT[ACT_KIND.CONVERSATION_LOAD_OLDER].refusal);
+        throw new ActRefused({ message: ACT[ACT_KIND.CONVERSATION_LOAD_OLDER].refusal });
       }
       return operator.host.loadOlderConversation();
     },
@@ -162,13 +162,15 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // conversation stands and what its transcript holds are the host's to decide.
     [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: ({ conversationId, kind }, sender) => {
       if (!sender.panel || sender.introduction) {
-        throw new ActRefused(ACT[ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT].refusal);
+        throw new ActRefused({ message: ACT[ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT].refusal });
       }
       return operator.host.openChildTranscript(conversationId, kind);
     },
     [ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: (_payload, sender) => {
       if (!sender.panel || sender.introduction) {
-        throw new ActRefused(ACT[ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT].refusal);
+        throw new ActRefused({
+          message: ACT[ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT].refusal,
+        });
       }
       return operator.host.closeChildTranscript();
     },
@@ -178,7 +180,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // holds and whether the service can be asked are the host's to decide.
     [ACT_KIND.NOTEBOOK_READ]: (_payload, sender) => {
       if (!sender.panel || sender.introduction) {
-        throw new ActRefused(ACT[ACT_KIND.NOTEBOOK_READ].refusal);
+        throw new ActRefused({ message: ACT[ACT_KIND.NOTEBOOK_READ].refusal });
       }
       return Effect.map(operator.host.readNotebook(), Option.getOrUndefined);
     },
