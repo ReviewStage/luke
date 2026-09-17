@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { test } from "vitest";
 import {
   ACT,
   ACT_KIND,
@@ -28,8 +28,8 @@ const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, introducti
 const KINDS: readonly ActKind[] = Object.values(ACT_KIND);
 
 /** The router answers an Effect; every test here runs it to the outcome it settles. */
-function perform(router: ActRouter, act: Act, sender: ActSender): Promise<ActOutcome> {
-  return Effect.runPromise(router.performAct(act, sender));
+function perform(router: ActRouter, act: Act, sender: ActSender): Effect.Effect<ActOutcome> {
+  return router.performAct(act, sender);
 }
 
 /**
@@ -52,145 +52,165 @@ function rowsRecording(ran: ActKind[], overrides: Partial<ActRows> = {}): ActRow
   return { ...table, ...overrides };
 }
 
-test("every kind reaches its own row, and only its own", async () => {
-  const ran: ActKind[] = [];
-  const router = createActRouter(rowsRecording(ran));
-  for (const kind of KINDS) {
-    ran.length = 0;
-    // The kinds that carry a payload are covered by the vocabulary's own
-    // table; here the dispatch is what is under test, so the two kinds are
-    // driven through the same call with the payload each takes.
-    const act = ONE_ACT_OF_EACH_KIND[kind];
-    const outcome = await perform(router, act, PANEL);
-    assert.deepEqual(ran, [kind], kind);
-    assert.notEqual(outcome.status, ACT_OUTCOME_STATUS.UNKNOWN_ACT, kind);
-  }
-});
+it.effect("every kind reaches its own row, and only its own", () =>
+  Effect.gen(function* () {
+    const ran: ActKind[] = [];
+    const router = createActRouter(rowsRecording(ran));
+    for (const kind of KINDS) {
+      ran.length = 0;
+      // The kinds that carry a payload are covered by the vocabulary's own
+      // table; here the dispatch is what is under test, so the two kinds are
+      // driven through the same call with the payload each takes.
+      const act = ONE_ACT_OF_EACH_KIND[kind];
+      const outcome = yield* perform(router, act, PANEL);
+      assert.deepEqual(ran, [kind], kind);
+      assert.notEqual(outcome.status, ACT_OUTCOME_STATUS.UNKNOWN_ACT, kind);
+    }
+  }),
+);
 
-test("a payload the kind's schema refuses never reaches the row", async () => {
-  const ran: ActKind[] = [];
-  const router = createActRouter(rowsRecording(ran));
-  const outcome = await perform(
-    router,
-    // SAFETY: this is the malformed payload under test, which is exactly what
-    // a main-process caller could hand the router past the window's own read.
-    { kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: 3 } } as unknown as Act,
-    PANEL,
-  );
-  assert.deepEqual(outcome, {
-    status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: ACT[ACT_KIND.WINDOW_COPY_TEXT].refusal,
-  });
-  assert.deepEqual(ran, []);
-});
-
-test("a kind this build does not know is answered as unknown and reaches nothing", async () => {
-  const ran: ActKind[] = [];
-  const router = createActRouter(rowsRecording(ran));
-  // SAFETY: an unnamed kind is what a window of another build would send.
-  const outcome = await perform(router, { kind: "session.reopen" } as unknown as Act, PANEL);
-  assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-  assert.deepEqual(ran, []);
-});
-
-test("a row's own refusal is answered with its sentence; every other throw with the kind's", async () => {
-  const ran: ActKind[] = [];
-  const router = createActRouter(
-    rowsRecording(ran, {
-      [ACT_KIND.WINDOW_QUIT]: () => {
-        throw new ActRefused({ message: "A quit is held while the update installs." });
-      },
-      [ACT_KIND.CALENDAR_REFRESH]: () => {
-        throw new Error("EPIPE writing to the helper");
-      },
-    }),
-  );
-  assert.deepEqual(await perform(router, { kind: ACT_KIND.WINDOW_QUIT }, PANEL), {
-    status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: "A quit is held while the update installs.",
-  });
-  // Nothing an exception carried reaches the window: the kind's own sentence does.
-  assert.deepEqual(await perform(router, { kind: ACT_KIND.CALENDAR_REFRESH }, PANEL), {
-    status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: ACT[ACT_KIND.CALENDAR_REFRESH].refusal,
-  });
-});
-
-test("an answer the kind's own guard refuses is a refusal rather than a value drawn", async () => {
-  const router = createActRouter(
-    rowsRecording([], {
-      // SAFETY: this is the wrong-shaped answer under test.
-      [ACT_KIND.SESSION_SEND_MESSAGE]: () => ({ runId: "run-1" }) as never,
-    }),
-  );
-  assert.deepEqual(
-    await perform(router, ONE_ACT_OF_EACH_KIND[ACT_KIND.SESSION_SEND_MESSAGE], PANEL),
-    {
+it.effect("a payload the kind's schema refuses never reaches the row", () =>
+  Effect.gen(function* () {
+    const ran: ActKind[] = [];
+    const router = createActRouter(rowsRecording(ran));
+    const outcome = yield* perform(
+      router,
+      // SAFETY: this is the malformed payload under test, which is exactly what
+      // a main-process caller could hand the router past the window's own read.
+      { kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: 3 } } as unknown as Act,
+      PANEL,
+    );
+    assert.deepEqual(outcome, {
       status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: ACT[ACT_KIND.SESSION_SEND_MESSAGE].refusal,
-    },
-  );
-});
+      reason: ACT[ACT_KIND.WINDOW_COPY_TEXT].refusal,
+    });
+    assert.deepEqual(ran, []);
+  }),
+);
 
-test("a row that answers an effect is run by the router, and its failure is the kind's refusal", async () => {
-  const ran: ActKind[] = [];
-  const router = createActRouter(
-    rowsRecording(ran, {
-      [ACT_KIND.WINDOW_SET_EXPANDED]: () =>
-        Effect.sync(() => {
-          ran.push(ACT_KIND.WINDOW_SET_EXPANDED);
-          return "expanded";
+it.effect("a kind this build does not know is answered as unknown and reaches nothing", () =>
+  Effect.gen(function* () {
+    const ran: ActKind[] = [];
+    const router = createActRouter(rowsRecording(ran));
+    // SAFETY: an unnamed kind is what a window of another build would send.
+    const outcome = yield* perform(router, { kind: "session.reopen" } as unknown as Act, PANEL);
+    assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+    assert.deepEqual(ran, []);
+  }),
+);
+
+it.effect(
+  "a row's own refusal is answered with its sentence; every other throw with the kind's",
+  () =>
+    Effect.gen(function* () {
+      const ran: ActKind[] = [];
+      const router = createActRouter(
+        rowsRecording(ran, {
+          [ACT_KIND.WINDOW_QUIT]: () => {
+            throw new ActRefused({ message: "A quit is held while the update installs." });
+          },
+          [ACT_KIND.CALENDAR_REFRESH]: () => {
+            throw new Error("EPIPE writing to the helper");
+          },
         }),
-      [ACT_KIND.CALENDAR_REFRESH]: () =>
-        Effect.fail(new HostUnreachableRefusal({ message: "the transport closed" })),
-      [ACT_KIND.WINDOW_QUIT]: () =>
-        Effect.fail(new ActRefused({ message: "A quit is held while the update installs." })),
+      );
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.WINDOW_QUIT }, PANEL), {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: "A quit is held while the update installs.",
+      });
+      // Nothing an exception carried reaches the window: the kind's own sentence does.
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.CALENDAR_REFRESH }, PANEL), {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CALENDAR_REFRESH].refusal,
+      });
     }),
-  );
-  assert.deepEqual(
-    await perform(
-      router,
-      { kind: ACT_KIND.WINDOW_SET_EXPANDED, payload: { expanded: true } },
-      PANEL,
-    ),
-    { status: ACT_OUTCOME_STATUS.DONE, value: "expanded" },
-  );
-  assert.deepEqual(ran, [ACT_KIND.WINDOW_SET_EXPANDED]);
-  assert.deepEqual(await perform(router, { kind: ACT_KIND.CALENDAR_REFRESH }, PANEL), {
-    status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: ACT[ACT_KIND.CALENDAR_REFRESH].refusal,
-  });
-  assert.deepEqual(await perform(router, { kind: ACT_KIND.WINDOW_QUIT }, PANEL), {
-    status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: "A quit is held while the update installs.",
-  });
-});
+);
 
-test("a row is handed the sender's standing, which no payload can claim", async () => {
-  const seen: ActSender[] = [];
-  const router = createActRouter(
-    rowsRecording([], {
-      [ACT_KIND.WINDOW_FOCUS_PANEL]: (_payload, sender) => {
-        seen.push(sender);
+it.effect("an answer the kind's own guard refuses is a refusal rather than a value drawn", () =>
+  Effect.gen(function* () {
+    const router = createActRouter(
+      rowsRecording([], {
+        // SAFETY: this is the wrong-shaped answer under test.
+        [ACT_KIND.SESSION_SEND_MESSAGE]: () => ({ runId: "run-1" }) as never,
+      }),
+    );
+    assert.deepEqual(
+      yield* perform(router, ONE_ACT_OF_EACH_KIND[ACT_KIND.SESSION_SEND_MESSAGE], PANEL),
+      {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.SESSION_SEND_MESSAGE].refusal,
       },
-    }),
-  );
-  const voice: ActSender = { sender: SENDER, panel: false, voice: true, introduction: false };
-  await perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, PANEL);
-  await perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, voice);
-  assert.deepEqual(seen, [PANEL, voice]);
-});
+    );
+  }),
+);
 
-test("a row's answer rides the outcome as its own value", async () => {
-  const router = createActRouter(
-    rowsRecording([], { [ACT_KIND.WINDOW_SET_EXPANDED]: () => "expanded" }),
-  );
-  assert.deepEqual(
-    await perform(
-      router,
-      { kind: ACT_KIND.WINDOW_SET_EXPANDED, payload: { expanded: true } },
-      PANEL,
-    ),
-    { status: ACT_OUTCOME_STATUS.DONE, value: "expanded" },
-  );
-});
+it.effect(
+  "a row that answers an effect is run by the router, and its failure is the kind's refusal",
+  () =>
+    Effect.gen(function* () {
+      const ran: ActKind[] = [];
+      const router = createActRouter(
+        rowsRecording(ran, {
+          [ACT_KIND.WINDOW_SET_EXPANDED]: () =>
+            Effect.sync(() => {
+              ran.push(ACT_KIND.WINDOW_SET_EXPANDED);
+              return "expanded";
+            }),
+          [ACT_KIND.CALENDAR_REFRESH]: () =>
+            Effect.fail(new HostUnreachableRefusal({ message: "the transport closed" })),
+          [ACT_KIND.WINDOW_QUIT]: () =>
+            Effect.fail(new ActRefused({ message: "A quit is held while the update installs." })),
+        }),
+      );
+      assert.deepEqual(
+        yield* perform(
+          router,
+          { kind: ACT_KIND.WINDOW_SET_EXPANDED, payload: { expanded: true } },
+          PANEL,
+        ),
+        { status: ACT_OUTCOME_STATUS.DONE, value: "expanded" },
+      );
+      assert.deepEqual(ran, [ACT_KIND.WINDOW_SET_EXPANDED]);
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.CALENDAR_REFRESH }, PANEL), {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CALENDAR_REFRESH].refusal,
+      });
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.WINDOW_QUIT }, PANEL), {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: "A quit is held while the update installs.",
+      });
+    }),
+);
+
+it.effect("a row is handed the sender's standing, which no payload can claim", () =>
+  Effect.gen(function* () {
+    const seen: ActSender[] = [];
+    const router = createActRouter(
+      rowsRecording([], {
+        [ACT_KIND.WINDOW_FOCUS_PANEL]: (_payload, sender) => {
+          seen.push(sender);
+        },
+      }),
+    );
+    const voice: ActSender = { sender: SENDER, panel: false, voice: true, introduction: false };
+    yield* perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, PANEL);
+    yield* perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, voice);
+    assert.deepEqual(seen, [PANEL, voice]);
+  }),
+);
+
+it.effect("a row's answer rides the outcome as its own value", () =>
+  Effect.gen(function* () {
+    const router = createActRouter(
+      rowsRecording([], { [ACT_KIND.WINDOW_SET_EXPANDED]: () => "expanded" }),
+    );
+    assert.deepEqual(
+      yield* perform(
+        router,
+        { kind: ACT_KIND.WINDOW_SET_EXPANDED, payload: { expanded: true } },
+        PANEL,
+      ),
+      { status: ACT_OUTCOME_STATUS.DONE, value: "expanded" },
+    );
+  }),
+);

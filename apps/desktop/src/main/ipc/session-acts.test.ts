@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { SessionIdentity, SessionWriteResult } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { ActRefused, type ActSender, createActRouter } from "../act-router";
 import { sessionActRows } from "./session-acts";
@@ -17,10 +17,10 @@ function answered(
     | SessionWriteResult
     | Promise<SessionWriteResult>
     | Effect.Effect<SessionWriteResult, Error>,
-): Promise<SessionWriteResult> {
+): Effect.Effect<SessionWriteResult, Error> {
   // SAFETY: every row under test answers an effect, which is what the row's
   // own type says of the three shapes a row may answer.
-  return Effect.runPromise(answer as Effect.Effect<SessionWriteResult, Error>);
+  return answer as Effect.Effect<SessionWriteResult, Error>;
 }
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, introduction: false };
@@ -61,95 +61,110 @@ function fixture(answer: () => Effect.Effect<SessionWriteResult>) {
   return { rows, asked };
 }
 
-test("a row's send and press cross to the host's writes with the identity and words the row named", async () => {
-  const f = fixture(() => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }));
-  const sent = await answered(
-    f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "please add a test" }, PANEL),
-  );
-  const pressed = await answered(
-    f.rows[ACT_KIND.SESSION_EXECUTE_CONTROL](
-      { identity: IDENTITY, controlId: "cancel-run" },
-      PANEL,
-    ),
-  );
-  assert.deepEqual(sent, { status: ACTION_RESULT_STATUS.ACCEPTED });
-  assert.deepEqual(pressed, { status: ACTION_RESULT_STATUS.ACCEPTED });
-  assert.deepEqual(f.asked.messages, [{ identity: IDENTITY, text: "please add a test" }]);
-  assert.deepEqual(f.asked.controls, [{ identity: IDENTITY, controlId: "cancel-run" }]);
-});
-
-test("the host's refusal is the row's answer, never a throw", async () => {
-  const refusal = { status: ACTION_RESULT_STATUS.REJECTED, reason: "No such session." } as const;
-  const f = fixture(() => Effect.succeed(refusal));
-  assert.deepEqual(
-    await answered(
-      f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, PANEL),
-    ),
-    refusal,
-  );
-});
-
-test("a host that could not be asked answers the row with this build's own sentence", async () => {
-  const f = fixture(() => Effect.die(new Error("the transport closed")));
-  assert.deepEqual(
-    await answered(
-      f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, PANEL),
-    ),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: "That message could not be sent." },
-  );
-  assert.deepEqual(
-    await answered(
-      f.rows[ACT_KIND.SESSION_EXECUTE_CONTROL](
-        { identity: IDENTITY, controlId: "cancel-run" },
-        PANEL,
-      ),
-    ),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: "That control could not be run." },
-  );
-});
-
-test("only a panel's row may write: the voice window and the introduction are refused before the host", async () => {
-  const f = fixture(() => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }));
-  for (const sender of [VOICE, INTRODUCTION]) {
-    await assert.rejects(
-      async () => f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, sender),
-      ActRefused,
-    );
-    await assert.rejects(
-      async () =>
+it.effect(
+  "a row's send and press cross to the host's writes with the identity and words the row named",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture(() => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }));
+      const sent = yield* answered(
+        f.rows[ACT_KIND.SESSION_SEND_MESSAGE](
+          { identity: IDENTITY, text: "please add a test" },
+          PANEL,
+        ),
+      );
+      const pressed = yield* answered(
         f.rows[ACT_KIND.SESSION_EXECUTE_CONTROL](
           { identity: IDENTITY, controlId: "cancel-run" },
-          sender,
+          PANEL,
         ),
-      ActRefused,
-    );
-  }
-  assert.deepEqual(f.asked.messages, []);
-  assert.deepEqual(f.asked.controls, []);
-});
+      );
+      assert.deepEqual(sent, { status: ACTION_RESULT_STATUS.ACCEPTED });
+      assert.deepEqual(pressed, { status: ACTION_RESULT_STATUS.ACCEPTED });
+      assert.deepEqual(f.asked.messages, [{ identity: IDENTITY, text: "please add a test" }]);
+      assert.deepEqual(f.asked.controls, [{ identity: IDENTITY, controlId: "cancel-run" }]);
+    }),
+);
 
-test("through the router, a refused sender reads as the row's own refusal and an answer keeps its shape", async () => {
-  const f = fixture(() => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }));
-  // SAFETY: the router dispatches on the kind alone; the other kinds are never reached here.
-  const router = createActRouter(f.rows as Parameters<typeof createActRouter>[0]);
-  const refused = await Effect.runPromise(
-    router.performAct(
-      { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },
-      VOICE,
-    ),
-  );
-  assert.deepEqual(refused, {
-    status: ACT_OUTCOME_STATUS.REFUSED,
-    reason: "Only a session row on the panel can send that.",
-  });
-  const done = await Effect.runPromise(
-    router.performAct(
-      { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },
-      PANEL,
-    ),
-  );
-  assert.deepEqual(done, {
-    status: ACT_OUTCOME_STATUS.DONE,
-    value: { status: ACTION_RESULT_STATUS.ACCEPTED },
-  });
-});
+it.effect("the host's refusal is the row's answer, never a throw", () =>
+  Effect.gen(function* () {
+    const refusal = { status: ACTION_RESULT_STATUS.REJECTED, reason: "No such session." } as const;
+    const f = fixture(() => Effect.succeed(refusal));
+    assert.deepEqual(
+      yield* answered(
+        f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, PANEL),
+      ),
+      refusal,
+    );
+  }),
+);
+
+it.effect("a host that could not be asked answers the row with this build's own sentence", () =>
+  Effect.gen(function* () {
+    const f = fixture(() => Effect.die(new Error("the transport closed")));
+    assert.deepEqual(
+      yield* answered(
+        f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, PANEL),
+      ),
+      { status: ACTION_RESULT_STATUS.REJECTED, reason: "That message could not be sent." },
+    );
+    assert.deepEqual(
+      yield* answered(
+        f.rows[ACT_KIND.SESSION_EXECUTE_CONTROL](
+          { identity: IDENTITY, controlId: "cancel-run" },
+          PANEL,
+        ),
+      ),
+      { status: ACTION_RESULT_STATUS.REJECTED, reason: "That control could not be run." },
+    );
+  }),
+);
+
+it.effect(
+  "only a panel's row may write: the voice window and the introduction are refused before the host",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture(() => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }));
+      for (const sender of [VOICE, INTRODUCTION]) {
+        assert.throws(
+          () => f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, sender),
+          ActRefused,
+        );
+        assert.throws(
+          () =>
+            f.rows[ACT_KIND.SESSION_EXECUTE_CONTROL](
+              { identity: IDENTITY, controlId: "cancel-run" },
+              sender,
+            ),
+          ActRefused,
+        );
+      }
+      assert.deepEqual(f.asked.messages, []);
+      assert.deepEqual(f.asked.controls, []);
+    }),
+);
+
+it.effect(
+  "through the router, a refused sender reads as the row's own refusal and an answer keeps its shape",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture(() => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }));
+      // SAFETY: the router dispatches on the kind alone; the other kinds are never reached here.
+      const router = createActRouter(f.rows as Parameters<typeof createActRouter>[0]);
+      const refused = yield* router.performAct(
+        { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },
+        VOICE,
+      );
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: "Only a session row on the panel can send that.",
+      });
+      const done = yield* router.performAct(
+        { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },
+        PANEL,
+      );
+      assert.deepEqual(done, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { status: ACTION_RESULT_STATUS.ACCEPTED },
+      });
+    }),
+);

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { runModeFor } from "@sidecar/host";
 import { TRANSCRIPT_KIND } from "@sidecar/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
-import { test } from "vitest";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
@@ -47,15 +47,17 @@ function store(): AppStateStore {
  * `changes` only delivers a write to a subscriber already reading when it
  * happens — before `act`'s synchronous writes run.
  */
-function watchChanges(app: AppStateStore, count: number, act: () => void): Promise<AppState[]> {
-  return Effect.runPromise(
-    Effect.gen(function* () {
-      const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(app.changes, count)));
-      yield* Effect.yieldNow;
-      act();
-      return yield* Fiber.join(fiber);
-    }),
-  );
+function watchChanges(
+  app: AppStateStore,
+  count: number,
+  act: () => void,
+): Effect.Effect<AppState[]> {
+  return Effect.gen(function* () {
+    const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(app.changes, count)));
+    yield* Effect.yieldNow;
+    act();
+    return yield* Fiber.join(fiber);
+  });
 }
 
 /**
@@ -71,7 +73,7 @@ function inert<Value>(): Value {
 
 const SETTINGS = inert<NonNullable<AppState["settings"]>>();
 
-test("a fresh document is version zero and carries this launch's own facts", () => {
+it("a fresh document is version zero and carries this launch's own facts", () => {
   const state = store().snapshot();
   assert.equal(state.version, 0);
   assert.equal(state.run.appVersion, "1.2.3");
@@ -83,7 +85,7 @@ test("a fresh document is version zero and carries this launch's own facts", () 
   assert.equal(state.audio.microphoneStatus, MICROPHONE_STATUS.NOT_DETERMINED);
 });
 
-test("nothing is introducing itself until the launch's own gate says so", () => {
+it("nothing is introducing itself until the launch's own gate says so", () => {
   const app = store();
   assert.equal(app.snapshot().introduction.playing, false);
   app.update({ introduction: { playing: true } });
@@ -97,59 +99,65 @@ test("nothing is introducing itself until the launch's own gate says so", () => 
   assert.equal(app.snapshot().version, versionAtEnding);
 });
 
-test("one slice patched bumps the version once and announces once on `changes`", async () => {
-  const app = store();
-  const seen = await watchChanges(app, 2, () => {
-    app.update({ announcements: { held: true } });
-  });
-  assert.equal(seen.length, 2);
-  assert.equal(seen[1]?.version, 1);
-  assert.equal(seen[1]?.announcements.held, true);
-});
+it.effect("one slice patched bumps the version once and announces once on `changes`", () =>
+  Effect.gen(function* () {
+    const app = store();
+    const seen = yield* watchChanges(app, 2, () => {
+      app.update({ announcements: { held: true } });
+    });
+    assert.equal(seen.length, 2);
+    assert.equal(seen[1]?.version, 1);
+    assert.equal(seen[1]?.announcements.held, true);
+  }),
+);
 
-test("a patch that says nothing new announces nothing on `changes`", async () => {
-  const app = store();
-  const seen = await watchChanges(app, 2, () => {
-    app.update({});
-    app.update({ announcements: { held: false } });
-    app.update({ calendars: [] });
-    // The one real patch is the second document `changes` ever carries; the
-    // three no-ops before it wrote nothing for a collector to see.
-    app.update({ announcements: { held: true } });
-  });
-  assert.equal(seen.length, 2);
-  assert.equal(seen[0]?.version, 0);
-  assert.equal(seen[1]?.version, 1);
-});
+it.effect("a patch that says nothing new announces nothing on `changes`", () =>
+  Effect.gen(function* () {
+    const app = store();
+    const seen = yield* watchChanges(app, 2, () => {
+      app.update({});
+      app.update({ announcements: { held: false } });
+      app.update({ calendars: [] });
+      // The one real patch is the second document `changes` ever carries; the
+      // three no-ops before it wrote nothing for a collector to see.
+      app.update({ announcements: { held: true } });
+    });
+    assert.equal(seen.length, 2);
+    assert.equal(seen[0]?.version, 0);
+    assert.equal(seen[1]?.version, 1);
+  }),
+);
 
-test("two slices in one patch are one version", () => {
+it("two slices in one patch are one version", () => {
   const app = store();
   app.update({ announcements: { held: true }, calendars: [inert()] });
   assert.equal(app.snapshot().version, 1);
   assert.equal(app.snapshot().calendars.length, 1);
 });
 
-test("a touch re-announces the document without numbering it again", async () => {
-  const app = store();
-  const seen = await watchChanges(app, 4, () => {
-    app.update({ announcements: { held: true } });
-    app.touch();
-    app.touch();
-  });
-  assert.deepEqual(
-    seen.map((state) => state.version),
-    [0, 1, 1, 1],
-  );
-});
+it.effect("a touch re-announces the document without numbering it again", () =>
+  Effect.gen(function* () {
+    const app = store();
+    const seen = yield* watchChanges(app, 4, () => {
+      app.update({ announcements: { held: true } });
+      app.touch();
+      app.touch();
+    });
+    assert.deepEqual(
+      seen.map((state) => state.version),
+      [0, 1, 1, 1],
+    );
+  }),
+);
 
-test("a slice is replaced whole rather than merged field by field", () => {
+it("a slice is replaced whole rather than merged field by field", () => {
   const app = store();
   app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
   app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.DENIED } });
   assert.deepEqual(app.snapshot().audio, { microphoneStatus: MICROPHONE_STATUS.DENIED });
 });
 
-test("the version climbs once per applied patch", () => {
+it("the version climbs once per applied patch", () => {
   const app = store();
   for (let index = 0; index < 10; index += 1) {
     app.update({ announcements: { held: index % 2 === 0 } });
@@ -157,7 +165,7 @@ test("the version climbs once per applied patch", () => {
   assert.equal(app.snapshot().version, 10);
 });
 
-test("the live session's phase is a slice of the voice document beside the view, and a window going away keeps it", () => {
+it("the live session's phase is a slice of the voice document beside the view, and a window going away keeps it", () => {
   const app = new AppStateStore(initialAppState(RUN, false), Context.empty());
   app.update({ voice: { view: IDLE_VOICE_VIEW } });
   app.update({
@@ -177,7 +185,7 @@ test("the live session's phase is a slice of the voice document beside the view,
   });
 });
 
-test("a voice window that went away leaves the document holding no view", () => {
+it("a voice window that went away leaves the document holding no view", () => {
   const app = store();
   app.update({ voice: { view: { ...IDLE_VOICE_VIEW, talkOpening: true } } });
   app.update({ voice: {} });
@@ -209,7 +217,7 @@ const BOOT: HostBootstrap = {
   agentTraceEnabled: true,
 };
 
-test("a host bootstrap lands in the document as the host answered it", () => {
+it("a host bootstrap lands in the document as the host answered it", () => {
   const app = store();
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   const held = app.snapshot();
@@ -226,7 +234,7 @@ test("a host bootstrap lands in the document as the host answered it", () => {
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
 });
 
-test("a halt outlives every host read until the host's own event stands it down", () => {
+it("a halt outlives every host read until the host's own event stands it down", () => {
   const app = store();
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   app.update({ sessionReplay: { ...app.snapshot().sessionReplay, halted: true } });
@@ -238,7 +246,7 @@ test("a halt outlives every host read until the host's own event stands it down"
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
 });
 
-test("a run that observes nothing is settled whatever the host answered", () => {
+it("a run that observes nothing is settled whatever the host answered", () => {
   const quiet = new AppStateStore(
     initialAppState({ ...RUN, runMode: runModeFor({ capture: false, fixture: true }) }, false),
     Context.empty(),
@@ -247,7 +255,7 @@ test("a run that observes nothing is settled whatever the host answered", () => 
   assert.equal(quiet.snapshot().sessions.settled, true);
 });
 
-test("recording is what the host permitted less what an account's end stood down", () => {
+it("recording is what the host permitted less what an account's end stood down", () => {
   const app = store();
   app.update({ sessionReplay: { permitted: true, accountId: "person", halted: false } });
   assert.deepEqual(sessionReplayBootstrap(app.snapshot()), {
