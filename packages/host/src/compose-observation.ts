@@ -81,7 +81,7 @@ interface ObservationDependencies {
  * constructor argument; its sibling concerns stay plain arguments because the
  * cycles between them forbid a tag on either side.
  */
-export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation")(function* (
+export const composeObservation = /* @__PURE__ */ Effect.fn("host/composeObservation")(function* (
   dependencies: ObservationDependencies,
 ): Effect.fn.Return<ObservationComposer, never, HostKernelTag | Scope.Scope> {
   const { settings, account, observationGate } = dependencies;

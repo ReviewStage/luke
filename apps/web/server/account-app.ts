@@ -68,7 +68,7 @@ const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
  * Without both halves of the analytics configuration there is no person to
  * erase and nothing to erase it with, so the erasure is simply skipped.
  */
-const forgetAnalytics = /* @__PURE__ */ Effect.fn("forgetAnalytics")(function* (
+const forgetAnalytics = /* @__PURE__ */ Effect.fn("web/forgetAnalytics")(function* (
   userId: string,
 ): Effect.fn.Return<void, never, HostedEnvironment | HttpClient.HttpClient> {
   const environment = yield* HostedEnvironment;
@@ -97,7 +97,7 @@ const forgetAnalytics = /* @__PURE__ */ Effect.fn("forgetAnalytics")(function* (
  * refusal or an outage there must not hold up the delete, so it is logged as
  * a status and the delete proceeds.
  */
-const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("accountDeleteEndpoint")(function* (
+const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoint")(function* (
   seams: AccountAppSeams,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
@@ -115,7 +115,7 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("accountDeleteEndpoint")
 });
 
 /** GET: the caller's own stored preferences, or an empty snapshot for a user with none stored. */
-const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("preferencesReadEndpoint")(function* (
+const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesReadEndpoint")(function* (
   seams: AccountAppSeams,
 ): Effect.fn.Return<
   ReturnType<typeof hostedJsonResponse>,
@@ -131,32 +131,34 @@ const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("preferencesReadEndpoi
 });
 
 /** PUT: replaces the caller's stored preferences with a validated snapshot. */
-const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("preferencesWriteEndpoint")(function* (
-  seams: AccountAppSeams,
-): Effect.fn.Return<
-  ReturnType<typeof hostedJsonResponse>,
-  HostedRefusal,
-  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
-> {
-  const userId = yield* resolvedUserId(seams);
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  const parsed = yield* incoming.json.pipe(Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST));
-  // SAFETY: Request JSON is untrusted boundary data; accountPreferencesFromWire validates it before use.
-  const body = parsed as UnparsedWireValue;
-  if (!isRecord(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWriteEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    ReturnType<typeof hostedJsonResponse>,
+    HostedRefusal,
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+  > {
+    const userId = yield* resolvedUserId(seams);
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    const parsed = yield* incoming.json.pipe(Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST));
+    // SAFETY: Request JSON is untrusted boundary data; accountPreferencesFromWire validates it before use.
+    const body = parsed as UnparsedWireValue;
+    if (!isRecord(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 
-  const preferences = accountPreferencesFromWire(body.preferences);
-  if (preferences === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    const preferences = accountPreferencesFromWire(body.preferences);
+    if (preferences === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 
-  const updatedAt = yield* hostedStoreOrUnavailable(seams.writePreferences(userId, preferences));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    preferences,
-    updatedAt: updatedAt.getTime(),
-  });
-});
+    const updatedAt = yield* hostedStoreOrUnavailable(seams.writePreferences(userId, preferences));
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      preferences,
+      updatedAt: updatedAt.getTime(),
+    });
+  },
+);
 
 /** GET or PUT on the same path; any other method is the same refusal the two branches would answer separately. */
-const accountPreferencesEndpoint = /* @__PURE__ */ Effect.fn("accountPreferencesEndpoint")(
+const accountPreferencesEndpoint = /* @__PURE__ */ Effect.fn("web/accountPreferencesEndpoint")(
   function* (
     seams: AccountAppSeams,
   ): Effect.fn.Return<

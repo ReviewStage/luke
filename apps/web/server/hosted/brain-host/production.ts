@@ -118,7 +118,7 @@ const findVaultRows = SqlSchema.findAll({
  * absence is answered as the unavailable refusal wherever a seam needs it,
  * never thrown: a deployment without the vault has no store to read.
  */
-export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("productionBrainHostSeams")(
+export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productionBrainHostSeams")(
   function* (run: WebStoreRun): Effect.fn.Return<BrainHostSeams, never, HostedEnvironment> {
     const environment = yield* HostedEnvironment;
     const vaultSecret: Effect.Effect<Redacted.Redacted, HostedRefusal> =

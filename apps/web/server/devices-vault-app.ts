@@ -112,7 +112,7 @@ function decodeBody<Value, Encoded>(
  * documented shape is one 400 whatever was wrong with it, so a refused
  * request tells a caller nothing about which field the service reads.
  */
-const devicesEffect = /* @__PURE__ */ Effect.fn("devicesEffect")(
+const devicesEffect = /* @__PURE__ */ Effect.fn("web/devicesEffect")(
   function* (
     seams: DevicesVaultSeams,
   ): Effect.fn.Return<
@@ -192,7 +192,7 @@ function parseProviderKey(value: UnparsedWireValue): string | undefined {
 }
 
 /** Stores, replaces, or deletes the provider API key for the signed-in user. */
-const vaultKeyEffect = /* @__PURE__ */ Effect.fn("vaultKeyEffect")(
+const vaultKeyEffect = /* @__PURE__ */ Effect.fn("web/vaultKeyEffect")(
   function* (
     seams: DevicesVaultSeams,
   ): Effect.fn.Return<
@@ -228,7 +228,7 @@ const vaultKeyEffect = /* @__PURE__ */ Effect.fn("vaultKeyEffect")(
 );
 
 /** Lists stored provider keys for the signed-in user. Never returns ciphertext or plaintext. */
-const vaultKeysEffect = /* @__PURE__ */ Effect.fn("vaultKeysEffect")(
+const vaultKeysEffect = /* @__PURE__ */ Effect.fn("web/vaultKeysEffect")(
   function* (
     seams: DevicesVaultSeams,
   ): Effect.fn.Return<

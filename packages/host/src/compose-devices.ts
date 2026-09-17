@@ -142,7 +142,7 @@ interface DeviceCadence {
  * nothing. What the poll answers of the resources' heads is not read here:
  * the reads behind them are another concern's.
  */
-export const deviceCadence = /* @__PURE__ */ Effect.fn("deviceCadence")(function* (
+export const deviceCadence = /* @__PURE__ */ Effect.fn("host/deviceCadence")(function* (
   options: DeviceCadenceOptions,
 ): Effect.fn.Return<DeviceCadence, never, Scope.Scope> {
   const intervalMs = options.pollIntervalMs ?? DEVICE_POLL_INTERVAL_MS;
@@ -375,7 +375,7 @@ interface DevicesDependencies {
  * record, and a fixture or evidence run, which sends nothing, registers
  * nothing.
  */
-export const composeDevices = /* @__PURE__ */ Effect.fn("composeDevices")(function* (
+export const composeDevices = /* @__PURE__ */ Effect.fn("host/composeDevices")(function* (
   dependencies: DevicesDependencies,
 ): Effect.fn.Return<DevicesComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> {
   const { account, calendars, settings } = dependencies;

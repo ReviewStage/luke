@@ -88,7 +88,7 @@ function unreachable(seams: { readonly report: (message: string) => void }, what
 }
 
 /** eve's answer to the message sent into the session, a refusal said here and a retirement left to the caller. */
-const sendInto = /* @__PURE__ */ Effect.fn("sendInto")(function* <Turn extends BrainHostTurn>(
+const sendInto = /* @__PURE__ */ Effect.fn("web/sendInto")(function* <Turn extends BrainHostTurn>(
   seams: HandoverSeams<Turn>,
   sessionId: string,
   message: EveMessage<Turn>,
@@ -111,7 +111,9 @@ const sendInto = /* @__PURE__ */ Effect.fn("sendInto")(function* <Turn extends B
 });
 
 /** A new session opened for the conversation, and claimed for its row; a refusal said. */
-const openSession = /* @__PURE__ */ Effect.fn("openSession")(function* <Turn extends BrainHostTurn>(
+const openSession = /* @__PURE__ */ Effect.fn("web/openSession")(function* <
+  Turn extends BrainHostTurn,
+>(
   seams: HandoverSeams<Turn>,
   target: ConversationTarget,
   message: EveMessage<Turn>,
@@ -141,7 +143,7 @@ const openSession = /* @__PURE__ */ Effect.fn("openSession")(function* <Turn ext
  * the one ahead of it opened, and only a row still recording no session, or
  * still the one eve retired, has a new one opened for it.
  */
-const openUnderLock = /* @__PURE__ */ Effect.fn("openUnderLock")(function* <
+const openUnderLock = /* @__PURE__ */ Effect.fn("web/openUnderLock")(function* <
   Turn extends BrainHostTurn,
 >(
   seams: HandoverSeams<Turn>,
@@ -168,7 +170,7 @@ const openUnderLock = /* @__PURE__ */ Effect.fn("openUnderLock")(function* <
 });
 
 /** Whether eve took the message: sent to the session the conversation runs in, or opened in a new one where none runs. */
-export const handToEve = /* @__PURE__ */ Effect.fn("handToEve")(function* <
+export const handToEve = /* @__PURE__ */ Effect.fn("web/handToEve")(function* <
   Turn extends BrainHostTurn,
 >(
   seams: HandoverSeams<Turn>,

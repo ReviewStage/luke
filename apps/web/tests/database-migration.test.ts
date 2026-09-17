@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import type { Client } from "pg";
 import { withMigrationLock } from "../server/db/migrate.js";
 
@@ -49,7 +49,8 @@ it.effect("a failed migration still releases its lock and connection", () =>
       ),
     );
 
-    assert.deepEqual(exit, Exit.fail("migration failed"));
+    // The traced span annotates the failure with its stack, so the failure value is what is compared.
+    assert.equal(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined, "migration failed");
     assert.deepEqual(events, ["connect", "lock", "migrate", "unlock", "end"]);
   }),
 );

@@ -181,7 +181,7 @@ const TIMED_OUT_ACCOUNT: AccountOutcome = {
  * exactly as the promise race this replaces never cancelled the pass it
  * raced either.
  */
-const accountWithin = /* @__PURE__ */ Effect.fn("accountWithin")(function* (
+const accountWithin = /* @__PURE__ */ Effect.fn("web/accountWithin")(function* (
   account: Effect.Effect<AccountOutcome, never, SqlClient.SqlClient>,
   deadlineMs: number,
 ): Effect.fn.Return<AccountOutcome, never, SqlClient.SqlClient> {
@@ -193,7 +193,7 @@ const accountWithin = /* @__PURE__ */ Effect.fn("accountWithin")(function* (
 });
 
 /** The pass, then the opening over what it and earlier passes left pending, then the completion sweep; a step that throws is failed and still followed by the next. */
-const accountTurn = /* @__PURE__ */ Effect.fn("accountTurn")(function* (
+const accountTurn = /* @__PURE__ */ Effect.fn("web/accountTurn")(function* (
   options: ObservationTickReads,
   userId: string,
 ): Effect.fn.Return<AccountOutcome, never, SqlClient.SqlClient> {
@@ -210,7 +210,7 @@ const accountTurn = /* @__PURE__ */ Effect.fn("accountTurn")(function* (
  * settles is what decides it; `Effect.fn` suspends the body until the fiber
  * runs it, which is that start.
  */
-const accountShare = /* @__PURE__ */ Effect.fn("accountShare")(function* (
+const accountShare = /* @__PURE__ */ Effect.fn("web/accountShare")(function* (
   options: ObservationTickReads,
   userId: string,
   budget: TickBudget,
@@ -220,76 +220,78 @@ const accountShare = /* @__PURE__ */ Effect.fn("accountShare")(function* (
   return yield* accountWithin(accountTurn(options, userId), budget.passDeadlineMs);
 });
 
-export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservationTick")(function* (
-  options: ObservationTickOptions,
-): Effect.fn.Return<Response, unknown, SqlClient.SqlClient> {
-  const { request } = options;
-  if (request.method !== "GET") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-
-  const secret = options.cronSecret;
-  if (secret === undefined || options.encryptionSecret === undefined) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
-  if (!bearerMatchesSecret(request, secret)) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  const startedAt = yield* Clock.currentTimeMillis;
-  const budgetMs = options.budgetMs ?? OBSERVATION_TICK.BUDGET_MS;
-  const passDeadlineMs = options.passDeadlineMs ?? OBSERVATION_TICK.PASS_DEADLINE_MS;
-  const seenAfter = startedAt - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
-
-  yield* options.forgetIneligible(seenAfter);
-  const purged = yield* options.purgeCleared(startedAt);
-  const abandoned = yield* options.sweepAbandonedTurns(startedAt);
-  const speech = yield* options.sweepSpeech(startedAt);
-  const push = yield* options.pushSpeech(startedAt);
-  const accounts = yield* options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
-
-  const answer: ObservationTickAnswer = {
-    accounts: 0,
-    observed: 0,
-    failed: 0,
-    exhausted: false,
-    purged,
-    abandoned,
-    speech,
-    push,
-    children: NOTHING_DELIVERED,
-    turns: NOTHING_OPENED,
-  };
-  // A sliding window of CONCURRENCY accounts: one settling admits the next, so
-  // no account waits on the slowest of a batch, and one skipped for budget
-  // says the tick stopped with accounts still listed.
-  const outcomes = yield* Effect.forEach(
-    accounts,
-    (account) => accountShare(options, account.userId, { startedAt, budgetMs, passDeadlineMs }),
-    { concurrency: OBSERVATION_TICK.CONCURRENCY },
-  );
-  for (const outcome of outcomes) {
-    if (outcome === undefined) {
-      answer.exhausted = true;
-      continue;
+export const handleObservationTick = /* @__PURE__ */ Effect.fn("web/handleObservationTick")(
+  function* (
+    options: ObservationTickOptions,
+  ): Effect.fn.Return<Response, unknown, SqlClient.SqlClient> {
+    const { request } = options;
+    if (request.method !== "GET") {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
     }
-    const { pass, turns, children } = outcome;
-    answer.accounts += 1;
-    if (pass.complete) answer.observed += 1;
-    else answer.failed += 1;
-    answer.turns = {
-      observation: answer.turns.observation + turns.observation,
-      failed: answer.turns.failed + turns.failed,
-    };
-    answer.children = {
-      delivered: answer.children.delivered + children.delivered,
-      undelivered: answer.children.undelivered + children.undelivered,
-      withheld: answer.children.withheld + children.withheld,
-    };
-  }
 
-  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-});
+    const secret = options.cronSecret;
+    if (secret === undefined || options.encryptionSecret === undefined) {
+      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    }
+    if (!bearerMatchesSecret(request, secret)) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
+
+    const startedAt = yield* Clock.currentTimeMillis;
+    const budgetMs = options.budgetMs ?? OBSERVATION_TICK.BUDGET_MS;
+    const passDeadlineMs = options.passDeadlineMs ?? OBSERVATION_TICK.PASS_DEADLINE_MS;
+    const seenAfter = startedAt - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
+
+    yield* options.forgetIneligible(seenAfter);
+    const purged = yield* options.purgeCleared(startedAt);
+    const abandoned = yield* options.sweepAbandonedTurns(startedAt);
+    const speech = yield* options.sweepSpeech(startedAt);
+    const push = yield* options.pushSpeech(startedAt);
+    const accounts = yield* options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
+
+    const answer: ObservationTickAnswer = {
+      accounts: 0,
+      observed: 0,
+      failed: 0,
+      exhausted: false,
+      purged,
+      abandoned,
+      speech,
+      push,
+      children: NOTHING_DELIVERED,
+      turns: NOTHING_OPENED,
+    };
+    // A sliding window of CONCURRENCY accounts: one settling admits the next, so
+    // no account waits on the slowest of a batch, and one skipped for budget
+    // says the tick stopped with accounts still listed.
+    const outcomes = yield* Effect.forEach(
+      accounts,
+      (account) => accountShare(options, account.userId, { startedAt, budgetMs, passDeadlineMs }),
+      { concurrency: OBSERVATION_TICK.CONCURRENCY },
+    );
+    for (const outcome of outcomes) {
+      if (outcome === undefined) {
+        answer.exhausted = true;
+        continue;
+      }
+      const { pass, turns, children } = outcome;
+      answer.accounts += 1;
+      if (pass.complete) answer.observed += 1;
+      else answer.failed += 1;
+      answer.turns = {
+        observation: answer.turns.observation + turns.observation,
+        failed: answer.turns.failed + turns.failed,
+      };
+      answer.children = {
+        delivered: answer.children.delivered + children.delivered,
+        undelivered: answer.children.undelivered + children.undelivered,
+        withheld: answer.children.withheld + children.withheld,
+      };
+    }
+
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  },
+);

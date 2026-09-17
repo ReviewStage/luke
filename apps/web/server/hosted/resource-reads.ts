@@ -107,7 +107,7 @@ type ReadGate = { readonly userId: string; readonly query: URLSearchParams } | R
  * same brake as the three reads here rather than a count of its own, so a
  * device's polling and its owner's looking share one allowance.
  */
-export const readGate = /* @__PURE__ */ Effect.fnUntraced(function* (
+export const readGate = /* @__PURE__ */ Effect.fn("web/readGate")(function* (
   options: Pick<ResourceReadOptions, "request" | "resolveUserId">,
 ): Effect.fn.Return<ReadGate> {
   const { request, resolveUserId } = options;
@@ -270,7 +270,7 @@ interface SequenceRowReading<Row> {
  * so a read that cut them all is one whose window they fall outside of, for
  * good.
  */
-const walkSequences = /* @__PURE__ */ Effect.fnUntraced(function* <Row, Failure>(
+const walkSequences = /* @__PURE__ */ Effect.fn("web/walkSequences")(function* <Row, Failure>(
   standing: readonly StandingConversation[],
   page: ReadPage<SequenceReadCursor>,
   headOf: (conversation: StandingConversation) => SequenceHead,
@@ -550,7 +550,7 @@ type ServerHistoryAnswer = Omit<ConversationHistoryAnswer, "groups"> & {
  * cannot read back refuses the page whole, naming the row, as every messages
  * read does.
  */
-export const handleConversationHistory = /* @__PURE__ */ Effect.fn("handleConversationHistory")(
+export const handleConversationHistory = /* @__PURE__ */ Effect.fn("web/handleConversationHistory")(
   function* (
     options: ResourceReadOptions,
   ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
@@ -598,21 +598,21 @@ export const handleConversationHistory = /* @__PURE__ */ Effect.fn("handleConver
 );
 
 /** GET: the view over the page's rows, grouped by turn, with the cursor to read on from. */
-export const handleConversationMessages = /* @__PURE__ */ Effect.fn("handleConversationMessages")(
-  function* (
-    options: ResourceReadOptions,
-  ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
-    const gate = yield* readGate(options);
-    if (gate instanceof Response) return gate;
-    const { userId, query } = gate;
-    const page = readPage(query, sequenceReadCursorSchema);
-    if (!page) return invalidRequest();
-    const { store } = options;
+export const handleConversationMessages = /* @__PURE__ */ Effect.fn(
+  "web/handleConversationMessages",
+)(function* (
+  options: ResourceReadOptions,
+): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const gate = yield* readGate(options);
+  if (gate instanceof Response) return gate;
+  const { userId, query } = gate;
+  const page = readPage(query, sequenceReadCursorSchema);
+  if (!page) return invalidRequest();
+  const { store } = options;
 
-    const standing = yield* store.directory.standing(userId);
-    return yield* messagesPage(store, userId, standing, page);
-  },
-);
+  const standing = yield* store.directory.standing(userId);
+  return yield* messagesPage(store, userId, standing, page);
+});
 
 /**
  * A child or an observed conversation as the one conversation of its own
@@ -643,7 +643,7 @@ function asPageMain(conversation: PagedConversation): StandingConversation {
  * for a resource it does not hold.
  */
 export const handleConversationChildMessages = /* @__PURE__ */ Effect.fn(
-  "handleConversationChildMessages",
+  "web/handleConversationChildMessages",
 )(function* (
   options: ResourceReadOptions,
 ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
@@ -679,7 +679,7 @@ function readEvent(event: StoredEventRecord): ConversationReadEvent {
 }
 
 /** GET: the events about the view's conversations' messages, each conversation's in its own sequence. */
-export const handleConversationEvents = /* @__PURE__ */ Effect.fn("handleConversationEvents")(
+export const handleConversationEvents = /* @__PURE__ */ Effect.fn("web/handleConversationEvents")(
   function* (
     options: ResourceReadOptions,
   ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
@@ -724,7 +724,7 @@ function readTurn(turn: StoredTurnRecord): BrainTurnRecord {
 }
 
 /** GET: the account's turns past the cursor in the order they last changed, so a turn is answered again when a stamp on it moves. */
-export const handleBrainTurns = /* @__PURE__ */ Effect.fn("handleBrainTurns")(function* (
+export const handleBrainTurns = /* @__PURE__ */ Effect.fn("web/handleBrainTurns")(function* (
   options: ResourceReadOptions,
 ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
   const gate = yield* readGate(options);
@@ -787,24 +787,24 @@ function readChild(child: ChildRecord): ChildRead {
  * is short: a query is accepted and ignored, and the change signal's
  * `children` head is what tells a device to read again.
  */
-export const handleConversationChildren = /* @__PURE__ */ Effect.fn("handleConversationChildren")(
-  function* (
-    options: Pick<ResourceReadOptions, "request" | "resolveUserId"> & {
-      store: Pick<HostedStore, "directory">;
-    },
-  ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
-    const gate = yield* readGate(options);
-    if (gate instanceof Response) return gate;
-    const { userId } = gate;
-
-    const children = yield* options.store.directory.children(
-      userId,
-      CHILDREN_READ_BOUNDS.MAX_CHILDREN,
-    );
-    const answer: ChildrenAnswer = { children: children.map(readChild) };
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+export const handleConversationChildren = /* @__PURE__ */ Effect.fn(
+  "web/handleConversationChildren",
+)(function* (
+  options: Pick<ResourceReadOptions, "request" | "resolveUserId"> & {
+    store: Pick<HostedStore, "directory">;
   },
-);
+): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const gate = yield* readGate(options);
+  if (gate instanceof Response) return gate;
+  const { userId } = gate;
+
+  const children = yield* options.store.directory.children(
+    userId,
+    CHILDREN_READ_BOUNDS.MAX_CHILDREN,
+  );
+  const answer: ChildrenAnswer = { children: children.map(readChild) };
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
 
 /** One agent as the wire carries it: the store's record with its instants as epoch milliseconds and each unset column left out. */
 function readAgent(agent: AgentRecord): AgentRead {
@@ -831,7 +831,7 @@ function readAgent(agent: AgentRecord): AgentRead {
  * ignored, and the change signal's `agents` head is what tells a device to
  * read again.
  */
-export const handleConversationAgents = /* @__PURE__ */ Effect.fn("handleConversationAgents")(
+export const handleConversationAgents = /* @__PURE__ */ Effect.fn("web/handleConversationAgents")(
   function* (
     options: Pick<ResourceReadOptions, "request" | "resolveUserId"> & {
       store: Pick<HostedStore, "directory">;

@@ -129,7 +129,7 @@ export interface SettingsComposer extends Composer {
  * constructor argument. It is the first composer built, so it takes no
  * sibling composer as a dependency.
  */
-export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
+export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")(
   function* (): Effect.fn.Return<
     SettingsComposer,
     never,

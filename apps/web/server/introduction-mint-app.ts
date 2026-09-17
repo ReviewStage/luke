@@ -45,7 +45,7 @@ export interface IntroductionMintSeams extends MintSeams {
  * introduction is not an allowance the desktop tracks, only a cap it may run
  * into.
  */
-const introductionMint = /* @__PURE__ */ Effect.fn("introductionMint")(function* (
+const introductionMint = /* @__PURE__ */ Effect.fn("web/introductionMint")(function* (
   seams: IntroductionMintSeams,
 ) {
   yield* refusingMint(hostedMethod(MINT_METHOD));

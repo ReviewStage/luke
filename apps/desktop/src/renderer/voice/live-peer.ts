@@ -173,7 +173,7 @@ const acquireDevice = (
  * and releases nothing by hand: whatever was acquired goes when the scope
  * does.
  */
-export const acquireLivePeer = /* @__PURE__ */ Effect.fn("acquireLivePeer")(
+export const acquireLivePeer = /* @__PURE__ */ Effect.fn("desktop/acquireLivePeer")(
   function* (seams: LivePeerSeams): Effect.fn.Return<LivePeerOpening, string, Scope.Scope> {
     const connection = yield* Effect.acquireRelease(
       Effect.try({ try: () => seams.createPeerConnection(), catch: messageOf }),

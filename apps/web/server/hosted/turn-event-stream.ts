@@ -188,7 +188,7 @@ function notFound(): Response {
 }
 
 /** The turn's record and its journal as they stand now, or nothing where the turn is gone or its journal cannot be read. */
-const lookAtTurn = /* @__PURE__ */ Effect.fn("lookAtTurn")(function* (
+const lookAtTurn = /* @__PURE__ */ Effect.fn("web/lookAtTurn")(function* (
   store: TurnEventStreamOptions["store"],
   userId: string,
   turnId: string,
@@ -229,92 +229,95 @@ function cursorOf(query: URLSearchParams): number | undefined {
   return Result.getOrUndefined(readEither(turnEventCursorSchema)(unparsedWire(Number(text))));
 }
 
-export const handleTurnEventStream = /* @__PURE__ */ Effect.fn("handleTurnEventStream")(function* (
-  options: TurnEventStreamOptions,
-): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  const { request, resolveUserId, store } = options;
-  if (request.method !== "GET") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+export const handleTurnEventStream = /* @__PURE__ */ Effect.fn("web/handleTurnEventStream")(
+  function* (
+    options: TurnEventStreamOptions,
+  ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+    const { request, resolveUserId, store } = options;
+    if (request.method !== "GET") {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
+    }
+    const query = new URL(request.url).searchParams;
+    const ids = query.getAll(TURN_ID_QUERY);
+    const [id] = ids;
+    if (id === undefined || ids.length !== 1) return invalidRequest();
+    const after = cursorOf(query);
+    if (after === undefined) return invalidRequest();
+
+    const account = yield* resolveUserId(request);
+    if (Option.isNone(account)) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
+    const userId = account.value;
+    if (!(yield* streamBrake.check(userId))) {
+      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    }
+    // An id that is not a uuid names no row and answers as none, the same as another account's.
+    const turnId = Result.getOrUndefined(readEither(wireUuidSchema)(unparsedWire(id)));
+    if (turnId === undefined) return notFound();
+    const [turn] = yield* store.turns.named(userId, [turnId]);
+    if (turn === undefined) return notFound();
+    const bounds = { ...TURN_EVENT_STREAM_BOUNDS, ...options.bounds };
+    const sleep = options.sleep ?? ((ms: number) => Effect.sleep(ms));
+    const encoder = new TextEncoder();
+    const attachedAt = yield* Clock.currentTimeMillis;
+    // The client's side of the connection can end two ways: the stream's own
+    // cancel, which interrupts the fiber reading below it, and the request's
+    // abort, which the next read of the attachment sees and stops on.
+    const gone = () => request.signal.aborted;
+
+    const frames = Stream.paginate(
+      { told: after, quietSince: attachedAt, polled: false, last: false } satisfies Attachment,
+      (attachment: Attachment) =>
+        Effect.gen(function* () {
+          // Nothing more to write and nothing more to wait for: an empty
+          // batch with no next attachment is how a paginated stream ends.
+          const none: readonly [ReadonlyArray<string>, Option.Option<Attachment>] = [
+            [],
+            Option.none(),
+          ];
+          if (attachment.last || gone()) return none;
+          if (attachment.polled) yield* sleep(bounds.POLL_MS);
+          if (gone()) return none;
+          const events = yield* lookAtTurn(store, userId, turn.id);
+          if (events === undefined || gone()) return none;
+          const now = yield* Clock.currentTimeMillis;
+          const fresh = events.slice(attachment.told);
+          const told = fresh.at(-1)?.seq ?? attachment.told;
+          const quietSince = fresh.length > 0 ? now : attachment.quietSince;
+          const written = fresh.map((event) => encodeTurnEventFrame(event));
+          const last =
+            events.at(-1)?.kind === TURN_EVENT_KIND.ENDED ||
+            now - attachedAt >= bounds.ATTACHMENT_MS;
+          const heartbeat = !last && now - quietSince >= bounds.HEARTBEAT_MS;
+          if (heartbeat) written.push(TURN_EVENT_STREAM.HEARTBEAT_FRAME);
+          return [
+            written,
+            Option.some({
+              told,
+              quietSince: heartbeat ? now : quietSince,
+              polled: true,
+              last,
+            } satisfies Attachment),
+          ] as const;
+        }),
     );
-  }
-  const query = new URL(request.url).searchParams;
-  const ids = query.getAll(TURN_ID_QUERY);
-  const [id] = ids;
-  if (id === undefined || ids.length !== 1) return invalidRequest();
-  const after = cursorOf(query);
-  if (after === undefined) return invalidRequest();
+    // The polling runs inside the stream this handler answers with, so it
+    // outlives the handler's own fiber: the reader forks a fiber of its own on
+    // the runtime this request runs on, and the stream's cancel interrupts it.
+    const body = yield* Stream.toReadableStreamEffect(
+      Stream.map(frames, (frame) => encoder.encode(frame)),
+    );
 
-  const account = yield* resolveUserId(request);
-  if (Option.isNone(account)) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-  const userId = account.value;
-  if (!(yield* streamBrake.check(userId))) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  }
-  // An id that is not a uuid names no row and answers as none, the same as another account's.
-  const turnId = Result.getOrUndefined(readEither(wireUuidSchema)(unparsedWire(id)));
-  if (turnId === undefined) return notFound();
-  const [turn] = yield* store.turns.named(userId, [turnId]);
-  if (turn === undefined) return notFound();
-  const bounds = { ...TURN_EVENT_STREAM_BOUNDS, ...options.bounds };
-  const sleep = options.sleep ?? ((ms: number) => Effect.sleep(ms));
-  const encoder = new TextEncoder();
-  const attachedAt = yield* Clock.currentTimeMillis;
-  // The client's side of the connection can end two ways: the stream's own
-  // cancel, which interrupts the fiber reading below it, and the request's
-  // abort, which the next read of the attachment sees and stops on.
-  const gone = () => request.signal.aborted;
-
-  const frames = Stream.paginate(
-    { told: after, quietSince: attachedAt, polled: false, last: false } satisfies Attachment,
-    (attachment: Attachment) =>
-      Effect.gen(function* () {
-        // Nothing more to write and nothing more to wait for: an empty
-        // batch with no next attachment is how a paginated stream ends.
-        const none: readonly [ReadonlyArray<string>, Option.Option<Attachment>] = [
-          [],
-          Option.none(),
-        ];
-        if (attachment.last || gone()) return none;
-        if (attachment.polled) yield* sleep(bounds.POLL_MS);
-        if (gone()) return none;
-        const events = yield* lookAtTurn(store, userId, turn.id);
-        if (events === undefined || gone()) return none;
-        const now = yield* Clock.currentTimeMillis;
-        const fresh = events.slice(attachment.told);
-        const told = fresh.at(-1)?.seq ?? attachment.told;
-        const quietSince = fresh.length > 0 ? now : attachment.quietSince;
-        const written = fresh.map((event) => encodeTurnEventFrame(event));
-        const last =
-          events.at(-1)?.kind === TURN_EVENT_KIND.ENDED || now - attachedAt >= bounds.ATTACHMENT_MS;
-        const heartbeat = !last && now - quietSince >= bounds.HEARTBEAT_MS;
-        if (heartbeat) written.push(TURN_EVENT_STREAM.HEARTBEAT_FRAME);
-        return [
-          written,
-          Option.some({
-            told,
-            quietSince: heartbeat ? now : quietSince,
-            polled: true,
-            last,
-          } satisfies Attachment),
-        ] as const;
-      }),
-  );
-  // The polling runs inside the stream this handler answers with, so it
-  // outlives the handler's own fiber: the reader forks a fiber of its own on
-  // the runtime this request runs on, and the stream's cancel interrupts it.
-  const body = yield* Stream.toReadableStreamEffect(
-    Stream.map(frames, (frame) => encoder.encode(frame)),
-  );
-
-  return new Response(body, {
-    status: HOSTED_HTTP_STATUS.OK,
-    headers: {
-      "content-type": `${TURN_EVENT_STREAM.MEDIA_TYPE}; charset=utf-8`,
-      "cache-control": "no-cache, no-transform",
-    },
-  });
-});
+    return new Response(body, {
+      status: HOSTED_HTTP_STATUS.OK,
+      headers: {
+        "content-type": `${TURN_EVENT_STREAM.MEDIA_TYPE}; charset=utf-8`,
+        "cache-control": "no-cache, no-transform",
+      },
+    });
+  },
+);

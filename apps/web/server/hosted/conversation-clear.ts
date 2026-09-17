@@ -40,7 +40,7 @@ interface ConversationClearOptions {
   store: Pick<HostedStore, "main">;
 }
 
-export const handleConversationClear = /* @__PURE__ */ Effect.fn("handleConversationClear")(
+export const handleConversationClear = /* @__PURE__ */ Effect.fn("web/handleConversationClear")(
   function* (
     options: ConversationClearOptions,
   ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {

@@ -12,19 +12,21 @@ import { type UnboxExportOptions, unboxTraceFromLines } from "./unbox-export.js"
 /** Where the converted document goes: a path, or standard output when there is none. */
 export type UnboxExportDestination = { path: string } | { stdout: true };
 
-export const unboxExportEffect = /* @__PURE__ */ Effect.fn("unboxExportEffect")(function* (
-  sourcePath: string,
-  destination: UnboxExportDestination,
-  options: UnboxExportOptions,
-): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem> {
-  const fs = yield* FileSystem.FileSystem;
-  const contents = yield* fs.readFileString(sourcePath);
-  const trace = unboxTraceFromLines(contents.split("\n"), options);
-  const document = `${JSON.stringify(trace, undefined, 2)}\n`;
-  if ("path" in destination) {
-    yield* fs.writeFileString(destination.path, document);
-    yield* Effect.sync(() => process.stderr.write(`Wrote ${destination.path}\n`));
-    return;
-  }
-  yield* Effect.sync(() => process.stdout.write(document));
-});
+export const unboxExportEffect = /* @__PURE__ */ Effect.fn("trace-export/unboxExportEffect")(
+  function* (
+    sourcePath: string,
+    destination: UnboxExportDestination,
+    options: UnboxExportOptions,
+  ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem> {
+    const fs = yield* FileSystem.FileSystem;
+    const contents = yield* fs.readFileString(sourcePath);
+    const trace = unboxTraceFromLines(contents.split("\n"), options);
+    const document = `${JSON.stringify(trace, undefined, 2)}\n`;
+    if ("path" in destination) {
+      yield* fs.writeFileString(destination.path, document);
+      yield* Effect.sync(() => process.stderr.write(`Wrote ${destination.path}\n`));
+      return;
+    }
+    yield* Effect.sync(() => process.stdout.write(document));
+  },
+);

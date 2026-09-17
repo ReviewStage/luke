@@ -24,7 +24,7 @@ import { SOCKET_CLOSE_CODE } from "./socket.js";
  * registering here rather than at the socket's own open lose nothing.
  */
 
-export const upstreamSideband = /* @__PURE__ */ Effect.fn("upstreamSideband")(function* (
+export const upstreamSideband = /* @__PURE__ */ Effect.fn("web/upstreamSideband")(function* (
   socket: WebSocket,
 ): Effect.fn.Return<LiveSideband, never, Scope.Scope> {
   const hold = holdSocket({

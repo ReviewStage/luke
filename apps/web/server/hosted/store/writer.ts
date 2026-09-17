@@ -1552,7 +1552,7 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
   }
 }
 
-const enqueueTurn = /* @__PURE__ */ Effect.fn("enqueueTurn")(function* (
+const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
   context: WriterContext,
   enqueue: TurnEnqueue,
 ): Effect.fn.Return<TurnEnqueueResult, WriteFailure, SqlClient.SqlClient> {
@@ -1602,7 +1602,7 @@ const stampTurnCancel = SqlSchema.findAll({
  * the first instant standing and writes nothing; a turn the conversation does
  * not hold is refused.
  */
-const requestTurnCancel = /* @__PURE__ */ Effect.fn("requestTurnCancel")(function* (
+const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(function* (
   context: WriterContext,
   cancel: TurnCancelRequest,
 ): Effect.fn.Return<TurnCancelResult, WriteFailure, SqlClient.SqlClient> {
@@ -1617,7 +1617,7 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("requestTurnCancel")(functio
   );
 });
 
-const recordUserMessage = /* @__PURE__ */ Effect.fn("recordUserMessage")(function* (
+const recordUserMessage = /* @__PURE__ */ Effect.fn("web/recordUserMessage")(function* (
   context: WriterContext,
   write: UserMessageWrite,
 ): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
@@ -1641,7 +1641,7 @@ const recordUserMessage = /* @__PURE__ */ Effect.fn("recordUserMessage")(functio
   return Result.succeed({ id, effect: STORE_WRITE_EFFECT.WRITTEN });
 });
 
-const upsertSpokenRow = /* @__PURE__ */ Effect.fn("upsertSpokenRow")(function* (
+const upsertSpokenRow = /* @__PURE__ */ Effect.fn("web/upsertSpokenRow")(function* (
   context: WriterContext,
   write: SpokenRowWrite,
 ): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
@@ -1943,7 +1943,7 @@ function moveTurnWorkAfter(context: WriterContext, turnId: string, seq: number):
   });
 }
 
-const attachAskLines = /* @__PURE__ */ Effect.fn("attachAskLines")(function* (
+const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function* (
   context: WriterContext,
   turnId: string,
 ): Effect.fn.Return<AskLinesAttached, WriteFailure, SqlClient.SqlClient> {
@@ -2015,7 +2015,7 @@ const findSpokenRowsToAttach = SqlSchema.findAll({
       .orderBy(asc(messages.seq)),
 });
 
-const attachSpokenAsk = /* @__PURE__ */ Effect.fn("attachSpokenAsk")(function* (
+const attachSpokenAsk = /* @__PURE__ */ Effect.fn("web/attachSpokenAsk")(function* (
   context: WriterContext,
   attach: SpokenAskAttach,
 ): Effect.fn.Return<SpokenAskAttached, WriteFailure, SqlClient.SqlClient> {
@@ -2071,7 +2071,7 @@ const attachSpokenAsk = /* @__PURE__ */ Effect.fn("attachSpokenAsk")(function* (
  * landed between the read and the lock, rather than re-opening a settled
  * offer by landing after it.
  */
-const recordEvent = /* @__PURE__ */ Effect.fn("recordEvent")(function* (
+const recordEvent = /* @__PURE__ */ Effect.fn("web/recordEvent")(function* (
   context: WriterContext,
   event: EventWrite | SpeechEventWrite,
 ): Effect.fn.Return<EventWriteResult, WriteFailure, SqlClient.SqlClient> {

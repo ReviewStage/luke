@@ -413,7 +413,7 @@ function dispatchAskOnce(
 }
 
 /** The one place a client id becomes a row: the insert lands or is refused by the index, and the row is read back either way. */
-const recordAsk = /* @__PURE__ */ Effect.fn("recordAsk")(function* (
+const recordAsk = /* @__PURE__ */ Effect.fn("web/recordAsk")(function* (
   ask: AskWrite,
 ): Effect.fn.Return<AskRow, AskFailure, SqlClient.SqlClient> {
   yield* insertAsk(ask);

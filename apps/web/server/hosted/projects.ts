@@ -56,7 +56,7 @@ export interface ProjectsOptions
  * listed; a provider whose keys stand but that documents no creation offers
  * nowhere to create.
  */
-export const handleProjects = /* @__PURE__ */ Effect.fn("handleProjects")(function* (
+export const handleProjects = /* @__PURE__ */ Effect.fn("web/handleProjects")(function* (
   options: ProjectsOptions,
 ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;

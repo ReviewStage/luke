@@ -72,7 +72,7 @@ function reportedInstant(value: number | null | undefined): Date | null | undefi
   return new Date(value);
 }
 
-export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function* (
+export const handleChanges = /* @__PURE__ */ Effect.fn("web/handleChanges")(function* (
   options: ChangeSignalOptions,
 ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const { request, resolveUserId, store } = options;

@@ -88,7 +88,7 @@ export interface GatewayClient {
  * forks for itself, so closing the scope ends both and a client not listening
  * reconnects nothing.
  */
-export const gatewayClient = /* @__PURE__ */ Effect.fn("gatewayClient")(function* (
+export const gatewayClient = /* @__PURE__ */ Effect.fn("gateway/gatewayClient")(function* (
   options: GatewayClientOptions,
 ): Effect.fn.Return<GatewayClient, never, Scope.Scope> {
   const scope = yield* Effect.scope;

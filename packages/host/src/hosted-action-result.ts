@@ -97,7 +97,7 @@ export function hostedActionResult(
  * write's answer reaches its caller no later than it did when the poke was a
  * detached promise.
  */
-export const settleHostedWrite = /* @__PURE__ */ Effect.fn("settleHostedWrite")(function* <
+export const settleHostedWrite = /* @__PURE__ */ Effect.fn("host/settleHostedWrite")(function* <
   Result extends SessionWriteResult,
 >(
   result: Result,

@@ -170,7 +170,7 @@ function openInvocation(
  * take the performance the duplicates are joined to; the scope that served
  * the handler is what ends them all.
  */
-export const invocationMemory = /* @__PURE__ */ Effect.fn("invocationMemory")(function* (
+export const invocationMemory = /* @__PURE__ */ Effect.fn("gateway/invocationMemory")(function* (
   options: InvocationMemoryOptions,
 ): Effect.fn.Return<InvocationMemory, never, Scope.Scope> {
   const capacity = options.capacity ?? INVOCATION_MEMORY_DEFAULTS.SETTLED_CAPACITY;

@@ -183,7 +183,7 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * fiber rather than through a runner of its own, so a failed statement it
  * reads is a defect here.
  */
-const effectPassthrough = /* @__PURE__ */ Effect.fn("effectPassthrough")(function* <R>(
+const effectPassthrough = /* @__PURE__ */ Effect.fn("web/effectPassthrough")(function* <R>(
   handle: (request: Request) => Effect.Effect<Response, unknown, R>,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
@@ -199,7 +199,7 @@ const effectPassthrough = /* @__PURE__ */ Effect.fn("effectPassthrough")(functio
 });
 
 /** Reads one observed session's conversation for the caller who opened its screen. */
-const sessionsMessagesEffect = /* @__PURE__ */ Effect.fn("sessionsMessagesEffect")(function* (
+const sessionsMessagesEffect = /* @__PURE__ */ Effect.fn("web/sessionsMessagesEffect")(function* (
   request: Request,
 ): Effect.fn.Return<
   Response,
@@ -241,7 +241,7 @@ function observeEffect(
  * userinfo call is better-auth's own foreign promise, so it is wrapped here,
  * at the seam's implementation, rather than inside the handler.
  */
-const eventsEffect = /* @__PURE__ */ Effect.fn("eventsEffect")(function* (
+const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
   request: Request,
 ): Effect.fn.Return<Response, never, SqlClient.SqlClient | HostedEnvironment> {
   const environment = yield* HostedEnvironment;
@@ -278,7 +278,7 @@ const eventsEffect = /* @__PURE__ */ Effect.fn("eventsEffect")(function* (
  * tick's own secret, so the account named to eve is only ever one this tick
  * enumerated.
  */
-const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")(function* (
+const observationTickEffect = /* @__PURE__ */ Effect.fn("web/observationTickEffect")(function* (
   request: Request,
 ): Effect.fn.Return<
   Response,

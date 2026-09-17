@@ -48,7 +48,7 @@ export type HostDrain = (
  * admissions close and the runs are cancelled once however many times the
  * quit arrives.
  */
-export const hostDrain = /* @__PURE__ */ Effect.fn("hostDrain")(function* (
+export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
   steps: GatewayShutdownSteps,
   report: (message: string) => void,
 ): Effect.fn.Return<HostDrain> {

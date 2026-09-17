@@ -76,7 +76,7 @@ export type ChildCompletionDelivery =
   (typeof CHILD_COMPLETION_DELIVERY)[keyof typeof CHILD_COMPLETION_DELIVERY];
 
 /** The child's final reply: the text of its latest turn's journal, read back under the registry; empty where the row is missing or unreadable. */
-const finalReplyOf = /* @__PURE__ */ Effect.fn("finalReplyOf")(function* (
+const finalReplyOf = /* @__PURE__ */ Effect.fn("web/finalReplyOf")(function* (
   tools: ToolSet,
   child: ConversationTarget,
   turnId: string,
@@ -93,7 +93,7 @@ const finalReplyOf = /* @__PURE__ */ Effect.fn("finalReplyOf")(function* (
 });
 
 /** Delivers one child's completion to its parent, as the module comment describes. */
-export const deliverChildCompletion = /* @__PURE__ */ Effect.fn("deliverChildCompletion")(
+export const deliverChildCompletion = /* @__PURE__ */ Effect.fn("web/deliverChildCompletion")(
   function* (
     seams: ChildCompletionSeams,
     child: ConversationTarget,
@@ -183,38 +183,40 @@ export interface ChildCompletionSweepOptions {
  * deadline, so the account named to eve is only ever one this tick listed
  * and the sweep's time is the account's share of the tick and no more.
  */
-export const sweepChildCompletions = /* @__PURE__ */ Effect.fn("sweepChildCompletions")(function* (
-  seams: ChildCompletionSeams,
-  userId: string,
-  options: ChildCompletionSweepOptions = {},
-): Effect.fn.Return<
-  ChildCompletionSweepOutcome,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient
-> {
-  if (seams.deploymentSecret() === undefined || seams.eveOrigin() === undefined) {
-    return NOTHING_DELIVERED;
-  }
-  const outcome = { delivered: 0, undelivered: 0, withheld: 0 };
-  const children = yield* undeliveredChildren(
-    userId,
-    options.limit ?? CHILD_COMPLETION_SWEEP.LIMIT,
-  );
-  for (const child of children) {
-    const delivery = yield* deliverChildCompletion(seams, child);
-    switch (delivery) {
-      case CHILD_COMPLETION_DELIVERY.DELIVERED:
-        outcome.delivered += 1;
-        break;
-      case CHILD_COMPLETION_DELIVERY.UNDELIVERED:
-        outcome.undelivered += 1;
-        break;
-      case CHILD_COMPLETION_DELIVERY.WITHHELD:
-        outcome.withheld += 1;
-        break;
-      case CHILD_COMPLETION_DELIVERY.NOTHING:
-        break;
+export const sweepChildCompletions = /* @__PURE__ */ Effect.fn("web/sweepChildCompletions")(
+  function* (
+    seams: ChildCompletionSeams,
+    userId: string,
+    options: ChildCompletionSweepOptions = {},
+  ): Effect.fn.Return<
+    ChildCompletionSweepOutcome,
+    SqlError | Schema.SchemaError,
+    SqlClient.SqlClient
+  > {
+    if (seams.deploymentSecret() === undefined || seams.eveOrigin() === undefined) {
+      return NOTHING_DELIVERED;
     }
-  }
-  return outcome;
-});
+    const outcome = { delivered: 0, undelivered: 0, withheld: 0 };
+    const children = yield* undeliveredChildren(
+      userId,
+      options.limit ?? CHILD_COMPLETION_SWEEP.LIMIT,
+    );
+    for (const child of children) {
+      const delivery = yield* deliverChildCompletion(seams, child);
+      switch (delivery) {
+        case CHILD_COMPLETION_DELIVERY.DELIVERED:
+          outcome.delivered += 1;
+          break;
+        case CHILD_COMPLETION_DELIVERY.UNDELIVERED:
+          outcome.undelivered += 1;
+          break;
+        case CHILD_COMPLETION_DELIVERY.WITHHELD:
+          outcome.withheld += 1;
+          break;
+        case CHILD_COMPLETION_DELIVERY.NOTHING:
+          break;
+      }
+    }
+    return outcome;
+  },
+);

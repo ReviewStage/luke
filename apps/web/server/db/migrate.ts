@@ -42,10 +42,11 @@ function tolerated<A>(what: string, step: () => Promise<A>): Effect.Effect<void>
  * migration runs; the two finalizers close in reverse, which is what makes the
  * connection close even when the unlock itself fails.
  */
-export const withMigrationLock = /* @__PURE__ */ Effect.fnUntraced(function* <A, E, R>(
-  connection: MigrationConnection,
-  migrate: Effect.Effect<A, E, R>,
-) {
+export const withMigrationLock = /* @__PURE__ */ Effect.fn("web/withMigrationLock")(function* <
+  A,
+  E,
+  R,
+>(connection: MigrationConnection, migrate: Effect.Effect<A, E, R>) {
   yield* Effect.acquireRelease(
     Effect.tryPromise({ try: () => connection.connect(), catch: lockFailure }),
     () => tolerated("The migration connection did not close", () => connection.end()),

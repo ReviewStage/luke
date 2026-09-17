@@ -146,7 +146,7 @@ function githubRead(
 }
 
 /** One read of the head's preview from the deployment records, a dropped connection or a refused read retried a few times. */
-const readPreview = /* @__PURE__ */ Effect.fn("readPreview")(
+const readPreview = /* @__PURE__ */ Effect.fn("web/readPreview")(
   function* (
     source: PreviewSource,
   ): Effect.fn.Return<

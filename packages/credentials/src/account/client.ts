@@ -354,26 +354,26 @@ interface AccountDeletionOptions {
  * an expired access token (refresh and retry) from a service that actually
  * said no.
  */
-export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("deleteHostedAccount")(function* (
-  options: AccountDeletionOptions,
-): Effect.fn.Return<void, AccountClientFailure> {
-  const response = yield* timedRequest(
-    options.httpClient ?? FetchHttpClient.layer,
-    HttpClientRequest.post(
-      `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
-      { headers: { authorization: `Bearer ${options.accessToken}` } },
-    ),
-    options.timeoutMs ?? DELETE_TIMEOUT_MS,
-  );
-  if (!response.ok) {
-    return yield* Effect.fail(
-      new AccountClientError({
-        message: `Account service returned ${response.status}`,
-        status: response.status,
-      }),
+export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("credentials/deleteHostedAccount")(
+  function* (options: AccountDeletionOptions): Effect.fn.Return<void, AccountClientFailure> {
+    const response = yield* timedRequest(
+      options.httpClient ?? FetchHttpClient.layer,
+      HttpClientRequest.post(
+        `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
+        { headers: { authorization: `Bearer ${options.accessToken}` } },
+      ),
+      options.timeoutMs ?? DELETE_TIMEOUT_MS,
     );
-  }
-});
+    if (!response.ok) {
+      return yield* Effect.fail(
+        new AccountClientError({
+          message: `Account service returned ${response.status}`,
+          status: response.status,
+        }),
+      );
+    }
+  },
+);
 
 /**
  * One call made on a fiber of its own and waited for where it was asked for.

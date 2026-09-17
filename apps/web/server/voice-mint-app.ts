@@ -58,7 +58,7 @@ const signedIn = /* @__PURE__ */ Effect.fnUntraced(function* (seams: VoiceMintSe
 });
 
 /** POST: the signed-in desktop's own credential, spent against its daily allowance. */
-const voiceMint = /* @__PURE__ */ Effect.fn("voiceMint")(function* (seams: VoiceMintSeams) {
+const voiceMint = /* @__PURE__ */ Effect.fn("web/voiceMint")(function* (seams: VoiceMintSeams) {
   yield* refusingMint(hostedMethod(MINT_METHOD));
   const apiKey = yield* hostedKey();
   const environment = yield* HostedEnvironment;

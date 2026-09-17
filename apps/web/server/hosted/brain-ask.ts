@@ -218,7 +218,7 @@ export interface AskStandingReads {
  * route with, so it reads the standing here until the turn's own id is set
  * and projects the turn's events from there.
  */
-export const askStanding = /* @__PURE__ */ Effect.fn("askStanding")(function* (
+export const askStanding = /* @__PURE__ */ Effect.fn("web/askStanding")(function* (
   reads: AskStandingReads,
   userId: string,
   id: string,
@@ -286,7 +286,7 @@ const unreachableSend = () =>
  * with the same client id finds the record and dispatches again only where
  * the first dispatch never reached eve.
  */
-export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
+export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
   seams: AskSeams,
   input: AskInput,
 ): Effect.fn.Return<AskOutcome, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
@@ -367,7 +367,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
 });
 
 /** `POST /api/brain/ask`: the gate and the body, then `acceptAsk` under the caller's own bearer. */
-export const handleBrainAsk = /* @__PURE__ */ Effect.fn("handleBrainAsk")(function* (
+export const handleBrainAsk = /* @__PURE__ */ Effect.fn("web/handleBrainAsk")(function* (
   options: BrainAskOptions,
 ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
   const admitted = yield* gate(options, "POST");
@@ -408,7 +408,7 @@ function settled(standing: AskStanding | undefined): boolean {
  * the wait runs out, and once more at the bound so the answer is the turn as
  * it then stands rather than as the last poll saw it.
  */
-const heldStanding = /* @__PURE__ */ Effect.fn("heldStanding")(function* (
+const heldStanding = /* @__PURE__ */ Effect.fn("web/heldStanding")(function* (
   options: BrainAskOptions,
   userId: string,
   id: string,
@@ -432,7 +432,7 @@ const heldStanding = /* @__PURE__ */ Effect.fn("heldStanding")(function* (
   return Option.isSome(polled) ? polled.value : yield* read;
 });
 
-export const handleBrainTurn = /* @__PURE__ */ Effect.fn("handleBrainTurn")(function* (
+export const handleBrainTurn = /* @__PURE__ */ Effect.fn("web/handleBrainTurn")(function* (
   options: BrainAskOptions,
 ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
   const admitted = yield* gate(options, "GET");
@@ -486,7 +486,7 @@ interface StopSeams extends AskStandingReads {
  * or written before the column stood: eve runs nothing this build can name
  * under it, so the Stop is the stamp alone and eve is asked nothing.
  */
-export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
+export const stopAsk = /* @__PURE__ */ Effect.fn("web/stopAsk")(function* (
   seams: StopSeams,
   userId: string,
   id: string,
@@ -554,31 +554,33 @@ interface BrainTurnCancelOptions extends BrainAskOptions {
   writer: Pick<StoreWriter, "requestTurnCancel">;
 }
 
-export const handleBrainTurnCancel = /* @__PURE__ */ Effect.fn("handleBrainTurnCancel")(function* (
-  options: BrainTurnCancelOptions,
-): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
-  const admitted = yield* gate(options, "POST");
-  if (admitted instanceof Response) return admitted;
-  const id = pathId(options.request);
-  if (id instanceof Response) return id;
-  const outcome = yield* stopAsk(
-    {
-      store: options.store,
-      asks: options.asks,
-      writer: options.writer,
-      eve: options.eve(admitted.authorization),
-    },
-    admitted.userId,
-    id,
-  );
-  if (Result.isSuccess(outcome)) return jsonResponse(HOSTED_HTTP_STATUS.OK, outcome.success);
-  const refused = outcome.failure;
-  switch (refused.refusal) {
-    case STOP_REFUSAL.NOT_FOUND:
-      return notFound();
-    case STOP_REFUSAL.NOT_RUNNING:
-      return errorResponse(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NOT_RUNNING);
-    case STOP_REFUSAL.UPSTREAM:
-      return upstream(refused.status);
-  }
-});
+export const handleBrainTurnCancel = /* @__PURE__ */ Effect.fn("web/handleBrainTurnCancel")(
+  function* (
+    options: BrainTurnCancelOptions,
+  ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+    const admitted = yield* gate(options, "POST");
+    if (admitted instanceof Response) return admitted;
+    const id = pathId(options.request);
+    if (id instanceof Response) return id;
+    const outcome = yield* stopAsk(
+      {
+        store: options.store,
+        asks: options.asks,
+        writer: options.writer,
+        eve: options.eve(admitted.authorization),
+      },
+      admitted.userId,
+      id,
+    );
+    if (Result.isSuccess(outcome)) return jsonResponse(HOSTED_HTTP_STATUS.OK, outcome.success);
+    const refused = outcome.failure;
+    switch (refused.refusal) {
+      case STOP_REFUSAL.NOT_FOUND:
+        return notFound();
+      case STOP_REFUSAL.NOT_RUNNING:
+        return errorResponse(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NOT_RUNNING);
+      case STOP_REFUSAL.UPSTREAM:
+        return upstream(refused.status);
+    }
+  },
+);

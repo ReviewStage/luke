@@ -33,7 +33,7 @@ function byInstantThenId(left: ProviderTranscriptChange, right: ProviderTranscri
 }
 
 export const readConductorTranscriptChanges = /* @__PURE__ */ Effect.fn(
-  "readConductorTranscriptChanges",
+  "providers/readConductorTranscriptChanges",
 )(
   (
     reported: ReportedSessions,

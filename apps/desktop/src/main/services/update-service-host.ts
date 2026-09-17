@@ -54,7 +54,7 @@ interface UpdateServiceHostDependencies {
  * `start()` is what the launch calls once it has reached the right point in
  * its own order, never this function's own return.
  */
-export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("createUpdateServiceHost")(
+export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/createUpdateServiceHost")(
   function* (
     dependencies: UpdateServiceHostDependencies,
   ): Effect.fn.Return<UpdateServiceHost, never, Scope.Scope> {

@@ -28,7 +28,7 @@ export interface BriefingOfferSeams {
 }
 
 /** Offers the turn's briefing on its journal row; answers whether the offer landed or already stood. */
-export const offerBriefing = /* @__PURE__ */ Effect.fn("offerBriefing")(function* (
+export const offerBriefing = /* @__PURE__ */ Effect.fn("web/offerBriefing")(function* (
   seams: BriefingOfferSeams,
   target: ConversationTarget,
   turnId: string,

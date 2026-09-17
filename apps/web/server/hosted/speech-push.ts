@@ -285,7 +285,7 @@ function devicesByAccount(
  * Apple says its token is gone. Nothing here decides whether a briefing is
  * worth saying, rewords it, or reads anything of it but the words.
  */
-export const pushSpeech = /* @__PURE__ */ Effect.fn("pushSpeech")(function* (
+export const pushSpeech = /* @__PURE__ */ Effect.fn("web/pushSpeech")(function* (
   seams: SpeechPushSeams,
   options: SpeechPushOptions,
 ): Effect.fn.Return<SpeechPushOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {

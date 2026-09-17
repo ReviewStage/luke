@@ -158,7 +158,7 @@ function rosterObservedUnder(
  * open is not a failed read but a snapshot with no roster, so the instant
  * alone is answered and the next pass replaces it.
  */
-export const storedRoster = /* @__PURE__ */ Effect.fn("storedRoster")(function* (
+export const storedRoster = /* @__PURE__ */ Effect.fn("web/storedRoster")(function* (
   store: ObservationStore,
   userId: string,
   rows: readonly VaultKeyRow[],
@@ -178,7 +178,7 @@ export const storedRoster = /* @__PURE__ */ Effect.fn("storedRoster")(function* 
     : { observedAt: snapshot.observedAt };
 });
 
-export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot")(function* (
+export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("web/observeAndSnapshot")(function* (
   input: ObservationPassInput,
 ): Effect.fn.Return<ObservationPassOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const { userId, store, now } = input;
@@ -283,7 +283,7 @@ export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot"
  * here so the next action and the next observe read what it stored rather
  * than asking the provider again.
  */
-export const rosterForAction = /* @__PURE__ */ Effect.fn("rosterForAction")(function* (input: {
+export const rosterForAction = /* @__PURE__ */ Effect.fn("web/rosterForAction")(function* (input: {
   userId: string;
   providerId: CloudAgentProviderId;
   secret: Redacted.Redacted;

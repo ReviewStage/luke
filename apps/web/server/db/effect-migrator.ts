@@ -76,7 +76,7 @@ function migrationId(entry: JournalEntry): number {
 export const webMigrationJournal: (
   folder?: string,
 ) => Effect.Effect<ReadonlyArray<JournalEntry>, Migrator.MigrationError, FileSystem | Path> =
-  /* @__PURE__ */ Effect.fn("webMigrationJournal")(function* (
+  /* @__PURE__ */ Effect.fn("web/webMigrationJournal")(function* (
     folder: string = DRIZZLE_MIGRATIONS_FOLDER,
   ) {
     const fileSystem = yield* FileSystem;
@@ -96,7 +96,7 @@ function statementsOf(file: string): ReadonlyArray<string> {
 
 /** The generated folder as migration records, in the journal's own order. */
 export const webMigrations: (folder?: string) => Migrator.Loader<FileSystem | Path> =
-  /* @__PURE__ */ Effect.fn("webMigrations")(function* (
+  /* @__PURE__ */ Effect.fn("web/webMigrations")(function* (
     folder: string = DRIZZLE_MIGRATIONS_FOLDER,
   ) {
     const fileSystem = yield* FileSystem;
@@ -142,58 +142,58 @@ function ensureMigrationsTable(table: string) {
  * copy runs only into an empty table, which is what makes a second launch a
  * no-op rather than a second copy.
  */
-export const bootstrapFromDrizzleHistory = /* @__PURE__ */ Effect.fn("bootstrapFromDrizzleHistory")(
-  function* (
-    folder: string = DRIZZLE_MIGRATIONS_FOLDER,
-    table: string = MIGRATIONS_TABLE,
-  ): Effect.fn.Return<
-    ReadonlyArray<readonly [id: number, name: string]>,
-    Migrator.MigrationError | SqlError,
-    SqlClient.SqlClient | FileSystem | Path
-  > {
-    yield* ensureMigrationsTable(table);
-    const sql = yield* SqlClient.SqlClient;
-    const present = yield* sql`
+export const bootstrapFromDrizzleHistory = /* @__PURE__ */ Effect.fn(
+  "web/bootstrapFromDrizzleHistory",
+)(function* (
+  folder: string = DRIZZLE_MIGRATIONS_FOLDER,
+  table: string = MIGRATIONS_TABLE,
+): Effect.fn.Return<
+  ReadonlyArray<readonly [id: number, name: string]>,
+  Migrator.MigrationError | SqlError,
+  SqlClient.SqlClient | FileSystem | Path
+> {
+  yield* ensureMigrationsTable(table);
+  const sql = yield* SqlClient.SqlClient;
+  const present = yield* sql`
     select 1 as present from information_schema.tables
     where table_schema = ${DRIZZLE_MIGRATIONS_TABLE.SCHEMA}
       and table_name = ${DRIZZLE_MIGRATIONS_TABLE.NAME}
   `.withoutTransform;
-    if (present.length === 0) {
-      return [];
-    }
-    const recorded = yield* decodeCountRow(
-      (yield* sql`select count(*)::int as recorded from ${sql(table)}`.withoutTransform)[0],
-    ).pipe(Effect.mapError(failed));
-    if (recorded.recorded > 0) {
-      return [];
-    }
-    const history = yield* decodeHistoryRow(
-      (yield* sql`
+  if (present.length === 0) {
+    return [];
+  }
+  const recorded = yield* decodeCountRow(
+    (yield* sql`select count(*)::int as recorded from ${sql(table)}`.withoutTransform)[0],
+  ).pipe(Effect.mapError(failed));
+  if (recorded.recorded > 0) {
+    return [];
+  }
+  const history = yield* decodeHistoryRow(
+    (yield* sql`
       select max(created_at)::text as latest
       from ${sql(DRIZZLE_MIGRATIONS_TABLE.SCHEMA)}.${sql(DRIZZLE_MIGRATIONS_TABLE.NAME)}
     `.withoutTransform)[0],
-    ).pipe(Effect.mapError(failed));
-    const latest = history.latest;
-    if (latest === null) {
-      return [];
-    }
-    const applied = (yield* webMigrationJournal(folder))
-      .filter((entry) => entry.when <= latest)
-      .map((entry) => [migrationId(entry), entry.tag] as const);
-    if (applied.length === 0) {
-      return [];
-    }
-    yield* sql`
+  ).pipe(Effect.mapError(failed));
+  const latest = history.latest;
+  if (latest === null) {
+    return [];
+  }
+  const applied = (yield* webMigrationJournal(folder))
+    .filter((entry) => entry.when <= latest)
+    .map((entry) => [migrationId(entry), entry.tag] as const);
+  if (applied.length === 0) {
+    return [];
+  }
+  yield* sql`
     insert into ${sql(table)} ${sql.insert(
       applied.map(([migration_id, name]) => ({ migration_id, name })),
     )}
   `.withoutTransform;
-    return applied;
-  },
-);
+  return applied;
+});
 
 /** Bootstraps, then applies whatever the generated folder still holds. */
-export const runWebMigrations = /* @__PURE__ */ Effect.fn("runWebMigrations")(function* (
+export const runWebMigrations = /* @__PURE__ */ Effect.fn("web/runWebMigrations")(function* (
   folder: string = DRIZZLE_MIGRATIONS_FOLDER,
   table: string = MIGRATIONS_TABLE,
 ): Effect.fn.Return<

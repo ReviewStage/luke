@@ -272,7 +272,7 @@ function probeRequest(
 }
 
 /** Every planned request sent to the target and judged; the answer's body is never read. */
-export const probeDeployment = /* @__PURE__ */ Effect.fn("probeDeployment")(function* (
+export const probeDeployment = /* @__PURE__ */ Effect.fn("web/probeDeployment")(function* (
   target: ProbeTarget,
   plan: readonly PlannedRequest[],
 ): Effect.fn.Return<

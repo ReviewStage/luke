@@ -384,7 +384,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     );
   };
 
-  const requestJson = /* @__PURE__ */ Effect.fnUntraced(function* (
+  const requestJson = /* @__PURE__ */ Effect.fn("providers/requestJson")(function* (
     apiKey: Redacted.Redacted,
     budget: BackoffBudget,
     segments: readonly string[],
@@ -457,7 +457,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * adapter that needs it — a creation response names the thing it created —
    * and travels no further.
    */
-  const writeAttempt = /* @__PURE__ */ Effect.fnUntraced(function* (
+  const writeAttempt = /* @__PURE__ */ Effect.fn("providers/writeAttempt")(function* (
     apiKey: Redacted.Redacted,
     route: CloudWriteRoute,
     subject: WriteSubject,

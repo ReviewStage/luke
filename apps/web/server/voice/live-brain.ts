@@ -135,7 +135,7 @@ export interface HostedLiveBrainOptions {
  */
 export type HostedLiveBrain = LiveBrain;
 
-export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("hostedLiveBrain")(function* (
+export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(function* (
   options: HostedLiveBrainOptions,
 ): Effect.fn.Return<HostedLiveBrain, never, Scope.Scope | SqlClient.SqlClient> {
   const sql = yield* SqlClient.SqlClient;

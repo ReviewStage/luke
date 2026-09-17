@@ -99,7 +99,7 @@ const actionEncryptionSecret: Effect.Effect<
  * runs on this group's fiber and reads the connection the edge already
  * opened; a failed statement is a defect here, as a rejected promise was.
  */
-const actionPassthrough = /* @__PURE__ */ Effect.fn("actionPassthrough")(function* (
+const actionPassthrough = /* @__PURE__ */ Effect.fn("web/actionPassthrough")(function* (
   handle: HostedActionHandler,
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,

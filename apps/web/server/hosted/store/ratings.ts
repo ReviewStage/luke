@@ -52,7 +52,7 @@ export interface RatingStore {
   readonly writer: StoreWriter;
 }
 
-export const rateMessage = /* @__PURE__ */ Effect.fn("rateMessage")(function* (
+export const rateMessage = /* @__PURE__ */ Effect.fn("web/rateMessage")(function* (
   { writer }: RatingStore,
   userId: string,
   messageId: string,

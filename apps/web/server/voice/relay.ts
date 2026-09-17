@@ -199,6 +199,8 @@ export function relaySession<R = never>(
         : undefined;
     };
 
+    // Note that the four frame handlers below stay untraced, because a span per
+    // socket frame would open one on every audio chunk the relay passes.
     const armOpening = Effect.fnUntraced(function* (
       opening: LiveClientEvent,
     ): Effect.fn.Return<void, never, Scope.Scope> {
