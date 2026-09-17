@@ -423,7 +423,10 @@ export function listMessages(
 const windowStands = (window: HistoryWindow) =>
   window.since === undefined
     ? eq(messages.conversationId, window.conversationId)
-    : and(eq(messages.conversationId, window.conversationId), gte(messages.createdAt, window.since));
+    : and(
+        eq(messages.conversationId, window.conversationId),
+        gte(messages.createdAt, window.since),
+      );
 
 /** The rows before the position in the history's order: placed earlier, or at the same instant under a lesser conversation, or under the same one at a lesser sequence. */
 const placedBefore = (before: HistoryPosition) => {
@@ -431,7 +434,11 @@ const placedBefore = (before: HistoryPosition) => {
   return or(
     sql`${messages.placedAt} < ${before.placedAt}::timestamptz`,
     and(sameInstant, lt(messages.conversationId, before.conversationId)),
-    and(sameInstant, eq(messages.conversationId, before.conversationId), lt(messages.seq, before.seq)),
+    and(
+      sameInstant,
+      eq(messages.conversationId, before.conversationId),
+      lt(messages.seq, before.seq),
+    ),
   );
 };
 
@@ -551,8 +558,7 @@ export function listRecentMessages(
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(
     findRecentMessages({ conversationId, userId, limit: pageLimit({ limit }) }),
-    (selected) =>
-      Effect.promise(() => readSelected([...selected].reverse(), tools)),
+    (selected) => Effect.promise(() => readSelected([...selected].reverse(), tools)),
   );
 }
 
