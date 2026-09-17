@@ -122,30 +122,19 @@ function pushFieldsPaired(fields: {
  * a launch that registers before Apple hands the token back is not a device
  * without one.
  */
-export interface DeviceRegisterRequest {
-  platform: DevicePlatform;
-  installationId: string;
-  pushToken?: string;
-  pushEnvironment?: PushEnvironment;
-}
-
-const deviceRegisterRequestCore = EffectSchema.Struct({
+export const deviceRegisterRequestSchema = EffectSchema.Struct({
   platform: devicePlatformSchema,
   installationId: deviceId,
   pushToken: EffectSchema.optionalKey(pushToken),
   pushEnvironment: EffectSchema.optionalKey(pushEnvironmentSchema),
 }).check(EffectSchema.makeFilter(pushFieldsPaired));
 
-export const deviceRegisterRequestSchema = deviceRegisterRequestCore;
+export type DeviceRegisterRequest = typeof deviceRegisterRequestSchema.Type;
 
 /** Confirms a registration and names the row the service minted or already held. */
-export interface DeviceRegisterAnswer {
-  deviceId: string;
-}
+export const deviceRegisterAnswerSchema = EffectSchema.Struct({ deviceId });
 
-const deviceRegisterAnswerCore = EffectSchema.Struct({ deviceId });
-
-export const deviceRegisterAnswerSchema = deviceRegisterAnswerCore;
+export type DeviceRegisterAnswer = typeof deviceRegisterAnswerSchema.Type;
 
 /**
  * A heartbeat moves the row's last-seen instant and may carry two optional
@@ -154,15 +143,7 @@ export const deviceRegisterAnswerSchema = deviceRegisterAnswerCore;
  * with its gateway, or `null` to clear the one on file. A field left out
  * changes nothing.
  */
-export interface DeviceHeartbeatRequest {
-  deviceId: string;
-  /** Epoch milliseconds; absent leaves presence as it stands. */
-  activeUntil?: number;
-  pushToken?: string | null;
-  pushEnvironment?: PushEnvironment;
-}
-
-const deviceHeartbeatRequestCore = EffectSchema.Struct({
+export const deviceHeartbeatRequestSchema = EffectSchema.Struct({
   deviceId,
   activeUntil: EffectSchema.optionalKey(
     EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
@@ -175,27 +156,17 @@ const deviceHeartbeatRequestCore = EffectSchema.Struct({
   pushEnvironment: EffectSchema.optionalKey(pushEnvironmentSchema),
 }).check(EffectSchema.makeFilter(pushFieldsPaired));
 
-export const deviceHeartbeatRequestSchema = deviceHeartbeatRequestCore;
+export type DeviceHeartbeatRequest = typeof deviceHeartbeatRequestSchema.Type;
 
 /** Whether the heartbeat found the row; `false` tells the client to register again. */
-const deviceHeartbeatAnswerCore = EffectSchema.Struct({ seen: EffectSchema.Boolean });
-
-export const deviceHeartbeatAnswerSchema = deviceHeartbeatAnswerCore;
+export const deviceHeartbeatAnswerSchema = EffectSchema.Struct({ seen: EffectSchema.Boolean });
 
 /** Forgets the row at sign-out. */
-export interface DeviceForgetRequest {
-  deviceId: string;
-}
+export const deviceForgetRequestSchema = EffectSchema.Struct({ deviceId });
 
-const deviceForgetRequestCore = EffectSchema.Struct({ deviceId });
-
-export const deviceForgetRequestSchema = deviceForgetRequestCore;
+export type DeviceForgetRequest = typeof deviceForgetRequestSchema.Type;
 
 /** Confirms whether a sign-out found and removed the device's row. */
-export interface DeviceForgetAnswer {
-  deleted: boolean;
-}
+export const deviceForgetAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Boolean });
 
-const deviceForgetAnswerCore = EffectSchema.Struct({ deleted: EffectSchema.Boolean });
-
-export const deviceForgetAnswerSchema = deviceForgetAnswerCore;
+export type DeviceForgetAnswer = typeof deviceForgetAnswerSchema.Type;

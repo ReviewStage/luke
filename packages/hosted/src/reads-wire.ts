@@ -2,21 +2,15 @@ import {
   CONVERSATION_VIEW_ACTION_OUTCOME,
   CONVERSATION_VIEW_SOURCE,
   CONVERSATION_VIEW_TOOL_KIND,
-  type ConversationViewSource,
-  type ConversationViewToolPart,
-  type ConversationViewTurn,
-  type SessionIdentity,
   TOOL_PART_STATE,
 } from "@sidecar/session";
 import {
   CONVERSATION_EVENT_KIND,
-  type ConversationEventKind,
   isRecord,
   isWireString,
   SCHEMA_REFUSAL,
   type SchemaRead,
   STANDING_RATING,
-  type StandingRating,
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
@@ -185,35 +179,20 @@ function encodeCursor<Value, Encoded>(
  * so a head and a cursor read equal exactly when nothing was numbered or
  * written since; a resource whose rows never change carries none.
  */
-export interface SequencePosition {
-  readonly conversationId: string;
-  readonly seq: number;
-  readonly revision?: number;
-}
-
-/**
- * A cursor over the numbered rows of several conversations at once, one
- * position per conversation the view stood on when it was minted, in
- * conversation-id order so two cursors over the same positions are the same
- * string. A conversation not positioned is read from its beginning; one
- * positioned but no longer standing is dropped from the next cursor minted.
- */
-export interface SequenceReadCursor {
-  readonly positions: readonly SequencePosition[];
-}
-
 const sequencePositionSchema = EffectSchema.Struct({
   conversationId: wireUuidSchema,
   seq: wholeNumber(0),
   revision: EffectSchema.optionalKey(wholeNumber(0)),
 });
 
+export type SequencePosition = typeof sequencePositionSchema.Type;
+
 function compareCodePoints(a: string, b: string): number {
   if (a === b) return 0;
   return a < b ? -1 : 1;
 }
 
-function positionsCanonical(cursor: SequenceReadCursor): boolean {
+function positionsCanonical(cursor: { readonly positions: readonly SequencePosition[] }): boolean {
   return cursor.positions.every(
     (position, index) =>
       index === 0 ||
@@ -224,11 +203,20 @@ function positionsCanonical(cursor: SequenceReadCursor): boolean {
   );
 }
 
+/**
+ * A cursor over the numbered rows of several conversations at once, one
+ * position per conversation the view stood on when it was minted, in
+ * conversation-id order so two cursors over the same positions are the same
+ * string. A conversation not positioned is read from its beginning; one
+ * positioned but no longer standing is dropped from the next cursor minted.
+ */
 const sequenceReadCursorRecord = EffectSchema.Struct({
   positions: EffectSchema.Array(sequencePositionSchema).check(
     EffectSchema.isMaxLength(READ_CURSOR_BOUNDS.MAX_CONVERSATIONS),
   ),
 }).check(EffectSchema.makeFilter(positionsCanonical));
+
+export type SequenceReadCursor = typeof sequenceReadCursorRecord.Type;
 
 /** Reads a sequence cursor a device handed back, or refuses one this build did not mint the shape of. */
 export const sequenceReadCursorSchema = encodedCursorSchema(sequenceReadCursorRecord);
@@ -273,22 +261,6 @@ const STORE_INSTANT_TEXT =
  * the same millisecond as the oldest a device took would otherwise never
  * read as older.
  */
-export interface HistoryPosition {
-  readonly placedAt: string;
-  readonly conversationId: string;
-  readonly seq: number;
-}
-
-/**
- * A cursor over the Conversation's history: the position to read back from,
- * or none to read from the tail, the newest rows the view holds. A device
- * reading a long Conversation for the first time asks for the tail, draws
- * it, and reads back a page at a time only as far as its reader looks.
- */
-export interface HistoryReadCursor {
-  readonly before?: HistoryPosition;
-}
-
 const historyPositionSchema = EffectSchema.Struct({
   placedAt: trimmedText({ max: 40 }).check(
     EffectSchema.makeFilter((instant) => STORE_INSTANT_TEXT.test(instant)),
@@ -297,9 +269,19 @@ const historyPositionSchema = EffectSchema.Struct({
   seq: wholeNumber(1),
 });
 
+export type HistoryPosition = typeof historyPositionSchema.Type;
+
+/**
+ * A cursor over the Conversation's history: the position to read back from,
+ * or none to read from the tail, the newest rows the view holds. A device
+ * reading a long Conversation for the first time asks for the tail, draws
+ * it, and reads back a page at a time only as far as its reader looks.
+ */
 const historyReadCursorRecord = EffectSchema.Struct({
   before: EffectSchema.optionalKey(historyPositionSchema),
 });
+
+export type HistoryReadCursor = typeof historyReadCursorRecord.Type;
 
 /** Reads a history cursor a device handed back, or refuses one this build did not mint the shape of. */
 export const historyReadCursorSchema = encodedCursorSchema(historyReadCursorRecord);
@@ -334,17 +316,14 @@ export function encodeHistoryReadCursor(before: HistoryPosition | undefined): st
  * the same millisecond apart, and a turn that settled in the same millisecond
  * as one a device already took would otherwise never read as later.
  */
-export interface TurnReadCursor {
-  readonly changedAt: string;
-  readonly id: string;
-}
-
 const turnReadCursorRecord = EffectSchema.Struct({
   changedAt: trimmedText({ max: 40 }).check(
     EffectSchema.makeFilter((instant) => STORE_INSTANT_TEXT.test(instant)),
   ),
   id: wireUuidSchema,
 });
+
+export type TurnReadCursor = typeof turnReadCursorRecord.Type;
 
 export const turnReadCursorSchema = encodedCursorSchema(turnReadCursorRecord);
 
@@ -369,12 +348,9 @@ export function encodeTurnReadCursor(cursor: TurnReadCursor): string {
  * as a turn cursor, and opaque to a device all the same: the children read
  * takes no cursor, and a device compares the head to the one it last saw.
  */
-export interface ChildrenHead {
-  readonly changedAt: string;
-  readonly id: string;
-}
-
 export const childrenHeadSchema = encodedCursorSchema(turnReadCursorRecord);
+
+export type ChildrenHead = typeof childrenHeadSchema.Type;
 
 const encodedChildrenHeadSchema = trimmedText({
   max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH,
@@ -393,12 +369,9 @@ export function encodeChildrenHead(head: ChildrenHead): string {
  * agents read takes no cursor, and a device compares the head to the one it
  * last saw.
  */
-export interface AgentsHead {
-  readonly changedAt: string;
-  readonly id: string;
-}
-
 export const agentsHeadSchema = encodedCursorSchema(turnReadCursorRecord);
+
+export type AgentsHead = typeof agentsHeadSchema.Type;
 
 const encodedAgentsHeadSchema = trimmedText({
   max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH,
@@ -429,23 +402,11 @@ const sessionIdentitySchema = EffectSchema.Struct({
  * conversation is never cleared, so the service reads its rows from that
  * instant on and a device that already holds earlier ones lets them go.
  */
-export type ConversationReadConversation =
-  | {
-      readonly id: string;
-      readonly kind: typeof CONVERSATION_VIEW_SOURCE.MAIN;
-      /** Epoch milliseconds the standing main was opened at; the view's window starts here. */
-      readonly openedAt: number;
-    }
-  | {
-      readonly id: string;
-      readonly kind: typeof CONVERSATION_VIEW_SOURCE.OBSERVED;
-      readonly session: SessionIdentity;
-    };
-
 const conversationReadConversationSchema = EffectSchema.Union([
   EffectSchema.Struct({
     id: wireUuidSchema,
     kind: EffectSchema.Literal(CONVERSATION_VIEW_SOURCE.MAIN),
+    // Epoch milliseconds the standing main was opened at; the view's window starts here.
     openedAt: countedNumber,
   }),
   EffectSchema.Struct({
@@ -454,6 +415,8 @@ const conversationReadConversationSchema = EffectSchema.Union([
     session: sessionIdentitySchema,
   }),
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+
+export type ConversationReadConversation = typeof conversationReadConversationSchema.Type;
 
 const conversationViewSourceSchema = EffectSchema.Union([
   EffectSchema.Struct({ kind: EffectSchema.Literal(CONVERSATION_VIEW_SOURCE.MAIN) }),
@@ -531,25 +494,18 @@ const wireValueSchema = declareReader<WireValue>(
  * beginning; the events remain the record, one row per rating, and a
  * re-rating is a newer row that this field then answers.
  */
-export interface ConversationReadMessage {
-  readonly message: WireRecord;
-  readonly seq: number;
-  /** Epoch milliseconds the row was written at. */
-  readonly createdAt: number;
-  /** Epoch milliseconds where the row stands in the Conversation; the order across conversations. */
-  readonly placedAt: number;
-  readonly tools: readonly ConversationViewToolPart[];
-  readonly rating?: StandingRating;
-}
-
 const conversationReadMessageSchema = EffectSchema.Struct({
   message: storedMessageRecordSchema,
   seq: wholeNumber(1),
+  // Epoch milliseconds the row was written at.
   createdAt: countedNumber,
+  // Epoch milliseconds where the row stands in the Conversation; the order across conversations.
   placedAt: countedNumber,
   tools: EffectSchema.Array(conversationViewToolPartSchema),
   rating: EffectSchema.optionalKey(STANDING_RATING),
 });
+
+export type ConversationReadMessage = typeof conversationReadMessageSchema.Type;
 
 /**
  * The messages one turn wrote that the view selected, under the turn row
@@ -571,14 +527,6 @@ const conversationReadMessageSchema = EffectSchema.Struct({
  * stand, and the cursor passes it only then; a device replaces the message
  * it holds rather than keeping the first copy.
  */
-export interface ConversationReadTurnGroup {
-  readonly turnId: string;
-  readonly conversationId: string;
-  readonly source: ConversationViewSource;
-  readonly turn?: ConversationViewTurn;
-  readonly messages: readonly ConversationReadMessage[];
-}
-
 const conversationReadTurnGroupSchema = EffectSchema.Struct({
   turnId: wireUuidSchema,
   conversationId: wireUuidSchema,
@@ -586,6 +534,11 @@ const conversationReadTurnGroupSchema = EffectSchema.Struct({
   turn: EffectSchema.optionalKey(conversationViewTurnSchema),
   messages: EffectSchema.Array(conversationReadMessageSchema).check(EffectSchema.isMinLength(1)),
 });
+
+export type ConversationReadTurnGroup = typeof conversationReadTurnGroupSchema.Type;
+
+/** A group holds at least one row, so a page holds at most as many groups as rows. */
+const MAX_MESSAGE_GROUPS = READ_PAGE_BOUNDS.MAX_LIMIT;
 
 /**
  * The messages endpoint's answer: the view's standing conversations, the
@@ -595,16 +548,6 @@ const conversationReadTurnGroupSchema = EffectSchema.Struct({
  * ordinary work that never crosses into the view; the cursor moved all the
  * same, and a device reads on.
  */
-export interface ConversationMessagesAnswer {
-  readonly conversations: readonly ConversationReadConversation[];
-  readonly groups: readonly ConversationReadTurnGroup[];
-  readonly next: string;
-  readonly hasMore: boolean;
-}
-
-/** A group holds at least one row, so a page holds at most as many groups as rows. */
-const MAX_MESSAGE_GROUPS = READ_PAGE_BOUNDS.MAX_LIMIT;
-
 export const conversationMessagesAnswerSchema = EffectSchema.Struct({
   conversations: EffectSchema.Array(conversationReadConversationSchema).check(
     EffectSchema.isMaxLength(READ_CURSOR_BOUNDS.MAX_CONVERSATIONS),
@@ -615,6 +558,8 @@ export const conversationMessagesAnswerSchema = EffectSchema.Struct({
   next: encodedSequenceReadCursorSchema,
   hasMore: EffectSchema.Boolean,
 });
+
+export type ConversationMessagesAnswer = typeof conversationMessagesAnswerSchema.Type;
 
 /**
  * The history endpoint's answer: the same view over the same standing
@@ -627,14 +572,6 @@ export const conversationMessagesAnswerSchema = EffectSchema.Struct({
  * no group and still say older rows stand, as a messages page may; the
  * cursor moved all the same, and a device reads on.
  */
-export interface ConversationHistoryAnswer {
-  readonly conversations: readonly ConversationReadConversation[];
-  readonly groups: readonly ConversationReadTurnGroup[];
-  readonly older: string;
-  readonly hasOlder: boolean;
-  readonly next: string;
-}
-
 export const conversationHistoryAnswerSchema = EffectSchema.Struct({
   conversations: EffectSchema.Array(conversationReadConversationSchema).check(
     EffectSchema.isMaxLength(READ_CURSOR_BOUNDS.MAX_CONVERSATIONS),
@@ -647,35 +584,22 @@ export const conversationHistoryAnswerSchema = EffectSchema.Struct({
   next: encodedSequenceReadCursorSchema,
 });
 
-/** One event row about a message, in its conversation's own event sequence. */
-export interface ConversationReadEvent {
-  readonly id: string;
-  readonly conversationId: string;
-  readonly seq: number;
-  readonly messageId: string;
-  readonly kind: ConversationEventKind;
-  /** The device that claimed, spoke, or rated; absent for a kind no device took part in. */
-  readonly deviceId?: string;
-  readonly payload?: WireValue;
-  readonly createdAt: number;
-}
+export type ConversationHistoryAnswer = typeof conversationHistoryAnswerSchema.Type;
 
+/** One event row about a message, in its conversation's own event sequence. */
 const conversationReadEventSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   conversationId: wireUuidSchema,
   seq: wholeNumber(1),
   messageId: wireUuidSchema,
   kind: EffectSchema.Literals(CONVERSATION_EVENT_KIND_NAMES),
+  // The device that claimed, spoke, or rated; absent for a kind no device took part in.
   deviceId: EffectSchema.optionalKey(trimmedText()),
   payload: EffectSchema.optionalKey(wireValueSchema),
   createdAt: countedNumber,
 });
 
-export interface ConversationEventsAnswer {
-  readonly events: readonly ConversationReadEvent[];
-  readonly next: string;
-  readonly hasMore: boolean;
-}
+export type ConversationReadEvent = typeof conversationReadEventSchema.Type;
 
 export const conversationEventsAnswerSchema = EffectSchema.Struct({
   events: EffectSchema.Array(conversationReadEventSchema).check(
@@ -685,6 +609,8 @@ export const conversationEventsAnswerSchema = EffectSchema.Struct({
   hasMore: EffectSchema.Boolean,
 });
 
+export type ConversationEventsAnswer = typeof conversationEventsAnswerSchema.Type;
+
 /**
  * One turn as the turns endpoint answers it: the view's columns, the
  * conversation it ran over, what it ran on and how it ended, and its own
@@ -692,14 +618,6 @@ export const conversationEventsAnswerSchema = EffectSchema.Struct({
  * again each time a stamp on it moves, so a device replaces the turn it holds
  * by id rather than appending.
  */
-export interface BrainTurnRecord extends ConversationViewTurn {
-  readonly conversationId: string;
-  readonly model?: string;
-  readonly failure?: string;
-  readonly cancelRequestedAt?: number;
-  readonly cursor: string;
-}
-
 const brainTurnRecordSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   conversationId: wireUuidSchema,
@@ -714,13 +632,9 @@ const brainTurnRecordSchema = EffectSchema.Struct({
   cursor: encodedTurnReadCursorSchema,
 });
 
-/** The turns endpoint's answer; `next` is absent only when nothing has ever been taken and nothing stood to take. */
-export interface BrainTurnsAnswer {
-  readonly turns: readonly BrainTurnRecord[];
-  readonly next?: string;
-  readonly hasMore: boolean;
-}
+export type BrainTurnRecord = typeof brainTurnRecordSchema.Type;
 
+/** The turns endpoint's answer; `next` is absent only when nothing has ever been taken and nothing stood to take. */
 export const brainTurnsAnswerSchema = EffectSchema.Struct({
   turns: EffectSchema.Array(brainTurnRecordSchema).check(
     EffectSchema.isMaxLength(READ_PAGE_BOUNDS.MAX_LIMIT),
@@ -728,6 +642,8 @@ export const brainTurnsAnswerSchema = EffectSchema.Struct({
   next: EffectSchema.optionalKey(encodedTurnReadCursorSchema),
   hasMore: EffectSchema.Boolean,
 });
+
+export type BrainTurnsAnswer = typeof brainTurnsAnswerSchema.Type;
 
 /**
  * Where a child stands, derived from its latest turn: accepted before one
@@ -766,19 +682,6 @@ const CHILD_PARENT_KIND_NAMES = Object.values(CONVERSATION_VIEW_SOURCE);
  * opening. A child is answered whole on every read, so a device replaces the
  * child it holds by id rather than appending.
  */
-export interface ChildRead {
-  readonly id: string;
-  readonly parentConversationId: string;
-  readonly parentKind: ConversationViewSource["kind"];
-  readonly label?: string;
-  readonly task?: string;
-  readonly status: ChildStatus;
-  readonly acceptedAt: number;
-  readonly startedAt?: number;
-  readonly settledAt?: number;
-  readonly failure?: string;
-}
-
 const childReadSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   parentConversationId: wireUuidSchema,
@@ -792,21 +695,21 @@ const childReadSchema = EffectSchema.Struct({
   failure: EffectSchema.optionalKey(trimmedText()),
 });
 
+export type ChildRead = typeof childReadSchema.Type;
+
 /**
  * The children endpoint's answer: the account's standing children, newest
  * first, at most `MAX_CHILDREN` of them and no cursor, since a child's status
  * changes in place and the list is short. The change signal's `children` head
  * says when to read it again.
  */
-export interface ChildrenAnswer {
-  readonly children: readonly ChildRead[];
-}
-
 export const childrenAnswerSchema = EffectSchema.Struct({
   children: EffectSchema.Array(childReadSchema).check(
     EffectSchema.isMaxLength(CHILDREN_READ_BOUNDS.MAX_CHILDREN),
   ),
 });
+
+export type ChildrenAnswer = typeof childrenAnswerSchema.Type;
 
 /** The bound of the agents read: the most agents one answer lists. */
 export const AGENTS_READ_BOUNDS = {
@@ -814,6 +717,8 @@ export const AGENTS_READ_BOUNDS = {
   /** How much of a session's title or workspace name an agent carries, in UTF-16 units. */
   NAME_CHARS: 200,
 } as const;
+
+const agentNameSchema = trimmedText({ max: AGENTS_READ_BOUNDS.NAME_CHARS });
 
 /**
  * One agent as the agents read answers it: a coding-agent session Luke
@@ -829,22 +734,6 @@ export const AGENTS_READ_BOUNDS = {
  * let it go; no branch or path travels. An agent is answered whole on every
  * read, so a device replaces the agent it holds by id rather than appending.
  */
-export interface AgentRead {
-  readonly id: string;
-  readonly providerId: string;
-  readonly providerSessionId: string;
-  readonly title?: string;
-  readonly workspace?: string;
-  readonly status: ChildStatus;
-  readonly acceptedAt: number;
-  readonly queuedAt: number;
-  readonly startedAt?: number;
-  readonly settledAt?: number;
-  readonly failure?: string;
-}
-
-const agentNameSchema = trimmedText({ max: AGENTS_READ_BOUNDS.NAME_CHARS });
-
 const agentReadSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   ...sessionIdentitySchema.fields,
@@ -858,6 +747,8 @@ const agentReadSchema = EffectSchema.Struct({
   failure: EffectSchema.optionalKey(trimmedText()),
 });
 
+export type AgentRead = typeof agentReadSchema.Type;
+
 /**
  * The agents endpoint's answer: the account's standing agents that hold a
  * turn, the one that changed last first on the `agents` head's own terms
@@ -865,15 +756,13 @@ const agentReadSchema = EffectSchema.Struct({
  * and no cursor, since an agent's status changes in place and the list is
  * short. The change signal's `agents` head says when to read it again.
  */
-export interface AgentsAnswer {
-  readonly agents: readonly AgentRead[];
-}
-
 export const agentsAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(agentReadSchema).check(
     EffectSchema.isMaxLength(AGENTS_READ_BOUNDS.MAX_AGENTS),
   ),
 });
+
+export type AgentsAnswer = typeof agentsAnswerSchema.Type;
 
 /**
  * The query a child's messages read takes: the conversation by its id, read
@@ -919,6 +808,10 @@ export const unreadableRowRefusalSchema = unreadableRowRefusalRecord.pipe(
   ),
 );
 
+const presenceInstantSchema = EffectSchema.Union([wholeNumber(0), EffectSchema.Null]).annotate(
+  wireRefusal(SCHEMA_REFUSAL.MALFORMED),
+);
+
 /**
  * The change-signal poll's request: the device asking, and what it reports
  * of itself on the way. `activeUntil` is the instant its presence holds
@@ -928,21 +821,13 @@ export const unreadableRowRefusalSchema = unreadableRowRefusalRecord.pipe(
  * clear the one on file, and absent to leave it. The service reports them and decides nothing from them here: what a
  * quiet instant does is hold speech, and holding is the whole of its power.
  */
-export interface ChangesRequest {
-  readonly deviceId: string;
-  readonly activeUntil?: number | null;
-  readonly quietUntil?: number | null;
-}
-
-const presenceInstantSchema = EffectSchema.Union([wholeNumber(0), EffectSchema.Null]).annotate(
-  wireRefusal(SCHEMA_REFUSAL.MALFORMED),
-);
-
 export const changesRequestSchema = EffectSchema.Struct({
   deviceId: wireUuidSchema,
   activeUntil: EffectSchema.optionalKey(presenceInstantSchema),
   quietUntil: EffectSchema.optionalKey(presenceInstantSchema),
 });
+
+export type ChangesRequest = typeof changesRequestSchema.Type;
 
 /**
  * Where every resource's read stands now: the cursor a device reading each
@@ -957,25 +842,17 @@ export const changesRequestSchema = EffectSchema.Struct({
  * heartbeat says it; `false` tells the device to register again, and the
  * signal is answered either way.
  */
-export interface ChangesAnswer {
-  readonly seen: boolean;
-  readonly messages: string;
-  readonly events: string;
-  readonly turns?: string;
-  /** The children head: compared to the one last seen, since the children read takes no cursor. */
-  readonly children?: string;
-  /** The agents head, on the same terms; absent while no agent has a turn. */
-  readonly agents?: string;
-  /** Epoch milliseconds of the latest roster snapshot the scheduled observation wrote. */
-  readonly rosterObservedAt?: number;
-}
-
 export const changesAnswerSchema = EffectSchema.Struct({
   seen: EffectSchema.Boolean,
   messages: encodedSequenceReadCursorSchema,
   events: encodedSequenceReadCursorSchema,
   turns: EffectSchema.optionalKey(encodedTurnReadCursorSchema),
+  // The children head: compared to the one last seen, since the children read takes no cursor.
   children: EffectSchema.optionalKey(encodedChildrenHeadSchema),
+  // The agents head, on the same terms; absent while no agent has a turn.
   agents: EffectSchema.optionalKey(encodedAgentsHeadSchema),
+  // Epoch milliseconds of the latest roster snapshot the scheduled observation wrote.
   rosterObservedAt: EffectSchema.optionalKey(countedNumber),
 });
+
+export type ChangesAnswer = typeof changesAnswerSchema.Type;
