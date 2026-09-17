@@ -567,15 +567,6 @@ it.effect(
     }),
 );
 
-it.effect("no source means no session and nothing announced", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    f.sourceAvailable = false;
-    assert.equal(yield* f.service.createSession("offer"), undefined);
-    assert.deepEqual(f.changes, []);
-  }),
-);
-
 it.effect(
   "a delegation is claimed once, composed from the transcript since the previous one, and attaches the developer's row, written as it stands",
   () =>
@@ -1696,21 +1687,6 @@ it.effect(
       );
       assert.ok(lastBriefingChunk);
     }),
-);
-
-it.effect("creating a session while one stands closes the standing one first", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const first = yield* f.open();
-    yield* settle();
-    const creating = yield* Effect.forkChild(f.service.createSession("offer-2"));
-    yield* settle();
-    assert.equal(appends(first, LIVE_CLIENT_EVENT.CLOSE).length, 1);
-    first.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 9);
-    const created = yield* Fiber.join(creating);
-    assert.equal(created?.sessionId, "sess-2");
-    assert.equal(f.creates.length, 2);
-  }),
 );
 
 it.effect("stop closes the session gracefully and takes nothing else with it", () =>

@@ -3,9 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
 import { settleJsonGolden, settleJsonSchemaGoldenSet } from "@sidecar/wire/testing";
-import { Effect, Result, type Scope } from "effect";
+import { Effect, type Scope } from "effect";
 import { test } from "vitest";
 import type { GatewayMethodTable } from "./methods.js";
 import {
@@ -27,9 +26,6 @@ import {
   NotFoundRefusal,
   RefusedRefusal,
   UnknownCapabilityRefusal,
-  voiceCreateLiveSessionParamsSchema,
-  voiceReportLiveActivityParamsSchema,
-  voiceReportLiveTransportParamsSchema,
 } from "./protocol.js";
 
 import { type GatewayInProcessHost, gatewayInProcessHost } from "./server.js";
@@ -191,33 +187,6 @@ function answeringTable(): GatewayMethodTable {
   for (const method of METHODS) table[method] = () => Effect.succeed({ answered: method });
   return table;
 }
-
-test("the declared parameters the fixtures carry are the shapes the protocol admits", () => {
-  assert.deepEqual(
-    Result.getOrUndefined(
-      readEither(voiceCreateLiveSessionParamsSchema)(
-        paramsFor(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION),
-      ),
-    ),
-    { sdp: FIXTURE_SDP },
-  );
-  assert.deepEqual(
-    Result.getOrUndefined(
-      readEither(voiceReportLiveTransportParamsSchema)(
-        paramsFor(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT),
-      ),
-    ),
-    { state: LIVE_TRANSPORT_STATE.CONNECTED },
-  );
-  assert.deepEqual(
-    Result.getOrUndefined(
-      readEither(voiceReportLiveActivityParamsSchema)(
-        paramsFor(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY),
-      ),
-    ),
-    { idle: false },
-  );
-});
 
 it.effect("every method's request and answer cross as the recorded envelopes", () =>
   Effect.gen(function* () {

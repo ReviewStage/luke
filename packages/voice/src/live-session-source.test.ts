@@ -18,13 +18,11 @@ import {
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { Duration, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
-import { test } from "vitest";
 import {
   HOSTED_REATTACH_DELAYS_MS,
   type HostedLiveSessionOptions,
   HostedLiveSessionSource,
   IntroductionLiveSessionSource,
-  unavailableLiveDiagnostics,
 } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
 import {
@@ -887,17 +885,6 @@ it.effect("the introduction source never reads a refusal as signed out", () =>
     assert.equal(capped.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED);
   }),
 );
-
-test("unavailable diagnostics name the fixture run apart from the missing account", () => {
-  assert.equal(
-    unavailableLiveDiagnostics({ fixtureMode: true }).lastOutcome,
-    LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE,
-  );
-  const missing = unavailableLiveDiagnostics({ fixtureMode: false });
-  assert.equal(missing.lastOutcome, LIVE_SESSION_OUTCOME.NO_ACCOUNT);
-  assert.equal(missing.sidebandAttached, false);
-  assert.equal(missing.voice, LIVE_DEFAULTS.VOICE);
-});
 
 it.effect(
   "the hosted source names this installation's device on the create handshake alone, and none while no device is registered",

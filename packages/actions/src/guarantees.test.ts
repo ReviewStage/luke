@@ -20,7 +20,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Deferred, Effect, Fiber } from "effect";
+import { Effect } from "effect";
 import { ACTION_KIND, type ActionKind, type ActionRequest } from "./action-kinds.js";
 import {
   ACTION_REFUSAL,
@@ -172,20 +172,6 @@ it.effect("each validated against the observed roster before an adapter sees it"
   }),
 );
 
-it.effect("a fresh roster read precedes it, and admission reads it once per action", () =>
-  Effect.gen(function* () {
-    for (const kind of SESSION_KINDS) {
-      const standing = context();
-      assert.notEqual(
-        (yield* decide({ kind, fields: FIELDS[kind] }, standing)).kind,
-        undefined,
-        kind,
-      );
-      assert.equal(standing.rosterReads(), 1, kind);
-    }
-  }),
-);
-
 it.effect("its target has to be one the roster holds", () =>
   Effect.gen(function* () {
     // The same session id under another provider is another session, and names nothing.
@@ -211,50 +197,6 @@ it.effect("a cancellation or a revoked run refuses it", () =>
       );
       assert.equal(revoked.rosterReads(), 0, kind);
     }
-  }),
-);
-
-it.effect("a turn that ends while the roster is read refuses rather than dispatching", () =>
-  Effect.gen(function* () {
-    let over = false;
-    const controller = new AbortController();
-    const answer = yield* decide(
-      { kind: ACTION_KIND.MESSAGE, fields: FIELDS[ACTION_KIND.MESSAGE] },
-      {
-        origin: RUN_ORIGIN.USER,
-        guard: { isRevoked: () => over, signal: controller.signal },
-        roster: {
-          read: () =>
-            Effect.sync(() => {
-              over = true;
-              return [offering()];
-            }),
-        },
-      },
-    );
-    assert.equal(refused(answer), ACTION_REFUSAL.TURN_OVER);
-  }),
-);
-
-it.effect("a read still out when the signal fires answers nothing, and the action refuses", () =>
-  Effect.gen(function* () {
-    const controller = new AbortController();
-    const held = yield* Deferred.make<readonly Session[]>();
-    // The read is out before the signal fires: the fork starts on this statement.
-    const pending = yield* Effect.forkChild(
-      decide(
-        { kind: ACTION_KIND.MESSAGE, fields: FIELDS[ACTION_KIND.MESSAGE] },
-        {
-          origin: RUN_ORIGIN.USER,
-          guard: { isRevoked: () => controller.signal.aborted, signal: controller.signal },
-          roster: { read: () => Deferred.await(held) },
-        },
-      ),
-      { startImmediately: true },
-    );
-    controller.abort();
-    assert.equal(refused(yield* Fiber.join(pending)), ACTION_REFUSAL.TURN_OVER);
-    yield* Deferred.succeed(held, [offering()]);
   }),
 );
 

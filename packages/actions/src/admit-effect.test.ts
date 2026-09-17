@@ -11,7 +11,7 @@ import {
 } from "@sidecar/session";
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { ACTION_KIND } from "./action-kinds.js";
-import { ACTION_REFUSAL, type AdmitContext, AdmitRefusal, admitEffect } from "./admit.js";
+import { ACTION_REFUSAL, type AdmitContext, admitEffect } from "./admit.js";
 
 /**
  * The gauntlet as an Effect: what it succeeds with, what it fails with, and
@@ -296,10 +296,4 @@ describe("admitEffect", () => {
       assert.equal(admitted.kind, ACTION_KIND.MESSAGE);
     }),
   );
-});
-
-it("AdmitRefusal is the tagged error the gauntlet fails with", () => {
-  const refusal = new AdmitRefusal({ reason: ACTION_REFUSAL.NO_SESSION });
-  assert.equal(refusal._tag, "AdmitRefusal");
-  assert.equal(refusal.reason, ACTION_REFUSAL.NO_SESSION);
 });

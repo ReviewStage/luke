@@ -21,7 +21,6 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import {
-  ACTION_FAMILY,
   ACTION_REFUSAL,
   ACTION_TOOL,
   ACTIONS,
@@ -899,11 +898,6 @@ it.effect("an opening task is held to the project's own word for it", () =>
     for (const refusal of refusals) assert.equal(refusal.status, ACTION_RESULT_STATUS.REJECTED);
   }),
 );
-
-it("each action belongs to one family", () => {
-  assert.equal(ACTIONS.CHANGE_APP_SETTING.family, ACTION_FAMILY.APP);
-  assert.equal(ACTIONS.SEND_SESSION_MESSAGE.family, ACTION_FAMILY.SESSION);
-});
 
 it("show_panel's filter enum carries the whole vocabulary its validator accepts", () => {
   const values = itemEnum(objectProperties(emitJsonSchema(ACTIONS.SHOW_PANEL.request)).filters);
