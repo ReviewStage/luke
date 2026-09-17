@@ -30,6 +30,7 @@ import {
   dailyNotePath,
   isRecord,
   isWireString,
+  jsonRoundTrip,
   RUN_ORIGIN,
   sessionKey,
   unparsedWire,
@@ -217,11 +218,9 @@ const housekeepingTurn = /* @__PURE__ */ Effect.fn("housekeepingTurn")(function*
   // every call the model emits comes back here to be parsed and carried.
   const offered: Tool = tool({
     description: module.description,
-    // SAFETY: the wire schema's node is JSON Schema in the strict form a function tool takes; a
+    // The wire schema's node is JSON Schema in the strict form a function tool takes; a
     // round trip is its plain-object form, which is what the SDK's schema type names.
-    inputSchema: jsonSchema<unknown>(
-      JSON.parse(JSON.stringify(emitJsonSchema(module.inputSchema))),
-    ),
+    inputSchema: jsonSchema<unknown>(jsonRoundTrip(emitJsonSchema(module.inputSchema))),
   });
   const tools: ToolSet = { [BRAIN_TOOL.APPEND_DAILY_NOTE]: offered };
   const asked = yield* Effect.tryPromise({

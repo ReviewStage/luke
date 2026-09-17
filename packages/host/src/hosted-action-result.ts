@@ -9,9 +9,10 @@ import {
   type HostedActionOutcome,
   type HostedActionWorkspaceOutcome,
 } from "@sidecar/hosted";
+import { onOwnFiber } from "@sidecar/runtime/effect";
 import type { CloudAgentProviderId, SessionWriteResult } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
-import { Effect, Fiber } from "effect";
+import { Effect } from "effect";
 
 /**
  * One service call, made on a fiber of its own and waited for where it was
@@ -26,7 +27,7 @@ import { Effect, Fiber } from "effect";
  * neither cuts it nor drops what it earns.
  */
 export function carriedHostedCall<Answer>(call: Effect.Effect<Answer>): Effect.Effect<Answer> {
-  return Effect.flatMap(Effect.forkDetach(call), Fiber.join);
+  return onOwnFiber(call);
 }
 
 /** What a caller hears of a service call that ended short of the provider's own answer. */

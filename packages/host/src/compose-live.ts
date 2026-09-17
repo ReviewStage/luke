@@ -14,12 +14,13 @@ import {
 } from "@sidecar/gateway";
 import { type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
+import { serialQueue } from "@sidecar/runtime/effect";
 import { SESSION_STATUS } from "@sidecar/session";
 import { APP_SETTING_SCHEMA, voiceHotkeyCandidates, voiceHotkeyLabel } from "@sidecar/settings";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { type BeatKind, LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
-import { Duration, Effect, Queue, Result, type Scope } from "effect";
+import { Duration, Effect, Result, type Scope } from "effect";
 import {
   arrivalBeatOwed,
   countsFirstAnnouncement,
@@ -122,14 +123,9 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
   // What a caller asked for and nothing waits on: each decision is taken in
   // turn by a fiber of this composer's scope, and one that dies is written
   // down rather than left to end the fiber every later ask needs.
-  const asks = yield* Queue.unbounded<Effect.Effect<void>>();
-  yield* Effect.forkScoped(
-    Effect.forever(
-      Effect.flatMap(Queue.take(asks), (ask) =>
-        Effect.catchDefect(ask, (defect) => Effect.logError("an onboarding beat failed", defect)),
-      ),
-    ),
-  );
+  const asks = yield* serialQueue({
+    onDefect: (cause) => Effect.logError("an onboarding beat failed", cause),
+  });
 
   function markFirstAnnouncementSpoken(): void {
     const onboardingState = calendars.onboarding();
@@ -359,7 +355,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
               Effect.sleep(Duration.millis(remaining)),
               Effect.sync(() => {
                 debounceRetryArmed = false;
-                Queue.offerUnsafe(asks, briefingSession(lastOpenOffers));
+                asks.offerUnsafe(briefingSession(lastOpenOffers));
               }),
             ),
             scope,
@@ -461,13 +457,13 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
     methods,
     service,
     requestOnboardingBeat: () => {
-      Queue.offerUnsafe(asks, onboardingBeat);
+      asks.offerUnsafe(onboardingBeat);
     },
     onAnnouncementHoldRead: () => {
-      Queue.offerUnsafe(asks, holdRead);
+      asks.offerUnsafe(holdRead);
     },
     briefingsOffered: (openOffers) => {
-      Queue.offerUnsafe(asks, briefingSession(openOffers));
+      asks.offerUnsafe(briefingSession(openOffers));
     },
     seedArrivalOnFirstSignIn: () => {
       if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;

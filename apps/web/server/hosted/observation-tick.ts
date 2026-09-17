@@ -1,3 +1,4 @@
+import { withFallback } from "@sidecar/runtime/effect";
 import { Duration, Effect, Fiber } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -164,22 +165,6 @@ const TIMED_OUT_ACCOUNT: AccountOutcome = {
   turns: FAILED_OPENING,
   children: NOTHING_DELIVERED,
 };
-
-/**
- * A read that failed or defected stands as the fallback; a caller ending the
- * fiber is neither, so only `catchAll` (the read's own typed failure) and
- * `catchAllDefect` (an unexpected throw) are handled here — an interruption
- * passes through untouched.
- */
-function withFallback<A, E>(
-  effect: Effect.Effect<A, E, SqlClient.SqlClient>,
-  fallback: A,
-): Effect.Effect<A, never, SqlClient.SqlClient> {
-  return Effect.catchDefect(
-    Effect.catch(effect, () => Effect.succeed(fallback)),
-    () => Effect.succeed(fallback),
-  );
-}
 
 /**
  * An account's turn cut short at its own deadline, on the ambient clock so a

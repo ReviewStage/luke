@@ -1,4 +1,5 @@
 import { HOSTED_SERVICE_PATH } from "@sidecar/hosted";
+import { onOwnFiber } from "@sidecar/runtime/effect";
 import {
   isRecord,
   isWireString,
@@ -7,7 +8,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
-import { Duration, Effect, Fiber, type Layer } from "effect";
+import { Duration, Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -371,10 +372,6 @@ export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("deleteHostedAccoun
  * made it, so its deadline ends it exactly as it did when the request ran on a
  * fiber of its own, and the unwinding still waits for what it asked for.
  */
-function onOwnFiber<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> {
-  return Effect.flatMap(Effect.forkDetach(effect), Fiber.join);
-}
-
 /**
  * Ensures credentials rejected before sign-in completes do not outlive the
  * failed attempt. The revocation runs on the way out of any end the use did

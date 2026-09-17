@@ -1,3 +1,4 @@
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import type { Schema } from "effect";
 import { Cause, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -245,11 +246,10 @@ function offered(
   words: string,
 ): OpenerEffect<boolean> {
   // Without the row lock: the visit is the one thing opening this account's observed sessions.
-  return Effect.catchCause(
+  // A cancelled tick is not a refused send; it is the tick ending, and passes through.
+  return catchAllButInterrupt(
     handToEve(seams, target, turn, words, SESSION_OPENING.UNLOCKED),
     (cause) => {
-      // A cancelled tick is not a refused send; it is the tick ending.
-      if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
       seams.report(
         `A ${turn} turn for conversation ${target.conversationId} could not be handed over: ${String(Cause.squash(cause))}.`,
       );

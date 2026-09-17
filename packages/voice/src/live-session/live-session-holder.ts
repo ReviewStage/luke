@@ -21,8 +21,9 @@ import {
   rosterSeedItem,
   seedItemTokens,
 } from "@sidecar/live";
+import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
 import type { ConversationEntry } from "@sidecar/session";
-import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Queue, Scope, Stream } from "effect";
+import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Scope, Stream } from "effect";
 import {
   createdOf,
   type LiveSessionOpened,
@@ -140,18 +141,22 @@ export class LiveSessionHolder {
    * later ask silent for the run.
    */
   #wantedAt: number | undefined;
-  readonly #tasks: Queue.Queue<Effect.Effect<void>>;
+  /** The fibers the tasks run as, one each, all ended by the holder's scope. */
+  readonly #fibers: FiberSet.FiberSet<void, unknown>;
+  /** The door a synchronous edge starts a task through: the queue forks it into the set. */
+  readonly #tasks: SerialQueue;
   readonly #clock: Clock.Clock;
   readonly #sessions: Scope.Scope;
 
   private constructor(
     options: LiveSessionHolderOptions,
-    tasks: Queue.Queue<Effect.Effect<void>>,
+    running: { readonly fibers: FiberSet.FiberSet<void, unknown>; readonly tasks: SerialQueue },
     clock: Clock.Clock,
     sessions: Scope.Scope,
   ) {
     this.#options = options;
-    this.#tasks = tasks;
+    this.#fibers = running.fibers;
+    this.#tasks = running.tasks;
     this.#clock = clock;
     this.#sessions = sessions;
   }
@@ -161,25 +166,23 @@ export class LiveSessionHolder {
     options: LiveSessionHolderOptions,
   ): Effect.Effect<LiveSessionHolder, never, Scope.Scope> {
     return Effect.gen(function* () {
-      const tasks = yield* Queue.unbounded<Effect.Effect<void>>();
-      const fibers = yield* FiberSet.make();
+      const fibers = yield* FiberSet.make<void>();
+      const tasks = yield* serialQueue({
+        onDefect: (cause) => Effect.logError("a live session task could not be started", cause),
+      });
       const scope = yield* Effect.scope;
-      const holder = new LiveSessionHolder(
+      return new LiveSessionHolder(
         options,
-        tasks,
+        { fibers, tasks },
         yield* Clock.Clock,
         yield* Scope.fork(scope, "sequential"),
       );
-      yield* Effect.forkScoped(
-        Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
-      );
-      return holder;
     });
   }
 
   /** Begins what nothing waits for, on the holder's own fiber. */
   #start(effect: Effect.Effect<void>): void {
-    Queue.offerUnsafe(this.#tasks, effect);
+    this.#tasks.offerUnsafe(Effect.asVoid(FiberSet.run(this.#fibers, effect)));
   }
 
   /** Whether a session stands that the stop and the reports can reach. */

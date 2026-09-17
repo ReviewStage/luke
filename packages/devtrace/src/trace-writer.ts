@@ -1,4 +1,5 @@
-import { Deferred, Effect, Path, Queue, type Scope } from "effect";
+import { type SerialQueue, serialQueue } from "@sidecar/runtime/effect";
+import { Cause, Deferred, Effect, Path, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
@@ -24,30 +25,17 @@ type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
   | { kind: typeof TRACE_ENTRY_KIND.SPEECH; speech: SpeechTraceRecord };
 
-/**
- * What waits on the writer's queue: a line to append, or a caller's own marker
- * that it wants every line offered before it to have landed. The queue is
- * first in, first out, so the marker's turn is exactly that moment and no
- * counting of what is outstanding is needed to find it.
- */
-const TRACE_WORK = {
-  LINE: "line",
-  SETTLED: "settled",
-} as const;
-
-type TraceWork =
-  | { readonly kind: typeof TRACE_WORK.LINE; readonly line: string }
-  | {
-      readonly kind: typeof TRACE_WORK.SETTLED;
-      readonly done: Deferred.Deferred<void>;
-    };
-
 interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
   directory: string;
   now?: () => Date;
   report?: (message: string) => void;
 }
+
+/** Where a writer with no reporter of its own says a write failed. */
+const reportToStderr = (text: string): void => {
+  process.stderr.write(text);
+};
 
 /**
  * The trace's line format: what one tapped entry becomes once the moment it
@@ -94,17 +82,20 @@ export class AgentTraceWriter {
   readonly #directory: string;
   readonly #report: (message: string) => void;
   readonly #now: () => Date;
-  readonly #work: Queue.Queue<TraceWork>;
+  /** The line writes in arrival order, and a caller's own marker among them; the fiber is the scope's. */
+  readonly #work: SerialQueue<FileSystem.FileSystem>;
   #failed = false;
 
   /**
    * The queue drained, for a test to await what `record*` fired and forgot: a
    * marker of its own onto the same queue, awaited until the fiber reaches it.
+   * The queue is first in, first out, so the marker's turn is exactly that
+   * moment and no counting of what is outstanding is needed to find it.
    */
   readonly settled: Effect.Effect<void> = Effect.suspend(() =>
     Effect.flatMap(Deferred.make<void>(), (done) =>
       Effect.andThen(
-        Queue.offer(this.#work, { kind: TRACE_WORK.SETTLED, done }),
+        this.#work.offer(Effect.asVoid(Deferred.succeed(done, undefined))),
         Deferred.await(done),
       ),
     ),
@@ -114,10 +105,10 @@ export class AgentTraceWriter {
     options: AgentTraceWriterOptions,
     file: string,
     now: () => Date,
-    work: Queue.Queue<TraceWork>,
+    work: SerialQueue<FileSystem.FileSystem>,
   ) {
     this.#directory = options.directory;
-    this.#report = options.report ?? ((text: string) => process.stderr.write(text));
+    this.#report = options.report ?? reportToStderr;
     this.file = file;
     this.#now = now;
     this.#work = work;
@@ -132,9 +123,16 @@ export class AgentTraceWriter {
       const now = options.now ?? (() => new Date());
       const stamp = now().toISOString().replace(/[:.]/gu, "-");
       const file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
-      const writer = new AgentTraceWriter(options, file, now, yield* Queue.unbounded<TraceWork>());
-      yield* Effect.forkScoped(writer.#drain());
-      return writer;
+      const report = options.report ?? reportToStderr;
+      // Only a write's own failure is caught by the write; a line that dies
+      // is one more way the trace could not be written, said the same way.
+      const work = yield* serialQueue<FileSystem.FileSystem>({
+        onDefect: (cause) =>
+          Effect.sync(() =>
+            report(`Agent trace could not be written: ${String(Cause.squash(cause))}\n`),
+          ),
+      });
+      return new AgentTraceWriter({ ...options, report }, file, now, work);
     });
   }
 
@@ -151,30 +149,16 @@ export class AgentTraceWriter {
     });
   }
 
+  /** One line onto the queue; a write that fails is reported once and then silent. */
   #append(entry: PendingTraceEntry): void {
-    Queue.offerUnsafe(this.#work, {
-      kind: TRACE_WORK.LINE,
-      line: traceLine(entry, this.#now),
-    });
-  }
-
-  /**
-   * One line at a time, for as long as the fiber stands. Only a write's own
-   * failure is caught, so the interruption that ends the scope ends the fiber
-   * rather than being swallowed by a loop that would never stop.
-   */
-  #drain(): Effect.Effect<never, never, FileSystem.FileSystem> {
-    return Effect.forever(
-      Effect.flatMap(Queue.take(this.#work), (work) =>
-        work.kind === TRACE_WORK.SETTLED
-          ? Effect.asVoid(Deferred.succeed(work.done, undefined))
-          : Effect.catch(writeTraceLine(this.#directory, this.file, work.line), (error) =>
-              Effect.sync(() => {
-                if (this.#failed) return;
-                this.#failed = true;
-                this.#report(`Agent trace could not be written: ${error.message}\n`);
-              }),
-            ),
+    const line = traceLine(entry, this.#now);
+    this.#work.offerUnsafe(
+      Effect.catch(writeTraceLine(this.#directory, this.file, line), (error) =>
+        Effect.sync(() => {
+          if (this.#failed) return;
+          this.#failed = true;
+          this.#report(`Agent trace could not be written: ${error.message}\n`);
+        }),
       ),
     );
   }
