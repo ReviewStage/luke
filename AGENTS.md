@@ -198,8 +198,6 @@ evidence; CI builds nothing for the Mac.
 - Prefer the real implementation, then a fake, then a stub. A double is a
   test `Layer` on the subject's `Context.Tag` at a process boundary: provider
   HTTP, Apple, the model, the OS, the clock.
-- No mocking frameworks: `vi.mock`, `vi.doMock`, `vi.spyOn`, `vi.fn`,
-  `vi.mocked` fail lint (`testing/no-module-mocks`). `vi.stubEnv` is fine.
 - Assert what a caller observes, never private state or call counts.
 - Use the shared builders before inline setup: `packages/host/src/testing/`,
   `apps/web/tests/support/`, `packages/wire/src/testing/`,
@@ -210,16 +208,14 @@ evidence; CI builds nothing for the Mac.
   (`testing/no-runner`); `setTimeout`, `setInterval`, `Effect.sleep`, and
   `it.live` fail lint (`testing/no-real-time`).
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
-  helpers, with the diff explained in the PR. Fixtures are synthetic.
-- Never assert a model's words. Judgment is the offline `test:agent` eval.
+  helpers, with the diff explained in the PR.
 - Never loosen, delete, or skip a test to go green. `.only`, `.skip`,
-  `.todo`, `it.flakyTest`, and `retry` fail lint (`testing/no-focus-or-retry`).
-  Fix or delete a flaky test; never retry it.
+  `.todo`, and `it.flakyTest` fail lint (`testing/no-focus-or-retry`). Fix
+  or delete a flaky test.
 - Do not write change-detector tests: an expected value computed by the code
   under test or pasted from its output; a test of a getter, constant, type,
   re-export, or Schema round-trip on a valid value; a test that only asserts
-  a fake was called; a private function exported for a test; a claim another
-  test already makes.
+  a fake was called; a private function exported for a test.
 
 `tools/oxlint/testing/test-edges.json` holds the files not yet on these rules:
 `runnerHoldouts` and `realTimeHoldouts` only shrink and are deleted with their
