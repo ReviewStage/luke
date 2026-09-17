@@ -34,10 +34,10 @@ export const TOOL_POLICY_LAYER = {
   TURN: "turn",
 } as const;
 
-export type ToolPolicyLayer = (typeof TOOL_POLICY_LAYER)[keyof typeof TOOL_POLICY_LAYER];
+type ToolPolicyLayer = (typeof TOOL_POLICY_LAYER)[keyof typeof TOOL_POLICY_LAYER];
 
 /** The order the layers apply in, fixed by the pinned OpenClaw pipeline: the declaration order above. */
-export const TOOL_POLICY_ORDER: readonly ToolPolicyLayer[] = Object.values(TOOL_POLICY_LAYER);
+const TOOL_POLICY_ORDER: readonly ToolPolicyLayer[] = Object.values(TOOL_POLICY_LAYER);
 
 /** The configured layers: everything but the turn's own, which the host supplies per turn. */
 type ConfiguredToolPolicyLayer = Exclude<ToolPolicyLayer, typeof TOOL_POLICY_LAYER.TURN>;

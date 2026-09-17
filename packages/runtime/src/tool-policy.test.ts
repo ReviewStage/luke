@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { TOOL_EFFECT, TOOL_EXECUTION, type ToolDescriptor } from "./registry.js";
-import { resolveToolPolicy, TOOL_POLICY_LAYER, TOOL_POLICY_ORDER } from "./tool-policy.js";
+import { resolveToolPolicy, TOOL_POLICY_LAYER } from "./tool-policy.js";
 
 function tool(name: string, groups: readonly string[]): ToolDescriptor {
   return {
@@ -36,7 +36,6 @@ test("no layers offer the whole catalog in order", () => {
 });
 
 test("layers apply in the pinned order, allow narrows, deny wins, and groups expand", () => {
-  assert.deepEqual(TOOL_POLICY_ORDER, ["global", "agent", "provider", "session", "child", "turn"]);
   const policy = resolveToolPolicy(CATALOG, {
     global: { deny: ["message"] },
     agent: { allow: ["group:read", "group:actions", "announce", "conversations_*"] },
