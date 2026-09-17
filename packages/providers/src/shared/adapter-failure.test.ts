@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Cause, Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Fiber, Option } from "effect";
 import { test } from "vitest";
 import {
   ADAPTER_FAILURE,
@@ -59,4 +59,19 @@ test("a failure carries its kind and stays an error", () => {
   assert.equal(failure.name, "AdapterFailure");
   assert.equal(failure.failure, ADAPTER_FAILURE.TRANSIENT);
   assert.equal(failure.message, "the provider did not answer");
+});
+
+test("an interrupted item ends the pass with the interruption rather than standing as one resource missing", async () => {
+  const exit = await Effect.runPromiseExit(
+    Effect.gen(function* () {
+      const fiber = yield* Effect.forkChild(tolerateItemFailureEffect(Effect.never));
+      yield* Effect.yieldNow;
+      yield* Fiber.interrupt(fiber);
+      return yield* Fiber.await(fiber);
+    }),
+  );
+  assert.equal(Exit.isSuccess(exit), true);
+  const itemExit = Exit.isSuccess(exit) ? exit.value : undefined;
+  assert.ok(itemExit !== undefined);
+  assert.equal(Exit.hasInterrupts(itemExit), true);
 });

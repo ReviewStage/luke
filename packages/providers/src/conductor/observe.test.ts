@@ -12,10 +12,11 @@ import {
   type RecordingHttpClient,
   runTest,
 } from "@sidecar/wire/testing";
-import { Effect, Layer } from "effect";
+import { Deferred, Effect, Fiber, Layer } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { test } from "vitest";
+import { CLOUD_ADAPTER_DEFAULTS } from "../shared/cloud-wire.js";
 import {
   ERRORED_SESSION_UUID,
   fakeConductorApi,
@@ -916,6 +917,83 @@ test("observes every workspace and chat the pages hold", async () => {
     observations.map((observation) => observation.providerSessionId),
     ["session-0", "session-1", "session-2", "session-3", "session-4", "session-5"],
   );
+});
+
+const SESSION_STATUS_ROUTE = /^\/v0\/sessions\/[^/]+\/status$/;
+
+/**
+ * The fake's own client, with every status read held at a gate until the test
+ * opens it: `reached` settles once the bound's worth stand waiting there, and
+ * the most that ever waited at once is written down.
+ */
+function gatedStatusReads(
+  api: RecordingHttpClient,
+  gate: Deferred.Deferred<void>,
+  reached: Deferred.Deferred<void>,
+) {
+  let inFlight = 0;
+  let peak = 0;
+  const layer = Layer.provide(
+    Layer.effect(
+      HttpClient.HttpClient,
+      Effect.map(HttpClient.HttpClient, (client) =>
+        HttpClient.make((request) => {
+          // A workspace's lifecycle read ends in `/status` as well; only a chat's is held.
+          if (!SESSION_STATUS_ROUTE.test(new URL(request.url).pathname)) {
+            return client.execute(request);
+          }
+          return Effect.gen(function* () {
+            inFlight += 1;
+            peak = Math.max(peak, inFlight);
+            if (inFlight === CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY) {
+              yield* Deferred.succeed(reached, undefined);
+            }
+            yield* Deferred.await(gate);
+            inFlight -= 1;
+            return yield* client.execute(request);
+          });
+        }),
+      ),
+    ),
+    api.layer,
+  );
+  return { layer, inFlight: () => inFlight, peak: () => peak };
+}
+
+test("holds at most the read bound of status reads in flight at once", async () => {
+  const sessionCount = 3 * CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY;
+  const api = fakeConductorApi({
+    userId: TEST_USER_ID,
+    projects: [LUKE_PROJECT],
+    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
+    sessions: Array.from({ length: sessionCount }, (_value, index) => ({
+      id: `session-${index}`,
+      workspaceId: "workspace-active",
+      name: TEST_SESSION_NAME,
+      status: TEST_CONDUCTOR_STATUS.WORKING,
+      statusUpdatedAt: TEST_TIME - 1_000,
+    })),
+  });
+
+  const observations = await runTest(
+    Effect.gen(function* () {
+      const gate = yield* Deferred.make<void>();
+      const reached = yield* Deferred.make<void>();
+      const reads = gatedStatusReads(api, gate, reached);
+      const pass = yield* Effect.forkChild(pluginFor(reads.layer).observe());
+      // The bound's worth reach the gate and stand there; were the fan-out
+      // unbounded, the rest would follow before the gate opened.
+      yield* Deferred.await(reached);
+      yield* Effect.yieldNow;
+      assert.equal(reads.inFlight(), CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY);
+      yield* Deferred.succeed(gate, undefined);
+      const observed = yield* Fiber.join(pass);
+      assert.equal(reads.peak(), CLOUD_ADAPTER_DEFAULTS.READ_CONCURRENCY);
+      return observed;
+    }),
+  );
+
+  assert.equal(observations.length, sessionCount);
 });
 
 test("keeps an old open workspace that newer pages would have crowded out", async () => {
