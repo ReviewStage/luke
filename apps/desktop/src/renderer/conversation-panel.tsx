@@ -7,6 +7,7 @@ import { ConversationListeningRow } from "./conversation-rows";
 import { ConversationTurns } from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
+import { prefersReducedMotion } from "./use-reduced-motion";
 
 /** What a reader is told when the service named a row this build could not read back; the thread stands as last read. */
 const UNREADABLE_NOTICE = "Part of the conversation could not be read.";
@@ -115,8 +116,32 @@ function scrollMetrics(element: HTMLDivElement): ConversationScrollMetrics {
   };
 }
 
-function scrollToConversationTail(element: HTMLDivElement): void {
+/** Seats the reader on the tail with the paint, which is what keeps a following reader pinned as words land. */
+function pinConversationTail(element: HTMLDivElement): void {
   element.scrollTop = element.scrollHeight;
+}
+
+/**
+ * Carries the reader down to the tail in view rather than seating them there,
+ * so a press shows the thread going by instead of cutting to its end; someone
+ * who asked for motion to be reduced is seated there instead.
+ */
+function seekConversationTail(element: HTMLDivElement): void {
+  element.scrollTo({
+    top: element.scrollHeight,
+    behavior: prefersReducedMotion() ? "instant" : "smooth",
+  });
+}
+
+/**
+ * A press still carrying the reader down to the tail: the offset the last
+ * scroll step left them at. The browser reports the way down one step at a
+ * time, each short of the tail without the reader having left it, so the
+ * steps are not read as a reader scrolling away; a step back up is one the
+ * animation never makes, and so is the reader taking the scroll back.
+ */
+interface TailSeek {
+  readonly from: number;
 }
 
 /** Where a row stands in the scrolled content, whatever the offset is: the one number a prepend moves. */
@@ -261,18 +286,25 @@ export function ConversationPanel({
   // above a reader who is not following the tail, the offset is moved by
   // exactly what landed above them.
   const anchor = useRef<ThreadAnchor | undefined>(undefined);
+  /** The press of the jump control still on its way to the tail, if one is. */
+  const seek = useRef<TailSeek | undefined>(undefined);
   const thread = view.groups.length > 0 || live.length > 0 || spokenAskPending;
   const olderStands = view.hasOlder === true && onLoadOlder !== undefined;
 
   useEffect(() => {
     if (thread) return;
+    seek.current = undefined;
     setFollowing(true);
   }, [thread]);
 
+  // Words landing while a press is still carrying the reader down move the
+  // tail they are carried to, not the reader.
   useLayoutEffect(() => {
     if (!thread || !followingRef.current) return;
     const element = list.current;
-    if (element) scrollToConversationTail(element);
+    if (!element) return;
+    if (seek.current === undefined) pinConversationTail(element);
+    else seekConversationTail(element);
   }, [thread, view, live, spokenAskPending]);
 
   // After the tail is pinned, so a following reader is never moved twice.
@@ -317,15 +349,51 @@ export function ConversationPanel({
     askForOlder();
   }, [view, loadingOlder]);
 
+  /**
+   * Whether a scroll is a step of a press still on its way down, and so says
+   * nothing about the reader: not that they left the tail, and not that they
+   * reached for the top, which a press made near it passes through on its
+   * first steps. Arriving at the tail ends the seek with the reader on it,
+   * and a step back up ends it with the reader where they took the scroll
+   * back.
+   */
+  const seekUnderway = (metrics: ConversationScrollMetrics): boolean => {
+    const underway = seek.current;
+    if (underway === undefined) return false;
+    if (followsConversationTail(metrics) || metrics.scrollTop < underway.from) {
+      seek.current = undefined;
+      return false;
+    }
+    seek.current = { from: metrics.scrollTop };
+    return true;
+  };
+
   const syncFollowing = () => {
     const element = list.current;
     if (!element) return;
     const metrics = scrollMetrics(element);
+    if (seekUnderway(metrics)) return;
     setFollowing((standing) => {
       const next = followsConversationTail(metrics);
       return standing === next ? standing : next;
     });
     if (reachesConversationHead(metrics)) askForOlder();
+  };
+
+  // A press stands until the reader is on the tail or takes it back by
+  // scrolling up, so a scroll that came to rest short of the tail with a press
+  // still standing is carried the rest of the way: words landing on the way
+  // retarget the animation, which the browser may report as one scroll ending
+  // and another beginning, and a reader who scrolled on down themselves and
+  // stopped is still owed the tail they pressed for.
+  const settleScroll = () => {
+    const element = list.current;
+    if (!element || seek.current === undefined) return;
+    if (followsConversationTail(scrollMetrics(element))) {
+      seek.current = undefined;
+      return;
+    }
+    seekConversationTail(element);
   };
 
   return (
@@ -341,7 +409,12 @@ export function ConversationPanel({
     >
       {thread ? (
         <div className="conversation-thread">
-          <div className="conversation-scroll" ref={list} onScroll={syncFollowing}>
+          <div
+            className="conversation-scroll"
+            ref={list}
+            onScroll={syncFollowing}
+            onScrollEnd={settleScroll}
+          >
             {/* The pull is the thread's own sideways scroll, on a scroller of its
                 own so the vertical one keeps its scrollbar: the list is one
                 stamp column wider than the view, and snapping puts it back the
@@ -376,8 +449,9 @@ export function ConversationPanel({
               onClick={() => {
                 const element = list.current;
                 if (!element) return;
-                scrollToConversationTail(element);
+                seek.current = { from: element.scrollTop };
                 setFollowing(true);
+                seekConversationTail(element);
               }}
             />
           )}
