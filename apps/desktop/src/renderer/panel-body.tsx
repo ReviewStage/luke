@@ -26,6 +26,7 @@ import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { ConductorKeyGate, type ConductorKeyGateControl } from "./conductor-key-gate";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationClearButton, ConversationPanel } from "./conversation-panel";
+import { ConversationSearchButton } from "./conversation-search";
 import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -244,7 +245,7 @@ interface PanelBodyProps {
   transcriptOpen: TranscriptRow | undefined;
   /** The one transcript the host holds open, a child's or an agent's, as the document carries it. */
   childTranscript: TranscriptSnapshot | undefined;
-  /** Reports someone being part-way through the session search, so the panel holds for them. */
+  /** Reports someone being part-way through the session or conversation search, so the panel holds for them. */
   onFieldEngaged: (engaged: boolean) => void;
   /**
    * Whether there is anything for the sheet to decide. Decided by the panel
@@ -264,6 +265,17 @@ interface PanelBodyProps {
   /** The settings search's field state, on the sessions search's own terms. */
   settingsSearchOpen: boolean;
   onSettingsSearchToggle: () => void;
+  /**
+   * Whether the Conversation search is offered: the thread page showing with
+   * turns in it. Decided by the app rather than here, because whoever offers
+   * the button also has to be the one that closes the field when it stops
+   * offering it, and the field's open state is the app's.
+   */
+  offerConversationSearch: boolean;
+  conversationSearchOpen: boolean;
+  onConversationSearchToggle: () => void;
+  /** The field's own way out — Escape on an empty query. */
+  onConversationSearchClose: () => void;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   /**
@@ -316,6 +328,10 @@ export function PanelBody({
   onSearchClose,
   settingsSearchOpen,
   onSettingsSearchToggle,
+  offerConversationSearch,
+  conversationSearchOpen,
+  onConversationSearchToggle,
+  onConversationSearchClose,
   tab,
   onTabChange,
   settings,
@@ -417,6 +433,13 @@ export function PanelBody({
             {tab === PANEL_TAB.SETTINGS ? (
               <SettingsSearchButton open={settingsSearchOpen} onToggle={onSettingsSearchToggle} />
             ) : null}
+            {/* The thread's own magnifier, in the same spot a third time. */}
+            {offerConversationSearch ? (
+              <ConversationSearchButton
+                open={conversationSearchOpen}
+                onToggle={onConversationSearchToggle}
+              />
+            ) : null}
             {/* Conversation's clear, in the same spot again: its words are the
                 build's own, so it may stand outside the blocked subtree the
                 thread's words never leave. */}
@@ -487,6 +510,9 @@ export function PanelBody({
           live={liveConversationEntries}
           spokenAskPending={spokenAskPending}
           now={now}
+          searchOpen={conversationSearchOpen}
+          onSearchClose={onConversationSearchClose}
+          onSearchEngaged={onFieldEngaged}
         />
       ) : (
         <SessionsPanel

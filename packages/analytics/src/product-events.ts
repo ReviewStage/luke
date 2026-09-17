@@ -226,6 +226,7 @@ export type ProductSettingsView =
 export const PRODUCT_SEARCH_SURFACE = {
   SESSIONS: "sessions",
   SETTINGS: "settings",
+  CONVERSATION: "conversation",
 } as const;
 
 type ProductSearchSurface = (typeof PRODUCT_SEARCH_SURFACE)[keyof typeof PRODUCT_SEARCH_SURFACE];

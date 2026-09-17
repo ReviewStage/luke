@@ -1,11 +1,24 @@
 /* A compact chat thread: sent and received messages use the familiar two-sided
    bubble grammar, while the developer's requested actions sit between them. */
 .conversation-view {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 8px;
+}
+
+/* While the search results stand in its place the thread stands behind
+   them: still laid out, so its scroller keeps the reader's place and the
+   paging keeps the row it measures against, but unseen and out of reach of
+   the pointer and the keyboard. Nothing is put back when the results leave,
+   because nothing left. */
+.conversation-thread[data-behind-results="true"] {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 /* The clear and the turn to the sub-agents ride the tab bar's line beside the
@@ -43,6 +56,37 @@
 
 .conversation-clear-controls:has(.conversation-clear-cancel) .conversation-clear {
   color: var(--danger);
+}
+
+/* The search pill at the head of the thread: the sessions list's own, worn by
+   class rather than copied. It gives up only its margin, because the view's
+   own gap already spaces the stack. */
+.session-search.conversation-search {
+  margin-bottom: 0;
+}
+
+/* The results are the thread's own rows on the thread's own scroller, so
+   nothing here restyles them: the one thing a result adds is its press, an
+   unseen button over its words — the bubble, or the quiet words under his
+   face, whose body is already the ground its ellipsis is placed from — so
+   the words stay words and the row's margin, stamp, and controls are left
+   alone. It draws nothing of its own, at rest or under the pointer; the row
+   already reads as the message it is, and the keyboard's ring is the
+   engine's. */
+.conversation-words-press {
+  position: absolute;
+  inset: 0;
+  border-radius: 15px;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* The message a pressed result landed on says so with its marks alone, lit
+   brighter than every other bubble's, the way a browser's find lights the
+   match it is on: the bubble keeps its own colours, so nothing else about
+   the row changes. */
+.conversation-entry[data-search-landed] .row-match {
+  background: rgba(255, 255, 255, 0.34);
 }
 
 /* The thread is the conversation tab's one growing region: the scroll box

@@ -1,9 +1,14 @@
 /** Long enough for any stage to arrive, and short enough to be a backstop. */
 const FOCUS_FRAME_LIMIT = 60;
 
-/** Only an element a reader can actually see is worth acting on. */
+/**
+ * Only an element a reader can actually see is worth acting on: not one
+ * undrawn, faded out, or hidden — the Conversation thread stands hidden
+ * behind the search results, and a landing that measured against it there
+ * would centre the row in a box the reader is not looking at.
+ */
 export function drawnVisibly(element: HTMLElement): boolean {
-  return element.checkVisibility({ opacityProperty: true });
+  return element.checkVisibility({ opacityProperty: true, visibilityProperty: true });
 }
 
 /** Whether the staged surface an element sits in has finished arriving. */

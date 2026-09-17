@@ -16,6 +16,7 @@ import {
   childTranscriptRow,
   type TranscriptRow,
 } from "./agents-panel";
+import { CONVERSATION_SEARCH_INPUT_ID } from "./conversation-search";
 import {
   FIXTURE_AGENT,
   FIXTURE_ROSTER,
@@ -95,6 +96,10 @@ function bodyProps(
     onSearchClose: () => undefined,
     settingsSearchOpen: false,
     onSettingsSearchToggle: () => undefined,
+    offerConversationSearch: false,
+    conversationSearchOpen: false,
+    onConversationSearchToggle: () => undefined,
+    onConversationSearchClose: () => undefined,
     tab,
     onTabChange: () => undefined,
     settings: SETTINGS,
@@ -311,4 +316,43 @@ test("a row's press opens the child or the agent, and the transcript page draws 
   mounted.render(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.TRANSCRIPT, change, extra));
   assert.ok(mounted.container.textContent?.includes("No messages yet"));
   assert.equal(mounted.container.querySelector(".agents-header"), null);
+});
+
+test("the thread's magnifier is offered where the app offers it, lit while its field is open, and the field stands in the conversation view", () => {
+  const conversation = { groups: fixtureConversationTurns(), settled: true };
+  const toggles: number[] = [];
+  const offered = mount(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, () => {}, {
+      conversation,
+      offerConversationSearch: true,
+      onConversationSearchToggle: () => toggles.push(1),
+    }),
+  );
+  const button = offered.container.querySelector('button[aria-label="Search conversation"]');
+  assert.ok(button instanceof HTMLButtonElement);
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+  assert.equal(offered.container.querySelector(`#${CONVERSATION_SEARCH_INPUT_ID}`), null);
+  act(() => {
+    button.click();
+  });
+  assert.equal(toggles.length, 1);
+  const open = mount(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, () => {}, {
+      conversation,
+      offerConversationSearch: true,
+      conversationSearchOpen: true,
+    }),
+  );
+  assert.equal(
+    open.container
+      .querySelector('button[aria-label="Search conversation"]')
+      ?.getAttribute("aria-expanded"),
+    "true",
+  );
+  assert.ok(open.container.querySelector(`.conversation-view #${CONVERSATION_SEARCH_INPUT_ID}`));
+  // Not offered means no button, whatever the thread holds.
+  const unoffered = mount(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, () => {}, { conversation }),
+  );
+  assert.equal(unoffered.container.querySelector('button[aria-label="Search conversation"]'), null);
 });
