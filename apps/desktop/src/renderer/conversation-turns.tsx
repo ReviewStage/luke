@@ -1419,8 +1419,16 @@ interface ConversationSearchRating {
   readonly ask: string | undefined;
 }
 
-/** One message the Conversation search can find, and what its result draws: the row the thread draws its words as, the words, and the row's own controls. */
+/**
+ * One row of words the Conversation search can find, and what its result
+ * draws: the row the thread draws the words as, the words, and the row's own
+ * controls. A message that draws two rows of words — a briefing announced in
+ * Luke's bubble and his written note on it under his face — is two entries,
+ * as it is two rows, so a result never shows one bubble made of both.
+ */
 export interface ConversationSearchEntry {
+  /** The row's own key, the one the thread draws the row under; two rows of one message share the message's id and not this. */
+  readonly key: string;
   /** The stored message's id, which its rows wear as their anchor. */
   readonly messageId: string;
   /** Which row the thread draws the words as. */
@@ -1429,7 +1437,7 @@ export interface ConversationSearchEntry {
   readonly voice: RowVoice;
   /** When the thread places it, which dates the result and orders it. */
   readonly at: number;
-  /** Every bubble the message draws, joined as paragraphs: what the query is read against and what the result draws. */
+  /** The row's words: what the query is read against and what the result draws. */
   readonly words: string;
   /** Whether the thread's row carries the copy control: the developer's ask and Luke's bubbles do, a note and his own-judgment words do not. */
   readonly copy: boolean;
@@ -1448,73 +1456,76 @@ interface DrawnWords {
 const LUKE_BUBBLE = { row: CONVERSATION_SEARCH_ROW.BUBBLE, voice: VOICE.LUKE, copy: true } as const;
 
 /**
- * The words one message draws as bubbles, joined as paragraphs, drawn as the
- * thread draws them — or nothing for a message that draws no words. Decided
- * by the same branches `messageRows` draws by, so the search reads exactly
- * what the thread shows: the developer's ask and the brain's note, unless the
- * note is an observed chat's lines folded under a count; the voice's reading
- * of a message in the thread; and otherwise the text parts and briefings that
- * are not his thinking — the text of a turn the voice answered, and a briefing
- * a device read aloud, both fold as his written working and are not words
- * said, and so does an observed session's briefing, which folds as the
- * brain's proposal with the agent's chip inside. A briefing is otherwise
- * drawn in Luke's own bubble whatever the turn's judgment, and text on his
- * own judgment under his face, so a message that draws both is drawn as its
- * first words are. The row's controls follow the
- * same rows: the copy where the thread's row has one, and the rating the
- * thread puts on the message's last words — of the reading's source for words
- * the voice said, on the last of that source's readings — with the ask the
- * turn answered, so a thumbs down in the results drafts what it would in the
- * thread.
+ * The rows of words one message draws, each drawn as the thread draws it —
+ * or none for a message that draws no words. Decided by the same branches
+ * `messageRows` draws by, so the search reads exactly what the thread shows:
+ * the developer's ask and the brain's note, unless the note is an observed
+ * chat's lines folded under a count; the voice's reading of a message in the
+ * thread; and otherwise the text parts and briefings that are not his
+ * thinking — the text of a turn the voice answered, and a briefing a device
+ * read aloud, both fold as his written working and are not words said, and
+ * so does an observed session's briefing, which folds as the brain's
+ * proposal with the agent's chip inside. A briefing is otherwise drawn in
+ * Luke's own bubble whatever the turn's judgment, and text on his own
+ * judgment under his face, one entry each in the parts' order. The row's
+ * controls follow the same rows: the copy where the thread's row has one,
+ * and the rating the thread puts on the message's last words — of the
+ * reading's source for words the voice said, on the last of that source's
+ * readings — with the ask the turn answered, so a thumbs down in the results
+ * drafts what it would in the thread.
  */
-function searchEntryOf(
+function searchEntriesOf(
   view: ConversationViewMessage,
   judgment: Judgment,
   aloud: boolean,
   observed: boolean,
   readings: Readings,
   ask: string | undefined,
-): ConversationSearchEntry | undefined {
+): readonly ConversationSearchEntry[] {
   const { message } = view;
   const entry = (
-    drawn: readonly DrawnWords[],
+    key: string,
+    drawn: DrawnWords,
     rated: ConversationSearchRating | undefined,
-  ): ConversationSearchEntry | undefined => {
-    const [first] = drawn;
-    const words = drawn.map((part) => part.text).join("\n\n");
-    if (first === undefined || words.length === 0) return undefined;
-    return {
-      messageId: message.id,
-      row: first.row,
-      voice: first.voice,
-      at: view.placedAt,
-      words,
-      copy: first.copy,
-      rated,
-    };
-  };
+  ): readonly ConversationSearchEntry[] =>
+    drawn.text.length === 0
+      ? []
+      : [
+          {
+            key,
+            messageId: message.id,
+            row: drawn.row,
+            voice: drawn.voice,
+            at: view.placedAt,
+            words: drawn.text,
+            copy: drawn.copy,
+            rated,
+          },
+        ];
   if (message.role === MESSAGE_ROLE.USER) {
     const words = userWords(message);
     if (
       message.metadata.author === MESSAGE_AUTHOR.BRAIN &&
       observedMessagesOf(words) !== undefined
     ) {
-      return undefined;
+      return [];
     }
     const voice = userVoice(message);
     return entry(
-      [{ row: CONVERSATION_SEARCH_ROW.BUBBLE, voice, copy: voice === VOICE.YOU, text: words }],
+      message.id,
+      { row: CONVERSATION_SEARCH_ROW.BUBBLE, voice, copy: voice === VOICE.YOU, text: words },
       undefined,
     );
   }
-  if (message.role === MESSAGE_ROLE.SYSTEM) return undefined;
+  if (message.role === MESSAGE_ROLE.SYSTEM) return [];
   const readFrom = readFromOf(view);
   const source = readFrom === undefined ? undefined : readings.byId.get(readFrom);
   if (source !== undefined) {
     const words = spokenWords(message);
     const last = readings.readOf.get(source.message.id)?.at(-1) === view;
     return entry(
-      [{ ...LUKE_BUBBLE, text: words }],
+      message.id,
+      { ...LUKE_BUBBLE, text: words },
       last ? { view: source, words, ask } : undefined,
     );
   }
@@ -1527,28 +1538,25 @@ function searchEntryOf(
     judgment === JUDGMENT.OWN
       ? { row: CONVERSATION_SEARCH_ROW.OWN, voice: VOICE.OWN, copy: false }
       : LUKE_BUBBLE;
-  const drawn: DrawnWords[] = [];
-  for (const part of message.parts) {
-    if (isTextPart(part)) {
-      if (!thinking) drawn.push({ ...spoken, text: part.text });
-      continue;
-    }
-    // An observed session's briefing folds as the brain's proposal, and a
-    // briefing a device read aloud folds as his written working: neither is
-    // words said.
-    if (observed || readAloud || !isStoredToolPart(part)) continue;
-    if (described.get(part.toolCallId)?.kind !== CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) continue;
-    const briefing = announcedWords(part);
-    if (briefing !== undefined) drawn.push({ ...LUKE_BUBBLE, text: briefing });
-  }
+  // The rating stands on the message's last words, so one row of it carries it.
   const lastWordsAt = message.parts.findLastIndex((part: StoredPart) =>
     drawsWords(part, described, thinking),
   );
-  const rated =
-    lastWordsAt === -1 || readAloud
-      ? undefined
-      : { view, words: quotedWords(message, message.parts[lastWordsAt]), ask };
-  return entry(drawn, rated);
+  return message.parts.flatMap((part: StoredPart, index): readonly ConversationSearchEntry[] => {
+    const key = `${message.id}:${index}`;
+    const rated =
+      index === lastWordsAt && !readAloud
+        ? { view, words: quotedWords(message, part), ask }
+        : undefined;
+    if (isTextPart(part)) return thinking ? [] : entry(key, { ...spoken, text: part.text }, rated);
+    // An observed session's briefing folds as the brain's proposal, and a
+    // briefing a device read aloud folds as his written working: neither is
+    // words said.
+    if (observed || readAloud || !isStoredToolPart(part)) return [];
+    if (described.get(part.toolCallId)?.kind !== CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) return [];
+    const briefing = announcedWords(part);
+    return briefing === undefined ? [] : entry(key, { ...LUKE_BUBBLE, text: briefing }, rated);
+  });
 }
 
 /**
@@ -1599,7 +1607,7 @@ export function ConversationSearchHitRow({
 }
 
 /**
- * Every message the thread draws words for, in the thread's own order: the
+ * Every row of words the thread draws, in the thread's own order: the
  * corpus the Conversation search reads, composed here beside the rows so
  * what is searched and what is drawn are decided once.
  */
@@ -1617,15 +1625,9 @@ export function conversationSearchEntries(
     const aloud = answeredAloud(group.turn);
     const observed = group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED;
     for (const view of group.messages) {
-      const entry = searchEntryOf(
-        view,
-        judgment,
-        aloud,
-        observed,
-        readings,
-        asks.get(group.turnId),
+      entries.push(
+        ...searchEntriesOf(view, judgment, aloud, observed, readings, asks.get(group.turnId)),
       );
-      if (entry !== undefined) entries.push(entry);
       if (
         judgment === JUDGMENT.ASK &&
         view.message.role === MESSAGE_ROLE.USER &&

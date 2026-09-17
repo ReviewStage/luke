@@ -22,8 +22,10 @@ import { matchesTokens, searchTokens } from "./session-model";
  * under its header, the same results in the transcript's place, the same
  * landing, worded for a transcript. The corpus is the words the thread draws as
  * bubbles — the developer's asks, Luke's replies and briefings, his words on
- * his own judgment, and what his voice read aloud — one entry per message,
- * composed by the turn renderer from the very branches that draw them
+ * his own judgment, and what his voice read aloud — one entry per row of
+ * words, so a message that briefs in a bubble and writes the same under his
+ * face is two results as it is two rows, composed by the turn renderer from
+ * the very branches that draw them
  * (`conversationSearchEntries` in `conversation-turns.tsx`), so a search can
  * neither find words the thread does not show nor miss words it does. What
  * the thread folds away (his thinking, an observed chat's lines) and what it
@@ -75,13 +77,13 @@ export type ConversationSearchGroup = readonly ConversationSearchEntry[];
 export interface ConversationSearchOutcome {
   /** The query's words, lowercased — what each message was actually read against, and what the bubbles mark. */
   readonly tokens: readonly string[];
-  /** The messages the query kept, in the thread's own order. */
+  /** The rows the query kept, in the thread's own order. */
   readonly hits: readonly ConversationSearchEntry[];
-  /** The same messages under the thread's dates, newest group first; the first of the first is what Enter lands on. */
+  /** The same rows under the thread's dates, newest group first; the first of the first is what Enter lands on. */
   readonly groups: readonly ConversationSearchGroup[];
-  /** How many messages the query kept. */
+  /** How many rows the query kept. */
   readonly matched: number;
-  /** How many messages the query was read against: every one with words. */
+  /** How many rows the query was read against: every one with words. */
   readonly searched: number;
 }
 
@@ -341,11 +343,11 @@ export function ConversationSearchResults({
               const [first] = group;
               if (first === undefined) return null;
               return (
-                <Fragment key={first.messageId}>
+                <Fragment key={first.key}>
                   <ConversationTimeBreak recordedAt={first.at} now={now} />
                   {group.map((entry) => (
                     <ConversationSearchHitRow
-                      key={entry.messageId}
+                      key={entry.key}
                       entry={entry}
                       tokens={search.tokens}
                       onOpen={onOpen}

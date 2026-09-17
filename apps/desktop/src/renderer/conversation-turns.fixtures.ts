@@ -205,6 +205,8 @@ export const FIXTURE_TURN = {
   WORKING: "1a000000-0000-4000-8000-000000000108",
   /** A child's completion, kept out of the scenarios above so their counts stand: see `fixtureChildCompletionTurns`. */
   COMPLETION: "1a000000-0000-4000-8000-000000000109",
+  /** A transcript change Luke both announced and wrote down, kept apart on the same terms: see `fixtureBriefingTurns`. */
+  BRIEFED: "1a000000-0000-4000-8000-000000000110",
 } as const;
 
 const TURN = FIXTURE_TURN;
@@ -219,6 +221,7 @@ const AT = {
   WORKING: 1757506150000,
   OWN: 1757506200000,
   COMPLETION: 1757506250000,
+  BRIEFED: 1757506270000,
 } as const;
 
 /** The instant the fixtures are read against: the running turn has been going for a while. */
@@ -698,6 +701,46 @@ export function fixtureChildCompletionTurns(
         origin: TURN_ORIGIN.CHILD_COMPLETION,
         status: TURN_STATUS.SETTLED,
         queuedAt: AT.COMPLETION,
+      },
+    ],
+    events: [],
+    toolKinds: FIXTURE_TOOL_KINDS,
+  });
+}
+
+/** The words Luke announced and then wrote down in `fixtureBriefingTurns`, the same in both. */
+export const FIXTURE_BRIEFING =
+  "The transcript search PR has every check green. Only the reviews remain.";
+
+/**
+ * A transcript change Luke both announced and wrote down, as the brain does
+ * when it briefs and then notes what it said: one message whose `announce`
+ * carries the briefing and whose text repeats it, drawn as Luke's bubble and
+ * then his words under his own face. Apart from the scenarios above, so the
+ * counts they assert stand.
+ */
+export function fixtureBriefingTurns(): readonly ConversationViewTurnGroup[] {
+  return selectConversationView({
+    main: [
+      {
+        message: reply("2b000000-0000-4000-8000-000000000295", [
+          { type: "step-start" },
+          call("announce", { briefing: FIXTURE_BRIEFING }, {}),
+          { type: "text", text: FIXTURE_BRIEFING, state: "done" },
+        ]),
+        seq: 1,
+        turnId: TURN.BRIEFED,
+        createdAt: AT.BRIEFED,
+        placedAt: AT.BRIEFED,
+      },
+    ],
+    observed: [],
+    turns: [
+      {
+        id: TURN.BRIEFED,
+        origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
+        status: TURN_STATUS.SETTLED,
+        queuedAt: AT.BRIEFED,
       },
     ],
     events: [],
