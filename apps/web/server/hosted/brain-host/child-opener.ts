@@ -1,4 +1,4 @@
-import { Effect, type Schema } from "effect";
+import { Effect, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { abandonChildConversation, openChildConversation } from "../store/children.js";
@@ -79,9 +79,11 @@ export const CHILD_OPEN_REFUSAL = {
 
 type ChildOpenRefusal = (typeof CHILD_OPEN_REFUSAL)[keyof typeof CHILD_OPEN_REFUSAL];
 
-export type ChildOpened =
-  | { readonly ok: true; readonly childId: string; readonly sessionId: string }
-  | { readonly ok: false; readonly refusal: ChildOpenRefusal };
+/** The child opened, by its conversation and eve session, or why none was. */
+export type ChildOpened = Result.Result<
+  { readonly childId: string; readonly sessionId: string },
+  ChildOpenRefusal
+>;
 
 /** Opens one child for the delegation, as the module comment describes. */
 export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
@@ -94,7 +96,7 @@ export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
     seams.report(
       `A child of conversation ${spawn.parent.conversationId} could not be opened: the deployment holds no secret or no origin for eve.`,
     );
-    return { ok: false, refusal: CHILD_OPEN_REFUSAL.UNCONFIGURED };
+    return Result.fail(CHILD_OPEN_REFUSAL.UNCONFIGURED);
   }
   const { userId } = spawn.parent;
   const childId = yield* openChildConversation({
@@ -109,7 +111,7 @@ export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
     seams.report(
       `A child of conversation ${spawn.parent.conversationId} could not be opened: the conversation or message ${spawn.spawnedByMessageId} does not stand for account ${userId}.`,
     );
-    return { ok: false, refusal: CHILD_OPEN_REFUSAL.NO_PARENT };
+    return Result.fail(CHILD_OPEN_REFUSAL.NO_PARENT);
   }
   const eve = seams.eve({
     origin,
@@ -139,15 +141,15 @@ export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
       Effect.onInterrupt(() => Effect.ignore(abandon)),
     );
   if (sessionId === undefined) {
-    if (yield* abandon) return { ok: false, refusal: CHILD_OPEN_REFUSAL.EVE_REFUSED };
+    if (yield* abandon) return Result.fail(CHILD_OPEN_REFUSAL.EVE_REFUSED);
     // The row was claimed before the answer was read: eve started the session, whatever it answered.
     const claimed = yield* recordedRuntimeSession(target);
-    if (claimed === undefined) return { ok: false, refusal: CHILD_OPEN_REFUSAL.EVE_REFUSED };
+    if (claimed === undefined) return Result.fail(CHILD_OPEN_REFUSAL.EVE_REFUSED);
     seams.report(
       `Child ${childId} runs in session ${claimed}, which claimed it before eve's answer was read.`,
     );
-    return { ok: true, childId, sessionId: claimed };
+    return Result.succeed({ childId, sessionId: claimed });
   }
   yield* claimRuntimeSession(target, sessionId, new Date(seams.now()));
-  return { ok: true, childId, sessionId };
+  return Result.succeed({ childId, sessionId });
 });

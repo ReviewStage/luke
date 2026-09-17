@@ -938,10 +938,7 @@ test("the in-process ask answers what the ask route answers: the same record aga
   assert.ok(routed);
   assert.deepEqual(
     await database.run(acceptAsk(seams, { ...ASK, conversationId, userId: owner })),
-    {
-      ok: true,
-      answer: routed,
-    },
+    Result.succeed(routed),
   );
   assert.equal(h.eve.calls.length, 1);
 
@@ -955,10 +952,7 @@ test("the in-process ask answers what the ask route answers: the same record aga
   );
   assert.deepEqual(
     await database.run(acceptAsk(seams, { ...ASK, conversationId, userId: other })),
-    {
-      ok: false,
-      refusal: ASK_REFUSAL.NOT_FOUND,
-    },
+    Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND }),
   );
   assert.equal(h.eve.calls.length, 1);
 });
@@ -1051,20 +1045,17 @@ test("the in-process Stop answers what the cancel route answers: for a running t
       ),
     );
     assert.ok(viaRoute);
-    assert.deepEqual(await database.run(stopAsk(seams, owner, id)), {
-      ok: true,
-      answer: viaRoute,
-    });
+    assert.deepEqual(await database.run(stopAsk(seams, owner, id)), Result.succeed(viaRoute));
     assert.deepEqual(
       await errorOf(
         await database.run(handleBrainTurnCancel(h.options(cancelRequest(other, id), other))),
       ),
       [404, HOSTED_API_ERROR.NOT_FOUND],
     );
-    assert.deepEqual(await database.run(stopAsk(seams, other, id)), {
-      ok: false,
-      refusal: STOP_REFUSAL.NOT_FOUND,
-    });
+    assert.deepEqual(
+      await database.run(stopAsk(seams, other, id)),
+      Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND }),
+    );
   }
   assert.deepEqual(
     await errorOf(
@@ -1074,10 +1065,10 @@ test("the in-process Stop answers what the cancel route answers: for a running t
     ),
     [409, HOSTED_API_ERROR.NOT_RUNNING],
   );
-  assert.deepEqual(await database.run(stopAsk(seams, unrecordedOwner, orphan)), {
-    ok: false,
-    refusal: STOP_REFUSAL.NOT_RUNNING,
-  });
+  assert.deepEqual(
+    await database.run(stopAsk(seams, unrecordedOwner, orphan)),
+    Result.fail({ refusal: STOP_REFUSAL.NOT_RUNNING }),
+  );
   const [row] = await database.run(database.store.turns.named(unrecordedOwner, [orphan]));
   assert.equal(row?.cancelRequestedAt, null);
 });
@@ -1107,7 +1098,7 @@ test("a Stop cancels only the turn it was aimed at: the intended turn ending whi
     now: () => h.clock,
   };
   const outcome = await database.run(stopAsk(seams, userId, intended));
-  assert.equal(outcome.ok, true);
+  assert.ok(Result.isSuccess(outcome));
   assert.deepEqual(h.eve.cancelledTurns, []);
   assert.equal(h.eve.activeTurn, "turn_2");
   assert.deepEqual(h.eve.calls, [{ kind: "cancel", sessionId, eveTurnId: "turn_1" }]);
@@ -1139,7 +1130,7 @@ test("a running row that names no eve turn takes the stamp alone: eve is asked n
     now: () => h.clock,
   };
   const outcome = await database.run(stopAsk(seams, userId, unnamed));
-  assert.deepEqual(outcome.ok && outcome.answer.cancelRequestedAt, NOW);
+  assert.deepEqual(Result.isSuccess(outcome) && outcome.success.cancelRequestedAt, NOW);
   assert.deepEqual(h.eve.calls, []);
   assert.equal(h.eve.activeTurn, "turn_5");
   const [row] = await database.run(database.store.turns.named(userId, [unnamed]));
