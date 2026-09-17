@@ -539,7 +539,7 @@ export function AgentTranscriptPanel({
   }
   const search =
     searchOpen && query !== ""
-      ? searchConversation(conversationSearchEntries(groups), query)
+      ? searchConversation(conversationSearchEntries(groups, { session: open.session }), query)
       : undefined;
   const marks: ConversationSearchMarks | undefined =
     search === undefined ? undefined : { tokens: search.tokens, landed };

@@ -44,7 +44,7 @@ import {
 } from "./conversation-rating";
 import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import { detailToolLabel, TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
-import { ConversationTurns, foldOpen } from "./conversation-turns";
+import { ConversationTurns, conversationSearchEntries, foldOpen } from "./conversation-turns";
 import {
   FIXTURE_AGENT,
   FIXTURE_INPUT,
@@ -221,7 +221,6 @@ test("a message of one tool call draws the row itself, stamped, with no fold and
   assert.equal(count(markup, "class", "settings-chevron"), 0);
   assert.equal(actionRows(markup), 1);
   assert.equal(count(markup, "data-thinking", "true"), 0);
-  assert.equal(count(markup, "data-judgment", "ask"), 1);
   // The row stands between the ask and the reply, and carries the message's stamp as they do.
   assert.equal(count(markup, "class", "conversation-time"), 3);
   const [beforeRow, afterRow] = markup.split('data-action-kind="');
@@ -353,13 +352,19 @@ test("a running turn ends in Luke's wait, driven by the turn row's status alone"
   }
 });
 
-test("a turn nobody opened is Luke's own judgment: his face leads every row, and his words are never a reply bubble", () => {
+test("a turn nobody opened is Luke's own judgment: his words lead with his face and are never a reply bubble, and his tool calls draw as any tool call does", () => {
   const own = render([groupOf(FIXTURE_TURN.OWN)], OPEN);
-  assert.equal(count(own, "data-judgment", "own"), 2);
+  assert.equal(count(own, "data-judgment", "own"), 1);
   assert.equal(count(own, "data-judgment", "ask"), 0);
   assert.equal(count(own, "data-own-words", "true"), 1);
   assert.equal(count(own, "data-speaker", "luke"), 0);
-  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 2);
+  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 1);
+  // The face is the words' alone: the turn's tool call leads with its kind's
+  // mark, stamped with no judgment, exactly as the same call would in an ask.
+  const ownRow = entries(own).find((row) => row.includes("data-tool-kind="));
+  assert.ok(ownRow);
+  assert.ok(!ownRow.includes("luke-face") && !ownRow.includes("data-judgment="));
+  assert.ok(ownRow.includes('<span class="conversation-action-mark" aria-hidden="true"><svg'));
 
   const asked = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
   assert.equal(count(asked, "data-judgment", "own"), 0);
@@ -405,7 +410,7 @@ test("a child's completion leads Luke's words with a chip naming the child, pres
   // The turn is Luke's own judgment: a read of his, then his words, and the
   // chip stands before the words, past the message that only read.
   assert.equal(count(markup, "data-own-words", "true"), 1);
-  assert.equal(count(markup, "data-judgment", "own"), 2);
+  assert.equal(count(markup, "data-judgment", "own"), 1);
   assert.equal(markup.split(SUBAGENT_CHIP_BUTTON).length - 1, 1);
   assert.ok(markup.includes('aria-label="Open Sub-agent: Audit the release notes"'));
   assert.ok(markup.includes(">Sub-agent: Audit the release notes</button>"));
@@ -428,6 +433,22 @@ test("a child's completion leads Luke's words with a chip naming the child, pres
       '<span class="conversation-action-chip conversation-subagent-chip">Sub-agent: Audit the release notes</span>',
     ),
   );
+  // On an agent's transcript page the same turn's words are Luke's bubble,
+  // and the chip still leads them, inside the bubble ahead of the words.
+  const paged = renderCompletion(groups, {
+    subagents: [COMPLETED_CHILD],
+    onOpenChild: open,
+    session: { providerId: "conductor", providerSessionId: FIXTURE_SESSION.HELD },
+  });
+  assert.equal(count(paged, "data-own-words", "true"), 0);
+  assert.equal(paged.split(SUBAGENT_CHIP_BUTTON).length - 1, 1);
+  const pagedBubble = entries(paged).find((row) => row.includes("conversation-subagent-chip"));
+  assert.ok(pagedBubble);
+  assert.ok(
+    pagedBubble.includes('data-speaker="luke"') && pagedBubble.includes("conversation-bubble"),
+  );
+  const pagedChipAt = pagedBubble.indexOf("conversation-subagent-chip");
+  assert.ok(pagedChipAt > 0 && pagedChipAt < pagedBubble.indexOf("The audit found"));
   // Every other turn, the developer's and Luke's own alike, wears none.
   const others = renderCompletion(fixtureConversationTurns(), {
     subagents: [COMPLETED_CHILD],
@@ -736,6 +757,79 @@ test("an observation announce call is a fold of thinking and nothing else, and a
   assert.ok(insideFold !== undefined && afterFold !== undefined);
   assert.equal(count(insideFold, "class", "conversation-time"), 0);
   assert.equal(count(afterFold, "class", "conversation-time"), 1);
+});
+
+/**
+ * The observed fixture turn as the service pages a transcript: the session's
+ * own conversation read as main, its messages whole rather than cut to what
+ * crosses into the thread.
+ */
+function transcriptOf(turnId: string): ConversationViewTurnGroup {
+  const group = selectConversationView({
+    ...FIXTURE_INPUT,
+    main: FIXTURE_INPUT.observed.flatMap((conversation) => conversation.messages),
+    observed: [],
+  }).find((candidate) => candidate.turnId === turnId);
+  assert.ok(group);
+  return group;
+}
+
+test("on an observed session's transcript page the announce call is a tool call row like any other and the brain's text is his bubble", () => {
+  const BRIEFING = "The fixture session is waiting on a permission prompt.";
+  const group = transcriptOf(FIXTURE_TURN.ANNOUNCED);
+  assert.equal(group.source.kind, CONVERSATION_VIEW_SOURCE.MAIN);
+  const session: SessionIdentity = {
+    providerId: "conductor",
+    providerSessionId: FIXTURE_SESSION.HELD,
+  };
+  const markup = render([group], OPEN, { session });
+  // The announce is one tool call row of its own kind, composed as every
+  // other call is: stamped, led by its kind's mark and never his face, its
+  // briefing quoted in the row's words; no observed-group fold anywhere.
+  assert.equal(count(markup, "data-tool-kind", "announce"), 1);
+  assert.equal(count(markup, "data-observation-announcement", "true"), 0);
+  assert.equal((markup.match(/data-tool-calls-fold=/g) ?? []).length, 0);
+  const row = entries(markup).find((entry) => entry.includes('data-tool-kind="announce"'));
+  assert.ok(row);
+  assert.ok(!row.includes("data-judgment="));
+  assert.ok(row.includes('data-tool-status="accepted"'));
+  assert.equal(count(row, "class", "luke-face"), 0);
+  assert.ok(row.includes('<span class="conversation-action-mark" aria-hidden="true"><svg'));
+  assert.ok(row.includes(`Announced: &quot;${BRIEFING}&quot;`));
+  assert.equal(count(row, "class", "conversation-time"), 1);
+  assert.ok(!row.includes("conversation-bubble"));
+  // The brain's text is Luke's bubble, never the quiet row under his face,
+  // and carries the message's one rating; the row order is the parts' own.
+  assert.equal(count(markup, "data-own-words", "true"), 0);
+  const bubble = entries(markup).find((entry) => entry.includes("conversation-bubble"));
+  assert.ok(bubble);
+  assert.ok(bubble.includes('data-speaker="luke"'));
+  assert.ok(bubble.includes("Announced.") && !bubble.includes(BRIEFING));
+  assert.equal(ratingControls(markup), 1);
+  assert.equal(ratingControls(bubble), 1);
+  assert.ok(markup.indexOf('data-tool-kind="announce"') < markup.indexOf("conversation-bubble"));
+  // The same group drawn by a thread that is the transcript of no session is
+  // what it was: the briefing as Luke's bubble, his text under his face.
+  const thread = render([group], OPEN);
+  assert.equal(count(thread, "data-tool-kind", "announce"), 0);
+  assert.equal(count(thread, "data-own-words", "true"), 1);
+  assert.ok(thread.includes(BRIEFING));
+  // The search reads what each draws: on the page the text is a bubble's
+  // words and the briefing is a tool row's, not words said; in the thread
+  // the briefing is the bubble and the text his own words.
+  const paged = conversationSearchEntries([group], { session });
+  assert.deepEqual(
+    paged.map((entry) => [entry.row, entry.words]),
+    [["bubble", "Announced."]],
+  );
+  const drawn = conversationSearchEntries([group]);
+  assert.deepEqual(
+    drawn.map((entry) => [entry.row, entry.words]),
+    [
+      ["bubble", BRIEFING],
+      ["own", "Announced."],
+    ],
+  );
 });
 
 test("a developer's row is a sent bubble with a copy control, and a note the brain wrote is a quiet row", () => {

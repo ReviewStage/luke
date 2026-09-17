@@ -23,6 +23,7 @@ import {
   ProviderMark,
   RobotIcon,
   SearchIcon,
+  SpeakerIcon,
   StopIcon,
   WingFace,
 } from "@sidecar/panel";
@@ -95,7 +96,12 @@ import { ThinkingDots } from "./thinking-dots";
  * observation's briefing folds like his thinking instead, since it is the
  * brain's proposal and not words anyone heard, with the chip naming the
  * observed agent inside the fold above the words; the recorded spoken text
- * stays below as the voice's own bubble. Every other stored tool call of one assistant
+ * stays below as the voice's own bubble. On an observed session's own
+ * transcript page — the brain's conversation about that one chat, which the
+ * service pages as main — the announce call is a tool call row like every
+ * other, its briefing quoted in the row's words, and the brain's text is his
+ * bubble, since nothing there is anyone's ask to be confused with. Every
+ * other stored tool call of one assistant
  * message — reads, actions, even one whose tool failed — draws ahead of that
  * message's words, in the call order the message stored them: one call as
  * the row it is, stamped like any other, and two or more inside one fold
@@ -104,11 +110,13 @@ import { ThinkingDots } from "./thinking-dots";
  * row anatomy — a mark for the kind of thing it was, then a sentence with the
  * session it reached as a chip — whether it did something to a session or to
  * Luke, or only read a roster, a transcript, a file, or the notebook; what a
- * read answered is never drawn. A turn the developer
- * did not open — a roster look, a child's end — is Luke's
- * own judgment, and everything it did leads with his face under that name and
- * never wears a reply's bubble, so what he decided for himself is never read
- * as something the developer asked. A turn of an observed session's own
+ * read answered is never drawn, and a call draws the same whoever opened
+ * the turn. A turn the developer did not open — a roster look, a child's
+ * end — is Luke's own judgment, and the words he wrote in it lead with his
+ * face under that name and never wear a reply's bubble, so what he decided
+ * for himself is never read as something the developer asked; on an
+ * observed session's own transcript page, where no ask stands to be
+ * confused with, they are his bubble. A turn of an observed session's own
  * conversation — a per-workspace agent's — opens on one chip naming that
  * agent, a header line of the group and no part of any bubble, so what he
  * did there is never read as done in the main thread; the chip leads to the
@@ -136,13 +144,13 @@ const VOICE = {
   /** A note the brain wrote itself into the conversation, never the developer's words. */
   NOTE: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Note" },
   ACTION: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Action" },
-  /** A turn nobody opened: what Luke did and said in it is his own judgment, and the label says so. */
+  /** A turn nobody opened: what Luke said in it is his own judgment, and the label says so. */
   OWN: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Luke, on his own judgment" },
   /** The header line naming the observed session a turn group belongs to. */
   SOURCE: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "In session" },
 } as const satisfies Record<string, RowVoice>;
 
-/** Whose judgment a turn's rows record, stamped on each so the two never look alike. */
+/** Whose judgment a turn's words record, stamped on the rows of words so the two never look alike. */
 const JUDGMENT = { ASK: "ask", OWN: "own" } as const;
 
 type Judgment = (typeof JUDGMENT)[keyof typeof JUDGMENT];
@@ -214,6 +222,7 @@ const ROW_GLYPH = {
   [TOOL_ROW_KIND.CHILD_HISTORY]: DocumentIcon,
   [TOOL_ROW_KIND.NOTEBOOK_SEARCH]: SearchIcon,
   [TOOL_ROW_KIND.NOTEBOOK_READ]: BookIcon,
+  [TOOL_ROW_KIND.ANNOUNCE]: SpeakerIcon,
   [TOOL_ROW_KIND.OTHER]: undefined,
 } as const satisfies Record<ToolRowKind, (() => React.JSX.Element) | undefined>;
 
@@ -317,6 +326,7 @@ function BubbleRow({
   at,
   copy = true,
   reading = false,
+  lead,
   rating,
   search,
   press,
@@ -325,6 +335,8 @@ function BubbleRow({
   words: string;
   at: number;
   copy?: boolean;
+  /** What stands before the words inside the bubble: the chip naming the child whose completion the turn answered, on a transcript page. */
+  lead?: React.ReactNode;
   /** Whether the words are what Luke's voice said of a message folded above them. */
   reading?: boolean;
   /** The rating control, behind the ellipsis on the last words of one of Luke's messages and nowhere else. */
@@ -345,6 +357,7 @@ function BubbleRow({
       <div className="conversation-message">
         <span className="conversation-bubble">
           {press === undefined ? null : <WordsPress onPress={press} />}
+          {lead}
           <MarkdownMessage
             words={words}
             className="conversation-words"
@@ -795,16 +808,15 @@ function chipOf(row: ToolRow): ToolRowChip | undefined {
  * stands down rather than repeat it. A refused or unknown outcome says why
  * under the words; an accepted action shows the carrier's own note where it
  * wrote one. A row of its own carries the message's stamp; one inside a fold
- * carries none, since the fold's line carries it for all of them.
+ * carries none, since the fold's line carries it for all of them. The row is
+ * the same whoever opened the turn: a call is drawn by what it did.
  */
 function ToolCallRow({
   row,
-  judgment,
   at,
   onOpenChat,
 }: {
   row: ToolRow;
-  judgment: Judgment;
   at?: number;
   onOpenChat?: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
@@ -812,26 +824,23 @@ function ToolCallRow({
   const chip = chipOf(row);
   const trailingProvider =
     row.providerId !== undefined && chip?.markId !== row.providerId ? row.providerId : undefined;
-  const own = judgment === JUDGMENT.OWN;
-  const voice = own ? VOICE.OWN : VOICE.ACTION;
   return (
     <li
       className="conversation-entry"
-      data-speaker={voice.speaker}
-      data-judgment={judgment}
+      data-speaker={VOICE.ACTION.speaker}
       data-tool-kind={row.kind}
       data-action-kind={isActionRowKind(row.kind) ? row.kind : undefined}
       data-tool-status={row.status}
     >
-      <small className="visually-hidden">{voice.label}</small>
+      <small className="visually-hidden">{VOICE.ACTION.label}</small>
       <div className="conversation-message">
         <span className="conversation-action">
           <span
             className="conversation-action-mark"
             aria-hidden="true"
-            data-control={own ? undefined : row.controlKind}
+            data-control={row.controlKind}
           >
-            {own ? <WingFace /> : Glyph === undefined ? null : <Glyph />}
+            {Glyph === undefined ? null : <Glyph />}
           </span>
           <span className="conversation-action-body">
             <span className="conversation-words">
@@ -909,33 +918,27 @@ const FOLD_FROM_CALLS = 2;
  * for the state the turn set as well as for a press, so a toggle is read as
  * the reader's only when it leaves the element in a state the turn did not
  * ask for; a fold that mistook the turn's word for the reader's would never
- * close. Under Luke's own judgment the line leads with his face, as each row
- * inside it does.
+ * close.
  */
 function ToolCallsFold({
   rows,
   pending,
-  judgment,
   at,
 }: {
   rows: readonly React.JSX.Element[];
   pending: boolean;
-  judgment: Judgment;
   /** When the first of the folded actions ran: the line's stamp, since the rows inside carry none. */
   at: number;
 }): React.JSX.Element {
   const [choice, setChoice] = useState<FoldChoice | undefined>(undefined);
   const open = foldOpen(choice, pending);
-  const own = judgment === JUDGMENT.OWN;
-  const voice = own ? VOICE.OWN : VOICE.ACTION;
   return (
     <li
       className="conversation-entry"
-      data-speaker={voice.speaker}
-      data-judgment={judgment}
+      data-speaker={VOICE.ACTION.speaker}
       data-tool-calls-fold={pending ? "running" : "settled"}
     >
-      <small className="visually-hidden">{voice.label}</small>
+      <small className="visually-hidden">{VOICE.ACTION.label}</small>
       <div className="conversation-message">
         <details
           className="conversation-actions-fold"
@@ -950,11 +953,6 @@ function ToolCallsFold({
         >
           <summary className="conversation-turn-summary">
             <ChevronIcon />
-            {own ? (
-              <span className="conversation-action-mark" aria-hidden="true">
-                <WingFace />
-              </span>
-            ) : null}
             <span>{`${rows.length} tool calls`}</span>
           </summary>
           <ol className="conversation-turn-rows">{rows}</ol>
@@ -1182,16 +1180,19 @@ function spokenWords(message: StoredUIMessage): string {
 
 /**
  * Whether a part draws words Luke said: a text part that is not his thinking,
- * or an announce call carrying its briefing. A fold of thinking draws words
- * too, but none he said, so the rating never stands on one.
+ * or an announce call carrying its briefing where the thread draws it as
+ * words rather than as the call. A fold of thinking draws words too, but
+ * none he said, so the rating never stands on one.
  */
 function drawsWords(
   part: StoredPart,
   described: ReadonlyMap<string, ConversationViewToolPart>,
   thinking: boolean,
+  transcript: boolean,
 ): boolean {
   if (isTextPart(part)) return !thinking;
   return (
+    !transcript &&
     isStoredToolPart(part) &&
     described.get(part.toolCallId)?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE &&
     announcedWords(part) !== undefined
@@ -1232,7 +1233,6 @@ interface ToolCall {
 
 function toolCallRow(
   call: ToolCall,
-  judgment: Judgment,
   at: number | undefined,
   onOpenChat: ((identity: SessionIdentity) => void) | undefined,
 ): React.JSX.Element {
@@ -1240,7 +1240,6 @@ function toolCallRow(
     <ToolCallRow
       key={call.key}
       row={call.row}
-      judgment={judgment}
       {...(at === undefined ? undefined : { at })}
       {...(onOpenChat ? { onOpenChat } : undefined)}
     />
@@ -1255,7 +1254,10 @@ function toolCallRow(
  * decision, read back by call id; an announce call carrying its briefing is
  * drawn as that bubble, or in an observed group as a fold of thinking worn
  * by the source chip handed in, and as no tool call row; every other call
- * is a row composed from its own part.
+ * is a row composed from its own part, and on an observed session's
+ * transcript page the announce call is one of them, its briefing in the
+ * row's words, while the brain's text there is his bubble whoever opened
+ * the turn.
  * In a turn whose answer the voice said, the
  * brain's text is his thinking and folds as his written working, whatever
  * the voice made of it; the rating of the brain's judgment then stands on the
@@ -1277,6 +1279,8 @@ function messageRows(
   sourceChip?: React.ReactNode,
   /** The session whose transcript the row stands in, so an observed-messages note's chip opens its chat; absent where the thread knows none. */
   chat?: SessionIdentity,
+  /** Whether the thread is an observed session's transcript page, where an announce call is a tool call row and text is a bubble. */
+  transcript = false,
 ): readonly React.JSX.Element[] {
   const { message } = view;
   const search: RowSearch = {
@@ -1351,7 +1355,7 @@ function messageRows(
   const toolCalls: ToolCall[] = [];
   // The control stands on the message's last words, so one message takes one.
   const lastWordsAt = message.parts.findLastIndex((part: StoredPart) =>
-    drawsWords(part, described, thinking),
+    drawsWords(part, described, thinking, transcript),
   );
   const control =
     lastWordsAt === -1 || readAloud
@@ -1368,7 +1372,7 @@ function messageRows(
         return;
       }
       rows.push(
-        judgment === JUDGMENT.OWN ? (
+        judgment === JUDGMENT.OWN && !transcript ? (
           <OwnWordsRow
             key={key}
             words={part.text}
@@ -1383,6 +1387,7 @@ function messageRows(
             voice={VOICE.LUKE}
             words={part.text}
             at={view.placedAt}
+            lead={index === leadAt ? lead : undefined}
             rating={placed}
             search={search}
           />
@@ -1396,7 +1401,7 @@ function messageRows(
     }
     if (!isStoredToolPart(part)) return;
     const tool = described.get(part.toolCallId);
-    if (tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) {
+    if (tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && !transcript) {
       const words = announcedWords(part);
       if (words !== undefined && sourceChip !== undefined) {
         rows.push(
@@ -1433,14 +1438,13 @@ function messageRows(
   const [only] = toolCalls;
   if (only === undefined) return rows;
   if (toolCalls.length < FOLD_FROM_CALLS) {
-    return [toolCallRow(only, judgment, view.placedAt, onOpenChat), ...rows];
+    return [toolCallRow(only, view.placedAt, onOpenChat), ...rows];
   }
   return [
     <ToolCallsFold
       key={`${message.id}:tools`}
-      rows={toolCalls.map((call) => toolCallRow(call, judgment, undefined, onOpenChat))}
+      rows={toolCalls.map((call) => toolCallRow(call, undefined, onOpenChat))}
       pending={pending}
-      judgment={judgment}
       at={view.placedAt}
     />,
     ...rows,
@@ -1534,6 +1538,7 @@ function searchEntriesOf(
   judgment: Judgment,
   aloud: boolean,
   observed: boolean,
+  transcript: boolean,
   readings: Readings,
   ask: string | undefined,
 ): readonly ConversationSearchEntry[] {
@@ -1590,12 +1595,12 @@ function searchEntriesOf(
     view.tools.map((tool) => [tool.toolCallId, tool]),
   );
   const spoken =
-    judgment === JUDGMENT.OWN
+    judgment === JUDGMENT.OWN && !transcript
       ? { row: CONVERSATION_SEARCH_ROW.OWN, voice: VOICE.OWN, copy: false }
       : LUKE_BUBBLE;
   // The rating stands on the message's last words, so one row of it carries it.
   const lastWordsAt = message.parts.findLastIndex((part: StoredPart) =>
-    drawsWords(part, described, thinking),
+    drawsWords(part, described, thinking, transcript),
   );
   return message.parts.flatMap((part: StoredPart, index): readonly ConversationSearchEntry[] => {
     const key = `${message.id}:${index}`;
@@ -1604,10 +1609,10 @@ function searchEntriesOf(
         ? { view, words: quotedWords(message, part), ask }
         : undefined;
     if (isTextPart(part)) return thinking ? [] : entry(key, { ...spoken, text: part.text }, rated);
-    // An observed session's briefing folds as the brain's proposal, and a
-    // briefing a device read aloud folds as his written working: neither is
-    // words said.
-    if (observed || readAloud || !isStoredToolPart(part)) return [];
+    // An observed session's briefing folds as the brain's proposal, on its
+    // own transcript page it is a tool call row, and a briefing a device
+    // read aloud folds as his written working: none is words said.
+    if (observed || transcript || readAloud || !isStoredToolPart(part)) return [];
     if (described.get(part.toolCallId)?.kind !== CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) return [];
     const briefing = announcedWords(part);
     return briefing === undefined ? [] : entry(key, { ...LUKE_BUBBLE, text: briefing }, rated);
@@ -1668,7 +1673,12 @@ export function ConversationSearchHitRow({
  */
 export function conversationSearchEntries(
   groups: readonly ConversationViewTurnGroup[],
+  options?: {
+    /** The session the thread is the transcript of, as `ConversationTurns` is handed it; absent for the main thread. */
+    readonly session?: SessionIdentity | undefined;
+  },
 ): readonly ConversationSearchEntry[] {
+  const transcript = options?.session !== undefined;
   const readings = readingsOf(groups);
   const entries: ConversationSearchEntry[] = [];
   // The ask a rated reply answered is the developer's latest words in the
@@ -1681,7 +1691,15 @@ export function conversationSearchEntries(
     const observed = group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED;
     for (const view of group.messages) {
       entries.push(
-        ...searchEntriesOf(view, judgment, aloud, observed, readings, asks.get(group.turnId)),
+        ...searchEntriesOf(
+          view,
+          judgment,
+          aloud,
+          observed,
+          transcript,
+          readings,
+          asks.get(group.turnId),
+        ),
       );
       if (
         judgment === JUDGMENT.ASK &&
@@ -1832,7 +1850,9 @@ export function ConversationTurns({
   /**
    * The session this thread is the transcript of, on an agent's page, so an
    * observed-messages note's chip opens its chat the way the page's header
-   * does; absent for the main thread, which is the transcript of no session.
+   * does, the brain's text is his bubble, and an announce call is a tool
+   * call row; absent for the main thread, which is the transcript of no
+   * session.
    */
   session?: SessionIdentity;
   /**
@@ -1956,6 +1976,7 @@ export function ConversationTurns({
             ) : undefined,
             naming === undefined ? undefined : <SourceChip {...naming} />,
             chat,
+            session !== undefined,
           );
           if (
             judgment === JUDGMENT.ASK &&

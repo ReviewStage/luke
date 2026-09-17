@@ -62,9 +62,10 @@ function parsedRequest<Value, Encoded>(
  * and the envelope says what became of it and what the target was when it
  * ran: its title, its agent, the control's label and kind, the session a
  * creation made. For every other tool — a roster look, a transcript read, a
- * notebook search, a workspace write, a delegation — the arguments say what
- * was read or written and the answer says only whether the tool refused; not
- * a word of what it read or wrote is drawn. The roster as it stands now
+ * notebook search, a workspace write, a delegation, a briefing announced
+ * where the thread draws the call rather than the words — the arguments say
+ * what was read, written, or said and the answer says only whether the tool
+ * refused; not a word of what a read answered is drawn. The roster as it stands now
  * supplies the current name of a session it still holds; once it has let the
  * session go, the envelope's snapshot names it, which is what keeps a departed
  * chat nameable. No sentence is stored anywhere for a row to draw: the words
@@ -92,6 +93,8 @@ export const TOOL_ROW_KIND = {
   CHILD_HISTORY: "child-history",
   NOTEBOOK_SEARCH: "notebook-search",
   NOTEBOOK_READ: "notebook-read",
+  /** The briefing handed to the voice, drawn as the call it was where the thread does not draw it as words. */
+  ANNOUNCE: "announce",
   OTHER: "other",
 } as const satisfies Record<string, string>;
 
@@ -122,6 +125,7 @@ const DETAIL_KIND_BY_TOOL: ReadonlyMap<string, DetailKind> = new Map<string, Det
   [BRAIN_TOOL.SESSIONS_HISTORY, TOOL_ROW_KIND.CHILD_HISTORY],
   [NOTEBOOK_MEMORY_TOOL.SEARCH, TOOL_ROW_KIND.NOTEBOOK_SEARCH],
   [NOTEBOOK_MEMORY_TOOL.GET, TOOL_ROW_KIND.NOTEBOOK_READ],
+  [BRAIN_TOOL.ANNOUNCE, TOOL_ROW_KIND.ANNOUNCE],
 ]);
 
 /** A tool's name as a reader sees it, for a tool this build has no words for: the underscores the model spells it with become spaces. */
@@ -712,6 +716,13 @@ function composeDetail(
               path === undefined ? "Read from the notebook" : `Read "${path}" from the notebook`,
           },
         ],
+      };
+    }
+    case TOOL_ROW_KIND.ANNOUNCE: {
+      // The briefing is quoted the way a sent message's text is: it is what the call carried.
+      const briefing = wordIn(input, "briefing");
+      return {
+        runs: [{ text: briefing === undefined ? "Announced" : `Announced: "${briefing}"` }],
       };
     }
     case TOOL_ROW_KIND.OTHER:
