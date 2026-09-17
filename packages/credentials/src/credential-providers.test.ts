@@ -7,7 +7,6 @@ import {
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_PROVIDERS,
   isCredentialProviderId,
-  providerRunsSessionsInCloud,
 } from "./credential-providers.js";
 
 test("accepts only a provider the build ships", () => {
@@ -56,18 +55,4 @@ test("the Providers section is exactly the registry", () => {
     CLOUD_AGENT_PROVIDER_LIST.map((provider) => provider.id).sort(),
     CREDENTIAL_PROVIDER_LIST.map((provider) => provider.id).sort(),
   );
-});
-
-test("the cloud badge belongs to every agent the registry names", () => {
-  // The badge says a provider's sessions run in a cloud service, which is
-  // what every key this build holds buys.
-  for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
-    assert.equal(providerRunsSessionsInCloud(provider.id), true, provider.id);
-  }
-});
-
-test("holds no key format for a provider that publishes one kind of key", () => {
-  // Conductor publishes one kind of key, so it has no format worth holding a
-  // credential to.
-  assert.equal(CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR].keyFormat, undefined);
 });

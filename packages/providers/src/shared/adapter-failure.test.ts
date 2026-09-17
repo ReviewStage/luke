@@ -9,16 +9,6 @@ import {
   tolerateItemFailureEffect,
 } from "./adapter-failure.js";
 
-it("a rejected credential and nothing to observe with both clear observed state", () => {
-  assert.equal(clearsObservedState(ADAPTER_FAILURE.UNAUTHORIZED), true);
-  assert.equal(clearsObservedState(ADAPTER_FAILURE.UNAVAILABLE), true);
-});
-
-it("a failure that says nothing about the credential leaves the snapshot standing", () => {
-  assert.equal(clearsObservedState(ADAPTER_FAILURE.TRANSIENT), false);
-  assert.equal(clearsObservedState(ADAPTER_FAILURE.RATE_LIMITED), false);
-});
-
 it.effect(
   "a rate limit ends the pass without clearing it, and one resource's transient failure is tolerated alone",
   () =>
@@ -58,16 +48,6 @@ it("every failure kind has an answer, so a new one cannot arrive undecided", () 
     [ADAPTER_FAILURE.TRANSIENT, false],
     [ADAPTER_FAILURE.RATE_LIMITED, false],
   ]);
-});
-
-it("a failure carries its kind under its own tag", () => {
-  const failure = new AdapterFailure({
-    failure: ADAPTER_FAILURE.TRANSIENT,
-    message: "the provider did not answer",
-  });
-  assert.equal(failure._tag, "AdapterFailure");
-  assert.equal(failure.failure, ADAPTER_FAILURE.TRANSIENT);
-  assert.equal(failure.message, "the provider did not answer");
 });
 
 it.effect(

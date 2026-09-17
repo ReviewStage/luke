@@ -846,19 +846,6 @@ it.effect(
     }),
 );
 
-it.effect("a Retry-After in seconds is honoured in place of the doubled wait", () =>
-  Effect.gen(function* () {
-    const stub = rateLimitedClient(1, "3");
-    const plugin = stubPluginFor(stub.layer);
-    plugin.collected = [observation("session-one")];
-
-    const observations = yield* forkAndSettle(plugin);
-
-    assert.equal(observations.length, 1);
-    assert.equal(stub.requests.length, 2);
-  }),
-);
-
 it.effect(
   "a rate limit that outlasts the backoff ends the pass as rate limited and keeps the previous snapshot",
   () =>

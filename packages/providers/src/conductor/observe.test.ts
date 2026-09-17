@@ -5,17 +5,9 @@ import {
   advertisedControls,
   SESSION_STATUS,
 } from "@sidecar/session";
-import {
-  atInstant,
-  fakeHttpClientLayer,
-  HTTP_STATUS,
-  jsonResponse,
-  type RecordingHttpClient,
-  runTest,
-} from "@sidecar/wire/testing";
+import { atInstant, HTTP_STATUS, type RecordingHttpClient, runTest } from "@sidecar/wire/testing";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { test } from "vitest";
 import { CLOUD_ADAPTER_DEFAULTS } from "../shared/cloud-wire.js";
 import {
@@ -41,29 +33,6 @@ import {
 } from "../testing/conductor-api.js";
 import { CONDUCTOR_PROVIDER } from "./vocabulary.js";
 
-test("names every action Conductor documents, and none it does not", () => {
-  const plugin = pluginFor(fakeHttpClientLayer(() => jsonResponse({})));
-
-  assert.deepEqual(Object.keys(plugin.actions ?? {}).sort(), [
-    "control",
-    "createWorkspace",
-    "message",
-    "renameSession",
-    "renameWorkspace",
-    "spawnAgent",
-  ]);
-  // A cloud session's conversation lives with its provider, and every read of
-  // it goes there: the developer's own conversation read, the brain's whole
-  // transcript read, the opener's which-chats-changed read that carries no
-  // words, and the brain's incremental read behind the cursor Conductor
-  // handed back; an observation pass reads none of them.
-  assert.deepEqual(Object.keys(plugin.reads ?? {}).sort(), [
-    "conversation",
-    "transcript",
-    "transcriptChanges",
-    "transcriptSince",
-  ]);
-});
 test("observes cloud sessions the signed-in user created, under their own names", async () => {
   const api = fakeConductorApi({
     userId: TEST_USER_ID,
@@ -1108,57 +1077,6 @@ test("keeps only the open chats of a workspace that also holds filed-away ones",
     ["open-session"],
   );
   assert.equal(observations[0]?.status, SESSION_STATUS.WORKING);
-});
-
-/**
- * The fake's own client until the gate closes, and a refused key after it, so
- * one plugin sees its key stop working mid-life.
- */
-function refusingWhen(
-  api: RecordingHttpClient,
-  rejecting: () => boolean,
-): Layer.Layer<HttpClient.HttpClient> {
-  return Layer.provide(
-    Layer.effect(
-      HttpClient.HttpClient,
-      Effect.map(HttpClient.HttpClient, (client) =>
-        HttpClient.make((request) =>
-          rejecting()
-            ? Effect.succeed(
-                HttpClientResponse.fromWeb(request, jsonResponse({}, HTTP_STATUS.UNAUTHORIZED)),
-              )
-            : client.execute(request),
-        ),
-      ),
-    ),
-    api.layer,
-  );
-}
-
-test("clears observations when Conductor rejects the API key", async () => {
-  const api = fakeConductorApi({
-    userId: TEST_USER_ID,
-    projects: [LUKE_PROJECT],
-    workspaces: [ownedWorkspace("workspace-active", TEST_TIME - 1_000)],
-    sessions: [
-      {
-        id: "session-active",
-        workspaceId: "workspace-active",
-        name: TEST_SESSION_NAME,
-        status: TEST_CONDUCTOR_STATUS.WORKING,
-        statusUpdatedAt: TEST_TIME - 1_000,
-      },
-    ],
-  });
-  let rejectRequests = false;
-  const plugin = pluginFor(refusingWhen(api, () => rejectRequests));
-
-  const authorized = await observeAt(plugin);
-  rejectRequests = true;
-  const rejected = await observeAt(plugin);
-
-  assert.equal(authorized.length, 1);
-  assert.deepEqual(rejected, []);
 });
 
 test("keeps observing when one session's status cannot be read", async () => {

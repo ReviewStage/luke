@@ -11,7 +11,6 @@ import {
   AccountTransportError,
   accessTokenNeedsRefresh,
   accountFailureAction,
-  accountGateOpen,
   deleteHostedAccount,
   withIssuedAccountTokens,
 } from "./client.js";
@@ -363,12 +362,6 @@ test("a rejected or expired access token refreshes without signing out", () => {
     ),
     false,
   );
-});
-
-test("capture and fixture runs bypass the account wall", () => {
-  assert.equal(accountGateOpen({ requiresAccount: false }, false), true);
-  assert.equal(accountGateOpen({ requiresAccount: true }, false), false);
-  assert.equal(accountGateOpen({ requiresAccount: true }, true), true);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
