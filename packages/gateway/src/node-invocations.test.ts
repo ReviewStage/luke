@@ -362,9 +362,13 @@ it.live(
       const client = yield* gatewayClient({
         transport: {
           request: (request) =>
-            Effect.callback<GatewayResponse>((resume) => {
-              const answering = Effect.runFork(doorOf(doors, current).request(request));
-              pendingAnswers.push(() => resume(Fiber.join(answering)));
+            Effect.gen(function* () {
+              const answering = yield* Effect.forkDetach(doorOf(doors, current).request(request), {
+                startImmediately: true,
+              });
+              return yield* Effect.callback<GatewayResponse>((resume) => {
+                pendingAnswers.push(() => resume(Fiber.join(answering)));
+              });
             }),
           events: (sink) => {
             sinks.add(sink);
@@ -392,7 +396,7 @@ it.live(
       current = newHost;
       for (let i = 0; i < 5; i += 1)
         newHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, `new-${i + 1}`);
-      const adoption = Effect.runFork(client.adoptHost());
+      const adoption = yield* Effect.forkChild(client.adoptHost(), { startImmediately: true });
       assert.equal(pendingAnswers.length, 2);
       // The host handles the hello (capturing sequence 5) before the sixth event
       // is emitted; only the answer is still on its way.

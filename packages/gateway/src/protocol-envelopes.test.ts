@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
+import { settleJsonGolden, settleJsonSchemaGoldenSet } from "@sidecar/wire/testing";
 import { Effect, Result, type Scope } from "effect";
 import { test } from "vitest";
 import type { GatewayMethodTable } from "./methods.js";
@@ -48,10 +48,8 @@ import { TextLoopbackTransport } from "./testing.js";
  * sentence read as a broken contract, so the golden carries a fixed token in
  * its place and the exchange asserts the live message is a non-empty string.
  * Every other value is structural or this file's own synthetic fixture.
+ * Recording, under `LUKE_UPDATE_FIXTURES=1`, is the shared golden door's.
  */
-
-/** Records the envelopes instead of asserting them. `check.sh` never sets it. */
-const UPDATE_FIXTURES = process.env.LUKE_UPDATE_FIXTURES === "1";
 
 const FIXTURE_ROOT = path.join(fileURLToPath(import.meta.url), "../../fixtures/protocol");
 
@@ -108,23 +106,6 @@ const ENVELOPE_GOLDEN_NAME = {
   EMPTY_RESULT: "envelope-empty-result",
 } as const;
 
-function goldenText(value: WireValue): string {
-  return `${JSON.stringify(value, undefined, 2)}\n`;
-}
-
-async function settleGolden(name: string, recorded: WireRecord): Promise<void> {
-  const filePath = path.join(FIXTURE_ROOT, `${name}.json`);
-  const serialized = goldenText(recorded);
-  if (UPDATE_FIXTURES) {
-    await fs.mkdir(FIXTURE_ROOT, { recursive: true });
-    await fs.writeFile(filePath, serialized);
-    return;
-  }
-  const held = await fs.readFile(filePath, "utf8").catch(() => undefined);
-  assert.ok(held !== undefined, `no envelope recorded at ${filePath}`);
-  assert.equal(serialized, held);
-}
-
 function responseGolden(response: GatewayResponse): WireRecord {
   const wire = gatewayResponseToWire(response);
   if (response.ok) return wire;
@@ -142,7 +123,7 @@ function settleExchange(
   return Effect.gen(function* () {
     const response = yield* transport.request(request);
     yield* Effect.promise(() =>
-      settleGolden(name, {
+      settleJsonGolden(FIXTURE_ROOT, name, {
         request: gatewayRequestToWire(request),
         response: responseGolden(response),
       }),
@@ -238,7 +219,7 @@ test("the declared parameters the fixtures carry are the shapes the protocol adm
   );
 });
 
-it.live("every method's request and answer cross as the recorded envelopes", () =>
+it.effect("every method's request and answer cross as the recorded envelopes", () =>
   Effect.gen(function* () {
     const host = yield* goldenHost(answeringTable());
     const transport = new TextLoopbackTransport(host, OPERATOR);
@@ -253,7 +234,7 @@ it.live("every method's request and answer cross as the recorded envelopes", () 
   }),
 );
 
-it.live("every error code crosses as the recorded envelope", () =>
+it.effect("every error code crosses as the recorded envelope", () =>
   Effect.gen(function* () {
     const throwing = new Error("the handler failed");
     const unanswered = answeringTable();
@@ -385,7 +366,7 @@ it.live("every error code crosses as the recorded envelope", () =>
   }),
 );
 
-it.live("a reconnection inside the window replays, and one past it is handed a snapshot", () =>
+it.effect("a reconnection inside the window replays, and one past it is handed a snapshot", () =>
   Effect.gen(function* () {
     const host = yield* goldenHost(answeringTable(), { replayWindow: 3 });
     const transport = new TextLoopbackTransport(host, OPERATOR);
@@ -421,7 +402,7 @@ it.live("a reconnection inside the window replays, and one past it is handed a s
   }),
 );
 
-it.live("a named revision and an empty answer cross as the recorded envelopes", () =>
+it.effect("a named revision and an empty answer cross as the recorded envelopes", () =>
   Effect.gen(function* () {
     const host = yield* goldenHost({
       ...answeringTable(),
@@ -453,17 +434,10 @@ it.live("a named revision and an empty answer cross as the recorded envelopes", 
 );
 
 test("the recorded envelopes are exactly the cases the protocol names", async () => {
-  const expected = [
+  await settleJsonSchemaGoldenSet(FIXTURE_ROOT, [
     ...METHODS.map(methodGoldenName),
     ...ERROR_CODES.map(errorGoldenName),
     ...Object.values(REPLAY_GOLDEN_NAME),
     ...Object.values(ENVELOPE_GOLDEN_NAME),
-  ].map((name) => `${name}.json`);
-  const held = await fs.readdir(FIXTURE_ROOT);
-  if (UPDATE_FIXTURES) {
-    for (const name of held) {
-      if (!expected.includes(name)) await fs.rm(path.join(FIXTURE_ROOT, name));
-    }
-  }
-  assert.deepEqual((await fs.readdir(FIXTURE_ROOT)).toSorted(), expected.toSorted());
+  ]);
 });

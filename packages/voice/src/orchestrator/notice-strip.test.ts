@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, FiberSet, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
 
@@ -14,18 +14,22 @@ function advance(delayMs: number): Effect.Effect<void> {
   return Effect.andThen(TestClock.adjust(Duration.millis(delayMs)), settle);
 }
 
-/** One strip under this test's own services, so its clocks are this test's `TestClock`. */
-function strip(): Effect.Effect<{
-  subject: NoticeStrip;
-  changes: () => number;
-}> {
-  return Effect.map(Effect.context<never>(), (services) => {
+/** One strip forking into this test's own scope, so its clocks are this test's `TestClock`. */
+function strip(): Effect.Effect<
+  {
+    subject: NoticeStrip;
+    changes: () => number;
+  },
+  never,
+  Scope.Scope
+> {
+  return Effect.map(FiberSet.makeRuntime<never>(), (fork) => {
     let changes = 0;
     const subject = new NoticeStrip({
       onChanged: () => {
         changes += 1;
       },
-      fork: (effect) => Effect.runForkWith(services)(effect),
+      fork: (effect) => fork(effect),
     });
     return { subject, changes: () => changes };
   });

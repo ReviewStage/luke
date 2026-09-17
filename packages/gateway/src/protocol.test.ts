@@ -122,7 +122,7 @@ function client(transport: GatewayTransport, onSnapshot?: (snapshot: WireValue) 
  * a shape that only works because it never left the process fails here.
  */
 for (const kind of ["in-process", "loopback"] as const) {
-  it.live(
+  it.effect(
     `[${kind}] a mutation carries an idempotency key, and the same key finds the first answer once`,
     () =>
       Effect.gen(function* () {
@@ -162,7 +162,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.live(`[${kind}] two retries in flight together await one decision`, () =>
+  it.effect(`[${kind}] two retries in flight together await one decision`, () =>
     Effect.gen(function* () {
       const h = yield* harness();
       const c = yield* client(transportFor(kind, h.host));
@@ -178,7 +178,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     }),
   );
 
-  it.live(
+  it.effect(
     `[${kind}] a request built over a replaced lifetime or configuration is refused before its handler`,
     () =>
       Effect.gen(function* () {
@@ -210,7 +210,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.live(
+  it.effect(
     `[${kind}] unknown methods, unsupported versions, thrown handlers, and typed refusals all answer as errors`,
     () =>
       Effect.gen(function* () {
@@ -236,19 +236,21 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.live(`[${kind}] a node may only offer itself; the operator's methods are refused to it`, () =>
-    Effect.gen(function* () {
-      const h = yield* harness();
-      const node = yield* client(transportFor(kind, h.host, NODE));
-      const refused = yield* node.call(GATEWAY_METHOD.SESSION_ROSTER);
-      assert.equal(refused.ok, false);
-      if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.UNAUTHORIZED);
-      const hello = yield* node.call(GATEWAY_METHOD.HELLO);
-      assert.equal(hello.ok, true);
-    }),
+  it.effect(
+    `[${kind}] a node may only offer itself; the operator's methods are refused to it`,
+    () =>
+      Effect.gen(function* () {
+        const h = yield* harness();
+        const node = yield* client(transportFor(kind, h.host, NODE));
+        const refused = yield* node.call(GATEWAY_METHOD.SESSION_ROSTER);
+        assert.equal(refused.ok, false);
+        if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.UNAUTHORIZED);
+        const hello = yield* node.call(GATEWAY_METHOD.HELLO);
+        assert.equal(hello.ok, true);
+      }),
   );
 
-  it.live(
+  it.effect(
     `[${kind}] events arrive numbered in order, and a gap is filled from the host's log before anything later is delivered`,
     () =>
       Effect.gen(function* () {
@@ -274,7 +276,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.live(
+  it.effect(
     `[${kind}] an event emitted while a reconnection is in flight is delivered once it settles, not at the next gap`,
     () =>
       Effect.gen(function* () {
@@ -311,7 +313,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.live(
+  it.effect(
     `[${kind}] a reconnection past the replay window is answered with a snapshot, never a silent skip`,
     () =>
       Effect.gen(function* () {
@@ -349,7 +351,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.live(
+  it.effect(
     `[${kind}] a disconnected transport answers every request disconnected rather than hanging`,
     () =>
       Effect.gen(function* () {
@@ -382,7 +384,7 @@ test("a method outside the vocabulary is refused by the writer before it reaches
   assert.equal(gatewayRequestFromWire(envelope), undefined);
 });
 
-it.live(
+it.effect(
   "a delayed answer still lands, and a late acknowledgement after it changes nothing more",
   () =>
     Effect.gen(function* () {

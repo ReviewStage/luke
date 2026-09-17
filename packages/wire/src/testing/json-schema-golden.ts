@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Schema } from "effect";
 import { emitJsonSchema } from "../effect/json-schema.js";
+import type { WireValue } from "../json.js";
 import type { JsonSchemaNode } from "../schema-vocabulary.js";
 
 /**
@@ -34,6 +35,9 @@ interface JsonSchemaGoldenTool {
 }
 
 export type JsonSchemaGolden = JsonSchemaNode | JsonSchemaGoldenTool;
+
+/** What a golden file holds: a JSON Schema, or any other JSON a test pins byte for byte, such as a protocol envelope. */
+export type JsonGolden = JsonSchemaGolden | WireValue;
 
 /** Anything that emits a node: every `Schema`, and nothing that has to be one. */
 export interface JsonSchemaSource {
@@ -72,7 +76,7 @@ export function jsonSchemaGoldenRoot(moduleUrl: string): string {
   return path.join(fileURLToPath(moduleUrl), "../../fixtures/json-schema");
 }
 
-function goldenText(recorded: JsonSchemaGolden): string {
+function goldenText(recorded: JsonGolden): string {
   return `${JSON.stringify(recorded, undefined, 2)}\n`;
 }
 
@@ -89,7 +93,7 @@ function goldenPath(root: string, name: string): string {
 export async function matchJsonSchemaGolden(
   root: string,
   name: string,
-  emitted: JsonSchemaGolden,
+  emitted: JsonGolden,
 ): Promise<void> {
   const filePath = goldenPath(root, name);
   const held = await fs.readFile(filePath, "utf8").catch(() => undefined);
@@ -97,11 +101,15 @@ export async function matchJsonSchemaGolden(
   assert.equal(goldenText(emitted), held);
 }
 
-/** Compares one emitted schema with the recorded bytes, or records it. */
-export async function settleJsonSchemaGolden(
+/**
+ * Compares one recorded JSON value with the bytes on disk, or records it: the
+ * one door every byte golden in the repository goes through, so
+ * `LUKE_UPDATE_FIXTURES` is read here and in no test file of its own.
+ */
+export async function settleJsonGolden(
   root: string,
   name: string,
-  recorded: JsonSchemaGolden,
+  recorded: JsonGolden,
 ): Promise<void> {
   if (UPDATE_FIXTURES) {
     await fs.mkdir(root, { recursive: true });
@@ -111,10 +119,20 @@ export async function settleJsonSchemaGolden(
   await matchJsonSchemaGolden(root, name, recorded);
 }
 
+/** Compares one emitted schema with the recorded bytes, or records it. */
+export async function settleJsonSchemaGolden(
+  root: string,
+  name: string,
+  recorded: JsonSchemaGolden,
+): Promise<void> {
+  await settleJsonGolden(root, name, recorded);
+}
+
 /**
- * The recorded set is exactly the named one: a schema added later cannot go
- * unrecorded, and one retired leaves no golden behind claiming it still
- * stands. Recording drops what the names no longer reach.
+ * The recorded set is exactly the named one: a schema (or any other golden
+ * under the root) added later cannot go unrecorded, and one retired leaves no
+ * golden behind claiming it still stands. Recording drops what the names no
+ * longer reach.
  */
 export async function settleJsonSchemaGoldenSet(
   root: string,

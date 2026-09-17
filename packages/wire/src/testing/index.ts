@@ -26,6 +26,7 @@ export {
   type ParsedJsonObject,
 } from "./json.js";
 export {
+  type JsonGolden,
   type JsonSchemaGolden,
   type JsonSchemaSource,
   jsonSchemaGoldenRoot,
@@ -33,6 +34,7 @@ export {
   matchJsonSchemaGolden,
   type RecordedEffectJsonSchemas,
   type RecordedJsonSchemaSource,
+  settleJsonGolden,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,
 } from "./json-schema-golden.js";
