@@ -67,8 +67,15 @@ in for the missing job before the first release.
   fingerprint of the key it was observed under, so a snapshot observed under
   another key is neither served nor admitted against; a pass any
   provider refused, rate limited, or failed leaves the previous snapshot
-  standing and is recorded as failed. Nothing in the pass decides anything: no
-  model runs in it, and nothing leaves it. The snapshot is never diffed: it is
+  standing and is recorded as failed. A pass whose snapshot landed also
+  retires, per provider it read, the conversation of every observed chat the
+  roster no longer lists (`retireDepartedObservedConversations` in
+  `store/observed-conversations.ts`, on the landed branch alone): stamped
+  `deleted_at` with its descendants on the terms of a Clear, skipped by every
+  read, purged thirty days on, and a chat listed again opens a fresh row
+  under the partial index migration 0048 made. Nothing in the pass decides
+  anything: no model runs in it, and nothing leaves it. The snapshot is never
+  diffed: it is
   what the Mac panel, the on-demand observe endpoint, and the brain's
   `list_sessions` show, and what names the chats the opener may ask about.
   The opener (`apps/web/server/hosted/brain-host/opener.ts`) runs for the
