@@ -1,3 +1,4 @@
+import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
 import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "../server/hosted/brain-host/bounds.js";
 import { productionBrainHostSeams } from "../server/hosted/brain-host/production.js";
@@ -32,11 +33,11 @@ export default defineAgent({
           };
         }
         const admitted = await runWeb(host.admit(ctx.session.auth, ctx.session.id));
-        if (!admitted.ok) throw new Error(admitted.refusal);
+        if (Result.isFailure(admitted)) throw new Error(admitted.failure);
         if (host.turnKindOf(ctx.session.auth) === undefined) {
           throw new Error(BRAIN_HOST_REFUSAL.NO_TURN_KIND);
         }
-        const model = host.model(admitted);
+        const model = host.model(admitted.success);
         if (!model) throw new Error(BRAIN_HOST_REFUSAL.NO_MODEL);
         return { model, modelContextWindowTokens: BRAIN_HOST.MODEL_CONTEXT_WINDOW_TOKENS };
       },

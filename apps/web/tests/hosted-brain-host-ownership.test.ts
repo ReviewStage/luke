@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClient } from "@sidecar/wire/testing";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { routeAuth } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
@@ -150,9 +150,9 @@ async function recordedSession(conversationId: string): Promise<string | null> {
 /** A session's start as the store hook runs it: admitted while claiming, then the claim; answers whether the record is now this session's. */
 async function start(host: BrainHost, auth: SessionAuth, sessionId: string): Promise<boolean> {
   const starting = await database.run(host.admitStarting(auth, sessionId));
-  assert.equal(starting.ok, true);
-  if (!starting.ok) return false;
-  return database.run(host.sessionStarted(starting, sessionId));
+  assert.ok(Result.isSuccess(starting));
+  if (!Result.isSuccess(starting)) return false;
+  return database.run(host.sessionStarted(starting.success, sessionId));
 }
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
@@ -190,12 +190,12 @@ async function hookedEvent(
   state = memoryRelayState(),
 ): Promise<boolean> {
   const admitted = await database.run(host.admit(auth, sessionId));
-  if (!admitted.ok) return false;
+  if (Result.isFailure(admitted)) return false;
   await database.run(
     host
       .relay(
         event,
-        admitted,
+        admitted.success,
         { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
         state,
         {},
@@ -245,11 +245,11 @@ test("two concurrent starts on one conversation leave exactly one recorded sessi
 
     assert.equal(claims[order.indexOf(SESSION.NEWER)], true);
     assert.equal(await recordedSession(target.conversationId), SESSION.NEWER);
-    assert.equal((await database.run(host.admit(seat, SESSION.NEWER))).ok, true);
-    assert.deepEqual(await database.run(host.admit(seat, SESSION.OLDER)), {
-      ok: false,
-      refusal: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION,
-    });
+    assert.ok(Result.isSuccess(await database.run(host.admit(seat, SESSION.NEWER))));
+    assert.deepEqual(
+      await database.run(host.admit(seat, SESSION.OLDER)),
+      Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
+    );
     assert.equal(await start(host, seat, SESSION.OLDER), false);
     assert.equal(await recordedSession(target.conversationId), SESSION.NEWER);
   }
@@ -428,14 +428,14 @@ test("a conversation cleared while its session runs admits nobody at the door an
     ),
     forbidden(BRAIN_HOST_REFUSAL.NOT_OWNER),
   );
-  assert.deepEqual(await database.run(host.admit(seat, SESSION.OLDER)), {
-    ok: false,
-    refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
-  });
-  assert.deepEqual(await database.run(host.admitStarting(seat, SESSION.NEWER)), {
-    ok: false,
-    refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
-  });
+  assert.deepEqual(
+    await database.run(host.admit(seat, SESSION.OLDER)),
+    Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION),
+  );
+  assert.deepEqual(
+    await database.run(host.admitStarting(seat, SESSION.NEWER)),
+    Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION),
+  );
   assert.equal(await recordedSession(target.conversationId), SESSION.OLDER);
 });
 

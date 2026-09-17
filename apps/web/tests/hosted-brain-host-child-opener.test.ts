@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Schema } from "effect";
+import { Effect, Fiber, Result, Schema } from "effect";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
@@ -208,18 +208,21 @@ test("a delegation inserts the child under its parent and hands eve the task as 
       { id: SESSION_ID, standing: SESSION_STANDING.CURRENT },
     ),
   );
-  assert.equal(admitted.ok, true);
-  if (!admitted.ok) return;
-  assert.equal(admitted.kind, CONVERSATION_KIND.CHILD);
-  assert.deepEqual(admitted.target, { userId: fixture.userId, conversationId: answer.childId });
-  assert.equal(admitted.runtimeSessionId, SESSION_ID);
+  assert.ok(Result.isSuccess(admitted));
+  if (!Result.isSuccess(admitted)) return;
+  assert.equal(admitted.success.kind, CONVERSATION_KIND.CHILD);
+  assert.deepEqual(admitted.success.target, {
+    userId: fixture.userId,
+    conversationId: answer.childId,
+  });
+  assert.equal(admitted.success.runtimeSessionId, SESSION_ID);
   const other = await database.run(
     admitConversation(
       { current: auth, initiator: auth },
       { id: "wrun_01M000000000000000000OTHER", standing: SESSION_STANDING.CURRENT },
     ),
   );
-  assert.equal(other.ok, false);
+  assert.ok(Result.isFailure(other));
 });
 
 test("a child without a label or an awaited completion records neither", async () => {
@@ -283,7 +286,7 @@ test("a refused open and an open that never answered each stamp the child they o
       { id: SESSION_ID, standing: SESSION_STANDING.CLAIMING },
     ),
   );
-  assert.equal(admitted.ok, false);
+  assert.ok(Result.isFailure(admitted));
 });
 
 test("a session that claimed the child before eve's answer was read is the child's, whatever eve answered", async () => {

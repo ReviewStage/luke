@@ -5,7 +5,7 @@ import {
 } from "@sidecar/memory";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import type { LanguageModel } from "ai";
-import { Cache, Data, Effect, type Schema } from "effect";
+import { Cache, Data, Effect, Result, type Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -444,8 +444,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           id: context.session.id,
           standing: SESSION_STANDING.CURRENT,
         });
-        if (!standing.ok) {
-          return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.refusal };
+        if (Result.isFailure(standing)) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.failure };
         }
         const client = yield* SqlClient.SqlClient;
         const http = yield* HttpClient.HttpClient;
@@ -502,7 +502,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             // eve opens none and cancels none.
             children: hostedChildAccess(client, {
               conversation: binding.target,
-              kind: standing.kind,
+              kind: standing.success.kind,
               turnId: binding.turn.turnId,
               opener: {
                 deploymentSecret: seams.deploymentSecret,
@@ -532,7 +532,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           id: capture.session.id,
           standing: SESSION_STANDING.CURRENT,
         });
-        if (!admitted.ok) return skippedHousekeeping(admitted.refusal);
+        if (Result.isFailure(admitted)) return skippedHousekeeping(admitted.failure);
         // OpenClaw's session-kind gate: a scaffolding turn — the roster's
         // observation, a child's task — produces no durable memory, so only
         // a turn the developer opened flushes, typed or spoken.
@@ -540,12 +540,13 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         if (turn === undefined || BRAIN_HOST_TURN_KIND[turn].trigger !== BRAIN_TURN_TRIGGER.ASK) {
           return skippedHousekeeping(MEMORY_FLUSH_REFUSAL.NOT_AN_ASK);
         }
-        const model = fixtureModel ?? modelFor(admitted);
+        const model = fixtureModel ?? modelFor(admitted.success);
         if (!model) return skippedHousekeeping(BRAIN_HOST_REFUSAL.NO_MODEL);
         const client = yield* SqlClient.SqlClient;
-        const { userId } = admitted.target;
+        const { target } = admitted.success;
+        const { userId } = target;
         return yield* flushMemory({
-          target: admitted.target,
+          target,
           operationId: capture.operationId,
           messages: capture.messages,
           signal: capture.abortSignal,
