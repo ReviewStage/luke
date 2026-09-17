@@ -225,7 +225,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange"
    */
   const written = yield* serialQueue({
     onDefect: (cause) =>
-      Effect.sync(() => report(`Reporting a live event failed: ${String(Cause.squash(cause))}`)),
+      Effect.sync(() => report(`Reporting a live event failed: ${Cause.pretty(cause)}`)),
   });
   const reported = (message: string | undefined): Effect.Effect<void> =>
     message === undefined ? Effect.void : Effect.sync(() => report(message));

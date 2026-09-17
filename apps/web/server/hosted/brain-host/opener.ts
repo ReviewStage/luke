@@ -251,7 +251,7 @@ function offered(
     handToEve(seams, target, turn, words, SESSION_OPENING.UNLOCKED),
     (cause) => {
       seams.report(
-        `A ${turn} turn for conversation ${target.conversationId} could not be handed over: ${String(Cause.squash(cause))}.`,
+        `A ${turn} turn for conversation ${target.conversationId} could not be handed over: ${Cause.pretty(cause)}`,
       );
       return Effect.succeed(false);
     },

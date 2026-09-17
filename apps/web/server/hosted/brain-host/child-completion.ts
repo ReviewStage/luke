@@ -138,7 +138,7 @@ export const deliverChildCompletion = /* @__PURE__ */ Effect.fn("deliverChildCom
     });
     const taken = yield* catchAllButInterrupt(handover, (cause) => {
       seams.report(
-        `The completion of child ${child.conversationId} could not be handed over: ${String(Cause.squash(cause))}.`,
+        `The completion of child ${child.conversationId} could not be handed over: ${Cause.pretty(cause)}`,
       );
       return Effect.succeed(false);
     });

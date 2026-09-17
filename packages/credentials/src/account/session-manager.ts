@@ -57,16 +57,6 @@ interface AccountSessionStore {
 }
 
 /**
- * A rejected client call as the failure channel's own value. Everything that
- * reads one below — the renewal decision, the deletion's retry, the sentence
- * a row shows — reads an `Error`, so a rejection that carried something else
- * is worded here rather than carried on as an unknown.
- */
-function asError(cause: unknown): Error {
-  return cause instanceof Error ? cause : new Error(String(cause));
-}
-
-/**
  * A step of the sign-out whose failure is written down and never held against
  * the sign-out itself: an account that could not tell the service it was
  * leaving still leaves this machine.
@@ -78,7 +68,7 @@ function reportingFailure<A, E>(effect: Effect.Effect<A, E>, what: string): Effe
     Cause.hasInterruptsOnly(cause)
       ? Effect.interrupt
       : Effect.sync(() => {
-          process.stderr.write(`${what}: ${asError(Cause.squash(cause)).message}\n`);
+          process.stderr.write(`${what}: ${Cause.pretty(cause)}\n`);
         }),
   ).pipe(Effect.asVoid);
 }

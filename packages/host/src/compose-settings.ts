@@ -251,11 +251,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
       Queue.offerUnsafe(accountPreferencesActions, { label, work });
     };
 
-    const failureReason = (cause: Cause.Cause<unknown>): string => {
-      const error = Cause.squash(cause);
-      return error instanceof Error ? error.message : String(error);
-    };
-
     /** The queue drained one action at a time, for as long as the fiber running it stands. */
     const drainAccountPreferencesSync = Queue.take(accountPreferencesActions).pipe(
       Effect.flatMap(({ label, work }) =>
@@ -266,7 +261,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
           Cause.hasInterruptsOnly(cause)
             ? Effect.interrupt
             : Effect.sync(() => {
-                report(`Account preferences ${label} failed: ${failureReason(cause)}`);
+                report(`Account preferences ${label} failed: ${Cause.pretty(cause)}`);
               }),
         ),
       ),
