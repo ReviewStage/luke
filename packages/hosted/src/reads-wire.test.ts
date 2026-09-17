@@ -34,11 +34,14 @@ import {
   childrenAnswerSchema,
   childrenHeadSchema,
   conversationEventsAnswerSchema,
+  conversationHistoryAnswerSchema,
   conversationMessagesAnswerSchema,
   encodeAgentsHead,
   encodeChildrenHead,
+  encodeHistoryReadCursor,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,
+  historyReadCursorSchema,
   READ_CURSOR_BOUNDS,
   READ_PAGE_BOUNDS,
   readLimitSchema,
@@ -57,6 +60,7 @@ const FIXTURE = {
   CHILDREN: "children-answer.json",
   CHILD_MESSAGES: "child-messages-answer.json",
   OBSERVED_MESSAGES: "observed-messages-answer.json",
+  HISTORY: "conversation-history-answer.json",
   AGENTS: "agents-answer.json",
   CHANGES_REQUEST: "changes-request.json",
   CHANGES_ANSWER: "changes-answer.json",
@@ -112,6 +116,51 @@ function parseAnswer<S extends EffectSchema.ConstraintDecoder<unknown>>(
 ): S["Type"] | undefined {
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
+
+test("a history cursor names the oldest row taken to the microsecond, or nothing for the tail, and refuses an instant the store would not render", () => {
+  const tail = encodeHistoryReadCursor(undefined);
+  assert.deepEqual(parse(historyReadCursorSchema, tail), {});
+  const position = {
+    placedAt: "2026-09-10 12:00:00.123456+00",
+    conversationId: MAIN,
+    seq: 7,
+  };
+  const encoded = encodeHistoryReadCursor(position);
+  assert.deepEqual(parse(historyReadCursorSchema, encoded), { before: position });
+  const minted = (record: WireValue) => Buffer.from(JSON.stringify(record)).toString("base64url");
+  assert.equal(
+    parse(historyReadCursorSchema, minted({ before: { ...position, placedAt: "1757505600123" } })),
+    undefined,
+  );
+  assert.equal(
+    parse(historyReadCursorSchema, minted({ before: { ...position, seq: 0 } })),
+    undefined,
+  );
+  assert.equal(parse(historyReadCursorSchema, "not a cursor"), undefined);
+});
+
+test("the history answer reads as the fixture records it: the messages read's groups, the position to read back from, and the head the forward reads begin at", async () => {
+  const answer = expectReadAnswer(conversationHistoryAnswerSchema, await fixture(FIXTURE.HISTORY));
+  const messages = expectReadAnswer(
+    conversationMessagesAnswerSchema,
+    await fixture(FIXTURE.MESSAGES),
+  );
+  assert.deepEqual(answer.conversations, messages.conversations);
+  assert.deepEqual(answer.groups, messages.groups);
+  assert.equal(answer.next, messages.next);
+  assert.equal(answer.hasOlder, true);
+  assert.deepEqual(parse(historyReadCursorSchema, answer.older), {
+    before: { placedAt: "2026-09-10 12:00:00.000000+00", conversationId: MAIN, seq: 1 },
+  });
+  const raw = await fixture(FIXTURE.HISTORY);
+  assert.ok(isRecord(raw));
+  // A position that does not read back as one this build mints refuses the answer, as a messages cursor does.
+  assert.equal(
+    parseAnswer(conversationHistoryAnswerSchema, { ...raw, older: "c3VyZQ" }),
+    undefined,
+  );
+  assert.equal(parseAnswer(conversationHistoryAnswerSchema, { ...raw, next: "c3VyZQ" }), undefined);
+});
 
 test("a sequence cursor round-trips in one canonical string whatever order its positions arrived in", () => {
   const forward = encodeSequenceReadCursor([

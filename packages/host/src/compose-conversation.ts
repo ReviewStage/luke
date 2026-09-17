@@ -4,6 +4,7 @@ import { PRODUCT_EVENT, PRODUCT_RATED_MESSAGE_KIND } from "@sidecar/analytics";
 import { catalogToolSet } from "@sidecar/brain/tool-set";
 import {
   CONVERSATION_RATE_STATUS,
+  type ConversationLoadOlderResult,
   type ConversationRateMessageResult,
   type ConversationRateStatus,
   carried,
@@ -22,6 +23,7 @@ import {
   type ChildStatus,
   CONVERSATION_RATE_REFUSAL,
   CONVERSATION_READ_FAILURE,
+  type ConversationHistoryAnswer,
   type ConversationMessagesAnswer,
   type ConversationRateRefusal,
   type ConversationReadResult,
@@ -55,6 +57,7 @@ import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import {
   ConversationViewSync,
+  type ReadHistoryPage,
   type ReadMessagesPage,
   type ReadTurnGroup,
 } from "./conversation-view-sync.js";
@@ -113,6 +116,7 @@ export interface ConversationComposer extends Composer {
 export type ConversationReadsClient = Pick<
   HostedConversationClient,
   | "messages"
+  | "history"
   | "childMessages"
   | "events"
   | "turns"
@@ -168,7 +172,14 @@ function rateAnswer(status: ConversationRateStatus) {
  * the resources whose head differs from the cursor held, and pages each to
  * its end under the bound above. Before the device row has registered there
  * is no signal to ask, so the three resources are read directly, each an
- * empty page when nothing moved. A messages page is held to the vocabulary
+ * empty page when nothing moved. The first messages read a picture makes is
+ * of the tail: one history page from the newest rows back, whose answer
+ * also carries the messages cursor standing at the head, so the forward
+ * reads carry on from there and a long Conversation is never walked from
+ * its beginning to be drawn. Older turns are read back one page at a time
+ * only when a client asks, which the panel does as its reader reaches the
+ * top of the thread, and each such read runs inside the poll so the picture
+ * is written by one pass at a time. A messages page is held to the vocabulary
  * under the brain catalog's own registry before it is folded in — the same
  * registry the service read the rows back under — and the one refusal a read
  * answers with a body, an unreadable row, is surfaced on the snapshot and
@@ -225,6 +236,9 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     caughtUp: boolean;
   }
   let openTranscript: OpenTranscript | undefined;
+  /** Whether a client asked for a page of older turns since the last pass, and whether the pass that spent the ask landed one. */
+  let olderWanted = false;
+  let olderLanded = false;
   /** What the clients were last told of the transcript: which conversation, of which kind, at which revision; nothing while they were told none is open. */
   let publishedTranscript:
     | { readonly conversationId: string; readonly kind: TranscriptKind; readonly revision: number }
@@ -326,10 +340,10 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * stands as last read and says so rather than stopping quietly at the last
    * good page; the cursor does not pass the row.
    */
-  const readPage = /* @__PURE__ */ Effect.fnUntraced(function* (
-    answer: ConversationMessagesAnswer,
+  const readGroups = /* @__PURE__ */ Effect.fnUntraced(function* (
+    answer: Pick<ConversationMessagesAnswer, "groups">,
   ): Effect.fn.Return<
-    { readonly page: ReadMessagesPage } | { readonly unreadable: UnreadableRow }
+    { readonly groups: readonly ReadTurnGroup[] } | { readonly unreadable: UnreadableRow }
   > {
     const groups: ReadTurnGroup[] = [];
     for (const group of answer.groups) {
@@ -373,7 +387,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         messages,
       });
     }
-    return { page: { conversations: answer.conversations, groups, next: answer.next } };
+    return { groups };
   });
 
   function createdWorkspaceAnswer(part: StoredToolPart) {
@@ -392,8 +406,8 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     );
   }
 
-  function pageCreatedWorkspaceNeedsRefresh(page: ReadMessagesPage): boolean {
-    for (const group of page.groups) {
+  function pageCreatedWorkspaceNeedsRefresh(groups: readonly ReadTurnGroup[]): boolean {
+    for (const group of groups) {
       for (const message of group.messages) {
         for (const part of message.message.parts) {
           if (!isStoredToolPart(part)) continue;
@@ -449,7 +463,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     return false;
   });
 
-  const pageMessages = (generation: number) =>
+  const pageMessagesForward = (generation: number) =>
     pageResource(
       generation,
       sync,
@@ -457,17 +471,81 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       () => sync.cursors().messages,
       (answer, epoch) =>
         Effect.gen(function* () {
-          const read = yield* readPage(answer);
+          const read = yield* readGroups(answer);
           if (!loop.isCurrent(generation)) return false;
           if ("unreadable" in read) {
             if (sync.clearEpoch === epoch) sync.markUnreadable(read.unreadable);
             return false;
           }
-          sync.applyMessages(read.page);
-          if (pageCreatedWorkspaceNeedsRefresh(read.page)) yield* refreshRoster;
+          const page: ReadMessagesPage = {
+            conversations: answer.conversations,
+            groups: read.groups,
+            next: answer.next,
+          };
+          sync.applyMessages(page);
+          if (pageCreatedWorkspaceNeedsRefresh(read.groups)) yield* refreshRoster;
           return true;
         }),
     );
+
+  /**
+   * One history page, from the tail where no position is held or from the
+   * position given, folded onto the picture on the forward read's own terms:
+   * a page landing after the poll lost the loop is dropped, and the one
+   * refusal a device acts on is written where the walk stopped. Answers
+   * whether the page landed.
+   */
+  const readHistory = /* @__PURE__ */ Effect.fnUntraced(function* (
+    generation: number,
+    before: string | undefined,
+  ): Effect.fn.Return<boolean, never, HttpClient.HttpClient> {
+    const epoch = sync.clearEpoch;
+    const result = yield* client.history(before === undefined ? {} : { before });
+    if (!loop.isCurrent(generation)) return false;
+    if (!result.ok) {
+      if (
+        result.failure === CONVERSATION_READ_FAILURE.UNREADABLE_ROW &&
+        sync.clearEpoch === epoch
+      ) {
+        sync.markUnreadable(result.row);
+      }
+      return false;
+    }
+    // A page read before a Clear names history the Clear ended; folding it would say older turns stand again.
+    if (sync.clearEpoch !== epoch) return false;
+    const answer: ConversationHistoryAnswer = result.answer;
+    const read = yield* readGroups(answer);
+    if (!loop.isCurrent(generation) || sync.clearEpoch !== epoch) return false;
+    if ("unreadable" in read) {
+      if (sync.clearEpoch === epoch) sync.markUnreadable(read.unreadable);
+      return false;
+    }
+    const page: ReadHistoryPage = {
+      conversations: answer.conversations,
+      groups: read.groups,
+      older: answer.older,
+      hasOlder: answer.hasOlder,
+      next: answer.next,
+    };
+    sync.applyHistory(page);
+    if (pageCreatedWorkspaceNeedsRefresh(read.groups)) yield* refreshRoster;
+    return true;
+  });
+
+  /**
+   * The messages read: the tail first, where this picture holds no cursor
+   * yet, since the tail page anchors the forward cursor at the head, and
+   * then forward from the cursor held. A tail read that did not land leaves
+   * the cursor unheld, so the next poll asks for the tail again.
+   */
+  const pageMessages = /* @__PURE__ */ Effect.fnUntraced(function* (
+    generation: number,
+  ): Effect.fn.Return<boolean, never, HttpClient.HttpClient> {
+    if (sync.cursors().messages === undefined && !(yield* readHistory(generation, undefined))) {
+      return false;
+    }
+    return yield* pageMessagesForward(generation);
+  });
 
   const pageEvents = (generation: number) =>
     pageResource(
@@ -541,13 +619,17 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       () => held.sync.cursors().messages,
       (answer, epoch) =>
         Effect.gen(function* () {
-          const read = yield* readPage(answer);
+          const read = yield* readGroups(answer);
           if (!loop.isCurrent(generation) || openTranscript !== held) return false;
           if ("unreadable" in read) {
             if (held.sync.clearEpoch === epoch) held.sync.markUnreadable(read.unreadable);
             return false;
           }
-          held.sync.applyMessages(read.page);
+          held.sync.applyMessages({
+            conversations: answer.conversations,
+            groups: read.groups,
+            next: answer.next,
+          });
           return true;
         }),
     );
@@ -574,6 +656,17 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     // Messages before turns within a poll, so the turn a group carries is never
     // older than the row the turns resource answered a moment before it.
     if (readMessages) yield* pageMessages(generation);
+    // One page of older turns where a client asked for one since the last
+    // pass, after the forward read so the tail is anchored first, and only
+    // while the picture says older turns stand; the ask is spent whether or
+    // not the page landed, since the client asks again as its reader looks.
+    if (olderWanted) {
+      olderWanted = false;
+      const history = sync.history();
+      if (history?.hasOlder === true) {
+        olderLanded = yield* readHistory(generation, history.older);
+      }
+    }
     if (readEvents) yield* pageEvents(generation);
     if (readTurns) yield* pageTurns(generation);
     if (readChildren) yield* readChildrenList(generation, signal?.children);
@@ -637,6 +730,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
 
   function reset(): void {
     sync.reset();
+    olderWanted = false;
     children = { settled: false, children: [] };
     childrenHead = undefined;
     childrenRevision += 1;
@@ -658,6 +752,23 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     // with any pass under way and gates it like every pass; the answer is that
     // the pass it earned has run, or that the gate was closed.
     [GATEWAY_METHOD.CONVERSATION_REFRESH]: () => Effect.as(loop.refresh, {}),
+    // One page of older turns, read back from where this device's history
+    // stands: the panel asks as its reader reaches the top of the thread.
+    // The read runs inside the pass asked for here rather than beside it,
+    // so the picture is written by one pass at a time, and the page arrives
+    // on the view every client is told rather than as the answer; the
+    // answer says whether a page landed, so the panel knows the ask is
+    // spent. Nothing older to read, or a closed gate, answers at once.
+    [GATEWAY_METHOD.CONVERSATION_LOAD_OLDER]: () =>
+      Effect.gen(function* () {
+        if (!gate() || sync.history()?.hasOlder !== true) {
+          return carried<ConversationLoadOlderResult>({ loaded: false });
+        }
+        olderWanted = true;
+        olderLanded = false;
+        yield* pollAfter;
+        return carried<ConversationLoadOlderResult>({ loaded: olderLanded });
+      }),
     [GATEWAY_METHOD.CONVERSATION_CLEAR]: () =>
       Effect.gen(function* () {
         if (!gate()) return { cleared: false };

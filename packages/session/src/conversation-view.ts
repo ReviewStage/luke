@@ -243,6 +243,13 @@ export interface UnreadableRow {
 export interface ConversationViewSnapshot {
   readonly groups: readonly ConversationViewTurnGroup[];
   readonly settled: boolean;
+  /**
+   * Present, and true, where turns older than the oldest group held stand on
+   * the service and this device may read them: a reader at the top of the
+   * thread is offered more. Absent where the beginning has been reached, the
+   * thread was cleared, or the picture is at its bound.
+   */
+  readonly hasOlder?: boolean;
   readonly unreadable?: UnreadableRow;
 }
 

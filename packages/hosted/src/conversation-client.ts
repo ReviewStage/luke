@@ -29,9 +29,11 @@ import {
   CHILD_MESSAGES_QUERY,
   type ChildrenAnswer,
   type ConversationEventsAnswer,
+  type ConversationHistoryAnswer,
   type ConversationMessagesAnswer,
   childrenAnswerSchema,
   conversationEventsAnswerSchema,
+  conversationHistoryAnswerSchema,
   conversationMessagesAnswerSchema,
   READ_QUERY,
   unreadableRowRefusalSchema,
@@ -48,6 +50,12 @@ export interface HostedConversationClientOptions extends AccountToken {
 /** One page's ask: the cursor the previous answer handed back, or none for the beginning, and the page bound. */
 export interface ReadPageQuery {
   readonly after?: string | undefined;
+  readonly limit?: number | undefined;
+}
+
+/** One history page's ask: the cursor the previous answer handed back as `older`, or none for the tail, and the page bound. */
+export interface HistoryPageQuery {
+  readonly before?: string | undefined;
   readonly limit?: number | undefined;
 }
 
@@ -127,6 +135,15 @@ function pagePath(
   return encoded === "" ? path : `${path}?${encoded}`;
 }
 
+/** The history read's path with its page: the position to read back from, where one is held, and the bound. */
+function historyPath(path: string, page: HistoryPageQuery): string {
+  const query = new URLSearchParams();
+  if (page.before !== undefined) query.set(READ_QUERY.BEFORE, page.before);
+  if (page.limit !== undefined) query.set(READ_QUERY.LIMIT, String(page.limit));
+  const encoded = query.toString();
+  return encoded === "" ? path : `${path}?${encoded}`;
+}
+
 /**
  * The desktop's side of the Conversation's per-resource reads and Clear; the
  * change signal between the reads is the changes client's, shared with the
@@ -156,6 +173,25 @@ export class HostedConversationClient {
   > {
     return this.#readEffect(pagePath(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page), (payload) =>
       Result.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
+    );
+  }
+
+  /**
+   * The Conversation's history behind the caller's cursor: the same groups
+   * `messages` answers, read newest first from the position named or from
+   * the tail, with the cursor to read further back from and the messages
+   * cursor standing at the head, where the forward reads begin.
+   */
+  history(
+    page: HistoryPageQuery = {},
+  ): Effect.Effect<
+    ConversationReadResult<ConversationHistoryAnswer>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return this.#readEffect(
+      historyPath(HOSTED_SERVICE_PATH.CONVERSATION_HISTORY, page),
+      (payload) => Result.getOrUndefined(readEither(conversationHistoryAnswerSchema)(payload)),
     );
   }
 

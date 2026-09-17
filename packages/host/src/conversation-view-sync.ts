@@ -57,13 +57,13 @@ import { Result } from "effect";
  */
 
 /**
- * How much of the Conversation one device keeps in memory and hands its
- * windows: the newest turns, whole. The desktop has no backward page for the
- * main thread, so this bound needs to cover realistic multi-day use rather
- * than silently cutting active history off after a few hundred turns.
+ * How many turns one device keeps in memory and hands its windows on every
+ * publish. History pages in from the service as the reader scrolls, so this
+ * bounds payload rather than reach; a picture that reaches it lets its oldest
+ * groups go and pages back no further.
  */
 export const CONVERSATION_VIEW_BOUNDS = {
-  MAX_GROUPS: 1000,
+  MAX_GROUPS: 400,
 } as const;
 
 /** Where this device's read of each resource stands; absent before the first page of that resource. */
@@ -82,6 +82,27 @@ export interface ReadMessagesPage {
 
 export interface ReadTurnGroup extends Omit<ConversationReadTurnGroup, "messages"> {
   readonly messages: readonly ConversationViewMessage[];
+}
+
+/**
+ * A history page on the same terms: the rows read back from the tail or
+ * from the position this device last reached, the position to read further
+ * back from, whether older rows stand, and the messages cursor standing at
+ * the head as of the read, which anchors the forward reads of a device that
+ * began at the tail.
+ */
+export interface ReadHistoryPage {
+  readonly conversations: readonly ConversationReadConversation[];
+  readonly groups: readonly ReadTurnGroup[];
+  readonly older: string;
+  readonly hasOlder: boolean;
+  readonly next: string;
+}
+
+/** Where this device's read back through the history stands, and whether anything stands beyond it. */
+export interface HistoryStanding {
+  readonly older: string;
+  readonly hasOlder: boolean;
 }
 
 /**
@@ -196,6 +217,12 @@ export class ConversationViewSync {
   #eventsCaughtUp = false;
   #cursors: ConversationReadCursors = {};
   /**
+   * Where the read back through the history stands: absent before the tail
+   * has been read, and saying nothing stands older once the last page said
+   * so, a Clear emptied the thread, or the picture reached its bound.
+   */
+  #history: HistoryStanding | undefined;
+  /**
    * Where the view's window starts on this device: the latest instant a main
    * opened, as the pages or a confirmed Clear said. It only ever moves
    * forward, so a page read before a Clear and landing after it cannot fold
@@ -217,6 +244,11 @@ export class ConversationViewSync {
     return this.#cursors;
   }
 
+  /** Where the read back through the history stands; absent until the tail has been read. */
+  history(): HistoryStanding | undefined {
+    return this.#history;
+  }
+
   /** How many Clears this picture has taken; a caller compares it across a read to tell a stale refusal from a current one. */
   get clearEpoch(): number {
     return this.#clearEpoch;
@@ -229,6 +261,46 @@ export class ConversationViewSync {
    * turn and each message replaced at its sequence.
    */
   applyMessages(page: ReadMessagesPage): void {
+    let moved = this.#mergePage(page);
+    this.#cursors = { ...this.#cursors, messages: page.next };
+    if (this.#landed()) moved = true;
+    if (moved) this.#revision += 1;
+  }
+
+  /**
+   * Folds one history page in: the rows are merged exactly as a messages
+   * page's are, since they are the same rows read the other way, and the
+   * position to read further back from follows the answer's. The tail page,
+   * the first read a device makes, also anchors the forward reads: the
+   * messages cursor is set to the head the answer carried, so the poll reads
+   * on from there and never walks the Conversation from its beginning. A
+   * later history page leaves that cursor where the forward reads have it.
+   */
+  applyHistory(page: ReadHistoryPage): void {
+    let moved = this.#mergePage(page);
+    if (this.#cursors.messages === undefined) {
+      this.#cursors = { ...this.#cursors, messages: page.next };
+    }
+    const history = { older: page.older, hasOlder: page.hasOlder };
+    if (!isDeepStrictEqual(this.#history, history)) {
+      this.#history = history;
+      moved = true;
+    }
+    if (this.#landed()) moved = true;
+    if (moved) this.#revision += 1;
+  }
+
+  /**
+   * Merges a page's groups in, whichever way the page was read: everything
+   * held for a conversation the answer does not name goes first, then each
+   * group is merged by turn and each message replaced at its sequence, and
+   * the window is held to where the answer says the main opened. Answers
+   * whether anything a snapshot shows moved.
+   */
+  #mergePage(page: {
+    readonly conversations: readonly ConversationReadConversation[];
+    readonly groups: readonly ReadTurnGroup[];
+  }): boolean {
     const standing = new Set(page.conversations.map((conversation) => conversation.id));
     let moved = this.#dropOutside(standing);
     for (const group of page.groups) {
@@ -259,7 +331,12 @@ export class ConversationViewSync {
     }
     // After the merge, so a page's own rows from before the window are held to it too.
     if (this.#openWindow(mainOpenedAt(page.conversations))) moved = true;
-    this.#cursors = { ...this.#cursors, messages: page.next };
+    return moved;
+  }
+
+  /** A page landed: the thread is read, and a row the last read could not read back is no longer what stands. Answers whether that moved the picture. */
+  #landed(): boolean {
+    let moved = false;
     if (this.#unreadable !== undefined) {
       this.#unreadable = undefined;
       moved = true;
@@ -268,7 +345,7 @@ export class ConversationViewSync {
       this.#settled = true;
       moved = true;
     }
-    if (moved) this.#revision += 1;
+    return moved;
   }
 
   /**
@@ -442,6 +519,7 @@ export class ConversationViewSync {
     this.#ratings.clear();
     this.#eventsCaughtUp = false;
     this.#cursors = {};
+    this.#history = undefined;
     this.#windowStart = 0;
     this.#settled = false;
     this.#unreadable = undefined;
@@ -485,12 +563,24 @@ export class ConversationViewSync {
         this.#forgetMarks([...held.messages.values()].map((message) => message.message.id));
       }
       runs = runs.filter((run) => !dropped.has(run.turnId));
+      // The groups let go of stood between the ones kept and the position the
+      // history read would carry on from, so a page read from there would
+      // land past a hole; the bound is where this device's history ends.
+      this.#closeHistory();
     }
     return {
       groups: runs,
       settled: this.#settled,
+      ...(this.#history?.hasOlder ? { hasOlder: true } : undefined),
       ...(this.#unreadable !== undefined ? { unreadable: this.#unreadable } : undefined),
     };
+  }
+
+  /** Nothing older is read from here on; answers whether that changes what a snapshot says. */
+  #closeHistory(): boolean {
+    if (this.#history === undefined || !this.#history.hasOlder) return false;
+    this.#history = { ...this.#history, hasOlder: false };
+    return true;
   }
 
   #withSpeech(message: ConversationViewMessage): ConversationViewMessage {
@@ -601,8 +691,13 @@ export class ConversationViewSync {
    * keeps its own context.
    */
   #openWindow(openedAt: number | undefined): boolean {
-    if (openedAt !== undefined && openedAt > this.#windowStart) this.#windowStart = openedAt;
     let dropped = false;
+    if (openedAt !== undefined && openedAt > this.#windowStart) {
+      this.#windowStart = openedAt;
+      // Nothing before the new main's opening is ever read again, whichever
+      // Mac made the Clear, so there is no history to page back through.
+      if (this.#closeHistory()) dropped = true;
+    }
     for (const [turnId, group] of this.#groups) {
       // Row by row, as the service selects them: a turn still running across
       // a Clear keeps only what it wrote after the new main opened.

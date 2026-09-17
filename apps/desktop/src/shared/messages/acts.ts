@@ -121,6 +121,13 @@ export const ACT_KIND = {
    */
   CONVERSATION_RATE_MESSAGE: "conversation.rateMessage",
   /**
+   * The thread's reader reaching the top of what this Mac holds: the panel
+   * asks the host for one page of older turns, which arrives on the document
+   * rather than as the answer; the answer says whether a page landed, so the
+   * panel knows the ask is spent and may ask again as the reader scrolls on.
+   */
+  CONVERSATION_LOAD_OLDER: "conversation.loadOlder",
+  /**
    * One transcript held open on this Mac, a child's or an observed session's:
    * the panel asks the host to read it to its end and again whenever its
    * list's head moves, and to stop when it lets go of it. One at a time, and
@@ -557,6 +564,11 @@ export const ACT = {
       isReadable(conversationRateMessageResultSchema),
     ),
     refusal: "Could not record that rating on this system.",
+  },
+  [ACT_KIND.CONVERSATION_LOAD_OLDER]: {
+    payload: noPayload,
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not read earlier messages on this system.",
   },
   [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: {
     payload: actSchema(conversationOpenChildTranscriptParamsSchema),

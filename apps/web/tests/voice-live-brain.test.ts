@@ -319,6 +319,7 @@ it.effect(
       const unreadable: MessageListRead = {
         ok: false,
         refusal: SCHEMA_REFUSAL.MALFORMED,
+        conversationId: target.conversationId,
         seq: 0,
         path: [],
       };

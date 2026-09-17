@@ -24,9 +24,11 @@ import {
   CONVERSATION_RATE_REFUSAL,
   CONVERSATION_READ_FAILURE,
   type ConversationEventsAnswer,
+  type ConversationHistoryAnswer,
   type ConversationMessagesAnswer,
   type ConversationRateResult,
   type ConversationReadResult,
+  type HistoryPageQuery,
   type HostedMessageRatingRequest,
   type NotebookAnswer,
   type ReadPageQuery,
@@ -101,6 +103,14 @@ const AGENT_ROW: AgentRead = {
 
 const EMPTY_EVENTS: ConversationEventsAnswer = { events: [], next: "events-head", hasMore: false };
 const EMPTY_TURNS: BrainTurnsAnswer = { turns: [], hasMore: false };
+/** The tail of a Conversation with nothing in it yet: no rows, nothing older, and the forward cursor standing at an empty head. */
+const EMPTY_TAIL: ConversationHistoryAnswer = {
+  conversations: [{ id: MAIN, kind: CONVERSATION_VIEW_SOURCE.MAIN, openedAt: NOW - 60_000 }],
+  groups: [],
+  older: "tail",
+  hasOlder: false,
+  next: "",
+};
 
 function messagesAnswer(text: string, next = "messages-head"): ConversationMessagesAnswer {
   return {
@@ -166,6 +176,8 @@ interface FakeClient extends ConversationReadsClient, ConversationHeadsClient {
   messagesAnswer: ConversationReadResult<ConversationMessagesAnswer>;
   /** A gate a messages read waits at before answering, so a test can hold a poll open. */
   messagesGate: Promise<void>;
+  /** The history pages in the order they are answered, the tail first; the last stands for every read after it. */
+  historyAnswers: ConversationReadResult<ConversationHistoryAnswer>[];
   childrenAnswer: ConversationReadResult<ChildrenAnswer>;
   agentsAnswer: ConversationReadResult<AgentsAnswer>;
   /** A child's pages in the order they are answered; the last stands for every read after it. */
@@ -183,6 +195,7 @@ function fakeClient(): FakeClient {
     changesAnswer: undefined,
     messagesAnswer: ok(messagesAnswer("hello")),
     messagesGate: Promise.resolve(),
+    historyAnswers: [ok(EMPTY_TAIL)],
     childrenAnswer: ok({ children: [] }),
     agentsAnswer: ok({ agents: [] }),
     childMessagesAnswers: [ok(childPage("child-page-2", true)), ok(childPage("child-end", false))],
@@ -210,6 +223,13 @@ function fakeClient(): FakeClient {
         const answer = client.messagesAnswer;
         await client.messagesGate;
         return answer;
+      }),
+    history: (page: HistoryPageQuery = {}) =>
+      Effect.sync(() => {
+        client.calls.push(`history:${page.before ?? ""}`);
+        const [answer] = client.historyAnswers;
+        if (client.historyAnswers.length > 1) client.historyAnswers.shift();
+        return answer ?? { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
       }),
     childMessages: (childId: string, page: ReadPageQuery = {}) =>
       Effect.sync(() => {
@@ -386,7 +406,14 @@ test("a refresh asked for by a method runs a pass now and answers once it has, a
       ),
     );
   assert.deepEqual(await refresh(), {});
-  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children", "agents"]);
+  assert.deepEqual(client.calls, [
+    "history:",
+    "messages:",
+    "events:",
+    "turns:",
+    "children",
+    "agents",
+  ]);
   assert.equal(views().length, 1);
 
   const closed = harness({ active: false });
@@ -412,7 +439,15 @@ test("without a device row a poll reads every resource, and tells every client o
   const { composer, client, views } = harness();
   assert.deepEqual(composer.snapshot(), { groups: [], settled: false });
   await Effect.runPromise(composer.loop.refresh);
-  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children", "agents"]);
+  // The tail first, whose empty head anchors the forward cursor, then forward from it.
+  assert.deepEqual(client.calls, [
+    "history:",
+    "messages:",
+    "events:",
+    "turns:",
+    "children",
+    "agents",
+  ]);
   assert.equal(views().length, 1);
   const [view] = views();
   assert.equal(view?.settled, true);
@@ -421,7 +456,7 @@ test("without a device row a poll reads every resource, and tells every client o
   // The same answers again move nothing, and nothing is told.
   await Effect.runPromise(composer.loop.refresh);
   assert.equal(views().length, 1);
-  assert.deepEqual(client.calls.slice(5), [
+  assert.deepEqual(client.calls.slice(6), [
     "messages:messages-head",
     "events:events-head",
     "turns:",
@@ -439,6 +474,7 @@ test("with a device row the change signal decides which resources are read", asy
   // children list is read once so a signal naming no child still settles it.
   assert.deepEqual(client.calls, [
     `changes:${DEVICE}`,
+    "history:",
     "messages:",
     "events:",
     "children",
@@ -567,7 +603,14 @@ test("a page this build's registry refuses is named on the snapshot like a row t
   assert.deepEqual(composer.snapshot().unreadable, { conversationId: MAIN, seq: 3 });
   assert.deepEqual(views().at(-1)?.unreadable, { conversationId: MAIN, seq: 3 });
   // One read, not a walk: the cursor did not pass the row and no page after it was asked for.
-  assert.deepEqual(client.calls, ["messages:", "events:", "turns:", "children", "agents"]);
+  assert.deepEqual(client.calls, [
+    "history:",
+    "messages:",
+    "events:",
+    "turns:",
+    "children",
+    "agents",
+  ]);
   assert.equal(reports.length, 1);
 });
 
@@ -1373,4 +1416,171 @@ test("a reset drops the children, the agents, and the open transcript and tells 
   assert.deepEqual(composer.childrenSnapshot(), { settled: false, children: [] });
   assert.deepEqual(composer.agentsSnapshot(), { settled: false, agents: [] });
   assert.equal(composer.childTranscriptSnapshot(), undefined);
+});
+
+/** The tail of a Conversation with the hello exchange as its newest turn, and the position to read back from. */
+function tailAnswer(
+  older: string,
+  hasOlder: boolean,
+  next = "messages-head",
+): ConversationHistoryAnswer {
+  const page = messagesAnswer("hello", next);
+  return {
+    conversations: page.conversations,
+    groups: page.groups,
+    older,
+    hasOlder,
+    next,
+  };
+}
+
+/** One page read back: an earlier turn's exchange under a turn of its own, and where the history then stands. */
+function olderAnswer(older: string, hasOlder: boolean): ConversationHistoryAnswer {
+  const page = tailAnswer(older, hasOlder);
+  const earlier = "1a000000-0000-4000-8000-000000000000";
+  return {
+    ...page,
+    groups: page.groups.map((group) => ({
+      ...group,
+      turnId: earlier,
+      turn: {
+        id: earlier,
+        origin: TURN_ORIGIN.TYPED,
+        status: TURN_STATUS.SETTLED,
+        queuedAt: NOW - 30_000,
+      },
+      messages: group.messages.map((message, index) => ({
+        ...message,
+        message: { ...message.message, id: `2b000000-0000-4000-8000-00000000000${index}` },
+        seq: index + 1,
+        createdAt: NOW - 30_000,
+        placedAt: NOW - 30_000,
+      })),
+    })),
+  };
+}
+
+test("the first read is the tail, whose head anchors the forward cursor, so the next poll reads forward from that head and never from the beginning", async () => {
+  const { composer, client, views } = harness({ deviceId: DEVICE });
+  client.historyAnswers = [ok(tailAnswer("older-1", true))];
+  client.messagesAnswer = ok({ ...messagesAnswer("hello"), groups: [] });
+  client.changesAnswer = { seen: true, messages: "messages-head", events: "events-head" };
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [
+    `changes:${DEVICE}`,
+    "history:",
+    "messages:messages-head",
+    "events:",
+    "children",
+    "agents",
+  ]);
+  const [view] = views();
+  assert.equal(view?.groups.length, 1);
+  assert.equal(view?.hasOlder, true);
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  // The cursor stands at the head the tail carried: only the signal travels.
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`]);
+});
+
+test("a tail read that did not land leaves the cursor unheld, so the next poll asks for the tail again and reads nothing forward meanwhile", async () => {
+  const { composer, client, views } = harness();
+  client.historyAnswers = [
+    { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED },
+    ok(tailAnswer("older-1", false)),
+  ];
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, ["history:", "events:", "turns:", "children", "agents"]);
+  assert.equal(views().length, 0);
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls.slice(0, 2), ["history:", "messages:messages-head"]);
+  assert.equal(views().at(-1)?.groups.length, 1);
+  assert.equal(views().at(-1)?.hasOlder, undefined);
+});
+
+test("loading older reads one page back from where the history stands inside a pass and answers whether it landed; nothing older answers at once without a read", async () => {
+  const { composer, client, views } = harness();
+  client.historyAnswers = [ok(tailAnswer("older-1", true)), ok(olderAnswer("older-2", false))];
+  await Effect.runPromise(composer.loop.refresh);
+  assert.equal(views().at(-1)?.hasOlder, true);
+  client.calls.length = 0;
+
+  const loaded = await callMethod(composer, GATEWAY_METHOD.CONVERSATION_LOAD_OLDER);
+  assert.deepEqual(loaded, { loaded: true });
+  assert.ok(client.calls.includes("history:older-1"));
+  const view = views().at(-1);
+  assert.equal(view?.groups.length, 2);
+  assert.equal(view?.groups[0]?.turnId, "1a000000-0000-4000-8000-000000000000");
+  assert.equal(view?.groups[1]?.turnId, TURN);
+  assert.equal(view?.hasOlder, undefined);
+
+  // The beginning was reached: the ask is answered without a pass.
+  client.calls.length = 0;
+  assert.deepEqual(await callMethod(composer, GATEWAY_METHOD.CONVERSATION_LOAD_OLDER), {
+    loaded: false,
+  });
+  assert.deepEqual(client.calls, []);
+
+  // A closed gate answers the same way, whatever the picture says.
+  const closed = harness({ active: false });
+  assert.deepEqual(await callMethod(closed.composer, GATEWAY_METHOD.CONVERSATION_LOAD_OLDER), {
+    loaded: false,
+  });
+  assert.deepEqual(closed.client.calls, []);
+});
+
+test("a page read back that did not land answers that nothing landed, and the picture still says older turns stand for the next ask", async () => {
+  const { composer, client, views } = harness();
+  client.historyAnswers = [
+    ok(tailAnswer("older-1", true)),
+    { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED },
+  ];
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(await callMethod(composer, GATEWAY_METHOD.CONVERSATION_LOAD_OLDER), {
+    loaded: false,
+  });
+  assert.ok(client.calls.includes("history:older-1"));
+  assert.equal(views().at(-1)?.hasOlder, true);
+});
+
+test("a history page that lands after a Clear is dropped, so the Clear's empty thread does not say older turns stand", async () => {
+  const { composer, client, views } = harness();
+  client.historyAnswers = [ok(tailAnswer("older-1", true))];
+  await Effect.runPromise(composer.loop.refresh);
+  assert.equal(views().at(-1)?.hasOlder, true);
+  // The next history page is held at the gate while the Clear lands.
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  client.history = () =>
+    Effect.promise(async () => {
+      client.calls.push("history:held");
+      await gate;
+      return ok(olderAnswer("older-2", true));
+    });
+  const loading = callMethod(composer, GATEWAY_METHOD.CONVERSATION_LOAD_OLDER);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(client.calls.includes("history:held"));
+  const clearAnswer = client.clearAnswer;
+  assert.ok(clearAnswer);
+  client.messagesAnswer = ok({
+    ...messagesAnswer("hello", "messages-cleared"),
+    conversations: [
+      {
+        id: clearAnswer.opened,
+        kind: CONVERSATION_VIEW_SOURCE.MAIN,
+        openedAt: clearAnswer.openedAt,
+      },
+    ],
+    groups: [],
+  });
+  const cleared = clear(composer);
+  release();
+  assert.equal(await cleared, true);
+  assert.deepEqual(await loading, { loaded: false });
+  const view = views().at(-1);
+  assert.deepEqual(view?.groups, []);
+  assert.equal(view?.hasOlder, undefined);
 });

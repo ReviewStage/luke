@@ -66,6 +66,9 @@
   padding: 4px 4px 8px;
   overflow-x: clip;
   overflow-y: auto;
+  /* Older turns land above the reader and the panel moves the offset itself,
+     so the browser's own anchoring must not move it a second time. */
+  overflow-anchor: none;
   overscroll-behavior: contain;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
   scrollbar-width: thin;
@@ -599,6 +602,15 @@
 
 /* The one thing said about a read the service refused: a quiet line under
    the thread, in the dates' voice, and never a row of the thread itself. */
+/* Over the top of the thread rather than in it, so the page on its way does not move the rows under the reader. */
+.conversation-loading-older {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+}
+
 .conversation-notice {
   margin: 0;
   padding: 4px 12px;

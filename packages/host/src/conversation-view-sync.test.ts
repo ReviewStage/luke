@@ -23,6 +23,7 @@ import { test } from "vitest";
 import {
   CONVERSATION_VIEW_BOUNDS,
   ConversationViewSync,
+  type ReadHistoryPage,
   type ReadMessagesPage,
   type ReadTurnGroup,
 } from "./conversation-view-sync.js";
@@ -872,4 +873,136 @@ test("a row of no turn placed between a turn's rows stands between them in the s
       [turnId(1), TURN_STATUS.RUNNING, [messageId(2)]],
     ],
   );
+});
+
+function historyPage(
+  groups: readonly ReadTurnGroup[],
+  standing: { readonly older: string; readonly hasOlder: boolean; readonly next: string },
+): ReadHistoryPage {
+  return { ...page(groups, standing.next), ...standing };
+}
+
+test("a history page merges like a messages page, the tail alone anchors the forward cursor, and the snapshot says whether older turns stand", () => {
+  const sync = new ConversationViewSync();
+  sync.applyHistory(
+    historyPage([mainGroup(turnId(3), [ask(3, 3, "newest", NOW + 3)])], {
+      older: "older-1",
+      hasOlder: true,
+      next: "head-1",
+    }),
+  );
+  assert.deepEqual(sync.cursors(), { messages: "head-1" });
+  assert.deepEqual(sync.history(), { older: "older-1", hasOlder: true });
+  let snapshot = sync.snapshot();
+  assert.equal(snapshot.settled, true);
+  assert.equal(snapshot.hasOlder, true);
+  assert.deepEqual(
+    snapshot.groups.map((group) => group.turnId),
+    [turnId(3)],
+  );
+  // The forward read moves the cursor; a page read back does not move it again.
+  sync.applyMessages(page([mainGroup(turnId(4), [ask(4, 4, "after", NOW + 4)])], "head-2"));
+  const before = sync.revision;
+  sync.applyHistory(
+    historyPage(
+      [
+        mainGroup(turnId(1), [ask(1, 1, "oldest", NOW + 1)]),
+        mainGroup(turnId(2), [ask(2, 2, "older", NOW + 2)]),
+      ],
+      { older: "older-2", hasOlder: false, next: "head-3" },
+    ),
+  );
+  assert.ok(sync.revision > before);
+  assert.deepEqual(sync.cursors(), { messages: "head-2" });
+  assert.deepEqual(sync.history(), { older: "older-2", hasOlder: false });
+  snapshot = sync.snapshot();
+  assert.equal(snapshot.hasOlder, undefined);
+  assert.deepEqual(
+    snapshot.groups.map((group) => group.turnId),
+    [turnId(1), turnId(2), turnId(3), turnId(4)],
+  );
+  // The same page again moves nothing.
+  const settled = sync.revision;
+  sync.applyHistory(
+    historyPage([mainGroup(turnId(1), [ask(1, 1, "oldest", NOW + 1)])], {
+      older: "older-2",
+      hasOlder: false,
+      next: "head-3",
+    }),
+  );
+  assert.equal(sync.revision, settled);
+});
+
+test("a Clear ends the history, the bound ends it, and a reset forgets where it stood", () => {
+  const cleared = new ConversationViewSync();
+  cleared.applyHistory(
+    historyPage([mainGroup(turnId(1), [ask(1, 1, "before", NOW)])], {
+      older: "older-1",
+      hasOlder: true,
+      next: "head-1",
+    }),
+  );
+  assert.equal(cleared.snapshot().hasOlder, true);
+  const before = cleared.revision;
+  cleared.applyClear(NOW + 10_000);
+  assert.ok(cleared.revision > before);
+  assert.deepEqual(cleared.snapshot(), { groups: [], settled: true });
+  assert.deepEqual(cleared.history(), { older: "older-1", hasOlder: false });
+
+  const bounded = new ConversationViewSync();
+  const total = CONVERSATION_VIEW_BOUNDS.MAX_GROUPS + 3;
+  bounded.applyHistory(
+    historyPage(
+      Array.from({ length: total }, (_, index) =>
+        mainGroup(turnId(index + 1), [ask(index + 1, index + 1, `ask ${index + 1}`, NOW + index)]),
+      ),
+      { older: "older-1", hasOlder: true, next: "head-1" },
+    ),
+  );
+  const snapshot = bounded.snapshot();
+  assert.equal(snapshot.groups.length, CONVERSATION_VIEW_BOUNDS.MAX_GROUPS);
+  // The groups let go of stood between the ones kept and the position, so no page is read back past them.
+  assert.equal(snapshot.hasOlder, undefined);
+  assert.deepEqual(bounded.history(), { older: "older-1", hasOlder: false });
+
+  bounded.reset();
+  assert.equal(bounded.history(), undefined);
+  assert.deepEqual(bounded.cursors(), {});
+});
+
+test("a Clear made on another Mac, arriving as a page whose main opened later, closes the history as a local Clear does", () => {
+  const sync = new ConversationViewSync();
+  sync.applyHistory(
+    historyPage([mainGroup(turnId(1), [ask(1, 1, "before", NOW)])], {
+      older: "older-1",
+      hasOlder: true,
+      next: "head-1",
+    }),
+  );
+  assert.equal(sync.snapshot().hasOlder, true);
+  // The other Mac's Clear opened a new main after the row; this Mac reads it as a page listing that main.
+  sync.applyMessages(
+    page(
+      [mainGroup(turnId(2), [ask(2, 1, "after", NOW + 20_000)])],
+      "head-2",
+      [NEW_MAIN],
+      NOW + 10_000,
+    ),
+  );
+  const snapshot = sync.snapshot();
+  assert.deepEqual(
+    snapshot.groups.map((group) => group.turnId),
+    [turnId(2)],
+  );
+  assert.equal(snapshot.hasOlder, undefined);
+  assert.deepEqual(sync.history(), { older: "older-1", hasOlder: false });
+  // A history page for the new main opens the history again where the service says older rows stand.
+  sync.applyHistory(
+    historyPage([mainGroup(turnId(2), [ask(2, 1, "after", NOW + 20_000)])], {
+      older: "older-2",
+      hasOlder: true,
+      next: "head-2",
+    }),
+  );
+  assert.equal(sync.snapshot().hasOlder, true);
 });

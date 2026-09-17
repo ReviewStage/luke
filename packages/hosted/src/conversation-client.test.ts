@@ -48,8 +48,10 @@ it.effect(
       const children = yield* Effect.promise(() => fixture("children-answer.json"));
       const agents = yield* Effect.promise(() => fixture("agents-answer.json"));
       const childMessages = yield* Effect.promise(() => fixture("child-messages-answer.json"));
+      const history = yield* Effect.promise(() => fixture("conversation-history-answer.json"));
       const api = fakeCloudApi({
         [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES}`]: { answer: () => messages },
+        [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_HISTORY}`]: { answer: () => history },
         [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_EVENTS}`]: { answer: () => events },
         [`GET ${HOSTED_SERVICE_PATH.BRAIN_TURNS}`]: { answer: () => turns },
         [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN}`]: { answer: () => children },
@@ -61,7 +63,7 @@ it.effect(
       const page: ReadPageQuery = { after: "c3VyZQ", limit: 50 };
       const child = "3c000000-0000-4000-8000-000000000011";
 
-      const [read, eventsRead, turnsRead, childrenRead, childRead, agentsRead] =
+      const [read, eventsRead, turnsRead, childrenRead, childRead, agentsRead, tail, older] =
         yield* Effect.provide(
           Effect.all([
             client().messages(page),
@@ -70,12 +72,16 @@ it.effect(
             client().children(),
             client().childMessages(child, { limit: 50 }),
             client().agents(),
+            client().history(),
+            client().history({ before: "e30", limit: 50 }),
           ]),
           api.layer,
         );
 
       assert.ok(read.ok && eventsRead.ok && turnsRead.ok && childrenRead.ok && childRead.ok);
-      assert.ok(agentsRead.ok);
+      assert.ok(agentsRead.ok && tail.ok && older.ok);
+      assert.equal(tail.answer.hasOlder, true);
+      assert.equal(older.answer.groups.length, 2);
       assert.equal(agentsRead.answer.agents.length, 2);
       assert.equal(read.answer.groups.length, 2);
       assert.equal(eventsRead.answer.events.length > 0, true);
@@ -92,10 +98,12 @@ it.effect(
         `GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN}`,
         `GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILD_MESSAGES}?child=${child}&limit=50`,
         `GET ${HOSTED_SERVICE_PATH.CONVERSATION_AGENTS}`,
+        `GET ${HOSTED_SERVICE_PATH.CONVERSATION_HISTORY}`,
+        `GET ${HOSTED_SERVICE_PATH.CONVERSATION_HISTORY}?before=e30&limit=50`,
       ]);
       assert.deepEqual(
         api.credentials(),
-        Array.from({ length: 6 }, () => "token-1"),
+        Array.from({ length: 8 }, () => "token-1"),
       );
     }),
 );

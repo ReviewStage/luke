@@ -10,6 +10,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
   ne,
   or,
   type SQL,
@@ -146,12 +147,57 @@ export type MessageListRead =
   | {
       readonly ok: false;
       readonly refusal: SchemaRefusal;
+      readonly conversationId: string;
       readonly seq: number;
       readonly path: SchemaPath;
     };
 
+/**
+ * Where a history read stands after a page: the oldest row it took, by the
+ * instant it is placed at as the store renders it, and the row's conversation
+ * and sequence to break a tie between two conversations' rows placed at one
+ * instant. The next page reads the rows before it in the same order.
+ */
+interface HistoryPosition {
+  readonly placedAt: string;
+  readonly conversationId: string;
+  readonly seq: number;
+}
+
+/**
+ * What a history read is over: each standing conversation, and for one under
+ * the view's window, the instant its rows must have been written at or after.
+ * The read is one select across them all, newest first, so a page holds the
+ * newest rows of the view whichever conversation wrote them.
+ */
+export interface HistoryWindow {
+  readonly conversationId: string;
+  readonly since?: Date;
+}
+
+/** A history read's cursor: the rows before this position, or the newest rows where none is given. */
+export interface HistoryCursor {
+  readonly before?: HistoryPosition;
+  readonly limit?: number;
+}
+
+/**
+ * A history page: its rows oldest first, as a forward page's are, the
+ * position of the oldest so the next page reads on from it, and whether any
+ * row stands before that; or the page refused at its first unreadable row.
+ */
+export type MessageHistoryRead =
+  | {
+      readonly ok: true;
+      readonly value: readonly StoredMessageRecord[];
+      readonly older: HistoryPosition | undefined;
+      readonly hasOlder: boolean;
+    }
+  | Exclude<MessageListRead, { ok: true }>;
+
 type MessageRow = {
   readonly id: string;
+  readonly conversationId: string;
   readonly seq: number;
   readonly turnId: string | null;
   readonly clientId: string;
@@ -172,7 +218,15 @@ async function refusedRow(
 ): Promise<RefusedPage> {
   const [index, ...path] = read.path;
   const named = rows.find((_, position) => position === index);
-  if (named !== undefined) return { ok: false, refusal: read.refusal, seq: named.seq, path };
+  if (named !== undefined) {
+    return {
+      ok: false,
+      refusal: read.refusal,
+      conversationId: named.conversationId,
+      seq: named.seq,
+      path,
+    };
+  }
   for (const row of rows) {
     const single = await readStoredUIMessages(
       unparsedWire([row.stored]),
@@ -181,7 +235,13 @@ async function refusedRow(
     );
     if (!single.ok) {
       const [, ...inner] = single.path;
-      return { ok: false, refusal: single.refusal, seq: row.seq, path: inner };
+      return {
+        ok: false,
+        refusal: single.refusal,
+        conversationId: row.conversationId,
+        seq: row.seq,
+        path: inner,
+      };
     }
   }
   throw new Error("a page was refused whole and every row of it read alone");
@@ -216,6 +276,7 @@ const TURN_CONVERSATION_STANDS = and(
 /** The columns a message read selects, held to the vocabulary by nothing until `readSelected` below. */
 const MESSAGE_FIELDS = {
   id: messages.id,
+  conversationId: messages.conversationId,
   seq: messages.seq,
   turnId: messages.turnId,
   clientId: messages.clientId,
@@ -229,8 +290,9 @@ const MESSAGE_FIELDS = {
 };
 
 /** The row every message read selects, in the fields the projection above names. */
-const SelectedMessageRowSchema = Schema.Struct({
+const SELECTED_MESSAGE_FIELDS = {
   id: Schema.String,
+  conversationId: Schema.String,
   seq: EpochMillisColumnSchema,
   turnId: Schema.NullOr(Schema.String),
   clientId: Schema.String,
@@ -241,13 +303,28 @@ const SelectedMessageRowSchema = Schema.Struct({
   placedAt: InstantColumnSchema,
   finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
-});
+} as const;
+
+const SelectedMessageRowSchema = Schema.Struct(SELECTED_MESSAGE_FIELDS);
 
 type SelectedMessage = typeof SelectedMessageRowSchema.Type;
 
+// A history cursor's instant travels as text, for the reason a turn cursor's
+// does (a millisecond number cannot tell two rows placed in one millisecond
+// apart), rendered as the UTC wall clock with the zone spelled so the text is
+// a property of the query rather than of the connection's TimeZone.
+const PLACED_AT_TEXT = sql<string>`(${messages.placedAt} at time zone 'UTC')::text || '+00'`;
+
+/** A history read's row: the message row with the instant it is placed at rendered as the cursor carries it. */
+const SelectedHistoryRowSchema = Schema.Struct({
+  ...SELECTED_MESSAGE_FIELDS,
+  placedAtText: Schema.String,
+});
+
+type SelectedHistoryRow = typeof SelectedHistoryRowSchema.Type;
+
 /** Selected rows read back through the vocabulary, in the order given, or the page refused at its first unreadable row. */
 async function readSelected(
-  conversationId: string,
   selected: readonly SelectedMessage[],
   tools: ToolSet,
 ): Promise<MessageListRead> {
@@ -268,7 +345,7 @@ async function readSelected(
       if (row === undefined) throw new Error("a read answered more messages than rows");
       return {
         id: row.id,
-        conversationId,
+        conversationId: row.conversationId,
         seq: row.seq,
         ...optionalField("turnId", row.turnId),
         clientId: row.clientId,
@@ -338,7 +415,108 @@ export function listMessages(
   cursor: MessageCursor = {},
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(findSelectedMessages({ conversationId, userId, cursor }), (selected) =>
-    Effect.promise(() => readSelected(conversationId, selected, tools)),
+    Effect.promise(() => readSelected(selected, tools)),
+  );
+}
+
+/** One window's rows: the conversation's, and where the view cuts it, only those written at or after the cut. */
+const windowStands = (window: HistoryWindow) =>
+  window.since === undefined
+    ? eq(messages.conversationId, window.conversationId)
+    : and(
+        eq(messages.conversationId, window.conversationId),
+        gte(messages.createdAt, window.since),
+      );
+
+/** The rows before the position in the history's order: placed earlier, or at the same instant under a lesser conversation, or under the same one at a lesser sequence. */
+const placedBefore = (before: HistoryPosition) => {
+  const sameInstant = sql`${messages.placedAt} = ${before.placedAt}::timestamptz`;
+  return or(
+    sql`${messages.placedAt} < ${before.placedAt}::timestamptz`,
+    and(sameInstant, lt(messages.conversationId, before.conversationId)),
+    and(
+      sameInstant,
+      eq(messages.conversationId, before.conversationId),
+      lt(messages.seq, before.seq),
+    ),
+  );
+};
+
+const findSelectedMessagesBefore = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    windows: Schema.Any,
+    cursor: Schema.Any,
+  }),
+  Result: SelectedHistoryRowSchema,
+  execute: (options: {
+    readonly userId: string;
+    readonly windows: readonly HistoryWindow[];
+    readonly cursor: HistoryCursor;
+  }) => {
+    const conditions: Array<SQL | undefined> = [
+      eq(messages.userId, options.userId),
+      or(...options.windows.map(windowStands)),
+    ];
+    if (options.cursor.before !== undefined) conditions.push(placedBefore(options.cursor.before));
+    // One row past the bound, so the page can say whether older rows stand
+    // without a count of its own; it is taken off before the rows are read back.
+    return db
+      .select({ ...MESSAGE_FIELDS, placedAtText: PLACED_AT_TEXT })
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(and(...conditions))
+      .orderBy(desc(messages.placedAt), desc(messages.conversationId), desc(messages.seq))
+      .limit(pageLimit(options.cursor) + 1);
+  },
+});
+
+/**
+ * The view's rows before a position, newest first across every window given
+ * and cut at the page bound, answered oldest first as a forward page is so
+ * the same projection reads either: how a device draws a long Conversation
+ * from its tail and reads back only as far as its reader looks. The order is
+ * the instant a row is placed at, then its conversation, then its sequence,
+ * a total order every device walks the same way, and the position handed
+ * back is the oldest row taken, so the next page starts exactly where this
+ * one stopped whatever was written in between. A row written since the tail
+ * was read is the forward read's to answer, whatever instant it was placed
+ * at. Nothing to read over answers an empty page with nothing older.
+ */
+export function listMessagesBefore(
+  userId: string,
+  windows: readonly HistoryWindow[],
+  tools: ToolSet,
+  cursor: HistoryCursor = {},
+): Effect.Effect<MessageHistoryRead, MessageReadFailure, SqlClient.SqlClient> {
+  if (windows.length === 0) {
+    return Effect.succeed({ ok: true, value: [], older: undefined, hasOlder: false });
+  }
+  const limit = pageLimit(cursor);
+  return Effect.flatMap(findSelectedMessagesBefore({ userId, windows, cursor }), (selected) =>
+    Effect.promise(async () => {
+      const hasOlder = selected.length > limit;
+      const taken: readonly SelectedHistoryRow[] = selected.slice(0, limit);
+      const oldest = taken.at(-1);
+      const read = await readSelected(
+        taken.map(({ placedAtText: _text, ...row }) => row).reverse(),
+        tools,
+      );
+      if (!read.ok) return read;
+      return {
+        ok: true,
+        value: read.value,
+        older:
+          oldest === undefined
+            ? undefined
+            : {
+                placedAt: oldest.placedAtText,
+                conversationId: oldest.conversationId,
+                seq: oldest.seq,
+              },
+        hasOlder,
+      };
+    }),
   );
 }
 
@@ -380,8 +558,7 @@ export function listRecentMessages(
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(
     findRecentMessages({ conversationId, userId, limit: pageLimit({ limit }) }),
-    (selected) =>
-      Effect.promise(() => readSelected(conversationId, [...selected].reverse(), tools)),
+    (selected) => Effect.promise(() => readSelected([...selected].reverse(), tools)),
   );
 }
 
@@ -419,7 +596,7 @@ export function readMessageByClientId(
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(
     findMessageByClientIdRow({ conversationId, userId, clientId }),
-    (selected) => Effect.promise(() => readSelected(conversationId, selected, tools)),
+    (selected) => Effect.promise(() => readSelected(selected, tools)),
   );
 }
 
@@ -456,7 +633,7 @@ export function readMessageById(
   messageId: string,
 ): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.flatMap(findMessageByIdRow({ conversationId, userId, messageId }), (selected) =>
-    Effect.promise(() => readSelected(conversationId, selected, tools)),
+    Effect.promise(() => readSelected(selected, tools)),
   );
 }
 
