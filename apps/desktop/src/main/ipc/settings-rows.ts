@@ -2,7 +2,7 @@ import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "@sidecar/calen
 import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, type AppSettingField } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, type SettingUpdatePayload } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";
@@ -79,16 +79,18 @@ function settingsWriter(
   const refuse = (reason: string): Effect.Effect<SettingsUpdateResult, Error> =>
     Effect.suspend(() => {
       const held = dependencies.lastSettings();
-      return held ? Effect.succeed(held) : dependencies.host.settingsSnapshot();
+      return held ? Effect.succeedSome(held) : dependencies.host.settingsSnapshot();
     }).pipe(
-      Effect.flatMap((settings) =>
-        settings
-          ? Effect.succeed<SettingsUpdateResult>({
+      Effect.flatMap(
+        Option.match({
+          onNone: () => Effect.fail(new Error(reason)),
+          onSome: (settings) =>
+            Effect.succeed<SettingsUpdateResult>({
               status: ACTION_RESULT_STATUS.REJECTED,
               settings,
               reason,
-            })
-          : Effect.fail(new Error(reason)),
+            }),
+        }),
       ),
     );
   return {
@@ -246,7 +248,7 @@ function connectionActRows(
     [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: () =>
       Effect.map(
         host.appleCalendarAccessStatus(),
-        (access) => access ?? APPLE_CALENDAR_ACCESS.NOT_DETERMINED,
+        Option.getOrElse(() => APPLE_CALENDAR_ACCESS.NOT_DETERMINED),
       ),
     [ACT_KIND.CALENDAR_REFRESH]: () => host.refreshCalendars(),
     [ACT_KIND.CALENDAR_OPEN_SETTINGS]: () => openExternal(CALENDAR_PRIVACY_PANE_URL),

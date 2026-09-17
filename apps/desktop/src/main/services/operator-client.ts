@@ -4,7 +4,7 @@ import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { Effect, type Scope } from "effect";
+import { Effect, Option, type Scope } from "effect";
 import { channels } from "#shared/bridge";
 import { type AppStateStore, bootstrapPatch } from "../app-state";
 import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
@@ -200,8 +200,8 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("createOperatorCli
         const held = state.snapshot().settings;
         if (held) return held;
         const settings = yield* gateway.host.settingsSnapshot();
-        if (settings) state.update({ settings });
-        return settings;
+        if (Option.isSome(settings)) state.update({ settings: settings.value });
+        return Option.getOrUndefined(settings);
       }),
     signedIn: () => state.snapshot().account.status === ACCOUNT_STATUS.SIGNED_IN,
     voiceAvailable: () => voiceAvailable,
@@ -209,8 +209,8 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("createOperatorCli
     readBootstrap: () =>
       Effect.gen(function* () {
         const boot = yield* gateway.host.bootstrap();
-        if (boot) adoptBootstrap(boot);
-        return boot;
+        if (Option.isSome(boot)) adoptBootstrap(boot.value);
+        return Option.getOrUndefined(boot);
       }),
     haltSessionReplay: () => setSessionReplayHalted(true),
     resumeSessionReplay: () => setSessionReplayHalted(false),
@@ -228,8 +228,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("createOperatorCli
         attachments += 1;
         yield* gateway.attached();
         const boot = yield* gateway.host.bootstrap();
-        if (!boot) return yield* Effect.die(new Error("the host answered no bootstrap"));
-        adoptBootstrap(boot);
+        if (Option.isNone(boot))
+          return yield* Effect.die(new Error("the host answered no bootstrap"));
+        adoptBootstrap(boot.value);
         if (attachments === 1) return;
         const relay = links();
         relay.reapplyTalkHotkey();

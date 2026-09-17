@@ -45,7 +45,7 @@ function rows(overrides: {
     host: {
       updateSetting: overrides.updateSetting ?? (() => Effect.succeed(accepted())),
       connectGoogleCalendar: overrides.connectGoogleCalendar ?? (() => Effect.succeed(accepted())),
-      settingsSnapshot: () => Effect.succeed(undefined),
+      settingsSnapshot: () => Effect.succeedNone,
     } as unknown as HostOperator,
     reporterOf: () => "reporter",
     lastSettings: overrides.lastSettings ?? (() => SETTINGS),

@@ -52,7 +52,7 @@ function observeOptions(
   return {
     request: observeRequest(),
     encryptionSecret: SECRET,
-    resolveUserId: () => Effect.succeed("user-1"),
+    resolveUserId: () => Effect.succeedSome("user-1"),
     readVaultKeys: (_userId: string): Effect.Effect<VaultKeyRow[]> => Effect.succeed([]),
     store: () => store,
     ...overrides,
@@ -101,7 +101,7 @@ test("the observe gate order is method, secret, token", async () => {
   assert.equal(blankSecret.status, 503);
 
   const anonymous = await runWithoutDatabase(
-    handleObserve(observeOptions({ resolveUserId: () => Effect.succeed(undefined) })),
+    handleObserve(observeOptions({ resolveUserId: () => Effect.succeedNone })),
   );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
@@ -523,7 +523,7 @@ test("readVaultKeys is called with the resolved user id", async () => {
   await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        resolveUserId: () => Effect.succeed("user-xyz"),
+        resolveUserId: () => Effect.succeedSome("user-xyz"),
         readVaultKeys: (userId) => {
           calledWithUserId = userId;
           return Effect.succeed([]);
@@ -547,7 +547,7 @@ test("fresh reads return 429 after too many in the same window, while stored rea
   const fresh = () =>
     observeOptions({
       request: observeRequest({}, true),
-      resolveUserId: () => Effect.succeed(userId),
+      resolveUserId: () => Effect.succeedSome(userId),
       readVaultKeys: () => Effect.succeed(KEY_ROWS),
       store: () => store,
       httpClient: api.layer,
@@ -567,7 +567,7 @@ test("fresh reads return 429 after too many in the same window, while stored rea
   const stored = await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        resolveUserId: () => Effect.succeed(userId),
+        resolveUserId: () => Effect.succeedSome(userId),
         readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         now,

@@ -1,4 +1,4 @@
-import type { Effect } from "effect";
+import type { UserIdResolver } from "../hosted/http-effect.js";
 import type {
   HostedSpend,
   IntroductionSpend,
@@ -21,7 +21,7 @@ import type {
  */
 export interface VoiceAccounts {
   /** The account behind an `Authorization` value, or nothing, yielded on the session's own fiber. */
-  resolveUserId(authorization: string): Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver<string>;
   /** Spends one session of the account's daily allowance. */
   spend(userId: string): QuotaEffect<HostedSpend>;
   /** Spends one introduction of the deployment's shared daily ceiling, the one the introduction mint spends. */

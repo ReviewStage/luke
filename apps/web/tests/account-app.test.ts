@@ -5,7 +5,7 @@ import { PROVIDER_ID } from "@sidecar/session";
 import type { AccountPreferences } from "@sidecar/settings";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { type FakeResponder, fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Layer, Redacted } from "effect";
+import { Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
@@ -67,9 +67,11 @@ function backing(overrides: Partial<Backing> = {}): Backing {
   };
 }
 
-function resolveUserId(request: Request): Effect.Effect<string | undefined> {
+function resolveUserId(request: Request): Effect.Effect<Option.Option<string>> {
   return Effect.succeed(
-    request.headers.get("authorization") === VALID_AUTHORIZATION ? USER_ID : undefined,
+    request.headers.get("authorization") === VALID_AUTHORIZATION
+      ? Option.some(USER_ID)
+      : Option.none(),
   );
 }
 

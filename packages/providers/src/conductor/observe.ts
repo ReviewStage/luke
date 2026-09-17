@@ -11,11 +11,10 @@ import {
   SESSION_STATUS,
   type SessionStatus,
 } from "@sidecar/session";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { type AdapterFailure, tolerateItemFailureEffect } from "../shared/adapter-failure.js";
 import type { CloudRequest } from "../shared/cloud-wire.js";
 import {
-  isDefined,
   knownValue,
   recordsFromPage,
   repositoryLabel,
@@ -118,7 +117,7 @@ export const conductorObservations = /* @__PURE__ */ Effect.fn("conductorObserva
           (lifecycle) => (lifecycle ? ([workspace.id, lifecycle] as const) : undefined),
         ),
       { concurrency: "unbounded" },
-    )).filter(isDefined),
+    )).filter(Predicate.isNotUndefined),
   );
   const openWorkspaces = workspaces.filter((workspace) => {
     const lifecycleStatus = workspaceLifecycles.get(workspace.id)?.status;
@@ -130,7 +129,7 @@ export const conductorObservations = /* @__PURE__ */ Effect.fn("conductorObserva
     (workspace) => tolerateItemFailureEffect(listSessions(request, workspace)),
     { concurrency: "unbounded" },
   ))
-    .filter(isDefined)
+    .filter(Predicate.isNotUndefined)
     .flat();
 
   // The transcripts read rides beside the status reads: one bounded query
@@ -183,7 +182,7 @@ export const conductorObservations = /* @__PURE__ */ Effect.fn("conductorObserva
         now,
       ),
     )
-    .filter(isDefined);
+    .filter(Predicate.isNotUndefined);
 });
 
 function identity(
@@ -216,7 +215,7 @@ function listProjects(request: CloudRequest): Effect.Effect<ConductorProject[], 
               }
             : undefined;
         })
-        .filter(isDefined)
+        .filter(Predicate.isNotUndefined)
         .slice(0, CONDUCTOR_DEFAULTS.MAXIMUM_PROJECTS),
   );
 }
@@ -246,7 +245,7 @@ const listWorkspaces = /* @__PURE__ */ Effect.fnUntraced(function* (
       [CONDUCTOR_QUERY.INCLUDE_ARCHIVED]: "false",
     });
     const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
-    workspaces.push(...records.map(workspaceFromRecord).filter(isDefined));
+    workspaces.push(...records.map(workspaceFromRecord).filter(Predicate.isNotUndefined));
     offset += records.length;
     if (body[CONDUCTOR_FIELD.HAS_MORE] !== true || records.length === 0) break;
   }
@@ -295,7 +294,7 @@ function listSessions(
             ...(deepLink ? { deepLink } : undefined),
           };
         })
-        .filter(isDefined),
+        .filter(Predicate.isNotUndefined),
   );
 }
 

@@ -60,7 +60,7 @@ function options(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(),
     apiKey: API_KEY,
-    resolveUserId: () => Effect.succeed("user-1"),
+    resolveUserId: () => Effect.succeedSome("user-1"),
     spend: () => Effect.succeed(OPEN_SPEND),
     now: () => NOW,
     ...overrides,
@@ -184,7 +184,7 @@ test("the gate order is method, kill switch, token, body, quota", async () => {
   assert.equal(blankKey.status, 503);
   assert.equal((await blankKey.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
-  const anonymous = await mintAnswer(options({ resolveUserId: () => Effect.succeed(undefined) }));
+  const anonymous = await mintAnswer(options({ resolveUserId: () => Effect.succeedNone }));
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 

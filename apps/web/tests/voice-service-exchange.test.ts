@@ -249,7 +249,7 @@ async function stand(offer: Offer): Promise<Stand> {
   const eve = fakeEve();
   const log: LogEntry[] = [];
   const reports: ExchangeReport[] = [];
-  const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeed(target.userId) };
+  const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(target.userId) };
   let release = (): void => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;

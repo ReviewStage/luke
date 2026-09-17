@@ -9,9 +9,11 @@
  * mid-week, or a span ending on today, draw an honestly ragged edge.
  */
 
+import { Duration } from "effect";
+
 export const DAYS_PER_WEEK = 7;
 
-const DAY_MS = 86_400_000;
+const DAY_MS = Duration.toMillis(Duration.days(1));
 
 interface CalendarWeek<Day extends { day: string }> {
   /** The week's UTC Sunday, as YYYY-MM-DD. */

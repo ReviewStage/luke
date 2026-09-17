@@ -1,4 +1,4 @@
-import { Effect, Redacted } from "effect";
+import { Effect, type Option, Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import type { DevicesVaultSeams } from "../devices-vault-app.js";
@@ -7,6 +7,7 @@ import { hostedUserId, oauthUserInfoFromAuthAnswer, userIdForAuthorization } fro
 import { deviceSeams } from "./device-store.js";
 import { payloadKeyRing } from "./encryption.js";
 import { HostedEnvironment } from "./environment.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
 import {
   deleteVaultKey,
@@ -35,7 +36,7 @@ export interface VaultKeyRow {
 
 export interface HostedVaultRoute {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
   encryptionSecret: string | undefined;
   /** Reads the encrypted key row for this user and provider, or undefined if none stored. */
@@ -85,7 +86,7 @@ export const hostedVaultUserInfo: UserInfoEndpoint = (input) =>
  * `hostedVaultUserInfo` is constructed, so the resolution itself is an effect
  * a route yields rather than a promise each route rewraps.
  */
-export function resolveHostedUserId(request: Request): Effect.Effect<string | undefined> {
+export function resolveHostedUserId(request: Request): Effect.Effect<Option.Option<string>> {
   return hostedUserId(request, hostedVaultUserInfo);
 }
 

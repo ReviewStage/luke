@@ -40,7 +40,7 @@ function present(value: string | undefined): string | undefined {
 export function mintAnswer(call: MintCall): Promise<Response> {
   const apiKey = present(call.apiKey);
   const seams = {
-    resolveUserId: () => Effect.succeed(undefined),
+    resolveUserId: () => Effect.succeedNone,
     spend: () => Effect.succeed({ allowed: false, quota: { used: 0, limit: 0, resetsAt: 0 } }),
     spendIntroduction: () => Effect.succeed({ allowed: false }),
     ...call,

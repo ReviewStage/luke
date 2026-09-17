@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Effect, type Schema as EffectSchema, Result } from "effect";
+import { Data, Effect, type Schema as EffectSchema, Option, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -51,6 +51,7 @@ import {
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET, CATALOG_VIEW_TOOL_KINDS } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { makeRateBrake } from "./rate-brake.js";
 import type {
   AgentRecord,
@@ -94,7 +95,7 @@ const readBrake = makeRateBrake({
 
 export interface ResourceReadOptions {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "messages" | "events" | "turns" | "directory">;
 }
 
@@ -116,10 +117,11 @@ export const readGate = /* @__PURE__ */ Effect.fnUntraced(function* (
       HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
   }
-  const userId = yield* resolveUserId(request);
-  if (!userId) {
+  const account = yield* resolveUserId(request);
+  if (Option.isNone(account)) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
+  const userId = account.value;
   if (!(yield* readBrake.check(userId))) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
   }

@@ -52,7 +52,7 @@ function messageOptions(overrides: Partial<SessionActionOptions> = {}): SessionA
     }),
     kind: ACTION_KIND.MESSAGE,
     encryptionSecret: SECRET,
-    resolveUserId: () => Effect.succeed("user-1"),
+    resolveUserId: () => Effect.succeedSome("user-1"),
     readKey: () => Effect.succeed({ ciphertext: encryptProviderKey("key-1", SECRET) }),
     roster: () => Effect.succeed(EMPTY_ROSTER),
     unsupportedReason: () => undefined,

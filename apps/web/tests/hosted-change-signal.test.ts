@@ -78,7 +78,7 @@ function sorted<Value>(positions: readonly [string, Value][]): [string, Value][]
 function options(userId: string, request: Request) {
   return {
     request,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeedSome(userId),
     store: database.store,
     touchDevice: seams.touchDevice,
     now: () => NOW,
@@ -145,7 +145,7 @@ test("the gate order is method, bearer, and body, and a refused request moves no
   const anonymous = await database.run(
     handleChanges({
       ...options(userId, changesRequest({ deviceId: DEVICE_ID }, "POST", false)),
-      resolveUserId: () => Effect.succeed(undefined),
+      resolveUserId: () => Effect.succeedNone,
     }),
   );
   assert.equal(anonymous.status, 401);

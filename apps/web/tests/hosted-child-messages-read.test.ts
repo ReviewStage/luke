@@ -82,7 +82,7 @@ function request(query: ReadQuery = {}, method = "GET", authorized = true): Requ
 function options(userId: string, req: Request): ResourceReadOptions {
   return {
     request: req,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeedSome(userId),
     store: database.store,
   };
 }
@@ -240,7 +240,7 @@ test("the gate order is method, bearer, then the query: a read naming no child o
     await database.run(
       handleConversationChildMessages({
         ...options(userId, request({ child }, "GET", false)),
-        resolveUserId: () => Effect.succeed(undefined),
+        resolveUserId: () => Effect.succeedNone,
       }),
     ),
     401,

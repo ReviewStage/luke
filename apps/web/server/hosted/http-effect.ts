@@ -1,4 +1,4 @@
-import { Effect, type Layer, Schema, Stream } from "effect";
+import { Effect, type Layer, type Option, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
@@ -50,6 +50,17 @@ export const RequestTooLargeRefusal = refusalSchema(HOSTED_API_ERROR.REQUEST_TOO
 export const UnavailableRefusal = refusalSchema(HOSTED_API_ERROR.UNAVAILABLE);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
+
+/**
+ * Resolves the signed-in account behind what a request carries, or none.
+ * Nothing distinguishes a missing header from an expired or revoked token on
+ * purpose: every failure is one 401, and the desktop's refresh machinery is
+ * what answers it. `Input` is the request itself, or the `Authorization`
+ * value alone where it arrived somewhere other than on its own request.
+ */
+export type UserIdResolver<Input = Request> = (
+  input: Input,
+) => Effect.Effect<Option.Option<string>>;
 
 /** The refusal values themselves, since not one of them carries a field. */
 export const HOSTED_REFUSAL = {

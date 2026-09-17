@@ -5,9 +5,11 @@
  * closer than that, a message answers the one before it, and the row's own
  * stamp in the pull column is enough.
  */
-const CONVERSATION_TIME_BREAK_MS = 60 * 60_000;
+import { Duration } from "effect";
 
-const DAY_MS = 24 * 60 * 60_000;
+const CONVERSATION_TIME_BREAK_MS = Duration.toMillis(Duration.hours(1));
+
+const DAY_MS = Duration.toMillis(Duration.days(1));
 
 /** The past week's weekdays are unambiguous by name; a week on they are not. */
 const WEEKDAY_NAME_DAYS = 7;

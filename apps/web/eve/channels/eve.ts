@@ -1,3 +1,4 @@
+import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
 import { hostedUserId } from "../../server/hosted/bearer.js";
 import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../../server/hosted/brain-host/channel.js";
@@ -14,7 +15,7 @@ const seams = productionBrainHostSeams(runWeb);
  * the resolution for eve's sake.
  */
 const resolveUserId = (request: Request): Promise<string | undefined> =>
-  runWeb(hostedUserId(request, seams.userInfo));
+  runWeb(Effect.map(hostedUserId(request, seams.userInfo), Option.getOrUndefined));
 
 export default eveChannel(
   brainHostChannelInput(resolveUserId, seams.ownership, {

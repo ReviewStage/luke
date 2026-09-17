@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
 import { asc, desc, inArray } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Duration, Effect, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -98,7 +98,7 @@ export const SPEECH_PUSH = {
    * are pushed instead. The Mac's live session claims within seconds of an
    * offer it will say; two ticks without a claim means it will not.
    */
-  GRACE_MS: 2 * 60_000,
+  GRACE_MS: Duration.toMillis(Duration.minutes(2)),
   /**
    * How long one pass may spend before leaving the rest of the offers for
    * the next tick. The pass runs after the sweep and ahead of the
@@ -107,7 +107,7 @@ export const SPEECH_PUSH = {
    * the one send that may still be waiting out its timeout when it is
    * reached must leave that room: the tick's test states the arithmetic.
    */
-  BUDGET_MS: 10_000,
+  BUDGET_MS: Duration.toMillis(Duration.seconds(10)),
 } as const;
 
 /** What the pass decided about one open offer, from its standing and its account's devices. */

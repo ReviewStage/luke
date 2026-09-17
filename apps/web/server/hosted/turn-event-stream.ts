@@ -31,6 +31,7 @@ import {
 import { hostedTurnPolicy } from "./brain-host/tools.js";
 import { CATALOG_TOOL_SET } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { makeRateBrake } from "./rate-brake.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
@@ -171,7 +172,7 @@ export function projectTurnEvents(
 
 export interface TurnEventStreamOptions {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "turns" | "messages">;
   now?: () => number;
   sleep?: (ms: number) => Effect.Effect<void>;
@@ -246,10 +247,11 @@ export const handleTurnEventStream = /* @__PURE__ */ Effect.fn("handleTurnEventS
   const after = cursorOf(query);
   if (after === undefined) return invalidRequest();
 
-  const userId = yield* resolveUserId(request);
-  if (!userId) {
+  const account = yield* resolveUserId(request);
+  if (Option.isNone(account)) {
     return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
   }
+  const userId = account.value;
   const now = options.now ?? Date.now;
   if (!(yield* streamBrake.check(userId))) {
     return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);

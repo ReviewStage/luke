@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_SERVICE_PATH, realtimeClientSecretRequest } from "./core.js";
@@ -9,6 +9,7 @@ import {
   hostedJsonResponse,
   hostedMethod,
   hostedNotFoundRoute,
+  type UserIdResolver,
 } from "./hosted/http-effect.js";
 import {
   hostedKey,
@@ -44,15 +45,15 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /** What the group is handed that the deployment alone can answer for. */
 export interface VoiceMintSeams extends MintSeams {
-  resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver<string | undefined>;
   spend: (userId: string) => QuotaEffect<HostedSpend>;
 }
 
 /** The signed-in caller behind the request's bearer, or the refusal that says there is none. */
 const signedIn = /* @__PURE__ */ Effect.fnUntraced(function* (seams: VoiceMintSeams) {
   const request = yield* HttpServerRequest.HttpServerRequest;
-  const userId = yield* seams.resolveUserId(request.headers.authorization);
-  return userId ? userId : yield* refuseMint(HOSTED_REFUSAL.INVALID_TOKEN);
+  const account = yield* seams.resolveUserId(request.headers.authorization);
+  return Option.isSome(account) ? account.value : yield* refuseMint(HOSTED_REFUSAL.INVALID_TOKEN);
 });
 
 /** POST: the signed-in desktop's own credential, spent against its daily allowance. */

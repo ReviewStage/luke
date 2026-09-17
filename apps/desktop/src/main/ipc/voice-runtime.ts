@@ -2,7 +2,7 @@ import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
 import type { LiveConversationLine } from "@sidecar/session";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -36,7 +36,7 @@ export interface VoiceRuntimeDependencies {
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
   liveSession: LiveSessionActs;
-  liveDiagnostics: () => Effect.Effect<LiveDiagnostics | undefined>;
+  liveDiagnostics: () => Effect.Effect<Option.Option<LiveDiagnostics>>;
   recordProductEvent: RecordProductEvent;
   /**
    * The Conversation Clear, begun here as the voice window is told, and
@@ -109,7 +109,9 @@ export function voiceRuntimeActRows(
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
     [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp }, { voice }) =>
-      voice ? liveSession.createLiveSession(sdp) : Effect.succeed(undefined),
+      voice
+        ? Effect.map(liveSession.createLiveSession(sdp), Option.getOrUndefined)
+        : Effect.succeed(undefined),
     [ACT_KIND.VOICE_END_LIVE_SESSION]: (_payload, { voice }) =>
       voice ? Effect.as(liveSession.endLiveSession(), undefined) : Effect.succeed(undefined),
     [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: ({ state }, { voice }) =>
@@ -124,7 +126,8 @@ export function voiceRuntimeActRows(
     // panel has no session to stop and is answered false.
     [ACT_KIND.VOICE_STOP_SPEAKING]: (_payload, { voice }) =>
       voice ? liveSession.stopSpeaking() : Effect.succeed(false),
-    [ACT_KIND.VOICE_DIAGNOSTICS]: () => dependencies.liveDiagnostics(),
+    [ACT_KIND.VOICE_DIAGNOSTICS]: () =>
+      Effect.map(dependencies.liveDiagnostics(), Option.getOrUndefined),
     [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: () =>
       dependencies.openExternal(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",

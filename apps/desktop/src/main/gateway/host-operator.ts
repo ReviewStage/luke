@@ -54,7 +54,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result } from "effect";
+import { Effect, Option, Result } from "effect";
 import {
   type AgentsSnapshot,
   agentsSnapshotSchema,
@@ -115,8 +115,8 @@ interface HostTranscript {
 }
 
 export interface HostOperator {
-  bootstrap(): Effect.Effect<HostBootstrap | undefined>;
-  settingsSnapshot(): Effect.Effect<AppSettings | undefined>;
+  bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
+  settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
   updateSetting<Field extends Exclude<AppSettingField, KeyedAppSettingField>>(
     field: Field,
     value: AppSettingValue<Field>,
@@ -137,7 +137,7 @@ export interface HostOperator {
     apiKey: string | undefined,
     reporter: string,
   ): Effect.Effect<SettingsUpdateResult, Error>;
-  accountSnapshot(): Effect.Effect<AccountSnapshot | undefined>;
+  accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
   beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, Error>;
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot, Error>;
@@ -151,7 +151,7 @@ export interface HostOperator {
   ): Effect.Effect<SettingsUpdateResult, Error>;
   connectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult, Error>;
   disconnectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult, Error>;
-  appleCalendarAccessStatus(): Effect.Effect<AppleCalendarAccess | undefined>;
+  appleCalendarAccessStatus(): Effect.Effect<Option.Option<AppleCalendarAccess>>;
   cancelAppleCalendarConnect(): Effect.Effect<void>;
   refreshCalendars(): Effect.Effect<void>;
   setCalendarSelected(
@@ -175,9 +175,9 @@ export interface HostOperator {
   ): Effect.Effect<SessionWriteResult>;
   workspaceProjects(): Effect.Effect<readonly ObservedWorkspaceProject[]>;
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
-  liveDiagnostics(): Effect.Effect<LiveDiagnostics | undefined>;
+  liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
   /** The peer's SDP offer, answered with the session the host created; a host that creates none answers nothing. */
-  createLiveSession(sdp: string): Effect.Effect<VoiceCreateLiveSessionResult | undefined>;
+  createLiveSession(sdp: string): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
   endLiveSession(): Effect.Effect<void>;
   reportLiveTransport(state: LiveTransportState): Effect.Effect<void>;
   /** The peer's own idle decision, from its local signals alone; the host decides the close. */
@@ -200,7 +200,7 @@ export interface HostOperator {
   openChildTranscript(conversationId: string, kind: TranscriptKind): Effect.Effect<boolean>;
   closeChildTranscript(): Effect.Effect<void>;
   /** Luke's notebook as the service holds it, for the Settings page that shows what he has saved; nothing when the host could not read it. */
-  readNotebook(): Effect.Effect<NotebookReadResult | undefined>;
+  readNotebook(): Effect.Effect<Option.Option<NotebookReadResult>>;
   /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
   rateConversationMessage(
     messageId: string,
@@ -343,11 +343,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
   return {
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
-        answered<HostBootstrap>(record(answer)),
+        Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),
       ),
     settingsSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
-        answered<AppSettings>(record(answer)?.settings),
+        Option.fromUndefinedOr(answered<AppSettings>(record(answer)?.settings)),
       ),
     updateSetting: (field, value, reporter) =>
       settingsResult(
@@ -380,7 +380,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     accountSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT), (answer) =>
-        answered<AccountSnapshot>(record(answer)?.account),
+        Option.fromUndefinedOr(answered<AccountSnapshot>(record(answer)?.account)),
       ),
     beginSignIn: (provider) =>
       accountResult(client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider })),
@@ -406,7 +406,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       settingsResult(client.call(GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE, wireReporter(reporter))),
     appleCalendarAccessStatus: () =>
       Effect.map(client.call(GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS), (answer) =>
-        answered<AppleCalendarAccess>(record(answer)?.access),
+        Option.fromUndefinedOr(answered<AppleCalendarAccess>(record(answer)?.access)),
       ),
     cancelAppleCalendarConnect: () =>
       fire(client.call(GATEWAY_METHOD.CALENDAR_CANCEL_APPLE_CONNECT)),
@@ -456,17 +456,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     liveDiagnostics: () =>
       Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
-        answered<LiveDiagnostics>(record(answer)?.diagnostics),
+        Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
       ),
     createLiveSession: (sdp) =>
       Effect.map(client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }), (answer) =>
         answer.ok
-          ? Result.getOrUndefined(
+          ? Result.getSuccess(
               readEither(voiceCreateLiveSessionResultSchema, { excess: EXCESS_KEYS.DROP })(
                 answer.result,
               ),
             )
-          : undefined,
+          : Option.none(),
       ),
     endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
     reportLiveTransport: (state) =>
@@ -515,10 +515,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     readNotebook: () =>
       Effect.map(client.call(GATEWAY_METHOD.NOTEBOOK_READ), (answer) =>
         answer.ok
-          ? Result.getOrUndefined(
+          ? Result.getSuccess(
               readEither(notebookReadResultSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
             )
-          : undefined,
+          : Option.none(),
       ),
     rateConversationMessage: (messageId, rating) =>
       Effect.map(

@@ -9,6 +9,7 @@ import {
 } from "../core.js";
 import { notebookPath } from "./brain-host/notebook.js";
 import { HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import { readGate } from "./resource-reads.js";
 import type { HostedStore } from "./store/index.js";
 
@@ -29,7 +30,7 @@ import type { HostedStore } from "./store/index.js";
 
 export interface NotebookReadOptions {
   request: Request;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   store: Pick<HostedStore, "workspace">;
 }
 

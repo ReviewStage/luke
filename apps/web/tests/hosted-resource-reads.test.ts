@@ -300,7 +300,7 @@ function request(path: string, query: ReadQuery = {}, method = "GET", authorized
 function options(userId: string, req: Request): ResourceReadOptions {
   return {
     request: req,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeedSome(userId),
     store: database.store,
   };
 }
@@ -849,7 +849,7 @@ it.effect("the gate order is method, bearer, and query, and every refusal is one
       const anonymous = await database.run(
         handle({
           ...options(userId, request(path, {}, "GET", false)),
-          resolveUserId: () => Effect.succeed(undefined),
+          resolveUserId: () => Effect.succeedNone,
         }),
       );
       assert.equal(anonymous.status, 401);
@@ -1277,7 +1277,7 @@ it.effect(
             headers: { authorization: "Bearer token-1", "content-type": "application/json" },
             body: JSON.stringify({ deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7" }),
           }),
-          resolveUserId: () => Effect.succeed(userId),
+          resolveUserId: () => Effect.succeedSome(userId),
           store: database.store,
           touchDevice: () => Effect.succeed(false),
           now: () => NOW,

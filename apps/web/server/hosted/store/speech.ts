@@ -1,7 +1,7 @@
 import { readEither } from "@sidecar/wire/effect";
 import { and, asc, eq, gt, inArray, isNull, max, notExists, notInArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { Effect, Option, Result, Schema } from "effect";
+import { Duration, Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -102,7 +102,7 @@ import { ConversationEventKindSchema, STORE_WRITE_REFUSAL, type StoreWriter } fr
 
 export const SPEECH_OFFER = {
   /** How long an offer stands before the sweep marks it unspoken; a briefing about what just changed is stale past this. */
-  TTL_MS: 15 * 60_000,
+  TTL_MS: Duration.toMillis(Duration.minutes(15)),
 } as const;
 
 const OPEN_OFFERS = {

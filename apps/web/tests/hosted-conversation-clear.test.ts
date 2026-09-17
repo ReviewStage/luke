@@ -13,7 +13,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Result } from "effect";
+import { Effect, type Schema as EffectSchema, Option, Result } from "effect";
 import { afterAll, test } from "vitest";
 import { handleConversationClear } from "../server/hosted/conversation-clear";
 import { handleConversationMessages } from "../server/hosted/resource-reads";
@@ -49,7 +49,7 @@ function request(url: string, method: string, authorized = true): Request {
 function options(userId: string | undefined, req: Request) {
   return {
     request: req,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeed(Option.fromUndefinedOr(userId)),
     store: database.store,
     now: () => NOW,
   };

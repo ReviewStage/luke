@@ -1,4 +1,4 @@
-import { Effect, type Layer, type Schema } from "effect";
+import { Effect, type Layer, Option, type Schema } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -14,6 +14,7 @@ import {
   type UnparsedWireValue,
 } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
+import type { UserIdResolver } from "./http-effect.js";
 import {
   type PosthogBatch,
   type PosthogBatchItem,
@@ -60,7 +61,7 @@ export interface EventsOptions {
   projectApiKey: string | undefined;
   /** A deployment-configured ingestion host; the shared default otherwise. */
   host?: string;
-  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
+  resolveUserId: UserIdResolver;
   /**
    * The account's own name and address, for the person record. Omitted by a
    * deployment that would rather PostHog held neither; the counts still land.
@@ -139,10 +140,11 @@ export function handleEvents(
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
 
-    const userId = yield* options.resolveUserId(request);
-    if (!userId) {
+    const account = yield* options.resolveUserId(request);
+    if (Option.isNone(account)) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
+    const userId = account.value;
 
     const raw = yield* Effect.tryPromise(() => request.text()).pipe(
       Effect.orElseSucceed((): string | undefined => undefined),

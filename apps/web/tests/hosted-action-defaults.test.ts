@@ -65,7 +65,7 @@ function routeOptions(
     request,
     kind,
     encryptionSecret: SECRET,
-    resolveUserId: () => Effect.succeed(userId),
+    resolveUserId: () => Effect.succeedSome(userId),
     readKey: () => Effect.succeed({ ciphertext: encryptProviderKey("key-1", SECRET) }),
     roster: () => Effect.succeed(EMPTY_ROSTER),
     unsupportedReason: () => undefined,
