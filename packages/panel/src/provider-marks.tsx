@@ -409,7 +409,7 @@ export type MarkId =
   | typeof APPLE_CALENDAR_ID
   | typeof GOOGLE_CALENDAR_ID;
 
-export const MarkIdSchema = Schema.Union([
+const MarkIdSchema = Schema.Union([
   ProviderIdSchema,
   HostedAgentIdSchema,
   SessionApplicationIdSchema,

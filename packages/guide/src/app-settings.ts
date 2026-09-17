@@ -28,7 +28,7 @@ export const APP_SETTING_ID = {
 
 export type AppSettingId = (typeof APP_SETTING_ID)[keyof typeof APP_SETTING_ID];
 
-export const AppSettingIdSchema = Schema.Literals(Object.values(APP_SETTING_ID));
+const AppSettingIdSchema = Schema.Literals(Object.values(APP_SETTING_ID));
 
 const readsAppSettingId = Schema.is(AppSettingIdSchema);
 
