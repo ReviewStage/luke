@@ -4,7 +4,7 @@ import {
   NOTEBOOK_MEMORY_TOOL,
   type NotebookMemoryAccess,
 } from "@sidecar/memory";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import {
@@ -135,9 +135,9 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
     notebook: unsearchedNotebook,
     children: undefined,
     workspace: {
-      read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
-      write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
-      append: () => Effect.succeed({ ok: false, reason: "not appended in these tests" }),
+      read: () => Effect.succeed(Result.fail("not read in these tests")),
+      write: () => Effect.succeed(Result.fail("not written in these tests")),
+      append: () => Effect.succeed(Result.fail("not appended in these tests")),
       listNotes: () => Effect.succeed([]),
       loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
     },
@@ -341,9 +341,9 @@ test("a created workspace keeps the created session identity in its action envel
     notebook: unsearchedNotebook,
     children: undefined,
     workspace: {
-      read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
-      write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
-      append: () => Effect.succeed({ ok: false, reason: "not appended in these tests" }),
+      read: () => Effect.succeed(Result.fail("not read in these tests")),
+      write: () => Effect.succeed(Result.fail("not written in these tests")),
+      append: () => Effect.succeed(Result.fail("not appended in these tests")),
       listNotes: () => Effect.succeed([]),
       loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
     },
@@ -420,9 +420,9 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
     notebook: unsearchedNotebook,
     children: undefined,
     workspace: {
-      read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
-      write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
-      append: () => Effect.succeed({ ok: false, reason: "not appended in these tests" }),
+      read: () => Effect.succeed(Result.fail("not read in these tests")),
+      write: () => Effect.succeed(Result.fail("not written in these tests")),
+      append: () => Effect.succeed(Result.fail("not appended in these tests")),
       listNotes: () => Effect.succeed([]),
       loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
     },

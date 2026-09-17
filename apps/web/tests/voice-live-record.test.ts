@@ -17,7 +17,7 @@ import {
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
-import { Deferred, Effect, Layer, Schema, Scope } from "effect";
+import { Deferred, Effect, Layer, Result, Schema, Scope } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -299,8 +299,8 @@ async function askRow(conversation: ConversationTarget, delegationId = "dl_1") {
   );
 }
 
-const IGNORED = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED } as const;
-const WRITTEN = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN } as const;
+const IGNORED = Result.succeed(STORE_WRITE_EFFECT.IGNORED);
+const WRITTEN = Result.succeed(STORE_WRITE_EFFECT.WRITTEN);
 
 test("a spoken ask is the developer's row attached to the delegation, its words including a delta that arrived after the delegation, and the reply is spoken under the delegation once that row is on record", async () => {
   const live = await target();
@@ -496,7 +496,7 @@ test("an ask the record refuses is answered all the same: nothing is said of the
     [["dl_2", "Stopping it."]],
   );
   assert.deepEqual(await messageRows(live.conversation), []);
-  const refused = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION } as const;
+  const refused = Result.fail(VOICE_WRITE_REFUSAL.NO_SESSION);
   assert.deepEqual(await Promise.all(f.observed), [IGNORED, refused, IGNORED]);
 });
 

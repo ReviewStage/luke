@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
 import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
@@ -27,10 +27,10 @@ export default defineDynamic({
       return runWeb(
         Effect.gen(function* () {
           const admitted = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
-          if (!admitted.ok) return null;
+          if (Result.isFailure(admitted)) return null;
           const turn = host.turnKindOf(ctx.session.auth);
           if (!turn) return null;
-          const composed = yield* host.prompt(admitted, turn.trigger);
+          const composed = yield* host.prompt(admitted.success, turn.trigger);
           prompt.update(() => ({ hash: composed.hash }));
           return defineInstructions({ content: composed.text });
         }),
@@ -40,8 +40,8 @@ export default defineDynamic({
       runWeb(
         Effect.gen(function* () {
           const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
-          if (!admitted.ok) return null;
-          return defineInstructions({ content: yield* host.standingContext(admitted) });
+          if (Result.isFailure(admitted)) return null;
+          return defineInstructions({ content: yield* host.standingContext(admitted.success) });
         }),
       ),
   },

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { defineDynamic, defineInstructions } from "eve/instructions";
 import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
@@ -15,8 +15,8 @@ export default defineDynamic({
       runWeb(
         Effect.gen(function* () {
           const admitted = yield* host.admitStarting(ctx.session.auth, ctx.session.id);
-          if (!admitted.ok) return null;
-          const seed = yield* host.seed(admitted);
+          if (Result.isFailure(admitted)) return null;
+          const seed = yield* host.seed(admitted.success);
           return seed === undefined ? null : defineInstructions({ content: seed, role: "user" });
         }),
       ),

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -108,11 +109,11 @@ test("account A is admitted for its own conversation and the target names its ro
   const id = await ownedConversation(userA);
   const a = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: id });
   const admitted = await database.run(admitConversation({ current: a, initiator: a }, CLAIMING));
-  assert.equal(admitted.ok, true);
-  if (!admitted.ok) return;
-  assert.deepEqual(admitted.target, { userId: userA, conversationId: id });
-  assert.equal(admitted.kind, CONVERSATION_KIND.MAIN);
-  assert.equal(admitted.runtimeSessionId, undefined);
+  assert.ok(Result.isSuccess(admitted));
+  if (!Result.isSuccess(admitted)) return;
+  assert.deepEqual(admitted.success.target, { userId: userA, conversationId: id });
+  assert.equal(admitted.success.kind, CONVERSATION_KIND.MAIN);
+  assert.equal(admitted.success.runtimeSessionId, undefined);
 });
 
 test("account B is refused on account A's session, whichever seat it takes", async () => {
@@ -123,15 +124,15 @@ test("account B is refused on account A's session, whichever seat it takes", asy
   const b = principal(userB, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: id });
 
   const followUp = await database.run(admitConversation({ current: b, initiator: a }, CLAIMING));
-  assert.deepEqual(followUp, { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR });
+  assert.deepEqual(followUp, Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR));
 
   const opened = await database.run(admitConversation({ current: b, initiator: b }, CLAIMING));
-  assert.deepEqual(opened, { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_OWNER });
+  assert.deepEqual(opened, Result.fail(BRAIN_HOST_REFUSAL.NOT_OWNER));
 
   const nobody = await database.run(
     admitConversation({ current: null, initiator: null }, CLAIMING),
   );
-  assert.deepEqual(nobody, { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_PRINCIPAL });
+  assert.deepEqual(nobody, Result.fail(BRAIN_HOST_REFUSAL.NO_PRINCIPAL));
 
   const unnamed = await database.run(
     admitConversation(
@@ -142,13 +143,13 @@ test("account B is refused on account A's session, whichever seat it takes", asy
       CLAIMING,
     ),
   );
-  assert.deepEqual(unnamed, { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION });
+  assert.deepEqual(unnamed, Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION));
 
   const unknown = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: CONVERSATION_ID });
   const missing = await database.run(
     admitConversation({ current: unknown, initiator: unknown }, CLAIMING),
   );
-  assert.deepEqual(missing, { ok: false, refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION });
+  assert.deepEqual(missing, Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION));
 });
 
 test("a cleared conversation admits nobody, its owner included, and no session claims its record", async () => {
@@ -158,10 +159,10 @@ test("a cleared conversation admits nobody, its owner included, and no session c
     deletedAt: new Date(),
   });
   const a = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId });
-  assert.deepEqual(await database.run(admitConversation({ current: a, initiator: a }, CLAIMING)), {
-    ok: false,
-    refusal: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
-  });
+  assert.deepEqual(
+    await database.run(admitConversation({ current: a, initiator: a }, CLAIMING)),
+    Result.fail(BRAIN_HOST_REFUSAL.NO_CONVERSATION),
+  );
   const session = "wrun_01M0000000000000000000000C";
   assert.equal(
     await database.run(claimRuntimeSession({ userId: userA, conversationId }, session, new Date())),
@@ -331,37 +332,42 @@ test("a conversation runs in one session: the recorded one is admitted, another 
   const older = "wrun_01M0000000000000000000000A";
   const newer = "wrun_01M0000000000000000000000B";
 
-  assert.equal(
-    (await database.run(admitConversation(auth, { id: older, standing: SESSION_STANDING.CURRENT })))
-      .ok,
-    false,
+  assert.ok(
+    Result.isFailure(
+      await database.run(
+        admitConversation(auth, { id: older, standing: SESSION_STANDING.CURRENT }),
+      ),
+    ),
   );
   assert.equal(await database.run(claimRuntimeSession(target, older, new Date())), true);
-  assert.equal(
-    (await database.run(admitConversation(auth, { id: older, standing: SESSION_STANDING.CURRENT })))
-      .ok,
-    true,
+  assert.ok(
+    Result.isSuccess(
+      await database.run(
+        admitConversation(auth, { id: older, standing: SESSION_STANDING.CURRENT }),
+      ),
+    ),
   );
 
   assert.equal(await database.run(claimRuntimeSession(target, newer, new Date())), true);
   assert.deepEqual(
     await database.run(admitConversation(auth, { id: older, standing: SESSION_STANDING.CURRENT })),
-    { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION },
+    Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
   );
-  assert.equal(
-    (await database.run(admitConversation(auth, { id: newer, standing: SESSION_STANDING.CURRENT })))
-      .ok,
-    true,
+  assert.ok(
+    Result.isSuccess(
+      await database.run(
+        admitConversation(auth, { id: newer, standing: SESSION_STANDING.CURRENT }),
+      ),
+    ),
   );
   assert.equal(await database.run(claimRuntimeSession(target, older, new Date())), false);
   assert.equal(await database.run(runtimeSessionOwner(newer)), userA);
-  assert.equal(
-    (
+  assert.ok(
+    Result.isSuccess(
       await database.run(
         admitConversation(auth, { id: older, standing: SESSION_STANDING.CLAIMING }),
-      )
-    ).ok,
-    true,
+      ),
+    ),
   );
 });
 
@@ -558,17 +564,17 @@ test("a session the deployment opened for an account admits that account's own b
   const opened = await database.run(
     admitConversation({ current: deployment, initiator: deployment }, CLAIMING),
   );
-  assert.equal(opened.ok, true);
-  if (!opened.ok) return;
-  assert.deepEqual(opened.target, { userId: userA, conversationId: id });
+  assert.ok(Result.isSuccess(opened));
+  if (!Result.isSuccess(opened)) return;
+  assert.deepEqual(opened.success.target, { userId: userA, conversationId: id });
   const byOwner = await database.run(
     admitConversation({ current: principal(userA), initiator: deployment }, CLAIMING),
   );
-  assert.equal(byOwner.ok, true);
+  assert.ok(Result.isSuccess(byOwner));
   const byOther = await database.run(
     admitConversation({ current: principal(userB), initiator: deployment }, CLAIMING),
   );
-  assert.deepEqual(byOther, { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR });
+  assert.deepEqual(byOther, Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR));
   const forOther = await database.run(
     admitConversation(
       {
@@ -581,5 +587,5 @@ test("a session the deployment opened for an account admits that account's own b
       CLAIMING,
     ),
   );
-  assert.deepEqual(forOther, { ok: false, refusal: BRAIN_HOST_REFUSAL.NOT_INITIATOR });
+  assert.deepEqual(forOther, Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR));
 });

@@ -6,7 +6,7 @@ import {
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
-import { Cause, Duration, Effect, Schedule, type Scope } from "effect";
+import { Cause, Duration, Effect, Result, Schedule, type Scope } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import {
   ASK_ORIGIN,
@@ -244,14 +244,14 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("hostedLiveBrain")(func
           options.asks,
           pinned === undefined ? input : { ...input, conversationId: pinned },
         );
-        if (!outcome.ok) {
+        if (Result.isFailure(outcome)) {
           return {
             outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
-            refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.refusal],
+            refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.failure.refusal],
           };
         }
-        yield* follow(outcome.answer.id);
-        return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.answer.id };
+        yield* follow(outcome.success.id);
+        return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.success.id };
       }).pipe(Effect.provideService(SqlClient.SqlClient, sql), Effect.orDie);
     },
     onRunEvent(listener) {

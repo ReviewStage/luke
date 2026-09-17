@@ -83,10 +83,8 @@ export function handleMessageRating(
     }
 
     const written = yield* rate(userId, messageId.success, rating.success);
-    if (written.ok) {
-      return jsonResponse(HOSTED_HTTP_STATUS.OK, { id: written.id, seq: written.seq });
-    }
-    switch (written.refusal) {
+    if (Result.isSuccess(written)) return jsonResponse(HOSTED_HTTP_STATUS.OK, written.success);
+    switch (written.failure) {
       case RATING_REFUSAL.NOT_FOUND:
         return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
       case RATING_REFUSAL.NOT_LUKES:

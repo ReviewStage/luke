@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { db } from "../server/db/query";
@@ -300,7 +300,7 @@ it.effect(
         database.run(acceptAsk(seams, input)),
       ]);
       assert.deepEqual(first, second);
-      assert.ok(first.ok);
+      assert.ok(Result.isSuccess(first));
       assert.equal(eve.opens, 1);
       assert.deepEqual(eve.deliveries, []);
     }),
@@ -484,7 +484,7 @@ it.effect(
           waiting.id,
         ),
       );
-      assert.equal(outcome.ok, true);
+      assert.ok(Result.isSuccess(outcome));
       assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
       const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
       assert.equal(turn?.cancelRequestedAt?.getTime(), NOW);
@@ -505,7 +505,7 @@ it.effect(
           later.id,
         ),
       );
-      assert.equal(stampedFirst.ok, true);
+      assert.ok(Result.isSuccess(stampedFirst));
       assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
       const stops: (readonly [string, string, string, string])[] = [];
       const relay = new StreamRelay({
@@ -584,7 +584,10 @@ it.effect(
           honoured.id,
         ),
       );
-      assert.deepEqual(afterHonour.ok && afterHonour.answer.cancelRequestedAt, NOW - 5);
+      assert.deepEqual(
+        Result.isSuccess(afterHonour) && afterHonour.success.cancelRequestedAt,
+        NOW - 5,
+      );
       assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
 
       // A second Stop on a running turn already stamped is a repeat: eve is not asked again.
@@ -595,7 +598,7 @@ it.effect(
           waiting.id,
         ),
       );
-      assert.deepEqual(again.ok && again.answer.cancelRequestedAt, NOW);
+      assert.deepEqual(Result.isSuccess(again) && again.success.cancelRequestedAt, NOW);
       assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
     }),
 );
@@ -621,9 +624,10 @@ it.effect(
           origin: ASK_ORIGIN.TYPED,
         }),
       );
-      assert.ok(accepted.ok);
+      assert.ok(Result.isSuccess(accepted));
+      if (!Result.isSuccess(accepted)) return;
       assert.deepEqual(eve.deliveries, ["delivery-1"]);
-      const queued = await database.run(askStanding(reads, userId, accepted.answer.id));
+      const queued = await database.run(askStanding(reads, userId, accepted.success.id));
       assert.equal(queued?.answer.status, TURN_STATUS.QUEUED);
       assert.equal(queued?.answer.turnId, undefined);
 
@@ -658,7 +662,7 @@ it.effect(
       await database.run(relay.handle(withDeliveries, standing));
 
       const turnId = hostTurnId(sessionId, "turn_3");
-      const running = await database.run(askStanding(reads, userId, accepted.answer.id));
+      const running = await database.run(askStanding(reads, userId, accepted.success.id));
       assert.equal(running?.answer.turnId, turnId);
       assert.equal(running?.answer.status, TURN_STATUS.RUNNING);
       assert.deepEqual(await database.run(askStanding(reads, userId, turnId)), {
@@ -688,7 +692,7 @@ it.effect(
             origin: ASK_ORIGIN.TYPED,
           }),
         ),
-        { ok: false, refusal: ASK_REFUSAL.NOT_FOUND },
+        Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND }),
       );
     }),
 );
@@ -712,13 +716,14 @@ it.effect(
           }),
         );
       const [first, second] = await Promise.all([ask(randomUUID()), ask(randomUUID())]);
-      assert.ok(first.ok && second.ok);
-      assert.notEqual(first.answer.id, second.answer.id);
+      assert.ok(Result.isSuccess(first) && Result.isSuccess(second));
+      if (!Result.isSuccess(first) || !Result.isSuccess(second)) return;
+      assert.notEqual(first.success.id, second.success.id);
       assert.equal(eve.opens, 1);
       assert.deepEqual(eve.deliveries, ["delivery-1"]);
       const rows = await Promise.all([
-        asks.named(userId, first.answer.id),
-        asks.named(userId, second.answer.id),
+        asks.named(userId, first.success.id),
+        asks.named(userId, second.success.id),
       ]);
       assert.equal(rows[0]?.sessionId, rows[1]?.sessionId);
       assert.equal(
@@ -776,7 +781,7 @@ it.effect(
           },
         ),
       );
-      assert.deepEqual(outcome, { ok: false, refusal: ASK_REFUSAL.NOT_FOUND });
+      assert.deepEqual(outcome, Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND }));
       assert.equal(eve.opens, 0);
       assert.deepEqual(eve.deliveries, []);
     }),

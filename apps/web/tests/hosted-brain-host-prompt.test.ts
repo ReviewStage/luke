@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { MessageStreamEvent } from "eve/client";
@@ -124,20 +124,20 @@ async function startSession(
   const id = sessionId();
   const auth = seat(target, turn);
   const starting = await database.run(host.admitStarting(auth, id));
-  assert.equal(starting.ok, true);
-  if (!starting.ok) throw new Error("not admitted");
-  assert.equal(await database.run(host.sessionStarted(starting, id)), true);
+  assert.ok(Result.isSuccess(starting));
+  if (!Result.isSuccess(starting)) throw new Error("not admitted");
+  assert.equal(await database.run(host.sessionStarted(starting.success, id)), true);
   return { id, auth, state: memoryRelayState() };
 }
 
 /** The prompt the instructions resolver composes at the session's start, as the host answers it. */
 async function composePrompt(host: BrainHost, session: Session) {
   const admitted = await database.run(host.admit(session.auth, session.id));
-  assert.equal(admitted.ok, true);
-  if (!admitted.ok) throw new Error("not admitted");
+  assert.ok(Result.isSuccess(admitted));
+  if (!Result.isSuccess(admitted)) throw new Error("not admitted");
   const kind = host.turnKindOf(session.auth);
   assert.ok(kind);
-  return database.run(host.prompt(admitted, kind.trigger));
+  return database.run(host.prompt(admitted.success, kind.trigger));
 }
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
@@ -171,13 +171,13 @@ async function relayTurn(
 ): Promise<string> {
   for (const event of shortTurn(eveTurnId, sequence)) {
     const admitted = await database.run(host.admit(session.auth, session.id));
-    assert.equal(admitted.ok, true);
-    if (!admitted.ok) throw new Error("not admitted");
+    assert.ok(Result.isSuccess(admitted));
+    if (!Result.isSuccess(admitted)) throw new Error("not admitted");
     await database.run(
       host
         .relay(
           event,
-          admitted,
+          admitted.success,
           { id: session.id, auth: session.auth, turn: { id: eveTurnId, sequence } },
           session.state,
           prompt,

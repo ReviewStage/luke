@@ -192,19 +192,6 @@ export function tooLargeRefusal(bound: number): string {
   return `${WORKSPACE_FILE_REFUSAL.TOO_LARGE} of ${bound} characters; read it back, condense, and rewrite to fit`;
 }
 
-export type WorkspaceReadResult =
-  | { readonly ok: true; readonly content: string }
-  | { readonly ok: false; readonly reason: string };
-
-export type WorkspaceWriteResult =
-  | { readonly ok: true; readonly chars: number }
-  | { readonly ok: false; readonly reason: string };
-
-/** What an append to the day's note answers: the note's path and its length once the entry landed, or the refusal. */
-export type WorkspaceAppendResult =
-  | { readonly ok: true; readonly path: string; readonly chars: number }
-  | { readonly ok: false; readonly reason: string };
-
 /** One dated note as a listing names it: its path under `memory/` and how many characters it holds, never a word of it. */
 export interface DailyNoteListing {
   readonly path: string;

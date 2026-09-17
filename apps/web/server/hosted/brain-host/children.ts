@@ -1,5 +1,5 @@
 import { isTextUIPart } from "ai";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import {
   type BrainChildAccess,
@@ -225,12 +225,13 @@ export function hostedChildAccess(
             ...(ask.label !== undefined ? { label: ask.label } : undefined),
             expectsCompletion: ask.expectsCompletion ?? true,
           });
-          if (!opened.ok) {
-            return refused(SPAWN_REFUSAL_OF_OPEN_REFUSAL[opened.refusal], opened.refusal);
+          if (Result.isFailure(opened)) {
+            return refused(SPAWN_REFUSAL_OF_OPEN_REFUSAL[opened.failure], opened.failure);
           }
+          const { childId } = opened.success;
           return {
             accepted: true,
-            receipt: { childId: opened.childId, childSessionKey: childSessionKey(opened.childId) },
+            receipt: { childId, childSessionKey: childSessionKey(childId) },
           };
         }),
       ),

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -136,7 +136,7 @@ async function announced(userId?: string): Promise<Announced> {
 async function offered(userId?: string): Promise<Announced> {
   const row = await announced(userId);
   const offer = await database.run(offerSpeech(store, row.userId, row.messageId, clock));
-  assert.equal(offer.ok, true);
+  assert.ok(Result.isSuccess(offer));
   return row;
 }
 
@@ -215,7 +215,7 @@ test("announce puts the briefing on offer once, with its expiry, and the offer r
   clock = NOW;
   const row = await announced();
   const first = await database.run(offerSpeech(store, row.userId, row.messageId, clock));
-  assert.equal(first.ok, true);
+  assert.ok(Result.isSuccess(first));
   const again = await database.run(offerSpeech(store, row.userId, row.messageId, clock + 5_000));
   assert.deepEqual(again, first);
   assert.deepEqual(await speechEvents(row.messageId), [
@@ -237,21 +237,18 @@ test("announce puts the briefing on offer once, with its expiry, and the offer r
   ]);
 
   const stranger = await database.createUser();
-  assert.deepEqual(await database.run(offerSpeech(store, stranger, row.messageId, clock)), {
-    ok: false,
-    refusal: SPEECH_REFUSAL.NOT_FOUND,
-  });
-  assert.deepEqual(await database.run(offerSpeech(store, row.userId, randomUUID(), clock)), {
-    ok: false,
-    refusal: SPEECH_REFUSAL.NOT_FOUND,
-  });
+  assert.deepEqual(
+    await database.run(offerSpeech(store, stranger, row.messageId, clock)),
+    Result.fail(SPEECH_REFUSAL.NOT_FOUND),
+  );
+  assert.deepEqual(
+    await database.run(offerSpeech(store, row.userId, randomUUID(), clock)),
+    Result.fail(SPEECH_REFUSAL.NOT_FOUND),
+  );
   const unoffered = await announced(row.userId);
   assert.deepEqual(
     await database.run(markSpeechSpoken(store, row.userId, unoffered.messageId, MAC)),
-    {
-      ok: false,
-      refusal: SPEECH_REFUSAL.NOT_OFFERED,
-    },
+    Result.fail(SPEECH_REFUSAL.NOT_OFFERED),
   );
   assert.equal(await viewMarksUnspoken(row), false);
 });
@@ -264,19 +261,15 @@ test("at most one authorization to speak per briefing, never that it was heard: 
     database.run(claimSpeech(store, row.userId, row.messageId, PHONE, clock)),
   ]);
   const outcomes = [mac, phone];
-  assert.equal(outcomes.filter((outcome) => outcome.ok).length, 1);
-  assert.deepEqual(
-    outcomes.filter((outcome) => !outcome.ok),
-    [{ ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED }],
-  );
-  const winner = mac.ok ? MAC : PHONE;
-  const loser = mac.ok ? PHONE : MAC;
+  assert.equal(outcomes.filter(Result.isSuccess).length, 1);
+  assert.deepEqual(outcomes.filter(Result.isFailure), [
+    Result.fail(SPEECH_REFUSAL.ALREADY_CLAIMED),
+  ]);
+  const winner = Result.isSuccess(mac) ? MAC : PHONE;
+  const loser = Result.isSuccess(mac) ? PHONE : MAC;
   assert.deepEqual(
     await database.run(claimSpeech(store, row.userId, row.messageId, loser, clock)),
-    {
-      ok: false,
-      refusal: SPEECH_REFUSAL.ALREADY_CLAIMED,
-    },
+    Result.fail(SPEECH_REFUSAL.ALREADY_CLAIMED),
   );
   assert.deepEqual(
     (await openOffers({ userId: row.userId })).map((offer) => [
@@ -299,12 +292,12 @@ test("at most one authorization to speak per briefing, never that it was heard: 
     }),
   );
 
-  assert.deepEqual(await database.run(markSpeechSpoken(store, row.userId, row.messageId, loser)), {
-    ok: false,
-    refusal: SPEECH_REFUSAL.NOT_CLAIMANT,
-  });
+  assert.deepEqual(
+    await database.run(markSpeechSpoken(store, row.userId, row.messageId, loser)),
+    Result.fail(SPEECH_REFUSAL.NOT_CLAIMANT),
+  );
   const spoken = await database.run(markSpeechSpoken(store, row.userId, row.messageId, winner));
-  assert.equal(spoken.ok, true);
+  assert.ok(Result.isSuccess(spoken));
   assert.deepEqual(
     (await speechEvents(row.messageId)).map((event) => [event.kind, event.deviceId]),
     [
@@ -319,17 +312,14 @@ test("at most one authorization to speak per briefing, never that it was heard: 
     database.run(claimSpeech(store, row.userId, row.messageId, PHONE, clock)),
     database.run(markSpeechPushed(store, row.userId, row.messageId, clock)),
   ]) {
-    assert.deepEqual(await late, { ok: false, refusal: SPEECH_REFUSAL.SETTLED });
+    assert.deepEqual(await late, Result.fail(SPEECH_REFUSAL.SETTLED));
   }
   assert.equal(await viewMarksUnspoken(row), false);
 
   const unclaimed = await offered(row.userId);
   assert.deepEqual(
     await database.run(markSpeechSpoken(store, row.userId, unclaimed.messageId, MAC)),
-    {
-      ok: false,
-      refusal: SPEECH_REFUSAL.NOT_CLAIMED,
-    },
+    Result.fail(SPEECH_REFUSAL.NOT_CLAIMED),
   );
 });
 
@@ -340,10 +330,10 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
     database.run(claimSpeech(store, raced.userId, raced.messageId, MAC, clock)),
     database.run(markSpeechPushed(store, raced.userId, raced.messageId, clock, PHONE)),
   ]);
-  assert.equal([claim, push].filter((outcome) => outcome.ok).length, 1);
+  assert.equal([claim, push].filter(Result.isSuccess).length, 1);
   const kinds = (await speechEvents(raced.messageId)).map((event) => event.kind);
-  if (claim.ok) {
-    assert.deepEqual(push, { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED });
+  if (Result.isSuccess(claim)) {
+    assert.deepEqual(push, Result.fail(SPEECH_REFUSAL.ALREADY_CLAIMED));
     assert.deepEqual(kinds, [
       CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
       CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
@@ -353,7 +343,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
       [SPEECH_STATE.CLAIMED],
     );
   } else {
-    assert.deepEqual(claim, { ok: false, refusal: SPEECH_REFUSAL.SETTLED });
+    assert.deepEqual(claim, Result.fail(SPEECH_REFUSAL.SETTLED));
     assert.deepEqual(kinds, [
       CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
       CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
@@ -366,11 +356,8 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
     database.run(markSpeechPushed(store, twice.userId, twice.messageId, clock, MAC)),
     database.run(markSpeechPushed(store, twice.userId, twice.messageId, clock, PHONE)),
   ]);
-  assert.equal(pushes.filter((outcome) => outcome.ok).length, 1);
-  assert.deepEqual(
-    pushes.filter((outcome) => !outcome.ok),
-    [{ ok: false, refusal: SPEECH_REFUSAL.SETTLED }],
-  );
+  assert.equal(pushes.filter(Result.isSuccess).length, 1);
+  assert.deepEqual(pushes.filter(Result.isFailure), [Result.fail(SPEECH_REFUSAL.SETTLED)]);
   assert.deepEqual(
     (await speechEvents(twice.messageId)).map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
@@ -385,7 +372,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
           event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED
             ? Effect.tap(
                 markSpeechPushed(store, target.userId, event.messageId, clock, PHONE),
-                (pushed) => Effect.sync(() => assert.equal(pushed.ok, true)),
+                (pushed) => Effect.sync(() => assert.ok(Result.isSuccess(pushed))),
               )
             : Effect.void,
           () => store.writer.recordEvent(target, event),
@@ -397,7 +384,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
     await database.run(
       claimSpeech(interposed, settledUnderneath.userId, settledUnderneath.messageId, MAC, clock),
     ),
-    { ok: false, refusal: SPEECH_REFUSAL.SETTLED },
+    Result.fail(SPEECH_REFUSAL.SETTLED),
   );
   assert.deepEqual(
     (await speechEvents(settledUnderneath.messageId)).map((event) => event.kind),
@@ -413,7 +400,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
           event.kind === CONVERSATION_EVENT_KIND.SPEECH_PUSHED
             ? Effect.tap(
                 claimSpeech(store, target.userId, event.messageId, MAC, clock),
-                (claimed) => Effect.sync(() => assert.equal(claimed.ok, true)),
+                (claimed) => Effect.sync(() => assert.ok(Result.isSuccess(claimed))),
               )
             : Effect.void,
           () => store.writer.recordEvent(target, event),
@@ -431,7 +418,7 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
         PHONE,
       ),
     ),
-    { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED },
+    Result.fail(SPEECH_REFUSAL.ALREADY_CLAIMED),
   );
   assert.deepEqual(
     (await speechEvents(takenUnderneath.messageId)).map((event) => event.kind),
@@ -440,7 +427,9 @@ test("a claim racing a push: exactly one lands, whichever reached the lock first
 
   const claimed = await offered(raced.userId);
   assert.equal(
-    (await database.run(claimSpeech(store, claimed.userId, claimed.messageId, MAC, clock))).ok,
+    Result.isSuccess(
+      await database.run(claimSpeech(store, claimed.userId, claimed.messageId, MAC, clock)),
+    ),
     true,
   );
   await database.run(
@@ -463,7 +452,7 @@ test("a push closes an offer nobody claimed, records the device pushed to, never
   const pushed = await database.run(
     markSpeechPushed(store, unclaimed.userId, unclaimed.messageId, clock, PHONE),
   );
-  assert.equal(pushed.ok, true);
+  assert.ok(Result.isSuccess(pushed));
   assert.deepEqual(
     (await speechEvents(unclaimed.messageId)).map((event) => [event.kind, event.deviceId]),
     [
@@ -474,31 +463,32 @@ test("a push closes an offer nobody claimed, records the device pushed to, never
 
   const claimed = await offered(unclaimed.userId);
   assert.equal(
-    (await database.run(claimSpeech(store, claimed.userId, claimed.messageId, MAC, clock))).ok,
+    Result.isSuccess(
+      await database.run(claimSpeech(store, claimed.userId, claimed.messageId, MAC, clock)),
+    ),
     true,
   );
   assert.deepEqual(
     await database.run(markSpeechPushed(store, claimed.userId, claimed.messageId, clock)),
-    {
-      ok: false,
-      refusal: SPEECH_REFUSAL.ALREADY_CLAIMED,
-    },
+    Result.fail(SPEECH_REFUSAL.ALREADY_CLAIMED),
   );
   assert.equal(
-    (await database.run(markSpeechSpoken(store, claimed.userId, claimed.messageId, MAC))).ok,
+    Result.isSuccess(
+      await database.run(markSpeechSpoken(store, claimed.userId, claimed.messageId, MAC)),
+    ),
     true,
   );
 
   const due = await offered(unclaimed.userId);
   const later = clock + SPEECH_OFFER.TTL_MS;
-  assert.deepEqual(await database.run(markSpeechPushed(store, due.userId, due.messageId, later)), {
-    ok: false,
-    refusal: SPEECH_REFUSAL.EXPIRED,
-  });
-  assert.deepEqual(await database.run(claimSpeech(store, due.userId, due.messageId, MAC, later)), {
-    ok: false,
-    refusal: SPEECH_REFUSAL.EXPIRED,
-  });
+  assert.deepEqual(
+    await database.run(markSpeechPushed(store, due.userId, due.messageId, later)),
+    Result.fail(SPEECH_REFUSAL.EXPIRED),
+  );
+  assert.deepEqual(
+    await database.run(claimSpeech(store, due.userId, due.messageId, MAC, later)),
+    Result.fail(SPEECH_REFUSAL.EXPIRED),
+  );
   assert.deepEqual(await openOffers({ userId: unclaimed.userId }), [
     {
       userId: due.userId,
@@ -516,7 +506,9 @@ test("the sweep expires an offer past its instant, claimed or not, marks it unsp
   const unclaimed = await offered();
   const claimed = await offered(unclaimed.userId);
   assert.equal(
-    (await database.run(claimSpeech(store, claimed.userId, claimed.messageId, MAC, clock))).ok,
+    Result.isSuccess(
+      await database.run(claimSpeech(store, claimed.userId, claimed.messageId, MAC, clock)),
+    ),
     true,
   );
   clock = NOW + 60_000;
@@ -562,10 +554,7 @@ test("the sweep expires an offer past its instant, claimed or not, marks it unsp
     assert.equal(await viewMarksUnspoken(row), true);
     assert.deepEqual(
       await database.run(claimSpeech(store, row.userId, row.messageId, PHONE, clock)),
-      {
-        ok: false,
-        refusal: SPEECH_REFUSAL.SETTLED,
-      },
+      Result.fail(SPEECH_REFUSAL.SETTLED),
     );
   }
   assert.deepEqual(
@@ -637,7 +626,7 @@ test("a sweep write racing a settled transition is refused under the lock: the o
           event.kind === CONVERSATION_EVENT_KIND.SPEECH_EXPIRED
             ? Effect.tap(
                 markSpeechPushed(store, target.userId, event.messageId, clock, PHONE),
-                (pushed) => Effect.sync(() => assert.equal(pushed.ok, true)),
+                (pushed) => Effect.sync(() => assert.ok(Result.isSuccess(pushed))),
               )
             : Effect.void,
           () => store.writer.recordEvent(target, event),

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { eq } from "drizzle-orm";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Effect, Exit, Result, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -252,7 +252,7 @@ test("an offer another device claimed first is not delivered here", async () => 
   const f = await stand(target, await voiceSession(target.userId, mine));
   const messageId = await offered(target, "Claimed elsewhere.");
   assert.equal(
-    (await database.run(claimSpeech(speech, target.userId, messageId, other, NOW))).ok,
+    Result.isSuccess(await database.run(claimSpeech(speech, target.userId, messageId, other, NOW))),
     true,
   );
 
@@ -294,7 +294,10 @@ test("an offer whose announcement has no words this build can read is left stand
     }),
   );
   assert.ok(written.ok);
-  assert.equal((await database.run(offerSpeech(speech, target.userId, written.id, NOW))).ok, true);
+  assert.equal(
+    Result.isSuccess(await database.run(offerSpeech(speech, target.userId, written.id, NOW))),
+    true,
+  );
 
   await database.run(f.briefings.look);
   assert.deepEqual(f.deliveries, []);
@@ -326,11 +329,11 @@ test("offers other devices hold claims on do not take the look's page from a new
   const first = await offered(target, "Claimed elsewhere, one.");
   const second = await offered(target, "Claimed elsewhere, two.");
   assert.equal(
-    (await database.run(claimSpeech(speech, target.userId, first, other, NOW))).ok,
+    Result.isSuccess(await database.run(claimSpeech(speech, target.userId, first, other, NOW))),
     true,
   );
   assert.equal(
-    (await database.run(claimSpeech(speech, target.userId, second, other, NOW))).ok,
+    Result.isSuccess(await database.run(claimSpeech(speech, target.userId, second, other, NOW))),
     true,
   );
   const third = await offered(target, "Still offered.");
