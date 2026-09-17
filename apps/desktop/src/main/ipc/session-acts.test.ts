@@ -119,29 +119,25 @@ it.effect("a host that could not be asked answers the row with this build's own 
   }),
 );
 
-it.effect(
-  "only a panel's row may write: the voice window and the introduction are refused before the host",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture(() => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }));
-      for (const sender of [VOICE, INTRODUCTION]) {
-        assert.throws(
-          () => f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, sender),
-          ActRefused,
-        );
-        assert.throws(
-          () =>
-            f.rows[ACT_KIND.SESSION_EXECUTE_CONTROL](
-              { identity: IDENTITY, controlId: "cancel-run" },
-              sender,
-            ),
-          ActRefused,
-        );
-      }
-      assert.deepEqual(f.asked.messages, []);
-      assert.deepEqual(f.asked.controls, []);
-    }),
-);
+it("only a panel's row may write: the voice window and the introduction are refused before the host", () => {
+  const f = fixture(() => Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }));
+  for (const sender of [VOICE, INTRODUCTION]) {
+    assert.throws(
+      () => f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, sender),
+      ActRefused,
+    );
+    assert.throws(
+      () =>
+        f.rows[ACT_KIND.SESSION_EXECUTE_CONTROL](
+          { identity: IDENTITY, controlId: "cancel-run" },
+          sender,
+        ),
+      ActRefused,
+    );
+  }
+  assert.deepEqual(f.asked.messages, []);
+  assert.deepEqual(f.asked.controls, []);
+});
 
 it.effect(
   "through the router, a refused sender reads as the row's own refusal and an answer keeps its shape",
