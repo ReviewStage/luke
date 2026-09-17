@@ -413,6 +413,13 @@ function deferredLoad() {
   };
 }
 
+/** The thread box around the scroller, which carries what the panel says of the history above it. */
+function thread(container: HTMLDivElement): HTMLElement {
+  const box = container.querySelector(".conversation-thread");
+  if (!(box instanceof HTMLElement)) throw new Error("Missing conversation thread box.");
+  return box;
+}
+
 /** The first message row the list draws, which the panel keeps the reader's place by. */
 function firstRow(container: HTMLDivElement): Element {
   const row = container.querySelector(".conversation-list > li:not(.conversation-break)");
@@ -452,6 +459,8 @@ test("reaching the top asks for older turns once while the view says they stand,
   placeRow(reading, mounted.scroll, () => readingTop);
   mounted.render({ ...BASE_PROPS, view: shortView, onLoadOlder: load.onLoadOlder });
   assert.equal(load.count, 0);
+  // The thread keeps the notice's band above its first row while older turns stand.
+  assert.equal(thread(mounted.container).dataset.olderStands, "true");
   // Scrolling up short of the top asks for nothing.
   scrollElement(mounted.scroll, 160);
   assert.equal(load.count, 0);
@@ -479,6 +488,10 @@ test("reaching the top asks for older turns once while the view says they stand,
   });
   assert.notEqual(firstRow(mounted.container), reading);
   assert.equal(metrics.state.scrollTop, 300);
+  // The notice leaves with the page, before the ask's answer has travelled
+  // back, and the band above the first row leaves with the history's end.
+  assert.equal(mounted.container.querySelector(".conversation-loading-older"), null);
+  assert.equal(thread(mounted.container).dataset.olderStands, undefined);
   await load.settle();
   assert.equal(mounted.container.querySelector(".conversation-loading-older"), null);
   // The beginning was reached, so reaching the top again asks for nothing.

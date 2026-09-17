@@ -310,6 +310,10 @@ export function ConversationPanel({
   const seek = useRef<TailSeek | undefined>(undefined);
   const thread = view.groups.length > 0 || live.length > 0 || spokenAskPending;
   const olderStands = view.hasOlder === true && onLoadOlder !== undefined;
+  // The page lands on the view before the ask answers, so the notice is
+  // taken down the render the view moves under the ask and not the render
+  // the answer arrives, or it would stand over the rows it announced.
+  const olderOnItsWay = loadingOlder && sameViewMark(askedOver.current, viewMark(view));
   // The query someone typed into the search field, and the message a pressed
   // result landed the thread on. Held here rather than above because nothing
   // else answers to them — and corrected during the render that discovers
@@ -517,6 +521,7 @@ export function ConversationPanel({
         <div
           className="conversation-thread"
           data-behind-results={resultsShowing ? "true" : undefined}
+          data-older-stands={olderStands ? "true" : undefined}
         >
           <div
             className="conversation-scroll"
@@ -549,7 +554,7 @@ export function ConversationPanel({
               </ConversationTurns>
             </div>
           </div>
-          {loadingOlder ? (
+          {olderOnItsWay ? (
             <p className="conversation-notice conversation-loading-older" role="status">
               {LOADING_OLDER_NOTICE}
             </p>
