@@ -9,6 +9,7 @@ import {
   type WorkspaceReadResult,
   type WorkspaceWriteResult,
 } from "@sidecar/runtime";
+import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   isWireString,
@@ -38,20 +39,22 @@ import type { ToolContext, ToolModule } from "./tool-module.js";
 
 /** How the workspace tools reach the agent's own files: bounded to the workspace by the host that supplies it. */
 export interface BrainWorkspaceAccess {
-  read(name: string): Effect.Effect<WorkspaceReadResult>;
-  write(name: string, content: string): Effect.Effect<WorkspaceWriteResult>;
+  read(name: string): Effect.Effect<WorkspaceReadResult, ToolHostUnavailable>;
+  write(name: string, content: string): Effect.Effect<WorkspaceWriteResult, ToolHostUnavailable>;
   /** Appends an entry to today's dated note, the day being the host's own clock's, creating the note where none stands. */
-  append(entry: string): Effect.Effect<WorkspaceAppendResult>;
+  append(entry: string): Effect.Effect<WorkspaceAppendResult, ToolHostUnavailable>;
   /** The dated notes newest first, at most `limit` of them, each with its character count. */
-  listNotes(limit: number): Effect.Effect<readonly DailyNoteListing[]>;
-  loadSkill(location: string): Effect.Effect<SkillLoad>;
+  listNotes(limit: number): Effect.Effect<readonly DailyNoteListing[], ToolHostUnavailable>;
+  loadSkill(location: string): Effect.Effect<SkillLoad, ToolHostUnavailable>;
 }
 
 export interface WorkspaceToolContext extends ToolContext {
   /** The agent's own files, or nothing for an agent with no workspace, which refuses every call. */
   readonly workspace: BrainWorkspaceAccess | undefined;
   /** Records an effect before it runs and its result before the model reads it; the executor's journal. */
-  journal(effect: Effect.Effect<WireRecord>): Effect.Effect<WireRecord>;
+  journal(
+    effect: Effect.Effect<WireRecord, ToolHostUnavailable>,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable>;
 }
 
 export type WorkspaceToolModule = ToolModule<WireRecord, WorkspaceToolContext>;
@@ -116,7 +119,10 @@ const READ_WORKSPACE_FILE: WorkspaceToolModule = {
     "MEMORY.md, BOOTSTRAP.md, or a dated note as memory/YYYY-MM-DD.md. Nothing " +
     "outside the workspace can be named.",
   inputSchema: READ_WORKSPACE_FILE_INPUT,
-  execute(input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
+  execute(
+    input: WireRecord,
+    context: WorkspaceToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.gen(function* () {
       const workspace = context.workspace;
       if (!workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);
@@ -143,7 +149,10 @@ const WRITE_WORKSPACE_FILE: WorkspaceToolModule = {
     "is refused rather than cut, and the refusal names the bound, so read the file, " +
     "condense it, and rewrite it to fit.",
   inputSchema: WRITE_WORKSPACE_FILE_INPUT,
-  execute(input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
+  execute(
+    input: WireRecord,
+    context: WorkspaceToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.suspend(() => {
       const workspace = context.workspace;
       if (!workspace) return Effect.succeed(rejection(REFUSAL_REASON.NO_WORKSPACE));
@@ -175,7 +184,10 @@ const APPEND_DAILY_NOTE: WorkspaceToolModule = {
     "blank line; nothing is rewritten. A note grown past the per-file bound is refused " +
     "rather than cut.",
   inputSchema: APPEND_DAILY_NOTE_INPUT,
-  execute(input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
+  execute(
+    input: WireRecord,
+    context: WorkspaceToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.suspend(() => {
       const workspace = context.workspace;
       if (!workspace) return Effect.succeed(rejection(REFUSAL_REASON.NO_WORKSPACE));
@@ -207,7 +219,10 @@ const LIST_DAILY_NOTES: WorkspaceToolModule = {
     `${maximumListedDailyNotes}, each with its path and how many characters it holds. Read ` +
     "one with read_workspace_file.",
   inputSchema: LIST_DAILY_NOTES_INPUT,
-  execute(_input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
+  execute(
+    _input: WireRecord,
+    context: WorkspaceToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.gen(function* () {
       const workspace = context.workspace;
       if (!workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);
@@ -227,7 +242,10 @@ const LOAD_SKILL: WorkspaceToolModule = {
     "Load one skill's full instructions by the location the available skills list gave. Only " +
     "a listed location answers.",
   inputSchema: LOAD_SKILL_INPUT,
-  execute(input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
+  execute(
+    input: WireRecord,
+    context: WorkspaceToolContext,
+  ): Effect.Effect<WireRecord, ToolHostUnavailable> {
     return Effect.gen(function* () {
       const workspace = context.workspace;
       if (!workspace) return rejection(REFUSAL_REASON.NO_WORKSPACE);

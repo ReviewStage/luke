@@ -310,7 +310,17 @@ const housekeepingTurn = /* @__PURE__ */ Effect.fn("housekeepingTurn")(function*
   let writes = 0;
   let refusal: string | undefined;
   for (const fields of asked.appends) {
-    const answer = yield* module.execute(fields, standing);
+    // The workspace the append reached could not be read or written: nothing
+    // landed, and the turn says so in the host's own words.
+    const answer = yield* Effect.catchTag(
+      module.execute(fields, standing),
+      "ToolHostUnavailable",
+      () =>
+        Effect.succeed<WireRecord>({
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: MEMORY_FLUSH_REFUSAL.HOST_FAILED,
+        }),
+    );
     if (answer.status === ACTION_RESULT_STATUS.ACCEPTED) writes += 1;
     else if (refusal === undefined && isWireString(answer.reason)) refusal = answer.reason;
   }

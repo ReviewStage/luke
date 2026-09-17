@@ -1,4 +1,5 @@
 import type { WireRecord } from "@sidecar/wire";
+import { Data } from "effect";
 
 /**
  * The seams along which Luke's reasoning is replaceable. A host owns the
@@ -36,6 +37,16 @@ export interface ToolExecutionContext {
   readonly signal: AbortSignal;
   isRevoked(): boolean;
 }
+
+/**
+ * A seam the host handed a tool could not answer: the store behind it, or
+ * the key it opens, was unreachable. It is the one failure a tool contract
+ * carries, and it carries no cause, because the host that met the outage
+ * logs it where the cause is known; the executor answers the call as a
+ * rejected record, so the model is told the call did not run and nothing
+ * more.
+ */
+export class ToolHostUnavailable extends Data.TaggedError("ToolHostUnavailable") {}
 
 export interface ModelUsage {
   readonly inputTokens?: number;

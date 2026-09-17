@@ -180,9 +180,9 @@ function seamsOf(
 }
 
 /** One use of the access, built over the test database's own client the way the host builds it over the request's. */
-function withAccess<A>(
+function withAccess<A, E>(
   seams: HostedChildrenSeams,
-  use: (access: ReturnType<typeof hostedChildAccess>) => Effect.Effect<A>,
+  use: (access: ReturnType<typeof hostedChildAccess>) => Effect.Effect<A, E>,
 ): Promise<A> {
   return database.run(
     Effect.flatMap(SqlClient.SqlClient, (client) => use(hostedChildAccess(client, seams))),

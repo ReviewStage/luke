@@ -1,4 +1,9 @@
-import type { RunOrigin, SessionKey, ToolExecutionContext } from "@sidecar/runtime/vocabulary";
+import type {
+  RunOrigin,
+  SessionKey,
+  ToolExecutionContext,
+  ToolHostUnavailable,
+} from "@sidecar/runtime/vocabulary";
 import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import type { Effect, Schema } from "effect";
 
@@ -49,7 +54,9 @@ export interface ToolModule<Output extends WireRecord, Context extends ToolConte
   readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
   /**
    * Carries one call whose arguments parsed as a record; everything the call
-   * may do runs inside, on the fiber of the loop that dispatched it.
+   * may do runs inside, on the fiber of the loop that dispatched it. The one
+   * failure it may end in is a host seam the call reached and could not
+   * answer, which the executor answers as a rejected record.
    */
-  execute(input: WireRecord, context: Context): Effect.Effect<Output>;
+  execute(input: WireRecord, context: Context): Effect.Effect<Output, ToolHostUnavailable>;
 }

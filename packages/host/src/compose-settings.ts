@@ -14,6 +14,7 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import { type AccountRefreshFailed, HostedVaultClient } from "@sidecar/hosted";
+import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
@@ -919,9 +920,16 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
         // after this one, waited on by none of them. The read first drops the
         // ciphertext of any key this build no longer names — the developer's
         // own OpenAI key, until LUKE-205 — so a key nothing reads does not
-        // stay on disk.
+        // stay on disk. A failure holds nothing up and is written down, since
+        // a key that stayed on disk is worth a line.
         yield* Effect.forkScoped(
-          Effect.ignore(Effect.andThen(store.retireStoredApiKeys(), store.snapshot())),
+          catchAllButInterrupt(
+            Effect.andThen(store.retireStoredApiKeys(), store.snapshot()),
+            (cause) =>
+              Effect.sync(() => {
+                report(`Retiring stored API keys failed: ${failureReason(cause)}`);
+              }),
+          ),
         );
         // The two chains this composer holds, each drained by a fiber of the
         // composer's own lifetime scope: the scope closing interrupts both

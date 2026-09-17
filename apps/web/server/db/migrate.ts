@@ -23,6 +23,20 @@ function lockFailure(cause: unknown): Migrator.MigrationError {
 }
 
 /**
+ * A finalizer's step that is tolerated when it fails: the unlock, since the
+ * advisory lock is the session's and goes with the connection, and the close,
+ * since the connection is this process's and goes with it. Each is written
+ * down and neither ends the scope's close, where a thrown promise would have
+ * been a defect rather than the tolerance the finalizers promise.
+ */
+function tolerated<A>(what: string, step: () => Promise<A>): Effect.Effect<void> {
+  return Effect.tryPromise(step).pipe(
+    Effect.catch((failure) => Effect.logWarning(`${what}: ${failure.message}`)),
+    Effect.asVoid,
+  );
+}
+
+/**
  * Keeps same-branch deploys from applying the same migration concurrently. The
  * lock is a session's, so it stands on this one connection for as long as the
  * migration runs; the two finalizers close in reverse, which is what makes the
@@ -34,7 +48,7 @@ export const withMigrationLock = /* @__PURE__ */ Effect.fnUntraced(function* <A,
 ) {
   yield* Effect.acquireRelease(
     Effect.tryPromise({ try: () => connection.connect(), catch: lockFailure }),
-    () => Effect.promise(() => connection.end()),
+    () => tolerated("The migration connection did not close", () => connection.end()),
   );
   yield* Effect.acquireRelease(
     Effect.tryPromise({
@@ -46,7 +60,7 @@ export const withMigrationLock = /* @__PURE__ */ Effect.fnUntraced(function* <A,
       catch: lockFailure,
     }),
     () =>
-      Effect.promise(() =>
+      tolerated("The migration advisory lock was not released", () =>
         connection.query("select pg_advisory_unlock($1, $2)", [
           MIGRATION_LOCK.NAMESPACE,
           MIGRATION_LOCK.RESOURCE,

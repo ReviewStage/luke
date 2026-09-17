@@ -7,6 +7,7 @@ import type { WireBoundaryInput } from "@sidecar/wire";
 import { type FakeResponder, fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Layer, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
+import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
 import type { AccountPreferencesRow } from "../server/hosted/account-store.js";
@@ -55,6 +56,8 @@ interface Backing {
   forgotten: string[];
   stored: Map<string, AccountPreferencesRow>;
   forgetAnalyticsFails: boolean;
+  /** The store refuses every statement, the way an unreachable database does. */
+  storeUnavailable: boolean;
 }
 
 function backing(overrides: Partial<Backing> = {}): Backing {
@@ -63,8 +66,21 @@ function backing(overrides: Partial<Backing> = {}): Backing {
     forgotten: [],
     stored: new Map(),
     forgetAnalyticsFails: false,
+    storeUnavailable: false,
     ...overrides,
   };
+}
+
+const STORE_UNAVAILABLE = new SqlError({
+  reason: new UnknownError({
+    cause: new Error("the fixture's database is unreachable"),
+    message: "connection refused",
+  }),
+});
+
+/** A seam over the backing store: the statement itself, or the store's refusal where it is unreachable. */
+function overStore<A>(state: Backing, statement: () => Promise<A>): Effect.Effect<A, SqlError> {
+  return state.storeUnavailable ? Effect.fail(STORE_UNAVAILABLE) : Effect.promise(statement);
 }
 
 function resolveUserId(request: Request): Effect.Effect<Option.Option<string>> {
@@ -105,10 +121,10 @@ function writePreferences(state: Backing) {
 function groupSeams(state: Backing): AccountAppSeams {
   return {
     resolveUserId,
-    deleteUser: (userId) => Effect.promise(() => deleteUser(state)(userId)),
-    readPreferences: (userId) => Effect.promise(() => readPreferences(state)(userId)),
+    deleteUser: (userId) => overStore(state, () => deleteUser(state)(userId)),
+    readPreferences: (userId) => overStore(state, () => readPreferences(state)(userId)),
     writePreferences: (userId, preferences) =>
-      Effect.promise(() => writePreferences(state)(userId, preferences)),
+      overStore(state, () => writePreferences(state)(userId, preferences)),
   };
 }
 
@@ -261,6 +277,21 @@ const EXCHANGES: readonly Exchange[] = [
     state: () => backing(),
     request: () => new Request(`${ORIGIN}/api/account/preferences`, { method: "DELETE" }),
     finalState: () => backing(),
+  },
+  // The store is unreachable: the erasure is refused as unavailable, so the
+  // caller knows to ask again, and the analytics forget that ran first is
+  // the only thing that landed.
+  {
+    name: "delete-store-unavailable",
+    state: () => backing({ storeUnavailable: true }),
+    request: deleteRequest,
+    finalState: () => backing({ storeUnavailable: true, forgotten: [USER_ID] }),
+  },
+  {
+    name: "preferences-read-store-unavailable",
+    state: () => backing({ storeUnavailable: true }),
+    request: () => preferencesReadRequest(),
+    finalState: () => backing({ storeUnavailable: true }),
   },
 ];
 

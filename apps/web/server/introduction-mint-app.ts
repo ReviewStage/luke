@@ -4,7 +4,12 @@ import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_SERVICE_PATH } from "./core.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./hosted/http.js";
-import { hostedJsonResponse, hostedMethod, hostedNotFoundRoute } from "./hosted/http-effect.js";
+import {
+  hostedJsonResponse,
+  hostedMethod,
+  hostedNotFoundRoute,
+  hostedStoreOrUnavailable,
+} from "./hosted/http-effect.js";
 import {
   INTRODUCTION_MINT_FIELDS,
   introductionClientSecretRequest,
@@ -47,7 +52,7 @@ const introductionMint = /* @__PURE__ */ Effect.fn("introductionMint")(function*
   const apiKey = yield* hostedKey();
   const environment = yield* HostedEnvironment;
   const read = yield* mintPreferences(INTRODUCTION_MINT_FIELDS);
-  const spend = yield* Effect.orDie(seams.spendIntroduction());
+  const spend = yield* refusingMint(hostedStoreOrUnavailable(seams.spendIntroduction()));
   if (!spend.allowed) {
     return yield* Effect.fail(
       hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {

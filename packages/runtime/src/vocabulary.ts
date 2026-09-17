@@ -10,12 +10,13 @@
  */
 
 export { CHILD_RUN_STATUS, type ChildRunRecord, type ChildSpawnReceipt } from "./child-records.js";
-export type {
-  ModelUsage,
-  ReasoningSummary,
-  ToolExecutionContext,
-  ToolInvocation,
-  ToolSchema,
+export {
+  type ModelUsage,
+  type ReasoningSummary,
+  type ToolExecutionContext,
+  ToolHostUnavailable,
+  type ToolInvocation,
+  type ToolSchema,
 } from "./execution.js";
 export {
   type AgentId,

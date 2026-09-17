@@ -11,6 +11,7 @@ import {
   type MemoryTool,
   type MemoryToolContext,
   sameMemoryScope,
+  type ToolHostUnavailable,
 } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
@@ -51,12 +52,12 @@ export interface NotebookMemoryAccess {
     readonly query: string;
     readonly maxResults?: number;
     readonly signal: AbortSignal;
-  }): Effect.Effect<WireRecord>;
+  }): Effect.Effect<WireRecord, ToolHostUnavailable>;
   get(ask: {
     readonly path: string;
     readonly from?: number;
     readonly lines?: number;
-  }): Effect.Effect<WireRecord>;
+  }): Effect.Effect<WireRecord, ToolHostUnavailable>;
 }
 
 /** The most results one memory search answers, and the longest query it takes. */
@@ -176,7 +177,7 @@ function search(
   access: NotebookMemoryAccess | undefined,
   args: WireRecord,
   context: MemoryToolContext,
-): Effect.Effect<WireRecord> {
+): Effect.Effect<WireRecord, ToolHostUnavailable> {
   if (!access) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.NO_INDEX));
   const query = text(args.query)?.replace(/\s+/g, " ").trim().slice(0, maximumMemoryQueryLength);
   if (!query) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.EMPTY_QUERY));
@@ -194,7 +195,7 @@ function search(
 function get(
   access: NotebookMemoryAccess | undefined,
   args: WireRecord,
-): Effect.Effect<WireRecord> {
+): Effect.Effect<WireRecord, ToolHostUnavailable> {
   if (!access) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.NO_INDEX));
   const filePath = text(args.path)?.trim();
   if (!filePath) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.NOT_MEMORY_PATH));
