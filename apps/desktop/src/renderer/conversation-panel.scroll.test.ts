@@ -224,7 +224,7 @@ const FULL_GROUPS = selectConversationView({ ...FIXTURE_INPUT, observed: [], eve
 
 /** A deferred answer to the load-older ask, so a test settles it when it means to; `count` is every ask made. */
 function deferredLoad() {
-  const pending: (() => void)[] = [];
+  const pending: ((landed: boolean) => void)[] = [];
   let count = 0;
   const onLoadOlder = () =>
     new Promise<boolean>((resolve) => {
