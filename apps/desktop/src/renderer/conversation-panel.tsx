@@ -293,17 +293,23 @@ export function ConversationPanel({
     askedOver.current = viewMark(view);
     setLoadingOlder(true);
     loadingOlderRef.current = true;
-    // However the ask ends, the next reach may ask again; what landed is on the view.
-    const settled = () => setLoadingOlder(false);
-    void onLoadOlder().then(settled, settled);
+    // A page that landed moved the history on, whether or not a row of it
+    // shows, so the next look may ask again over the same view; an ask that
+    // landed nothing leaves the mark, so the same view is not asked over twice.
+    const settled = (landed: boolean) => {
+      if (landed) askedOver.current = undefined;
+      setLoadingOlder(false);
+    };
+    void onLoadOlder().then(settled, () => settled(false));
   };
 
   // A page that landed short of the reader's window, or a thread that fits it
   // whole, leaves them at the top with no scroll to make: the next page is
-  // asked for once the view has moved since the last ask and no ask is out.
-  // The page lands on the view before the ask answers, so the look is made
-  // again as the ask settles; a view that did not move is not asked over
-  // twice, so a page the host would not read does not spin the ask.
+  // asked for once a page has landed or the view has moved since the last
+  // ask, and no ask is out. The page lands on the view before the ask
+  // answers, so the look is made again as the ask settles; an ask that
+  // landed nothing over a view that did not move is not made twice, so a
+  // page the host would not read does not spin the ask.
   useEffect(() => {
     if (loadingOlder || sameViewMark(askedOver.current, viewMark(view))) return;
     const element = list.current;

@@ -229,15 +229,16 @@ function deferredLoad() {
   const onLoadOlder = () =>
     new Promise<boolean>((resolve) => {
       count += 1;
-      pending.push(() => resolve(true));
+      pending.push(resolve);
     });
   return {
     onLoadOlder,
     get count() {
       return count;
     },
-    async settle() {
-      for (const resolve of pending.splice(0)) resolve();
+    /** Answers every ask out, as a page that landed unless told otherwise. */
+    async settle(landed = true) {
+      for (const resolve of pending.splice(0)) resolve(landed);
       await act(async () => {
         await Promise.resolve();
       });
@@ -339,21 +340,30 @@ test("a thread that fits its window whole asks for older turns as it lands, agai
   // The same view carried again is not a page landing; nor is an ask that ended with nothing landing.
   mounted.render({ ...props, view: { ...props.view } });
   assert.equal(load.count, 1);
-  await load.settle();
+  await load.settle(false);
   assert.equal(load.count, 1);
+  // A page that landed with nothing of it showing still moved the history on: the top asks again.
+  mounted.render({ ...props, view: { ...props.view } });
+  assert.equal(load.count, 1);
+  scrollElement(mounted.scroll, 0);
+  assert.equal(load.count, 2);
+  await load.settle(true);
+  assert.equal(load.count, 3);
+  await load.settle(false);
+  assert.equal(load.count, 3);
   // The view moving asks again.
   const grown = { groups: FULL_GROUPS.slice(-2), settled: true, hasOlder: true };
   mounted.render({ ...props, view: grown });
-  assert.equal(load.count, 2);
+  assert.equal(load.count, 4);
   // A page landing while that ask is out waits for it to settle, then asks for the next.
   mounted.render({ ...props, view: { groups: FULL_GROUPS, settled: true, hasOlder: true } });
-  assert.equal(load.count, 2);
+  assert.equal(load.count, 4);
   await load.settle();
-  assert.equal(load.count, 3);
+  assert.equal(load.count, 5);
   // Once the view says nothing older stands, the settled ask asks for nothing.
   mounted.render({ ...props, view: { groups: FULL_GROUPS, settled: true } });
   await load.settle();
-  assert.equal(load.count, 3);
+  assert.equal(load.count, 5);
   mounted.unmount();
 });
 

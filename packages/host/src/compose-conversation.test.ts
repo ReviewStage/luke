@@ -1543,3 +1543,44 @@ test("a page read back that did not land answers that nothing landed, and the pi
   assert.ok(client.calls.includes("history:older-1"));
   assert.equal(views().at(-1)?.hasOlder, true);
 });
+
+test("a history page that lands after a Clear is dropped, so the Clear's empty thread does not say older turns stand", async () => {
+  const { composer, client, views } = harness();
+  client.historyAnswers = [ok(tailAnswer("older-1", true))];
+  await Effect.runPromise(composer.loop.refresh);
+  assert.equal(views().at(-1)?.hasOlder, true);
+  // The next history page is held at the gate while the Clear lands.
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  client.history = () =>
+    Effect.promise(async () => {
+      client.calls.push("history:held");
+      await gate;
+      return ok(olderAnswer("older-2", true));
+    });
+  const loading = callMethod(composer, GATEWAY_METHOD.CONVERSATION_LOAD_OLDER);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(client.calls.includes("history:held"));
+  const clearAnswer = client.clearAnswer;
+  assert.ok(clearAnswer);
+  client.messagesAnswer = ok({
+    ...messagesAnswer("hello", "messages-cleared"),
+    conversations: [
+      {
+        id: clearAnswer.opened,
+        kind: CONVERSATION_VIEW_SOURCE.MAIN,
+        openedAt: clearAnswer.openedAt,
+      },
+    ],
+    groups: [],
+  });
+  const cleared = clear(composer);
+  release();
+  assert.equal(await cleared, true);
+  assert.deepEqual(await loading, { loaded: false });
+  const view = views().at(-1);
+  assert.deepEqual(view?.groups, []);
+  assert.equal(view?.hasOlder, undefined);
+});

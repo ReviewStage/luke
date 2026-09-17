@@ -470,8 +470,6 @@ export class ConversationViewSync {
   applyClear(openedAt: number): void {
     this.#clearEpoch += 1;
     let moved = this.#openWindow(openedAt);
-    // Nothing older than the new main's opening is ever read again, so there is no history to page back through.
-    if (this.#closeHistory()) moved = true;
     // A row the last read could not read back stood in the main the Clear
     // stamped; the notice about it goes with the thread it was about.
     if (this.#unreadable !== undefined) {
@@ -693,8 +691,13 @@ export class ConversationViewSync {
    * keeps its own context.
    */
   #openWindow(openedAt: number | undefined): boolean {
-    if (openedAt !== undefined && openedAt > this.#windowStart) this.#windowStart = openedAt;
     let dropped = false;
+    if (openedAt !== undefined && openedAt > this.#windowStart) {
+      this.#windowStart = openedAt;
+      // Nothing before the new main's opening is ever read again, whichever
+      // Mac made the Clear, so there is no history to page back through.
+      if (this.#closeHistory()) dropped = true;
+    }
     for (const [turnId, group] of this.#groups) {
       // Row by row, as the service selects them: a turn still running across
       // a Clear keeps only what it wrote after the new main opened.

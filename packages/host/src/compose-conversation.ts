@@ -511,9 +511,11 @@ export function composeConversation(dependencies: ConversationDependencies): Con
       }
       return false;
     }
+    // A page read before a Clear names history the Clear ended; folding it would say older turns stand again.
+    if (sync.clearEpoch !== epoch) return false;
     const answer: ConversationHistoryAnswer = result.answer;
     const read = yield* readGroups(answer);
-    if (!loop.isCurrent(generation)) return false;
+    if (!loop.isCurrent(generation) || sync.clearEpoch !== epoch) return false;
     if ("unreadable" in read) {
       if (sync.clearEpoch === epoch) sync.markUnreadable(read.unreadable);
       return false;

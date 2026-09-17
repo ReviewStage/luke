@@ -969,3 +969,40 @@ test("a Clear ends the history, the bound ends it, and a reset forgets where it 
   assert.equal(bounded.history(), undefined);
   assert.deepEqual(bounded.cursors(), {});
 });
+
+test("a Clear made on another Mac, arriving as a page whose main opened later, closes the history as a local Clear does", () => {
+  const sync = new ConversationViewSync();
+  sync.applyHistory(
+    historyPage([mainGroup(turnId(1), [ask(1, 1, "before", NOW)])], {
+      older: "older-1",
+      hasOlder: true,
+      next: "head-1",
+    }),
+  );
+  assert.equal(sync.snapshot().hasOlder, true);
+  // The other Mac's Clear opened a new main after the row; this Mac reads it as a page listing that main.
+  sync.applyMessages(
+    page(
+      [mainGroup(turnId(2), [ask(2, 1, "after", NOW + 20_000)])],
+      "head-2",
+      [NEW_MAIN],
+      NOW + 10_000,
+    ),
+  );
+  const snapshot = sync.snapshot();
+  assert.deepEqual(
+    snapshot.groups.map((group) => group.turnId),
+    [turnId(2)],
+  );
+  assert.equal(snapshot.hasOlder, undefined);
+  assert.deepEqual(sync.history(), { older: "older-1", hasOlder: false });
+  // A history page for the new main opens the history again where the service says older rows stand.
+  sync.applyHistory(
+    historyPage([mainGroup(turnId(2), [ask(2, 1, "after", NOW + 20_000)])], {
+      older: "older-2",
+      hasOlder: true,
+      next: "head-2",
+    }),
+  );
+  assert.equal(sync.snapshot().hasOlder, true);
+});
