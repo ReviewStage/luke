@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { HTTP_STATUS, type UnparsedWireValue } from "@sidecar/wire";
+import { Redacted } from "effect";
 import { HOSTED_API_ERROR, type HostedApiError, type HostedQuota } from "../core.js";
 
 /**
@@ -126,15 +127,23 @@ export async function readJsonBody(
   }
 }
 
+/** What every bearer begins with; a secret that adds nothing to it is no secret. */
+const BEARER_PREFIX = "Bearer ";
+
 /**
  * Whether the request's bearer is the deployment's own secret, compared in
  * constant time so a wrong bearer costs the same as a right one however much
  * of it matched. The secret is the caller's to read from the environment; a
  * blank one matches nothing.
  */
-export function bearerMatchesSecret(request: Request, secret: string): boolean {
+export function bearerMatchesSecret(request: Request, secret: Redacted.Redacted): boolean {
   const authorization = request.headers.get("authorization")?.trim() ?? "";
   const offered = Buffer.from(authorization);
-  const wanted = Buffer.from(`Bearer ${secret}`);
-  return secret.length > 0 && offered.length === wanted.length && timingSafeEqual(offered, wanted);
+  // The secret is revealed here alone, into the bytes the constant-time compare reads.
+  const wanted = Buffer.from(`${BEARER_PREFIX}${Redacted.value(secret).trim()}`);
+  return (
+    wanted.length > BEARER_PREFIX.length &&
+    offered.length === wanted.length &&
+    timingSafeEqual(offered, wanted)
+  );
 }

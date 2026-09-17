@@ -19,6 +19,8 @@ export interface HostedEnvironmentValues {
   readonly openAiKey: Redacted.Redacted | undefined;
   /** A deployment-configured Realtime model override, under the name the desktop honours. */
   readonly realtimeModel: string | undefined;
+  /** A deployment-configured model for the hosted brain's turns; the brain's own default otherwise. */
+  readonly brainModel: string | undefined;
   /** The analytics processor's own deletion key; absent means there is no person to erase. */
   readonly posthogPersonalApiKey: Redacted.Redacted | undefined;
   /** The analytics project the personal key deletes from; absent means there is nothing to erase it with. */
@@ -46,9 +48,11 @@ function present(value: Option.Option<string>): string | undefined {
   return text(Option.getOrUndefined(value));
 }
 
+/** A secret stays sealed while its blankness is judged: a blank one is dropped, never revealed and re-wrapped. */
 function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Redacted | undefined {
-  const revealed = present(Option.map(value, Redacted.value));
-  return revealed === undefined ? undefined : Redacted.make(revealed);
+  return Option.getOrUndefined(
+    Option.filter(value, (secret) => text(Redacted.value(secret)) !== undefined),
+  );
 }
 
 /** The four APNs values as {@link apnsCredentialsFromEnvironment} takes them, read through `Config` rather than `process.env` directly. */
@@ -82,6 +86,7 @@ export const hostedEnvironment = Layer.effect(
     Config.all({
       apiKey: Config.option(Config.Redacted(HOSTED_OPENAI_ENVIRONMENT.API_KEY)),
       realtimeModel: Config.option(Config.String(HOSTED_OPENAI_ENVIRONMENT.REALTIME_MODEL)),
+      brainModel: Config.option(Config.String(HOSTED_OPENAI_ENVIRONMENT.BRAIN_MODEL)),
       posthogPersonalApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
       posthogProjectId: Config.option(Config.String(POSTHOG_ENVIRONMENT.PROJECT_ID)),
       posthogApiHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.API_HOST)),
@@ -99,6 +104,7 @@ export const hostedEnvironment = Layer.effect(
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
       realtimeModel: present(read.realtimeModel),
+      brainModel: present(read.brainModel),
       posthogPersonalApiKey: presentRedacted(read.posthogPersonalApiKey),
       posthogProjectId: present(read.posthogProjectId),
       posthogApiHost: present(read.posthogApiHost),

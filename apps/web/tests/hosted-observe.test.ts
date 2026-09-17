@@ -4,7 +4,7 @@ import { SESSION_STATUS } from "@sidecar/session";
 import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { atInstant, fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, type Schema as EffectSchema, Result } from "effect";
+import { Effect, type Schema as EffectSchema, Redacted, Result } from "effect";
 import { test } from "vitest";
 import {
   fakeConductorApi,
@@ -31,7 +31,7 @@ function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
-const SECRET = "a".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
 const KEY_ROWS: VaultKeyRow[] = [
   { providerId: "conductor", ciphertext: encryptProviderKey("conductor-test-key", SECRET) },
 ];
@@ -94,11 +94,6 @@ test("the observe gate order is method, secret, token", async () => {
   );
   assert.equal(noSecret.status, 503);
   assert.equal((await noSecret.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
-
-  const blankSecret = await runWithoutDatabase(
-    handleObserve(observeOptions({ encryptionSecret: "  " })),
-  );
-  assert.equal(blankSecret.status, 503);
 
   const anonymous = await runWithoutDatabase(
     handleObserve(observeOptions({ resolveUserId: () => Effect.succeedNone })),

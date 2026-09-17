@@ -1,9 +1,10 @@
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { betterAuth } from "better-auth";
 import { jwt, lastLoginMethod } from "better-auth/plugins";
+import { Redacted } from "effect";
 import { USER_ROLE } from "./admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
-import { authDeployment } from "./auth-deployment.js";
+import { authDeployment, authSecrets, type SocialClient } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,
@@ -16,12 +17,28 @@ const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
 const MOBILE_OAUTH_CLIENT_ID = MOBILE_OAUTH_CLIENT.id;
 
 const deployment = authDeployment(process.env);
+const secrets = authSecrets(process.env);
+// Note that a missing session secret is reported once, as the module loads,
+// because Better Auth refuses it only when a request reaches it and the log
+// line is what says why sign-in is refused on this deployment.
+if (secrets.sessionSecret === undefined) {
+  console.error("BETTER_AUTH_SECRET is not set; the auth service will refuse to sign sessions.");
+}
+
+/** The one place a social secret is revealed: handed to Better Auth, which puts it on the provider's token request. */
+function socialProvider(client: SocialClient, scope: readonly string[]) {
+  return {
+    clientId: client.clientId,
+    clientSecret: client.clientSecret === undefined ? "" : Redacted.value(client.clientSecret),
+    scope: [...scope],
+  };
+}
 
 export const auth = betterAuth({
   appName: "Luke",
   baseURL: deployment.baseURL,
   trustedOrigins: deployment.trustedOrigins,
-  secret: process.env.BETTER_AUTH_SECRET,
+  secret: secrets.sessionSecret === undefined ? undefined : Redacted.value(secrets.sessionSecret),
   database: authDatabaseAdapter(authDatabase),
   account: ACCOUNT_TOKEN_STORAGE,
   // Admin access is a plain-text `role` on the user, managed by Better Auth:
@@ -36,16 +53,8 @@ export const auth = betterAuth({
   },
   disabledPaths: ["/token"],
   socialProviders: {
-    google: {
-      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-      scope: ["email", "profile"],
-    },
-    github: {
-      clientId: process.env.GITHUB_CLIENT_ID ?? "",
-      clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
-      scope: ["read:user", "user:email"],
-    },
+    google: socialProvider(secrets.google, ["email", "profile"]),
+    github: socialProvider(secrets.github, ["read:user", "user:email"]),
   },
   plugins: [
     // Ahead of the social sign-in it rewrites, and of the provider plugin whose

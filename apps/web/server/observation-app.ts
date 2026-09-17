@@ -288,17 +288,14 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
   const environment = yield* HostedEnvironment;
   // eve's client is composed from the edge's `HttpClient` once for the tick, for every account it visits.
   const eve = yield* eveSessionsComposer;
-  const encryptionSecret = environment.providerKeyEncryptionSecret
-    ? Redacted.value(environment.providerKeyEncryptionSecret)
-    : undefined;
+  const encryptionSecret = environment.providerKeyEncryptionSecret;
   const store = encryptionSecret
     ? hostedStore({ keys: payloadKeyRing(encryptionSecret) })
     : undefined;
   const sender = environment.apnsCredentials
     ? new ApnsSender({ credentials: environment.apnsCredentials })
     : undefined;
-  const cronSecret =
-    environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
+  const cronSecret = environment.cronSecret;
   const eveOrigin = tickEveOrigin(request);
 
   const options: ObservationTickOptions = {

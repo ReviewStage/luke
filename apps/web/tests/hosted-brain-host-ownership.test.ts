@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClient } from "@sidecar/wire/testing";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Redacted, Result, Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { routeAuth } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
@@ -48,7 +48,7 @@ import {
  */
 
 const NOW = 1_800_000_000_000;
-const TEST_VAULT_SECRET = "v".repeat(64);
+const TEST_VAULT_SECRET = Redacted.make("v".repeat(64));
 
 let minted = 0;
 
@@ -94,10 +94,11 @@ interface TestHost {
 function hostOverTestDatabase(): TestHost {
   let storeReads = 0;
   const seams: BrainHostSeams = {
-    store: () => {
-      storeReads += 1;
-      return database.store;
-    },
+    store: () =>
+      Effect.sync(() => {
+        storeReads += 1;
+        return database.store;
+      }),
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership,
@@ -108,12 +109,12 @@ function hostOverTestDatabase(): TestHost {
     scriptedModel: () => false,
     spend: unreached("spend"),
     vaultRows: () => Effect.succeed([]),
-    vaultSecret: () => TEST_VAULT_SECRET,
+    vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
     providerKey: unreached("providerKey"),
     executeAction: unreached("executeAction"),
     now: () => NOW,
   };
-  return { host: brainHost(seams), storeReads: () => storeReads };
+  return { host: Effect.runSync(brainHost(seams)), storeReads: () => storeReads };
 }
 
 function principal(

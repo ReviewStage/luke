@@ -1,6 +1,6 @@
 import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
 import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Option, type Redacted, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -12,9 +12,9 @@ import type { WebStoreRun } from "../../runtime.js";
 import { executeSessionAction } from "../action-execute.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
-import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../encryption.js";
-import { OBSERVATION_ENVIRONMENT } from "../observation-bounds.js";
-import { HOSTED_OPENAI_ENVIRONMENT } from "../openai.js";
+import { payloadKeyRing } from "../encryption.js";
+import { HostedEnvironment } from "../environment.js";
+import { HOSTED_REFUSAL, type HostedRefusal } from "../http-effect.js";
 import { type HostedSpend, spendHostedMeter } from "../quota.js";
 import { type HostedStore, hostedStore, storeWriter } from "../store/index.js";
 import { readApiKeyFor } from "../vault-keys.js";
@@ -28,14 +28,16 @@ import { deploymentEveOrigin } from "./eve-origin.js";
 import type { CloudActionExecutor } from "./performer.js";
 
 /**
- * The deployment's real seams behind the eve project's authored files, each
- * built on first use so the agent's discovery, which imports these files,
- * touches no database and needs no secret: the bearer's account through the
- * auth service's own userinfo, the stored keys out of the vault table under
- * the vault secret, the store under the payload key ring, the writer over
- * the catalog's tool set, Luke's own OpenAI key and model, the notebook
- * search's embedder on that same key, and the daily meter. An authored file
- * hands what it needs here and nothing else.
+ * The deployment's real seams behind the eve project's authored files, built
+ * over `HostedEnvironment` so every secret is read once, as the environment
+ * is, and travels sealed: the bearer's account through the auth service's
+ * own userinfo, the stored keys out of the vault table under the vault
+ * secret, the store under the payload key ring, the writer over the
+ * catalog's tool set, Luke's own OpenAI key and model, the notebook search's
+ * embedder on that same key, and the daily meter. The store and the writer
+ * are each built on first use and kept for the instance, so the agent's
+ * discovery, which imports the authored files, touches no database. An
+ * authored file hands what it needs here and nothing else.
  */
 
 /**
@@ -52,19 +54,21 @@ const DEFAULT_BRAIN_MODEL = BRAIN_OPENAI_DEFAULTS.MODEL;
 type BrainHostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 interface OpenAiAccess {
-  readonly apiKey: string;
+  /** Sealed until the SDK client is built. */
+  readonly apiKey: Redacted.Redacted;
   readonly modelId: string;
 }
 
 export interface BrainHostSeams {
-  readonly store: () => HostedStore;
+  /** The store under the vault's key ring, composed once per instance; the unavailable refusal while the deployment holds no vault secret. */
+  readonly store: () => Effect.Effect<HostedStore, HostedRefusal>;
   /** The writer over the catalog's tool set, composed once per instance; its composition probes every declared schema. */
   readonly writer: () => Effect.Effect<StoreWriter>;
   readonly userInfo: UserInfoEndpoint;
   /** Who a session or a conversation belongs to, for the door. */
   readonly ownership: SessionOwnership;
-  /** The secret the deployment acts for an account under at eve's door, the tick's own; nothing while the environment names none. */
-  readonly deploymentSecret: () => string | undefined;
+  /** The secret the deployment acts for an account under at eve's door, the tick's own, sealed; nothing while the environment names none. */
+  readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on from inside its own service, or nothing where the deployment names none. */
   readonly eveOrigin: () => string | undefined;
   /** Luke's own OpenAI access, or nothing when the deployment holds no key and the hosted brain is off. */
@@ -76,13 +80,13 @@ export interface BrainHostSeams {
   readonly spend: (userId: string) => Promise<HostedSpend>;
   /** The account's stored provider keys, sealed, as the roster and the actions are admitted under them. */
   readonly vaultRows: (userId: string) => BrainHostEffect<readonly VaultKeyRow[]>;
-  /** The secret the vault's rows are sealed under. */
-  readonly vaultSecret: () => string;
-  /** The account's stored key for a cloud provider, decrypted; nothing where none is stored or it cannot be opened. */
+  /** The secret the vault's rows are sealed under, itself sealed; the unavailable refusal while the deployment holds none. */
+  readonly vaultSecret: () => Effect.Effect<Redacted.Redacted, HostedRefusal>;
+  /** The account's stored key for a cloud provider, decrypted and sealed; nothing where none is stored or it cannot be opened. */
   readonly providerKey: (
     userId: string,
     providerId: CloudAgentProviderId,
-  ) => BrainHostEffect<string | undefined>;
+  ) => BrainHostEffect<Redacted.Redacted | undefined>;
   readonly executeAction: CloudActionExecutor;
   readonly now: () => number;
 }
@@ -103,89 +107,75 @@ const findVaultRows = SqlSchema.findAll({
       .where(eq(providerKey.userId, userId)),
 });
 
-function once<Value>(build: () => Value): () => Value {
-  let built: { value: Value } | undefined;
-  return () => {
-    built ??= { value: build() };
-    return built.value;
-  };
-}
-
-/**
- * The same memoization for a value only an effect can build: the writer's
- * composition probes every declared output schema, so a warm instance pays
- * that walk once rather than once per request, and the host's plugin cache is
- * built on the first fiber that reaches it.
- */
-export function onceComposed<Value>(build: Effect.Effect<Value>): () => Effect.Effect<Value> {
-  let built: { value: Value } | undefined;
-  return () =>
-    Effect.suspend(() =>
-      built === undefined
-        ? Effect.map(build, (value) => {
-            built = { value };
-            return value;
-          })
-        : Effect.succeed(built.value),
-    );
-}
-
-function vaultSecret(): string {
-  const secret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET];
-  if (!secret)
-    throw new Error(`${VAULT_ENCRYPTION_ENVIRONMENT.SECRET} is required by the brain host.`);
-  return secret;
-}
-
 /**
  * The deployment's seams, built over the runner the edge composing them hands
- * in. `ownership` and `spend` answer promises because what reads them does:
- * eve's own door takes a promise-shaped ownership, and the AI SDK's model
- * middleware takes a promise-shaped meter. Neither has a request fiber to
- * compose into, so the authored eve file that builds these seams hands its
- * own `runWeb` down rather than this module keeping a runner of its own.
+ * in and the environment service the edge provides. `ownership` and `spend`
+ * answer promises because what reads them does: eve's own door takes a
+ * promise-shaped ownership, and the AI SDK's model middleware takes a
+ * promise-shaped meter. Neither has a request fiber to compose into, so the
+ * authored eve file that builds these seams hands its own `runWeb` down
+ * rather than this module keeping a runner of its own. The vault secret's
+ * absence is answered as the unavailable refusal wherever a seam needs it,
+ * never thrown: a deployment without the vault has no store to read.
  */
-export function productionBrainHostSeams(run: WebStoreRun): BrainHostSeams {
-  const store = once(() => hostedStore({ keys: payloadKeyRing(vaultSecret()) }));
-  const writer = onceComposed(storeWriter({ tools: CATALOG_TOOL_SET }));
-  const vaultRows = (userId: string): BrainHostEffect<readonly VaultKeyRow[]> =>
-    findVaultRows(userId);
-  return {
-    store,
-    writer,
-    ownership: {
-      sessionOwner: (sessionId) => run(runtimeSessionOwner(sessionId)),
-      ownsConversation: (userId, conversationId) =>
-        run(conversationOwnedBy(userId, conversationId)),
-    },
-    deploymentSecret: () => process.env[OBSERVATION_ENVIRONMENT.CRON_SECRET]?.trim() || undefined,
-    eveOrigin: deploymentEveOrigin,
-    userInfo: (input) =>
-      Effect.tryPromise(async () => {
-        // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.
-        const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
-        return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
-      }),
-    openAi: () => {
-      const apiKey = process.env[HOSTED_OPENAI_ENVIRONMENT.API_KEY];
-      if (!apiKey) return undefined;
-      return {
-        apiKey,
-        modelId: process.env[HOSTED_OPENAI_ENVIRONMENT.BRAIN_MODEL] || DEFAULT_BRAIN_MODEL,
-      };
-    },
-    embedder: () => {
-      const apiKey = process.env[HOSTED_OPENAI_ENVIRONMENT.API_KEY];
-      return apiKey ? hostedEmbedder(apiKey) : undefined;
-    },
-    scriptedModel: () =>
-      process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,
-    spend: (userId) => run(spendHostedMeter({ userId, now: Date.now() })),
-    vaultRows,
-    vaultSecret,
-    providerKey: (userId, providerId) =>
-      Effect.flatMap(vaultRows(userId), (rows) => readApiKeyFor(rows, vaultSecret())(providerId)()),
-    executeAction: (input) => executeSessionAction(input),
-    now: () => Date.now(),
-  };
-}
+export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("productionBrainHostSeams")(
+  function* (run: WebStoreRun): Effect.fn.Return<BrainHostSeams, never, HostedEnvironment> {
+    const environment = yield* HostedEnvironment;
+    const vaultSecret: Effect.Effect<Redacted.Redacted, HostedRefusal> =
+      environment.providerKeyEncryptionSecret === undefined
+        ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
+        : Effect.succeed(environment.providerKeyEncryptionSecret);
+    // Each is composed on its first use and kept for the instance: the writer's
+    // composition probes every declared output schema, so a warm instance pays
+    // that walk once rather than once per request.
+    const store = yield* Effect.cached(
+      Effect.map(vaultSecret, (secret) => hostedStore({ keys: payloadKeyRing(secret) })),
+    );
+    const writer = yield* Effect.cached(storeWriter({ tools: CATALOG_TOOL_SET }));
+    const vaultRows = (userId: string): BrainHostEffect<readonly VaultKeyRow[]> =>
+      findVaultRows(userId);
+    return {
+      store: () => store,
+      writer: () => writer,
+      ownership: {
+        sessionOwner: (sessionId) => run(runtimeSessionOwner(sessionId)),
+        ownsConversation: (userId, conversationId) =>
+          run(conversationOwnedBy(userId, conversationId)),
+      },
+      deploymentSecret: () => environment.cronSecret,
+      eveOrigin: deploymentEveOrigin,
+      userInfo: (input) =>
+        Effect.tryPromise(async () => {
+          // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.
+          const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
+          return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
+        }),
+      openAi: () =>
+        environment.openAiKey === undefined
+          ? undefined
+          : {
+              apiKey: environment.openAiKey,
+              modelId: environment.brainModel ?? DEFAULT_BRAIN_MODEL,
+            },
+      embedder: () =>
+        environment.openAiKey === undefined ? undefined : hostedEmbedder(environment.openAiKey),
+      scriptedModel: () =>
+        process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,
+      spend: (userId) => run(spendHostedMeter({ userId, now: Date.now() })),
+      vaultRows,
+      vaultSecret: () => vaultSecret,
+      // A row the vault cannot open under a deployment with no secret is a key that is absent.
+      providerKey: (userId, providerId) =>
+        Effect.flatMap(vaultRows(userId), (rows) =>
+          Effect.flatMap(Effect.option(vaultSecret), (secret) =>
+            Option.match(secret, {
+              onNone: () => Effect.succeed(undefined),
+              onSome: (held) => readApiKeyFor(rows, held)(providerId)(),
+            }),
+          ),
+        ),
+      executeAction: (input) => executeSessionAction(input),
+      now: () => Date.now(),
+    };
+  },
+);

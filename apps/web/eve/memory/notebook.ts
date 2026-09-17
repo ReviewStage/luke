@@ -2,9 +2,8 @@ import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import { Effect } from "effect";
 import { defineMemory, defineMemoryProvider } from "eve/memory";
 import { actedForAccount } from "../../server/hosted/brain-host/auth.js";
-import { productionBrainHostSeams } from "../../server/hosted/brain-host/production.js";
 import { runWeb } from "../../server/runtime.js";
-import { host } from "../host.js";
+import { host, seams } from "../host.js";
 import { scriptedModel } from "../scripted-model.js";
 
 /**
@@ -23,8 +22,6 @@ import { scriptedModel } from "../scripted-model.js";
  * could not run is reported and the compaction proceeds: nothing here may
  * fail the developer's turn.
  */
-
-const seams = productionBrainHostSeams(runWeb);
 
 export default defineMemory({
   scope: (context) => actedForAccount(context.session.auth.current) ?? null,

@@ -1,4 +1,4 @@
-import { Effect, Option, type Schema } from "effect";
+import { Effect, Option, Redacted, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -44,7 +44,7 @@ export interface ConversationReadOptions
     providerSessionId: string;
     afterMessageId?: string;
     beforeOffset?: number;
-    apiKey: string;
+    apiKey: Redacted.Redacted;
   }) => Effect.Effect<HostedConversationAnswer | ConversationReadRefusal>;
 }
 
@@ -84,8 +84,8 @@ export function handleConversationRead(
       );
     }
 
-    const secret = (encryptionSecret ?? "").trim();
-    if (!secret) {
+    const secret = encryptionSecret;
+    if (secret === undefined) {
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
 
@@ -135,9 +135,9 @@ export function handleConversationRead(
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
 
-    let apiKey: string;
+    let apiKey: Redacted.Redacted;
     try {
-      apiKey = decryptProviderKey(keyRow.ciphertext, secret);
+      apiKey = Redacted.make(decryptProviderKey(keyRow.ciphertext, secret));
     } catch {
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }

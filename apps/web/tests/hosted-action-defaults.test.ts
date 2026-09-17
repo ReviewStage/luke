@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Redacted } from "effect";
 import { ACTION_KIND, type WireRecord, type WorkspaceAgentSelection } from "../server/core";
 import { user } from "../server/db/auth-schema";
 import { accountWorkspacePreference } from "../server/db/preferences-schema";
@@ -25,7 +25,7 @@ import { testSqlClient } from "./support/sql-client";
  * Synthetic accounts and keys throughout.
  */
 
-const SECRET = "a".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
 
 const EMPTY_ROSTER: ActionRoster = {
   observations: [],

@@ -3,7 +3,7 @@ import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { and, eq, isNull } from "drizzle-orm";
-import { Effect, ManagedRuntime, Result, Schema } from "effect";
+import { Effect, ManagedRuntime, Redacted, Result, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { defineEval } from "eve/evals";
 import {
@@ -201,7 +201,7 @@ export default defineEval({
       assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.equal(answer.parts.filter((part) => isTextUIPart(part)).length, 1);
 
-      const store = hostedStore({ keys: payloadKeyRing(secret) });
+      const store = hostedStore({ keys: payloadKeyRing(Redacted.make(secret)) });
       const user = await run(store.workspace.read(LOCAL_DEV_PRINCIPAL, WORKSPACE_FILE.USER));
       assert.ok(user);
       assert.equal(user.content.split(SCRIPTED_FACT).length - 1, 1);

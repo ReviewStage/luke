@@ -1,4 +1,4 @@
-import type { Effect, Layer } from "effect";
+import type { Effect, Layer, Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { conductorPlugin } from "../../../../packages/providers/src/conductor/index.js";
 import type { CloudSessionPlugin } from "../../../../packages/providers/src/shared/cloud-pass.js";
@@ -13,7 +13,7 @@ import { CLOUD_AGENT_PROVIDER_ID } from "../core.js";
  * debounced pass could only ever answer with nothing.
  */
 interface CloudAdapterSeams {
-  readApiKey: () => Effect.Effect<string | undefined>;
+  readApiKey: () => Effect.Effect<Redacted.Redacted | undefined>;
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   /**

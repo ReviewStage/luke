@@ -37,7 +37,7 @@ import {
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Cause, Deferred, Effect, Queue, type Scope } from "effect";
+import { Cause, Deferred, Effect, Queue, Redacted, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -411,7 +411,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
         const local = yield* Effect.orDie(store.readStoredApiKey(providerId));
         if (local === undefined) continue;
         if (!held.has(providerId)) {
-          const stored = yield* hostedVault.storeKey(providerId, local);
+          // The key is revealed here alone, into the body the vault client sends.
+          const stored = yield* hostedVault.storeKey(providerId, Redacted.value(local));
           if (!stored?.stored) continue;
           moved = true;
         }

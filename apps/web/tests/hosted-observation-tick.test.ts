@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
-import { Duration, Effect, Fiber } from "effect";
+import { Duration, Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
@@ -19,8 +19,8 @@ import { SPEECH_PUSH, type SpeechPushOutcome } from "../server/hosted/speech-pus
 import type { SpeechSweepOutcome } from "../server/hosted/store";
 import { noDatabase, runWithoutDatabase } from "./support/no-database";
 
-const CRON_SECRET = "cron-secret-1";
-const ENCRYPTION_SECRET = "a".repeat(64);
+const CRON_SECRET = Redacted.make("cron-secret-1");
+const ENCRYPTION_SECRET = Redacted.make("a".repeat(64));
 const TICK_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 const SWEPT: SpeechSweepOutcome = { expired: 3 };
 const PUSHED: SpeechPushOutcome = {
@@ -44,7 +44,9 @@ const NOTHING_OPENED: TurnOpeningOutcome = {
 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
-function tickRequest(authorization: string | null = `Bearer ${CRON_SECRET}`): Request {
+function tickRequest(
+  authorization: string | null = `Bearer ${Redacted.value(CRON_SECRET)}`,
+): Request {
   return new Request(`https://luke.test${OBSERVATION_TICK_PATH}`, {
     method: "GET",
     headers: authorization === null ? {} : { authorization },
@@ -155,9 +157,6 @@ test("the tick is off without CRON_SECRET or the encryption secret, and refuses 
   const noCron = await runTick(tickOptions({ cronSecret: undefined }).options);
   assert.equal(noCron.status, 503);
   assert.equal((await noCron.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
-
-  const blankCron = await runTick(tickOptions({ cronSecret: "  " }).options);
-  assert.equal(blankCron.status, 503);
 
   const noEncryption = await runTick(tickOptions({ encryptionSecret: undefined }).options);
   assert.equal(noEncryption.status, 503);

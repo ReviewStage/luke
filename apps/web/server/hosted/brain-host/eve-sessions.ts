@@ -4,7 +4,7 @@
 
 import { delayLadder } from "@sidecar/runtime/effect";
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Duration, Effect, Schema as EffectSchema, Result } from "effect";
+import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
@@ -214,8 +214,8 @@ export type EveCaller =
     }
   | {
       readonly kind: typeof EVE_CALLER.DEPLOYMENT;
-      /** The deployment's own secret, the one the door's deployment actor was composed with. */
-      readonly secret: string;
+      /** The deployment's own secret, the one the door's deployment actor was composed with; revealed onto the bearer alone. */
+      readonly secret: Redacted.Redacted;
       /** The account acted for: one the caller already established, never one a request named. */
       readonly account: string;
     };
@@ -238,7 +238,7 @@ function callerHeaders(caller: EveCaller) {
       return { authorization: caller.authorization };
     case EVE_CALLER.DEPLOYMENT:
       return {
-        authorization: `Bearer ${caller.secret}`,
+        authorization: `Bearer ${Redacted.value(caller.secret)}`,
         [BRAIN_HOST_HEADER.ACCOUNT]: caller.account,
       };
   }

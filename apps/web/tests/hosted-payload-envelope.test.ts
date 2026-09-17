@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Redacted } from "effect";
 import { test } from "vitest";
 import {
   decryptProviderKey,
@@ -9,8 +10,8 @@ import {
   sealPayload,
 } from "../server/hosted/encryption";
 
-const SECRET = "a".repeat(64);
-const NEXT_SECRET = "b".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
+const NEXT_SECRET = Redacted.make("b".repeat(64));
 const USER = "user-1";
 
 test("a sealed payload names its key, opens under the same ring and binding, and reads as nothing without them", () => {

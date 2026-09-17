@@ -1,5 +1,5 @@
 import { pbkdf2Sync } from "node:crypto";
-import { Effect, Option, type Schema } from "effect";
+import { Effect, Option, Redacted, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "../core.js";
@@ -51,7 +51,7 @@ const optionally = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 export interface ObservationPassInput {
   userId: string;
   rows: readonly VaultKeyRow[];
-  secret: string;
+  secret: Redacted.Redacted;
   store: ObservationStore;
   seams: CloudObserveSeams;
   now: number;
@@ -104,10 +104,11 @@ const KEY_FINGERPRINT = {
  * the Mac does on every launch, rewriting the stored ciphertext under a fresh
  * nonce — keeps its fingerprint, and a different key has another.
  */
-export function keyFingerprint(apiKey: string, secret: string): string {
+export function keyFingerprint(apiKey: Redacted.Redacted, secret: Redacted.Redacted): string {
+  // Both are revealed here alone, into the derivation's bytes.
   return pbkdf2Sync(
-    apiKey,
-    secret,
+    Redacted.value(apiKey),
+    Redacted.value(secret).trim(),
     KEY_FINGERPRINT.ITERATIONS,
     KEY_FINGERPRINT.LENGTH_BYTES,
     KEY_FINGERPRINT.DIGEST,
@@ -117,7 +118,7 @@ export function keyFingerprint(apiKey: string, secret: string): string {
 /** The fingerprint of each cloud provider's standing key, by provider; a row this secret cannot open names none. */
 function keyFingerprints(
   rows: readonly VaultKeyRow[],
-  secret: string,
+  secret: Redacted.Redacted,
 ): Map<CloudAgentProviderId, string> {
   const fingerprints = new Map<CloudAgentProviderId, string>();
   for (const row of rows) {
@@ -125,7 +126,7 @@ function keyFingerprints(
     try {
       fingerprints.set(
         row.providerId,
-        keyFingerprint(decryptProviderKey(row.ciphertext, secret), secret),
+        keyFingerprint(Redacted.make(decryptProviderKey(row.ciphertext, secret)), secret),
       );
     } catch {
       // A key this deployment cannot open observed nothing; the pass reports it as unreadable.
@@ -143,7 +144,7 @@ function keyFingerprints(
 function rosterObservedUnder(
   roster: ObservedRoster,
   rows: readonly VaultKeyRow[],
-  secret: string,
+  secret: Redacted.Redacted,
 ): boolean {
   const standing = keyFingerprints(rows, secret);
   if (roster.providers.length !== standing.size) return false;
@@ -161,7 +162,7 @@ export const storedRoster = /* @__PURE__ */ Effect.fn("storedRoster")(function* 
   store: ObservationStore,
   userId: string,
   rows: readonly VaultKeyRow[],
-  secret: string,
+  secret: Redacted.Redacted,
 ): Effect.fn.Return<StoredSnapshot | undefined, never, SqlClient.SqlClient> {
   const read = yield* optionally(store.roster.read(userId));
   if (Option.isNone(read)) {
@@ -285,7 +286,7 @@ export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot"
 export const rosterForAction = /* @__PURE__ */ Effect.fn("rosterForAction")(function* (input: {
   userId: string;
   providerId: CloudAgentProviderId;
-  secret: string;
+  secret: Redacted.Redacted;
   store: ObservationStore;
   readVaultKeys: (userId: string) => VaultKeyEffect<VaultKeyRow[]>;
   seams: CloudObserveSeams;

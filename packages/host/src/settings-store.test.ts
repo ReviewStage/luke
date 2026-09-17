@@ -44,7 +44,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { ConfigProvider, Context, Effect, Layer } from "effect";
+import { ConfigProvider, Context, Effect, Layer, Redacted } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { test } from "vitest";
@@ -217,6 +217,11 @@ interface PromisedSettingsStore {
   readAppleCalendarConnection(): Promise<AppleCalendarConnection | undefined>;
 }
 
+/** The store hands a key out sealed; the assertions here are written against the string it seals. */
+function revealed(key: Redacted.Redacted | undefined): string | undefined {
+  return key === undefined ? undefined : Redacted.value(key);
+}
+
 function awaitedStoreOf(
   store: SettingsStore,
   services: Context.Context<never>,
@@ -241,8 +246,9 @@ function awaitedStoreOf(
       awaited(store.accountPreferencesSyncBaseline(accountEmail)),
     setAccountPreferencesSyncBaseline: (accountEmail, preferences) =>
       awaited(store.setAccountPreferencesSyncBaseline(accountEmail, preferences)),
-    readApiKey: (providerId) => awaited(store.readApiKey(providerId)),
-    readStoredApiKey: (providerId) => awaited(store.readStoredApiKey(providerId)),
+    readApiKey: (providerId) => awaited(Effect.map(store.readApiKey(providerId), revealed)),
+    readStoredApiKey: (providerId) =>
+      awaited(Effect.map(store.readStoredApiKey(providerId), revealed)),
     retireStoredApiKeys: () => awaited(store.retireStoredApiKeys()),
     setApiKey: (providerId, apiKey) => awaited(store.setApiKey(providerId, apiKey)),
     readCalendarAccounts: () => awaited(store.readCalendarAccounts()),

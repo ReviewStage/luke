@@ -1,4 +1,4 @@
-import { Effect, Result, type Schema } from "effect";
+import { Effect, type Redacted, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { abandonChildConversation, openChildConversation } from "../store/children.js";
@@ -46,7 +46,7 @@ export type ChildTurn = typeof BRAIN_HOST_TURN.CHILD_TASK;
 
 export interface ChildOpenerSeams {
   /** The deployment's own secret, the one eve's door admits the deployment under; undefined means it is unset and no child is opened. */
-  readonly deploymentSecret: () => string | undefined;
+  readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on; undefined on a machine that is neither configured nor deployed. */
   readonly eveOrigin: () => string | undefined;
   /** eve's session client composed for one caller: `eveSessions` in production, a fake in the tests. */

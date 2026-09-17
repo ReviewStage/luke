@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, type Layer } from "effect";
+import { Effect, type Layer, Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
 import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
@@ -25,7 +25,7 @@ import type { VaultKeyRow } from "../server/hosted/vault-route";
 import { runWithoutDatabase } from "./support/no-database";
 import { memoryObservationStore } from "./support/observation-store";
 
-const SECRET = "a".repeat(64);
+const SECRET = Redacted.make("a".repeat(64));
 const NOW = Date.parse("2026-08-12T02:45:00.000Z");
 
 const EMPTY_ROSTER: ActionRoster = {
@@ -450,7 +450,7 @@ test("the roster an action stands on is read once the key is, and reaches the ex
       messageOptions({
         roster: (userId, providerId, secret) =>
           Effect.sync(() => {
-            asked.push(userId, providerId, secret);
+            asked.push(userId, providerId, Redacted.value(secret));
             return EMPTY_ROSTER;
           }),
         execute: (options) =>
@@ -462,7 +462,7 @@ test("the roster an action stands on is read once the key is, and reaches the ex
     ),
   );
 
-  assert.deepEqual(asked, ["user-1", "conductor", SECRET]);
+  assert.deepEqual(asked, ["user-1", "conductor", Redacted.value(SECRET)]);
   assert.equal(received, EMPTY_ROSTER);
 });
 
@@ -622,7 +622,7 @@ async function ask(
       kind,
       providerId: "conductor",
       fields: { provider_id: "conductor", ...fields },
-      apiKey: "key-1",
+      apiKey: Redacted.make("key-1"),
       roster,
       ...(agentSelection === undefined ? undefined : { agentSelection }),
       seams: { httpClient: api.layer },
@@ -714,7 +714,7 @@ test("a key the provider refuses is named as the reason, not a missing session, 
         provider_session_id: CONDUCTOR_SESSION_ID,
         text: "hello",
       },
-      apiKey: "key-1",
+      apiKey: Redacted.make("key-1"),
       roster,
       seams: { httpClient: fakeHttpClientLayer(async () => new Response("{}", { status: 401 })) },
     }),
@@ -739,7 +739,7 @@ test("a provider that cannot be reached is named as the reason", async () => {
         provider_session_id: CONDUCTOR_SESSION_ID,
         text: "hello",
       },
-      apiKey: "key-1",
+      apiKey: Redacted.make("key-1"),
       roster,
       seams: { httpClient: unreachable },
     }),

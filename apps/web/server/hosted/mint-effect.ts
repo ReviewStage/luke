@@ -48,11 +48,11 @@ export function refusingMint<A, R>(
 }
 
 /** The key this deployment holds, or the refusal that says the tier is off. */
-export function hostedKey(): Effect.Effect<string, MintAnswer, HostedEnvironment> {
+export function hostedKey(): Effect.Effect<Redacted.Redacted, MintAnswer, HostedEnvironment> {
   return Effect.flatMap(HostedEnvironment, (environment) =>
     environment.openAiKey === undefined
       ? refuseMint(HOSTED_REFUSAL.UNAVAILABLE)
-      : Effect.succeed(Redacted.value(environment.openAiKey)),
+      : Effect.succeed(environment.openAiKey),
   );
 }
 
@@ -83,13 +83,14 @@ export function mintedConnection(
 
 export function mintOptions(
   seams: MintSeams,
-  apiKey: string,
+  apiKey: Redacted.Redacted,
   model: string | undefined,
   read: VoiceMintPreferences,
   clientSecretRequest: RealtimeConnectionMintOptions["clientSecretRequest"],
 ): RealtimeConnectionMintOptions {
+  // The key is revealed here alone, into the options the upstream mint puts on its request.
   return {
-    apiKey,
+    apiKey: Redacted.value(apiKey),
     model,
     preferences: read,
     clientSecretRequest,

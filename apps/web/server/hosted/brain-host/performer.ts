@@ -1,5 +1,5 @@
 import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
-import { Effect } from "effect";
+import { Effect, type Redacted } from "effect";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -50,7 +50,7 @@ export type CloudActionExecutor = (input: {
   kind: HostedSessionActionKind;
   providerId: CloudAgentProviderId;
   fields: WireRecord;
-  apiKey: string;
+  apiKey: Redacted.Redacted;
   /** The provider's slice of the stored roster, which the execution admits the action against again. */
   roster: ActionRoster;
   /** The developer's stored agent pairing for the provider, riding a creation or a spawn that named no model. */
@@ -61,10 +61,10 @@ interface HostedCarrierDependencies {
   /** The roster as the snapshot holds it now, read again for every action. */
   readonly roster: () => Effect.Effect<HostedRoster, ToolHostUnavailable>;
   readonly defaults: () => Effect.Effect<HostedWorkspaceDefaults, ToolHostUnavailable>;
-  /** The account's stored key for a provider, decrypted; nothing where none is stored. */
+  /** The account's stored key for a provider, decrypted and sealed; nothing where none is stored. */
   readonly apiKey: (
     providerId: CloudAgentProviderId,
-  ) => Effect.Effect<string | undefined, ToolHostUnavailable>;
+  ) => Effect.Effect<Redacted.Redacted | undefined, ToolHostUnavailable>;
   readonly execute: CloudActionExecutor;
 }
 
