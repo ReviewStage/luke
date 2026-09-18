@@ -10,7 +10,9 @@
 3. Run `./scripts/check.sh` for portable-only work. For a macOS, Electron-window,
    native-adapter, microphone, or desktop UI change, run `./scripts/verify.sh`
    and inspect all PNGs. For a web UI change, run `pnpm --filter @luke/web dev`
-   and inspect the page in a browser. For desktop motion changes, run
+   and inspect the page in a browser. For a hosted-service change the Mac
+   talks to, run `./scripts/run.sh --preview` against the PR's Vercel
+   Preview before merging. For desktop motion changes, run
    `pnpm evidence:record` on a physical Mac and inspect the generated MP4 or GIF
    before publishing it. CI cannot run `verify.sh` for you: its jobs are Linux
    only, and by Dean's ruling of 2026-09-11 no macOS job is coming back. The
