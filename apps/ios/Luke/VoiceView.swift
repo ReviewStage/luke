@@ -70,8 +70,6 @@ struct VoiceView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.ground.ignoresSafeArea())
-        .navigationTitle("Luke")
-        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { settingsButton }
         }
