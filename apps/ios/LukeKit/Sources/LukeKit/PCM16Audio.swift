@@ -20,6 +20,20 @@ public enum PCM16Audio {
         }
     }
 
+    /// The loudest sample a chunk of digital silence may hold: GPT Live
+    /// streams `session.output_audio.delta` frames of zeros, with the odd
+    /// ±1 of dither, for as long as the session stands and Luke is not
+    /// speaking, so a chunk that quiet is the line held open and not his
+    /// voice. 32 of 32,767 is about -60 dBFS, well under the softest
+    /// syllable the model renders.
+    public static let silenceFloor: Int16 = 32
+
+    /// Whether a chunk is digital silence — the line held open — rather
+    /// than Luke speaking: every sample within `silenceFloor` of zero.
+    public static func isSilence(_ samples: [Int16]) -> Bool {
+        samples.allSatisfy { $0 > -silenceFloor && $0 < silenceFloor }
+    }
+
     /// Luke's voice as the audio route relays it: the samples a
     /// `session.output_audio.delta` frame carries in `delta`, in the format the
     /// session was created under, or nothing for an event of another type or

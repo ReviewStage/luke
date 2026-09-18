@@ -288,7 +288,10 @@ final class WatchVoiceSessionModel {
 
     /// Everything the session tells the watch. Luke's audio plays as it
     /// arrives; the captions and the developer's own transcript are activity;
-    /// the socket's end for good is the call's end.
+    /// the socket's end for good is the call's end. The silence GPT Live
+    /// streams between his turns is neither his voice nor activity: played,
+    /// it would hold the speaking status for as long as the call stands, and
+    /// counted, it would keep the idle report from ever going.
     private func listen(to session: HostedAudioSession) {
         sessionReader = Task { [weak self] in
             for await event in session.events {
@@ -308,6 +311,7 @@ final class WatchVoiceSessionModel {
 
     private func receive(_ frame: LiveServerEventFrame) {
         if let samples = PCM16Audio.samples(in: frame) {
+            guard !PCM16Audio.isSilence(samples) else { return }
             play(samples)
             noteActivity()
             return

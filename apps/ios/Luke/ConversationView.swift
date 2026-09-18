@@ -33,6 +33,8 @@ import SwiftUI
 /// tap draws reach this phone and nothing else.
 struct ConversationView: View {
     let conversation: ConversationStore
+    /// Room left under the last row for controls floating over the thread; nothing when the screen stands alone.
+    var bottomInset: CGFloat = 0
 
     @Environment(AccountSession.self) private var account
     @Environment(SessionsStore.self) private var store
@@ -49,6 +51,7 @@ struct ConversationView: View {
     private static let endId = "conversation-end"
     /// How long the row a tap opened at stays lifted.
     private static let liftDuration: Duration = .seconds(2)
+    private static let layoutSettle: Duration = .milliseconds(300)
 
     private var turns: [ConversationTurnRows] {
         conversation.groups.map { ConversationTurnRows(group: $0, roster: store.sessions) }
@@ -112,6 +115,7 @@ struct ConversationView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
+            .safeAreaPadding(.bottom, bottomInset)
             // Masked whole, the way the desktop blocks its Conversation
             // subtree: the recording sees the screen's frame and none of
             // its words.
@@ -129,6 +133,17 @@ struct ConversationView: View {
                 case .missing, nil: scroll(proxy, to: Self.endId)
                 }
             }
+            // Lazy rows take their real heights after they land, so a page
+            // aimed at the end while the screen is up settles short of it;
+            // once the layout stands, the end is aimed at again.
+            .task(id: conversation.groups.count) {
+                try? await Task.sleep(for: Self.layoutSettle)
+                guard !Task.isCancelled else { return }
+                switch conversation.opening {
+                case .seeking, .found: return
+                case .missing, nil: scroll(proxy, to: Self.endId)
+                }
+            }
             .onChange(of: conversation.opening) { _, opening in follow(opening, proxy) }
             // A row found before the screen was pushed is scrolled to once the
             // lazy stack has laid out, on the run loop turn after appearing,
@@ -143,8 +158,6 @@ struct ConversationView: View {
             }
         }
         .background(Color.ground.ignoresSafeArea())
-        .navigationTitle("Conversation")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear { now = Date() }
         // The missing-briefing line stands while the screen does; leaving
         // settles it, so the next opening starts clean.
