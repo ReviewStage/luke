@@ -17,7 +17,7 @@ enum WatchRoute: Hashable {
 final class WatchNavigation {
     var path: [WatchRoute] = []
 
-    /// Pushes the sessions list over Luke, the press the top-left button takes.
+    /// Pushes the sessions list over Luke, the press the top-right button takes.
     func showSessions() {
         path = [.sessions]
     }

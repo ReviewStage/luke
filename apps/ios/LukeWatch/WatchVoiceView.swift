@@ -8,6 +8,9 @@ import SwiftUI
 /// speakers' lines land there through the voice writer, so what the call
 /// draws of its own is one caption: Luke's words for the reply under way.
 struct WatchVoiceView: View {
+    /// Who is signed in, drawn as the top-left avatar and named on its sheet.
+    let identity: AccountIdentity
+
     @Environment(WatchAccountSession.self) private var accountSession
     @Environment(WatchRosterStore.self) private var store
     @Environment(ConversationStore.self) private var stored
@@ -15,7 +18,7 @@ struct WatchVoiceView: View {
     @AppStorage(VoiceSettingsKey.voice) private var voice = LiveVoice.default
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
-    @State private var settingsShown = false
+    @State private var accountShown = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -42,15 +45,25 @@ struct WatchVoiceView: View {
             model.hangUp()
         }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { sessionsButton }
-            ToolbarItem(placement: .topBarTrailing) { settingsButton }
+            ToolbarItem(placement: .topBarLeading) { accountButton }
+            ToolbarItem(placement: .topBarTrailing) { sessionsButton }
         }
-        .sheet(isPresented: $settingsShown) {
-            WatchVoiceSettingsView()
+        .sheet(isPresented: $accountShown) {
+            WatchAccountView(identity: identity)
         }
     }
 
     // MARK: - Toolbar
+
+    /// Opens the account sheet, where the phone's avatar opens its Profile.
+    private var accountButton: some View {
+        Button {
+            accountShown = true
+        } label: {
+            AccountAvatar(identity: identity, diameter: 26)
+        }
+        .accessibilityLabel("Account profile for \(identity.name ?? identity.email)")
+    }
 
     /// Pushes the sessions list over this screen; its back button returns here.
     private var sessionsButton: some View {
@@ -60,15 +73,6 @@ struct WatchVoiceView: View {
             Label("Sessions", systemImage: "list.bullet")
         }
         .accessibilityLabel("Sessions")
-    }
-
-    private var settingsButton: some View {
-        Button {
-            settingsShown = true
-        } label: {
-            Label("Voice Settings", systemImage: "gearshape")
-        }
-        .accessibilityLabel("Voice Settings")
     }
 
     // MARK: - Floating controls
