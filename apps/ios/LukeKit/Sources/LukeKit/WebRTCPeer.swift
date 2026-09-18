@@ -1,4 +1,5 @@
 #if canImport(LiveKitWebRTC)
+import AVFAudio
 import Foundation
 import LiveKitWebRTC
 
@@ -13,9 +14,9 @@ import LiveKitWebRTC
 // Capture and playback are the framework's own audio device module: the
 // microphone track's source is the device's input, and a remote track plays
 // through its output for as long as the track is enabled, with the audio
-// session configured by the module when the peer stands. Nothing here reads a
-// sample; the bytes that cross the process boundary are the SDP and the
-// channel's JSON, and neither is logged.
+// session configured by `WebRTCAudioRoute` as the module's engine comes up.
+// Nothing here reads a sample; the bytes that cross the process boundary are
+// the SDP and the channel's JSON, and neither is logged.
 
 /// Why the framework could not build what the peer asked for.
 public enum WebRTCPeerFailure: Error, Equatable, Sendable, LocalizedError {
@@ -34,17 +35,50 @@ public enum WebRTCPeerFailure: Error, Equatable, Sendable, LocalizedError {
     }
 }
 
-/// A phone's two peer seams, from one `RTCPeerConnectionFactory`: the
-/// factory owns the audio device module, so the connection and the
-/// microphone it builds share the one capture and playout path.
+/// A phone's peer seams, from one `RTCPeerConnectionFactory`: the factory
+/// owns the audio device module, so the connection and the microphone it
+/// builds share the one capture and playout path. The module is the
+/// framework's `AVAudioEngine` one, the module whose engine lifecycle is
+/// observable and whose audio session is the observer's to configure; the
+/// platform-default module configures nothing and leaves the phone in its
+/// starting playback-only category.
 @MainActor
 public final class WebRTCPeerFactory {
-    private let factory = LKRTCPeerConnectionFactory()
+    private let factory = LKRTCPeerConnectionFactory(
+        audioDeviceModuleType: .audioEngine,
+        bypassVoiceProcessing: false,
+        encoderFactory: nil,
+        decoderFactory: nil,
+        audioProcessingModule: nil
+    )
+    #if os(iOS)
+    private let audioRoute = WebRTCAudioRoute()
+    #endif
 
-    public init() {}
+    public init() {
+        #if os(iOS)
+        factory.audioDeviceModule.observer = audioRoute
+        #endif
+    }
 
     public func makePeerConnection() throws -> any LivePeerConnection {
         try WebRTCPeerConnection(factory: factory)
+    }
+
+    /// The `AVAudioSession` in `WebRTCAudioRoute`'s category before the
+    /// microphone opens, through the framework's own lock on the session so
+    /// the module and the app never interleave their configurations.
+    public func activateAudio() throws {
+        #if os(iOS)
+        try WebRTCAudioRoute.activate()
+        #endif
+    }
+
+    /// The activation given back at the peer's end, telling other apps' audio it may resume.
+    public func releaseAudio() {
+        #if os(iOS)
+        WebRTCAudioRoute.release()
+        #endif
     }
 
     /// The microphone as a track: its source is the audio device module's
@@ -54,6 +88,113 @@ public final class WebRTCPeerFactory {
         return WebRTCAudioTrack(factory.audioTrack(with: source, trackId: UUID().uuidString))
     }
 }
+
+#if os(iOS)
+/// The audio device module's observer. The module builds and tears down its
+/// `AVAudioEngine` around the tracks on the line and, by the framework's
+/// design, leaves the `AVAudioSession` to the observer: an engine enabled
+/// under the process's starting `soloAmbient` has no input route, and the
+/// microphone track then encodes silence and GPT Live hears no one. So every
+/// engine the module enables gets the one category that records as well as
+/// plays, whether or not this enable records yet (the module enables playout
+/// first and adds recording once the track is live, and a category change
+/// between the two would rebuild the route); and the session is given back
+/// once the engine is disabled with nothing left on it. Every callback is
+/// raised on the module's own thread.
+final class WebRTCAudioRoute: NSObject, LKRTCAudioDeviceModuleDelegate {
+    /// Speaker by default and Bluetooth headsets allowed, as the phone's legacy capture chose.
+    static func activate() throws {
+        let session = LKRTCAudioSession.sharedInstance()
+        session.lockForConfiguration()
+        defer { session.unlockForConfiguration() }
+        try session.setCategory(
+            .playAndRecord,
+            mode: .voiceChat,
+            options: [.defaultToSpeaker, .allowBluetoothHFP]
+        )
+        if !session.isActive {
+            try session.setActive(true)
+        }
+    }
+
+    static func release() {
+        let session = LKRTCAudioSession.sharedInstance()
+        session.lockForConfiguration()
+        defer { session.unlockForConfiguration() }
+        try? session.setActive(false)
+    }
+
+    func audioDeviceModule(
+        _ audioDeviceModule: LKRTCAudioDeviceModule,
+        willEnableEngine engine: AVAudioEngine,
+        isPlayoutEnabled: Bool,
+        isRecordingEnabled: Bool,
+        isVoiceProcessingEnabled: Bool
+    ) -> Int {
+        do {
+            try Self.activate()
+            return 0
+        } catch {
+            return -1
+        }
+    }
+
+    func audioDeviceModule(
+        _ audioDeviceModule: LKRTCAudioDeviceModule,
+        didDisableEngine engine: AVAudioEngine,
+        isPlayoutEnabled: Bool,
+        isRecordingEnabled: Bool
+    ) -> Int {
+        if !isPlayoutEnabled, !isRecordingEnabled {
+            Self.release()
+        }
+        return 0
+    }
+
+    func audioDeviceModule(
+        _ audioDeviceModule: LKRTCAudioDeviceModule,
+        didReceiveSpeechActivityEvent speechActivityEvent: LKRTCSpeechActivityEvent
+    ) {}
+
+    func audioDeviceModule(_ audioDeviceModule: LKRTCAudioDeviceModule, didCreateEngine engine: AVAudioEngine) -> Int { 0 }
+
+    func audioDeviceModule(
+        _ audioDeviceModule: LKRTCAudioDeviceModule,
+        willStartEngine engine: AVAudioEngine,
+        isPlayoutEnabled: Bool,
+        isRecordingEnabled: Bool
+    ) -> Int { 0 }
+
+    func audioDeviceModule(
+        _ audioDeviceModule: LKRTCAudioDeviceModule,
+        didStopEngine engine: AVAudioEngine,
+        isPlayoutEnabled: Bool,
+        isRecordingEnabled: Bool
+    ) -> Int { 0 }
+
+    func audioDeviceModule(_ audioDeviceModule: LKRTCAudioDeviceModule, willReleaseEngine engine: AVAudioEngine) -> Int { 0 }
+
+    func audioDeviceModule(
+        _ audioDeviceModule: LKRTCAudioDeviceModule,
+        engine: AVAudioEngine,
+        configureInputFromSource source: AVAudioNode?,
+        toDestination destination: AVAudioNode,
+        format: AVAudioFormat,
+        context: [AnyHashable: Any]
+    ) -> Int { 0 }
+
+    func audioDeviceModule(
+        _ audioDeviceModule: LKRTCAudioDeviceModule,
+        engine: AVAudioEngine,
+        configureOutputFromSource source: AVAudioNode,
+        toDestination destination: AVAudioNode?,
+        format: AVAudioFormat,
+        context: [AnyHashable: Any]
+    ) -> Int { 0 }
+
+    func audioDeviceModuleDidUpdateDevices(_ audioDeviceModule: LKRTCAudioDeviceModule) {}
+}
+#endif
 
 /// An object of the framework's crossing from the thread it was raised on to
 /// the main actor, where the peer reads it. The framework hands each out once
