@@ -98,9 +98,11 @@ public final class WebRTCPeerFactory {
 /// engine the module enables gets the one category that records as well as
 /// plays, whether or not this enable records yet (the module enables playout
 /// first and adds recording once the track is live, and a category change
-/// between the two would rebuild the route); and the session is given back
-/// once the engine is disabled with nothing left on it. Every callback is
-/// raised on the module's own thread.
+/// between the two would rebuild the route). The session is given back by
+/// the peer that held it (`LivePeer.tearDown`, on the main actor, before the
+/// next peer activates) and never from here: every callback is raised on the
+/// module's own thread, and a disable trailing a hung-up peer could otherwise
+/// land after its successor had already taken the route.
 final class WebRTCAudioRoute: NSObject, LKRTCAudioDeviceModuleDelegate {
     /// Speaker by default and Bluetooth headsets allowed, as the phone's legacy capture chose.
     static func activate() throws {
@@ -145,10 +147,7 @@ final class WebRTCAudioRoute: NSObject, LKRTCAudioDeviceModuleDelegate {
         isPlayoutEnabled: Bool,
         isRecordingEnabled: Bool
     ) -> Int {
-        if !isPlayoutEnabled, !isRecordingEnabled {
-            Self.release()
-        }
-        return 0
+        0
     }
 
     func audioDeviceModule(
