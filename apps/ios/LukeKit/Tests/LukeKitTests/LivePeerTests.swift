@@ -233,7 +233,9 @@ final class LivePeerTests: XCTestCase {
         XCTAssertEqual(harness.audioActiveAtMicrophoneOpen, [true], "the route records before the microphone opens on it")
         XCTAssertTrue(harness.audioActive, "the route is held for the peer's life")
 
-        harness.channel?.receive(#"{"type":"session.closed","event_id":"event_2","session":{"id":"live_123"}}"#)
+        harness.channel?.receive(
+            #"{"type":"session.closed","event_id":"event_2","reason":"expired","usage":{"seconds":600}}"#
+        )
 
         XCTAssertFalse(harness.audioActive)
         XCTAssertEqual(harness.audioReleases, 1)
