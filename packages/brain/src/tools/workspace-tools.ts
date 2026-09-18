@@ -24,17 +24,12 @@ import { REFUSAL_REASON } from "./refusals.js";
 import type { ToolContext, ToolModule } from "./tool-module.js";
 
 /**
- * The workspace tools: the one place the brain writes a file at all, and they
- * reach nothing outside the workspace directory, because the host's access is
- * what bounds the names, and a host with none refuses them all. A call whose
- * arguments are not the strings the tool takes is refused before anything is
- * journaled, never filled in, so a malformed write can empty no file: the
- * write module reads its arguments first and only then asks the journal in
- * its context to record and run the effect. The two writes divide by what
- * they are for: a bootstrap file is rewritten whole, deliberately, after a
- * read; a dated note under `memory/` is only ever grown, by appending an
- * entry to today's, so the reply path never rewrites a curated file and a
- * note's earlier entries are never at the mercy of a rewrite that forgot them.
+ * workspace-tools.ts -- the one place the brain writes a file, bounded to its own workspace.
+ *
+ * Note that a call whose arguments are not the strings the tool takes is
+ * refused before anything is journaled, never filled in, so a malformed write
+ * can empty no file. A dated note is only ever grown, never rewritten, so an
+ * entry cannot be lost to a rewrite that forgot it.
  */
 
 /** How the workspace tools reach the agent's own files: bounded to the workspace by the host that supplies it. */
@@ -87,20 +82,20 @@ function erase(schema: EffectSchema.Top): EffectSchema.Codec<unknown, UnparsedWi
   return EffectSchema.make(schema.ast);
 }
 
-const FILE_NAME = trimmedText("The file's name relative to the workspace.");
+const FILE_NAME = trimmedText("The file name, relative to your workspace.");
 
 const READ_WORKSPACE_FILE_INPUT = erase(EffectSchema.Struct({ name: FILE_NAME }));
 
 const WRITE_WORKSPACE_FILE_INPUT = erase(
   EffectSchema.Struct({
     name: FILE_NAME,
-    content: trimmedTextAllowingEmpty("The file's whole new content."),
+    content: trimmedTextAllowingEmpty("The complete new contents."),
   }),
 );
 
 const APPEND_DAILY_NOTE_INPUT = erase(
   EffectSchema.Struct({
-    content: trimmedText("The entry to add to today's note: a few lines of Markdown."),
+    content: trimmedText("What to add to today's note."),
   }),
 );
 
@@ -108,16 +103,15 @@ const LIST_DAILY_NOTES_INPUT = erase(EffectSchema.Struct({}));
 
 const LOAD_SKILL_INPUT = erase(
   EffectSchema.Struct({
-    location: trimmedText("The SKILL.md location exactly as listed."),
+    location: trimmedText("The SKILL.md location, exactly as listed."),
   }),
 );
 
 const READ_WORKSPACE_FILE: WorkspaceToolModule = {
   name: BRAIN_TOOL.READ_WORKSPACE_FILE,
   description:
-    "Read one of your own workspace files whole: AGENTS.md, IDENTITY.md, USER.md, " +
-    "MEMORY.md, BOOTSTRAP.md, or a dated note as memory/YYYY-MM-DD.md. Nothing " +
-    "outside the workspace can be named.",
+    "Read one of your workspace files: AGENTS.md, IDENTITY.md, USER.md, MEMORY.md, " +
+    "BOOTSTRAP.md, or a dated note like memory/YYYY-MM-DD.md.",
   inputSchema: READ_WORKSPACE_FILE_INPUT,
   execute(
     input: WireRecord,
@@ -140,14 +134,10 @@ const READ_WORKSPACE_FILE: WorkspaceToolModule = {
 const WRITE_WORKSPACE_FILE: WorkspaceToolModule = {
   name: BRAIN_TOOL.WRITE_WORKSPACE_FILE,
   description:
-    "Replace one of your five bootstrap files with new content, whole: AGENTS.md, IDENTITY.md, " +
-    "USER.md, MEMORY.md, or BOOTSTRAP.md. A whole-file rewrite is deliberate: read the file " +
-    "first so nothing is lost. A dated note under memory/ is not rewritten here; add to today's " +
-    `with append_daily_note. USER.md and MEMORY.md are budgeted small, ${CURATED_FILE_BUDGET[WORKSPACE_FILE.USER]} ` +
-    `and ${CURATED_FILE_BUDGET[WORKSPACE_FILE.MEMORY]} characters: keep durable decisions ` +
-    "and short summaries there and put detail in a dated note. A write past a file's bound " +
-    "is refused rather than cut, and the refusal names the bound, so read the file, " +
-    "condense it, and rewrite it to fit.",
+    "Overwrite AGENTS.md, IDENTITY.md, USER.md, MEMORY.md, or BOOTSTRAP.md with a whole new " +
+    `file. USER.md holds ${CURATED_FILE_BUDGET[WORKSPACE_FILE.USER]} characters and MEMORY.md ` +
+    `holds ${CURATED_FILE_BUDGET[WORKSPACE_FILE.MEMORY]}. Going over is refused rather than ` +
+    "cut short. For a dated note, use append_daily_note.",
   inputSchema: WRITE_WORKSPACE_FILE_INPUT,
   execute(
     input: WireRecord,
@@ -178,11 +168,8 @@ const WRITE_WORKSPACE_FILE: WorkspaceToolModule = {
 const APPEND_DAILY_NOTE: WorkspaceToolModule = {
   name: BRAIN_TOOL.APPEND_DAILY_NOTE,
   description:
-    "Add an entry to today's dated note, memory/YYYY-MM-DD.md, creating it if the day has " +
-    "none. Use it during work for an observation worth keeping: a decision, a result, " +
-    "something learned. The entry lands after what the note already holds, separated by a " +
-    "blank line; nothing is rewritten. A note grown past the per-file bound is refused " +
-    "rather than cut.",
+    "Add an entry to the end of today's note, memory/YYYY-MM-DD.md, creating it if today " +
+    "has none.",
   inputSchema: APPEND_DAILY_NOTE_INPUT,
   execute(
     input: WireRecord,
@@ -215,9 +202,8 @@ const APPEND_DAILY_NOTE: WorkspaceToolModule = {
 const LIST_DAILY_NOTES: WorkspaceToolModule = {
   name: BRAIN_TOOL.LIST_DAILY_NOTES,
   description:
-    "List your dated notes under memory/, newest first, at most the newest " +
-    `${maximumListedDailyNotes}, each with its path and how many characters it holds. Read ` +
-    "one with read_workspace_file.",
+    `List your dated notes under memory/, newest first, up to ${maximumListedDailyNotes}. ` +
+    "Read one with read_workspace_file.",
   inputSchema: LIST_DAILY_NOTES_INPUT,
   execute(
     _input: WireRecord,
@@ -238,9 +224,7 @@ const LIST_DAILY_NOTES: WorkspaceToolModule = {
 
 const LOAD_SKILL: WorkspaceToolModule = {
   name: BRAIN_TOOL.LOAD_SKILL,
-  description:
-    "Load one skill's full instructions by the location the available skills list gave. Only " +
-    "a listed location answers.",
+  description: "Load a skill's instructions by the location the skills list gave.",
   inputSchema: LOAD_SKILL_INPUT,
   execute(
     input: WireRecord,
