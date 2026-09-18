@@ -674,7 +674,7 @@ authorization URL without a client secret, so a Preview without
 `GOOGLE_CLIENT_SECRET` answers 500 to every Google sign-in before the browser
 leaves for Google (found 2026-09-18); Better Auth's own oauth-proxy setup sets
 the provider secrets in every environment, and Charles chose on 2026-09-18 to
-follow it rather than hold them back from Preview. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+follow it rather than hold them back from Preview; the preview then builds its own Google URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
 ends, or the profile arrives undecryptable. A Preview without it does not expose
 the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
 would require putting production's session-signing and provider-token key into
