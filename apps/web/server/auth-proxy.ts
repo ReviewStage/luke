@@ -12,6 +12,29 @@ import {
 } from "./core.js";
 
 const PROXY_CALLBACK_PATH = "/api/auth/oauth-proxy-callback";
+const SIGN_IN_PATHS = ["/sign-in/social", "/sign-in/oauth2"];
+const AUTHORIZE_PATH = "/oauth2/authorize";
+/** The parameters the OAuth provider plugin signs the login page's query with, and the prompt that sent it there. */
+const SIGNED_QUERY_PARAMS = ["sig", "exp", "ba_iat", "ba_param", "ba_pl", "prompt"];
+
+/**
+ * The authorize request a Preview's sign-in returns to once the proxied
+ * profile has landed. On production the provider plugin resumes the desktop's
+ * pending authorization itself, from the state it stored when the sign-in
+ * began; on a Preview that state is consumed by the proxy callback, which
+ * creates the session and redirects to the sign-in's `callbackURL`, and the
+ * page sends none, so the proxy falls back to the auth base URL and the browser
+ * lands on a 404. Naming the authorize request as the callback re-enters it
+ * with the new session, and the plugin issues the code to the desktop's
+ * loopback as it would have. The signature parameters go because the request
+ * is re-validated whole, and `prompt=login` goes because the login it asked
+ * for has just happened.
+ */
+export function resumeAuthorizeURL(baseURL: string, oauthQuery: string): string {
+  const params = new URLSearchParams(oauthQuery);
+  for (const name of SIGNED_QUERY_PARAMS) params.delete(name);
+  return `${baseURL.replace(/\/$/, "")}${AUTHORIZE_PATH}?${params.toString()}`;
+}
 
 /** Read only proxy state; an ordinary provider state is not this guard's concern. */
 export async function oauthProxyCallbackURL(
@@ -123,7 +146,32 @@ export function authProxy(deployment: AuthDeployment) {
     secret: deployment.proxySecret,
   });
 
-  if (deployment.acceptsProxyProfiles) return proxy;
+  if (deployment.acceptsProxyProfiles) {
+    // Ahead of the proxy's own sign-in hook, which reads the callback this sets.
+    const resumeDesktopAuthorization = {
+      matcher(context: { path?: string }) {
+        return context.path !== undefined && SIGN_IN_PATHS.includes(context.path);
+      },
+      handler: createAuthMiddleware(async (ctx) => {
+        // SAFETY: Better Auth hands over its parsed body as structured-clone data; the wire guards below validate the selected fields.
+        const body = unparsedWire(ctx.body as WireBoundaryInput);
+        if (!isRecord(body) || body.callbackURL !== undefined) return;
+        if (!isWireString(body.oauth_query)) return;
+        return {
+          context: {
+            body: {
+              ...body,
+              callbackURL: resumeAuthorizeURL(ctx.context.baseURL, body.oauth_query),
+            },
+          },
+        };
+      }),
+    };
+    return {
+      ...proxy,
+      hooks: { ...proxy.hooks, before: [resumeDesktopAuthorization, ...proxy.hooks.before] },
+    };
+  }
 
   const proxySecret = deployment.proxySecret;
   if (proxySecret === undefined) {
