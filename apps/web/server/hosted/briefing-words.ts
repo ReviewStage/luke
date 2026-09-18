@@ -7,7 +7,6 @@ import {
   isRecord,
   isStoredToolPart,
   MESSAGE_ROLE,
-  maximumBriefingLength,
   storedToolName,
   TOOL_PART_STATE,
   text,
@@ -18,8 +17,8 @@ import { readMessageById, type SpeechOffer } from "./store/index.js";
 
 /**
  * The briefing an announcement's row carries: the settled announce call's
- * input, read back under the vocabulary the row was written in and bounded
- * as the tool bounds it. A row this build cannot read, or one with no settled
+ * input, read back under the vocabulary the row was written in, whole and as
+ * the model wrote it. A row this build cannot read, or one with no settled
  * announce call on it, has no words, and a caller that would speak or push
  * them leaves the offer standing rather than claiming words it cannot say.
  * The push pass and the live session service read the same words this way.
@@ -41,7 +40,7 @@ export function briefingWordsOf(
         // SAFETY: the part was read back from the row's jsonb column through the vocabulary; its input is the JSON that column held.
         const input = unparsedWire(part.input as WireBoundaryInput);
         const briefing = isRecord(input) ? text(input.briefing) : undefined;
-        if (briefing) return briefing.slice(0, maximumBriefingLength);
+        if (briefing) return briefing;
       }
       return undefined;
     },

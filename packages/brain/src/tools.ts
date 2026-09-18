@@ -30,7 +30,7 @@ import type { ToolContext, ToolModule } from "./tools/tool-module.js";
 import { WORKSPACE_TOOLS } from "./tools/workspace-tools.js";
 import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
 
-export { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength, TOOL_GROUP } from "./tools/names.js";
+export { BRAIN_TOOL, isBrainOnlyTool, TOOL_GROUP } from "./tools/names.js";
 
 /**
  * The brain's tool catalog: every tool a turn could be offered, as the

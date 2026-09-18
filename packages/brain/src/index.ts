@@ -78,7 +78,6 @@ export {
   brainToolCatalog,
   brainToolRegistry,
   hostedBrainToolCatalog,
-  maximumBriefingLength,
   planReadsToolSchema,
   resolveTurnToolPolicy,
   TOOL_GROUP,
