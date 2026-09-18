@@ -30,7 +30,7 @@ export default defineDynamic({
           if (Result.isFailure(admitted)) return null;
           const turn = host.turnKindOf(ctx.session.auth);
           if (!turn) return null;
-          const composed = yield* host.prompt(admitted.success, turn.trigger);
+          const composed = yield* host.prompt(admitted.success);
           prompt.update(() => ({ hash: composed.hash }));
           return defineInstructions({ content: composed.text });
         }),

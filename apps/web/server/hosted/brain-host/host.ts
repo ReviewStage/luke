@@ -77,12 +77,7 @@ import {
 } from "./roster.js";
 import { rotationSeedText } from "./seed.js";
 import { carryStop } from "./stop-carrier.js";
-import {
-  type HostedToolDeclaration,
-  hostedToolDeclarations,
-  hostedTurnPolicy,
-  runHostedTool,
-} from "./tools.js";
+import { type HostedToolDeclaration, hostedToolDeclarations, runHostedTool } from "./tools.js";
 import { hostedTranscriptReads } from "./transcript.js";
 import {
   hostedPrompt,
@@ -181,11 +176,8 @@ export interface BrainHost {
   turnKindOf(auth: SessionAuth): HostedTurnKind | undefined;
   /** The turn eve just started, keyed as the store keys it; nothing for a request that named no kind. */
   turnOf(auth: SessionAuth, sessionId: string, eveTurnId: string): HostedTurn | undefined;
-  /** The prompt a session runs under, composed from the workspace rows under the hosted policy, with the hash its turns are recorded under; the text itself is stored nowhere. */
-  prompt(
-    admitted: AdmittedConversation,
-    trigger: BrainTurnTrigger,
-  ): HostEffect<HostedSessionPrompt>;
+  /** The prompt a session runs under, composed from the workspace rows, with the hash its turns are recorded under; the text itself is stored nowhere. */
+  prompt(admitted: AdmittedConversation): HostEffect<HostedSessionPrompt>;
   /** The standing context one turn opens with: the roster and the projects, as data. */
   standingContext(admitted: AdmittedConversation): HostEffect<string>;
   /** The conversation so far, for a session opened over a conversation with words already said; nothing otherwise. */
@@ -436,13 +428,12 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
         };
       },
 
-      prompt: (admitted, trigger) =>
+      prompt: (admitted) =>
         Effect.gen(function* () {
           const store = yield* seams.store();
           yield* seedHostedWorkspace(store, admitted.target.userId, seams.now());
           const modelId = seams.openAi()?.modelId;
           const built = yield* hostedPrompt(store, admitted.target.userId, {
-            policy: hostedTurnPolicy(trigger),
             ...(modelId !== undefined ? { model: modelId } : undefined),
           });
           return { text: built.text, hash: promptHashOf(built.text) };

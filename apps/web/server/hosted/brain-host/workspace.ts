@@ -19,7 +19,6 @@ import {
   DEFAULT_AGENT_ID,
   dailyNoteDay,
   dailyNotePath,
-  type EffectiveToolPolicy,
   isWorkspaceFile,
   PROMPT_PROFILE,
   parseDailyNoteName,
@@ -166,18 +165,17 @@ export const recentHostedDailyNotes = /* @__PURE__ */ Effect.fn("recentHostedDai
 );
 
 export interface HostedPromptInput {
-  readonly policy: EffectiveToolPolicy;
   readonly model?: string;
 }
 
 /**
- * The prompt one session runs under, built by the same pure builder the
- * desktop uses over the bootstrap files read from the rows: the identity
- * line, the persona, the tools the effective policy offers, the brain's own
- * tool notes, the marker the standing context arrives behind, and the
- * workspace files in order and within their bounds. The service lists no
- * skills and runs in no directory, so those sections are absent rather than
- * invented.
+ * The prompt one session runs under, built by the pure builder over the
+ * bootstrap files read from the rows: the identity line, the persona, the
+ * brain's own tool notes, the marker the standing context arrives behind,
+ * and the workspace files in order and within their bounds. Note that the
+ * tools are named nowhere in it, because the request carries each one's
+ * schema and the policy is read again as every turn starts, so a list
+ * composed once for the session could only go stale.
  */
 export const hostedPrompt = /* @__PURE__ */ Effect.fn("web/hostedPrompt")(function* (
   store: WorkspaceStore,
@@ -195,10 +193,8 @@ export const hostedPrompt = /* @__PURE__ */ Effect.fn("web/hostedPrompt")(functi
     profile: PROMPT_PROFILE.FULL,
     identity: BRAIN_IDENTITY_LINE,
     persona: BRAIN_PERSONA,
-    tools: input.policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
     toolNotes: brainToolNotes(),
     runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
-    skills: [],
     workspaceDirectory: BRAIN_HOST.WORKSPACE_NAME,
     bootstrapFiles: boundBootstrapFiles(files),
     runtime: {
