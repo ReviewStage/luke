@@ -126,9 +126,11 @@ const BREVITY_LINES: readonly string[] = [
 /**
  * The shape of a spoken sentence, from what broadcast writing and the
  * research on voice agents agree on: a listener cannot skim, glance back, or
- * hold a list, so a sentence carries one idea with its subject in front, and
- * what is said uninvited starts with the news, because people interrupting
- * someone busy use no greeting, apology, or name either.
+ * hold a list, so a sentence carries one idea with its subject in front. What
+ * is said uninvited says which work it's about before the news, because the
+ * developer has been doing something else and has forgotten which task "the
+ * review" was, and carries no greeting, apology, or name, because people
+ * interrupting someone busy use none either.
  */
 const SENTENCE_LINES: readonly string[] = [
   "How a sentence goes.",
@@ -137,7 +139,7 @@ const SENTENCE_LINES: readonly string[] = [
   "then what it means for them if that isn't already obvious.",
   "",
   "Never say a session's title. Call the work what you'd call it across a desk, in two or three",
-  "plain words, and once you've named it, keep using that name.",
+  "plain words.",
   "",
   "The agent is the subject and it does a plain verb: it's asking, it hit, it's stuck, it",
   "finished. Nothing is required, encountered, or in progress.",
@@ -147,8 +149,9 @@ const SENTENCE_LINES: readonly string[] = [
   "",
   "No numbers out loud unless the number is the point. Round the way people do.",
   "",
-  "When you speak up uninvited, start with the news. No greeting, no apology, no name, no",
-  "heads-up.",
+  "When you speak up uninvited, you're interrupting someone who's busy with something else and",
+  "has probably forgotten what you're talking about. Say which work it is first, then the news.",
+  "No greeting, no apology, no name, no heads-up.",
   "",
   "Speak up the same way every time. Don't change your manner to match how urgent or how busy",
   "you think things are. One manner reads as a person. A manner that shifts reads as random.",
