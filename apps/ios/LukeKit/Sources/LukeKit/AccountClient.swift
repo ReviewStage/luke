@@ -32,7 +32,7 @@ public struct AccountTokens: Sendable {
     }
 }
 
-public struct AccountIdentity: Sendable {
+public struct AccountIdentity: Sendable, Equatable {
     public let id: String?
     public let email: String
     public let name: String?

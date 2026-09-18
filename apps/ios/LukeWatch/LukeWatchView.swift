@@ -11,8 +11,8 @@ struct LukeWatchView: View {
             switch watchSession.state {
             case .signedOut:
                 SignedOutView()
-            case .signedIn:
-                signedInStack
+            case .signedIn(let identity):
+                signedInStack(identity)
             }
         }
         .onChange(of: watchSession.accountScope) {
@@ -23,15 +23,15 @@ struct LukeWatchView: View {
         }
     }
 
-    private var signedInStack: some View {
+    private func signedInStack(_ identity: AccountIdentity) -> some View {
         // The stack over Luke and the Conversation's reading are the signed-in
         // developer's own: a changed account rebuilds them from nothing.
-        SignedInStack().id(watchSession.accountScope)
+        SignedInStack(identity: identity).id(watchSession.accountScope)
     }
 }
 
 /// The one stack a signed-in account stands in: the Luke screen at its root,
-/// the sessions list pushed over it from the top-left button, and a session's
+/// the sessions list pushed over it from the top-right button, and a session's
 /// own screen over the list. The Conversation's reading is owned here, so it
 /// is torn down with the stack: the next account starts with nothing of the
 /// last one's thread. It polls under the device row the registrar stored, or
@@ -39,6 +39,7 @@ struct LukeWatchView: View {
 /// the wrist waits for a path on.
 private struct SignedInStack: View {
     @Environment(WatchNavigation.self) private var navigation
+    let identity: AccountIdentity
     @State private var conversation = ConversationStore(
         client: ConversationReadClient(
             serviceURL: AccountConstants.serviceURL, http: WatchNetwork.session
@@ -55,7 +56,7 @@ private struct SignedInStack: View {
     var body: some View {
         @Bindable var navigation = navigation
         return NavigationStack(path: $navigation.path) {
-            WatchVoiceView()
+            WatchVoiceView(identity: identity)
                 .navigationDestination(for: WatchRoute.self) { route in
                     switch route {
                     case .sessions:

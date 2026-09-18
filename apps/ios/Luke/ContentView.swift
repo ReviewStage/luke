@@ -291,13 +291,21 @@ private struct SignedInView: View {
     @ViewBuilder
     private var avatarLabel: some View {
         if #available(iOS 26.0, *) {
-            AccountAvatar(identity: identity, diameter: 36)
+            avatar(diameter: 36)
                 .padding(4)
                 .glassEffect(.regular.interactive(), in: Circle())
         } else {
-            AccountAvatar(identity: identity, diameter: 36)
+            avatar(diameter: 36)
                 .padding(4)
         }
+    }
+
+    /// LukeKit's avatar in the phone's own inks.
+    private func avatar(diameter: CGFloat) -> some View {
+        AccountAvatar(
+            identity: identity, diameter: diameter,
+            ink: Color.ink, secondaryInk: Color.inkSecondary
+        )
     }
 
 }
@@ -323,7 +331,10 @@ private struct ProfileSheet: View {
             List {
                 Section {
                     VStack(spacing: 12) {
-                        AccountAvatar(identity: identity, diameter: 88)
+                        AccountAvatar(
+                            identity: identity, diameter: 88,
+                            ink: Color.ink, secondaryInk: Color.inkSecondary
+                        )
                         VStack(spacing: 2) {
                             Text(identity.name ?? identity.email)
                                 .font(.title2.weight(.semibold))
@@ -424,49 +435,6 @@ private struct ProfileSheet: View {
             .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return version.map { "Luke v\($0)" } ?? "Luke"
     }()
-}
-
-// MARK: - Avatar
-
-/// The account's own avatar, falling back to its initials. A provider's
-/// avatar URL can outlive the image it named, so a failed fetch draws the
-/// letters rather than leaving a broken frame.
-private struct AccountAvatar: View {
-    let identity: AccountIdentity
-    let diameter: CGFloat
-
-    var body: some View {
-        Group {
-            if let url = identity.pictureURL {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        initialsCircle
-                    }
-                }
-            } else {
-                initialsCircle
-            }
-        }
-        .frame(width: diameter, height: diameter)
-        .clipShape(Circle())
-    }
-
-    private var initialsCircle: some View {
-        ZStack {
-            Circle().fill(Color.ink.opacity(0.12))
-            if let initials = identity.initials {
-                Text(initials)
-                    .font(.system(size: diameter * 0.4, weight: .semibold))
-                    .foregroundStyle(Color.ink)
-            } else {
-                Image(systemName: "person.fill")
-                    .font(.system(size: diameter * 0.44))
-                    .foregroundStyle(Color.inkSecondary)
-            }
-        }
-    }
 }
 
 // MARK: - Provider button

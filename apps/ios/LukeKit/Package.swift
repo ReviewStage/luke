@@ -20,6 +20,8 @@ let excludedSources = [
     "PCMAudio.swift",
     // SwiftUI and CoreGraphics: Luke's face as a shape.
     "Marks.swift",
+    // SwiftUI and ImageIO: the account's avatar, drawn on the phone and the wrist.
+    "AccountAvatar.swift",
     // Apple Foundation's Markdown AttributedString: PresentationIntent,
     // inlinePresentationIntent, and AttributedString.MarkdownParsingOptions,
     // none of which swift-corelibs-foundation carries.

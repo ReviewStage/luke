@@ -9,15 +9,8 @@ import Observation
 final class WatchAccountSession {
     enum State: Equatable {
         case signedOut
-        case signedIn(email: String, name: String?)
-
-        static func == (lhs: State, rhs: State) -> Bool {
-            switch (lhs, rhs) {
-            case (.signedOut, .signedOut): true
-            case let (.signedIn(e1, n1), .signedIn(e2, n2)): e1 == e2 && n1 == n2
-            default: false
-            }
-        }
+        /// Who the tokens belong to, as the phone handed it over.
+        case signedIn(AccountIdentity)
     }
 
     private(set) var state: State = .signedOut
@@ -76,7 +69,7 @@ final class WatchAccountSession {
         self.tokenExpiry = stored.expiry
         departedAccessToken = nil
         accountScope = Self.scope(email: stored.email)
-        state = .signedIn(email: email, name: stored.name)
+        state = .signedIn(Self.identity(of: stored))
         onSignedIn?()
     }
 
@@ -124,7 +117,18 @@ final class WatchAccountSession {
         accessToken = stored.accessToken
         tokenExpiry = stored.expiry
         accountScope = Self.scope(email: stored.email)
-        state = .signedIn(email: stored.email, name: stored.name)
+        state = .signedIn(Self.identity(of: stored))
+    }
+
+    /// The picture is admitted from the hosts the account client names and
+    /// nowhere else, the same policy the phone applies to what it stores.
+    private static func identity(of stored: StoredTokens) -> AccountIdentity {
+        AccountIdentity(
+            id: stored.accountID,
+            email: stored.email,
+            name: stored.name,
+            pictureURL: AccountIdentity.pictureURL(fromWire: stored.pictureURL)
+        )
     }
 
     private static func scope(email: String) -> String {
@@ -149,8 +153,8 @@ final class WatchAccountSession {
 
 extension WatchAccountSession: AccountTokenProviding {
     var accountEmail: String? {
-        guard case .signedIn(let email, _) = state else { return nil }
-        return email
+        guard case .signedIn(let identity) = state else { return nil }
+        return identity.email
     }
 
     /// The watch never refreshes tokens independently — spending the phone's
