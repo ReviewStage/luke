@@ -181,6 +181,8 @@ struct ContentView: View {
 /// tears the flag down with the view, and the next sign-in starts with the
 /// sheet closed rather than inheriting a stale true.
 private struct SignedInView: View {
+    @Environment(AccountSession.self) private var session
+    @Environment(ProductEventSender.self) private var events
     @Environment(PushCoordinator.self) private var push
     let identity: AccountIdentity
     @State private var profileShown = false
@@ -216,6 +218,11 @@ private struct SignedInView: View {
                 .navigationDestination(for: SessionsRoute.self) { route in
                     SessionsView(route: route, threads: $threads)
                 }
+                // The Conversation's action rows name sessions off the
+                // roster, so it is read as Luke appears and not only once the
+                // list is pushed, as the watch reads it; the list still
+                // refreshes itself on every push and pull.
+                .task { await store.refresh(account: session, events: events) }
         }
         .environment(store)
         // A briefing's notification tapped: the Conversation opens at that
