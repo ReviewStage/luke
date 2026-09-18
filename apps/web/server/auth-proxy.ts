@@ -157,14 +157,11 @@ export function authProxy(deployment: AuthDeployment) {
         const body = unparsedWire(ctx.body as WireBoundaryInput);
         if (!isRecord(body) || body.callbackURL !== undefined) return;
         if (!isWireString(body.oauth_query)) return;
-        return {
-          context: {
-            body: {
-              ...body,
-              callbackURL: resumeAuthorizeURL(ctx.context.baseURL, body.oauth_query),
-            },
-          },
-        };
+        // Note that the body is written in place rather than returned as a
+        // context patch, because Better Auth applies a returned patch to the
+        // endpoint alone after every before hook has run, and the proxy's own
+        // hook right behind this one reads the callback from the same body.
+        ctx.body.callbackURL = resumeAuthorizeURL(ctx.context.baseURL, body.oauth_query);
       }),
     };
     return {
