@@ -8,6 +8,7 @@ import {
   isStoredToolPart,
   MESSAGE_ROLE,
   maximumBriefingLength,
+  type StoredUIMessage,
   storedToolName,
   TOOL_PART_STATE,
   text,
@@ -30,20 +31,21 @@ export function briefingWordsOf(
 ): Effect.Effect<string | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.map(
     readMessageById(offer.userId, offer.conversationId, tools, offer.messageId),
-    (read) => {
-      if (!read.ok) return undefined;
-      const message = read.value[0]?.message;
-      if (message === undefined || message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
-      for (const part of message.parts) {
-        if (!isStoredToolPart(part)) continue;
-        if (storedToolName(part) !== BRAIN_TOOL.ANNOUNCE) continue;
-        if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) continue;
-        // SAFETY: the part was read back from the row's jsonb column through the vocabulary; its input is the JSON that column held.
-        const input = unparsedWire(part.input as WireBoundaryInput);
-        const briefing = isRecord(input) ? text(input.briefing) : undefined;
-        if (briefing) return briefing.slice(0, maximumBriefingLength);
-      }
-      return undefined;
-    },
+    (read) => (read.ok ? announcedWordsOf(read.value[0]?.message) : undefined),
   );
+}
+
+/** The briefing an assistant message's settled announce call carries, bounded as the tool bounds it; nothing for any other message. */
+export function announcedWordsOf(message: StoredUIMessage | undefined): string | undefined {
+  if (message === undefined || message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
+  for (const part of message.parts) {
+    if (!isStoredToolPart(part)) continue;
+    if (storedToolName(part) !== BRAIN_TOOL.ANNOUNCE) continue;
+    if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) continue;
+    // SAFETY: the part was read back from the row's jsonb column through the vocabulary; its input is the JSON that column held.
+    const input = unparsedWire(part.input as WireBoundaryInput);
+    const briefing = isRecord(input) ? text(input.briefing) : undefined;
+    if (briefing) return briefing.slice(0, maximumBriefingLength);
+  }
+  return undefined;
 }

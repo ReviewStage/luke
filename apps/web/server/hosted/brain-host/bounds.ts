@@ -1,5 +1,11 @@
 import type { BrainTurnTrigger } from "../../core.js";
-import { BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER, type BrainTurnOrigin } from "../../core.js";
+import {
+  BRAIN_TURN_ORIGIN,
+  BRAIN_TURN_TRIGGER,
+  type BrainTurnOrigin,
+  DAY_MS,
+  maximumRecentBriefings,
+} from "../../core.js";
 
 /**
  * The bounds and names the hosted brain host runs under: how a request names
@@ -24,6 +30,10 @@ export const BRAIN_HOST = {
   TRANSCRIPT_DELTA_CHARS: 20_000,
   /** The most cloud plugins the host keeps built, one per account, provider, and sealed key; the least recently reached goes first. */
   PLUGIN_CACHE_CAPACITY: 1024,
+  /** How far back main's standing context recalls the briefings observed conversations gave; older ones are history the roster and the transcript reads cover. */
+  RECENT_BRIEFINGS_WINDOW_MS: DAY_MS,
+  /** How many of them at most, the newest kept; the same bound the text renders under. */
+  RECENT_BRIEFINGS: maximumRecentBriefings,
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */

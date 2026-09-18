@@ -25,6 +25,7 @@ import {
   type MessageHistoryRead,
   type MessageListRead,
   readMessageByClientId,
+  readMessagesByIds,
   type SequenceCursor,
   type StoredEventRecord,
   type StoredRatingRecord,
@@ -56,7 +57,13 @@ import {
   clearMainConversation,
   purgeClearedConversations,
 } from "./soft-delete.js";
-import { openSpeechOffers, type SpeechOffer } from "./speech.js";
+import {
+  openSpeechOffers,
+  type RecentBriefingOffer,
+  type RecentBriefingOffersQuery,
+  recentBriefingOffers,
+  type SpeechOffer,
+} from "./speech.js";
 import {
   type PagedConversation,
   pagedConversation,
@@ -132,6 +139,12 @@ export interface HostedStore {
       conversationId: string,
       tools: ToolSet,
       clientId: string,
+    ): HostedStoreEffect<MessageListRead>;
+    /** The account's messages the ids name, across their standing conversations, read back under the registry in one statement; an id naming no standing row is absent. */
+    byIds(
+      userId: string,
+      tools: ToolSet,
+      messageIds: readonly string[],
     ): HostedStoreEffect<MessageListRead>;
   };
   events: {
@@ -285,6 +298,10 @@ export interface HostedStore {
   speech: {
     /** The account's briefings not yet spoken, pushed, or expired, oldest offer first, each as it stands now; transitions are written through the `speech` module over the store writer. */
     open(userId: string, limit?: number): HostedStoreEffect<readonly SpeechOffer[]>;
+    /** The briefings offered from the account's observed conversations since the instant and since its main opened, newest first and bounded, whatever became of each. */
+    recentBriefings(
+      query: RecentBriefingOffersQuery,
+    ): HostedStoreEffect<readonly RecentBriefingOffer[]>;
   };
 }
 
@@ -298,6 +315,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
         listMessagesBefore(userId, windows, tools, cursor),
       byClientId: (userId, conversationId, tools, clientId) =>
         readMessageByClientId(userId, conversationId, tools, clientId),
+      byIds: (userId, tools, messageIds) => readMessagesByIds(userId, tools, messageIds),
     },
     events: {
       list: (userId, conversationId, cursor) => listEvents(userId, conversationId, cursor),
@@ -358,6 +376,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
     },
     speech: {
       open: (userId, limit) => openSpeechOffers({ userId, limit }),
+      recentBriefings: (query) => recentBriefingOffers(query),
     },
   };
 }

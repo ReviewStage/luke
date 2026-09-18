@@ -5,6 +5,8 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
+  type RecentBriefing,
+  recentBriefingsContextText,
   type StoredUIMessage,
   standingContextText,
   workspaceProjectContextText,
@@ -15,8 +17,11 @@ import type { HostedRoster } from "./roster.js";
 
 /**
  * What the hosted brain is handed beside its prompt every turn, rebuilt from
- * the rows and never remembered: the roster as the last pass left it and the
- * projects a workspace could be created in. It rides as the turn's
+ * the rows and never remembered: the roster as the last pass left it, the
+ * projects a workspace could be created in, and, for main alone, the
+ * briefings its observed conversations gave the developer lately, since an
+ * observed conversation's turns are its own history and nothing else carries
+ * what it announced into main. It rides as the turn's
  * system-role instruction, replaced each turn, so the history the model keeps
  * is the words that were said and never a stale roster. The exchange itself
  * is not repeated here: every turn of a conversation runs in one eve session
@@ -30,6 +35,8 @@ interface StandingContextInput {
   readonly roster: HostedRoster;
   readonly rosterText: string;
   readonly defaults: HostedWorkspaceDefaults;
+  /** The briefings recalled for this turn; none for a turn of any conversation but main. */
+  readonly briefings?: readonly RecentBriefing[];
   readonly now: number;
 }
 
@@ -74,6 +81,7 @@ export function hostedStandingContext(input: StandingContextInput): string {
       input.defaults.defaultProviderId,
       input.defaults.defaultProjectIds,
     ),
+    recentBriefingsContextText(input.briefings ?? [], input.now),
   ]
     .filter((part): part is string => part !== undefined && part.trim().length > 0)
     .join("\n\n");

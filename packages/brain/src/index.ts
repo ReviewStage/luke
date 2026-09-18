@@ -41,7 +41,13 @@ export {
   type TurnCompaction,
   toolCallSettlementOf,
 } from "./run-events.js";
-export { sessionContextText, workspaceProjectContextText } from "./standing-context.js";
+export {
+  maximumRecentBriefings,
+  type RecentBriefing,
+  recentBriefingsContextText,
+  sessionContextText,
+  workspaceProjectContextText,
+} from "./standing-context.js";
 export {
   ACTION_TOOLS,
   type ActionAdmissionReads,
