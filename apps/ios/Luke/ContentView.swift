@@ -218,13 +218,15 @@ private struct SignedInView: View {
                 .navigationDestination(for: SessionsRoute.self) { route in
                     SessionsView(route: route, threads: $threads)
                 }
-                // The Conversation's action rows name sessions off the
-                // roster, so it is read as Luke appears and not only once the
-                // list is pushed, as the watch reads it; the list still
-                // refreshes itself on every push and pull.
-                .task { await store.refresh(account: session, events: events) }
         }
         .environment(store)
+        // The Conversation's action rows name sessions off the roster, so it
+        // is read as the signed-in stack appears and not only once the list
+        // is pushed, as the watch reads it. On the stack rather than the Luke
+        // screen, because a push hides that screen and would cancel a read
+        // still in flight, and a cancellation is not a failed load. The list
+        // still refreshes itself on every push and pull.
+        .task { await store.refresh(account: session, events: events) }
         // A briefing's notification tapped: the Conversation opens at that
         // briefing, by the one id the payload carried. `initial` covers a tap
         // that launched the app, which lands before this view stands.
