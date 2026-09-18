@@ -71,15 +71,3 @@ export type ToolDescriptor = {
   /** Groups the policy may name in place of the tool: `group:read`, `group:actions`, and so on. */
   readonly groups: readonly string[];
 } & ToolPlacement;
-
-export interface SkillDescriptor {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  /** The absolute path of the skill's SKILL.md, loaded on demand and never inlined into a prompt. */
-  readonly location: string;
-  /** Whether the skill is offered at all; a disabled skill is listed to no run. */
-  readonly enabled: boolean;
-  /** Agents the skill is limited to; empty means every agent. */
-  readonly agents: readonly string[];
-}

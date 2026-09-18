@@ -4,13 +4,11 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import {
   BOOTSTRAP_BOUNDS,
-  BRAIN_TURN_TRIGGER,
   CURATED_FILE_BUDGET,
   tooLargeRefusal,
   WORKSPACE_FILE,
   WORKSPACE_FILE_REFUSAL,
 } from "../server/core";
-import { hostedTurnPolicy } from "../server/hosted/brain-host/tools";
 import {
   hostedPrompt,
   hostedWorkspaceAccess,
@@ -154,9 +152,7 @@ test("a row past its file's bound is read cut at that bound, and the prompt comp
     Result.succeed({ content: "a".repeat(USER_BUDGET + 250) }),
   );
 
-  const built = await database.run(
-    hostedPrompt(database.store, userId, { policy: hostedTurnPolicy(BRAIN_TURN_TRIGGER.ASK) }),
-  );
+  const built = await database.run(hostedPrompt(database.store, userId, {}));
   assert.ok(
     built.text.includes(`- USER.md: ${USER_BUDGET} of ${USER_BUDGET + 250} characters shown`),
   );

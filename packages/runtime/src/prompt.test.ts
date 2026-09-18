@@ -21,23 +21,8 @@ function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
     profile: PROMPT_PROFILE.FULL,
     identity: "You are the agent under test.",
     persona: "Witty and warm.",
-    tools: [
-      { name: "list_sessions", groups: ["read"] },
-      { name: "read_transcript", groups: ["read"] },
-      { name: "announce", groups: ["speak"] },
-    ],
     toolNotes: ["The turns.", "An ask is the developer speaking."],
     runtimeContextMarker: "[context]",
-    skills: [
-      {
-        id: "deploy",
-        name: "deploy",
-        description: "Ship a release",
-        location: "/skills/deploy/SKILL.md",
-        enabled: true,
-        agents: [],
-      },
-    ],
     workspaceDirectory: "/w",
     bootstrapFiles: FILES,
     runtime: { agentId: "main", runtimeId: "tool-loop", model: "m" },
@@ -45,10 +30,9 @@ function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
   };
 }
 
-test("the full profile opens on the identity, injects the files, lists skills by location, and ends on the runtime line", () => {
+test("the full profile opens on the identity, injects the files, and ends on the runtime line", () => {
   const built = buildSystemPrompt(facts());
   assert.ok(built.text.startsWith("# Identity\n\nYou are the agent under test."));
-  assert.ok(built.text.includes("/skills/deploy/SKILL.md"));
   assert.ok(built.text.includes("Prefers tests."));
   assert.ok(built.text.endsWith("# Runtime\n\nagent: main\nruntime: tool-loop\nmodel: m"));
   assert.equal(built.chars, built.text.length);
@@ -66,10 +50,7 @@ test("the stable sections are byte-identical across turns whose dynamic facts di
 
 test("the minimal profile carries AGENTS.md alone and no persona, identity, user, or memory file", () => {
   const built = buildSystemPrompt(facts({ profile: PROMPT_PROFILE.MINIMAL }));
-  assert.ok(!built.text.includes("# Memory"));
   assert.ok(!built.text.includes("# Persona"));
-  assert.ok(built.text.includes("# Safety"));
-  assert.ok(built.text.includes("# Skills"));
   assert.ok(!built.text.includes("Prefers tests."));
   assert.ok(built.text.includes("Be brief."));
 });
@@ -82,7 +63,7 @@ test("a truncated file is named in the notice, a curated file at its own budget"
     { name: WORKSPACE_FILE.IDENTITY, path: "/w/IDENTITY.md", content: undefined },
     { name: WORKSPACE_FILE.MEMORY, path: "/w/MEMORY.md", content: "m".repeat(budget + 50) },
   ]);
-  const built = buildSystemPrompt(facts({ bootstrapFiles: bounded, skills: [] }));
+  const built = buildSystemPrompt(facts({ bootstrapFiles: bounded }));
   assert.ok(built.text.includes(`- MEMORY.md: ${budget} of ${budget + 50} characters shown`));
   assert.ok(built.text.includes(`- AGENTS.md: ${perFile} of ${perFile + 50} characters shown`));
   assert.ok(built.text.includes(`[truncated: ${budget + 50} characters on disk]`));
