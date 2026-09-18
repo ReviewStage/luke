@@ -43,7 +43,12 @@ public struct AccountAvatar: View {
         .frame(width: diameter, height: diameter)
         .clipShape(Circle())
         .task(id: identity.pictureURL) {
-            picture = await Self.fetchPicture(identity.pictureURL, http: http)
+            guard let url = identity.pictureURL else { return picture = nil }
+            // A load the view's disappearance cancelled says nothing about
+            // the picture, so it leaves whatever is drawn standing.
+            guard let loaded = await Self.fetchPicture(url, http: http), !Task.isCancelled
+            else { return }
+            picture = loaded
         }
     }
 
@@ -64,8 +69,8 @@ public struct AccountAvatar: View {
 
     /// The picture, or nothing: a refused fetch or bytes that decode to no
     /// image both leave the letters standing.
-    private static func fetchPicture(_ url: URL?, http: URLSession) async -> CGImage? {
-        guard let url, let (data, _) = try? await http.data(from: url),
+    private static func fetchPicture(_ url: URL, http: URLSession) async -> CGImage? {
+        guard let (data, _) = try? await http.data(from: url),
               let source = CGImageSourceCreateWithData(data as CFData, nil)
         else { return nil }
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
