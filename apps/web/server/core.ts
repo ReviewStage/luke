@@ -46,7 +46,6 @@ export {
   CHILD_COMPLETION_STATUS,
   childCompletionInputText,
   childTaskInputText,
-  maximumBriefingLength,
   maximumRecentBriefings,
   OBSERVED_MESSAGES_CUT,
   type ObservedMessagesEnvelope,

@@ -12,7 +12,6 @@ import {
   type WorkspaceTaskSupport,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
-import { maximumBriefingLength } from "./tools/names.js";
 
 /**
  * Roster context serialization: the bounded, redacted view of sessions and
@@ -392,9 +391,9 @@ export const maximumRecentBriefings = 8;
 
 const UNTITLED_BRIEFING_SESSION = "untitled session";
 
-/** A briefing as one line: its whitespace folded so a line stays a line, and cut to the bound the tool announces under. */
+/** A briefing as one line: its whitespace folded so a line stays a line. */
 function briefingLineText(words: string): string {
-  return words.replace(/\s+/gu, " ").trim().slice(0, maximumBriefingLength);
+  return words.replace(/\s+/gu, " ").trim();
 }
 
 /**
