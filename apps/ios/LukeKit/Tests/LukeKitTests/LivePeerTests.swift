@@ -122,6 +122,11 @@ private final class Harness {
     private(set) var offers: [String] = []
     var created: LiveSessionCreated? = LiveSessionCreated(sessionId: "live_123", sdpAnswer: "v=0\r\nanswer\r\n")
     var microphoneOpens = 0
+    /// The device's audio route: active between the peer's activation and its release.
+    private(set) var audioActive = false
+    /// Whether the route was active as each microphone opened.
+    private(set) var audioActiveAtMicrophoneOpen: [Bool] = []
+    private(set) var audioReleases = 0
     private(set) var peer: LivePeer!
 
     init(
@@ -133,8 +138,14 @@ private final class Harness {
         peer = LivePeer(
             seams: LivePeerSeams(
                 makePeerConnection: { self.connection },
+                activateAudio: { self.audioActive = true },
+                releaseAudio: {
+                    self.audioActive = false
+                    self.audioReleases += 1
+                },
                 openMicrophone: {
                     self.microphoneOpens += 1
+                    self.audioActiveAtMicrophoneOpen.append(self.audioActive)
                     return self.microphone
                 },
                 createSession: { sdp in
@@ -210,6 +221,40 @@ final class LivePeerTests: XCTestCase {
         XCTAssertFalse(harness.peer.listening)
         XCTAssertEqual(harness.channel?.sent.count, 0, "nothing goes on the channel to start a session")
         XCTAssertEqual(harness.events, [.sessionStarted(eventId: "event_1", sessionId: "live_123")])
+    }
+
+    @MainActor
+    func testTheAudioRouteIsActiveBeforeTheMicrophoneOpensAndGivenBackAtTheEnd() async throws {
+        let harness = Harness()
+
+        let stood = await harness.openStarted()
+
+        XCTAssertTrue(stood)
+        XCTAssertEqual(harness.audioActiveAtMicrophoneOpen, [true], "the route records before the microphone opens on it")
+        XCTAssertTrue(harness.audioActive, "the route is held for the peer's life")
+
+        harness.channel?.receive(
+            #"{"type":"session.closed","event_id":"event_2","reason":"expired","usage":{"seconds":600}}"#
+        )
+
+        XCTAssertFalse(harness.audioActive)
+        XCTAssertEqual(harness.audioReleases, 1)
+        XCTAssertEqual(harness.peer.status, .idle)
+    }
+
+    @MainActor
+    func testAFailedOpenGivesTheAudioRouteBackToo() async throws {
+        let harness = Harness()
+        harness.created = nil
+
+        let opening = Task { await harness.peer.open() }
+        await until { harness.connection.steps.contains(.setLocal) }
+        harness.connection.gathered()
+        let stood = await opening.value
+
+        XCTAssertFalse(stood)
+        XCTAssertFalse(harness.audioActive)
+        XCTAssertEqual(harness.audioReleases, 1)
     }
 
     @MainActor

@@ -138,6 +138,12 @@ public protocol LivePeerConnection: AnyObject {
 /// session's id and the SDP answer, or nothing for a refusal.
 public struct LivePeerSeams: Sendable {
     public var makePeerConnection: @MainActor @Sendable () throws -> any LivePeerConnection
+    /// The device's audio route put in a state that records as well as plays,
+    /// before the microphone opens on it: on a phone the `AVAudioSession`'s
+    /// category, which starts out playback-only and is nobody else's to set.
+    public var activateAudio: @MainActor @Sendable () throws -> Void
+    /// The route given back at every end of the peer.
+    public var releaseAudio: @MainActor @Sendable () -> Void
     public var openMicrophone: @MainActor @Sendable () throws -> any LiveAudioTrack
     public var createSession: @MainActor @Sendable (_ sdp: String) async throws -> LiveSessionCreated?
     /// Each status the peer moves to, once.
@@ -153,6 +159,8 @@ public struct LivePeerSeams: Sendable {
 
     public init(
         makePeerConnection: @MainActor @Sendable @escaping () throws -> any LivePeerConnection,
+        activateAudio: @MainActor @Sendable @escaping () throws -> Void = {},
+        releaseAudio: @MainActor @Sendable @escaping () -> Void = {},
         openMicrophone: @MainActor @Sendable @escaping () throws -> any LiveAudioTrack,
         createSession: @MainActor @Sendable @escaping (_ sdp: String) async throws -> LiveSessionCreated?,
         onStatus: @MainActor @Sendable @escaping (LiveStatus) -> Void = { _ in },
@@ -164,6 +172,8 @@ public struct LivePeerSeams: Sendable {
         sessionCloseTimeout: Duration = LivePeerBounds.sessionClose
     ) {
         self.makePeerConnection = makePeerConnection
+        self.activateAudio = activateAudio
+        self.releaseAudio = releaseAudio
         self.openMicrophone = openMicrophone
         self.createSession = createSession
         self.onStatus = onStatus
@@ -326,6 +336,7 @@ public final class LivePeer {
         let connection = try seams.makePeerConnection()
         self.connection = connection
         connection.onTransportStateChange = { [weak self] in self?.transportChanged() }
+        try seams.activateAudio()
         let microphone = try seams.openMicrophone()
         microphone.isEnabled = false
         self.microphone = microphone
@@ -479,6 +490,7 @@ public final class LivePeer {
         microphone?.isEnabled = false
         micLive = false
         connection?.close()
+        seams.releaseAudio()
         self.status = status
     }
 
