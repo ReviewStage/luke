@@ -11,7 +11,7 @@ export {
   observedMessagesText,
   standingContextText,
 } from "./input-items.js";
-export { brainToolNotes } from "./instructions.js";
+export { BRAIN_INSTRUCTIONS } from "./instructions.js";
 export { BRAIN_OPENAI_DEFAULTS } from "./model-defaults.js";
 export type { BrainRoster } from "./performer.js";
 export {
@@ -94,4 +94,4 @@ export {
   userMessage,
   userMetadataOf,
 } from "./ui-messages.js";
-export { BRAIN_IDENTITY_LINE, BRAIN_PERSONA, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
+export { BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";

@@ -451,9 +451,6 @@ importers:
       '@sidecar/actions':
         specifier: workspace:*
         version: link:../actions
-      '@sidecar/guide':
-        specifier: workspace:*
-        version: link:../guide
       '@sidecar/memory':
         specifier: workspace:*
         version: link:../memory

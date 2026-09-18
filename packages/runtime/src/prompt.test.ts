@@ -19,10 +19,7 @@ const FILES = boundBootstrapFiles([
 function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
   return {
     profile: PROMPT_PROFILE.FULL,
-    identity: "You are the agent under test.",
-    persona: "Witty and warm.",
-    toolNotes: ["The turns.", "An ask is the developer speaking."],
-    runtimeContextMarker: "[context]",
+    instructions: "You are the agent under test.",
     workspaceDirectory: "/w",
     bootstrapFiles: FILES,
     runtime: { agentId: "main", runtimeId: "tool-loop", model: "m" },
@@ -30,9 +27,9 @@ function facts(overrides: Partial<PromptFacts> = {}): PromptFacts {
   };
 }
 
-test("the full profile opens on the identity, injects the files, and ends on the runtime line", () => {
+test("the full profile opens on the instructions, injects the files, and ends on the runtime line", () => {
   const built = buildSystemPrompt(facts());
-  assert.ok(built.text.startsWith("# Identity\n\nYou are the agent under test."));
+  assert.ok(built.text.startsWith("# Instructions\n\nYou are the agent under test."));
   assert.ok(built.text.includes("Prefers tests."));
   assert.ok(built.text.endsWith("# Runtime\n\nagent: main\nruntime: tool-loop\nmodel: m"));
   assert.equal(built.chars, built.text.length);
@@ -48,9 +45,8 @@ test("the stable sections are byte-identical across turns whose dynamic facts di
   assert.notEqual(first.text, second.text);
 });
 
-test("the minimal profile carries AGENTS.md alone and no persona, identity, user, or memory file", () => {
+test("the minimal profile carries AGENTS.md alone and no user or memory file", () => {
   const built = buildSystemPrompt(facts({ profile: PROMPT_PROFILE.MINIMAL }));
-  assert.ok(!built.text.includes("# Persona"));
   assert.ok(!built.text.includes("Prefers tests."));
   assert.ok(built.text.includes("Be brief."));
 });
