@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { symmetricEncrypt } from "better-auth/crypto";
+import { Redacted } from "effect";
 import { test } from "vitest";
-import { authDeployment, LOCAL_AUTH_URL } from "../server/auth-deployment";
+import {
+  authDeployment,
+  LOCAL_AUTH_URL,
+  RELAYED_CLIENT_SECRET_PLACEHOLDER,
+  socialProviderOptions,
+} from "../server/auth-deployment";
 import { authProxy, isTrustedProxyCallback, oauthProxyCallbackURL } from "../server/auth-proxy";
 
 const PRODUCTION_URL = "https://tryluke.dev";
@@ -170,4 +176,27 @@ test("the relay reads the callback only from state encrypted with the proxy key"
     data: JSON.stringify({ isOAuthProxy: "true", state: "nonce", stateCookie }),
   });
   assert.equal(await oauthProxyCallbackURL(truthyStringState, secret), callbackURL);
+});
+
+test("a preview relaying through production stands a placeholder where the client secret would go", () => {
+  const client = { clientId: "google-id", clientSecret: undefined };
+  const relayed = socialProviderOptions(client, ["email"], { acceptsProxyProfiles: true });
+  const own = socialProviderOptions(client, ["email"], { acceptsProxyProfiles: false });
+
+  assert.equal(relayed.clientSecret, RELAYED_CLIENT_SECRET_PLACEHOLDER);
+  assert.equal(own.clientSecret, "");
+  assert.deepEqual(relayed.scope, ["email"]);
+});
+
+test("a deployment holding the client secret hands it over whatever its role", () => {
+  const client = { clientId: "google-id", clientSecret: Redacted.make("secret") };
+
+  assert.equal(
+    socialProviderOptions(client, [], { acceptsProxyProfiles: true }).clientSecret,
+    "secret",
+  );
+  assert.equal(
+    socialProviderOptions(client, [], { acceptsProxyProfiles: false }).clientSecret,
+    "secret",
+  );
 });

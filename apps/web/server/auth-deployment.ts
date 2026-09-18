@@ -133,6 +133,33 @@ export function authSecrets(variables: Record<string, string | undefined>): Auth
   };
 }
 
+/**
+ * What Better Auth is handed for one social provider. A Preview holds no
+ * client secret, because production is the end that exchanges the code; but
+ * Google's provider refuses to build an authorization URL at all without one,
+ * which is a 500 on the preview's sign-in start before the browser ever leaves
+ * for Google. So a deployment that relays through production stands a
+ * placeholder where the secret would go, and only there: the placeholder is
+ * never sent, since the proxy hands the code to production, and it would
+ * satisfy no token endpoint if it were. A deployment that exchanges its own
+ * codes keeps the empty string and Better Auth's own refusal.
+ */
+export const RELAYED_CLIENT_SECRET_PLACEHOLDER = "relayed-through-production";
+
+export function socialProviderOptions(
+  client: SocialClient,
+  scope: readonly string[],
+  deployment: Pick<AuthDeployment, "acceptsProxyProfiles">,
+) {
+  const clientSecret =
+    client.clientSecret !== undefined
+      ? Redacted.value(client.clientSecret)
+      : deployment.acceptsProxyProfiles
+        ? RELAYED_CLIENT_SECRET_PLACEHOLDER
+        : "";
+  return { clientId: client.clientId, clientSecret, scope: [...scope] };
+}
+
 export function authDeployment(variables: Record<string, string | undefined>): AuthDeployment {
   const productionURL = text(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PRODUCTION_URL]);
   const proxySecret = text(variables[AUTH_DEPLOYMENT_ENVIRONMENT.PROXY_SECRET]);

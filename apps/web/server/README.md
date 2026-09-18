@@ -669,7 +669,9 @@ returned profile.
 The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
 `BETTER_AUTH_PROXY_SECRET`, `GOOGLE_CLIENT_ID`, and `GITHUB_CLIENT_ID`; the two
 client secrets are spent by production, which is the end that exchanges the
-code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+code. Google's provider refuses to start without a client secret at all, so a
+Preview stands a placeholder there (`socialProviderOptions` in
+`auth-deployment.ts`), never sent because the proxy hands the code to production. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
 ends, or the profile arrives undecryptable. A Preview without it does not expose
 the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
 would require putting production's session-signing and provider-token key into

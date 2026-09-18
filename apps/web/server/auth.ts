@@ -5,7 +5,7 @@ import { jwt, lastLoginMethod } from "better-auth/plugins";
 import { Redacted } from "effect";
 import { USER_ROLE } from "./admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
-import { authDeployment, authSecrets, type SocialClient } from "./auth-deployment.js";
+import { authDeployment, authSecrets, socialProviderOptions } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,
@@ -40,15 +40,6 @@ const refuseWithoutSessionSecret = createAuthMiddleware(async () => {
   });
 });
 
-/** The one place a social secret is revealed: handed to Better Auth, which puts it on the provider's token request. */
-function socialProvider(client: SocialClient, scope: readonly string[]) {
-  return {
-    clientId: client.clientId,
-    clientSecret: client.clientSecret === undefined ? "" : Redacted.value(client.clientSecret),
-    scope: [...scope],
-  };
-}
-
 export const auth = betterAuth({
   appName: "Luke",
   baseURL: deployment.baseURL,
@@ -69,8 +60,9 @@ export const auth = betterAuth({
   },
   disabledPaths: ["/token"],
   socialProviders: {
-    google: socialProvider(secrets.google, ["email", "profile"]),
-    github: socialProvider(secrets.github, ["read:user", "user:email"]),
+    // The one place a social secret is revealed: handed to Better Auth, which puts it on the provider's token request.
+    google: socialProviderOptions(secrets.google, ["email", "profile"], deployment),
+    github: socialProviderOptions(secrets.github, ["read:user", "user:email"], deployment),
   },
   plugins: [
     // Ahead of the social sign-in it rewrites, and of the provider plugin whose
