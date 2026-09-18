@@ -59,21 +59,18 @@ function accessFor(userId: string, now: () => number = () => NOW) {
   );
 }
 
-test("seeding writes the four seeded files once and never BOOTSTRAP.md, whose work is AGENTS.md's own rule", async () => {
+test("seeding writes the three seeded files once and never BOOTSTRAP.md or MEMORY.md", async () => {
   const userId = await database.createUser();
   const seeded = await database.run(seedHostedWorkspace(database.store, userId, NOW));
-  assert.deepEqual(seeded, [
-    WORKSPACE_FILE.AGENTS,
-    WORKSPACE_FILE.IDENTITY,
-    WORKSPACE_FILE.USER,
-    WORKSPACE_FILE.MEMORY,
-  ]);
+  assert.deepEqual(seeded, [WORKSPACE_FILE.AGENTS, WORKSPACE_FILE.IDENTITY, WORKSPACE_FILE.USER]);
   assert.deepEqual(await database.run(seedHostedWorkspace(database.store, userId, NOW + 1)), []);
   const access = await accessFor(userId);
-  assert.deepEqual(
-    await database.run(access.read(WORKSPACE_FILE.BOOTSTRAP)),
-    Result.fail(WORKSPACE_FILE_REFUSAL.NOT_FOUND),
-  );
+  for (const unseeded of [WORKSPACE_FILE.BOOTSTRAP, WORKSPACE_FILE.MEMORY]) {
+    assert.deepEqual(
+      await database.run(access.read(unseeded)),
+      Result.fail(WORKSPACE_FILE_REFUSAL.NOT_FOUND),
+    );
+  }
   const agents = await database.run(access.read(WORKSPACE_FILE.AGENTS));
   assert.ok(Result.isSuccess(agents));
   assert.match(agents.success.content, /append_daily_note/u);
@@ -84,8 +81,11 @@ test("a curated file is refused past its own budget with the budget named, and t
   const userId = await database.createUser();
   await database.run(seedHostedWorkspace(database.store, userId, NOW));
   const access = await accessFor(userId);
-  const seeded = await database.run(access.read(WORKSPACE_FILE.MEMORY));
-  assert.ok(Result.isSuccess(seeded));
+  // MEMORY.md is seeded with nothing, so the row this refusal must leave
+  // standing is one the agent wrote itself.
+  await database.run(access.write(WORKSPACE_FILE.MEMORY, "the deploy is manual"));
+  const stored = await database.run(access.read(WORKSPACE_FILE.MEMORY));
+  assert.ok(Result.isSuccess(stored));
 
   const refused = await database.run(
     access.write(WORKSPACE_FILE.MEMORY, "m".repeat(MEMORY_BUDGET + 1)),
@@ -95,7 +95,7 @@ test("a curated file is refused past its own budget with the budget named, and t
   assert.ok(
     Result.isFailure(refused) && refused.failure.startsWith(WORKSPACE_FILE_REFUSAL.TOO_LARGE),
   );
-  assert.deepEqual(await database.run(access.read(WORKSPACE_FILE.MEMORY)), seeded);
+  assert.deepEqual(await database.run(access.read(WORKSPACE_FILE.MEMORY)), stored);
 
   const written = await database.run(access.write(WORKSPACE_FILE.USER, "u".repeat(USER_BUDGET)));
   assert.deepEqual(written, Result.succeed({ chars: USER_BUDGET }));

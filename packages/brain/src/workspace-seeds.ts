@@ -1,57 +1,54 @@
+import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import { WORKSPACE_FILE, type WorkspaceSeeds } from "@sidecar/runtime";
+import { BRAIN_TOOL } from "./tools/names.js";
 
 /**
  * The product's words for the agent's identity workspace: what each
- * workspace file holds when it is first made. The runtime package knows the files' names and bounds and none of
- * this; the brain, which is Luke's, supplies both. A seed is written once,
- * when the file is missing, and an existing file is never rewritten, so an
- * account seeded by an earlier build keeps that build's words.
+ * workspace file holds when it is first made. The runtime package knows the
+ * files' names and bounds and none of this; the brain, which is Luke's,
+ * supplies both. A seed is written once, when the file is missing, and an
+ * existing file is never rewritten, so an account seeded by an earlier build
+ * keeps that build's words. MEMORY.md is seeded with nothing: a file whose
+ * every line is the model's own reads better empty than under a header
+ * explaining a file it is about to fill.
  */
 
 const SEED_AGENTS = [
   "# AGENTS.md",
   "",
-  "Operating notes for Luke's own agent. Edit freely. Luke reads this file at the start of every",
-  "prompt and never overwrites your changes.",
+  "Your workspace conventions. Edit freely. Luke reads this file at the start of every prompt",
+  "and never overwrites your changes.",
   "",
-  "## How the turns work",
+  "## Session Startup",
   "",
-  "- An observation turn carries what the coding agents' transcripts gained since you last",
-  "  looked. Decide whether anything is worth the developer's attention.",
-  "- A developer ask is the developer speaking or typing to you. Your final text is the reply.",
+  "Use the startup context you are given first. It already holds this file, IDENTITY.md,",
+  "USER.md, MEMORY.md, and the recent daily notes. Read one again only when the developer asks,",
+  "when something you need is missing, or when a follow-up needs the whole file.",
   "",
   "## Memory",
   "",
-  "You wake fresh each session. These files are your continuity, and a session's opening carries",
-  "the recent daily notes beside them; a mental note does not survive, a written one does.",
+  "You wake fresh each session. These files are your continuity.",
   "",
-  "- Daily notes are the raw log. Capture what matters there with append_daily_note: decisions,",
-  "  context, constraints, open loops, things learned, things to remember. Write concrete",
-  "  entries, never placeholders.",
-  "- Before answering anything about prior work, decisions, dates, people, preferences, or",
-  "  todos, look in what your prompt already carries, then run memory_search and memory_get for",
-  "  anything older, pulling only the lines you need. If you're still not confident, say you",
-  "  checked. If the search ran keyword-only or wasn't available, say so.",
-  "- MEMORY.md is your long-term memory: the distilled essence, not raw logs. Durable decisions,",
-  "  lessons, how the developer's projects fit together. Over time, review the daily notes and",
-  "  fold what is worth keeping into it: read MEMORY.md whole, then rewrite it with",
-  "  write_workspace_file. It has a 4,000-character budget.",
-  "- USER.md holds stable facts about the developer, each a dated directive line. When a",
-  "  developer-opened turn shows a stable preference, personal fact, goal, or recurring",
-  "  constraint, add a line for it, losing nothing that was there. When a new directive",
-  "  supersedes an old one, mark the old line superseded and name the date; never silently",
-  "  delete it. Remove a directive only when the developer asks you to forget it. USER.md has a",
-  "  4,000-character budget: when a rewrite nears it, drop the oldest superseded lines first,",
-  "  and a standing directive never. Skip transient details and uncertain inferences. Never",
-  "  record a credential; record a sensitive fact only when explicitly asked.",
-  "- While USER.md holds no dated line, the developer is new to you. In that first conversation,",
-  "  find out what they are working on and how they like to be told about it, and write what",
-  "  lasts to USER.md before the conversation ends.",
-  "- Do not mention routine memory edits.",
+  `- **Daily notes:** \`memory/YYYY-MM-DD.md\` holds the raw log; write to it with ${BRAIN_TOOL.APPEND_DAILY_NOTE}.`,
+  "- **User model:** USER.md holds stable preferences and profile facts as dated directives.",
+  "- **Long-term:** MEMORY.md holds durable decisions and facts, distilled from the notes.",
   "",
-  "## Tool notes",
+  "Capture decisions, context, constraints, open loops, and things to remember. Write concrete",
+  "entries, never placeholders. Skip secrets unless asked to keep them.",
   "",
-  "- Name a session only by the identity the standing context lists for it right now.",
+  `Before answering about prior work, look in what your prompt already carries, then ${NOTEBOOK_MEMORY_TOOL.SEARCH}`,
+  "for anything older.",
+  "",
+  "### USER.md",
+  "",
+  "One directive a line, newest last, each opening with the date you observed it. When a newer",
+  "directive replaces an older one, mark the old line superseded rather than deleting it.",
+  "Remove a line only when the developer asks you to forget it.",
+  "",
+  "### MEMORY.md",
+  "",
+  `Read it whole, then rewrite it with ${BRAIN_TOOL.WRITE_WORKSPACE_FILE}. Fold what is worth`,
+  "keeping from the daily notes into it over time.",
   "",
 ].join("\n");
 
@@ -75,23 +72,14 @@ const SEED_USER = [
   "",
 ].join("\n");
 
-const SEED_MEMORY = [
-  "# MEMORY.md",
-  "",
-  "A compact curated layer, kept by hand: durable decisions and short summaries worth carrying",
-  "between conversations, small enough to read whole every prompt. Detail belongs in dated notes",
-  "under memory/, one file per day, read when needed.",
-  "",
-].join("\n");
-
 /**
  * What each file holds when the workspace is first made. BOOTSTRAP.md is not
- * seeded: the first conversation's work is AGENTS.md's own rule, keyed on a
- * USER.md that holds no dated line yet, since no tool deletes a file.
+ * seeded and MEMORY.md is seeded with nothing: the one would be a first-run
+ * ritual no tool could delete afterwards, and the other is the model's own
+ * file from its first line.
  */
 export const BRAIN_WORKSPACE_SEEDS: WorkspaceSeeds = {
   [WORKSPACE_FILE.AGENTS]: SEED_AGENTS,
   [WORKSPACE_FILE.IDENTITY]: SEED_IDENTITY,
   [WORKSPACE_FILE.USER]: SEED_USER,
-  [WORKSPACE_FILE.MEMORY]: SEED_MEMORY,
 };
