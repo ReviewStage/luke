@@ -644,6 +644,41 @@ export function readMessageById(
   );
 }
 
+const findMessagesByIdRows = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    messageIds: Schema.Array(Schema.String),
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    db
+      .select(MESSAGE_FIELDS)
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(eq(messages.userId, options.userId), inArray(messages.id, [...options.messageIds])),
+      )
+      .orderBy(asc(messages.createdAt), asc(messages.conversationId), asc(messages.seq)),
+});
+
+/**
+ * The account's messages the given ids name, across their standing
+ * conversations, read back under the registry like a page: the announcing
+ * rows a standing context recalls briefings from, in one statement rather
+ * than one per row. Nothing for no ids; an id naming no standing row of the
+ * account's is absent from the answer rather than refused.
+ */
+export function readMessagesByIds(
+  userId: string,
+  tools: ToolSet,
+  messageIds: readonly string[],
+): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
+  if (messageIds.length === 0) return Effect.succeed({ ok: true, value: [] });
+  return Effect.flatMap(findMessagesByIdRows({ userId, messageIds }), (selected) =>
+    readSelected(selected, tools),
+  );
+}
+
 const FoundMessageIdSchema = Schema.Struct({ id: Schema.String });
 
 const findMessageIdByClientId = SqlSchema.findOneOption({

@@ -27,6 +27,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../../core.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
 import type { HostedRefusal } from "../http-effect.js";
@@ -48,6 +49,7 @@ import {
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
 } from "./bounds.js";
+import { readRecentBriefings } from "./briefings.js";
 import { deliverChildCompletion } from "./child-completion.js";
 import { hostedChildAccess } from "./children.js";
 import { hostedStandingContext, readRecentMessages } from "./context.js";
@@ -452,10 +454,22 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
           const now = seams.now();
           const roster = yield* rosterOf(userId);
           const defaults = yield* readWorkspaceDefaults(userId);
+          // Main alone recalls what its observed conversations announced: an
+          // observed turn has its own history, and a child's is its task.
+          const briefings =
+            admitted.kind === CONVERSATION_KIND.MAIN
+              ? yield* readRecentBriefings(
+                  yield* seams.store(),
+                  CATALOG_TOOL_SET,
+                  admitted.target,
+                  now,
+                )
+              : [];
           return hostedStandingContext({
             roster,
             rosterText: brainRosterOf(roster, now).text,
             defaults,
+            briefings,
             now,
           });
         }),

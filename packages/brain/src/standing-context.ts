@@ -7,10 +7,12 @@ import {
   SESSION_COMPLETION_CAUSE,
   type Session,
   type SessionCompletionCause,
+  type SessionIdentity,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceTaskSupport,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
+import { maximumBriefingLength } from "./tools/names.js";
 
 /**
  * Roster context serialization: the bounded, redacted view of sessions and
@@ -122,26 +124,47 @@ function prioritizedContextSessions(sessions: readonly Session[]): readonly Sess
  * roster every minute a stale session merely sat there, and the buckets are
  * wide enough that an ordinary conversation crosses few edges.
  */
-const SESSION_AGE_TEXT = {
-  JUST_NOW: "updated just now",
-  MINUTES: "updated minutes ago",
-  ABOUT_AN_HOUR: "updated about an hour ago",
-  HOURS: "updated hours ago",
-  DAY_OR_MORE: "updated a day or more ago",
+const AGE_BUCKET = {
+  JUST_NOW: "just_now",
+  MINUTES: "minutes",
+  ABOUT_AN_HOUR: "about_an_hour",
+  HOURS: "hours",
+  DAY_OR_MORE: "day_or_more",
 } as const;
 
-type SessionAgeText = (typeof SESSION_AGE_TEXT)[keyof typeof SESSION_AGE_TEXT];
+type AgeBucket = (typeof AGE_BUCKET)[keyof typeof AGE_BUCKET];
+
+const SESSION_AGE_TEXT = {
+  [AGE_BUCKET.JUST_NOW]: "updated just now",
+  [AGE_BUCKET.MINUTES]: "updated minutes ago",
+  [AGE_BUCKET.ABOUT_AN_HOUR]: "updated about an hour ago",
+  [AGE_BUCKET.HOURS]: "updated hours ago",
+  [AGE_BUCKET.DAY_OR_MORE]: "updated a day or more ago",
+} as const satisfies Record<AgeBucket, string>;
+
+/** The same buckets for a briefing's age, read as when it was given rather than when a session moved. */
+const BRIEFING_AGE_TEXT = {
+  [AGE_BUCKET.JUST_NOW]: "just now",
+  [AGE_BUCKET.MINUTES]: "minutes ago",
+  [AGE_BUCKET.ABOUT_AN_HOUR]: "about an hour ago",
+  [AGE_BUCKET.HOURS]: "hours ago",
+  [AGE_BUCKET.DAY_OR_MORE]: "a day or more ago",
+} as const satisfies Record<AgeBucket, string>;
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
 
-function sessionAgeText(lastActivityAt: number, now: number): SessionAgeText {
-  const elapsed = now - lastActivityAt;
-  if (elapsed < 5 * MINUTE_MS) return SESSION_AGE_TEXT.JUST_NOW;
-  if (elapsed < HOUR_MS) return SESSION_AGE_TEXT.MINUTES;
-  if (elapsed < 2 * HOUR_MS) return SESSION_AGE_TEXT.ABOUT_AN_HOUR;
-  if (elapsed < DAY_MS) return SESSION_AGE_TEXT.HOURS;
-  return SESSION_AGE_TEXT.DAY_OR_MORE;
+function ageBucket(instant: number, now: number): AgeBucket {
+  const elapsed = now - instant;
+  if (elapsed < 5 * MINUTE_MS) return AGE_BUCKET.JUST_NOW;
+  if (elapsed < HOUR_MS) return AGE_BUCKET.MINUTES;
+  if (elapsed < 2 * HOUR_MS) return AGE_BUCKET.ABOUT_AN_HOUR;
+  if (elapsed < DAY_MS) return AGE_BUCKET.HOURS;
+  return AGE_BUCKET.DAY_OR_MORE;
+}
+
+function sessionAgeText(lastActivityAt: number, now: number): string {
+  return SESSION_AGE_TEXT[ageBucket(lastActivityAt, now)];
 }
 
 /**
@@ -350,3 +373,53 @@ const TASK_SUPPORT_TEXT = {
   [WORKSPACE_TASK_SUPPORT.OPTIONAL]: "takes an opening task",
   [WORKSPACE_TASK_SUPPORT.REQUIRED]: "needs an opening task",
 } satisfies Record<WorkspaceTaskSupport, string>;
+
+/**
+ * One briefing Luke gave from an observed session's conversation, as the
+ * store found it: when it was offered, which session it was about, and the
+ * words the announce call carried.
+ */
+export interface RecentBriefing {
+  readonly announcedAt: number;
+  readonly session: SessionIdentity;
+  /** What the roster called the session when the briefing was given, or nothing where it had no name. */
+  readonly title: string | undefined;
+  readonly words: string;
+}
+
+/** How many briefings one context update may recall; older ones are history the roster and the transcript reads cover. */
+export const maximumRecentBriefings = 8;
+
+const UNTITLED_BRIEFING_SESSION = "untitled session";
+
+/** A briefing as one line: its whitespace folded so a line stays a line, and cut to the bound the tool announces under. */
+function briefingLineText(words: string): string {
+  return words.replace(/\s+/gu, " ").trim().slice(0, maximumBriefingLength);
+}
+
+/**
+ * Renders the briefings Luke gave recently from observed conversations, so
+ * main's turn knows what the developer has been told and which session each
+ * was about: an observed conversation's turns are that conversation's own
+ * history, and nothing else carries its briefing into main. Newest last, as
+ * the history reads, and at most the bound; nothing at all for none, so the
+ * section is absent rather than empty. The age is the roster's coarse
+ * buckets for the roster's reason: the block travels every turn, and a line
+ * that reworded itself each minute would say nothing new.
+ */
+export function recentBriefingsContextText(
+  briefings: readonly RecentBriefing[],
+  now: number,
+): string | undefined {
+  if (briefings.length === 0) return undefined;
+  const listed = [...briefings]
+    .sort((left, right) => left.announcedAt - right.announcedAt)
+    .slice(-maximumRecentBriefings);
+  return [
+    "Briefings you gave the developer in the last day, newest last. Each names the session it was about, so a follow-up that refers to one can act on that session without looking it up:",
+    ...listed.map(
+      (briefing) =>
+        `- ${BRIEFING_AGE_TEXT[ageBucket(briefing.announcedAt, now)]} — ${briefing.title ?? UNTITLED_BRIEFING_SESSION} [provider_id=${briefing.session.providerId} provider_session_id=${briefing.session.providerSessionId}] — "${briefingLineText(briefing.words)}"`,
+    ),
+  ].join("\n");
+}

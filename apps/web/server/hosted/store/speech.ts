@@ -1,5 +1,18 @@
 import { readEither } from "@sidecar/wire/effect";
-import { and, asc, eq, gt, inArray, isNull, max, notExists, notInArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  max,
+  notExists,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Duration, Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
@@ -21,6 +34,7 @@ import {
 import { devices } from "../../db/devices-schema.js";
 import { db } from "../../db/query.js";
 import { conversations, events, messages } from "../../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
 import { ConversationEventKindSchema, STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
 
@@ -660,6 +674,110 @@ export const openSpeechOffers = /* @__PURE__ */ Effect.fn("web/openSpeechOffers"
     return standing === undefined ? [] : [{ ...row, ...standing }];
   });
 });
+
+export interface RecentBriefingOffersQuery {
+  readonly userId: string;
+  /** The account's standing main: an offer from before it opened belongs to a thread the developer cleared, and is left out. */
+  readonly mainConversationId: string;
+  /** Offers at or after this instant alone. */
+  readonly since: Date;
+  readonly limit: number;
+}
+
+/** The offer's rows as the statement answers them; the session's columns are nullable on the table, and a row without them is dropped below. */
+const OfferedBriefingRowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  messageId: Schema.String,
+  offeredAt: InstantColumnSchema,
+  providerId: Schema.NullOr(Schema.String),
+  providerSessionId: Schema.NullOr(Schema.String),
+  title: Schema.NullOr(Schema.String),
+});
+
+/** One briefing as it was offered: the row announcing it, the observed session it was about, and what the roster then called that session. */
+export interface RecentBriefingOffer {
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly offeredAt: Date;
+  readonly providerId: string;
+  readonly providerSessionId: string;
+  readonly title: string | null;
+}
+
+const findRecentBriefingOffers = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    mainConversationId: Schema.String,
+    since: Schema.Date,
+    limit: Schema.Int,
+  }),
+  Result: OfferedBriefingRowSchema,
+  execute: (query) => {
+    // The floor the main opened at is read in the same statement, so a Clear
+    // that opened a new main cuts the list on the tick it landed.
+    const mainOpened = db
+      .select({ createdAt: conversations.createdAt })
+      .from(conversations)
+      .where(eq(conversations.id, query.mainConversationId));
+    return db
+      .select({
+        conversationId: events.conversationId,
+        messageId: events.messageId,
+        offeredAt: events.createdAt,
+        providerId: conversations.providerId,
+        providerSessionId: conversations.providerSessionId,
+        title: conversations.title,
+      })
+      .from(events)
+      .innerJoin(
+        conversations,
+        and(
+          eq(conversations.id, events.conversationId),
+          eq(conversations.kind, CONVERSATION_KIND.OBSERVED),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .where(
+        and(
+          eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_OFFERED),
+          eq(events.userId, query.userId),
+          gte(events.createdAt, query.since),
+          gte(events.createdAt, sql`(${mainOpened})`),
+        ),
+      )
+      .orderBy(desc(events.createdAt), desc(events.conversationId), desc(events.seq))
+      .limit(query.limit);
+  },
+});
+
+/**
+ * The briefings offered from the account's observed conversations since an
+ * instant and since its standing main opened, newest first and at most the
+ * bound, whatever became of each offer: what the developer was told is what
+ * main's turn is owed, heard or not. An observed conversation a Clear or a
+ * departure stamped is skipped like every other read, and one without its
+ * session, which no observation wrote, names nothing and is skipped too. A
+ * message told its offer twice is one briefing; the newest row keeps its
+ * place.
+ */
+export const recentBriefingOffers = /* @__PURE__ */ Effect.fn("web/recentBriefingOffers")(
+  function* (
+    query: RecentBriefingOffersQuery,
+  ): Effect.fn.Return<readonly RecentBriefingOffer[], SpeechReadFailure, SqlClient.SqlClient> {
+    const offered = yield* findRecentBriefingOffers(query);
+    const distinct = new Map<string, RecentBriefingOffer>();
+    for (const row of offered) {
+      if (row.providerId === null || row.providerSessionId === null) continue;
+      if (distinct.has(row.messageId)) continue;
+      distinct.set(row.messageId, {
+        ...row,
+        providerId: row.providerId,
+        providerSessionId: row.providerSessionId,
+      });
+    }
+    return [...distinct.values()];
+  },
+);
 
 /** What one sweep did, as counts. */
 export interface SpeechSweepOutcome {

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   type ProviderSessionObservation,
+  type RecentBriefing,
+  recentBriefingsContextText,
   SESSION_STATUS,
   standingContextText,
   WORKSPACE_TASK_SUPPORT,
@@ -12,10 +14,11 @@ import { brainRosterOf, hostedRosterFrom } from "../server/hosted/brain-host/ros
 import type { ObservedRoster } from "../server/hosted/observed-roster";
 
 /**
- * The standing context is the roster and the projects, as data, and nothing
- * else: the exchange so far is the eve session's own history and the rotation
- * seed's, and what Luke knows of the developer is USER.md in the prompt.
- * Synthetic roster throughout.
+ * The standing context is the roster, the projects, and, where the host hands
+ * them, the briefings main's observed conversations gave, as data, and
+ * nothing else: the exchange so far is the eve session's own history and the
+ * rotation seed's, and what Luke knows of the developer is USER.md in the
+ * prompt. Synthetic roster throughout.
  */
 
 const NOW = 1_800_000_000_000;
@@ -51,6 +54,33 @@ const ROSTER: ObservedRoster = {
   ],
 };
 
+test("main's standing context recalls the briefings its observed conversations gave, after the projects, and a turn handed none says nothing of them", () => {
+  const roster = hostedRosterFrom(ROSTER, NOW);
+  const rosterText = brainRosterOf(roster, NOW).text;
+  const defaults = { defaultProviderId: "conductor" };
+  const briefings: RecentBriefing[] = [
+    {
+      announcedAt: NOW - 60_000,
+      session: { providerId: "conductor", providerSessionId: SESSION_UUID },
+      title: `Chat ${SESSION_UUID}`,
+      words: "Checkout's agent is stuck on a failing test in auth.spec.",
+    },
+  ];
+  const context = hostedStandingContext({ roster, rosterText, defaults, briefings, now: NOW });
+
+  const projects = workspaceProjectContextText(roster.projects, defaults.defaultProviderId);
+  const section = recentBriefingsContextText(briefings, NOW);
+  assert.ok(section);
+  assert.equal(context, standingContextText(rosterText, `${projects}\n\n${section}`, NOW));
+  assert.ok(context.indexOf(projects) < context.indexOf(section));
+  assert.ok(context.includes(`provider_session_id=${SESSION_UUID}`));
+  assert.ok(context.includes("stuck on a failing test"));
+
+  const without = hostedStandingContext({ roster, rosterText, defaults, briefings: [], now: NOW });
+  assert.equal(without.includes("Briefings you gave"), false);
+  assert.equal(without, hostedStandingContext({ roster, rosterText, defaults, now: NOW }));
+});
+
 test("the standing context carries the roster and the projects alone: no recent exchange and no remembered facts", () => {
   const roster = hostedRosterFrom(ROSTER, NOW);
   const rosterText = brainRosterOf(roster, NOW).text;
@@ -67,7 +97,13 @@ test("the standing context carries the roster and the projects alone: no recent 
       NOW,
     ),
   );
-  for (const absent of ["Recent conversation", "Developer:", "Luke:", "Durable facts"]) {
+  for (const absent of [
+    "Recent conversation",
+    "Developer:",
+    "Luke:",
+    "Durable facts",
+    "Briefings you gave",
+  ]) {
     assert.equal(context.includes(absent), false, absent);
   }
 });
