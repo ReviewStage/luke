@@ -52,6 +52,9 @@ struct ConversationView: View {
     /// How long the row a tap opened at stays lifted.
     private static let liftDuration: Duration = .seconds(2)
     private static let layoutSettle: Duration = .milliseconds(300)
+    /// The row count the end was last re-aimed at, so the thread coming
+    /// back on screen with nothing new leaves the reader's place alone.
+    @State private var settledCount: Int?
 
     private var turns: [ConversationTurnRows] {
         conversation.groups.map { ConversationTurnRows(group: $0, roster: store.sessions) }
@@ -137,8 +140,11 @@ struct ConversationView: View {
             // aimed at the end while the screen is up settles short of it;
             // once the layout stands, the end is aimed at again.
             .task(id: conversation.groups.count) {
+                let count = conversation.groups.count
+                guard settledCount != count else { return }
                 try? await Task.sleep(for: Self.layoutSettle)
                 guard !Task.isCancelled else { return }
+                settledCount = count
                 switch conversation.opening {
                 case .seeking, .found: return
                 case .missing, nil: scroll(proxy, to: Self.endId)
