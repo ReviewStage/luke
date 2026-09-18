@@ -44,7 +44,6 @@
 		AABBCC0000000000000000D4 /* VoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D0 /* VoiceView.swift */; };
 		AABBCC000000000000000121 /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000120 /* ConversationView.swift */; };
 		AABBCC000000000000000125 /* PushNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC000000000000000124 /* PushNotifications.swift */; };
-		AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */; };
 		AABBCC0000000000000000F9 /* SessionsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000F8 /* SessionsStore.swift */; };
 		AABBCC0000000000000000E6 /* WatchVoiceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E5 /* WatchVoiceView.swift */; };
 		AABBCC0000000000000000E8 /* WatchVoiceSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */; };
@@ -125,7 +124,6 @@
 		AABBCC000000000000000120 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000124 /* PushNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotifications.swift; sourceTree = "<group>"; };
 		AABBCC000000000000000126 /* Luke.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Luke.entitlements; sourceTree = "<group>"; };
-		AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsSheet.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000F8 /* SessionsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsStore.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E5 /* WatchVoiceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceView.swift; sourceTree = "<group>"; };
 		AABBCC0000000000000000E7 /* WatchVoiceSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchVoiceSessionModel.swift; sourceTree = "<group>"; };
@@ -210,7 +208,6 @@
 				AABBCC0000000000000000D0 /* VoiceView.swift */,
 				AABBCC000000000000000120 /* ConversationView.swift */,
 				AABBCC000000000000000124 /* PushNotifications.swift */,
-				AABBCC0000000000000000D8 /* VoiceSettingsSheet.swift */,
 				AABBCC000000000000000014 /* Assets.xcassets */,
 				AABBCC000000000000000126 /* Luke.entitlements */,
 				AABBCC00000000000000001C /* Info.plist */,
@@ -425,7 +422,6 @@
 				AABBCC0000000000000000D4 /* VoiceView.swift in Sources */,
 				AABBCC000000000000000121 /* ConversationView.swift in Sources */,
 				AABBCC000000000000000125 /* PushNotifications.swift in Sources */,
-				AABBCC0000000000000000D9 /* VoiceSettingsSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

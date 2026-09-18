@@ -1,48 +1,11 @@
-// Provider marks, matching the geometry from the web and desktop, and the
-// phone-only rasterization of Luke's own face. Google G keeps its four
-// official brand colours. GitHub mark rides the view's foreground. The face
-// artwork itself is `FaceArt` and `LukeMark` in LukeKit, which the watch draws
-// too; only the UIKit rendering below is the phone's alone.
+// Provider marks, matching the geometry from the web and desktop, and their
+// rasterization for a menu row, which is the phone's alone. Google G keeps its
+// four official brand colours. GitHub mark rides the view's foreground. Luke's
+// own face is `FaceArt` and `LukeMark` in LukeKit, which the watch draws too.
 import CoreGraphics
 import LukeKit
 import SwiftUI
 import UIKit
-
-// MARK: - Luke face mark, rasterized
-
-extension LukeMark {
-    /// The face rasterized for the tab bar, which — like a `UIMenu` row —
-    /// draws only an image beside each title and drops a custom label view,
-    /// so LukeMark's Canvas can never appear there. The template rendering
-    /// lets the bar ink the face selected and unselected the way it inks an
-    /// SF Symbol.
-    static let tabIcon: UIImage = {
-        let box = FaceArt.markBox
-        let height: CGFloat = 24
-        let size = CGSize(width: height * box.width / box.height, height: height)
-        let scale = height / box.height
-        let placement = CGAffineTransform(scaleX: scale, y: scale)
-            .translatedBy(x: -box.minX, y: -box.minY)
-        let image = UIGraphicsImageRenderer(size: size).image { rendererContext in
-            let ctx = rendererContext.cgContext
-            // The CTM carries the tilt and placement, so the stroke width and
-            // eye rects stay in the artwork's own canvas coordinates.
-            ctx.concatenate(FaceArt.tilt.concatenating(placement))
-            ctx.setLineWidth(FaceArt.strokeWidth)
-            ctx.setLineCap(.round)
-            ctx.setLineJoin(.round)
-            ctx.addPath(FaceArt.smile.cgPath)
-            ctx.strokePath()
-            for eyeX in FaceArt.eyeXs {
-                ctx.fillEllipse(in: CGRect(
-                    x: eyeX - FaceArt.eyeRadius, y: FaceArt.eyeY - FaceArt.eyeRadius,
-                    width: FaceArt.eyeRadius * 2, height: FaceArt.eyeRadius * 2
-                ))
-            }
-        }
-        return image.withRenderingMode(.alwaysTemplate)
-    }()
-}
 
 // MARK: - Google G mark (official brand geometry, viewBox 0 0 18 18)
 

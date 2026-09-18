@@ -271,9 +271,9 @@ call does.
 - **Counted.** `voice:call_start` with `session_source: hosted` when
   `session.created` lands, as the desktop counts it.
 - **Settings.** The voice, chosen from every Live voice (`LIVE_VOICE`) and
-  synced with the account and the watch as before, and a reset. The Live model
-  has no speed, so the slider went with the move, and the Debug tool list
-  went with the tools.
+  synced with the account and the watch as before, under the account sheet
+  the avatar opens; there is no reset. The Live model has no speed, so the
+  slider went with the move, and the Debug tool list went with the tools.
 
 Gone with the move, by ruling (LUKE-212) or by the route's rule: the
 composer and the keyboard button (Luke is voice only on every device), the
@@ -368,8 +368,8 @@ and `closed` reaches the consumer at once, with nothing tried again.
 
 ## Conversation
 
-The Luke tab's toolbar opens the Conversation: the one long thread the
-account holds, read from the service's stored messages through the
+The Luke screen, the root of the signed-in stack, draws the Conversation
+under its talk controls: the one long thread the account holds, read from the service's stored messages through the
 per-resource reads `packages/hosted`'s `reads-wire.ts` declares
 (`/api/conversation/messages`, `/api/conversation/events`,
 `/api/brain/turns`) and the change signal (`/api/changes`). It is the same
@@ -504,8 +504,7 @@ class that are the only things the two sandboxes differ on; the voice call's
 audio in `PCMAudioPlayer` and `PCMAudioCapturer`, which touch no audio
 session of their own (on the watch `WatchVoiceAudioSession` holds it for the
 whole call) and speak at the rate the session's format names; and Luke's own
-face in `FaceArt` and `LukeMark`, with only the
-tab bar's UIKit rasterization left on the phone, where UIKit exists. A copy
+face in `FaceArt` and `LukeMark`. A copy
 kept in step by a "change both" comment is a copy that eventually is not, so
 each of those was one file with two callers rather than two files.
 

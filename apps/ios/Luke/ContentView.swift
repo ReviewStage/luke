@@ -174,23 +174,29 @@ struct ContentView: View {
 
 // MARK: - Signed-in view
 
-/// Its own struct so `profileShown` lives and dies with the signed-in
-/// hierarchy: a sign-out tears the flag down with the view, and the next
-/// sign-in starts with the sheet closed rather than inheriting a stale true.
+/// The one stack a signed-in account stands in: the Luke screen at its root,
+/// the sessions list pushed over it from the top-right button, and a
+/// session's own screen over the list, as the watch stands. Its own struct so
+/// `profileShown` lives and dies with the signed-in hierarchy: a sign-out
+/// tears the flag down with the view, and the next sign-in starts with the
+/// sheet closed rather than inheriting a stale true.
 private struct SignedInView: View {
     @Environment(AccountSession.self) private var session
     @Environment(ProductEventSender.self) private var events
     @Environment(PushCoordinator.self) private var push
     let identity: AccountIdentity
     @State private var profileShown = false
-    @State private var creatorShown = false
-    /// The list's state, the stack above it, and the tab selection, owned
-    /// here so the voice screen can drive the same presses the list offers
-    /// by hand, and torn down with the signed-in hierarchy like the profile
-    /// flag.
+    /// The list's state and the stack over Luke, owned here so the Luke
+    /// screen can drive the same presses the list offers by hand, and torn
+    /// down with the signed-in hierarchy like the profile flag.
     @State private var store = SessionsStore(
         rosterClient: RosterClient(serviceURL: AccountConstants.serviceURL)
     )
+    /// Sent bubbles per session, in memory alone for the app run — the
+    /// developer's own words, never written to disk. Owned above the stack so
+    /// they survive push and pop, and a chat reopened mid-run still shows
+    /// what was just sent.
+    @State private var threads: [String: [OutgoingMessage]] = [:]
     /// The Conversation's reading, owned here so it is torn down with the
     /// signed-in hierarchy: the next account starts with nothing of the last
     /// one's thread. It polls under the device row the registrar stored, or
@@ -201,40 +207,26 @@ private struct SignedInView: View {
         deviceId: { DeviceRegistrar.storedDeviceId() }
     )
 
-    private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
-    private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
-
     var body: some View {
         @Bindable var store = store
-        return TabView(selection: tabSelection) {
-            NavigationStack(path: $store.path) {
-                SessionsView()
-                    .toolbar { profileToolbar }
-            }
-            .tabItem { Label("Sessions", systemImage: "list.bullet") }
-            .tag(AppTab.sessions)
-
-            NavigationStack {
-                VoiceView(conversation: conversation)
-                    .toolbar { profileToolbar }
-            }
-            .tabItem {
-                Label {
-                    Text("Luke")
-                } icon: {
-                    Image(uiImage: LukeMark.tabIcon)
+        return NavigationStack(path: $store.path) {
+            VoiceView(conversation: conversation)
+                .toolbar {
+                    profileToolbar
+                    ToolbarItem(placement: .topBarTrailing) { sessionsButton }
                 }
-            }
-            .tag(AppTab.luke)
-
-            // Never shown: selecting this tab presents the creator sheet
-            // instead of changing the selection.
-            Color.ground
-                .ignoresSafeArea()
-                .tabItem { Label("New", systemImage: "plus") }
-                .tag(AppTab.create)
+                .navigationDestination(for: SessionsRoute.self) { route in
+                    SessionsView(route: route, threads: $threads)
+                }
         }
         .environment(store)
+        // The Conversation's action rows name sessions off the roster, so it
+        // is read as the signed-in stack appears and not only once the list
+        // is pushed, as the watch reads it. On the stack rather than the Luke
+        // screen, because a push hides that screen and would cancel a read
+        // still in flight, and a cancellation is not a failed load. The list
+        // still refreshes itself on every push and pull.
+        .task { await store.refresh(account: session, events: events) }
         // A briefing's notification tapped: the Conversation opens at that
         // briefing, by the one id the payload carried. `initial` covers a tap
         // that launched the app, which lands before this view stands.
@@ -247,32 +239,6 @@ private struct SignedInView: View {
         .sheet(isPresented: $profileShown) {
             ProfileSheet(identity: identity)
         }
-        .sheet(isPresented: $creatorShown) {
-            WorkspaceCreatorSheet(actionClient: actionClient, projectsClient: projectsClient) {
-                creatorShown = false
-                // The list is the one place the new workspace appears, so a
-                // session screen still stacked above it pops as well.
-                store.tab = .sessions
-                store.path.removeAll()
-                Task { await store.refresh(account: session, events: events) }
-            }
-        }
-    }
-
-    /// The New tab is a button in the bar: its selection opens the creator
-    /// sheet and the selection stays where it was, so dismissing the sheet
-    /// leaves the developer on the screen they were reading.
-    private var tabSelection: Binding<AppTab> {
-        Binding(
-            get: { store.tab },
-            set: { selected in
-                if selected == .create {
-                    creatorShown = true
-                } else {
-                    store.tab = selected
-                }
-            }
-        )
     }
 
     @ToolbarContentBuilder
@@ -290,6 +256,16 @@ private struct SignedInView: View {
                 profileButton
             }
         }
+    }
+
+    /// Pushes the sessions list over Luke; its back button returns here.
+    private var sessionsButton: some View {
+        Button {
+            store.showSessions()
+        } label: {
+            Label("Sessions", systemImage: "list.bullet")
+        }
+        .tint(Color.ink)
     }
 
     private var profileButton: some View {
@@ -330,9 +306,9 @@ private struct SignedInView: View {
 
 /// The account surface the header avatar opens, drawn with the system's own
 /// sheet vocabulary — inline title, close button, grouped list: the photo
-/// large at the top center, the account it belongs to, the provider keys,
-/// and at the very bottom the one account action, signing out, over the build's
-/// own version.
+/// large at the top center, the account it belongs to, the voice Luke speaks
+/// in on this account's devices, the provider keys, and at the very bottom
+/// the one account action, signing out, over the build's own version.
 private struct ProfileSheet: View {
     @Environment(AccountSession.self) private var session
     @Environment(VaultStore.self) private var vault
@@ -340,6 +316,7 @@ private struct ProfileSheet: View {
     @Environment(\.dismiss) private var dismiss
     let identity: AccountIdentity
     @State private var editingProvider: VaultProviderID?
+    @AppStorage(VoiceSettingsKey.voice) private var voice = LiveVoice.default
 
     var body: some View {
         NavigationStack {
@@ -367,6 +344,21 @@ private struct ProfileSheet: View {
                             .font(.footnote)
                             .foregroundStyle(Color.warningInk)
                     }
+                }
+
+                // The desktop's voice setting that applies on this device,
+                // chosen from every voice a Live session speaks and synced
+                // with the account and the watch. The Mac-only rows
+                // (microphone choice, media ducking, announcements, captions)
+                // are not drawn, and the Live model has no speed.
+                Section {
+                    Picker("Voice", selection: voiceChoice) {
+                        ForEach(LiveVoice.allCases) { candidate in
+                            Text(candidate.displayName).tag(candidate)
+                        }
+                    }
+                } footer: {
+                    Text("A conversation under way ends; the next press opens one in the new voice.")
                 }
 
                 VaultSection(editing: $editingProvider)
@@ -414,6 +406,17 @@ private struct ProfileSheet: View {
             }
             .accessibilityLabel("Close")
         }
+    }
+
+    private var voiceChoice: Binding<LiveVoice> {
+        Binding(
+            get: { voice },
+            set: { chosen in
+                guard chosen != voice else { return }
+                voice = chosen
+                events.record(.settingUpdate(setting: .voice, value: .set))
+            }
+        )
     }
 
     private static let versionLabel: String = {

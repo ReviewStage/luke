@@ -4,9 +4,9 @@ import XCTest
 
 @testable import Luke
 
-/// The store the list, the session screens, and the voice screen share. None
-/// of what is asserted here reaches the network: every case is a press the
-/// list itself draws a control for.
+/// The store the Luke screen, the list, and the session screens share. None
+/// of what is asserted here reaches the network: every case is a press a
+/// screen itself draws a control for.
 @MainActor
 final class SessionsStoreTests: XCTestCase {
     private func makeStore() -> SessionsStore {
@@ -24,50 +24,63 @@ final class SessionsStoreTests: XCTestCase {
         )
     }
 
-    func testOpeningASessionPushesItsScreen() {
+    func testShowingSessionsPushesTheListOverLuke() {
         let store = makeStore()
-        let session = makeSession("a")
-        store.open(session)
-        XCTAssertEqual(store.path, [.session(session)])
-        XCTAssertEqual(store.tab, .luke)
+        store.showSessions()
+        XCTAssertEqual(store.path, [.sessions])
     }
 
-    func testOpeningFromTheConversationLeavesTheLukeTab() {
+    func testShowingSessionsFromASessionScreenPopsToTheList() {
+        let store = makeStore()
+        store.showSessions()
+        store.open(makeSession("a"))
+        store.showSessions()
+        XCTAssertEqual(store.path, [.sessions])
+    }
+
+    func testOpeningASessionPushesItsScreenOverTheList() {
+        let store = makeStore()
+        let session = makeSession("a")
+        store.showSessions()
+        store.open(session)
+        XCTAssertEqual(store.path, [.sessions, .session(session)])
+    }
+
+    func testOpeningFromTheConversationStandsTheListUnderTheScreen() {
         let store = makeStore()
         let session = makeSession("a")
         store.openLeavingConversation(session)
-        XCTAssertEqual(store.tab, .sessions)
-        XCTAssertEqual(store.path, [.session(session)])
+        XCTAssertEqual(store.path, [.sessions, .session(session)])
     }
 
-    func testOpeningTheConversationLandsOnTheLukeTabItself() {
+    func testOpeningTheConversationPopsToLuke() {
         let store = makeStore()
-        store.tab = .sessions
+        store.showSessions()
         store.open(makeSession("a"))
-        store.tab = .sessions
         store.openConversation()
-        XCTAssertEqual(store.tab, .luke)
-        XCTAssertEqual(store.path, [.session(makeSession("a"))], "the sessions stack is left standing")
+        XCTAssertTrue(store.path.isEmpty)
     }
 
-    func testClosingAScreenLeavesEveryOtherSessionStanding() {
+    func testClosingAScreenLeavesTheListAndEveryOtherSessionStanding() {
         let store = makeStore()
         let first = makeSession("a")
         let second = makeSession("b")
+        store.showSessions()
         store.open(first)
         store.open(second)
         store.closeScreen(of: first)
-        XCTAssertEqual(store.path, [.session(second)])
+        XCTAssertEqual(store.path, [.sessions, .session(second)])
     }
 
     func testArchivingRemovesTheRowAndItsScreenAtThePress() {
         let store = makeStore()
         let session = makeSession("a")
         store.sessions = [session, makeSession("b")]
+        store.showSessions()
         store.open(session)
         store.beginArchiving(session)
         XCTAssertEqual(store.sessions.map(\.sessionId), ["b"])
-        XCTAssertTrue(store.path.isEmpty)
+        XCTAssertEqual(store.path, [.sessions], "the list stays under where the screen was")
     }
 
     func testARefusedArchiveRestoresTheRow() {

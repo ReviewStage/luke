@@ -2,28 +2,21 @@ import LukeKit
 import Observation
 import SwiftUI
 
-/// The signed-in tab bar's destinations. `create` is a button wearing a
-/// tab's clothes: selecting it presents the New Workspace sheet while the
-/// selection stays on the tab already showing.
-enum AppTab: Hashable {
-    case sessions
-    case luke
-    case create
-}
-
-/// Where the sessions tab can stand beyond the list: on one session's own
-/// screen. A route carries the observed row it was opened from, so a screen
+/// What the phone pushes over Luke: the sessions list, and one session's own
+/// screen over the list. The Luke screen is the root and is never a route. A
+/// session route carries the observed row it was opened from, so a screen
 /// whose session a later refresh no longer reports keeps its last observed
 /// word rather than going blank.
 enum SessionsRoute: Hashable {
+    case sessions
     case session(RosterSession)
 }
 
-/// The list's state and the stack above it, shared between the list, the
-/// session screens, and the voice screen, because Luke can be asked in
+/// The list's state and the stack over Luke, shared between the Luke screen,
+/// the list, and the session screens, because Luke can be asked in
 /// conversation for the same presses the list offers by hand: open a
 /// session's screen, narrow or reorder the list, search it. Every action on
-/// this store is a press the list itself draws a control for.
+/// this store is a press a screen itself draws a control for.
 @MainActor
 @Observable
 final class SessionsStore {
@@ -44,9 +37,7 @@ final class SessionsStore {
     var searchPresented = false
     var filters: Set<SessionFilter> = []
     var sort: SessionSort = .urgency
-    /// Which tab the signed-in hierarchy shows; the conversation with Luke is
-    /// where a launch lands.
-    var tab: AppTab = .luke
+    /// The stack pushed over the Luke screen, where a launch lands.
     var path: [SessionsRoute] = []
 
     /// Counts refresh passes so a stale answer cannot outrank a newer one:
@@ -70,24 +61,29 @@ final class SessionsStore {
         self.rosterClient = rosterClient
     }
 
-    /// Opens a session's own screen, the same press a row takes.
+    /// Pushes the sessions list over Luke, the press the top-right button takes.
+    func showSessions() {
+        path = [.sessions]
+    }
+
+    /// Opens a session's own screen over the list, the same press a row takes.
     func open(_ session: RosterSession) {
         path.append(.session(session))
     }
 
-    /// Opens a session's screen in the conversation's place: an open asked of
-    /// Luke leaves the Luke tab for the sessions tab the way the desktop's
-    /// open leaves the panel for the provider's app, and the voice screen
-    /// disappearing is what closes its call.
+    /// Opens a session's screen from the Conversation, standing the list
+    /// under it so back returns to the sessions and then to Luke, as a row
+    /// press would leave it: an open asked of Luke leaves his screen the way
+    /// the desktop's open leaves the panel for the provider's app, and the
+    /// voice screen disappearing is what closes its call.
     func openLeavingConversation(_ session: RosterSession) {
-        tab = .sessions
-        path.append(.session(session))
+        path = [.sessions, .session(session)]
     }
 
-    /// Opens the Conversation, which is the Luke tab's own root: what a
+    /// Pops to the Conversation, which is the Luke screen itself: what a
     /// briefing's notification tapped lands on.
     func openConversation() {
-        tab = .luke
+        path.removeAll()
     }
 
     /// A session that just left the roster has no screen to stand on any more.

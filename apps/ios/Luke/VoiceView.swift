@@ -55,7 +55,6 @@ struct VoiceView: View {
     @State private var isPressing = false
     @State private var isLatched = false
     @State private var pressBeganAt: TimeInterval?
-    @State private var settingsShown = false
     @State private var microphoneNote: String?
 
     var body: some View {
@@ -70,14 +69,6 @@ struct VoiceView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.ground.ignoresSafeArea())
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) { settingsButton }
-        }
-        .sheet(isPresented: $settingsShown) {
-            VoiceSettingsSheet()
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-        }
         .onAppear {
             if call == nil { call = makeCall() }
         }
@@ -93,8 +84,8 @@ struct VoiceView: View {
         .onChange(of: call?.status) { _, newStatus in
             if newStatus == .idle || newStatus == .failed { isLatched = false }
         }
-        // The screen's state outlives the screen (the tab, the Conversation
-        // pushed over it), so the latch goes with the call it held open.
+        // The screen's state outlives the screen (the sessions list pushed
+        // over it), so the latch goes with the call it held open.
         .onDisappear {
             isLatched = false
             guard let call else { return }
@@ -175,15 +166,6 @@ struct VoiceView: View {
     }
 
     // MARK: - Sub-views
-
-    private var settingsButton: some View {
-        Button {
-            settingsShown = true
-        } label: {
-            Label("Voice Settings", systemImage: "gearshape")
-        }
-        .tint(Color.ink)
-    }
 
     private var status: LiveStatus { call?.status ?? .idle }
 

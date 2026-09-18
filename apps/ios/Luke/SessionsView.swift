@@ -2,19 +2,23 @@ import LukeKit
 import SwiftUI
 import UIKit
 
-/// Shows the signed-in user's active cloud sessions with pull-to-refresh.
-/// The roster, the narrowing, and the stack above the list live in the
-/// shared store, because the voice screen can be asked for the same presses.
+/// One screen of the stack pushed over Luke: the signed-in user's active
+/// cloud sessions with pull-to-refresh, or one session's own screen over the
+/// list. Both are this view because both draw the same advertised actions
+/// (the row menu and the session screen's) and land their refusals in the
+/// same alerts. The roster, the narrowing, and the stack itself live in the
+/// shared store, because the Luke screen can be asked for the same presses.
 struct SessionsView: View {
     @Environment(AccountSession.self) private var session
     @Environment(ProductEventSender.self) private var events
     @Environment(SessionsStore.self) private var store
 
+    let route: SessionsRoute
+    /// Sent bubbles per session, owned above the stack: see `SignedInView`.
+    @Binding var threads: [String: [OutgoingMessage]]
+
     @State private var optionsShown = false
-    /// Sent bubbles per session, in memory alone for the app run — the
-    /// developer's own words, never written to disk, surviving push and pop
-    /// so a chat reopened mid-run still shows what was just sent.
-    @State private var threads: [String: [OutgoingMessage]] = [:]
+    @State private var creatorShown = false
     @State private var spawningSession: RosterSession?
     @State private var renaming: RenameTarget?
     @State private var renameText = ""
@@ -34,36 +38,15 @@ struct SessionsView: View {
 
     private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
     private let conversationClient = ConversationClient(serviceURL: AccountConstants.serviceURL)
+    private let projectsClient = ProjectsClient(serviceURL: AccountConstants.serviceURL)
 
     var body: some View {
-        searchableList
-        .navigationDestination(for: SessionsRoute.self) { route in
+        Group {
             switch route {
+            case .sessions:
+                searchableList
             case .session(let opened):
-                // The freshest observation of the opened session wins, so a
-                // refresh behind the screen updates the words it draws; a
-                // session the refresh no longer reports keeps its last
-                // observed word.
-                let current = store.sessions.first { $0.id == opened.id } ?? opened
-                SessionDetailView(
-                    session: current,
-                    actionClient: actionClient,
-                    conversationClient: conversationClient,
-                    thread: Binding(
-                        get: { threads[opened.id] ?? [] },
-                        set: { threads[opened.id] = $0 }
-                    ),
-                    onDelivered: { await refreshSessions() },
-                    sessionActions: { viewDetails in
-                        AnyView(
-                            rowMenu(
-                                current,
-                                viewDetails: viewDetails,
-                                sendMessage: nil
-                            )
-                        )
-                    }
-                )
+                sessionScreen(opened)
             }
         }
         .sheet(item: $spawningSession) { s in
@@ -93,6 +76,32 @@ struct SessionsView: View {
             Button("Cancel", role: .cancel) {}
         }
         .failureAlert("Not Delivered", reason: $actionFailure)
+    }
+
+    /// A session's own screen. The freshest observation of the opened session
+    /// wins, so a refresh behind the screen updates the words it draws; a
+    /// session the refresh no longer reports keeps its last observed word.
+    private func sessionScreen(_ opened: RosterSession) -> some View {
+        let current = store.sessions.first { $0.id == opened.id } ?? opened
+        return SessionDetailView(
+            session: current,
+            actionClient: actionClient,
+            conversationClient: conversationClient,
+            thread: Binding(
+                get: { threads[opened.id] ?? [] },
+                set: { threads[opened.id] = $0 }
+            ),
+            onDelivered: { await refreshSessions() },
+            sessionActions: { viewDetails in
+                AnyView(
+                    rowMenu(
+                        current,
+                        viewDetails: viewDetails,
+                        sendMessage: nil
+                    )
+                )
+            }
+        )
     }
 
     /// The rows the query leaves: matched with the desktop's own search
@@ -156,16 +165,36 @@ struct SessionsView: View {
             placement: .navigationBarDrawer(displayMode: .always),
             prompt: "Search sessions"
         )
+        .navigationTitle("Sessions")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
                 optionsButton
+                newButton
             }
         }
         .sheet(isPresented: $optionsShown) {
             SessionOptionsSheet(sessions: store.sessions, filters: $store.filters, sort: $store.sort)
                 .presentationDetents([.medium, .large])
         }
+        .sheet(isPresented: $creatorShown) {
+            WorkspaceCreatorSheet(actionClient: actionClient, projectsClient: projectsClient) {
+                creatorShown = false
+                // The list is the one place the new workspace appears.
+                Task { await refreshSessions() }
+            }
+        }
         .task { await refreshSessions() }
+    }
+
+    /// Opens the New Workspace sheet; dismissing it leaves the list standing.
+    private var newButton: some View {
+        Button {
+            creatorShown = true
+        } label: {
+            Label("New Workspace", systemImage: "plus")
+        }
+        .tint(Color.ink)
     }
 
     private var optionsButton: some View {
