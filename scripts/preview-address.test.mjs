@@ -42,6 +42,10 @@ const jq = args[args.indexOf("--jq") + 1];
 const read = (file) => JSON.parse(fs.readFileSync(path.join(directory, file), "utf8"));
 const cursorPath = path.join(directory, "${RECORDS_CURSOR}");
 let index = fs.existsSync(cursorPath) ? Number(fs.readFileSync(cursorPath, "utf8")) : 0;
+if (args[1].endsWith("/status")) {
+  process.stdout.write("pending: Vercel is deploying your app\n");
+  process.exit(0);
+}
 const isRecords = args[1].split("?")[0].endsWith("/deployments");
 if (isRecords) {
   fs.writeFileSync(cursorPath, String(index + 1));
@@ -119,7 +123,10 @@ test("waits through no record, a pending status, and a cancelled inactive one", 
   });
   assert.equal(result.status, EXIT.ADDRESS, result.stderr);
   assert.equal(result.stdout, `${ADDRESS}\n`);
-  assert.match(result.stderr, /waiting/);
+  assert.match(
+    result.stderr,
+    /waiting \(no record yet .*Vercel says pending: Vercel is deploying your app\)/,
+  );
 });
 
 test("a build Vercel skipped is NOT_AFFECTED, not waited on", () => {

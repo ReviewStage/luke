@@ -153,7 +153,12 @@ for ((attempt = 1; attempt <= attempts; attempt++)); do
         esac
         printf 'preview: waiting (record %s is %s)\n' "$record" "${state:-unsettled}" >&2
     else
-        printf 'preview: waiting (no record yet for %s)\n' "$sha" >&2
+        # No record means Vercel has not started the build; its commit status
+        # says whether it knows of the commit at all, so a queued build reads
+        # as a queue rather than as nothing.
+        vercel_status=$(gh api "repos/$repo/commits/$sha/status" \
+            --jq '[.statuses[] | select(.context == "Vercel")][0] | select(. != null) | "\(.state): \(.description)"' 2>/dev/null || true)
+        printf 'preview: waiting (no record yet for %s; Vercel says %s)\n' "$sha" "${vercel_status:-nothing}" >&2
     fi
     if ((attempt < attempts)); then
         sleep "$interval_seconds"
