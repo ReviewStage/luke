@@ -667,9 +667,14 @@ carries the relay hooks, while only a positively identified Preview accepts the
 returned profile.
 
 The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
-`BETTER_AUTH_PROXY_SECRET`, `GOOGLE_CLIENT_ID`, and `GITHUB_CLIENT_ID`; the two
-client secrets are spent by production, which is the end that exchanges the
-code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+`BETTER_AUTH_PROXY_SECRET`, and both providers' `CLIENT_ID` and
+`CLIENT_SECRET`, the same values production holds. Production is the end that
+exchanges the code, but Better Auth's Google provider refuses to build the
+authorization URL without a client secret, so a Preview without
+`GOOGLE_CLIENT_SECRET` answers 500 to every Google sign-in before the browser
+leaves for Google (found 2026-09-18); Better Auth's own oauth-proxy setup sets
+the provider secrets in every environment, and Charles chose on 2026-09-18 to
+follow it rather than hold them back from Preview. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
 ends, or the profile arrives undecryptable. A Preview without it does not expose
 the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
 would require putting production's session-signing and provider-token key into
