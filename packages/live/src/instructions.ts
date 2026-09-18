@@ -18,8 +18,8 @@ export const LiveSceneSchema = Schema.Literals(Object.values(LIVE_SCENE));
  * cannot name is a capability it will not reach for. The closing two lines
  * are the template's own. Note that the list is written out here rather than
  * read from the catalog, because `@sidecar/actions` already reaches this
- * package and an edge back would be a cycle; `apps/web/tests/voice-
- * delegation-tools.test.ts` holds the two against each other from above.
+ * package and an edge back would be a cycle, so a tool added to the catalog
+ * is added here by hand or the voice never delegates for it.
  */
 const DELEGATION_POLICY = `Delegation policy:
 Backend tools:
