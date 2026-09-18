@@ -60,7 +60,7 @@ struct WatchVoiceView: View {
         Button {
             accountShown = true
         } label: {
-            AccountAvatar(identity: identity, diameter: 26)
+            AccountAvatar(identity: identity, diameter: 26, http: WatchNetwork.session)
         }
         .accessibilityLabel("Account profile for \(identity.name ?? identity.email)")
     }

@@ -16,7 +16,7 @@ struct WatchAccountView: View {
             Form {
                 Section {
                     VStack(spacing: 6) {
-                        AccountAvatar(identity: identity, diameter: 44)
+                        AccountAvatar(identity: identity, diameter: 44, http: WatchNetwork.session)
                         Text(identity.name ?? identity.email)
                             .font(.headline)
                             .multilineTextAlignment(.center)
