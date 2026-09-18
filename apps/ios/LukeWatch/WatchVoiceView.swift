@@ -41,7 +41,6 @@ struct WatchVoiceView: View {
             isPressing = false
             model.hangUp()
         }
-        .navigationTitle("Luke")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { sessionsButton }
             ToolbarItem(placement: .topBarTrailing) { settingsButton }
