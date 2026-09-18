@@ -1,20 +1,12 @@
-import { LUKE_PERSONA } from "@sidecar/guide";
 import { WORKSPACE_FILE, type WorkspaceSeeds } from "@sidecar/runtime";
 
 /**
- * The product's words for the agent's identity workspace: the line every
- * prompt opens with, and what each workspace file holds when it is first
- * made. The runtime package knows the files' names and bounds and none of
+ * The product's words for the agent's identity workspace: what each
+ * workspace file holds when it is first made. The runtime package knows the files' names and bounds and none of
  * this; the brain, which is Luke's, supplies both. A seed is written once,
  * when the file is missing, and an existing file is never rewritten, so an
  * account seeded by an earlier build keeps that build's words.
  */
-
-export const BRAIN_IDENTITY_LINE =
-  "You're Luke, the developer's own agent, running in your own runtime.";
-
-/** The persona every surface shares, handed to the prompt as its own section. */
-export const BRAIN_PERSONA: string = LUKE_PERSONA;
 
 const SEED_AGENTS = [
   "# AGENTS.md",
