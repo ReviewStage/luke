@@ -18,6 +18,14 @@ final class PCM16AudioTests: XCTestCase {
         XCTAssertEqual(PCM16Audio.samples(base64: ""), [])
     }
 
+    func testTheHeldOpenLineIsSilenceAndAVoiceIsNot() {
+        XCTAssertTrue(PCM16Audio.isSilence([Int16](repeating: 0, count: 1600)))
+        XCTAssertTrue(PCM16Audio.isSilence([0, -1, 1, 0, -1]), "dither around zero is still silence")
+        XCTAssertTrue(PCM16Audio.isSilence([]))
+        XCTAssertFalse(PCM16Audio.isSilence([0, 0, 0, 900, 0]), "one syllable among the zeros is a voice")
+        XCTAssertFalse(PCM16Audio.isSilence([Int16](repeating: -PCM16Audio.silenceFloor, count: 10)))
+    }
+
     func testWhatIsNotWholeSamplesInBase64IsNothing() {
         XCTAssertNil(PCM16Audio.samples(base64: "AQAB"), "three bytes split a sample")
         XCTAssertNil(PCM16Audio.samples(base64: "not base64!"))

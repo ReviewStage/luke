@@ -214,22 +214,9 @@ private struct SignedInView: View {
             .tabItem { Label("Sessions", systemImage: "list.bullet") }
             .tag(AppTab.sessions)
 
-            NavigationStack(path: $store.lukePath) {
-                VoiceView()
+            NavigationStack {
+                VoiceView(conversation: conversation)
                     .toolbar { profileToolbar }
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            NavigationLink(value: LukeRoute.conversation) {
-                                Label("Conversation", systemImage: "text.bubble")
-                            }
-                        }
-                    }
-                    .navigationDestination(for: LukeRoute.self) { route in
-                        switch route {
-                        case .conversation:
-                            ConversationView(conversation: conversation)
-                        }
-                    }
             }
             .tabItem {
                 Label {

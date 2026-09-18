@@ -40,6 +40,16 @@ final class SessionsStoreTests: XCTestCase {
         XCTAssertEqual(store.path, [.session(session)])
     }
 
+    func testOpeningTheConversationLandsOnTheLukeTabItself() {
+        let store = makeStore()
+        store.tab = .sessions
+        store.open(makeSession("a"))
+        store.tab = .sessions
+        store.openConversation()
+        XCTAssertEqual(store.tab, .luke)
+        XCTAssertEqual(store.path, [.session(makeSession("a"))], "the sessions stack is left standing")
+    }
+
     func testClosingAScreenLeavesEveryOtherSessionStanding() {
         let store = makeStore()
         let first = makeSession("a")

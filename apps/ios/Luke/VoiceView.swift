@@ -40,6 +40,9 @@ func talkButtonReleaseAction(
 /// no tool call reaches this screen; the words are masked from session replay
 /// by the bubbles they share with the session chat.
 struct VoiceView: View {
+    /// The stored Conversation this screen stands on, the thread both speakers' lines land in.
+    let conversation: ConversationStore
+
     /// The system's grant is the one thing the press needs that the service cannot give it.
     private static let microphoneRefusedNote =
         "The talk button needs the microphone. Allow it in Settings, under Privacy & Security, Microphone."
@@ -57,7 +60,12 @@ struct VoiceView: View {
 
     var body: some View {
         ZStack {
-            captionLines
+            ConversationView(conversation: conversation, bottomInset: Self.controlsClearance)
+            if !captions.isEmpty {
+                captionLines
+                    .background(Color.ground.ignoresSafeArea())
+                    .transition(.opacity)
+            }
             bottomControls
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -183,6 +191,9 @@ struct VoiceView: View {
 
     private var captions: [LiveCaptionRow] { call?.captions ?? [] }
 
+    /// Empty space at the tail of a thread so its newest row clears the floating controls.
+    private static let controlsClearance: CGFloat = 200
+
     private var statusLabel: some View {
         HStack(spacing: 5) {
             statusGlyph
@@ -235,24 +246,14 @@ struct VoiceView: View {
                 // The controls float above the rows. Empty space at the tail
                 // lets the newest bubble clear them while the bubbles
                 // themselves can still scroll behind the glass.
-                .padding(.bottom, 200)
+                .padding(.bottom, Self.controlsClearance)
             }
             .onChange(of: captions) {
                 guard let last = captions.last else { return }
                 withAnimation { proxy.scrollTo(last.rowId, anchor: .bottom) }
             }
         }
-        .overlay {
-            if captions.isEmpty {
-                LukeMark()
-                    .foregroundStyle(Color.inkTertiary)
-                    .frame(width: 96)
-                    .accessibilityHidden(true)
-                    .allowsHitTesting(false)
-            }
-        }
         .frame(maxHeight: .infinity)
-        .animation(.easeInOut(duration: 0.15), value: captions.isEmpty)
     }
 
     @ViewBuilder
