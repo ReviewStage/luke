@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { symmetricEncrypt } from "better-auth/crypto";
+import { oAuthProxy } from "better-auth/plugins";
 import { test } from "vitest";
 import { authDeployment, LOCAL_AUTH_URL } from "../server/auth-deployment";
-import { authProxy, isTrustedProxyCallback, oauthProxyCallbackURL } from "../server/auth-proxy";
+import {
+  authProxy,
+  isTrustedProxyCallback,
+  oauthProxyCallbackURL,
+  resumeAuthorizeURL,
+} from "../server/auth-proxy";
 
 const PRODUCTION_URL = "https://tryluke.dev";
 
@@ -170,4 +176,52 @@ test("the relay reads the callback only from state encrypted with the proxy key"
     data: JSON.stringify({ isOAuthProxy: "true", state: "nonce", stateCookie }),
   });
   assert.equal(await oauthProxyCallbackURL(truthyStringState, secret), callbackURL);
+});
+
+test("a preview's sign-in returns to the desktop's authorize request, unsigned and without the login prompt", () => {
+  const signedQuery =
+    "response_type=code&client_id=luke-desktop&redirect_uri=http%3A%2F%2F127.0.0.1%3A54698%2Fcallback" +
+    "&scope=openid+profile&state=google.abc&code_challenge=xyz&code_challenge_method=S256&prompt=login" +
+    "&exp=1789770969&ba_iat=1789770369176&ba_param=ba_iat&ba_param=client_id&sig=zjn6%3D";
+
+  const path = resumeAuthorizeURL("/api/auth/", signedQuery);
+  // A path, so the browser stays on whichever of the preview's hostnames holds its session cookie.
+  assert.equal(path.startsWith("/api/auth/oauth2/authorize?"), true);
+  const resumed = new URL(path, "https://luke-git-branch-luke.vercel.app");
+
+  assert.equal(resumed.pathname, "/api/auth/oauth2/authorize");
+  assert.deepEqual(Object.fromEntries(resumed.searchParams), {
+    response_type: "code",
+    client_id: "luke-desktop",
+    redirect_uri: "http://127.0.0.1:54698/callback",
+    scope: "openid profile",
+    state: "google.abc",
+    code_challenge: "xyz",
+    code_challenge_method: "S256",
+  });
+});
+
+test("only a preview carries the sign-in hook that names that return, ahead of the proxy's own", () => {
+  const plugin = oAuthProxy({ productionURL: PRODUCTION_URL, secret: "shared" });
+  const preview = authProxy(
+    authDeployment({
+      VERCEL_ENV: "preview",
+      VERCEL_URL: "luke-abc123-luke.vercel.app",
+      BETTER_AUTH_URL: PRODUCTION_URL,
+      BETTER_AUTH_PROXY_SECRET: "shared",
+    }),
+  );
+  const production = authProxy(
+    authDeployment({
+      VERCEL_ENV: "production",
+      BETTER_AUTH_URL: PRODUCTION_URL,
+      BETTER_AUTH_PROXY_SECRET: "shared",
+    }),
+  );
+
+  // The preview adds one hook ahead of the plugin's; production adds only the relay guard, and keeps the plugin's own.
+  assert.equal(preview.hooks.before.length, plugin.hooks.before.length + 1);
+  assert.notEqual(preview.hooks.before[0], plugin.hooks.before[0]);
+  assert.equal(production.hooks.before.length, plugin.hooks.before.length + 1);
+  assert.equal(production.hooks.before[0] === preview.hooks.before[0], false);
 });

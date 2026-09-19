@@ -654,6 +654,14 @@ all — Better Auth trusts the origin of its own base URL, and the browser on a
 preview sends the preview's, which is the 403 behind the admin dashboard's
 "Sign-in could not start. Try again."
 
+On a Preview the desktop's pending authorization also has to be resumed by
+hand: production's provider plugin resumes it from the state it stored at
+sign-in, but a Preview's state is consumed by the proxy callback, which then
+redirects to the sign-in's `callbackURL`, and the page sends none. So a
+Preview's `authProxy` adds one sign-in hook ahead of the plugin's that names
+the authorize request itself as that callback (`resumeAuthorizeURL`), and the
+plugin issues the code to the desktop's loopback from there.
+
 Better Auth's `oAuthProxy` plugin carries the rest: the preview hands the
 provider production's registered redirect URI, production exchanges the code and
 redirects the profile back to the preview encrypted, and the preview creates the
