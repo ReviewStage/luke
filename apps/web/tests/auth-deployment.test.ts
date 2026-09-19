@@ -184,14 +184,12 @@ test("a preview's sign-in returns to the desktop's authorize request, unsigned a
     "&scope=openid+profile&state=google.abc&code_challenge=xyz&code_challenge_method=S256&prompt=login" +
     "&exp=1789770969&ba_iat=1789770369176&ba_param=ba_iat&ba_param=client_id&sig=zjn6%3D";
 
-  const resumed = new URL(
-    resumeAuthorizeURL("https://luke-abc123-luke.vercel.app/api/auth/", signedQuery),
-  );
+  const path = resumeAuthorizeURL("/api/auth/", signedQuery);
+  // A path, so the browser stays on whichever of the preview's hostnames holds its session cookie.
+  assert.equal(path.startsWith("/api/auth/oauth2/authorize?"), true);
+  const resumed = new URL(path, "https://luke-git-branch-luke.vercel.app");
 
-  assert.equal(
-    resumed.origin + resumed.pathname,
-    "https://luke-abc123-luke.vercel.app/api/auth/oauth2/authorize",
-  );
+  assert.equal(resumed.pathname, "/api/auth/oauth2/authorize");
   assert.deepEqual(Object.fromEntries(resumed.searchParams), {
     response_type: "code",
     client_id: "luke-desktop",

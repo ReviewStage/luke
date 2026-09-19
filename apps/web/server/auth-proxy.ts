@@ -14,6 +14,8 @@ import {
 const PROXY_CALLBACK_PATH = "/api/auth/oauth-proxy-callback";
 const SIGN_IN_PATHS = ["/sign-in/social", "/sign-in/oauth2"];
 const AUTHORIZE_PATH = "/oauth2/authorize";
+/** Better Auth's own default when `basePath` is not configured, as the proxy plugin spells it. */
+const DEFAULT_BASE_PATH = "/api/auth";
 /** The parameters the OAuth provider plugin signs the login page's query with, and the prompt that sent it there. */
 const SIGNED_QUERY_PARAMS = ["sig", "exp", "ba_iat", "ba_param", "ba_pl", "prompt"];
 
@@ -28,12 +30,16 @@ const SIGNED_QUERY_PARAMS = ["sig", "exp", "ba_iat", "ba_param", "ba_pl", "promp
  * with the new session, and the plugin issues the code to the desktop's
  * loopback as it would have. The signature parameters go because the request
  * is re-validated whole, and `prompt=login` goes because the login it asked
- * for has just happened.
+ * for has just happened. The result is a path, not an absolute URL, because
+ * a Preview answers on two hostnames (`VERCEL_URL` and `VERCEL_BRANCH_URL`)
+ * and the session cookie was set on whichever one the browser is on; an
+ * absolute URL on the base host would carry a sign-in begun on the other
+ * host to a page where it is a stranger.
  */
-export function resumeAuthorizeURL(baseURL: string, oauthQuery: string): string {
+export function resumeAuthorizeURL(basePath: string, oauthQuery: string): string {
   const params = new URLSearchParams(oauthQuery);
   for (const name of SIGNED_QUERY_PARAMS) params.delete(name);
-  return `${baseURL.replace(/\/$/, "")}${AUTHORIZE_PATH}?${params.toString()}`;
+  return `${basePath.replace(/\/$/, "")}${AUTHORIZE_PATH}?${params.toString()}`;
 }
 
 /** Read only proxy state; an ordinary provider state is not this guard's concern. */
@@ -161,7 +167,10 @@ export function authProxy(deployment: AuthDeployment) {
         // context patch, because Better Auth applies a returned patch to the
         // endpoint alone after every before hook has run, and the proxy's own
         // hook right behind this one reads the callback from the same body.
-        ctx.body.callbackURL = resumeAuthorizeURL(ctx.context.baseURL, body.oauth_query);
+        ctx.body.callbackURL = resumeAuthorizeURL(
+          ctx.context.options.basePath ?? DEFAULT_BASE_PATH,
+          body.oauth_query,
+        );
       }),
     };
     return {
