@@ -318,6 +318,10 @@ struct ConversationView: View {
         Task {
             let landed = await conversation.loadOlder(account: account)
             if landed {
+                // A page that brought the row a tap is seeking is scrolled to
+                // that row instead; holding the old topmost row would pull the
+                // reader off it.
+                if case .found = conversation.opening { return }
                 if let anchor { scrollIntent = .anchor(anchor) }
             } else {
                 olderRefused = conversation.hasOlder
