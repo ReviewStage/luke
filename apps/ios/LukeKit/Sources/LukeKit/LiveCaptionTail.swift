@@ -5,19 +5,16 @@ import Foundation
 /// settles, and the phone's next poll draws it as a durable row; the caption
 /// that streamed the same words then says nothing the thread does not, so it
 /// is dropped rather than drawn twice. A caption is matched to a durable row
-/// by speaker and words within the thread's newest turns alone, which is
-/// where the call's own utterances land.
+/// by speaker and words anywhere in the thread the screen holds, since a call
+/// keeps every caption it opened for as long as it stands.
 public enum LiveCaptionTail {
-    /// How many turns from the end of the thread a caption is looked for in.
-    public static let turnsSearched = 4
-
     public static func rows(
         captions: [LiveCaptionRow],
         behind turns: [ConversationTurnRows]
     ) -> [LiveCaptionRow] {
         guard !captions.isEmpty else { return [] }
         var written: Set<Spoken> = []
-        for turn in turns.suffix(turnsSearched) {
+        for turn in turns {
             for row in turn.rows {
                 guard case .words(_, let speaker, let text, _, _, _) = row,
                       let live = LiveTranscriptSpeaker(speaker)

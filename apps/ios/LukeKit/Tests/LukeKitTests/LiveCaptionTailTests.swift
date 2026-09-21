@@ -30,6 +30,13 @@ final class LiveCaptionTailTests: XCTestCase {
         XCTAssertEqual(LiveCaptionTail.rows(captions: [luke], behind: turns), [luke])
     }
 
+    func testACaptionWrittenManyTurnsAgoStaysDroppedForTheWholeCall() throws {
+        let fixture = try fixtureTurns()
+        let later = (0..<8).map { _ in fixture[1] }
+        let written = LiveCaptionRow(rowId: 1, speaker: .user, words: "Tell the fixture session to run the tests.")
+        XCTAssertEqual(LiveCaptionTail.rows(captions: [written], behind: fixture + later), [])
+    }
+
     func testAnEmptyThreadDrawsEveryCaptionAndNoCaptionDrawsNothing() throws {
         let row = LiveCaptionRow(rowId: 1, speaker: .user, words: "Hello")
         XCTAssertEqual(LiveCaptionTail.rows(captions: [row], behind: []), [row])
