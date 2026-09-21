@@ -11,6 +11,15 @@ import SwiftUI
 /// holds it, and a turn Luke opened himself leads with his face. The poll
 /// runs only while the app is active: the wrist dropping or the app leaving
 /// cancels it, and a poll cut short that way is not the service unreachable.
+///
+/// The thread opens at its end on the tail the store read and follows new
+/// rows only while the reader is there; a crown turned up into what was said
+/// before is left where it stands. Reaching the top while older turns stand
+/// is the ask for the page before it, one at a time, landed under the
+/// reader's place with the row that was topmost held where it was; a page
+/// that could not be read leaves the ask as a press to try again. The wrist
+/// draws no return control: the crown is the way back, and the floating
+/// controls already take the room one would stand in.
 struct WatchConversationView: View {
     let conversation: ConversationStore
 
@@ -23,8 +32,22 @@ struct WatchConversationView: View {
     /// The instant the thread's dates are read against; moves when a poll
     /// lands, when the page appears, and at midnight.
     @State private var now = Date()
+    /// Whether the thread's end stands in view: what new rows may pull the scroll toward.
+    @State private var atEnd = true
+    /// Set once the opening jump to the end has settled: before it, the first
+    /// layout sits at the top, where the sentinel would fire at once.
+    @State private var openSettled = false
+    /// Whether the last ask for older turns did not land, for the sentinel to offer again as a press.
+    @State private var olderRefused = false
+    /// The row that was topmost before older turns were prepended, to be held in place once they are laid out.
+    @State private var anchorRow: String?
+    /// The row count the end was last re-aimed at.
+    @State private var settledCount: Int?
 
     private static let endId = "conversation-end"
+    private static let layoutSettle: Duration = .milliseconds(300)
+    /// How long the top sentinel must stay in view before its ask counts.
+    private static let sentinelDwell: Duration = .milliseconds(450)
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -40,10 +63,11 @@ struct WatchConversationView: View {
                             .frame(width: 44, height: 40)
                             .frame(maxWidth: .infinity, minHeight: 80, alignment: .center)
                     }
-                    let ratings = conversation.ratings
-                    let turns = conversation.groups.map { group in
-                        (group: group, rows: ConversationTurnRows(group: group, roster: store.sessions))
+                    if conversation.hasOlder && openSettled {
+                        olderSentinel
                     }
+                    let ratings = conversation.ratings
+                    let turns = self.turns
                     ForEach(Array(turns.enumerated()), id: \.element.rows.id) { index, turn in
                         if let opensAt = turn.rows.opensAt,
                            ConversationTimeBreak.opens(
@@ -74,6 +98,8 @@ struct WatchConversationView: View {
                     Color.clear
                         .frame(height: 1)
                         .id(Self.endId)
+                        .onAppear { atEnd = true }
+                        .onDisappear { atEnd = false }
                 }
                 .padding(.horizontal, 4)
                 .padding(.top, 8)
@@ -85,7 +111,26 @@ struct WatchConversationView: View {
             .defaultScrollAnchor(.bottom)
             .onChange(of: conversation.groups.count) {
                 now = Date()
+                guard atEnd else { return }
                 withAnimation { proxy.scrollTo(Self.endId, anchor: .bottom) }
+            }
+            // Lazy rows take their real heights after they land, so the end
+            // is aimed at again once the layout stands, while the reader is
+            // there; only then may the history sentinel exist.
+            .task(id: conversation.groups.count) {
+                let count = conversation.groups.count
+                guard settledCount != count else { return }
+                try? await Task.sleep(for: Self.layoutSettle)
+                guard !Task.isCancelled else { return }
+                let opening = settledCount == nil
+                settledCount = count
+                if atEnd || opening { proxy.scrollTo(Self.endId, anchor: .bottom) }
+                if conversation.opened { openSettled = true }
+            }
+            .onChange(of: anchorRow) {
+                guard let anchorRow else { return }
+                self.anchorRow = nil
+                proxy.scrollTo(anchorRow, anchor: .top)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -101,6 +146,63 @@ struct WatchConversationView: View {
             while !Task.isCancelled {
                 await conversation.poll(account: account)
                 try? await Task.sleep(for: ConversationStore.pollInterval)
+            }
+        }
+    }
+
+    private var turns: [(group: ConversationReadTurnGroup, rows: ConversationTurnRows)] {
+        conversation.groups.map { group in
+            (group: group, rows: ConversationTurnRows(group: group, roster: store.sessions))
+        }
+    }
+
+    /// The top of the thread while older turns stand: reaching it and holding
+    /// it a moment is the ask for the page before what is on screen, never
+    /// made while a page is on its way; a page that did not land leaves the
+    /// ask as a press.
+    @ViewBuilder
+    private var olderSentinel: some View {
+        if conversation.loadingOlder {
+            Text("Loading earlier…")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+        } else if olderRefused {
+            Button {
+                askForOlder()
+            } label: {
+                Label("Earlier messages could not be loaded. Try again", systemImage: "arrow.clockwise")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+        } else {
+            ProgressView()
+                .controlSize(.small)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .accessibilityLabel("Loading earlier messages")
+                .task {
+                    try? await Task.sleep(for: Self.sentinelDwell)
+                    guard !Task.isCancelled else { return }
+                    askForOlder()
+                }
+        }
+    }
+
+    private func askForOlder() {
+        guard conversation.hasOlder, !conversation.loadingOlder else { return }
+        olderRefused = false
+        let anchor = atEnd ? nil : turns.first?.rows.rows.first?.id
+        Task {
+            let landed = await conversation.loadOlder(account: account)
+            if landed {
+                anchorRow = anchor
+            } else {
+                olderRefused = conversation.hasOlder
             }
         }
     }

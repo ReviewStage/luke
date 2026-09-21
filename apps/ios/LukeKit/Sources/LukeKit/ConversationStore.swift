@@ -7,9 +7,16 @@ import Observation
 /// every resource stands, reads only the ones whose head differs from the
 /// cursor this device holds, and merges what came back under
 /// `ConversationThread`'s rules; a first poll over a thread that holds
-/// nothing seeds the turns cursor from the signal's head, since the messages
-/// read it makes already carries every turn row, and reads the events from
-/// their beginning, since a message's rating lives only there. A device with
+/// nothing reads the tail — one history page from the newest rows back,
+/// whose answer anchors the forward messages read at the head — seeds the
+/// turns cursor from the signal's head, since that page already carries
+/// every turn row, and reads the events from their beginning, since a
+/// message's rating lives only there. Older turns are read back one page at
+/// a time only when the screen asks, which it does as the reader reaches the
+/// top of the thread, and only while the thread says older turns stand.
+/// A push's tap that names a message the tail does not hold reads back
+/// through history for it, a bounded number of pages a poll, before the
+/// screen is told the message is missing. A device with
 /// no registered row yet has no signal to ask and reads the messages alone,
 /// and once it has one it reads the turns and events from their beginning,
 /// since nothing it holds says where they stood. The one write here is the
@@ -50,6 +57,9 @@ public final class ConversationStore {
     public private(set) var ratings: [String: MessageRating] = [:]
     public private(set) var failure: Failure?
     public private(set) var opening: Opening?
+    /// Whether a page of older turns is being read: one at a time, so the
+    /// screen's sentinel reappearing while a read runs asks for nothing.
+    public private(set) var loadingOlder = false
     /// Whether the last messages read reached the end of what the service
     /// holds, or stopped at the page bound with more behind the cursor: only
     /// a drained read can say a message is not there.
@@ -128,6 +138,35 @@ public final class ConversationStore {
     /// the screen's skeleton.
     public var opened: Bool { thread.opened }
 
+    /// Whether older turns stand behind what this device holds, for the
+    /// screen to offer a reach back into: nothing before the tail has landed,
+    /// after the bound on held turns is reached, or once the thread was cleared.
+    public var hasOlder: Bool { thread.hasOlder }
+
+    /// Reads one page of older turns from where this device's history stands
+    /// and folds it under the tail, answering whether a page landed. Nothing
+    /// older to read, or a read already under way, answers false at once; so
+    /// does a read the service refused or that could not be reached, leaving
+    /// the thread as it was for the screen to ask again. An unreadable row is
+    /// surfaced as the poll surfaces one, never drawn as an empty page.
+    public func loadOlder(account: any AccountTokenProviding) async -> Bool {
+        guard thread.hasOlder, !loadingOlder, let holder = account.accountEmail else { return false }
+        loadingOlder = true
+        defer { loadingOlder = false }
+        do {
+            try await readOlderPage(Fenced(account: account, holder: holder))
+            return true
+        } catch is AccountSessionError {
+            return false
+        } catch ConversationReadError.unreadableRow(let row) {
+            guard !Task.isCancelled else { return false }
+            failure = .unreadableRow(row)
+            return false
+        } catch {
+            return false
+        }
+    }
+
     /// Asks the screen to open at one message: resolved at once where the
     /// thread already holds it, otherwise at the end of the next poll that
     /// runs to completion with the messages read to their end, which either
@@ -148,9 +187,30 @@ public final class ConversationStore {
         return ConversationTurnRows.anchor(forMessage: messageId, in: turns).map { .found(rowId: $0) }
     }
 
+    /// A sought message is missing only once the messages are read to their
+    /// end and no older page stands to bring it; while history stands the
+    /// seeking holds, for `seekThroughHistory` to read back through.
     private func resolveOpening() {
         guard case .seeking(let messageId) = opening else { return }
-        opening = anchor(forMessage: messageId) ?? (thread.opened && messagesDrained ? .missing : opening)
+        if let found = anchor(forMessage: messageId) {
+            opening = found
+        } else if thread.opened, messagesDrained, !thread.hasOlder {
+            opening = .missing
+        }
+    }
+
+    /// Reads back through history for the message a tap named, a page at a
+    /// time under the poll's page bound, until it is found, history ends, or
+    /// the bound is spent; a bound spent leaves the seeking to the next poll.
+    private func seekThroughHistory(_ fenced: Fenced) async throws {
+        guard case .seeking = opening, thread.opened, messagesDrained, thread.hasOlder, !loadingOlder else { return }
+        loadingOlder = true
+        defer { loadingOlder = false }
+        for _ in 0 ..< Self.maximumPagesPerPoll {
+            guard case .seeking = opening, thread.hasOlder else { return }
+            try await readOlderPage(fenced)
+            resolveOpening()
+        }
     }
 
     /// One poll: the signal, then whatever moved. Every answer is applied
@@ -179,6 +239,7 @@ public final class ConversationStore {
             }
             failure = nil
             resolveOpening()
+            try await seekThroughHistory(fenced)
         } catch is AccountSessionError {
             return
         } catch ConversationReadError.unreadableRow(let row) {
@@ -210,7 +271,17 @@ public final class ConversationStore {
         }
     }
 
+    /// The messages read: the tail first, where this device holds no cursor
+    /// yet, since the tail page anchors the forward cursor at the head, and
+    /// then forward from the cursor held. A tail read that did not land
+    /// leaves the cursor unheld, so the next poll asks for the tail again.
     private func readMessagePages(_ fenced: Fenced) async throws {
+        if thread.messagesCursor == nil {
+            let tail = try await fenced.call { try await self.client.history(before: nil, accessToken: $0) }
+            thread.apply(tail)
+            groups = thread.turnGroups
+            ratings = thread.ratings
+        }
         for _ in 0 ..< Self.maximumPagesPerPoll {
             let cursor = thread.messagesCursor
             let answer = try await fenced.call { try await self.client.messages(after: cursor, accessToken: $0) }
@@ -220,6 +291,14 @@ public final class ConversationStore {
             messagesDrained = !answer.hasMore
             guard answer.hasMore else { return }
         }
+    }
+
+    private func readOlderPage(_ fenced: Fenced) async throws {
+        let cursor = thread.historyCursor
+        let answer = try await fenced.call { try await self.client.history(before: cursor, accessToken: $0) }
+        thread.apply(answer)
+        groups = thread.turnGroups
+        ratings = thread.ratings
     }
 
     private func readTurnPages(_ fenced: Fenced) async throws {

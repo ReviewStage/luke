@@ -36,6 +36,8 @@ public enum ConversationReadError: Error, Equatable, HostedUnauthorizedSignaling
 public final class ConversationReadClient: Sendable {
     /// `HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES`, without its leading slash.
     public static let messagesPath = "api/conversation/messages"
+    /// `HOSTED_SERVICE_PATH.CONVERSATION_HISTORY`.
+    public static let historyPath = "api/conversation/history"
     /// `HOSTED_SERVICE_PATH.CONVERSATION_EVENTS`.
     public static let eventsPath = "api/conversation/events"
     /// `HOSTED_SERVICE_PATH.BRAIN_TURNS`.
@@ -47,6 +49,7 @@ public final class ConversationReadClient: Sendable {
 
     private enum Query {
         static let after = "after"
+        static let before = "before"
         static let limit = "limit"
     }
 
@@ -62,17 +65,23 @@ public final class ConversationReadClient: Sendable {
     /// GET the Conversation's messages behind the cursor, or from the
     /// beginning for none.
     public func messages(after cursor: String?, accessToken: String) async throws -> ConversationMessagesAnswer {
-        try await read(path: Self.messagesPath, after: cursor, accessToken: accessToken)
+        try await read(path: Self.messagesPath, cursor: cursor.map { (Query.after, $0) }, accessToken: accessToken)
+    }
+
+    /// GET one page of the Conversation's history, read back from the tail
+    /// for no cursor or from the position the last history answer named.
+    public func history(before cursor: String?, accessToken: String) async throws -> ConversationHistoryAnswer {
+        try await read(path: Self.historyPath, cursor: cursor.map { (Query.before, $0) }, accessToken: accessToken)
     }
 
     /// GET the events about the Conversation's messages behind the cursor.
     public func events(after cursor: String?, accessToken: String) async throws -> ConversationEventsAnswer {
-        try await read(path: Self.eventsPath, after: cursor, accessToken: accessToken)
+        try await read(path: Self.eventsPath, cursor: cursor.map { (Query.after, $0) }, accessToken: accessToken)
     }
 
     /// GET the account's turns in the order they last changed, behind the cursor.
     public func turns(after cursor: String?, accessToken: String) async throws -> BrainTurnsAnswer {
-        try await read(path: Self.turnsPath, after: cursor, accessToken: accessToken)
+        try await read(path: Self.turnsPath, cursor: cursor.map { (Query.after, $0) }, accessToken: accessToken)
     }
 
     /// POST the change signal: where every resource stands now, reported
@@ -92,13 +101,13 @@ public final class ConversationReadClient: Sendable {
     }
 
     private func read<Answer: Decodable>(
-        path: String, after cursor: String?, accessToken: String
+        path: String, cursor: (name: String, value: String)?, accessToken: String
     ) async throws -> Answer {
         var components = URLComponents(
             url: serviceURL.appendingPathComponent(path), resolvingAgainstBaseURL: false
         )
         var query = [URLQueryItem(name: Query.limit, value: String(Self.maximumPageLimit))]
-        if let cursor { query.append(URLQueryItem(name: Query.after, value: cursor)) }
+        if let cursor { query.append(URLQueryItem(name: cursor.name, value: cursor.value)) }
         components?.queryItems = query
         guard let url = components?.url else { throw ConversationReadError.invalidResponse }
         var request = URLRequest(url: url)
