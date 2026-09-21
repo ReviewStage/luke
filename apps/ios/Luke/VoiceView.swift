@@ -34,11 +34,12 @@ func talkButtonReleaseAction(
 /// until the next tap after a quick first one; the service's exchange runs
 /// the conversation, the hosted brain answers, and the record is written
 /// server-side, so what is said here appears in the Conversation on this
-/// phone and on a Mac signed into the same account. What this screen draws
-/// is both speakers' captions off the data channel, rows settling in place,
-/// and it holds them only while the call stands. Nothing is typed here and
-/// no tool call reaches this screen; the words are masked from session replay
-/// by the bubbles they share with the session chat.
+/// phone and on a Mac signed into the same account. The screen is that
+/// Conversation, and while the call stands both speakers' captions off the
+/// data channel are drawn at its tail, each row settling in place until the
+/// service's copy takes over; the thread never leaves the screen for them.
+/// Nothing is typed here and no tool call reaches this screen; the words are
+/// masked with the thread they join.
 struct VoiceView: View {
     /// The stored Conversation this screen stands on, the thread both speakers' lines land in.
     let conversation: ConversationStore
@@ -59,12 +60,11 @@ struct VoiceView: View {
 
     var body: some View {
         ZStack {
-            ConversationView(conversation: conversation, bottomInset: Self.controlsClearance)
-            if !captions.isEmpty {
-                captionLines
-                    .background(Color.ground.ignoresSafeArea())
-                    .transition(.opacity)
-            }
+            ConversationView(
+                conversation: conversation,
+                bottomInset: Self.controlsClearance,
+                liveRows: captions
+            )
             bottomControls
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -204,43 +204,6 @@ struct VoiceView: View {
                 .symbolEffect(.variableColor.iterative, isActive: true)
         case .unavailable, .idle, .muted, .failed:
             EmptyView()
-        }
-    }
-
-    /// Both speakers' rows as the call groups them, each stable from the
-    /// moment it opens and growing in place, so a late fragment never moves a
-    /// bubble. The bubbles are the session chat's, which is what masks the
-    /// developer's words from session replay.
-    private var captionLines: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 14) {
-                    // Tagged for the proxy, as every scroll target in this app is.
-                    ForEach(captions) { row in
-                        captionBubble(row).id(row.rowId)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                // The controls float above the rows. Empty space at the tail
-                // lets the newest bubble clear them while the bubbles
-                // themselves can still scroll behind the glass.
-                .padding(.bottom, Self.controlsClearance)
-            }
-            .onChange(of: captions) {
-                guard let last = captions.last else { return }
-                withAnimation { proxy.scrollTo(last.rowId, anchor: .bottom) }
-            }
-        }
-        .frame(maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private func captionBubble(_ row: LiveCaptionRow) -> some View {
-        switch row.speaker {
-        case .user: DeveloperMessageBubble(words: row.words)
-        case .assistant: AgentMessageBubble(words: row.words)
         }
     }
 

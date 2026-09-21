@@ -35,6 +35,9 @@ struct ConversationView: View {
     let conversation: ConversationStore
     /// Room left under the last row for controls floating over the thread; nothing when the screen stands alone.
     var bottomInset: CGFloat = 0
+    /// A standing call's captions, drawn at the thread's tail until the
+    /// service has written each as a row of its own; nothing between calls.
+    var liveRows: [LiveCaptionRow] = []
 
     @Environment(AccountSession.self) private var account
     @Environment(SessionsStore.self) private var store
@@ -105,6 +108,12 @@ struct ConversationView: View {
                             }
                         }
                     }
+                    ForEach(LiveCaptionTail.rows(captions: liveRows, behind: turnRows)) { row in
+                        switch row.speaker {
+                        case .user: DeveloperMessageBubble(words: row.words)
+                        case .assistant: AgentMessageBubble(words: row.words)
+                        }
+                    }
                     if let failure = conversation.failure {
                         failureRow(failure)
                     }
@@ -149,6 +158,11 @@ struct ConversationView: View {
                 case .seeking, .found: return
                 case .missing, nil: scroll(proxy, to: Self.endId)
                 }
+            }
+            // A caption growing keeps the end in view, as a caption screen would.
+            .onChange(of: liveRows) {
+                guard !liveRows.isEmpty else { return }
+                scroll(proxy, to: Self.endId)
             }
             .onChange(of: conversation.opening) { _, opening in follow(opening, proxy) }
             // A row found before the screen was pushed is scrolled to once the
