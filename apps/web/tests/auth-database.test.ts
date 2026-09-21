@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { it } from "@effect/vitest";
 import { betterAuth } from "better-auth";
+import { symmetricEncrypt } from "better-auth/crypto";
 import { jwt } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
-import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import { Effect, Layer, ManagedRuntime, Redacted, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
 import { authDatabaseAdapter } from "../server/auth-database";
@@ -19,7 +20,7 @@ import {
   MOBILE_OAUTH_CLIENT,
   oauthClientRecord,
 } from "../server/oauth-clients";
-import { seedOAuthClient } from "../server/seed-clients";
+import { dropUnreadableJwks, seedOAuthClient } from "../server/seed-clients";
 import { openMigratedPglite, sqlClientOverPglite, testSqlClient } from "./support/sql-client";
 
 const AUTH_TABLE_NAME = {
@@ -136,6 +137,40 @@ it.layer(testSqlClient)("the auth service's own tables", (it) => {
         const rows = yield* readOAuthClient(MOBILE_OAUTH_CLIENT.id);
         assert.equal(rows.length, 1);
       }),
+  );
+
+  // A Preview's branch database carries production's key, sealed under a
+  // secret the Preview never holds; the seed leaves only what this
+  // deployment can sign with.
+  it.effect("seeding drops the signing keys sealed under another deployment's secret", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const own = Redacted.make("this-deployment-secret");
+      const sealedHere = yield* Effect.promise(() =>
+        symmetricEncrypt({
+          key: Redacted.value(own),
+          data: JSON.stringify({ kty: "OKP", d: "own" }),
+        }),
+      );
+      const sealedElsewhere = yield* Effect.promise(() =>
+        symmetricEncrypt({
+          key: "production-secret",
+          data: JSON.stringify({ kty: "OKP", d: "other" }),
+        }),
+      );
+      const created = new Date("2026-08-17T06:02:37.421Z");
+      yield* sql`insert into jwks (id, public_key, private_key, created_at) values
+        ('readable', '{}', ${JSON.stringify(sealedHere)}, ${created}),
+        ('inherited', '{}', ${JSON.stringify(sealedElsewhere)}, ${created})`;
+
+      yield* dropUnreadableJwks(own);
+
+      const rows = yield* sql`select id as name from jwks order by id`;
+      assert.deepEqual(
+        rows.map((row) => Schema.decodeUnknownSync(NameRowSchema)(row).name),
+        ["readable"],
+      );
+    }),
   );
 });
 
