@@ -148,14 +148,17 @@ public final class ConversationStore {
     /// older to read, or a read already under way, answers false at once; so
     /// does a read the service refused or that could not be reached, leaving
     /// the thread as it was for the screen to ask again. An unreadable row is
-    /// surfaced as the poll surfaces one, never drawn as an empty page.
+    /// surfaced as the poll surfaces one, never drawn as an empty page. A page
+    /// that brings the message a tap is seeking resolves the opening here, as
+    /// the poll would, so the screen scrolls to it without waiting for one.
     public func loadOlder(account: any AccountTokenProviding) async -> Bool {
         guard thread.hasOlder, !loadingOlder, let holder = account.accountEmail else { return false }
         loadingOlder = true
         defer { loadingOlder = false }
         do {
-            try await readOlderPage(Fenced(account: account, holder: holder))
-            return true
+            let landed = try await readOlderPage(Fenced(account: account, holder: holder))
+            resolveOpening()
+            return landed
         } catch is AccountSessionError {
             return false
         } catch ConversationReadError.unreadableRow(let row) {
@@ -293,12 +296,19 @@ public final class ConversationStore {
         }
     }
 
-    private func readOlderPage(_ fenced: Fenced) async throws {
+    /// One page back from where history stands, folded in only while history
+    /// still stands there: a poll landing in between may have Cleared the
+    /// thread or bounded it, closing history, and the page it asked for
+    /// would otherwise bring the cleared turns back.
+    @discardableResult
+    private func readOlderPage(_ fenced: Fenced) async throws -> Bool {
         let cursor = thread.historyCursor
         let answer = try await fenced.call { try await self.client.history(before: cursor, accessToken: $0) }
+        guard thread.hasOlder, thread.historyCursor == cursor else { return false }
         thread.apply(answer)
         groups = thread.turnGroups
         ratings = thread.ratings
+        return true
     }
 
     private func readTurnPages(_ fenced: Fenced) async throws {

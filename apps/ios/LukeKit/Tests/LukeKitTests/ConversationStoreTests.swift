@@ -13,18 +13,22 @@ import FoundationNetworking
 /// does not hold found by reading back through history.
 @MainActor
 final class ConversationStoreTests: XCTestCase {
-    private static let main = "3c000000-0000-4000-8000-000000000001"
+    private nonisolated static let main = "3c000000-0000-4000-8000-000000000001"
+    private nonisolated static let laterMain = "3c000000-0000-4000-8000-000000000002"
 
     /// Answers each path with the bodies queued for it, in order, the last one standing.
     private final class RoutedHTTP: HTTPClient, @unchecked Sendable {
         var bodies: [String: [(status: Int, body: Data)]] = [:]
         private(set) var paths: [String] = []
         private(set) var queries: [[URLQueryItem]] = []
+        /// Runs before a path is answered, once: what a test does while that request is in flight.
+        var whileInFlight: [String: () async -> Void] = [:]
 
         func data(for request: URLRequest) async throws -> (Data, URLResponse) {
             let components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!
             paths.append(components.path)
             queries.append(components.queryItems ?? [])
+            if let meanwhile = whileInFlight.removeValue(forKey: components.path) { await meanwhile() }
             var queue = bodies[components.path] ?? []
             let answer = queue.count > 1 ? queue.removeFirst() : queue.first ?? (status: 404, body: Data())
             bodies[components.path] = queue
@@ -44,10 +48,10 @@ final class ConversationStoreTests: XCTestCase {
     private static let historyPath = "/api/conversation/history"
     private static let messagesPath = "/api/conversation/messages"
 
-    private func group(_ turnId: String, messageId: String, at: TimeInterval) -> [String: Any] {
+    private func group(_ turnId: String, messageId: String, at: TimeInterval, in conversation: String = main) -> [String: Any] {
         [
             "turnId": turnId,
-            "conversationId": Self.main,
+            "conversationId": conversation,
             "source": ["kind": "main"],
             "messages": [
                 [
@@ -71,9 +75,9 @@ final class ConversationStoreTests: XCTestCase {
         ])
     }
 
-    private func messages(groups: [[String: Any]], next: String) -> Data {
+    private func messages(groups: [[String: Any]], next: String, main: String = main) -> Data {
         try! JSONSerialization.data(withJSONObject: [
-            "conversations": [["id": Self.main, "kind": "main", "openedAt": 1_757_505_000_000]],
+            "conversations": [["id": main, "kind": "main", "openedAt": 1_757_505_000_000]],
             "groups": groups,
             "next": next,
             "hasMore": false,
@@ -137,6 +141,43 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertTrue(store.hasOlder)
         XCTAssertNil(store.failure)
         XCTAssertFalse(store.loadingOlder)
+    }
+
+    func testAnOlderPageLandingAfterAClearIsDroppedRatherThanBringingTheClearedTurnsBack() async throws {
+        let http = RoutedHTTP()
+        http.bodies[Self.historyPath] = [
+            (200, history(groups: [group("t9", messageId: "m9", at: 9)], older: "h9", hasOlder: true, next: "c9")),
+            (200, history(groups: [group("t8", messageId: "m8", at: 8)], older: "h8", hasOlder: true, next: "c9")),
+        ]
+        http.bodies[Self.messagesPath] = [
+            (200, messages(groups: [], next: "c9")),
+            (200, messages(groups: [group("t20", messageId: "m20", at: 20, in: Self.laterMain)], next: "c20", main: Self.laterMain)),
+        ]
+        let store = makeStore(http)
+        let tokens = Tokens()
+        await store.poll(account: tokens)
+        http.whileInFlight[Self.historyPath] = { await store.poll(account: tokens) }
+        let landed = await store.loadOlder(account: tokens)
+        XCTAssertFalse(landed)
+        XCTAssertEqual(store.groups.map(\.turnId), ["t20"])
+        XCTAssertFalse(store.hasOlder)
+    }
+
+    func testAnOlderPageAskedForByTheScreenResolvesTheMessageATapIsSeeking() async throws {
+        let http = RoutedHTTP()
+        http.bodies[Self.historyPath] = [
+            (200, history(groups: [group("t9", messageId: "m9", at: 9)], older: "h9", hasOlder: true, next: "c9")),
+            (200, history(groups: [group("t8", messageId: "m8", at: 8)], older: "h8", hasOlder: true, next: "c9")),
+        ]
+        http.bodies[Self.messagesPath] = [(200, messages(groups: [], next: "c9"))]
+        let store = makeStore(http)
+        let tokens = Tokens()
+        await store.poll(account: tokens)
+        store.open(at: "m8")
+        XCTAssertEqual(store.opening, .seeking(messageId: "m8"))
+        let landed = await store.loadOlder(account: tokens)
+        XCTAssertTrue(landed)
+        guard case .found = store.opening else { return XCTFail("expected the message found, got \(String(describing: store.opening))") }
     }
 
     func testATappedMessageBehindTheTailIsFoundByReadingBackThroughHistory() async throws {

@@ -34,6 +34,10 @@ struct WatchConversationView: View {
     @State private var now = Date()
     /// Whether the thread's end stands in view: what new rows may pull the scroll toward.
     @State private var atEnd = true
+    /// Whether the rows that last landed were aimed at the end, for the settle
+    /// pass to finish the jump where the rows' heights pushed the end marker
+    /// out of view in between.
+    @State private var followingTail = false
     /// Set once the opening jump to the end has settled: before it, the first
     /// layout sits at the top, where the sentinel would fire at once.
     @State private var openSettled = false
@@ -112,6 +116,7 @@ struct WatchConversationView: View {
             .onChange(of: conversation.groups.count) {
                 now = Date()
                 guard atEnd else { return }
+                followingTail = true
                 withAnimation { proxy.scrollTo(Self.endId, anchor: .bottom) }
             }
             // Lazy rows take their real heights after they land, so the end
@@ -124,7 +129,8 @@ struct WatchConversationView: View {
                 guard !Task.isCancelled else { return }
                 let opening = settledCount == nil
                 settledCount = count
-                if atEnd || opening { proxy.scrollTo(Self.endId, anchor: .bottom) }
+                if atEnd || opening || followingTail { proxy.scrollTo(Self.endId, anchor: .bottom) }
+                followingTail = false
                 if conversation.opened { openSettled = true }
             }
             .onChange(of: anchorRow) {

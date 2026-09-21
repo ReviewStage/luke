@@ -61,6 +61,10 @@ struct ConversationView: View {
     /// Whether the thread's end stands in view: what new rows may pull the
     /// scroll toward, and what the return control stands in for when not.
     @State private var atEnd = true
+    /// Whether the rows that last landed were aimed at the end: the settle
+    /// pass finishes that jump even where the rows, taking their heights,
+    /// pushed the end marker out of view in between.
+    @State private var followingTail = false
     /// Set once the opening jump to the thread's end has settled, and the one
     /// thing that lets the history sentinel exist: before it, the first
     /// layout still sits at the top, where the sentinel would fire at once
@@ -182,7 +186,10 @@ struct ConversationView: View {
                 switch conversation.opening {
                 case .seeking: return
                 case .found(let rowId): scroll(proxy, to: rowId)
-                case .missing, nil: if atEnd { scroll(proxy, to: Self.endId) }
+                case .missing, nil:
+                    guard atEnd else { return }
+                    followingTail = true
+                    scroll(proxy, to: Self.endId)
                 }
             }
             // Lazy rows take their real heights after they land, so a page
@@ -198,8 +205,9 @@ struct ConversationView: View {
                 settledCount = count
                 switch conversation.opening {
                 case .seeking, .found: break
-                case .missing, nil: if atEnd || opening { scroll(proxy, to: Self.endId) }
+                case .missing, nil: if atEnd || opening || followingTail { scroll(proxy, to: Self.endId) }
                 }
+                followingTail = false
                 if conversation.opened { openSettled = true }
             }
             .onChange(of: scrollIntent) {
