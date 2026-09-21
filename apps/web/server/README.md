@@ -65,7 +65,14 @@ so every database the application reaches already carries the clients, including
 the branch database Neon creates for a Preview deployment, which would otherwise
 be migrated but empty. The Drizzle seed is idempotent, upserting each public
 OAuth client compiled into Luke, which is what makes running it on every build
-safe. To apply it by hand against production:
+safe. The same step then deletes every JWKS signing key the deployment's
+`BETTER_AUTH_SECRET` cannot open (`dropUnreadableJwks`): Better Auth seals a
+private key under the secret of the deployment that minted it and fails the
+whole token exchange when the latest key will not open, and a Preview's branch
+database arrives carrying production's key under a secret a Preview never
+holds, so without this every desktop sign-in against a Preview ended at the
+token endpoint. Production's own key opens under its own secret and is left
+standing. To apply the seed by hand against production:
 
 ```sh
 vercel env run --environment production --scope stage-review -- \
