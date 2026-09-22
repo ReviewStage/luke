@@ -61,7 +61,7 @@ export interface HostKernel {
   readonly accountBaseUrl: string;
   readonly hostedServiceBaseUrl: string;
   readonly nodes: NodeRegistry;
-  /** One host event, numbered into the log every client follows. */
+  /** One host event, handed to every client listening for its kind. */
   emit: (kind: GatewayEventKind, payload: WireValue) => void;
   /**
    * An address a host-owned flow needs opened: the native node's. No node

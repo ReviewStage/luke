@@ -19,7 +19,7 @@ type Identifier<Brand extends string> = string & { readonly [identifierBrand]: B
 export type AgentId = Identifier<"agent">;
 export type SessionKey = Identifier<"session-key">;
 
-export function isIdentifier(value: UnparsedWireValue): value is string {
+function isIdentifier(value: UnparsedWireValue): value is string {
   return isWireString(value) && value.length > 0;
 }
 

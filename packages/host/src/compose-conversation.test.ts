@@ -9,7 +9,6 @@ import {
   GATEWAY_ERROR,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
-  GATEWAY_PROTOCOL_VERSION,
   type GatewayEventKind,
   type GatewayMethod,
 } from "@sidecar/gateway";
@@ -355,12 +354,6 @@ function callMethod(
   assert.ok(handler);
   return handler(params, {
     client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-    request: {
-      protocolVersion: GATEWAY_PROTOCOL_VERSION,
-      method,
-      params,
-      idempotencyKey: `${method}-1`,
-    },
   });
 }
 
@@ -372,12 +365,6 @@ function clear(composer: ReturnType<typeof composeConversation>) {
       {},
       {
         client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-        request: {
-          protocolVersion: GATEWAY_PROTOCOL_VERSION,
-          method: GATEWAY_METHOD.CONVERSATION_CLEAR,
-          params: {},
-          idempotencyKey: "clear-1",
-        },
       },
     );
     assert.ok(isRecord(result));
@@ -397,11 +384,6 @@ it.effect(
           {},
           {
             client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-            request: {
-              protocolVersion: GATEWAY_PROTOCOL_VERSION,
-              method: GATEWAY_METHOD.CONVERSATION_REFRESH,
-              params: {},
-            },
           },
         );
       assert.deepEqual(yield* refresh(), {});
@@ -422,11 +404,6 @@ it.effect(
         {},
         {
           client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-          request: {
-            protocolVersion: GATEWAY_PROTOCOL_VERSION,
-            method: GATEWAY_METHOD.CONVERSATION_REFRESH,
-            params: {},
-          },
         },
       );
       assert.deepEqual(closed.client.calls, []);
@@ -815,12 +792,6 @@ function rateOutcome(composer: ReturnType<typeof composeConversation>, params: W
       params as Parameters<typeof handler>[0],
       {
         client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-        request: {
-          protocolVersion: GATEWAY_PROTOCOL_VERSION,
-          method: GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE,
-          params: {},
-          idempotencyKey: "rate-1",
-        },
       },
     ),
   );
@@ -999,11 +970,6 @@ function readNotebook(composer: ReturnType<typeof composeConversation>) {
     {},
     {
       client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
-      request: {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        method: GATEWAY_METHOD.NOTEBOOK_READ,
-        params: {},
-      },
     },
   );
 }

@@ -18,7 +18,6 @@ import {
   type ActSender,
   createActRouter,
 } from "./act-router";
-import { HostUnreachableRefusal } from "./gateway/host-operator";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
@@ -145,7 +144,7 @@ it.effect("an answer the kind's own guard refuses is a refusal rather than a val
 );
 
 it.effect(
-  "a row that answers an effect is run by the router, and its failure is the kind's refusal",
+  "a row that answers an effect is run by the router, and its defect is the kind's refusal",
   () =>
     Effect.gen(function* () {
       const ran: ActKind[] = [];
@@ -156,8 +155,7 @@ it.effect(
               ran.push(ACT_KIND.WINDOW_SET_EXPANDED);
               return "expanded";
             }),
-          [ACT_KIND.CALENDAR_REFRESH]: () =>
-            Effect.fail(new HostUnreachableRefusal({ message: "the transport closed" })),
+          [ACT_KIND.CALENDAR_REFRESH]: () => Effect.die(new Error("calendar.refresh was refused")),
           [ACT_KIND.WINDOW_QUIT]: () =>
             Effect.fail(new ActRefused({ message: "A quit is held while the update installs." })),
         }),

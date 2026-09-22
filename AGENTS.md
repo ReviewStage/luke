@@ -222,8 +222,6 @@ last entry. `liveClockTests` is permanent, for a subject that is a real socket
 or process timeout; `it.live` is allowed only there, and each entry is named
 here with its reason:
 
-- `packages/gateway/src/node-invocations.test.ts`: a real Gateway socket's
-  reconnection and in-flight timeout.
 
 ## Effect idioms
 
@@ -336,12 +334,6 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 - **`apps/desktop/src/main/update-service.ts`** — synchronous Electron
   IPC/menu callers (start, check, install) bridge into fibers on the services
   the launch handed them, on the same terms as `app-state.ts` beside it.
-- **`packages/gateway/src/client.ts`** — `GatewayClient#take` forks its
-  reconnection with `Effect.runForkWith` on the calling stack, because a gap
-  must open its reconnection on the tick that found it: `take` is the
-  transport's own synchronous callback with no fiber to fork from, and a
-  scheduler-deferred fork would move the in-flight count
-  `node-invocations.test.ts` asserts on the statement right after a publish.
 - **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — the notice
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing

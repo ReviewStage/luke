@@ -23,7 +23,6 @@ export {
   CONVERSATION_KIND,
   childSessionKey,
   DEFAULT_AGENT_ID,
-  isIdentifier,
   MAIN_SESSION_KEY,
   RUN_ORIGIN,
   type RunOrigin,

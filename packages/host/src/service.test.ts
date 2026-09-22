@@ -1,81 +1,37 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_METHOD,
-  gatewayClient,
-  InProcessTransport,
-  NODE_CAPABILITY_STATUS,
-} from "@sidecar/gateway";
-import { TextLoopbackTransport } from "@sidecar/gateway/testing";
-import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
+import { GATEWAY_EVENT, NODE_CAPABILITY_STATUS } from "@sidecar/gateway";
+import { isRecord, type WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
 import { createGatewayService } from "./service.js";
 
-const NOW = 1_800_000_000_000;
-
-/** A wire value the test expects to be a record; anything else fails the test where it stands. */
-function recordOf(value: WireValue | undefined): WireRecord {
-  assert.ok(isRecord(value));
-  return value;
-}
-
-/** The service over its own node registry, and one operator client on the transport under test. */
-function fixture(transportKind: "in-process" | "loopback" = "in-process") {
-  return Effect.gen(function* () {
-    let ids = 0;
-    const service = yield* createGatewayService({
-      now: () => NOW,
-      createId: () => `id-${++ids}`,
-    });
-    const identity = { clientId: "operator", role: GATEWAY_CLIENT_ROLE.OPERATOR };
-    const transport =
-      transportKind === "in-process"
-        ? new InProcessTransport(service.gateway, identity)
-        : new TextLoopbackTransport(service.gateway, identity);
-    const client = yield* gatewayClient({ transport, createId: () => `request-${++ids}` });
-    return { service, client };
-  });
-}
-
-for (const kind of ["in-process", "loopback"] as const) {
-  it.effect(
-    `[${kind}] a node the host needs that is not connected answers unavailable through the protocol`,
-    () =>
-      Effect.gen(function* () {
-        const f = yield* fixture(kind);
-        const missing = yield* f.client.call(GATEWAY_METHOD.NODE_INVOKE, {
-          capability: "os.openExternal",
-          params: { url: "https://example.test" },
-        });
-        assert.ok(missing.ok);
-        assert.equal(recordOf(missing.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-        // A registration over the wire binds the node to the connection it came
-        // on: an ask of it is dispatched there and nowhere else, and a connection
-        // that serves no handler answers unavailable, the ask never dispatched.
-        const remote = yield* f.client.call(GATEWAY_METHOD.NODE_REGISTER, {
-          nodeId: "phone",
-          capabilities: ["mic"],
-        });
-        assert.ok(remote.ok);
-        const unserved = yield* f.client.call(GATEWAY_METHOD.NODE_INVOKE, {
-          capability: "mic",
-          params: {},
-        });
-        assert.ok(unserved.ok);
-        assert.equal(recordOf(unserved.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-        assert.ok(f.service.nodes.list().some((node) => node.nodeId === "phone" && node.connected));
-      }),
-  );
-
-  it.effect(`[${kind}] a hello's snapshot carries the nodes as they stand and nothing else`, () =>
+it.effect(
+  "a capability no registered node offers answers unavailable, and a registration is told as an event",
+  () =>
     Effect.gen(function* () {
-      const f = yield* fixture(kind);
-      const hello = yield* f.client.call(GATEWAY_METHOD.HELLO);
-      assert.ok(hello.ok);
-      const snapshot = recordOf(recordOf(hello.result).snapshot);
-      assert.deepEqual(Object.keys(snapshot), ["nodes"]);
-      assert.deepEqual(snapshot.nodes, []);
+      const service = createGatewayService({});
+      const heard: WireValue[] = [];
+      service.gateway.on(GATEWAY_EVENT.NODE_CHANGED, (payload) => heard.push(payload));
+
+      const missing = yield* service.nodes.invoke("os.openExternal", {
+        url: "https://example.test",
+      });
+      assert.equal(missing.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
+
+      service.nodes.registerRemote({
+        nodeId: "native",
+        capabilities: ["os.openExternal"],
+        invoke: () => Effect.succeed({ status: NODE_CAPABILITY_STATUS.OK, value: undefined }),
+      });
+      const opened = yield* service.nodes.invoke("os.openExternal", {
+        url: "https://example.test",
+      });
+      assert.equal(opened.status, NODE_CAPABILITY_STATUS.OK);
+      assert.equal(heard.length, 1);
+      const [payload] = heard;
+      assert.ok(isRecord(payload));
+      assert.deepEqual(payload.nodes, [
+        { nodeId: "native", capabilities: ["os.openExternal"], connected: true },
+      ]);
     }),
-  );
-}
+);

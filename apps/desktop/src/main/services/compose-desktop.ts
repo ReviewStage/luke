@@ -162,6 +162,7 @@ export function composeDesktop(
       const operator = yield* createOperatorClient({
         config,
         gateway: host.gateway,
+        nodes: host.nodes,
         node: native.capabilities,
         state,
       });
@@ -198,7 +199,6 @@ export function composeDesktop(
       operator.link({
         sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
-        recycleVoiceWindow: () => windows.recycleVoiceWindow(),
         introductionOwedChanged: () => windows.reconcileIntroduction(),
       });
 

@@ -12,12 +12,13 @@
  * the whole quit, and there is no other order to run it in.
  */
 import {
+  type GatewayHost,
   type GatewayShutdownOptions,
   type GatewayShutdownReport,
   type GatewayShutdownSteps,
+  type NodeRegistry,
   shutdownGatewayEffect,
 } from "@sidecar/gateway";
-import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { Context, Data, Deferred, Effect, Layer, Ref, type Scope } from "effect";
 import type { Composer } from "../composer.js";
 import { layersInOrder } from "./composer.js";
@@ -80,8 +81,10 @@ export const hostDrain = /* @__PURE__ */ Effect.fn("host/hostDrain")(function* (
 
 /** Everything constructed and linked, and nothing yet begun. */
 export interface HostAssembly {
-  /** The one boundary a client reaches this host through: the in-process host every transport here is bound to. */
-  readonly gateway: GatewayInProcessHost;
+  /** The one boundary a client reaches this host through. */
+  readonly gateway: GatewayHost;
+  /** Where the client offers this machine's native capabilities and the host asks for them. */
+  readonly nodes: NodeRegistry;
   /** The composers in the order the launch has to keep; the quit is this order reversed. */
   readonly startOrder: readonly Composer[];
   /**
@@ -100,7 +103,7 @@ export class HostAssemblyTag extends Context.Service<HostAssemblyTag, HostAssemb
 
 /** The host with every composer started: what a client operates and what the quit drains. */
 export interface StandingHost {
-  readonly gateway: GatewayInProcessHost;
+  readonly gateway: GatewayHost;
   readonly drain: HostDrain;
 }
 

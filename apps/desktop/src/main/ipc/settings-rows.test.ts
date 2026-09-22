@@ -9,7 +9,7 @@ import type { WebContents } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { appSettingsWire } from "../../testing/spoken-setting-bridge";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
-import { type HostOperator, HostUnreachableRefusal } from "../gateway/host-operator";
+import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
 import type { DockPresence } from "../window/dock-presence";
 import type { HotkeyRegistrar } from "../window/hotkey-registrar";
@@ -96,11 +96,10 @@ it.effect(
     }),
 );
 
-it.effect("a write the host refused is refused with the settings this client last saw", () =>
+it.effect("a write that died is refused with the settings this client last saw", () =>
   Effect.gen(function* () {
     const router = rows({
-      updateSetting: () =>
-        Effect.fail(new HostUnreachableRefusal({ message: "the host is not reachable" })),
+      updateSetting: () => Effect.die(new Error("settings.update was refused")),
     });
     assert.deepEqual(yield* router.performAct(OPEN_AT_LOGIN, PANEL), {
       status: "done",
@@ -117,8 +116,7 @@ it.effect("a client with no snapshot at all refuses through the act's own senten
   Effect.gen(function* () {
     const router = rows({
       lastSettings: () => undefined,
-      connectGoogleCalendar: () =>
-        Effect.fail(new HostUnreachableRefusal({ message: "the host is not reachable" })),
+      connectGoogleCalendar: () => Effect.die(new Error("calendar.connectGoogle was refused")),
     });
     assert.deepEqual(yield* router.performAct({ kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE }, PANEL), {
       status: "refused",

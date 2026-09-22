@@ -1,10 +1,16 @@
+/**
+ * wiring.ts -- the Gateway boundary as the desktop client composes it: one
+ * operator over the host it is handed, the host's events relayed to the
+ * document the windows draw from, and this process's native capabilities
+ * registered as one node on the host's registry. The runtime itself stands
+ * behind the host; nothing here composes a store, a brain, or an observation.
+ */
 import {
-  GATEWAY_METHOD,
-  type GatewayTransport,
-  gatewayClient,
+  type GatewayHost,
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
-  type NodeInvocation,
+  type NodeRegistry,
+  type RemoteNodeInvoker,
 } from "@sidecar/gateway";
 import {
   HOST_NATIVE_NODE_ID,
@@ -16,16 +22,10 @@ import { Effect, type Scope } from "effect";
 import type { AppStateStore } from "../app-state";
 import { createHostOperator, type HostOperator } from "./host-operator";
 
-/**
- * The Gateway boundary as the desktop client composes it: one operator over
- * the transport it is handed, the host's events relayed to the windows that
- * draw them, and this process's native capabilities served as one node on
- * the same connection. The runtime itself stands on the other side of the
- * transport; nothing here composes a store, a brain, or an observation.
- */
 export interface GatewayWiringDependencies {
-  transport: GatewayTransport;
-  createId: () => string;
+  gateway: GatewayHost;
+  /** This process's node is registered on this registry, where the host asks for its capabilities. */
+  nodes: Pick<NodeRegistry, "registerRemote" | "unregister">;
   report: (message: string) => void;
   /** What the host says, written down once; the windows are told from it. */
   state: AppStateStore;
@@ -41,13 +41,6 @@ export interface GatewayWiringDependencies {
 
 export interface GatewayWiring {
   readonly host: HostOperator;
-  /**
-   * What every attachment owes the host it now reaches: the host's stream
-   * adopted (its sequence and snapshot, so a replaced host's events are not
-   * dropped against the old host's count), and this process's node
-   * registered on the connection that now stands.
-   */
-  attached: () => Effect.Effect<boolean>;
 }
 
 /** The commands the EventKit helper answers; an invocation naming anything else is refused here. */
@@ -60,23 +53,17 @@ const APPLE_CALENDAR_HELPER_COMMANDS: ReadonlySet<string> = new Set([
 export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(function* (
   dependencies: GatewayWiringDependencies,
 ): Effect.fn.Return<GatewayWiring, never, Scope.Scope> {
-  const { transport, state, report } = dependencies;
-  const client = yield* gatewayClient({
-    transport,
-    createId: dependencies.createId,
-    report,
-  });
+  const { gateway, state, report } = dependencies;
   const host = createHostOperator({
-    client,
-    lastSettings: () => state.snapshot().settings,
+    client: gateway,
     report,
   });
 
   // What the host tells its clients: the Conversation as its reads of the
   // service compose it, the children and agents beside it, and the one
   // transcript held open, each written to the document every window is told
-  // from. The subscriptions are the scope's, as the client's own is, so the
-  // close that ends one ends them all.
+  // from. The subscriptions are the scope's, so the close that ends one ends
+  // them all.
   const heard = [
     host.onConversationViewChanged((view) => {
       state.update({ conversation: view });
@@ -101,28 +88,26 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
    * The capabilities this process performs at the host's ask. Each is
    * validated here before anything native runs — the address a string, the
    * helper command one the build knows — and each answers the host's own
-   * result vocabulary, so a refusal is typed and never a throw that the wire
-   * would have to guess at.
+   * result vocabulary, so a refusal is typed and never a throw.
    */
-  const perform = (invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> =>
+  const perform: RemoteNodeInvoker = (capability, params) =>
     Effect.suspend(() => {
       const failed = (reason: string): Effect.Effect<NodeCapabilityResult> =>
-        Effect.succeed({
-          status: NODE_CAPABILITY_STATUS.FAILED,
-          capability: invocation.capability,
-          reason,
-        });
-      switch (invocation.capability) {
+        Effect.succeed({ status: NODE_CAPABILITY_STATUS.FAILED, capability, reason });
+      switch (capability) {
         case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
-          const { url } = invocation.params;
+          const { url } = params;
           if (!isWireString(url)) return failed("open needs a url");
           return Effect.as(
             Effect.promise(() => dependencies.node.openExternal(url)),
-            { status: NODE_CAPABILITY_STATUS.OK, value: undefined },
+            {
+              status: NODE_CAPABILITY_STATUS.OK,
+              value: undefined,
+            },
           );
         }
         case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {
-          const helperArguments = invocation.params.arguments;
+          const helperArguments = params.arguments;
           if (
             !Array.isArray(helperArguments) ||
             !helperArguments.every(isWireString) ||
@@ -130,7 +115,7 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
           ) {
             return failed("the helper invocation is not one this build runs");
           }
-          const timeoutMs = invocation.params.timeoutMs;
+          const timeoutMs = params.timeoutMs;
           if (!isWireNumber(timeoutMs)) return failed("timeoutMs must be a number");
           return Effect.map(
             Effect.promise(() =>
@@ -142,24 +127,34 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
         default:
           return Effect.succeed({
             status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
-            capability: invocation.capability,
+            capability,
             reason: "this node offers no such capability",
           });
       }
     });
-  yield* transport.serveInvocations?.(perform) ?? Effect.void;
 
-  return {
-    host,
-    attached: () =>
-      Effect.gen(function* () {
-        yield* client.adoptHost();
-        const result = yield* client.call(GATEWAY_METHOD.NODE_REGISTER, {
-          nodeId: HOST_NATIVE_NODE_ID,
-          capabilities: [...HOST_NODE_CAPABILITY_LIST],
-        });
-        if (!result.ok) report(`the native node could not register: ${result.error.message}`);
-        return result.ok;
+  // A handler that dies answers failed on this node rather than taking the
+  // host's ask down with it; the host reads a typed refusal either way.
+  yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      dependencies.nodes.registerRemote({
+        nodeId: HOST_NATIVE_NODE_ID,
+        capabilities: [...HOST_NODE_CAPABILITY_LIST],
+        invoke: (capability, params) =>
+          Effect.catchDefect(perform(capability, params), (defect) =>
+            Effect.succeed<NodeCapabilityResult>({
+              status: NODE_CAPABILITY_STATUS.FAILED,
+              capability,
+              reason: defect instanceof Error ? defect.message : String(defect),
+            }),
+          ),
+      });
+    }),
+    () =>
+      Effect.sync(() => {
+        dependencies.nodes.unregister(HOST_NATIVE_NODE_ID);
       }),
-  };
+  );
+
+  return { host };
 });
