@@ -153,14 +153,6 @@
           "dest": "/api/default.js?route=vault/keys"
         },
         {
-          "src": "/api/voice/introduction-mint",
-          "dest": "/api/default.js?route=voice/introduction-mint"
-        },
-        {
-          "src": "/api/voice/mint",
-          "dest": "/api/default.js?route=voice/mint"
-        },
-        {
           "src": "/api/observation/tick",
           "dest": "/api/observation-tick.js?route=observation/tick"
         },
