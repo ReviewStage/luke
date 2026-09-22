@@ -10,7 +10,6 @@ import {
   type ExchangeAttachment,
   type ExchangeReport,
   type HostedLiveExchange,
-  type HostedLiveExchangeOptions,
   hostedLiveExchange,
 } from "./live-exchange.js";
 import { upstreamSideband } from "./live-sideband.js";
@@ -38,17 +37,11 @@ interface ExchangeAttachmentDeps {
   readonly writer: StoreWriter;
   /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
   readonly eve: (accountId: string) => EveSessions;
-  /** The retained conversation a session would be seeded from; the route seeds nothing of its own today, so the default is none. */
-  readonly conversationEntries?: HostedLiveExchangeOptions["conversationEntries"];
-  readonly emit: HostedLiveExchangeOptions["emit"];
   readonly now: () => number;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go, each named with the route and the platform of the session it stood on. */
   readonly report: (report: ExchangeReport) => void;
-  readonly trace?: HostedLiveExchangeOptions["trace"];
 }
-
-const NO_ENTRIES: HostedLiveExchangeOptions["conversationEntries"] = () => [];
 
 /** A session whose sideband the exchange could not stand on; the service refuses the session on it. */
 class ExchangeCannotStand extends Data.TaggedError("ExchangeCannotStand")<{
@@ -74,8 +67,6 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         context: deps.context,
         writer: deps.writer,
         eve: deps.eve(session.accountId),
-        conversationEntries: deps.conversationEntries ?? NO_ENTRIES,
-        emit: deps.emit,
         now: deps.now,
         createId: deps.createId,
         // The exchange reports a sentence; which session it stood on is this
@@ -83,7 +74,6 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         // no platform.
         report: (message) =>
           deps.report({ message, route: session.route, platform: session.platform }),
-        ...(deps.trace ? { trace: deps.trace } : undefined),
         ...(session.onSpoken ? { onProactiveSpoken: session.onSpoken } : undefined),
       });
       const adopted = yield* exchange.adopt({

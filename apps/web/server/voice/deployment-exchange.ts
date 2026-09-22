@@ -128,10 +128,6 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
       context: { keys: payloadKeyRing(encryptionSecret) },
       writer,
       eve,
-      // Nobody on the service reads the session's phases: the device reads
-      // its own from the frames the relay forwards, and the record is the
-      // exchange's own.
-      emit: () => undefined,
       now: seams.now,
       createId: () => randomUUID(),
       report: seams.report,

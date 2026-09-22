@@ -5,11 +5,7 @@ import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   type AdoptableSession,
   type BeatTurn,
-  type BriefingDelivery,
-  type LiveSessionOpened,
   LiveSessionService,
-  type LiveSessionServiceOptions,
-  type LiveSessionSource,
 } from "@sidecar/voice/live-session";
 import { eq } from "drizzle-orm";
 import { Cause, Effect, Layer, Option, Result, Schema, type Scope } from "effect";
@@ -48,13 +44,11 @@ import { observedSideband } from "./live-sideband.js";
  * and the briefings claimed as the session's device before they are spoken.
  * Everything of the store arrives as one context — the database, the runner,
  * and the key ring — so the writers, the ask record, and the reads hold one
- * client over one database. The session itself is still the caller's: a
- * source handed in is what creates and attaches it, or the sessions route
- * hands in a session it already created for the device and the exchange
- * adopts it, seeding nothing, through `adopt`. Whether the route hands one in
- * is the route's composition's decision, by build. The account's quiet is not this composition's: the
- * briefing look leaves a quiet account's offers unread, so nothing here is
- * held or released.
+ * client over one database. The session itself is still the caller's: the
+ * sessions route hands in a session it already created for the device and
+ * the exchange adopts it, seeding nothing, through `adopt`. The account's
+ * quiet is not this composition's: the briefing look leaves a quiet
+ * account's offers unread, so nothing here is held or released.
  *
  * The composition is a scope's, not a socket callback's: it is built in the
  * `Scope` its caller opened for the socket, and every fiber it runs is forked
@@ -82,14 +76,9 @@ export interface HostedLiveExchangeOptions {
    * here and a test hands in a fake.
    */
   readonly eve: EveSessions;
-  /** What creates a session for the service's own `createSession`; absent where every session is adopted. */
-  readonly source?: () => LiveSessionSource | undefined;
-  readonly conversationEntries: LiveSessionServiceOptions<BriefingDelivery>["conversationEntries"];
-  readonly emit: LiveSessionServiceOptions<BriefingDelivery>["emit"];
   readonly now: () => number;
   readonly createId: () => string;
   readonly report: (message: string) => void;
-  readonly trace?: LiveSessionServiceOptions<BriefingDelivery>["trace"];
   /**
    * A proactive turn was spoken to its end, by kind: a beat the device
    * asked for, or a briefing this exchange decided. The device keeps the
@@ -256,7 +245,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     report,
   });
 
-  /** The sideband with the record listening ahead of the service, on every session, created or adopted. */
+  /** The sideband with the record listening ahead of the service, on every session adopted. */
   const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
     return () =>
       Effect.map(attach(), (sideband) =>
@@ -266,35 +255,12 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       );
   };
 
-  const source = (): LiveSessionSource | undefined => {
-    const inner = options.source?.();
-    if (!inner) return undefined;
-    return {
-      ...inner,
-      create: (input) =>
-        Effect.map(inner.create(input), (opened) => {
-          if (!opened) return undefined;
-          const observed: LiveSessionOpened = {
-            ...opened,
-            attach: observing(() => opened.attach()),
-          };
-          return observed;
-        }),
-    };
-  };
-
   // The brain and the record are built beside the service here rather than
   // by a caller, so the layers that name them are provided on the spot.
   const service = yield* Effect.provide(
     LiveSessionService.make<HostedBriefingDelivery>({
-      source,
-      conversationEntries: options.conversationEntries,
-      quietNow: () => Effect.succeed(false),
-      releaseHeldBriefings: () => Effect.void,
-      emit: options.emit,
       createId: options.createId,
       report,
-      ...(options.trace ? { trace: options.trace } : undefined),
       onBriefingAppend: (delivery, eventId) =>
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
       ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),

@@ -2,13 +2,7 @@ import assert from "node:assert/strict";
 import { SESSION_STATUS } from "@sidecar/session";
 import { test } from "vitest";
 import { APPEND_TOKEN_BOUND } from "./chunks.js";
-import {
-  type RosterSeedSession,
-  type RosterTold,
-  rosterSeed,
-  rosterSeedItem,
-  rosterUpdate,
-} from "./roster-seed.js";
+import { type RosterSeedSession, rosterSeed, rosterSeedItem } from "./roster-seed.js";
 import { SEED_CONTENT_TYPE, SEED_ITEM_TYPE, SEED_ROLE } from "./seed.js";
 import { estimatedTokens } from "./tokens.js";
 
@@ -34,21 +28,6 @@ function session(overrides: Partial<RosterSeedSession> & { id: string }): Roster
 
 function rosterSeedText(sessions: readonly RosterSeedSession[], now: number): string | undefined {
   return rosterSeed(sessions, now)?.text;
-}
-
-function rosterUpdateText(
-  told: RosterTold | undefined,
-  next: readonly RosterSeedSession[],
-  now: number,
-): string | undefined {
-  return rosterUpdate(told, next, now)?.text;
-}
-
-/** What a session knows after it is seeded with these sessions, for a test that then moves the desk. */
-function toldOf(sessions: readonly RosterSeedSession[], now: number = NOW): RosterTold {
-  const seeded = rosterSeed(sessions, now);
-  assert.ok(seeded);
-  return seeded.told;
 }
 
 /** The one line a session renders, read out of a render of that session alone. */
@@ -181,95 +160,4 @@ test("the age reads in coarse buckets, so a line holds still across a clock tick
       .size,
     6,
   );
-});
-
-test("an unchanged roster is no update at all", () => {
-  const roster = [session({ id: "a" }), session({ id: "b", status: SESSION_STATUS.COMPLETE })];
-  assert.equal(rosterUpdateText(toldOf(roster), [...roster], NOW), undefined);
-});
-
-test("an update carries the lines that changed and nothing else", () => {
-  const still = session({ id: "still" });
-  const moved = session({ id: "moved" });
-  const after = { ...moved, status: SESSION_STATUS.COMPLETE };
-  const text = rosterUpdateText(toldOf([still, moved]), [still, after], NOW);
-  assert.deepEqual(lines(text).slice(1), [lineOf(after)]);
-});
-
-test("a session that has left the desk is withdrawn by name, ahead of the lines that merely changed", () => {
-  const stays = session({ id: "stays" });
-  const leaves = session({ id: "leaves", title: "gone agent" });
-  const arrives = session({ id: "arrives" });
-  const text = rosterUpdateText(toldOf([stays, leaves]), [stays, arrives], NOW);
-  const body = lines(text).slice(1);
-  assert.equal(body.length, 2);
-  assert.notEqual(body[0], lineOf(leaves));
-  assert.deepEqual(body[1], lineOf(arrives));
-});
-
-test("a withdrawal is never what the append bound cuts, however many rows moved beside it", () => {
-  const leaves = session({ id: "leaves", title: "gone agent" });
-  const many = Array.from({ length: 40 }, (_, index) =>
-    session({ id: `s${index}`, title: "x".repeat(200) }),
-  );
-  const before = many.map((one) => ({ ...one, status: SESSION_STATUS.COMPLETE }));
-  const text = rosterUpdateText(toldOf([...before, leaves]), many, NOW);
-  const body = lines(text).slice(1);
-  assert.ok(text);
-  assert.ok(estimatedTokens(text) <= APPEND_TOKEN_BOUND);
-  assert.ok(body.length < many.length);
-  assert.equal(body[0], `- gone agent: no longer on the desk.`);
-});
-
-test("an age that crossed a bucket edge is news, and one that did not is not", () => {
-  const one = session({ id: "age", lastActivityAt: NOW });
-  const told = toldOf([one]);
-  assert.equal(rosterUpdateText(told, [one], NOW + 30_000), undefined);
-  const drifted = rosterUpdateText(told, [one], NOW + 3 * HOUR);
-  assert.deepEqual(lines(drifted).slice(1), [lineOf(one, NOW + 3 * HOUR)]);
-});
-
-test("an update carries more lines than the seed's own count cap when that many rows moved", () => {
-  const many = Array.from({ length: ROSTER_SEED_BOUNDS.SESSIONS + 4 }, (_, index) =>
-    session({ id: `s${index}` }),
-  );
-  const before = many.map((one) => ({ ...one, status: SESSION_STATUS.COMPLETE }));
-  const body = lines(rosterUpdateText(toldOf(before), many, NOW)).slice(1);
-  assert.equal(body.length, many.length);
-  assert.equal(lines(rosterSeedText(many, NOW)).length - 2, ROSTER_SEED_BOUNDS.SESSIONS);
-});
-
-test("a summary the append bound cut short leaves the rows it dropped to be said again", () => {
-  const many = Array.from({ length: 40 }, (_, index) =>
-    session({ id: `s${index}`, title: `${index}-${"x".repeat(200)}` }),
-  );
-  let told = toldOf(many);
-  const said: string[] = [];
-  for (let pass = 0; pass < 20; pass += 1) {
-    const update = rosterUpdate(told, many, NOW);
-    if (update === undefined) break;
-    said.push(...lines(update.text).slice(1));
-    told = update.told;
-  }
-  // Every row the seed's own cap left out is said across the passes, each
-  // exactly once: what a cut summary never carried is still news.
-  assert.equal(new Set(said).size, said.length);
-  assert.deepEqual(
-    new Set([...said, ...lines(rosterSeedText(many, NOW)).slice(1, -1)]).size,
-    many.length,
-  );
-});
-
-test("a session never told a roster is told the whole summary rather than a diff against nothing", () => {
-  const roster = [session({ id: "a" })];
-  assert.equal(rosterUpdateText(undefined, roster, NOW), rosterSeedText(roster, NOW));
-});
-
-test("an update stays inside one append's bound too", () => {
-  const many = Array.from({ length: ROSTER_SEED_BOUNDS.SESSIONS + 4 }, (_, index) =>
-    session({ id: `s${index}`, title: "x".repeat(500) }),
-  );
-  const text = rosterUpdateText(new Map(), many, NOW);
-  assert.ok(text);
-  assert.ok(estimatedTokens(text) <= APPEND_TOKEN_BOUND);
 });

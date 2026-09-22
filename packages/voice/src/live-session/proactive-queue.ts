@@ -3,16 +3,11 @@ import {
   type ProactiveSpeechKind,
   type ProactiveSpeechTurn,
 } from "@sidecar/live";
-import { LIVE_TRACE_DECISION, type LiveTrace } from "./live-trace.js";
 
 /**
  * What Luke wants to say unprompted, waiting for a session to say it into:
  * briefings the brain decided, the two onboarding beats, and the launch
- * greeting. Quiet — a
- * meeting's or the developer's pause — is applied here and only here: a
- * request arriving under it, or standing when it begins, is held; a held beat
- * is released with a fresh clock when the quiet ends, and a held briefing is
- * handed back for one re-decision rather than said as it stood. A beat is one
+ * greeting. A beat is one
  * line, asked for once until it is spoken, refused, or withdrawn, and spent
  * for the run once spoken to the end. A request older than the notice age is
  * dropped rather than said as though it just happened. The launch greeting
@@ -40,25 +35,17 @@ export type ProactiveRequest<Delivery> =
 
 interface ProactiveQueueOptions {
   now: () => number;
-  trace: LiveTrace;
 }
 
 export class ProactiveQueue<Delivery extends { briefing: string; decidedAt: number }> {
   readonly #options: ProactiveQueueOptions;
   #pending: ProactiveRequest<Delivery>[] = [];
-  #held: ProactiveRequest<Delivery>[] = [];
-  #quiet = false;
   readonly #spentBeats = new Set<BeatKind>();
   /** Beats requested and not yet spoken, refused, or withdrawn. */
   readonly #activeBeats = new Set<BeatKind>();
 
   constructor(options: ProactiveQueueOptions) {
     this.#options = options;
-  }
-
-  /** How many requests stand, pending or held. */
-  get size(): number {
-    return this.#pending.length + this.#held.length;
   }
 
   /** Whether anything waits to be said into a session. */
@@ -84,7 +71,6 @@ export class ProactiveQueue<Delivery extends { briefing: string; decidedAt: numb
     if (briefings.length > MAXIMUM_PENDING_BRIEFINGS) {
       const oldest = briefings[0];
       this.#pending = this.#pending.filter((candidate) => candidate !== oldest);
-      this.#options.trace(LIVE_TRACE_DECISION.DROPPED);
     }
   }
 
@@ -98,48 +84,7 @@ export class ProactiveQueue<Delivery extends { briefing: string; decidedAt: numb
   /** Removes a beat whose reason has gone; withdrawal does not spend the kind. */
   withdrawBeat(kind: BeatKind): void {
     this.#pending = this.#pending.filter((request) => request.kind !== kind);
-    this.#held = this.#held.filter((request) => request.kind !== kind);
     this.#activeBeats.delete(kind);
-  }
-
-  /** Discards every briefing not yet taken; answers whether any went. */
-  dropBriefings(): boolean {
-    const before = this.size;
-    const notBriefing = (request: ProactiveRequest<Delivery>) =>
-      request.kind !== PROACTIVE_SPEECH_KIND.BRIEFING;
-    this.#pending = this.#pending.filter(notBriefing);
-    this.#held = this.#held.filter(notBriefing);
-    const dropped = before !== this.size;
-    if (dropped) this.#options.trace(LIVE_TRACE_DECISION.DROPPED);
-    return dropped;
-  }
-
-  /**
-   * Follows the announcement hold. Quiet beginning holds every pending
-   * request; quiet ending releases the beats with a fresh clock and answers
-   * the held briefings for the caller to hand back for re-decision.
-   */
-  setQuiet(quiet: boolean): readonly Delivery[] {
-    if (quiet === this.#quiet) return [];
-    this.#quiet = quiet;
-    if (quiet) {
-      this.#held.push(...this.#pending);
-      this.#pending = [];
-      if (this.#held.length > 0) this.#options.trace(LIVE_TRACE_DECISION.HELD);
-      return [];
-    }
-    const released = this.#held;
-    this.#held = [];
-    const briefings: Delivery[] = [];
-    const now = this.#options.now();
-    for (const request of released) {
-      if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
-        briefings.push(request.delivery);
-        continue;
-      }
-      this.#pend({ ...request, turn: { ...request.turn, decidedAt: now } });
-    }
-    return briefings;
   }
 
   /** Takes every pending request still worth saying, in order; the stale are dropped on the way. */
@@ -148,7 +93,6 @@ export class ProactiveQueue<Delivery extends { briefing: string; decidedAt: numb
     for (const request of this.#pending.splice(0)) {
       if (this.#stale(request)) {
         this.release(request);
-        this.#options.trace(LIVE_TRACE_DECISION.DROPPED);
         continue;
       }
       taken.push(request);
@@ -171,18 +115,11 @@ export class ProactiveQueue<Delivery extends { briefing: string; decidedAt: numb
 
   clear(): void {
     this.#pending = [];
-    this.#held = [];
   }
 
   #admit(request: ProactiveRequest<Delivery>): boolean {
     if (this.#stale(request)) {
       this.release(request);
-      this.#options.trace(LIVE_TRACE_DECISION.DROPPED);
-      return false;
-    }
-    if (this.#quiet) {
-      this.#held.push(request);
-      this.#options.trace(LIVE_TRACE_DECISION.HELD);
       return false;
     }
     this.#pend(request);

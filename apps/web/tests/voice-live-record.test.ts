@@ -11,7 +11,6 @@ import {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
   LiveSessionService,
-  type LiveSessionSource,
   ROW_WRITE_DEBOUNCE_MS,
   sidebandOverSocket,
 } from "@sidecar/voice/live-session";
@@ -170,33 +169,11 @@ async function stand(live: VoiceTarget) {
     }
   });
   const observed: Promise<VoiceWriteResult>[] = [];
-  const source: LiveSessionSource = {
-    create: (input) =>
-      Effect.succeed({
-        sessionId: live.liveSessionId,
-        sdpAnswer: `answer-for-${input.sdpOffer}`,
-        attach: () =>
-          Effect.succeed(
-            observedSideband(sidebandOverSocket(socket), (event) => {
-              observed.push(database.run(record.observe(event)));
-            }),
-          ),
-      }),
-    setVoice: () => undefined,
-    diagnostics: () => {
-      throw new Error("not read here");
-    },
-  };
   let ids = 0;
   const service = await database.run(
     Scope.provide(
       Effect.provide(
         LiveSessionService.make({
-          source: () => source,
-          conversationEntries: () => [],
-          quietNow: () => Effect.succeed(false),
-          releaseHeldBriefings: () => Effect.void,
-          emit: () => undefined,
           createId: () => `id-${++ids}`,
           report: () => undefined,
         }),
@@ -211,8 +188,19 @@ async function stand(live: VoiceTarget) {
     service,
     observed,
     async open() {
-      const created = await database.run(service.createSession("offer"));
-      assert.ok(created);
+      const adopted = await database.run(
+        service.adoptSession({
+          sessionId: live.liveSessionId,
+          attach: () =>
+            Effect.succeed(
+              observedSideband(sidebandOverSocket(socket), (event) => {
+                observed.push(database.run(record.observe(event)));
+              }),
+            ),
+          started: false,
+        }),
+      );
+      assert.ok(adopted);
       socket.receive(sessionStarted(live.liveSessionId));
     },
     commentary(): LiveAppendEvent[] {

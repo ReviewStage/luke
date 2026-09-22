@@ -1,40 +1,25 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
 import {
-  LIVE_SESSION_PHASE,
-  LIVE_TRANSPORT_STATE,
-  type VoiceLiveSessionChanged,
-} from "@sidecar/gateway";
-import {
-  chunkForAppend,
-  type InitialItem,
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
   LIVE_IDLE_WINDOW_MS,
-  LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
   type LiveServerEventType,
-  PREFETCH_DEBOUNCE_MS,
   PROACTIVE_SPEECH_KIND,
   parseLiveServerEvent,
-  type RosterSeedSession,
-  rosterSeed,
-  rosterUpdate,
-  SEED_ROLE,
-  seedItemTokens,
   TRANSCRIPT_SPEAKER,
   UTTERANCE_GAP_MS,
 } from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { Clock, Deferred, Duration, Effect, Fiber, Layer, type Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
 import { holdSocket, type SocketHold } from "../held-socket.js";
-import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import {
@@ -42,21 +27,17 @@ import {
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
-  type LiveBrainAnticipation,
-  type LiveBrainAnticipationFacts,
   type LiveBrainAsk,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
-  ANTICIPATION_FACTS_PREFIX,
   LiveSessionService,
   ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";
-import { LIVE_TRACE_DECISION, type LiveTraceRecord } from "./live-trace.js";
 
 /** The acknowledgment each append type earns, as the API names them. */
 const ACKNOWLEDGMENT_OF: ReadonlyMap<LiveClientEvent["type"], LiveServerEventType> = new Map([
@@ -201,36 +182,6 @@ class FakeBrain implements LiveBrain {
   }
 }
 
-/** A brain that reads ahead: it records each anticipation, each drop, and hands facts back by hand. */
-class AnticipatingBrain extends FakeBrain {
-  readonly anticipations: LiveBrainAnticipation[] = [];
-  drops = 0;
-  readonly #factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
-
-  anticipate(anticipation: LiveBrainAnticipation): Effect.Effect<void> {
-    return Effect.sync(() => {
-      this.anticipations.push(anticipation);
-    });
-  }
-
-  dropAnticipation(): Effect.Effect<void> {
-    return Effect.sync(() => {
-      this.drops += 1;
-    });
-  }
-
-  onAnticipationFacts(listener: (facts: LiveBrainAnticipationFacts) => void): () => void {
-    this.#factsListeners.add(listener);
-    return () => {
-      this.#factsListeners.delete(listener);
-    };
-  }
-
-  facts(facts: LiveBrainAnticipationFacts): void {
-    for (const listener of [...this.#factsListeners]) listener(facts);
-  }
-}
-
 class FakeRecord implements LiveRecord {
   /** Every row write in the order the record was handed them: a row grows as repeats of its id, each over the span it then had. */
   readonly rows: SpokenRowUpsert[] = [];
@@ -299,13 +250,6 @@ function attaches(record: FakeRecord) {
   }));
 }
 
-/** The row the brain was handed to read ahead of, which is what its facts are matched against. */
-function anticipatedRow(brain: AnticipatingBrain): string {
-  const rowId = brain.anticipations[0]?.rowId;
-  assert.ok(rowId, "an anticipation was handed over");
-  return rowId;
-}
-
 /**
  * The instant the service reads, as the test reads it: the ambient
  * `TestClock`'s own, which the service keeps time on too, so a value a test
@@ -348,18 +292,11 @@ interface Fixture {
   clock: TestNow;
   brain: FakeBrain;
   record: FakeRecord;
+  /** Every sideband adopted so far, in order; the session adopted over the nth is `sess-n`. */
   sidebands: FakeSideband[];
-  creates: LiveSessionOpened[];
-  seeds: readonly (readonly InitialItem[])[];
-  changes: VoiceLiveSessionChanged[];
-  traces: LiveTraceRecord[];
-  released: { briefing: string; decidedAt: number }[][];
   spoken: string[];
   service: LiveSessionService;
-  entries: ConversationEntry[];
-  roster: RosterSeedSession[];
-  quiet: boolean;
-  sourceAvailable: boolean;
+  /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
   /** What the test wants told of a briefing's last append; nothing by default. */
   onBriefingAppend?: (delivery: { briefing: string; decidedAt: number }, eventId: string) => void;
@@ -370,49 +307,12 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const clock = testNow(yield* Clock.Clock);
     const record = new FakeRecord();
     const sidebands: FakeSideband[] = [];
-    const creates: LiveSessionOpened[] = [];
-    const seeds: (readonly InitialItem[])[] = [];
-    const changes: VoiceLiveSessionChanged[] = [];
-    const traces: LiveTraceRecord[] = [];
-    const released: { briefing: string; decidedAt: number }[][] = [];
     const spoken: string[] = [];
     let ids = 0;
-    const state = { quiet: false, sourceAvailable: true };
-    const source: LiveSessionSource = {
-      create: (input) =>
-        Effect.sync(() => {
-          seeds.push([...input.input]);
-          const sideband = new FakeSideband();
-          sidebands.push(sideband);
-          const opened: LiveSessionOpened = {
-            sessionId: `sess-${sidebands.length}`,
-            sdpAnswer: `answer-for-${input.sdpOffer}`,
-            attach: () => Effect.succeed(sideband),
-          };
-          creates.push(opened);
-          return opened;
-        }),
-      setVoice: () => undefined,
-      diagnostics: () => {
-        throw new Error("not read here");
-      },
-    };
-    const entries: ConversationEntry[] = [];
-    const roster: RosterSeedSession[] = [];
     const service = yield* Effect.provide(
       LiveSessionService.make({
-        source: () => (state.sourceAvailable ? source : undefined),
-        conversationEntries: () => entries,
-        roster: () => roster,
-        quietNow: () => Effect.sync(() => state.quiet),
-        releaseHeldBriefings: (held) =>
-          Effect.sync(() => {
-            released.push([...held]);
-          }),
-        emit: (change) => changes.push(change),
         createId: () => `id-${++ids}`,
         report: () => undefined,
-        trace: (trace) => traces.push(trace),
         onProactiveSpoken: (kind) => spoken.push(kind),
         onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
       }),
@@ -423,34 +323,20 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       brain,
       record,
       sidebands,
-      creates,
-      seeds,
-      changes,
-      traces,
-      released,
       spoken,
       service,
-      entries,
-      roster,
-      get quiet() {
-        return state.quiet;
-      },
-      set quiet(value: boolean) {
-        state.quiet = value;
-      },
-      get sourceAvailable() {
-        return state.sourceAvailable;
-      },
-      set sourceAvailable(value: boolean) {
-        state.sourceAvailable = value;
-      },
       open: () =>
         Effect.gen(function* () {
-          const created = yield* service.createSession("offer");
-          assert.ok(created);
-          const sideband = sidebands[sidebands.length - 1];
-          assert.ok(sideband);
-          sideband.started(created.sessionId);
+          const sideband = new FakeSideband();
+          sidebands.push(sideband);
+          const sessionId = `sess-${sidebands.length}`;
+          const adopted = yield* service.adoptSession({
+            sessionId,
+            attach: () => Effect.succeed(sideband),
+            started: false,
+          });
+          assert.ok(adopted);
+          sideband.started(sessionId);
           return sideband;
         }),
     };
@@ -462,43 +348,11 @@ function appends(sideband: FakeSideband, type: string) {
   return sideband.sent.filter((event) => event.type === type);
 }
 
-function phases(changes: readonly VoiceLiveSessionChanged[]) {
-  return changes.map((change) => change.phase);
-}
-
 it.effect(
-  "a created session is seeded from the record alone, attached before the answer, and its phases are announced",
+  "an adopted session is stood without a seed: nothing is sent before the session speaks, and a delegation reaches the brain",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      f.entries.push(
-        { kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" },
-        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Nothing yet." },
-      );
-      const created = yield* f.service.createSession("offer");
-      assert.deepEqual(created, { sessionId: "sess-1", sdpAnswer: "answer-for-offer" });
-      assert.deepEqual(
-        f.seeds[0]?.map((item) => item.role),
-        [SEED_ROLE.USER, SEED_ROLE.ASSISTANT],
-      );
-      assert.equal(f.service.sessionStands(), true);
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED]);
-      f.sidebands[0]?.started("sess-1");
-      yield* settle();
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.STARTED]);
-      assert.deepEqual(
-        f.traces.map((trace) => trace.decision),
-        [LIVE_TRACE_DECISION.CREATED, LIVE_TRACE_DECISION.STARTED],
-      );
-    }),
-);
-
-it.effect(
-  "an adopted session is stood without asking the source and without a seed: nothing is created, nothing is sent before the session speaks, and a delegation reaches the brain as on a created session",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
       const sideband = new FakeSideband();
       const adopted = yield* f.service.adoptSession({
         sessionId: "sess-adopted",
@@ -506,12 +360,9 @@ it.effect(
         started: false,
       });
       assert.equal(adopted, true);
-      assert.deepEqual(f.creates, []);
-      assert.deepEqual(f.seeds, []);
       assert.deepEqual(sideband.sent, []);
       sideband.started("sess-adopted");
       yield* settle();
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.STARTED]);
       assert.deepEqual(sideband.sent, []);
       sideband.input("What needs me", 1000, 1800);
       sideband.delegation("item_1", 2500);
@@ -534,10 +385,6 @@ it.effect(
         }),
         true,
       );
-      assert.deepEqual(phases(running.changes), [
-        LIVE_SESSION_PHASE.CREATED,
-        LIVE_SESSION_PHASE.STARTED,
-      ]);
       running.service.deliverBriefing({
         briefing: "Nukualofa finished.",
         decidedAt: running.clock.now,
@@ -565,15 +412,6 @@ it.effect(
       yield* settle();
       assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
     }),
-);
-
-it.effect("no source means no session and nothing announced", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    f.sourceAvailable = false;
-    assert.equal(yield* f.service.createSession("offer"), undefined);
-    assert.deepEqual(f.changes, []);
-  }),
 );
 
 it.effect(
@@ -752,7 +590,6 @@ it.effect(
       // The second delegation found the row the first's claim had just taken and nothing else said
       // since: it is retained for the next fragment rather than composed on nothing.
       assert.equal(f.brain.asks.length, 1);
-      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.RETAINED).length, 1);
       yield* Deferred.succeed(f.brain.answerWhen, undefined);
       yield* settle();
       const rowIds = [...new Set(f.record.rows.map((row) => row.rowId))];
@@ -780,7 +617,6 @@ it.effect(
       sideband.delegation("item_early", 400);
       yield* settle();
       assert.equal(f.brain.asks.length, 0);
-      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.RETAINED).length, 1);
       sideband.input("Open the failing one.", 500, 1400);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
@@ -1023,7 +859,7 @@ it.effect("a refused submission is spoken as its refusal under the delegation", 
 );
 
 it.effect(
-  "a briefing is spoken into the standing session with no delegation, settled spoken by the first output past its end, and un-settled by a moderation cut",
+  "a briefing is spoken into the standing session with no delegation, settled spoken by the first output past its end",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1045,16 +881,6 @@ it.effect(
       sideband.output("alofa is done.", 5150, 5400);
       yield* settle();
       assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.BRIEFING]);
-      sideband.receive({
-        type: LIVE_SERVER_EVENT.ERROR,
-        event_id: "err",
-        error: { code: "moderation" },
-      });
-      yield* settle();
-      assert.deepEqual(
-        f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.UNSETTLED).length,
-        1,
-      );
     }),
 );
 
@@ -1075,10 +901,6 @@ it.effect("an error naming an append refuses that append and never counts as suc
     });
     yield* settle();
     assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-    assert.equal(
-      f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.APPEND_REFUSED).length,
-      1,
-    );
     sideband.output("One", 100, 200);
     assert.deepEqual(f.spoken, []);
   }),
@@ -1094,7 +916,6 @@ it.effect(
         firstName: "Ada",
         decidedAt: f.clock.now,
       });
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
       const sideband = yield* f.open();
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
@@ -1202,7 +1023,6 @@ it.effect(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
       assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH]);
-      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.SUPERSEDED).length, 1);
       sideband.output("The scroll fix is on the PR.", 250, 2200);
       yield* settle();
       assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH, PROACTIVE_SPEECH_KIND.BRIEFING]);
@@ -1231,12 +1051,11 @@ it.effect(
 );
 
 it.effect(
-  "a proactive turn with no session asks for one, muted, and speaks once it starts; a stale one is dropped instead",
+  "a proactive turn with no session waits for one and speaks once it starts; a stale one is dropped instead",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       f.service.deliverBriefing({ briefing: "News.", decidedAt: f.clock.now });
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
       f.service.speakBeat({
         kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
         decidedAt: f.clock.now,
@@ -1251,80 +1070,43 @@ it.effect(
       f.service.deliverBriefing({ briefing: "Old news.", decidedAt: f.clock.now - 3 * 60_000 });
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.DROPPED).length, 1);
     }),
 );
 
-it.effect(
-  "quiet holds briefings and beats; its end hands briefings back for re-decision and speaks the beats afresh",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      f.quiet = true;
-      f.service.reconcile();
-      yield* settle();
-      const delivery = { briefing: "Held news.", decidedAt: f.clock.now };
-      f.service.deliverBriefing(delivery);
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.ARRIVAL, decidedAt: f.clock.now });
-      yield* settle();
-      assert.equal(sideband.sent.length, 0);
-      yield* advanceClock(60_000);
-      f.quiet = false;
-      f.service.reconcile();
-      yield* settle();
-      yield* settle();
-      assert.deepEqual(f.released, [[delivery]]);
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-    }),
-);
-
-it.effect(
-  "a beat is spoken at most once to the end per run, and dropping briefings leaves beats standing",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      f.service.deliverBriefing({ briefing: "Drop me.", decidedAt: f.clock.now });
-      f.service.speakBeat({
-        kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-        decidedAt: f.clock.now,
-      });
-      f.service.speakBeat({
-        kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-        decidedAt: f.clock.now,
-      });
-      f.quiet = true;
-      f.service.reconcile();
-      yield* settle();
-      f.service.deliverBriefing({ briefing: "Drop me too.", decidedAt: f.clock.now });
-      f.service.dropBriefings();
-      f.quiet = false;
-      f.service.reconcile();
-      yield* settle();
-      yield* settle();
-      assert.deepEqual(f.released, []);
-      // The first briefing had already left before the hold; only the beat follows it.
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      sideband.acknowledge(0, 100, 200);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-      sideband.acknowledge(1, 300, 400);
-      sideband.output("Connect your calendar.", 500, 900);
-      yield* settle();
-      assert.deepEqual(f.spoken, [
-        PROACTIVE_SPEECH_KIND.BRIEFING,
-        PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-      ]);
-      f.service.speakBeat({
-        kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-        decidedAt: f.clock.now,
-      });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-    }),
+it.effect("a beat asked for twice is one line, and is spoken at most once to the end per run", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    f.service.deliverBriefing({ briefing: "First.", decidedAt: f.clock.now });
+    f.service.speakBeat({
+      kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+      decidedAt: f.clock.now,
+    });
+    f.service.speakBeat({
+      kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+      decidedAt: f.clock.now,
+    });
+    yield* settle();
+    // The briefing left first; the beat, asked for twice, follows it once.
+    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+    sideband.acknowledge(0, 100, 200);
+    yield* settle();
+    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
+    sideband.acknowledge(1, 300, 400);
+    sideband.output("Connect your calendar.", 500, 900);
+    yield* settle();
+    assert.deepEqual(f.spoken, [
+      PROACTIVE_SPEECH_KIND.BRIEFING,
+      PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+    ]);
+    f.service.speakBeat({
+      kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+      decidedAt: f.clock.now,
+    });
+    yield* settle();
+    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
+  }),
 );
 
 it.effect(
@@ -1347,7 +1129,7 @@ it.effect(
       f.service.reportActivity(true);
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
-      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSING);
+      assert.equal(f.service.sessionStands(), true);
       sideband.receive({
         type: LIVE_SERVER_EVENT.USAGE_UPDATED,
         event_id: "u1",
@@ -1361,9 +1143,8 @@ it.effect(
       yield* settle();
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 310);
       yield* settle();
-      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSED);
+      assert.equal(f.service.sessionStands(), false);
       assert.equal(sideband.closed, true);
-      assert.equal(f.changes.at(-1)?.reason, LIVE_CLOSE_REASON.CLOSE_REQUESTED);
     }),
 );
 
@@ -1402,27 +1183,13 @@ it.effect(
       assert.equal(ending.pollUnsafe(), undefined);
       yield* advanceClock(1);
       yield* Fiber.join(ending);
-      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSED);
+      assert.equal(f.service.sessionStands(), false);
       assert.equal(sideband.closed, true);
     }),
 );
 
-it.effect("an expired session reopens at once", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const sideband = yield* f.open();
-    yield* settle();
-    sideband.closedBy(LIVE_CLOSE_REASON.EXPIRED, 3600);
-    yield* settle();
-    assert.deepEqual(phases(f.changes).slice(-2), [
-      LIVE_SESSION_PHASE.CLOSED,
-      LIVE_SESSION_PHASE.WANTED,
-    ]);
-  }),
-);
-
 it.effect(
-  "a lost connection leaves the usage unconfirmed, drops the delivery aimed at the dead session, and reopens only if the microphone was live",
+  "a lost connection drops the delivery aimed at the dead session, which the session adopted after never hears",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1438,22 +1205,12 @@ it.effect(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
       sideband.dropConnection();
       yield* settle();
-      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSED);
-      assert.equal(f.changes.at(-1)?.reason, LIVE_CLOSE_REASON.CONNECTION_LOST);
-      assert.equal(
-        f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.APPEND_REFUSED).length,
-        1,
-      );
+      assert.equal(f.service.sessionStands(), false);
+      assert.equal(sideband.closed, true);
       const second = yield* f.open();
       yield* settle();
       assert.equal(appends(second, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-      second.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED, event_id: "um" });
-      second.dropConnection();
-      yield* settle();
-      assert.deepEqual(phases(f.changes).slice(-2), [
-        LIVE_SESSION_PHASE.CLOSED,
-        LIVE_SESSION_PHASE.WANTED,
-      ]);
+      assert.deepEqual(f.spoken, []);
     }),
 );
 
@@ -1473,38 +1230,6 @@ it.effect(
       yield* settle();
       assert.equal(appends(second, LIVE_CLIENT_EVENT.CLOSE).length, 1);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 0);
-    }),
-);
-
-it.effect(
-  "a reply that finishes after its session closed opens a new one and is spoken there with no delegation",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.input("Summarize the day.", 0, 900);
-      sideband.delegation("item_1", 1000);
-      yield* settle();
-      sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 30);
-      yield* settle();
-      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
-        runId: "run-1",
-        sentence: "Two sessions finished.",
-      });
-      yield* settle();
-      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.WANTED);
-      const second = yield* f.open();
-      yield* settle();
-      const commentary = appends(second, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(commentary.length, 1);
-      assert.equal(
-        commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
-        null,
-      );
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
     }),
 );
 
@@ -1698,18 +1423,26 @@ it.effect(
     }),
 );
 
-it.effect("creating a session while one stands closes the standing one first", () =>
+it.effect("adopting a session while one stands closes the standing one first", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const first = yield* f.open();
     yield* settle();
-    const creating = yield* Effect.forkChild(f.service.createSession("offer-2"));
+    const second = new FakeSideband();
+    const adopting = yield* Effect.forkChild(
+      f.service.adoptSession({
+        sessionId: "sess-2",
+        attach: () => Effect.succeed(second),
+        started: true,
+      }),
+    );
     yield* settle();
     assert.equal(appends(first, LIVE_CLIENT_EVENT.CLOSE).length, 1);
+    assert.equal(adopting.pollUnsafe(), undefined);
     first.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 9);
-    const created = yield* Fiber.join(creating);
-    assert.equal(created?.sessionId, "sess-2");
-    assert.equal(f.creates.length, 2);
+    assert.equal(yield* Fiber.join(adopting), true);
+    assert.equal(first.closed, true);
+    assert.equal(f.service.sessionStands(), true);
   }),
 );
 
@@ -1784,8 +1517,7 @@ it.effect(
   "an end asked for while the reader's own tear-down is still releasing waits on that one release and begins no second close",
   () =>
     Effect.gen(function* () {
-      const brain = new AnticipatingBrain();
-      const f = yield* fixture(brain);
+      const f = yield* fixture();
       const sideband = yield* f.open();
       yield* settle();
       sideband.input("Ship it.", 0, 800);
@@ -1799,7 +1531,6 @@ it.effect(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 0);
       f.record.release(true);
       yield* Fiber.join(ending);
-      assert.equal(brain.drops, 1);
       assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 0, 800]]);
     }),
 );
@@ -1848,41 +1579,6 @@ it.effect(
 );
 
 it.effect(
-  "a briefing taken from the queue is appended once: a hold beginning and ending around it re-sends nothing, and a held one is handed back once and appended never",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      f.service.deliverBriefing({ briefing: "Already said.", decidedAt: f.clock.now });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      f.quiet = true;
-      f.service.reconcile();
-      yield* settle();
-      f.quiet = false;
-      f.service.reconcile();
-      yield* settle();
-      yield* settle();
-      assert.deepEqual(f.released, []);
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      f.quiet = true;
-      f.service.reconcile();
-      yield* settle();
-      const held = { briefing: "Held.", decidedAt: f.clock.now };
-      f.service.deliverBriefing(held);
-      f.quiet = false;
-      f.service.reconcile();
-      yield* settle();
-      f.service.reconcile();
-      yield* settle();
-      yield* settle();
-      assert.deepEqual(f.released, [[held]]);
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-    }),
-);
-
-it.effect(
   "an append pending when the session dies is dropped with it and never re-sent into the session opened after",
   () =>
     Effect.gen(function* () {
@@ -1903,11 +1599,7 @@ it.effect(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
       sideband.dropConnection();
       yield* settle();
-      assert.equal(
-        f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.APPEND_REFUSED).length,
-        1,
-      );
-      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSED);
+      assert.equal(f.service.sessionStands(), false);
       const second = yield* f.open();
       yield* settle();
       yield* settle();
@@ -2080,434 +1772,5 @@ it.effect(
       sideband.delegation("item_3", 5000);
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
-      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.RETAINED).length, 1);
     }),
-);
-
-const ROSTER_DEBOUNCE_MS = 2_000;
-
-function rosterSession(id: string, overrides: Partial<RosterSeedSession> = {}): RosterSeedSession {
-  return {
-    identity: { providerId: "conductor", providerSessionId: id },
-    title: `session ${id}`,
-    provider: { displayName: "Conductor" },
-    status: SESSION_STATUS.WORKING,
-    lastActivityAt: 0,
-    ...overrides,
-  };
-}
-
-it.effect(
-  "a created session opens knowing the desk: the roster leads the input as one developer message, ahead of the conversation",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.roster.push(rosterSession("a"));
-      f.entries.push(
-        { kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" },
-        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Nothing yet." },
-      );
-      yield* f.service.createSession("offer");
-      assert.deepEqual(
-        f.seeds[0]?.map((item) => item.role),
-        [SEED_ROLE.DEVELOPER, SEED_ROLE.USER, SEED_ROLE.ASSISTANT],
-      );
-      assert.equal(f.seeds[0]?.[0]?.content[0]?.text, rosterSeed(f.roster, f.clock.now)?.text);
-    }),
-);
-
-it.effect("an empty desk puts no roster message into the input at all", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
-    yield* f.service.createSession("offer");
-    assert.deepEqual(
-      f.seeds[0]?.map((item) => item.role),
-      [SEED_ROLE.USER],
-    );
-  }),
-);
-
-it.effect(
-  "the roster message is counted against the input's own bounds, and the conversation is what fills what is left",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      for (let index = 0; index < 10; index += 1) {
-        f.roster.push(rosterSession(`s${index}`, { title: "x".repeat(500) }));
-      }
-      for (let index = 0; index < 200; index += 1) {
-        f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "y".repeat(400) });
-      }
-      yield* f.service.createSession("offer");
-      const seed = f.seeds[0];
-      assert.ok(seed);
-      assert.equal(seed[0]?.role, SEED_ROLE.DEVELOPER);
-      assert.equal(seed[0]?.content[0]?.text, rosterSeed(f.roster, f.clock.now)?.text);
-      assert.ok(seed.length <= LIVE_INPUT_BOUNDS.MESSAGES);
-      assert.ok(seedItemTokens(seed) <= LIVE_INPUT_BOUNDS.TOKENS);
-    }),
-);
-
-it.effect(
-  "a moved desk reaches the standing session as one thinking append with no delegation, once the change has settled",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      f.service.updateRoster([rosterSession("a")]);
-      f.service.updateRoster([rosterSession("a"), rosterSession("b")]);
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      const sent = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
-      assert.equal(sent.length, 1);
-      const only = sent[0];
-      assert.ok(only && "delegation_id" in only);
-      assert.equal(only.delegation_id, null);
-    }),
-);
-
-it.effect("a roster that comes back reading the same appends nothing", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    f.roster.push(rosterSession("a"));
-    const sideband = yield* f.open();
-    yield* settle();
-    f.service.updateRoster([rosterSession("a")]);
-    yield* advanceClock(ROSTER_DEBOUNCE_MS);
-    yield* settle();
-    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-  }),
-);
-
-it.effect(
-  "a desk that moves between a session's creation and its start is told at the start, not dropped",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.roster.push(rosterSession("a"));
-      const created = yield* f.service.createSession("offer");
-      assert.ok(created);
-      const sideband = f.sidebands[0];
-      assert.ok(sideband);
-      f.service.updateRoster([rosterSession("a"), rosterSession("b")]);
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-      sideband.started(created.sessionId);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
-    }),
-);
-
-it.effect(
-  "a change the seed's own read has already superseded is discarded, never told back as news",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.service.updateRoster([rosterSession("a")]);
-      f.roster.push(rosterSession("a"), rosterSession("b"));
-      const sideband = yield* f.open();
-      yield* settle();
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-    }),
-);
-
-it.effect(
-  "a desk that empties withdraws what the session was told rather than leaving it standing",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.roster.push(rosterSession("a"));
-      const sideband = yield* f.open();
-      yield* settle();
-      f.service.updateRoster([]);
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      const sent = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
-      assert.equal(sent.length, 1);
-      const only = sent[0];
-      assert.ok(only && "content" in only);
-      assert.equal(
-        only.content,
-        rosterUpdate(rosterSeed(f.roster, f.clock.now)?.told, [], f.clock.now)?.text,
-      );
-    }),
-);
-
-it.effect(
-  "a refresh the session refused is not recorded as told, so the withdrawal it carried is sent again",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.roster.push(rosterSession("a"));
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.acknowledgeThinkingAtOnce = false;
-      f.service.updateRoster([]);
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      const refused = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
-      assert.equal(refused.length, 1);
-      // The append is never acknowledged, so the channel counts it as not taken.
-      yield* advanceClock(10_000);
-      yield* settle();
-      sideband.acknowledgeThinkingAtOnce = true;
-      f.service.updateRoster([]);
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      const sent = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
-      assert.equal(sent.length, 2);
-      const first = sent[0];
-      const second = sent[1];
-      assert.ok(first && "content" in first && second && "content" in second);
-      assert.equal(second.content, first.content);
-    }),
-);
-
-it.effect(
-  "a change that lands while a refresh is still in flight is decided against what the session will know by then",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.roster.push(rosterSession("a"));
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.acknowledgeThinkingAtOnce = false;
-      // The first refresh puts b on the desk and is left unacknowledged, so it is
-      // still in flight when the second takes b away again.
-      f.service.updateRoster([rosterSession("a"), rosterSession("b")]);
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
-      f.service.updateRoster([rosterSession("a")]);
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      sideband.acknowledge(0, 0, 0);
-      yield* settle();
-      const sent = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
-      assert.equal(sent.length, 2);
-      const withdrawal = sent[1];
-      assert.ok(withdrawal && "content" in withdrawal);
-      assert.equal(
-        withdrawal.content,
-        rosterUpdate(
-          rosterSeed([rosterSession("a"), rosterSession("b")], f.clock.now)?.told,
-          [rosterSession("a")],
-          f.clock.now,
-        )?.text,
-      );
-    }),
-);
-
-it.effect("a desk that moves while no session stands opens none and sends nothing", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    f.service.updateRoster([rosterSession("a")]);
-    yield* advanceClock(ROSTER_DEBOUNCE_MS);
-    yield* settle();
-    assert.deepEqual(f.creates, []);
-    assert.equal(f.service.sessionStands(), false);
-  }),
-);
-
-it.effect(
-  "a roster append does not keep a quiet session open: the idle clock reads the appends the session is worth staying open for",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      yield* advanceClock(LIVE_IDLE_WINDOW_MS);
-      f.service.updateRoster([rosterSession("a")]);
-      yield* advanceClock(ROSTER_DEBOUNCE_MS);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
-      f.service.reportActivity(true);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
-    }),
-);
-
-it.effect(
-  "the developer's fragments arm one debounce; when it fires the words so far reach the brain once, and more words arm it again",
-  () =>
-    Effect.gen(function* () {
-      const brain = new AnticipatingBrain();
-      const f = yield* fixture(brain);
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.input("What is", 1000, 1300);
-      sideband.input(" abc", 1300, 1500);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS - 1);
-      assert.equal(brain.anticipations.length, 0);
-      yield* advanceClock(1);
-      const [first] = brain.anticipations;
-      assert.ok(first);
-      assert.deepEqual(brain.anticipations, [
-        { rowId: first.rowId, partialAsk: "What is abc", recentTurns: "Developer: What is abc" },
-      ]);
-      // The same words again plan nothing new; more words plan again under the same row.
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS * 3);
-      assert.equal(brain.anticipations.length, 1);
-      sideband.input(" doing", 1500, 1900);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      assert.equal(brain.anticipations.length, 2);
-      assert.equal(brain.anticipations[1]?.rowId, first.rowId);
-      assert.equal(brain.anticipations[1]?.partialAsk, "What is abc doing");
-      assert.deepEqual(
-        f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.ANTICIPATED).length,
-        2,
-      );
-    }),
-);
-
-it.effect(
-  "a delegation cancels the pending debounce, Luke's own fragments arm none, and a brain that reads nothing ahead is handed nothing",
-  () =>
-    Effect.gen(function* () {
-      const brain = new AnticipatingBrain();
-      const f = yield* fixture(brain);
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.output("Nukualofa finished.", 0, 900);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      assert.equal(brain.anticipations.length, 0);
-      sideband.input("What needs me", 1000, 1800);
-      sideband.delegation("item_1", 1900);
-      yield* settle();
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      assert.equal(brain.anticipations.length, 0);
-      assert.equal(f.brain.asks.length, 1);
-
-      const plain = yield* fixture();
-      const plainSideband = yield* plain.open();
-      yield* settle();
-      plainSideband.input("What needs me", 1000, 1800);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      assert.equal(
-        plain.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.ANTICIPATED).length,
-        0,
-      );
-    }),
-);
-
-it.effect(
-  "facts read ahead are appended once, as thinking under no delegation and behind the data prefix, and leave the idle clock where it was",
-  () =>
-    Effect.gen(function* () {
-      const brain = new AnticipatingBrain();
-      const f = yield* fixture(brain);
-      const sideband = yield* f.open();
-      yield* settle();
-      yield* advanceClock(LIVE_IDLE_WINDOW_MS);
-      sideband.input("What is abc doing", 1000, 1800);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      brain.facts({ rowId: anticipatedRow(brain), text: "abc finished the tests." });
-      brain.facts({ rowId: anticipatedRow(brain), text: "abc finished the tests, again." });
-      yield* settle();
-      const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
-      assert.equal(thinking.length, 1);
-      const [append] = thinking;
-      assert.ok(append && append.type === LIVE_CLIENT_EVENT.THINKING_APPEND);
-      assert.equal(append.delegation_id, null);
-      // The one append is the first chunk of the prefixed facts, cut by the same rule every append is.
-      assert.equal(
-        append.content,
-        chunkForAppend(`${ANTICIPATION_FACTS_PREFIX}abc finished the tests.`)[0],
-      );
-      assert.deepEqual(
-        f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_APPENDED).length,
-        1,
-      );
-      assert.deepEqual(
-        f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_DROPPED).length,
-        1,
-      );
-      f.service.reportActivity(true);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
-    }),
-);
-
-it.effect(
-  "facts for words since superseded, for a row never anticipated, or with no started session are dropped, never appended",
-  () =>
-    Effect.gen(function* () {
-      const brain = new AnticipatingBrain();
-      const f = yield* fixture(brain);
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.input("What is", 1000, 1300);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      sideband.input(" abc doing", 1300, 1800);
-      yield* settle();
-      brain.facts({ rowId: anticipatedRow(brain), text: "stale" });
-      brain.facts({ rowId: "row-never-opened", text: "unknown row" });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-      assert.equal(
-        f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_DROPPED).length,
-        2,
-      );
-      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 12);
-      brain.facts({ rowId: anticipatedRow(brain), text: "too late" });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-    }),
-);
-
-it.effect(
-  "once a row is the spoken ask, a late fragment on it anticipates nothing more and a summary read ahead for it is dropped rather than appended into the exchange",
-  () =>
-    Effect.gen(function* () {
-      const brain = new AnticipatingBrain();
-      const f = yield* fixture(brain);
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.input("What is abc", 1000, 1500);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      assert.equal(brain.anticipations.length, 1);
-      sideband.delegation("item_1", 1600);
-      yield* settle();
-      assert.equal(f.brain.asks.length, 1);
-      // A fragment still inside the gap joins the same row, which is already the ask.
-      sideband.input(" doing", 1500, 1900);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      assert.equal(brain.anticipations.length, 1);
-      brain.facts({ rowId: anticipatedRow(brain), text: "abc finished the tests." });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
-      assert.equal(
-        f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_DROPPED).length,
-        1,
-      );
-      // The developer's next utterance, after a pause well past the gap, is a new row and is anticipated as usual.
-      sideband.input("And def?", 7000, 7400);
-      yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-      assert.equal(brain.anticipations.length, 2);
-      assert.notEqual(brain.anticipations[1]?.rowId, anticipatedRow(brain));
-    }),
-);
-
-it.effect("a session's end and the drain each drop what the brain read ahead", () =>
-  Effect.gen(function* () {
-    const brain = new AnticipatingBrain();
-    const f = yield* fixture(brain);
-    const sideband = yield* f.open();
-    yield* settle();
-    sideband.input("What is abc doing", 1000, 1800);
-    sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 12);
-    yield* settle();
-    assert.equal(brain.drops, 1);
-    assert.equal(brain.anticipations.length, 0);
-    yield* advanceClock(PREFETCH_DEBOUNCE_MS);
-    assert.equal(brain.anticipations.length, 0);
-    yield* f.service.stop();
-    assert.equal(brain.drops, 2);
-  }),
 );
