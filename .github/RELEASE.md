@@ -52,10 +52,7 @@ nothing.
    where a feature expected an endpoint. The one endpoint with no fallback at all is
    `/api/voice/introduction` — the spoken introduction runs before any account or key
    exists, so that WebSocket is its only possible voice, and a desktop carrying the
-   introduction must not be tagged until the service serving it is live. The two
-   Realtime mints beside it, `/api/voice/mint` and `/api/voice/introduction-mint`, serve
-   only the installed desktops of releases before 0.6.0 and go with LUKE-226 once those
-   have updated.
+   introduction must not be tagged until the service serving it is live.
 
 3. **Tag the merged commit.** The tag must point at the squash-merged commit on `main`
    and its version must match `apps/desktop/package.json` exactly; the workflow refuses a

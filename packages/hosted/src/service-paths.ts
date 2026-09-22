@@ -6,7 +6,6 @@
  */
 
 export const HOSTED_SERVICE_PATH = {
-  VOICE_MINT: "/api/voice/mint",
   /** Send a message to a cloud session (POST). */
   ACTION_MESSAGE: "/api/actions/message",
   /** Create a workspace in a cloud project (POST). */
@@ -26,13 +25,6 @@ export const HOSTED_SERVICE_PATH = {
    * answer offered. Read like observe, from the snapshot.
    */
   PROJECTS: "/api/projects",
-  /**
-   * The one endpoint a fresh install may call before any account exists: it
-   * mints a single short-lived credential for the spoken onboarding
-   * introduction, takes no bearer, and answers with the same mint shape the
-   * ordinary endpoint does.
-   */
-  INTRODUCTION_MINT: "/api/voice/introduction-mint",
   ACCOUNT_DELETE: "/api/account/delete",
   EVENTS: "/api/events",
   /**

@@ -16,7 +16,7 @@ export const hostedUsage = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** The UTC day the counter covers, as YYYY-MM-DD. */
     day: text("day").notNull(),
-    /** Hosted operations spent: a Realtime mint, a Live session opened, and a brain turn count alike. */
+    /** Hosted operations spent: a Live session opened and a brain turn count alike. */
     calls: integer("calls").default(0).notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.day] })],

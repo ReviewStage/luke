@@ -369,7 +369,7 @@ becoming a rejected promise the service had to catch.
 the caller composes a store read into whatever it already runs. A route
 group's own seams are effects
 over that same ambient client — the account group's reads and writes, the
-vault group's three key statements, and the meter every brain and mint
+vault group's three key statements, and the meter every brain
 operation spends — so the group yields the seam on the request's own fiber
 and the edge that serves the request is the one place the client behind it is
 provided. What still holds a runner is everything a route composes apart from
@@ -412,10 +412,10 @@ it, so a missing header, an expired token, and a refusing auth service are
 the same 401 they always were, and no route repeats the recovery.
 
 Every caller yields it. `HostedStoreRoute.resolveUserId`
-(`server/hosted/store-route.ts`) and the seams of the devices-and-vault and
-voice-mint groups are Effect-shaped fields, so `brain-ask.ts`,
+(`server/hosted/store-route.ts`) and the seams of the devices-and-vault
+group are Effect-shaped fields, so `brain-ask.ts`,
 `turn-event-stream.ts`, `conversation-clear.ts`, `change-signal.ts`,
-`resource-reads.ts`, and the two groups' gates read the bearer on their own
+`resource-reads.ts`, and the group's gate read the bearer on their own
 fiber instead of wrapping a promise in `Effect.promise`. One caller is a
 promise of somebody else's: eve's `AuthFn`, which
 `apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
@@ -435,8 +435,7 @@ warm invocation reaches the services the cold one built. A group's routes are
 a layer rather than a value because that is what an `HttpRouter` registration
 is: the router is a service the layer writes each path into, and the
 requirements a route's own handler has travel as request markers the handler
-provides per request from the context `runWeb` read. The three mint routes,
-the auth group,
+provides per request from the context `runWeb` read. The auth group,
 the actions group, the five routes behind the observation group below, the
 account group's `server/routes/account/delete.ts` and
 `server/routes/account/preferences.ts`, the devices and vault group's three
@@ -713,48 +712,6 @@ from production lands on the protected preview like any other request, so the
 browser needs that deployment's access cookie already; without it the dashboard
 reports the intercepted API call rather than the metrics.
 
-## Legacy voice mint
-
-`server/routes/voice/mint.ts` mints a Realtime client secret on the deployment's own
-OpenAI key for an installed desktop that predates the live session; a current
-desktop opens its voice through the hosted voice service below and never calls
-it. It is an exact-path file, so Vercel's zero-config `api/`
-detection routes it without a `routes` entry; only the bracketed auth
-catch-all needs one. The mint lives behind the group in
-`server/voice-mint-app.ts`, which is what both mint functions serve — the
-desktop's, and the accountless `introduction-mint` in a group of its own —
-each request resolved to a user through the auth service's own
-`/oauth2/userinfo` endpoint, called in process, except the introduction's,
-which carries no bearer at all. The phone's and the watch's mint stood beside
-them until each device moved onto the hosted voice service (LUKE-216,
-LUKE-224) and LUKE-219 deleted it; these two installed-desktop mints are the
-legacy Realtime path's last readers, and retiring them is a desktop ticket.
-Each path is declared for every method, so the POST a mint documents stays
-its own `method-not-allowed`, and a path the group declares nothing for is
-the hosted vocabulary's `not-found`. `fixtures/voice-mint-route/` records
-what each mint and each refusal answers, recorded from the promise-shaped
-routes the group replaced and unchanged by the conversion.
-
-The mint answer's `connection` object carries both a WebRTC calls endpoint
-(`callsUrl`) for the desktop renderer and a WebSocket endpoint (`wsUrl`),
-which the phone's and the watch's Realtime clients opened until they moved
-and no current client reads; it stays because it is part of the answer the
-recorded fixtures hold. Both point at the canonical OpenAI host and are
-pinned by the build rather than composed by the client: `callsUrl` is the
-calls endpoint at `https://api.openai.com/v1/realtime/calls`; `wsUrl` is the
-WebSocket base at `wss://api.openai.com/v1/realtime` with the session's model
-appended as `?model=<model>`. The same ephemeral client secret authenticates
-both transports.
-
-The endpoint needs one secret: `OPENAI_API_KEY`. Without it it answers 503
-and the hosted tier is simply off, the same kill switch as the feedback
-endpoint, which is the intended state for Preview deployments, so a preview
-never spends the production key. `LUKE_REALTIME_MODEL` optionally overrides
-the model, under the same name the desktop honours; a blank value is treated
-as absent. Neither is read at an invocation: `server/hosted/environment.ts`
-resolves both from `Config` as the runtime's services are built, and drops a
-blank there, so the group sees one absence.
-
 `server/routes/account/delete.ts` erases the signed-in user on the same bearer
 resolution: the desktop's Delete account confirm is the only caller. Deleting
 the `user` row is the entire act: sessions, provider accounts, OAuth grants,
@@ -928,11 +885,10 @@ that ends, however it ends, leaves no socket standing. A socket handed over by
 `ws` is paused until its reader stands, because `ws` emits a frame to whoever
 listens at that instant and the reader is a fiber away.
 
-`/api/voice/introduction` takes a fresh install with no account, under the
-same durable shared daily ceiling the introduction mint spends
+`/api/voice/introduction` takes a fresh install with no account, under a
+durable shared daily ceiling of the deployment's own
 (`spendIntroductionMeter`, the `introduction_usage` row), taken only once a
-valid `session.create` has arrived, as the mint spends only after a valid
-body, so the ceiling is the deployment's and an empty handshake costs it
+valid `session.create` has arrived, so an empty handshake costs it
 nothing. There the sideband is
 the function's alone: the caller may send only what a renderer's data channel
 may, is shown only what one is shown, and `greetingInstruction()` goes up once
@@ -1217,8 +1173,7 @@ unconfirmed snapshot standing with `closed_at` null is the honest record, and
 a re-attached connection's `session.closed` later confirms it. Only these
 functions write `voice_sessions`; the seconds ledger and it both cascade with
 the user row. The seconds ledger meters nothing on its own: a session still
-spends one call when it opens, and the mint routes and their meter stay as
-they are for installed desktops until the seconds are what the allowance is
+spends one call when it opens, until the seconds are what the allowance is
 measured in.
 
 ### How a refusal looks
