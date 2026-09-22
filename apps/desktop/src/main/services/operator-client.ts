@@ -1,8 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
-import type { GatewayInProcessHost } from "@sidecar/gateway/server";
-import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
+import type { GatewayHost, NodeRegistry } from "@sidecar/gateway";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { Effect, Option, type Scope } from "effect";
 import { channels } from "#shared/bridge";
@@ -20,11 +17,6 @@ interface OperatorClientLinks {
    * something to talk to, or given back to the machine now that there is not.
    */
   reapplyTalkHotkey: () => void;
-  /**
-   * A later attachment recycles the voice window, because the epoch its
-   * renderer holds was the old host's.
-   */
-  recycleVoiceWindow: () => void;
   /** The host's word on whether the introduction is owed moved; the windows decide whether to begin it. */
   introductionOwedChanged: () => void;
 }
@@ -54,8 +46,8 @@ export interface OperatorClient {
    */
   completeIntroduction: () => Effect.Effect<void>;
   /**
-   * Begins this launch's one attachment. An effect the composer runs in the
-   * launch's own scope, never a promise this file built for itself.
+   * Reads the host's bootstrap into the document. An effect the composer runs
+   * in the launch's own scope, never a promise this file built for itself.
    */
   start: () => Effect.Effect<void>;
   /** Gives back what `start` began: every subscription this client holds. */
@@ -64,8 +56,10 @@ export interface OperatorClient {
 
 export interface OperatorClientDependencies {
   config: DesktopConfig;
-  /** The host this client operates, reached over the in-process transport. */
-  gateway: GatewayInProcessHost;
+  /** The host this client operates. */
+  gateway: GatewayHost;
+  /** The host's node registry, where this process's native capabilities are offered. */
+  nodes: NodeRegistry;
   node: NativeNodeCapabilities;
   /** Everything the host says, written down once; the windows are told from it. */
   state: AppStateStore;
@@ -74,9 +68,9 @@ export interface OperatorClientDependencies {
 /**
  * The one operator this process is. It relays the host's events to the
  * windows that draw them, remembers what a synchronous answer needs, and
- * serves this machine's native capabilities on the same connection as one
- * node. The runtime itself stands on the other side of the transport;
- * nothing here composes a store, a brain, or an observation.
+ * offers this machine's native capabilities as one node. The runtime itself
+ * stands behind the host; nothing here composes a store, a brain, or an
+ * observation.
  */
 export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOperatorClient")(
   function* (
@@ -99,15 +93,11 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOpe
      */
     let voiceAvailable = false;
     let introductionOwed = false;
-    let attachments = 0;
     const unsubscribers: (() => void)[] = [];
 
     const gateway = yield* wireGateway({
-      transport: new InProcessTransport(dependencies.gateway, {
-        clientId: HOST_OPERATOR_CLIENT_ID,
-        role: GATEWAY_CLIENT_ROLE.OPERATOR,
-      }),
-      createId: () => randomUUID(),
+      gateway: dependencies.gateway,
+      nodes: dependencies.nodes,
       report: config.report,
       state,
       node: dependencies.node,
@@ -216,26 +206,13 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOpe
       haltSessionReplay: () => setSessionReplayHalted(true),
       resumeSessionReplay: () => setSessionReplayHalted(false),
       completeIntroduction: () => gateway.host.completeIntroduction(),
-      /**
-       * What every attachment owes the host: its stream adopted and this
-       * process's node registered on the connection that now stands, and a
-       * bootstrap read. A host composed in this
-       * process is attached once and never goes away; over a transport that can
-       * drop, a later attachment writes what the host now holds into the
-       * document, which is what tells the windows whatever of it moved.
-       */
+      /** The one bootstrap the launch reads: a host composed in this process is attached once and never goes away. */
       start: () =>
         Effect.gen(function* () {
-          attachments += 1;
-          yield* gateway.attached();
           const boot = yield* gateway.host.bootstrap();
           if (Option.isNone(boot))
             return yield* Effect.die(new Error("the host answered no bootstrap"));
           adoptBootstrap(boot.value);
-          if (attachments === 1) return;
-          const relay = links();
-          relay.reapplyTalkHotkey();
-          relay.recycleVoiceWindow();
         }),
       stop: () =>
         Effect.sync(() => {

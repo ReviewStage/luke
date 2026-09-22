@@ -38,7 +38,6 @@
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
     "apps/desktop/src/main/update-service.ts",
-    "packages/gateway/src/client.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
   "rawAsyncPrimitives": [
@@ -67,7 +66,6 @@
     "apps/web/server/hosted/apns.ts",
     "apps/web/src/NotchMock.tsx",
     "apps/web/src/admin/use-admin-read.ts",
-    "apps/web/tests/support/voice-fakes.ts",
-    "packages/gateway/src/testing.ts"
+    "apps/web/tests/support/voice-fakes.ts"
   ]
 }

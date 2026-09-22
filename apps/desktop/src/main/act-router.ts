@@ -10,7 +10,6 @@ import {
   type ActPayload,
   type ActResultFor,
 } from "#shared/messages/acts";
-import type { HostUnreachableRefusal } from "./gateway/host-operator";
 
 /**
  * Who is asking, as this process alone can tell: which window sent the act,
@@ -41,11 +40,11 @@ export interface ActSender {
 export class ActRefused extends Data.TaggedError("ActRefused")<{ readonly message: string }> {}
 
 /**
- * Every failure a row's effect may end in: the row's own refusal, worded, or
- * a host that could not be reached, which the kind's fixed sentence answers
- * for. Anything else a row ends in is a defect, and answered the same way.
+ * The one failure a row's effect may end in: the row's own refusal, worded.
+ * Anything else a row ends in is a defect, and answered with the kind's fixed
+ * sentence.
  */
-type ActRowFailure = ActRefused | HostUnreachableRefusal;
+type ActRowFailure = ActRefused;
 
 /**
  * What one kind does. The payload is the one its own schema admitted, and the

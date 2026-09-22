@@ -67,9 +67,7 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
  * Every concern constructed, linked, and merged, with nothing yet begun: the
  * composers in the launch's order, the arming that follows the last of them,
  * and the drain. A method two concerns claim fails this build, so which
- * concern answers a method is checked before anything starts. The Gateway's
- * own layers are built in this layer's scope, so the server's fiber stands
- * for exactly as long as the assembly does.
+ * concern answers a method is checked before anything starts.
  */
 export const hostAssemblyLayer: Layer.Layer<
   HostAssemblyTag,
@@ -289,23 +287,22 @@ export const hostAssemblyLayer: Layer.Layer<
     };
 
     const methods = yield* mergedMethods(Object.values(concerns));
-    const service = yield* createGatewayService({
+    const service = createGatewayService({
       nodes: kernel.nodes,
-      now,
-      createId: kernel.createId,
       methods: { ...methods, ...bootstrapMethods },
     });
     yield* hostService.set(service);
 
     /**
-     * The explicit quit's steps. Admissions close at the server, and the
-     * counted events are flushed. No run of this Mac's own is under way to
+     * The explicit quit's steps. The Gateway has no door to close, since the
+     * one client is this process, so the step that closed it now only begins
+     * the counted events' flush. No run of this Mac's own is under way to
      * cancel, settle, or count: every ask is the service's, so the drain
      * cancels nothing and counts nothing unresolved.
      */
     const drainSteps: GatewayShutdownSteps = yield* shutdownStepsFlushingEvents(
       {
-        closeAdmissions: service.closeAdmissions,
+        closeAdmissions: Effect.void,
         cancelActive: Effect.succeed([]),
         awaitSettled: Effect.void,
         persistUnresolved: Effect.succeed(0),
@@ -320,6 +317,7 @@ export const hostAssemblyLayer: Layer.Layer<
 
     const assembly: HostAssembly = {
       gateway: service.gateway,
+      nodes: kernel.nodes,
       startOrder: HOST_START_ORDER.map((name) => concerns[name]),
       /**
        * The launch's own arming, which is the gate's: where the account's

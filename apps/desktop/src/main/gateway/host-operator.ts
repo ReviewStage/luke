@@ -4,7 +4,7 @@ import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
 import type { CredentialProviderId } from "@sidecar/credentials";
 import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
-import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
+import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@sidecar/gateway";
 import {
   CONVERSATION_RATE_STATUS,
   type ConversationRateMessageResult,
@@ -42,7 +42,6 @@ import type {
 } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
-  ACTION_RESULT_STATUS,
   type ActionResult,
   EXCESS_KEYS,
   isRecord,
@@ -54,7 +53,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Effect, Option, Result, Schema } from "effect";
+import { Clock, Effect, Option, Result } from "effect";
 import {
   type AgentsSnapshot,
   agentsSnapshotSchema,
@@ -69,11 +68,11 @@ import {
  * answers, and the events it pushes. Every method answers an effect: it
  * composes one request and reads its answer, and nothing here runs it — the
  * act row that asked yields it, and the router runs it once on the launch's
- * own runtime. A host that cannot be reached answers the typed disconnected
- * error, which reads here as an absent value or, for a settings write, as a
- * refusal worded for the row, never as a throw into the renderer. Nothing
- * here holds host state beyond the last settings snapshot a refusal is
- * answered with.
+ * own runtime. The host is this same process, so an answer that is not the
+ * shape the method documents is a defect of the build rather than a reachable
+ * host state, and dies where it is read; the act router words a defect as the
+ * kind's own refusal. Nothing here holds host state beyond the last settings
+ * snapshot a refusal is answered with.
  */
 export interface HostBootstrap {
   settings: AppSettings;
@@ -121,42 +120,30 @@ export interface HostOperator {
     field: Field,
     value: AppSettingValue<Field>,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
+  ): Effect.Effect<SettingsUpdateResult>;
   updateSettingEntry<Field extends KeyedAppSettingField>(
     field: Field,
     key: string,
     value: SettingEntryValue<Field> | undefined,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
-  resetSettings(
-    scope: SettingsResetScope,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
+  ): Effect.Effect<SettingsUpdateResult>;
+  resetSettings(scope: SettingsResetScope, reporter: string): Effect.Effect<SettingsUpdateResult>;
   setProviderApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
+  ): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
-  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, HostUnreachableRefusal>;
+  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot>;
   cancelSignIn(): Effect.Effect<void>;
-  signOut(): Effect.Effect<AccountSnapshot, HostUnreachableRefusal>;
-  deleteAccount(): Effect.Effect<AccountSnapshot, HostUnreachableRefusal>;
-  connectGoogleCalendar(
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
+  signOut(): Effect.Effect<AccountSnapshot>;
+  deleteAccount(): Effect.Effect<AccountSnapshot>;
+  connectGoogleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult>;
   cancelGoogleCalendarSignIn(): Effect.Effect<void>;
   reopenGoogleCalendarSignIn(): Effect.Effect<void>;
-  removeCalendarAccount(
-    accountId: string,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
-  connectAppleCalendar(
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
-  disconnectAppleCalendar(
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
+  removeCalendarAccount(accountId: string, reporter: string): Effect.Effect<SettingsUpdateResult>;
+  connectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult>;
+  disconnectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult>;
   appleCalendarAccessStatus(): Effect.Effect<Option.Option<AppleCalendarAccess>>;
   cancelAppleCalendarConnect(): Effect.Effect<void>;
   refreshCalendars(): Effect.Effect<void>;
@@ -165,7 +152,7 @@ export interface HostOperator {
     calendarId: string,
     selected: boolean,
     reporter: string,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>;
+  ): Effect.Effect<SettingsUpdateResult>;
   sessionRoster(): Effect.Effect<{ sessions: readonly Session[]; settled: boolean }>;
   openSession(identity: SessionIdentity): Effect.Effect<ActionResult>;
   openSessionApplication(
@@ -252,27 +239,18 @@ export interface HostOperator {
 
 interface HostOperatorOptions {
   client: GatewayClient;
-  /** The settings a refused write is answered with when the host cannot say; the last snapshot the client saw. */
-  lastSettings: () => AppSettings | undefined;
   report: (message: string) => void;
 }
 
-const HOST_UNREACHABLE_REFUSAL = "Luke's runtime is not reachable right now.";
-
-/**
- * The host answered nothing a row could draw and this client holds no
- * snapshot to refuse over, so the row fails rather than answers: the act
- * router words it with the kind's own sentence. A Schema error, modelled on
- * the Gateway's own refusals, because the operator's answers are what the
- * panel's IPC reads back.
- */
-export class HostUnreachableRefusal extends Schema.TaggedError<HostUnreachableRefusal>()(
-  "HostUnreachableRefusal",
-  { message: Schema.String },
-) {}
-
-function hostUnreachable(): HostUnreachableRefusal {
-  return new HostUnreachableRefusal({ message: HOST_UNREACHABLE_REFUSAL });
+/** The host refused a call, or answered a shape its method does not document: a defect of this build, worded by the router as the kind's refusal. */
+function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Effect<never> {
+  return Effect.die(
+    new Error(
+      answer.ok
+        ? `${method} answered a shape this client cannot read`
+        : `${method} was refused: ${answer.error.message}`,
+    ),
+  );
 }
 
 /**
@@ -301,49 +279,42 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
   const settingsResult = (
+    method: GatewayMethod,
     result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal> =>
+  ): Effect.Effect<SettingsUpdateResult> =>
     Effect.flatMap(result, (answer) => {
       const parsed = answered<SettingsUpdateResult>(record(answer));
-      if (parsed?.settings !== undefined) return Effect.succeed(parsed);
-      const settings = options.lastSettings();
-      if (!settings) return Effect.fail(hostUnreachable());
-      return Effect.succeed<SettingsUpdateResult>({
-        status: ACTION_RESULT_STATUS.REJECTED,
-        settings,
-        reason: HOST_UNREACHABLE_REFUSAL,
-      });
+      return parsed?.settings !== undefined ? Effect.succeed(parsed) : unanswered(method, answer);
     });
 
   const accountResult = (
+    method: GatewayMethod,
     result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<AccountSnapshot, HostUnreachableRefusal> =>
+  ): Effect.Effect<AccountSnapshot> =>
     Effect.flatMap(result, (answer) => {
       const account = answered<AccountSnapshot>(record(answer)?.account);
-      return account ? Effect.succeed(account) : Effect.fail(hostUnreachable());
+      return account ? Effect.succeed(account) : unanswered(method, answer);
     });
 
-  const actionResult = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<ActionResult> =>
-    Effect.map(
-      result,
-      (answer) =>
-        answered<ActionResult>(record(answer)) ?? {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: HOST_UNREACHABLE_REFUSAL,
-        },
-    );
+  const actionResult = (
+    method: GatewayMethod,
+    result: Effect.Effect<GatewayCallResult>,
+  ): Effect.Effect<ActionResult> =>
+    Effect.flatMap(result, (answer) => {
+      const action = answered<ActionResult>(record(answer));
+      return action ? Effect.succeed(action) : unanswered(method, answer);
+    });
 
   // A write's answer is read against its own shape rather than restored by
   // assertion: the host may answer unknown where a write's answer was lost,
   // and a row must draw that as neither a failure nor a success.
   const writeResult = (
+    method: GatewayMethod,
     result: Effect.Effect<GatewayCallResult>,
   ): Effect.Effect<SessionWriteResult> =>
-    Effect.map(result, (answer) => {
+    Effect.flatMap(result, (answer) => {
       const written = record(answer);
-      return isSessionWriteResult(written)
-        ? written
-        : { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
+      return isSessionWriteResult(written) ? Effect.succeed(written) : unanswered(method, answer);
     });
 
   const fire = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<void> =>
@@ -373,6 +344,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     updateSetting: (field, value, reporter) =>
       settingsResult(
+        GATEWAY_METHOD.SETTINGS_UPDATE,
         client.call(GATEWAY_METHOD.SETTINGS_UPDATE, {
           field,
           ...wireValue(value),
@@ -381,6 +353,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     updateSettingEntry: (field, key, value, reporter) =>
       settingsResult(
+        GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY,
         client.call(GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY, {
           field,
           key,
@@ -390,10 +363,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     resetSettings: (scope, reporter) =>
       settingsResult(
+        GATEWAY_METHOD.SETTINGS_RESET,
         client.call(GATEWAY_METHOD.SETTINGS_RESET, { scope, ...wireReporter(reporter) }),
       ),
     setProviderApiKey: (providerId, apiKey, reporter) =>
       settingsResult(
+        GATEWAY_METHOD.CREDENTIAL_SET_API_KEY,
         client.call(GATEWAY_METHOD.CREDENTIAL_SET_API_KEY, {
           providerId,
           ...(apiKey !== undefined ? { apiKey } : undefined),
@@ -405,27 +380,42 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         Option.fromUndefinedOr(answered<AccountSnapshot>(record(answer)?.account)),
       ),
     beginSignIn: (provider) =>
-      accountResult(client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider })),
+      accountResult(
+        GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN,
+        client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider }),
+      ),
     cancelSignIn: () => fire(client.call(GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN)),
-    signOut: () => accountResult(client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
-    deleteAccount: () => accountResult(client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
+    signOut: () =>
+      accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
+    deleteAccount: () =>
+      accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
     connectGoogleCalendar: (reporter) =>
-      settingsResult(client.call(GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE, wireReporter(reporter))),
+      settingsResult(
+        GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE,
+        client.call(GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE, wireReporter(reporter)),
+      ),
     cancelGoogleCalendarSignIn: () =>
       fire(client.call(GATEWAY_METHOD.CALENDAR_CANCEL_GOOGLE_SIGN_IN)),
     reopenGoogleCalendarSignIn: () =>
       fire(client.call(GATEWAY_METHOD.CALENDAR_REOPEN_GOOGLE_SIGN_IN)),
     removeCalendarAccount: (accountId, reporter) =>
       settingsResult(
+        GATEWAY_METHOD.CALENDAR_REMOVE_ACCOUNT,
         client.call(GATEWAY_METHOD.CALENDAR_REMOVE_ACCOUNT, {
           accountId,
           ...wireReporter(reporter),
         }),
       ),
     connectAppleCalendar: (reporter) =>
-      settingsResult(client.call(GATEWAY_METHOD.CALENDAR_CONNECT_APPLE, wireReporter(reporter))),
+      settingsResult(
+        GATEWAY_METHOD.CALENDAR_CONNECT_APPLE,
+        client.call(GATEWAY_METHOD.CALENDAR_CONNECT_APPLE, wireReporter(reporter)),
+      ),
     disconnectAppleCalendar: (reporter) =>
-      settingsResult(client.call(GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE, wireReporter(reporter))),
+      settingsResult(
+        GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE,
+        client.call(GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE, wireReporter(reporter)),
+      ),
     appleCalendarAccessStatus: () =>
       Effect.map(client.call(GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS), (answer) =>
         Option.fromUndefinedOr(answered<AppleCalendarAccess>(record(answer)?.access)),
@@ -435,6 +425,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     refreshCalendars: () => fire(client.call(GATEWAY_METHOD.CALENDAR_REFRESH)),
     setCalendarSelected: (accountId, calendarId, selected, reporter) =>
       settingsResult(
+        GATEWAY_METHOD.CALENDAR_SET_SELECTED,
         client.call(GATEWAY_METHOD.CALENDAR_SET_SELECTED, {
           accountId,
           calendarId,
@@ -451,22 +442,31 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         };
       }),
     openSession: (identity) =>
-      actionResult(client.call(GATEWAY_METHOD.SESSION_OPEN, { identity: { ...identity } })),
+      actionResult(
+        GATEWAY_METHOD.SESSION_OPEN,
+        client.call(GATEWAY_METHOD.SESSION_OPEN, { identity: { ...identity } }),
+      ),
     openSessionApplication: (identity, applicationId) =>
       actionResult(
+        GATEWAY_METHOD.SESSION_OPEN_APPLICATION,
         client.call(GATEWAY_METHOD.SESSION_OPEN_APPLICATION, {
           identity: { ...identity },
           applicationId,
         }),
       ),
     openSessionChange: (identity) =>
-      actionResult(client.call(GATEWAY_METHOD.SESSION_OPEN_CHANGE, { identity: { ...identity } })),
+      actionResult(
+        GATEWAY_METHOD.SESSION_OPEN_CHANGE,
+        client.call(GATEWAY_METHOD.SESSION_OPEN_CHANGE, { identity: { ...identity } }),
+      ),
     sendSessionMessage: (identity, text) =>
       writeResult(
+        GATEWAY_METHOD.SESSION_SEND_MESSAGE,
         client.call(GATEWAY_METHOD.SESSION_SEND_MESSAGE, { identity: { ...identity }, text }),
       ),
     executeSessionControl: (identity, controlId) =>
       writeResult(
+        GATEWAY_METHOD.SESSION_EXECUTE_CONTROL,
         client.call(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL, {
           identity: { ...identity },
           controlId,

@@ -11,12 +11,9 @@ import { reportToStderr, tolerateClosedStderr } from "./stderr-report";
  * the keys, the Dock, the native helpers this machine's devices answer
  * through, the updater that replaces this binary, and the one-time
  * introduction; it reaches everything else — the store, the brain, the
- * credentials, the observation, the accounts — through the Gateway protocol
- * as one operator, and offers this machine's native capabilities back to the
- * host as one node. The host it operates is composed here, in this process,
- * and reached over the in-process transport; a host on the other side of a
- * socket is the same client over another transport, and nothing above the
- * transport changes.
+ * credentials, the observation, the accounts — through the Gateway as one
+ * operator, and offers this machine's native capabilities back to the host as
+ * one node. The host it operates is composed here, in this process.
  *
  * This is the one place in the process that runs an Effect. Everything of the
  * launch is one `Layer`, built on one `ManagedRuntime`: building it is the

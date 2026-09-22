@@ -1,12 +1,12 @@
 /**
- * The three things every side of the Gateway boundary does with the protocol:
- * hand a value the build already made to the wire, refuse a parameter that is
- * not the shape its method takes, and read one event kind under a guard.
+ * wire.ts -- the three things every side of the Gateway boundary does with
+ * the protocol: hand a value the build already made to the wire, refuse a
+ * parameter that is not the shape its method takes, and read one event kind
+ * under a guard.
  */
-
 import type { WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
-import type { GatewayClient } from "./client.js";
+import type { GatewayClient } from "./host.js";
 import { type GatewayEventKind, InvalidParamsRefusal } from "./protocol.js";
 
 /** A value this build made, carried as the JSON it already is; every field of these shapes is a wire value. */
@@ -33,7 +33,7 @@ export function gatewayEventReader(client: GatewayClient) {
     listener: (payload: Payload) => void,
   ) =>
     client.on(kind, (event) => {
-      const payload = read(event.payload);
+      const payload = read(event);
       if (payload !== undefined) listener(payload);
     });
 }

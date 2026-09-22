@@ -2,7 +2,7 @@ import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { Effect } from "effect";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";
-import type { HostOperator, HostUnreachableRefusal } from "../gateway/host-operator";
+import type { HostOperator } from "../gateway/host-operator";
 
 /**
  * The account rows, proxied to the host that owns the account: the sign-in
@@ -41,12 +41,10 @@ export function accountActRows(
 ): Pick<ActRows, AccountActKind> {
   const { host, haltSessionReplay, resumeSessionReplay } = dependencies;
   /** The halt, the host's answer, and the resume an answer that never came owes. */
-  const halted = (
-    action: Effect.Effect<AccountSnapshot, HostUnreachableRefusal>,
-  ): Effect.Effect<AccountSnapshot, HostUnreachableRefusal> =>
+  const halted = (action: Effect.Effect<AccountSnapshot>): Effect.Effect<AccountSnapshot> =>
     Effect.suspend(() => {
       haltSessionReplay();
-      return Effect.tapError(action, () => Effect.sync(resumeSessionReplay));
+      return Effect.tapDefect(action, () => Effect.sync(resumeSessionReplay));
     });
 
   return {

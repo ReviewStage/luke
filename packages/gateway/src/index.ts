@@ -1,24 +1,15 @@
 /**
- * The Gateway: the one boundary every client reaches the runtime through.
- * The protocol is the vocabulary — versioned envelopes, a fixed method
- * table, typed errors — and everything beside it is what carries that
- * vocabulary: the handler shapes a host answers with, a client, the
- * in-process transport, and the node registry an operator's capabilities are
- * asked for through. Every name
- * in these modules is part of the contract, so the barrel is written as one
- * door per module rather than as a second list to forget a name in.
- *
- * Two things stand apart. `./server` is the host's server, because it composes
- * `effect/unstable/rpc`'s runtime over the group `./rpc` derives; and `./testing` is
- * the transport that carries every envelope through text, which nothing that
- * ships composes. The handler vocabulary a host writes its table against
- * stays here, in `./methods`.
+ * index.ts -- the Gateway: the one boundary the desktop reaches the host
+ * through. The protocol is the vocabulary (a fixed method table, event kinds,
+ * typed refusals, the shapes the desktop reads), and beside it is what
+ * carries that vocabulary in one process: the handler shapes a host answers
+ * with, the dispatcher over a folded method table, and the node registry an
+ * operator's capabilities are asked for through. The barrel is one door per
+ * module rather than a second list to forget a name in.
  */
-export * from "./client.js";
-export * from "./invocations.js";
+export * from "./host.js";
 export * from "./methods.js";
 export * from "./nodes.js";
 export * from "./protocol.js";
 export * from "./shutdown.js";
-export * from "./transport.js";
 export * from "./wire.js";

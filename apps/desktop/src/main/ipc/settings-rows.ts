@@ -6,7 +6,7 @@ import { Effect, Option } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, type SettingUpdatePayload } from "#shared/messages/acts";
 import { ActRefused, type ActRows } from "../act-router";
-import type { HostOperator, HostUnreachableRefusal } from "../gateway/host-operator";
+import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
 import type { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
@@ -59,14 +59,12 @@ interface SettingsWriter {
   /**
    * One settings write. The host's change event is what every other window
    * hears; the window that asked hears this answer and is skipped there. A
-   * host that could not be reached at all is refused over the last snapshot
-   * this client saw, worded by the act's own sentence, and only a client with
-   * no snapshot either fails — which the router then answers as that same
-   * sentence, without the settings the row would have redrawn from.
+   * write or an apply that died is refused over the settings this client last
+   * saw, worded by the act's own sentence.
    */
   write(
     kind: SettingsActKind,
-    save: Effect.Effect<SettingsUpdateResult, HostUnreachableRefusal>,
+    save: Effect.Effect<SettingsUpdateResult>,
     apply?: (result: SettingsUpdateResult) => Effect.Effect<void, unknown>,
   ): Effect.Effect<SettingsUpdateResult, ActRefused>;
   /** A refusal decided here rather than by the host: the settings as they stand, and why. */

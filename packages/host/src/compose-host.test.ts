@@ -1,14 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ACTION_REFUSAL } from "@sidecar/actions";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_METHOD,
-  GATEWAY_PROTOCOL_VERSION,
-  type GatewayMethod,
-  InProcessTransport,
-} from "@sidecar/gateway";
-import type { GatewayInProcessHost } from "@sidecar/gateway/server";
+import { GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
 import { ACTION_RESULT_STATUS, isRecord, isWireString } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Effect, Layer, Result } from "effect";
@@ -30,14 +23,6 @@ function fixtureHostLayer(stateRoot: string) {
     Layer.provide(hostStandingLayer, hostAssemblyLayer),
     testKernelLayer({ stateRoot }),
   );
-}
-
-/** One client of the composed host, as the desktop's own operator is: one connection, every request on it. */
-function operatorTransport(gateway: GatewayInProcessHost): InProcessTransport {
-  return new InProcessTransport(gateway, {
-    clientId: "test",
-    role: GATEWAY_CLIENT_ROLE.OPERATOR,
-  });
 }
 
 it("a method two composers claim is a construction failure, not a last writer", () => {
@@ -69,12 +54,7 @@ it.effect(
           const host = yield* HostTag;
           // The one method no composer owns: it reads six of them, so an answer
           // proves the merge stood every concern up and linked their back-edges.
-          const response = yield* operatorTransport(host.gateway).request({
-            protocolVersion: GATEWAY_PROTOCOL_VERSION,
-            id: "bootstrap-1",
-            method: GATEWAY_METHOD.CLIENT_BOOTSTRAP,
-            params: {},
-          });
+          const response = yield* host.gateway.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP);
           assert.ok(response.ok);
           assert.ok(isRecord(response.result));
           assert.equal(response.result.calendarOnboardingOwed, false);
@@ -97,13 +77,9 @@ it.effect("a cloud provider's key is refused signed out, and the store never hel
     yield* Effect.provide(
       Effect.gen(function* () {
         const host = yield* HostTag;
-        const transport = operatorTransport(host.gateway);
-        const response = yield* transport.request({
-          protocolVersion: GATEWAY_PROTOCOL_VERSION,
-          id: "key-1",
-          method: GATEWAY_METHOD.CREDENTIAL_SET_API_KEY,
-          params: { providerId: "conductor", apiKey: "cnd_test_key_1234567890" },
-          idempotencyKey: "key-1",
+        const response = yield* host.gateway.call(GATEWAY_METHOD.CREDENTIAL_SET_API_KEY, {
+          providerId: "conductor",
+          apiKey: "cnd_test_key_1234567890",
         });
         assert.ok(response.ok);
         assert.ok(isRecord(response.result));
@@ -128,22 +104,12 @@ it.effect(
         Effect.gen(function* () {
           const host = yield* HostTag;
           const identity = { providerId: "conductor", providerSessionId: "chat-nobody-observed" };
-          const transport = operatorTransport(host.gateway);
           const [sent, pressed] = yield* Effect.all(
             [
-              transport.request({
-                protocolVersion: GATEWAY_PROTOCOL_VERSION,
-                id: "send-1",
-                method: GATEWAY_METHOD.SESSION_SEND_MESSAGE,
-                params: { identity, text: "hello" },
-                idempotencyKey: "send-1",
-              }),
-              transport.request({
-                protocolVersion: GATEWAY_PROTOCOL_VERSION,
-                id: "press-1",
-                method: GATEWAY_METHOD.SESSION_EXECUTE_CONTROL,
-                params: { identity, controlId: "cancel-run" },
-                idempotencyKey: "press-1",
+              host.gateway.call(GATEWAY_METHOD.SESSION_SEND_MESSAGE, { identity, text: "hello" }),
+              host.gateway.call(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL, {
+                identity,
+                controlId: "cancel-run",
               }),
             ],
             { concurrency: "unbounded" },

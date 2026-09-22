@@ -1,165 +1,81 @@
-import {
-  isRecord,
-  RatingWordSchema,
-  TRANSCRIPT_KIND,
-  type UnparsedWireValue,
-  type WireRecord,
-  type WireValue,
-  WireValueSchema,
-} from "@sidecar/wire";
-import { Effect, Option, Predicate, Schema, SchemaGetter, SchemaTransformation } from "effect";
-
 /**
- * The Gateway protocol: what a client asks the host and what the host tells
- * every client, as versioned envelopes. The vocabulary lives here, below
- * every implementation, because the desktop, the voice window's main-process
- * relay, and one day a process on the other side of a socket all read the
- * same shapes. Nothing in this file performs anything; it says what a request,
- * an answer, and an event look like, and refuses shapes it does not know.
+ * protocol.ts -- the Gateway's vocabulary: the methods a client asks the host,
+ * the events the host tells every client, the refusals a handler fails with,
+ * and the parameter and result shapes the desktop reads.
+ *
+ * The vocabulary lives here, below every implementation, so the host that
+ * answers a method and the client that calls it read the same words from one
+ * contract. Nothing in this file performs anything.
  */
-export const GATEWAY_PROTOCOL_VERSION = 1;
+import { RatingWordSchema, TRANSCRIPT_KIND, type WireValue } from "@sidecar/wire";
+import { Effect, Schema } from "effect";
 
-/**
- * Every method the protocol knows, each saying whether it changes something.
- * A mutating method must carry an idempotency key, so a transport that
- * retries finds the first answer rather than a second effect; a read needs
- * none, because reading twice is reading. The flag rides on the entry so a
- * method added here cannot be forgotten in a set beside it.
- */
-interface MethodEntry {
-  readonly name: string;
-  readonly mutates: boolean;
-}
-
-/**
- * Nine methods and five events below are the protocol's own test vocabulary
- * and nothing more: `conversation.delete`, `run.submit`, `run.cancel`,
- * `run.wait`, `run.list`, `child.list`, `memory.status`,
- * `configuration.update`, and `guide.report`, with `runs.changed`,
- * `directory.changed`, `child.changed`, `configuration.changed`, and
- * `observation.changed`. They were the local brain's Gateway surface, and no
- * host answers or emits them since LUKE-206 deleted that brain from the
- * desktop: a request naming one of the methods is refused as unknown by every
- * host this repository composes, and no event of those kinds is ever
- * appended. They stay because this package's own tests use them as the
- * synthetic names their protocol cases run on (`protocol.test.ts`,
- * `server.test.ts`, `protocol-envelopes.test.ts`, `node-invocations.test.ts`,
- * `rpc.test.ts`) and the goldens under `fixtures/protocol` are keyed by them;
- * re-pointing those and re-recording the goldens is a ticket of its own. A
- * new method or event a host will answer is added beside them as before;
- * nothing here is a reservation.
- */
-const GATEWAY_METHODS = {
-  HELLO: { name: "gateway.hello", mutates: false },
-  RECONNECT: { name: "gateway.reconnect", mutates: false },
-  SHUTDOWN: { name: "gateway.shutdown", mutates: true },
+/** Every method the host answers, by the name a client calls it. */
+export const GATEWAY_METHOD = {
+  SHUTDOWN: "gateway.shutdown",
   /** The Conversation tab's Clear as the service's soft delete of the account's main conversation. */
-  CONVERSATION_CLEAR: { name: "conversation.clear", mutates: true },
+  CONVERSATION_CLEAR: "conversation.clear",
   /** The developer's thumb on one of Luke's messages, or the press that takes it back, carried to the service as a rating event beside it. */
-  CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
+  CONVERSATION_RATE_MESSAGE: "conversation.rateMessage",
   /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
-  CONVERSATION_REFRESH: { name: "conversation.refresh", mutates: false },
+  CONVERSATION_REFRESH: "conversation.refresh",
   /** One page of older turns read back from where this device's history stands, for a reader at the top of the thread; the page arrives on the view, the answer says whether one landed. */
-  CONVERSATION_LOAD_OLDER: { name: "conversation.loadOlder", mutates: false },
+  CONVERSATION_LOAD_OLDER: "conversation.loadOlder",
   /** One transcript held open on this device, a child's or an observed session's: read to its end now and again whenever its list's head moves, until closed. */
-  // Named for the child's transcript still, an observed session's opening through the same method; kept so the protocol goldens stay put.
-  CONVERSATION_OPEN_CHILD_TRANSCRIPT: { name: "conversation.openChildTranscript", mutates: true },
-  CONVERSATION_CLOSE_CHILD_TRANSCRIPT: { name: "conversation.closeChildTranscript", mutates: true },
+  // Named for the child's transcript still, an observed session's opening through the same method.
+  CONVERSATION_OPEN_CHILD_TRANSCRIPT: "conversation.openChildTranscript",
+  CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
-  NOTEBOOK_READ: { name: "notebook.read", mutates: false },
-  NODE_REGISTER: { name: "node.register", mutates: true },
-  NODE_INVOKE: { name: "node.invoke", mutates: true },
+  NOTEBOOK_READ: "notebook.read",
   /** Everything a window's bootstrap reads of the host, in one answer. */
-  CLIENT_BOOTSTRAP: { name: "client.bootstrap", mutates: false },
-  SETTINGS_SNAPSHOT: { name: "settings.snapshot", mutates: false },
-  SETTINGS_UPDATE: { name: "settings.update", mutates: true },
-  SETTINGS_UPDATE_ENTRY: { name: "settings.updateEntry", mutates: true },
-  SETTINGS_RESET: { name: "settings.reset", mutates: true },
-  CREDENTIAL_SET_API_KEY: { name: "credential.setApiKey", mutates: true },
-  ACCOUNT_SNAPSHOT: { name: "account.snapshot", mutates: false },
-  ACCOUNT_BEGIN_SIGN_IN: { name: "account.beginSignIn", mutates: true },
-  ACCOUNT_CANCEL_SIGN_IN: { name: "account.cancelSignIn", mutates: true },
-  ACCOUNT_SIGN_OUT: { name: "account.signOut", mutates: true },
-  ACCOUNT_DELETE: { name: "account.delete", mutates: true },
-  CALENDAR_CONNECT_GOOGLE: { name: "calendar.connectGoogle", mutates: true },
-  CALENDAR_CANCEL_GOOGLE_SIGN_IN: { name: "calendar.cancelGoogleSignIn", mutates: true },
-  CALENDAR_REOPEN_GOOGLE_SIGN_IN: { name: "calendar.reopenGoogleSignIn", mutates: true },
-  CALENDAR_REMOVE_ACCOUNT: { name: "calendar.removeAccount", mutates: true },
-  CALENDAR_CONNECT_APPLE: { name: "calendar.connectApple", mutates: true },
-  CALENDAR_DISCONNECT_APPLE: { name: "calendar.disconnectApple", mutates: true },
-  CALENDAR_APPLE_ACCESS_STATUS: { name: "calendar.appleAccessStatus", mutates: false },
-  CALENDAR_CANCEL_APPLE_CONNECT: { name: "calendar.cancelAppleConnect", mutates: true },
-  CALENDAR_REFRESH: { name: "calendar.refresh", mutates: true },
-  CALENDAR_SET_SELECTED: { name: "calendar.setSelected", mutates: true },
-  SESSION_ROSTER: { name: "session.roster", mutates: false },
-  SESSION_OPEN: { name: "session.open", mutates: true },
-  SESSION_OPEN_APPLICATION: { name: "session.openApplication", mutates: true },
-  SESSION_OPEN_CHANGE: { name: "session.openChange", mutates: true },
+  CLIENT_BOOTSTRAP: "client.bootstrap",
+  SETTINGS_SNAPSHOT: "settings.snapshot",
+  SETTINGS_UPDATE: "settings.update",
+  SETTINGS_UPDATE_ENTRY: "settings.updateEntry",
+  SETTINGS_RESET: "settings.reset",
+  CREDENTIAL_SET_API_KEY: "credential.setApiKey",
+  ACCOUNT_SNAPSHOT: "account.snapshot",
+  ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
+  ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
+  ACCOUNT_SIGN_OUT: "account.signOut",
+  ACCOUNT_DELETE: "account.delete",
+  CALENDAR_CONNECT_GOOGLE: "calendar.connectGoogle",
+  CALENDAR_CANCEL_GOOGLE_SIGN_IN: "calendar.cancelGoogleSignIn",
+  CALENDAR_REOPEN_GOOGLE_SIGN_IN: "calendar.reopenGoogleSignIn",
+  CALENDAR_REMOVE_ACCOUNT: "calendar.removeAccount",
+  CALENDAR_CONNECT_APPLE: "calendar.connectApple",
+  CALENDAR_DISCONNECT_APPLE: "calendar.disconnectApple",
+  CALENDAR_APPLE_ACCESS_STATUS: "calendar.appleAccessStatus",
+  CALENDAR_CANCEL_APPLE_CONNECT: "calendar.cancelAppleConnect",
+  CALENDAR_REFRESH: "calendar.refresh",
+  CALENDAR_SET_SELECTED: "calendar.setSelected",
+  SESSION_ROSTER: "session.roster",
+  SESSION_OPEN: "session.open",
+  SESSION_OPEN_APPLICATION: "session.openApplication",
+  SESSION_OPEN_CHANGE: "session.openChange",
   /** The two writes a session's own row asks for, each admitted in the host against the roster it reads for itself. */
-  SESSION_SEND_MESSAGE: { name: "session.sendMessage", mutates: true },
-  SESSION_EXECUTE_CONTROL: { name: "session.executeControl", mutates: true },
-  WORKSPACE_PROJECTS: { name: "workspace.projects", mutates: false },
-  VOICE_DIAGNOSTICS: { name: "voice.diagnostics", mutates: false },
-  VOICE_CREATE_LIVE_SESSION: { name: "voice.createLiveSession", mutates: true },
-  VOICE_END_LIVE_SESSION: { name: "voice.endLiveSession", mutates: true },
-  VOICE_REPORT_LIVE_TRANSPORT: { name: "voice.reportLiveTransport", mutates: true },
-  VOICE_REPORT_LIVE_ACTIVITY: { name: "voice.reportLiveActivity", mutates: true },
-  VOICE_STOP_SPEAKING: { name: "voice.stopSpeaking", mutates: true },
+  SESSION_SEND_MESSAGE: "session.sendMessage",
+  SESSION_EXECUTE_CONTROL: "session.executeControl",
+  WORKSPACE_PROJECTS: "workspace.projects",
+  VOICE_DIAGNOSTICS: "voice.diagnostics",
+  VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
+  VOICE_END_LIVE_SESSION: "voice.endLiveSession",
+  VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
+  VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
+  VOICE_STOP_SPEAKING: "voice.stopSpeaking",
   /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
-  VOICE_RECORD_TRACE: { name: "voice.recordTrace", mutates: true },
-  GUIDE_REPORT: { name: "guide.report", mutates: true },
-  ANALYTICS_RECORD: { name: "analytics.record", mutates: true },
-  ONBOARDING_STATE: { name: "onboarding.state", mutates: false },
-  ONBOARDING_SKIP_CALENDAR: { name: "onboarding.skipCalendar", mutates: true },
-  ONBOARDING_COMPLETE_CALENDAR: { name: "onboarding.completeCalendar", mutates: true },
+  VOICE_RECORD_TRACE: "voice.recordTrace",
+  ANALYTICS_RECORD: "analytics.record",
+  ONBOARDING_STATE: "onboarding.state",
+  ONBOARDING_SKIP_CALENDAR: "onboarding.skipCalendar",
+  ONBOARDING_COMPLETE_CALENDAR: "onboarding.completeCalendar",
   /** The spoken introduction was given to its end; the host records the moment and stands the introduction down for good. */
-  ONBOARDING_COMPLETE_INTRODUCTION: { name: "onboarding.completeIntroduction", mutates: true },
+  ONBOARDING_COMPLETE_INTRODUCTION: "onboarding.completeIntroduction",
   /** The developer declined the Conductor key step of onboarding; the settings row stays the way to connect later. */
-  ONBOARDING_SKIP_CONDUCTOR_KEY: { name: "onboarding.skipConductorKey", mutates: true },
-} as const satisfies Record<string, MethodEntry>;
-
-export const GATEWAY_METHOD =
-  // SAFETY: the entries are this same table's, so every key answers its own entry's name.
-  Object.fromEntries(
-    Object.entries(GATEWAY_METHODS).map(([held, entry]) => [held, entry.name]),
-  ) as { readonly [K in keyof typeof GATEWAY_METHODS]: (typeof GATEWAY_METHODS)[K]["name"] };
+  ONBOARDING_SKIP_CONDUCTOR_KEY: "onboarding.skipConductorKey",
+} as const;
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
-
-export const GatewayMethodSchema = Schema.Literals(Object.values(GATEWAY_METHOD));
-
-/** One method as the table names it: its wire name and whether it changes something. */
-interface GatewayMethodEntry {
-  readonly name: GatewayMethod;
-  readonly mutates: boolean;
-}
-
-/** Every entry of the one table, in its order, for whatever derives a vocabulary from it rather than keeping a list beside it. */
-export const GATEWAY_METHOD_ENTRIES: readonly GatewayMethodEntry[] = Object.values(GATEWAY_METHODS);
-
-/**
- * What a method takes: a record the host reads under its own declared shape,
- * admitted here only as a record. It is stated as a record of wire values
- * rather than as the wire value narrowed to one, because the wire value is a
- * suspended declaration and a check cannot stand on a suspension; the
- * refinement beside it is what still refuses an array, a boxed primitive, and
- * anything else carrying a prototype no record literal has.
- */
-export const GatewayParamsSchema = Schema.Record(Schema.String, WireValueSchema).pipe(
-  Schema.refine(isRecord),
-);
-
-/**
- * What a method answers: a wire value, or nothing at all, which the envelope
- * carries as an absent field. The nothing arm stands first on purpose: JSON
- * has no `undefined`, so the codec the Rpc runtime fills a message's result
- * hole with lowers it to `null`, and the arm that reads `null` back is
- * whichever the union names first. Naming it first is what keeps a method
- * that answered nothing answering nothing across the wire, at the price of
- * reading a wire value that was itself `null` as nothing — which is what the
- * envelope's absent field already says of it.
- */
-export const GatewayResultSchema = Schema.Union([Schema.Undefined, WireValueSchema]);
 
 /**
  * The live voice session's vocabulary, declared beside the four methods and
@@ -374,80 +290,24 @@ export const notebookReadResultSchema = Schema.Struct({
 
 export type NotebookReadResult = typeof notebookReadResultSchema.Type;
 
-const GATEWAY_METHODS_BY_NAME: ReadonlyMap<string, GatewayMethodEntry> = new Map(
-  GATEWAY_METHOD_ENTRIES.map((entry) => [entry.name, entry]),
-);
-
-const readsGatewayMethod = Schema.is(GatewayMethodSchema);
-
-export function isGatewayMethod(value: UnparsedWireValue): value is GatewayMethod {
-  return readsGatewayMethod(value);
-}
-
-export function isMutatingGatewayMethod(method: GatewayMethod): boolean {
-  return GATEWAY_METHODS_BY_NAME.get(method)?.mutates === true;
-}
-
-/** An id the protocol carries: a request's, an event's, a node's, a key's. Never empty, and otherwise the minter's own. */
-const GatewayIdentifierSchema = Schema.NonEmptyString;
-
-/** What a caller may say it expects to still stand when its request lands. */
-const GatewayExpectedRevisionSchema = Schema.Struct({
-  /** The conversation whose lifetime the caller read, and the generation it read there. */
-  sessionKey: Schema.optionalKey(GatewayIdentifierSchema),
-  sessionRevision: Schema.optionalKey(Schema.String),
-  /** The configuration revision the caller read. */
-  configurationRevision: Schema.optionalKey(Schema.Number),
-});
-
-export type GatewayExpectedRevision = typeof GatewayExpectedRevisionSchema.Type;
-
-/**
- * The envelopes, each declared once as the schema that both reads it off the
- * wire and writes it back. Key order is the contract, and a struct encodes
- * its keys in the order declared here, so what `fixtures/protocol` records
- * is what these declarations say; an explicitly absent field leaves rather
- * than travelling as null, and the readers refuse a shape they never sent.
- */
-export const GatewayRequestSchema = Schema.Struct({
-  protocolVersion: Schema.Number,
-  id: GatewayIdentifierSchema,
-  method: GatewayMethodSchema,
-  params: GatewayParamsSchema,
-  idempotencyKey: Schema.optionalKey(GatewayIdentifierSchema),
-  expectedRevision: Schema.optionalKey(GatewayExpectedRevisionSchema),
-});
-
-export type GatewayRequest = typeof GatewayRequestSchema.Type;
-
+/** Every way a call can be refused: the dispatcher's own two, and the codes a handler fails with. */
 export const GATEWAY_ERROR = {
-  UNSUPPORTED_VERSION: "unsupported_version",
   UNKNOWN_METHOD: "unknown_method",
   INVALID_PARAMS: "invalid_params",
-  MISSING_IDEMPOTENCY_KEY: "missing_idempotency_key",
-  IDEMPOTENCY_CONFLICT: "idempotency_conflict",
-  REVISION_MISMATCH: "revision_mismatch",
   NOT_FOUND: "not_found",
   REFUSED: "refused",
-  UNAUTHORIZED: "unauthorized",
   NODE_UNAVAILABLE: "node_unavailable",
   UNKNOWN_CAPABILITY: "unknown_capability",
-  DISCONNECTED: "disconnected",
-  SHUTTING_DOWN: "shutting_down",
   INTERNAL: "internal",
 } as const;
 
 export type GatewayErrorCode = (typeof GATEWAY_ERROR)[keyof typeof GATEWAY_ERROR];
 
-const GatewayErrorCodeSchema = Schema.Literals(Object.values(GATEWAY_ERROR));
-
-/** An error as the envelope carries it: the code, and a sentence for a person. */
-export const GatewayErrorSchema = Schema.Struct({
-  code: GatewayErrorCodeSchema,
-  message: Schema.String,
-});
-
-export type GatewayError = typeof GatewayErrorSchema.Type;
+/** A refused call as the client reads it: the code, and a sentence for a person. */
+export interface GatewayError {
+  readonly code: GatewayErrorCode;
+  readonly message: string;
+}
 
 /** One refusal's code, fixed by its class: the constructor takes the message alone. */
 function refusalCode<Code extends GatewayErrorCode>(code: Code) {
@@ -457,16 +317,9 @@ function refusalCode<Code extends GatewayErrorCode>(code: Code) {
 /**
  * Every error code as its own tagged error, so a handler that refuses has a
  * typed failure to fail with rather than a bare code. Each class's `code` is
- * the exact string `GATEWAY_ERROR` already names, and the family crosses the
- * wire as `GatewayRefusalSchema` writes it: today's `{ code, message }` object,
- * with no tag beside them, so a client of an earlier build reads the same
- * envelope it always did.
+ * the exact string `GATEWAY_ERROR` already names, and the dispatcher hands a
+ * client the `{ code, message }` of whichever one a handler failed with.
  */
-export class UnsupportedVersionRefusal extends Schema.TaggedError<UnsupportedVersionRefusal>()(
-  "UnsupportedVersionRefusal",
-  { code: refusalCode(GATEWAY_ERROR.UNSUPPORTED_VERSION), message: Schema.String },
-) {}
-
 export class UnknownMethodRefusal extends Schema.TaggedError<UnknownMethodRefusal>()(
   "UnknownMethodRefusal",
   { code: refusalCode(GATEWAY_ERROR.UNKNOWN_METHOD), message: Schema.String },
@@ -475,21 +328,6 @@ export class UnknownMethodRefusal extends Schema.TaggedError<UnknownMethodRefusa
 export class InvalidParamsRefusal extends Schema.TaggedError<InvalidParamsRefusal>()(
   "InvalidParamsRefusal",
   { code: refusalCode(GATEWAY_ERROR.INVALID_PARAMS), message: Schema.String },
-) {}
-
-export class MissingIdempotencyKeyRefusal extends Schema.TaggedError<MissingIdempotencyKeyRefusal>()(
-  "MissingIdempotencyKeyRefusal",
-  { code: refusalCode(GATEWAY_ERROR.MISSING_IDEMPOTENCY_KEY), message: Schema.String },
-) {}
-
-export class IdempotencyConflictRefusal extends Schema.TaggedError<IdempotencyConflictRefusal>()(
-  "IdempotencyConflictRefusal",
-  { code: refusalCode(GATEWAY_ERROR.IDEMPOTENCY_CONFLICT), message: Schema.String },
-) {}
-
-export class RevisionMismatchRefusal extends Schema.TaggedError<RevisionMismatchRefusal>()(
-  "RevisionMismatchRefusal",
-  { code: refusalCode(GATEWAY_ERROR.REVISION_MISMATCH), message: Schema.String },
 ) {}
 
 export class NotFoundRefusal extends Schema.TaggedError<NotFoundRefusal>()("NotFoundRefusal", {
@@ -502,11 +340,6 @@ export class RefusedRefusal extends Schema.TaggedError<RefusedRefusal>()("Refuse
   message: Schema.String,
 }) {}
 
-export class UnauthorizedRefusal extends Schema.TaggedError<UnauthorizedRefusal>()(
-  "UnauthorizedRefusal",
-  { code: refusalCode(GATEWAY_ERROR.UNAUTHORIZED), message: Schema.String },
-) {}
-
 export class NodeUnavailableRefusal extends Schema.TaggedError<NodeUnavailableRefusal>()(
   "NodeUnavailableRefusal",
   { code: refusalCode(GATEWAY_ERROR.NODE_UNAVAILABLE), message: Schema.String },
@@ -517,148 +350,20 @@ export class UnknownCapabilityRefusal extends Schema.TaggedError<UnknownCapabili
   { code: refusalCode(GATEWAY_ERROR.UNKNOWN_CAPABILITY), message: Schema.String },
 ) {}
 
-export class DisconnectedRefusal extends Schema.TaggedError<DisconnectedRefusal>()(
-  "DisconnectedRefusal",
-  { code: refusalCode(GATEWAY_ERROR.DISCONNECTED), message: Schema.String },
-) {}
-
-export class ShuttingDownRefusal extends Schema.TaggedError<ShuttingDownRefusal>()(
-  "ShuttingDownRefusal",
-  { code: refusalCode(GATEWAY_ERROR.SHUTTING_DOWN), message: Schema.String },
-) {}
-
 export class InternalRefusal extends Schema.TaggedError<InternalRefusal>()("InternalRefusal", {
   code: refusalCode(GATEWAY_ERROR.INTERNAL),
   message: Schema.String,
 }) {}
 
-/** Every refusal class this module declares, one per error code, for a membership check and the family's union. */
-export const GATEWAY_REFUSALS = [
-  UnsupportedVersionRefusal,
-  UnknownMethodRefusal,
-  InvalidParamsRefusal,
-  MissingIdempotencyKeyRefusal,
-  IdempotencyConflictRefusal,
-  RevisionMismatchRefusal,
-  NotFoundRefusal,
-  RefusedRefusal,
-  UnauthorizedRefusal,
-  NodeUnavailableRefusal,
-  UnknownCapabilityRefusal,
-  DisconnectedRefusal,
-  ShuttingDownRefusal,
-  InternalRefusal,
-] as const;
-
-export type GatewayRefusal = InstanceType<(typeof GATEWAY_REFUSALS)[number]>;
-
-/** The refusal class an error's code names, carrying its message: how an outcome a handler wrote as a code becomes a typed failure. */
-export function gatewayRefusalFromError(error: GatewayError): GatewayRefusal {
-  const message = error.message;
-  switch (error.code) {
-    case GATEWAY_ERROR.UNSUPPORTED_VERSION:
-      return new UnsupportedVersionRefusal({ message });
-    case GATEWAY_ERROR.UNKNOWN_METHOD:
-      return new UnknownMethodRefusal({ message });
-    case GATEWAY_ERROR.INVALID_PARAMS:
-      return new InvalidParamsRefusal({ message });
-    case GATEWAY_ERROR.MISSING_IDEMPOTENCY_KEY:
-      return new MissingIdempotencyKeyRefusal({ message });
-    case GATEWAY_ERROR.IDEMPOTENCY_CONFLICT:
-      return new IdempotencyConflictRefusal({ message });
-    case GATEWAY_ERROR.REVISION_MISMATCH:
-      return new RevisionMismatchRefusal({ message });
-    case GATEWAY_ERROR.NOT_FOUND:
-      return new NotFoundRefusal({ message });
-    case GATEWAY_ERROR.REFUSED:
-      return new RefusedRefusal({ message });
-    case GATEWAY_ERROR.UNAUTHORIZED:
-      return new UnauthorizedRefusal({ message });
-    case GATEWAY_ERROR.NODE_UNAVAILABLE:
-      return new NodeUnavailableRefusal({ message });
-    case GATEWAY_ERROR.UNKNOWN_CAPABILITY:
-      return new UnknownCapabilityRefusal({ message });
-    case GATEWAY_ERROR.DISCONNECTED:
-      return new DisconnectedRefusal({ message });
-    case GATEWAY_ERROR.SHUTTING_DOWN:
-      return new ShuttingDownRefusal({ message });
-    case GATEWAY_ERROR.INTERNAL:
-      return new InternalRefusal({ message });
-  }
-}
-
-/**
- * The refusal family as the wire carries it. Decoding an envelope's error
- * object answers the class its code names; encoding a refusal writes the
- * `{ code, message }` object and nothing else, so the class's own tag never
- * reaches the wire and the envelope goldens hold.
- */
-export const GatewayRefusalSchema: Schema.Codec<GatewayRefusal, GatewayError> =
-  GatewayErrorSchema.pipe(
-    Schema.decodeTo(
-      Schema.toType(Schema.Union(GATEWAY_REFUSALS)),
-      SchemaTransformation.transform({
-        decode: gatewayRefusalFromError,
-        encode: (refusal) => ({ code: refusal.code, message: refusal.message }),
-      }),
-    ),
-  );
-
-/**
- * The one refusal the protocol decides before any method is named: a request
- * on another protocol version is refused outright, whatever it asked.
- */
-export function gatewayVersionRefusal(
-  protocolVersion: number,
-): Option.Option<UnsupportedVersionRefusal> {
-  return protocolVersion === GATEWAY_PROTOCOL_VERSION
-    ? Option.none()
-    : Option.some(
-        new UnsupportedVersionRefusal({
-          message: `this host speaks protocol ${GATEWAY_PROTOCOL_VERSION}`,
-        }),
-      );
-}
-
-/** The revisions that stood when an answer was formed, so a client can name them on its next ask. */
-const GatewayRevisionSchema = Schema.Struct({
-  configuration: Schema.Number,
-  sequence: Schema.Number,
-});
-
-export type GatewayRevision = typeof GatewayRevisionSchema.Type;
-
-/**
- * A value that may be absent, read as `undefined` and written as no field at
- * all. `null` is a value here and travels; only `undefined` leaves.
- */
-function absentOrWireValue() {
-  return Schema.optionalKey(WireValueSchema).pipe(
-    Schema.decodeTo(Schema.UndefinedOr(WireValueSchema), {
-      decode: SchemaGetter.transformOptional((held) => Option.some(Option.getOrUndefined(held))),
-      encode: SchemaGetter.transformOptional((held: Option.Option<WireValue | undefined>) =>
-        Option.filter(held, Predicate.isNotUndefined),
-      ),
-    }),
-  );
-}
-
-const GatewayResponseSchema = Schema.Union([
-  Schema.Struct({
-    id: GatewayIdentifierSchema,
-    ok: Schema.Literal(true),
-    result: absentOrWireValue(),
-    revision: GatewayRevisionSchema,
-  }),
-  Schema.Struct({
-    id: GatewayIdentifierSchema,
-    ok: Schema.Literal(false),
-    error: GatewayErrorSchema,
-    revision: GatewayRevisionSchema,
-  }),
-]);
-
-export type GatewayResponse = typeof GatewayResponseSchema.Type;
+/** Every refusal a handler may fail with, one per error code. */
+export type GatewayRefusal =
+  | UnknownMethodRefusal
+  | InvalidParamsRefusal
+  | NotFoundRefusal
+  | RefusedRefusal
+  | NodeUnavailableRefusal
+  | UnknownCapabilityRefusal
+  | InternalRefusal;
 
 export const GATEWAY_EVENT = {
   /** The Conversation as the service's reads compose it, whole, whenever a poll moved it. */
@@ -668,7 +373,7 @@ export const GATEWAY_EVENT = {
   /** The account's agents as the service's read lists them, whole, whenever a poll moved the list. */
   AGENTS_CHANGED: "agents.changed",
   /** The open transcript, whole, whenever a poll moved it; an empty payload says none is open. */
-  // Named for the child's transcript still, whichever kind is open; kept so the protocol goldens stay put.
+  // Named for the child's transcript still, whichever kind is open.
   CHILD_TRANSCRIPT_CHANGED: "childTranscript.changed",
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
@@ -688,60 +393,6 @@ export const GATEWAY_EVENT = {
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
 
-const GatewayEventKindSchema = Schema.Literals(Object.values(GATEWAY_EVENT));
-
-export const GatewayEventSchema = Schema.Struct({
-  eventId: GatewayIdentifierSchema,
-  /** One more than the event before it, from 1, so a gap is a number a client can see. */
-  sequence: Schema.Number,
-  kind: GatewayEventKindSchema,
-  at: Schema.Number,
-  sessionKey: Schema.optionalKey(GatewayIdentifierSchema),
-  runId: Schema.optionalKey(GatewayIdentifierSchema),
-  payload: WireValueSchema,
-});
-
-export type GatewayEvent = typeof GatewayEventSchema.Type;
-
-/**
- * What a reconnecting client is handed for the sequence it last saw: every
- * event since, when the window still holds them, or a fresh snapshot with
- * the sequence it stands at, because a window that has moved on must never
- * skip what it can no longer replay.
- */
-export const GATEWAY_RECONNECT_KIND = {
-  REPLAY: "replay",
-  SNAPSHOT: "snapshot",
-} as const;
-
-const GatewayReconnectAnswerSchema = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal(GATEWAY_RECONNECT_KIND.REPLAY),
-    events: Schema.Array(GatewayEventSchema),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal(GATEWAY_RECONNECT_KIND.SNAPSHOT),
-    sequence: Schema.Number,
-    snapshot: WireValueSchema,
-  }),
-]);
-
-export type GatewayReconnectAnswer = typeof GatewayReconnectAnswerSchema.Type;
-
-/**
- * What a client and a host settle before any request crosses a connection:
- * the protocol version each speaks, carried on the connection's own
- * handshake and never in an address. The credential that authenticates the
- * client travels the same way, behind the authorization header, so it is
- * never part of a URL a log or a history could keep.
- */
-export const GATEWAY_HANDSHAKE_HEADER = {
-  AUTHORIZATION: "authorization",
-  PROTOCOL_VERSION: "x-luke-gateway-protocol",
-  CLIENT_ID: "x-luke-gateway-client",
-  CLIENT_ROLE: "x-luke-gateway-role",
-} as const;
-
 /** Who is asking: the one operator client, or a node offering capabilities. */
 export const GATEWAY_CLIENT_ROLE = {
   OPERATOR: "operator",
@@ -760,10 +411,9 @@ export interface GatewayClientIdentity {
  * never a thrown error and never a success: a required node that is not
  * connected leaves the action undone and says so, so nothing records it as done.
  * Unknown is the other typed answer an absent node can give, and it is not
- * unavailable: the ask was dispatched to the node and the node's connection
- * closed before it answered, so the effect may have happened. What reads an
- * unknown must record the action as uncertain, never as failed and never as
- * safe to repeat.
+ * unavailable: the ask reached the node and no answer came back, so the
+ * effect may have happened. What reads an unknown must record the action as
+ * uncertain, never as failed and never as safe to repeat.
  */
 export const NODE_CAPABILITY_STATUS = {
   OK: "ok",
@@ -771,122 +421,17 @@ export const NODE_CAPABILITY_STATUS = {
   UNAVAILABLE: "unavailable",
   /** The node performed and reported a failure. */
   FAILED: "failed",
-  /** Dispatched, and the answer lost with the node's connection; the effect is uncertain. */
+  /** Dispatched, and the answer lost; the effect is uncertain. */
   UNKNOWN: "unknown",
 } as const;
 
-const NodeCapabilityResultSchema = Schema.Union([
-  Schema.Struct({ status: Schema.Literal(NODE_CAPABILITY_STATUS.OK), value: absentOrWireValue() }),
-  Schema.Struct({
-    status: Schema.Literal(NODE_CAPABILITY_STATUS.UNAVAILABLE),
-    capability: Schema.String,
-    reason: Schema.String,
-  }),
-  Schema.Struct({
-    status: Schema.Literal(NODE_CAPABILITY_STATUS.FAILED),
-    capability: Schema.String,
-    reason: Schema.String,
-  }),
-  Schema.Struct({
-    status: Schema.Literal(NODE_CAPABILITY_STATUS.UNKNOWN),
-    capability: Schema.String,
-    reason: Schema.String,
-  }),
-]);
-
-export type NodeCapabilityResult = typeof NodeCapabilityResultSchema.Type;
-
-const readGatewayRequest = Schema.decodeUnknownOption(GatewayRequestSchema);
-const writeGatewayRequest = Schema.encodeSync(GatewayRequestSchema);
-const readGatewayResponse = Schema.decodeUnknownOption(GatewayResponseSchema);
-const writeGatewayResponse = Schema.encodeSync(GatewayResponseSchema);
-const readGatewayEvent = Schema.decodeUnknownOption(GatewayEventSchema);
-const writeGatewayEvent = Schema.encodeSync(GatewayEventSchema);
-const readGatewayReconnectAnswer = Schema.decodeUnknownOption(GatewayReconnectAnswerSchema);
-
-export function gatewayRequestToWire(request: GatewayRequest): WireRecord {
-  return writeGatewayRequest(request);
-}
-
-export function gatewayResponseToWire(response: GatewayResponse): WireRecord {
-  return writeGatewayResponse(response);
-}
-
-export function gatewayEventToWire(event: GatewayEvent): WireRecord {
-  return writeGatewayEvent(event);
-}
-
-/** A refusal the protocol itself answers, for a request no handler ever saw. */
-export function gatewayRefusal(
-  id: string,
-  code: GatewayErrorCode,
-  message: string,
-  revision: GatewayRevision = { configuration: 0, sequence: 0 },
-): GatewayResponse {
-  return { id, ok: false, error: { code, message }, revision };
-}
-
-export function gatewayRequestFromWire(value: UnparsedWireValue): GatewayRequest | undefined {
-  return Option.getOrUndefined(readGatewayRequest(value));
-}
-
-export function gatewayResponseFromWire(value: UnparsedWireValue): GatewayResponse | undefined {
-  return Option.getOrUndefined(readGatewayResponse(value));
-}
-
-export function gatewayEventFromWire(value: UnparsedWireValue): GatewayEvent | undefined {
-  return Option.getOrUndefined(readGatewayEvent(value));
-}
-
-export function gatewayReconnectAnswerFromWire(
-  value: UnparsedWireValue,
-): GatewayReconnectAnswer | undefined {
-  return Option.getOrUndefined(readGatewayReconnectAnswer(value));
-}
-
-/**
- * The host asking one connected node to perform one of its capabilities. It
- * travels on that node's own connection and nowhere else: never in the event
- * log, so a reconnecting client is never replayed an ask to act, and never to
- * another client, so no other process sees the parameters or can answer for
- * the node. The id binds the answer to the ask; a connection that closes
- * before answering leaves the ask unavailable and the effect uncertain.
- */
-const NodeInvocationSchema = Schema.Struct({
-  invocationId: GatewayIdentifierSchema,
-  nodeId: GatewayIdentifierSchema,
-  capability: Schema.String,
-  params: GatewayParamsSchema,
-});
-
-export type NodeInvocation = typeof NodeInvocationSchema.Type;
-
-const NodeInvocationAnswerSchema = Schema.Struct({
-  invocationId: GatewayIdentifierSchema,
-  result: NodeCapabilityResultSchema,
-});
-
-export type NodeInvocationAnswer = typeof NodeInvocationAnswerSchema.Type;
-
-const writeNodeCapabilityResult = Schema.encodeSync(NodeCapabilityResultSchema);
-const readNodeCapabilityResult = Schema.decodeUnknownOption(NodeCapabilityResultSchema);
-const writeNodeInvocation = Schema.encodeSync(NodeInvocationSchema);
-const readNodeInvocation = Schema.decodeUnknownOption(NodeInvocationSchema);
-
-export function nodeCapabilityResultToWire(result: NodeCapabilityResult): WireRecord {
-  return writeNodeCapabilityResult(result);
-}
-
-export function nodeInvocationToWire(invocation: NodeInvocation): WireRecord {
-  return writeNodeInvocation(invocation);
-}
-
-export function nodeInvocationFromWire(value: UnparsedWireValue): NodeInvocation | undefined {
-  return Option.getOrUndefined(readNodeInvocation(value));
-}
-
-export function nodeCapabilityResultFromWire(
-  value: UnparsedWireValue,
-): NodeCapabilityResult | undefined {
-  return Option.getOrUndefined(readNodeCapabilityResult(value));
-}
+export type NodeCapabilityResult =
+  | { readonly status: typeof NODE_CAPABILITY_STATUS.OK; readonly value: WireValue | undefined }
+  | {
+      readonly status:
+        | typeof NODE_CAPABILITY_STATUS.UNAVAILABLE
+        | typeof NODE_CAPABILITY_STATUS.FAILED
+        | typeof NODE_CAPABILITY_STATUS.UNKNOWN;
+      readonly capability: string;
+      readonly reason: string;
+    };

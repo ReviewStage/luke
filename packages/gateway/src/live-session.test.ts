@@ -4,9 +4,6 @@ import { readEither } from "@sidecar/wire/effect";
 import { Result, type Schema } from "effect";
 import { test } from "vitest";
 import {
-  GATEWAY_METHOD,
-  isGatewayMethod,
-  isMutatingGatewayMethod,
   LIVE_SDP_MAX_CHARACTERS,
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
@@ -38,21 +35,6 @@ function parseAnswer<Value, Encoded>(
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
-const LIVE_METHODS = [
-  GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION,
-  GATEWAY_METHOD.VOICE_END_LIVE_SESSION,
-  GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT,
-  GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY,
-  GATEWAY_METHOD.VOICE_STOP_SPEAKING,
-] as const;
-
-test("the five live session methods are in the vocabulary, and every one of them mutates", () => {
-  for (const method of LIVE_METHODS) {
-    assert.equal(isGatewayMethod(method), true);
-    assert.equal(isMutatingGatewayMethod(method), true);
-  }
-});
-
 test("a stop answer carries one boolean and nothing else is read from it", () => {
   assert.deepEqual(parseAnswer(voiceStopSpeakingResultSchema, { stopped: true }), {
     stopped: true,
@@ -62,18 +44,6 @@ test("a stop answer carries one boolean and nothing else is read from it", () =>
   });
   assert.equal(parseAnswer(voiceStopSpeakingResultSchema, {}), undefined);
   assert.equal(parseAnswer(voiceStopSpeakingResultSchema, { stopped: "yes" }), undefined);
-});
-
-test("the retired Realtime vocabulary is no longer in the contract", () => {
-  for (const method of [
-    "voice.mintRealtimeCredential",
-    "speech.settle",
-    "receiver.report",
-    "delivery.claim",
-    "delivery.acknowledge",
-  ]) {
-    assert.equal(isGatewayMethod(method), false);
-  }
 });
 
 test("a create request carries the offer and nothing else", () => {

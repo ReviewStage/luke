@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { GATEWAY_METHOD, type GatewayMethod, type GatewayShutdownSteps } from "@sidecar/gateway";
-import type { GatewayInProcessHost } from "@sidecar/gateway/server";
+import {
+  GATEWAY_METHOD,
+  type GatewayHost,
+  type GatewayMethod,
+  type GatewayShutdownSteps,
+  NodeRegistry,
+} from "@sidecar/gateway";
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { HOST_CONCERN, HOST_START_ORDER } from "../compose-host.js";
 import type { Composer } from "../composer.js";
@@ -14,8 +19,8 @@ import {
   hostStandingLayer,
 } from "./host.js";
 
-// SAFETY: these tests hand the in-process host through the assembly and back; none of them reads a part of it.
-const stubGateway = (): GatewayInProcessHost => ({}) as GatewayInProcessHost;
+// SAFETY: these tests hand the host through the assembly and back; none of them reads a part of it.
+const stubGateway = (): GatewayHost => ({}) as GatewayHost;
 
 const STEP = {
   START: "start",
@@ -58,6 +63,7 @@ const recordingComposer = (
 
 const recordingAssembly = (log: Recorded[], startOrder: readonly Composer[]): HostAssembly => ({
   gateway: stubGateway(),
+  nodes: new NodeRegistry(),
   startOrder,
   armed: Effect.andThen(
     Effect.sync(() => {
