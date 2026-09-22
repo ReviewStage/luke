@@ -43,6 +43,25 @@ Delegate before giving an answer that depends on backend work.
 Do not guess the result while waiting.`;
 
 /**
+ * Nothing answers a delegation during the introduction: the accountless
+ * endpoint wires no carrier, so a model told it had backend tools would emit a
+ * delegation nobody reads and promise an action it cannot reach, over a seed
+ * that carries the developer's own detected session titles, which is exactly
+ * what they will ask about first. This is the one thing the two scenes cannot
+ * share.
+ */
+const INTRODUCTION_DELEGATION_POLICY = `Delegation policy:
+Backend tools:
+- None. Nothing is connected during the introduction.
+
+Delegate to the backend when:
+- Never during the introduction.
+
+Do not delegate to the backend when:
+- The developer asks anything at all: answer from the conversation, and where an answer would
+  need their agents or an action, say what you will do for them once they sign in.`;
+
+/**
  * The Live prompting guide's starter template, cut to who is speaking and
  * how, the two policies about holding a conversation, and the delegation
  * policy that says when the backend is asked. The guide's instruction for a migration
@@ -57,7 +76,8 @@ Do not guess the result while waiting.`;
  * guide prints is "engineering manager" where the template reads "voice
  * assistant".
  */
-const SESSION_INSTRUCTIONS = `You are Luke, an engineering manager for the developer's coding agents.
+const instructionsFor = (delegationPolicy: string): string =>
+  `You are Luke, an engineering manager for the developer's coding agents.
 Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
 If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
 
@@ -65,11 +85,11 @@ Backchannel policy: Use frequent, eager backchannels. Acknowledge naturally with
 
 Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
 
-${DELEGATION_POLICY}`;
+${delegationPolicy}`;
 
 const SCENE_INSTRUCTIONS = {
-  [LIVE_SCENE.DESKTOP]: SESSION_INSTRUCTIONS,
-  [LIVE_SCENE.INTRODUCTION]: SESSION_INSTRUCTIONS,
+  [LIVE_SCENE.DESKTOP]: instructionsFor(DELEGATION_POLICY),
+  [LIVE_SCENE.INTRODUCTION]: instructionsFor(INTRODUCTION_DELEGATION_POLICY),
 } satisfies Record<LiveScene, string>;
 
 /** The `instructions` a session of this scene is created with. */

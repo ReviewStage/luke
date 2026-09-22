@@ -21,8 +21,15 @@ for (const scene of Object.values(LIVE_SCENE)) {
   });
 }
 
-test("every scene is told the same thing, delegation policy included", () => {
-  assert.deepEqual(blocksOf(LIVE_SCENE.INTRODUCTION), blocksOf(LIVE_SCENE.DESKTOP));
+test("the introduction is told the same thing as the desktop, except that nothing is connected", () => {
+  const desktop = blocksOf(LIVE_SCENE.DESKTOP);
+  const introduction = blocksOf(LIVE_SCENE.INTRODUCTION);
+  const policyAt = desktop.findIndex((block) => block.startsWith("Delegation policy:"));
+
+  assert.ok(policyAt > 0);
+  assert.deepEqual(introduction.slice(0, policyAt), desktop.slice(0, policyAt));
+  assert.ok(introduction.slice(policyAt).join("\n\n").includes("Nothing is connected"));
+  assert.equal(introduction.join("\n").includes("list_sessions"), false);
 });
 
 test("the greeting is one append's worth of instruction", () => {
