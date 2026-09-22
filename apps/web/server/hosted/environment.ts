@@ -17,8 +17,6 @@ import { POSTHOG_ENVIRONMENT } from "./posthog.js";
 export interface HostedEnvironmentValues {
   /** Luke's own OpenAI key; absent means the hosted tier is off and every endpoint answers 503. */
   readonly openAiKey: Redacted.Redacted | undefined;
-  /** A deployment-configured model for the hosted brain's turns; the brain's own default otherwise. */
-  readonly brainModel: string | undefined;
   /** The analytics processor's own deletion key; absent means there is no person to erase. */
   readonly posthogPersonalApiKey: Redacted.Redacted | undefined;
   /** The analytics project the personal key deletes from; absent means there is nothing to erase it with. */
@@ -89,7 +87,6 @@ export const hostedEnvironment = Layer.effect(
   Effect.map(
     Config.all({
       apiKey: Config.option(Config.Redacted(HOSTED_OPENAI_ENVIRONMENT.API_KEY)),
-      brainModel: Config.option(Config.String(HOSTED_OPENAI_ENVIRONMENT.BRAIN_MODEL)),
       posthogPersonalApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
       posthogProjectId: Config.option(Config.String(POSTHOG_ENVIRONMENT.PROJECT_ID)),
       posthogApiHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.API_HOST)),
@@ -106,7 +103,6 @@ export const hostedEnvironment = Layer.effect(
     }),
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
-      brainModel: present(read.brainModel),
       posthogPersonalApiKey: presentRedacted(read.posthogPersonalApiKey),
       posthogProjectId: present(read.posthogProjectId),
       posthogApiHost: present(read.posthogApiHost),

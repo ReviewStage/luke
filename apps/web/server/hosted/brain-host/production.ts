@@ -41,12 +41,6 @@ import type { CloudActionExecutor } from "./performer.js";
  */
 
 /**
- * The model the hosted brain runs on when the deployment names none: the one
- * default every brain turn shares.
- */
-const DEFAULT_BRAIN_MODEL = BRAIN_OPENAI_DEFAULTS.MODEL;
-
-/**
  * What a seam over the ambient client answers: an effect the caller composes
  * into whatever it already runs, so the edge serving the request is the one
  * place the client behind it is provided.
@@ -155,7 +149,7 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           ? undefined
           : {
               apiKey: environment.openAiKey,
-              modelId: environment.brainModel ?? DEFAULT_BRAIN_MODEL,
+              modelId: BRAIN_OPENAI_DEFAULTS.MODEL,
             },
       embedder: () =>
         environment.openAiKey === undefined ? undefined : hostedEmbedder(environment.openAiKey),

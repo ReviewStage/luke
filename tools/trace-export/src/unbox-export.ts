@@ -16,7 +16,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { hostedBrainToolCatalog } from "@sidecar/brain";
+import { BRAIN_OPENAI_DEFAULTS, hostedBrainToolCatalog } from "@sidecar/brain";
 import {
   TRACE_DIRECTION,
   TRACE_ENTRY_KIND,
@@ -56,13 +56,6 @@ const readsTraceEntryKind = Schema.is(TraceEntryKindSchema);
 /** The exchange before any delegation has no id of its own; a segment that closes with the session is named for it. */
 const SESSION_GENERATION_NAME = "session";
 const BRAIN_GENERATION_NAME = "brain-turn";
-/**
- * A hosted brain turn records no model, because the service's build owns that
- * choice and the desktop never learns it; the export shows the keyed default
- * rather than a blank, since the viewer requires a model on every generation.
- */
-const UNKNOWN_BRAIN_MODEL = "gpt-5.6-terra";
-
 const MESSAGE_ROLE = {
   USER: "user",
   ASSISTANT: "assistant",
@@ -388,7 +381,8 @@ function applyBrainEntry(state: ExportState, entry: WireRecord): void {
   state.events.push({
     type: "generation",
     name: BRAIN_GENERATION_NAME,
-    model: text(entry.model) ?? UNKNOWN_BRAIN_MODEL,
+    // A hosted brain turn records no model; every turn runs on the brain's one model.
+    model: BRAIN_OPENAI_DEFAULTS.MODEL,
     provider: "openai",
     metrics: {
       // The viewer reads latency in seconds; the trace stamps milliseconds.

@@ -7,8 +7,6 @@
 
 export const HOSTED_OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
-  /** The hosted brain host's model, under the same convention; the build's own default otherwise. */
-  BRAIN_MODEL: "LUKE_BRAIN_MODEL",
 } as const;
 
 export const HOSTED_OPENAI_DEFAULTS = {
