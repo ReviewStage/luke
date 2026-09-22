@@ -3,7 +3,7 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import { Result, Schema } from "effect";
 import { test } from "vitest";
 import { APP_SETTING_ID, AppSettingIdSchema } from "./app-settings.js";
-import { APP_SETTING_KIND, APP_UPDATE_ACTION } from "./guide.js";
+import { APP_PANEL_TAB, APP_SETTING_KIND } from "./guide.js";
 
 const NOTHING_ANY_VOCABULARY_HOLDS: readonly UnparsedWireValue[] = [
   "",
@@ -31,6 +31,6 @@ function settlesVocabulary<Member extends string>(
 test("a setting id is one of the ids the build declares", () => {
   settlesVocabulary(AppSettingIdSchema, Object.values(APP_SETTING_ID), [
     APP_SETTING_KIND.TOGGLE,
-    APP_UPDATE_ACTION.CHECK,
+    APP_PANEL_TAB.SESSIONS,
   ]);
 });

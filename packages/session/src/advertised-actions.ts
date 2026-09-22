@@ -13,17 +13,15 @@ export const ACTION_KIND = {
   ADD_AGENT: "add-agent",
   RENAME_SESSION: "rename-session",
   RENAME_WORKSPACE: "rename-workspace",
-  OPEN: "open",
   CREATE_WORKSPACE: "create-workspace",
 } as const;
 
 export type ActionKind = (typeof ACTION_KIND)[keyof typeof ACTION_KIND];
 
 /**
- * The five kinds an observation can advertise. The other two are not a
- * session's to offer: an open follows the address the observation already
- * reported and needs no endpoint at all, and a creation is validated against
- * the projects a provider listed rather than against any one session.
+ * The five kinds an observation can advertise. The sixth is not a session's
+ * to offer: a creation is validated against the projects a provider listed
+ * rather than against any one session.
  */
 export type AdvertisedActionKind =
   | typeof ACTION_KIND.MESSAGE

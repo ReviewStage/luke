@@ -195,7 +195,6 @@ final class ConversationToolRowTests: XCTestCase {
         let tools: [(String, ConversationActionKind)] = [
             ("send_session_message", .message),
             ("run_session_control", .control),
-            ("open_session", .open),
             ("add_workspace_agent", .addAgent),
             ("rename_workspace", .renameWorkspace),
             ("rename_session", .renameSession),
@@ -206,15 +205,6 @@ final class ConversationToolRowTests: XCTestCase {
             XCTAssertEqual(row.chip?.text, "Fixture session", tool)
             XCTAssertEqual(row.providerId, "conductor", tool)
         }
-    }
-
-    func testAnOpenNamesTheApplicationTheEnvelopeResolved() throws {
-        var target = fixtureTarget
-        target["applicationId"] = .string("cursor")
-        let row = try XCTUnwrap(ConversationToolRow(part: part("open_session", output: accepted(target: target)), roster: []))
-        XCTAssertEqual(row.runs.count, 3)
-        let bare = try XCTUnwrap(ConversationToolRow(part: part("open_session", output: accepted(target: fixtureTarget)), roster: []))
-        XCTAssertEqual(bare.runs.count, 2)
     }
 
     func testTheSentenceReadsTheChipsNameInItsPlace() throws {

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import {
   ACTION_KIND as ADVERTISED_ACTION_KIND,
   normalizeSession,
-  SESSION_APPLICATION_ID,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type Session,
@@ -67,7 +66,6 @@ const observed: Session = normalizeSession(
 const SESSION_ACTIONS: readonly CarriedAction<SessionActionKind>[] = [
   { kind: ACTION_KIND.MESSAGE, identity: IDENTITY, text: "go ahead" },
   STOP_ACTION,
-  { kind: ACTION_KIND.OPEN, identity: IDENTITY, applicationId: SESSION_APPLICATION_ID.CONDUCTOR },
   { kind: ACTION_KIND.ADD_AGENT, identity: IDENTITY, agent: "claude" },
   { kind: ACTION_KIND.RENAME_WORKSPACE, identity: IDENTITY, name: "Flaky test" },
   { kind: ACTION_KIND.RENAME_SESSION, identity: IDENTITY, name: "Flaky test chat" },
@@ -85,7 +83,6 @@ test("the target snapshot is the roster's picture at execution: identity, title,
   assert.deepEqual(snapshots, [
     session,
     { ...session, controlKind: SESSION_CONTROL_KIND.STOP, controlLabel: "Stop" },
-    { ...session, applicationId: SESSION_APPLICATION_ID.CONDUCTOR },
     session,
     session,
     session,

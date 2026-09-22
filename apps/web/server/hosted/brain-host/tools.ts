@@ -10,7 +10,6 @@ import { Effect } from "effect";
 import type { ToolContext as EveToolContext, ToolDefinition } from "eve/tools";
 import {
   ACTION_REFUSAL,
-  ACTION_TOOL,
   type ActionToolModule,
   ANNOUNCE_TOOL,
   type AnnounceToolModule,
@@ -63,10 +62,8 @@ import type { HostedTranscriptReads } from "./transcript.js";
  */
 
 /**
- * What the service cannot perform is not offered: the tools that reach a
- * machine — an open, an app setting, the panel, the feedback composer, the
- * updater — and one group, skills, behind a seam the service does not wire.
- * Delegation is offered: the four session tools reach the children access
+ * What the service cannot perform is not offered: one group, skills, behind a
+ * seam the service does not wire. Delegation is offered: the four session tools reach the children access
  * below, and the turn's own layer (`turnToolPolicy`) caps it at one level
  * by withholding the whole sessions group from a child's task, as it
  * withholds `announce` from an ask and from a child's task, and the message
@@ -77,16 +74,7 @@ import type { HostedTranscriptReads } from "./transcript.js";
  * written the way every other workspace file is.
  */
 const HOSTED_TOOL_POLICY: ToolPolicyLayers = {
-  agent: {
-    deny: [
-      `${GROUP_PREFIX}${TOOL_GROUP.SKILLS}`,
-      ACTION_TOOL.OPEN_SESSION,
-      ACTION_TOOL.CHANGE_APP_SETTING,
-      ACTION_TOOL.SHOW_PANEL,
-      ACTION_TOOL.OPEN_FEEDBACK_COMPOSER,
-      ACTION_TOOL.RUN_UPDATE_ACTION,
-    ],
-  },
+  agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.SKILLS}`] },
 };
 
 const POLICY_BY_TRIGGER = new Map<BrainTurnTrigger, EffectiveToolPolicy>();

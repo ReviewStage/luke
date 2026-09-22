@@ -96,10 +96,8 @@ test("the fixture scenarios draw every session action kind, folded or as a row o
     "control",
     "create-workspace",
     "message",
-    "open",
     "rename-session",
     "rename-workspace",
-    "setting",
   ]);
   assert.ok(count(markup, "data-tool-calls-fold", "settled") >= 1);
   assert.ok(count(markup, "data-tool-calls-fold", "running") >= 1);
@@ -192,7 +190,7 @@ test("a message's tool calls fold under a count once there are two, open while i
   assert.equal(count(settled, "data-tool-calls-fold", "settled"), 1);
   assert.equal((settled.match(/<details class="conversation-actions-fold" open/g) ?? []).length, 0);
   assert.equal((settled.match(/<details class="conversation-actions-fold"/g) ?? []).length, 1);
-  assert.equal(actionRows(settled), 9);
+  assert.equal(actionRows(settled), 8);
   // The fold stands ahead of the reply it explains: after the ask and before Luke's words.
   const [beforeFold, afterFold] = settled.split(TOOL_FOLD_OPENING);
   assert.ok(beforeFold !== undefined && afterFold !== undefined);
@@ -255,14 +253,13 @@ test("the brain's own tools draw as rows of the turn's working, each led by a ma
   ]) {
     assert.equal(count(working, "data-tool-kind", kind), 1, kind);
   }
-  // The one app action is an action, and the reads are not.
-  assert.equal(actionRows(working), 1);
-  assert.equal(count(working, "data-action-kind", "setting"), 1);
+  // The reads and writes of the turn's working are no actions.
+  assert.equal(actionRows(working), 0);
   // Every row wears a mark, and the refused write alone carries a reason.
-  assert.equal(count(working, "class", "conversation-action-mark"), 8);
+  assert.equal(count(working, "class", "conversation-action-mark"), 7);
   assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.REFUSED), 1);
   assert.equal(count(working, "class", "conversation-action-reason"), 1);
-  assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 7);
+  assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 6);
 });
 
 test("the wait is the thread's last object: once after the newest turn by queue instant, and never for a pending turn a later one was queued after", () => {

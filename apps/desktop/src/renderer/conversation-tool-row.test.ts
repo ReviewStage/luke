@@ -82,10 +82,8 @@ test("every action kind the fixtures carry composes an action row, and a brain t
       ACTION_KIND.CONTROL,
       ACTION_KIND.CREATE_WORKSPACE,
       ACTION_KIND.MESSAGE,
-      ACTION_KIND.OPEN,
       ACTION_KIND.RENAME_SESSION,
       ACTION_KIND.RENAME_WORKSPACE,
-      ACTION_KIND.SETTING,
     ].sort(),
   );
   // A transcript read names its session as a chip, the way an action's row does, under the provider's mark.
@@ -222,58 +220,6 @@ test("the brain's own tools are worded by their arguments, never their answers, 
   );
   assert.equal(failed.status, TOOL_ROW_STATUS.FAILED);
   assert.equal(failed.reason, "boom");
-});
-
-test("an action on Luke himself is worded by its request, a setting by its guide id in words", () => {
-  const words = (row: ToolRow) => row.runs.map((run) => ("text" in run ? run.text : "")).join("");
-  const setting = toolRow(
-    part(
-      "change_app_setting",
-      { setting_id: "open_at_login", value: "off" },
-      answered({ status: ACTION_OUTPUT_STATUS.ACCEPTED }),
-    ),
-    FIXTURE_ROSTER,
-  );
-  assert.equal(setting.kind, ACTION_KIND.SETTING);
-  assert.equal(words(setting), 'Changed the open at login setting to "off"');
-  assert.equal(setting.status, TOOL_ROW_STATUS.ACCEPTED);
-  assert.equal(
-    words(
-      toolRow(
-        part(
-          "change_app_setting",
-          { setting_id: "invented", value: "1" },
-          answered({ status: "accepted" }),
-        ),
-        FIXTURE_ROSTER,
-      ),
-    ),
-    'Changed the invented setting to "1"',
-  );
-  assert.equal(
-    words(toolRow(part("show_panel", {}, answered({ status: "accepted" })), FIXTURE_ROSTER)),
-    "Showed the sessions tab",
-  );
-  assert.equal(
-    words(
-      toolRow(
-        part("run_update_action", { action: "check" }, answered({ status: "accepted" })),
-        FIXTURE_ROSTER,
-      ),
-    ),
-    "Checked for updates",
-  );
-  const refused = toolRow(
-    part(
-      "open_feedback_composer",
-      { kind: "feedback" },
-      answered({ status: ACTION_OUTPUT_STATUS.REFUSED, reason: "not run here" }),
-    ),
-    FIXTURE_ROSTER,
-  );
-  assert.equal(words(refused), "Opened the feedback composer");
-  assert.equal(refused.status, TOOL_ROW_STATUS.REFUSED);
-  assert.equal(refused.reason, "not run here");
 });
 
 test("a chip names a held session by the roster and opens exactly when its row would", () => {
@@ -577,17 +523,17 @@ test("part state and envelope status are different questions, and each has its o
   assert.notEqual(unreadable?.reason, undefined);
   const noted = toolRow(
     part(
-      "open_session",
-      { ...HELD, application: "claude" },
+      "send_session_message",
+      message,
       answered({
         status: ACTION_OUTPUT_STATUS.ACCEPTED,
-        note: "Opened in Claude.",
+        note: "Delivered on the next turn.",
         warning: "Slowly.",
       }),
     ),
     FIXTURE_ROSTER,
   );
-  assert.equal(noted?.note, "Opened in Claude.");
+  assert.equal(noted?.note, "Delivered on the next turn.");
   assert.equal(noted?.warning, "Slowly.");
   assert.equal(noted?.reason, undefined);
 });

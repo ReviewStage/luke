@@ -8,25 +8,16 @@
  */
 
 import type {
-  AppGuideSetting,
-  AppPanelTab,
-  AppUpdateAction,
-  FeedbackComposerKind,
-  SessionListSort,
-} from "@sidecar/guide";
-import type {
   ACTION_KIND as ADVERTISED_ACTION_KIND,
   AdvertisedControl,
-  SessionApplicationId,
   SessionIdentity,
   WorkspaceAgentSelection,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 
-/** Which process an action is about: a session, or Luke himself. */
+/** Which process an action is about: a session, which is the one family left now that nothing reaches the machine. */
 export const ACTION_FAMILY = {
   SESSION: "session",
-  APP: "app",
 } as const;
 
 export type ActionFamily = (typeof ACTION_FAMILY)[keyof typeof ACTION_FAMILY];
@@ -40,22 +31,13 @@ export type ActionFamily = (typeof ACTION_FAMILY)[keyof typeof ACTION_FAMILY];
 export const ACTION_KIND = {
   MESSAGE: "message",
   CONTROL: "control",
-  OPEN: "open",
   CREATE_WORKSPACE: "create-workspace",
   ADD_AGENT: "add-agent",
   RENAME_WORKSPACE: "rename-workspace",
   RENAME_SESSION: "rename-session",
-  SETTING: "setting",
-  PANEL: "panel",
-  FEEDBACK: "feedback",
-  UPDATE: "update",
 } as const satisfies typeof ADVERTISED_ACTION_KIND & Record<string, string>;
 
 export type ActionKind = (typeof ACTION_KIND)[keyof typeof ACTION_KIND];
-
-/** The two whole-list scopes of a spoken panel ask beyond the locations. */
-export const SESSION_LIST_ALL = "all";
-export const SESSION_LIST_VOICE = "voice";
 
 /**
  * An action payload that can never be mistaken for a refusal: the two shapes are
@@ -65,17 +47,12 @@ type Carried<T> = T & { status?: never; reason?: never };
 
 /**
  * What each kind of action carries once admitted. Every field here is either the
- * developer's own bounded text or a value read back out of what the roster,
- * the projects list, or the guide advertised — never a caller's copy of one.
+ * developer's own bounded text or a value read back out of what the roster or
+ * the projects list advertised — never a caller's copy of one.
  */
 export interface ActionPayloads {
   [ACTION_KIND.MESSAGE]: { identity: SessionIdentity; text: string };
   [ACTION_KIND.CONTROL]: { identity: SessionIdentity; control: AdvertisedControl };
-  [ACTION_KIND.OPEN]: {
-    identity: SessionIdentity;
-    /** The one app the developer named to open it in, resolved to its id. */
-    applicationId?: SessionApplicationId;
-  };
   [ACTION_KIND.CREATE_WORKSPACE]: {
     providerId: string;
     providerProjectId: string;
@@ -100,27 +77,6 @@ export interface ActionPayloads {
   [ACTION_KIND.RENAME_WORKSPACE]: { identity: SessionIdentity; name: string };
   /** The chat's new name, exactly as the developer chose it. */
   [ACTION_KIND.RENAME_SESSION]: { identity: SessionIdentity; name: string };
-  [ACTION_KIND.SETTING]: {
-    setting: AppGuideSetting;
-    value: string;
-    /** The effort riding the new value, when the developer named both. */
-    effort?: string;
-  };
-  [ACTION_KIND.PANEL]: {
-    tab: AppPanelTab;
-    /** The validated narrowing, combined like the chips: OR within an axis, AND across. */
-    filters?: readonly string[];
-    sort?: SessionListSort;
-    /** Words to search the list for, exactly as the developer asked them. */
-    query?: string;
-  };
-  /**
-   * Opens the composer and nothing else: `draft` is at most the developer's
-   * own words, placed only into an empty note, and what the composer holds
-   * leaves only by its own Send button — no action here sends.
-   */
-  [ACTION_KIND.FEEDBACK]: { composer: FeedbackComposerKind; draft?: string };
-  [ACTION_KIND.UPDATE]: { action: AppUpdateAction };
 }
 
 /** One action ready for the performer that carries it, for one kind or any of them. */
@@ -128,14 +84,8 @@ export type CarriedAction<Kind extends ActionKind = ActionKind> = {
   [K in Kind]: Carried<{ kind: K } & ActionPayloads[K]>;
 }[Kind];
 
-export type SessionActionKind =
-  | typeof ACTION_KIND.MESSAGE
-  | typeof ACTION_KIND.CONTROL
-  | typeof ACTION_KIND.OPEN
-  | typeof ACTION_KIND.CREATE_WORKSPACE
-  | typeof ACTION_KIND.ADD_AGENT
-  | typeof ACTION_KIND.RENAME_WORKSPACE
-  | typeof ACTION_KIND.RENAME_SESSION;
+/** Every kind is a session's, the app's own having gone with the machine-reaching tools. */
+export type SessionActionKind = ActionKind;
 
 /**
  * One ask at an intake, before anything about it has been read: the kind names

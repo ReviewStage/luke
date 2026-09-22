@@ -38,23 +38,14 @@ test("follow-ups queue behind a turn under way, and the account bearer is checke
   assert.equal(Array.isArray(channel.auth), false);
 });
 
-test("the hosted policy withholds the machine's tools and skills, keeps the notebook's reads and writes, offers delegation, offers announce only to an observation, and the message send only to an ask", () => {
+test("the hosted policy withholds skills, keeps the notebook's reads and writes, offers delegation, offers announce only to an observation, and the message send only to an ask", () => {
   const ask = hostedTurnPolicy(BRAIN_TURN_TRIGGER.ASK);
   const observation = hostedTurnPolicy(BRAIN_TURN_TRIGGER.ROSTER);
   const askNames = ask.allowed.map((tool) => tool.schema.name);
   const observationNames = observation.allowed.map((tool) => tool.schema.name);
 
-  for (const denied of [
-    ACTION_TOOL.OPEN_SESSION,
-    ACTION_TOOL.CHANGE_APP_SETTING,
-    ACTION_TOOL.SHOW_PANEL,
-    ACTION_TOOL.OPEN_FEEDBACK_COMPOSER,
-    ACTION_TOOL.RUN_UPDATE_ACTION,
-    BRAIN_TOOL.LOAD_SKILL,
-  ]) {
-    assert.equal(askNames.includes(denied), false);
-    assert.equal(observationNames.includes(denied), false);
-  }
+  assert.equal(askNames.includes(BRAIN_TOOL.LOAD_SKILL), false);
+  assert.equal(observationNames.includes(BRAIN_TOOL.LOAD_SKILL), false);
   for (const kept of [
     ACTION_TOOL.RUN_SESSION_CONTROL,
     BRAIN_TOOL.LIST_SESSIONS,

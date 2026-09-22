@@ -44,13 +44,13 @@ import { CLOUD_OBSERVE_FAILURE, type CloudObserveFailure } from "./cloud-observe
 import { type ObservedRoster, rosterProvider } from "./observed-roster.js";
 
 /**
- * The actions a remote client can ask of a cloud session: the session action kinds
- * this build's own action vocabulary names, less the open, which is not a write
- * and reaches no endpoint. One vocabulary for the capability map below, for
- * every route that names an action, and for admission, so a route cannot invent
- * an action the map does not govern or admission does not know.
+ * The actions a remote client can ask of a cloud session: the session action
+ * kinds this build's own action vocabulary names, every one a write. One
+ * vocabulary for the capability map below, for every route that names an
+ * action, and for admission, so a route cannot invent an action the map does
+ * not govern or admission does not know.
  */
-export type HostedSessionActionKind = Exclude<SessionActionKind, typeof ACTION_KIND.OPEN>;
+export type HostedSessionActionKind = SessionActionKind;
 
 /**
  * The two actions that start an agent, and so the two the developer's stored

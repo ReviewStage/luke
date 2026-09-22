@@ -202,7 +202,7 @@ test("the notebook stands in the catalog under the memory group as the provider'
   const deniedActions = resolveToolPolicy(catalog, {
     agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.ACTIONS}`] },
   });
-  assert.equal(deniedActions.allows(ACTION_TOOL.CHANGE_APP_SETTING), false);
+  assert.equal(deniedActions.allows(ACTION_TOOL.RUN_SESSION_CONTROL), false);
   assert.equal(deniedActions.allows(NOTEBOOK_MEMORY_TOOL.SEARCH), true);
 });
 

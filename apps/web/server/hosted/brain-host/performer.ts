@@ -40,9 +40,8 @@ import type { HostedRoster } from "./roster.js";
  * carrier below. The carrier reaches the cloud action execution for a
  * session or a workspace, which admits the action once more against a fresh
  * pass before the provider's documented endpoint sees it. Nothing here
- * reaches a machine: an open and an app action have no performer on the
- * service, the tool policy offers none of them, and one that still arrives
- * is refused with a reason the model can read.
+ * reaches a machine: every action kind is a write the service carries to a
+ * provider, and the tools that once reached the developer's Mac are gone.
  */
 
 /** One session action carried to its provider through the service's own execution, admitted there again. */
@@ -69,7 +68,6 @@ interface HostedCarrierDependencies {
 }
 
 const REFUSAL = {
-  NOT_HERE: "Not run: this action reaches a machine, and the service has none.",
   NO_KEY: "No provider key is stored for that session's provider.",
   NOT_CLOUD: "Not run: that session's provider is not one the service reaches.",
 } as const;
@@ -122,11 +120,6 @@ function carriedResult(
   }
 }
 
-/** The kinds the service carries to a provider: every session action but the open, which reaches a machine. */
-function hostedSessionKind(kind: SessionActionKind): HostedSessionActionKind | undefined {
-  return kind === ACTION_KIND.OPEN ? undefined : kind;
-}
-
 /** The stored snapshot as the execution admits against it, named only when one stands. */
 function storedRosterOf(roster: HostedRoster): { roster?: ObservedRoster } {
   return roster.stored !== undefined ? { roster: roster.stored } : {};
@@ -141,8 +134,7 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
     Effect.gen(function* () {
       const roster = yield* dependencies.roster();
       const target = actionTargetSnapshot(action, roster.sessions);
-      const kind = hostedSessionKind(action.kind);
-      if (kind === undefined) return refusedActionOutput(REFUSAL.NOT_HERE, target);
+      const kind = action.kind;
       const providerId = "identity" in action ? action.identity.providerId : action.providerId;
       if (!isCloudAgentProviderId(providerId))
         return refusedActionOutput(REFUSAL.NOT_CLOUD, target);
@@ -167,9 +159,6 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
       });
       return actionOutputFromResult(carriedResult(action, executed), target);
     });
-
-  const notHere = (): Effect.Effect<ActionOutputEnvelope> =>
-    Effect.sync(() => refusedActionOutput(REFUSAL.NOT_HERE));
 
   return {
     admission: () =>
@@ -202,11 +191,6 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
           [ACTION_KIND.RENAME_WORKSPACE]: (carried) =>
             carrySessionAction(carried, fields, standing),
           [ACTION_KIND.RENAME_SESSION]: (carried) => carrySessionAction(carried, fields, standing),
-          [ACTION_KIND.OPEN]: notHere,
-          [ACTION_KIND.SETTING]: notHere,
-          [ACTION_KIND.PANEL]: notHere,
-          [ACTION_KIND.FEEDBACK]: notHere,
-          [ACTION_KIND.UPDATE]: notHere,
         });
       });
     },
