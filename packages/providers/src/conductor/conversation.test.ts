@@ -345,50 +345,6 @@ test("an opening read walks to the end of a long transcript one page at a time",
   );
 });
 
-test("a re-opened chat costs one request, from where the last read reached", async () => {
-  const api = longConversationApi();
-  const plugin = pluginFor(api.layer);
-  await observeAt(plugin);
-  await runTest(dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID }));
-  const requestsBefore = api.requests.length;
-
-  const result = await runTest(
-    dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID }),
-  );
-
-  assert.equal(result.status, "accepted");
-  if (result.status !== "accepted") return;
-  // One page before the end this session's last read reached is where the
-  // walk starts, so a re-open asks once and answers the newest page.
-  const reads = api.requests.slice(requestsBefore);
-  assert.equal(reads.length, 1);
-  assert.equal(reads[0]?.searchParams.get("offset"), "20");
-  assert.equal(result.messages.length, 100);
-  assert.equal(result.messages.at(-1)?.id, longMessageUuid(119));
-  assert.equal(result.firstOffset, 20);
-  assert.equal(result.hasOlder, true);
-});
-
-test("a transcript cleared behind the cached end is walked again from its start", async () => {
-  const api = longConversationApi();
-  const plugin = pluginFor(api.layer);
-  await observeAt(plugin);
-  await runTest(dispatchConversation(plugin, { providerSessionId: IDLE_SESSION_UUID }));
-  const emptied = conversationApi({ storedMessages: [] });
-  const restarted = pluginFor(emptied.layer);
-  await observeAt(restarted);
-
-  // A cached offset past a transcript the developer cleared on Conductor's
-  // own surface is the one backtrack, and it is bounded to one.
-  const first = await runTest(
-    dispatchConversation(restarted, { providerSessionId: IDLE_SESSION_UUID }),
-  );
-  assert.equal(first.status, "accepted");
-  if (first.status !== "accepted") return;
-  assert.equal(first.messages.length, 0);
-  assert.equal(first.firstOffset, 0);
-});
-
 test("a scroll to the top reads the history just before what the screen holds", async () => {
   const api = longConversationApi();
   const plugin = pluginFor(api.layer);

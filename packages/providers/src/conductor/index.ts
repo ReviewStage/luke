@@ -4,7 +4,6 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
 import { conductorActions } from "./actions.js";
 import {
-  conductorConversationEnds,
   readConductorConversation,
   readConductorTranscript,
   readConductorTranscriptSince,
@@ -22,7 +21,6 @@ export interface ConductorPluginOptions {
   baseUrl?: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  minimumRefreshIntervalMs?: number;
   /**
    * The roster the brain's transcript reads answer for, when a host holds
    * one the plugin did not read itself: the hosted brain reads against the
@@ -49,32 +47,23 @@ export interface ConductorPluginOptions {
  * learn which roster chats gained transcript since its mark and carrying no
  * words, and the `transcriptSince` handler, reached by the brain's
  * observation turn for a chat that read named, behind the cursor Conductor's
- * own last answer handed back; between them they keep nothing but where in
- * each transcript the last read got to. None takes anything from a pass: the
+ * own last answer handed back; between them they keep nothing. None takes
+ * anything from a pass: the
  * pass still judges a cloud chat from what Conductor reports about it, and
  * the brain's own reads are what open its messages.
  */
 export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPlugin {
   /**
-   * What the identity read learned and the projects the latest pass listed.
-   * A creation ask is honoured only against these, so it can never name a
-   * project observation did not see; `cloudPass` clears them whenever the
-   * credential changes or is rejected, so nothing read as one user can be
-   * offered to another.
+   * The projects the latest pass listed. A creation ask is honoured only
+   * against these, so it can never name a project observation did not see.
    */
   const cache: ConductorPassCache = { projects: [] };
-  const ends = conductorConversationEnds();
 
   const pass = cloudPass({
     provider: CONDUCTOR_PROVIDER,
     defaultBaseUrl: CONDUCTOR_DEFAULT_API_URL,
     baseUrlEnvironmentVariable: CONDUCTOR_ENVIRONMENT.API_URL,
     ...options,
-    forget() {
-      cache.userId = undefined;
-      cache.projects = [];
-      ends.reached.clear();
-    },
     collect: (request, now) => conductorObservations(request, now, cache),
   });
 
@@ -102,12 +91,11 @@ export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPl
     actions: conductorActions(pass),
 
     reads: {
-      transcript: (providerSessionId) =>
-        readConductorTranscript(pass, ends, reported, providerSessionId),
+      transcript: (providerSessionId) => readConductorTranscript(pass, reported, providerSessionId),
       transcriptSince: (providerSessionId, cursor) =>
-        readConductorTranscriptSince(pass, ends, reported, providerSessionId, cursor),
+        readConductorTranscriptSince(pass, reported, providerSessionId, cursor),
       conversation: ({ request, observation }) =>
-        readConductorConversation(pass, ends, observation.providerSessionId, request),
+        readConductorConversation(pass, observation.providerSessionId, request),
       transcriptChanges: (request) => readConductorTranscriptChanges(reported, request),
     },
   };

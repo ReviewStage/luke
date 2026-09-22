@@ -66,7 +66,6 @@ type ProviderObservation = (typeof PROVIDER_OBSERVATION)[keyof typeof PROVIDER_O
 interface ProviderFixtureInput {
   /** A temporary directory seeded from `home/`; the provider's home for this case. */
   readonly home: string;
-  readonly minimumRefreshIntervalMs: number;
   /** Answers `undefined` for the no-key cases, and dies for the unreadable one. */
   readonly readApiKey: () => Effect.Effect<Redacted.Redacted | undefined>;
   /**
@@ -209,8 +208,6 @@ function admissionRequest(
 }
 
 const CONTRACT_API_KEY = "contract-initial-key";
-const REPLACEMENT_API_KEY = "contract-replacement-key";
-const REFRESH_INTERVAL_MS = 15_000;
 /** The one body key a POSTed read document rides under. */
 const READ_DOCUMENT_FIELD = "query";
 const UNSUPPORTED_MESSAGE_TEXT = "This message must never reach a provider.";
@@ -332,13 +329,10 @@ interface ContractCase {
   readonly api: FakeCloudApi;
   /** One observation pass, run at the case's instant: the pass reads the ambient `Clock`. */
   readonly observe: () => Promise<readonly ProviderSessionObservation[]>;
-  readonly setApiKey: (apiKey: string | undefined) => void;
-  readonly setNow: (now: number) => void;
 }
 
 interface CaseOptions {
   readonly readApiKey?: () => Effect.Effect<Redacted.Redacted | undefined>;
-  readonly minimumRefreshIntervalMs?: number;
 }
 
 /**
@@ -368,16 +362,12 @@ export function describeProviderContract(
 
   async function contractCase(t: TestContext, options: CaseOptions = {}): Promise<ContractCase> {
     const home = await temporaryDirectory(t, `luke-contract-${fixtures.providerId}`);
-    let now = fixtures.now;
-    let apiKey: string | undefined = CONTRACT_API_KEY;
+    const now = fixtures.now;
     await seedHome(root, home, now);
     const api = await recordedApi(root);
     const plugin = await factory({
       home,
-      minimumRefreshIntervalMs: options.minimumRefreshIntervalMs ?? 0,
-      readApiKey:
-        options.readApiKey ??
-        (() => Effect.succeed(apiKey === undefined ? undefined : Redacted.make(apiKey))),
+      readApiKey: options.readApiKey ?? (() => Effect.succeed(Redacted.make(CONTRACT_API_KEY))),
       api,
       sql: async (name) =>
         (await fs.readFile(path.join(root, "db", `${name}.sql`), "utf8")).replaceAll(
@@ -390,12 +380,6 @@ export function describeProviderContract(
       home,
       api,
       observe: () => runTest(atInstant(now)(plugin.observe())),
-      setApiKey: (replacement) => {
-        apiKey = replacement;
-      },
-      setNow: (replacement) => {
-        now = replacement;
-      },
     };
   }
 
@@ -605,19 +589,6 @@ export function describeProviderContract(
       assert.deepEqual(api.requests(), []);
     });
 
-    test(named("reads again at once under a credential the user just replaced"), async (t) => {
-      const contract = await contractCase(t, { minimumRefreshIntervalMs: 60_000 });
-
-      await contract.observe();
-      const requestsAfterFirstPass = contract.api.requests().length;
-      contract.setApiKey(REPLACEMENT_API_KEY);
-      const observed = await contract.observe();
-
-      assert.ok(contract.api.requests().length > requestsAfterFirstPass);
-      assert.ok(observed.length > 0);
-      assert.equal(contract.api.credentials().at(-1), REPLACEMENT_API_KEY);
-    });
-
     test(
       named("keeps what it read through a failure that ran, and drops it when refused"),
       async (t) => {
@@ -634,18 +605,6 @@ export function describeProviderContract(
         assert.deepEqual(afterRefusal, []);
       },
     );
-
-    test(named("asks nothing again inside its own refresh interval"), async (t) => {
-      const contract = await contractCase(t, { minimumRefreshIntervalMs: REFRESH_INTERVAL_MS });
-
-      const first = await contract.observe();
-      const requestsAfterFirstPass = contract.api.requests().length;
-      contract.setNow(fixtures.now + REFRESH_INTERVAL_MS / 3);
-      const throttled = await contract.observe();
-
-      assert.deepEqual(throttled, first);
-      assert.equal(contract.api.requests().length, requestsAfterFirstPass);
-    });
   }
 
   // "The read performs nothing and answers only for a session whose provider's

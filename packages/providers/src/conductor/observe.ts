@@ -64,16 +64,14 @@ import {
  * here — that is the developer's own ask, and it lives in `conversation.ts`.
  */
 
-/** What the identity read reported, kept for as long as the credential stands. */
+/** The projects the latest pass listed, which a creation is later held to. */
 export interface ConductorPassCache {
-  userId?: string | undefined;
   projects: readonly ConductorProject[];
 }
 
 /**
- * One pass, as the observations it answers with. The cache is the pass's own
- * — the identity read once per credential, the projects a creation is later
- * held to — and `cloudPass` clears it whenever the credential changes.
+ * One pass, as the observations it answers with. The cache is the pass's own:
+ * the projects a creation is later held to.
  */
 export const conductorObservations = /* @__PURE__ */ Effect.fn("providers/conductorObservations")(
   function* (
@@ -81,7 +79,7 @@ export const conductorObservations = /* @__PURE__ */ Effect.fn("providers/conduc
     now: number,
     cache: ConductorPassCache,
   ): Effect.fn.Return<readonly ProviderSessionObservation[], AdapterFailure> {
-    const userId = yield* identity(request, cache);
+    const userId = yield* identity(request);
     if (!userId) return [];
 
     // Every fan-out below is bounded by the page sizes in
@@ -188,15 +186,10 @@ export const conductorObservations = /* @__PURE__ */ Effect.fn("providers/conduc
   },
 );
 
-function identity(
-  request: CloudRequest,
-  cache: ConductorPassCache,
-): Effect.Effect<string | undefined, AdapterFailure> {
-  if (cache.userId) return Effect.succeed(cache.userId);
-  return Effect.map(request(CONDUCTOR_ROUTE.IDENTITY), (body) => {
-    cache.userId = textFromRecord(body, CONDUCTOR_FIELD.USER_ID);
-    return cache.userId;
-  });
+function identity(request: CloudRequest): Effect.Effect<string | undefined, AdapterFailure> {
+  return Effect.map(request(CONDUCTOR_ROUTE.IDENTITY), (body) =>
+    textFromRecord(body, CONDUCTOR_FIELD.USER_ID),
+  );
 }
 
 function listProjects(request: CloudRequest): Effect.Effect<ConductorProject[], AdapterFailure> {

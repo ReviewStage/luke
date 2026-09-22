@@ -316,7 +316,6 @@ export function pluginFor(
   overrides: {
     apiKey?: string | undefined;
     readApiKey?: () => Effect.Effect<Redacted.Redacted | undefined>;
-    minimumRefreshIntervalMs?: number;
     /** The roster the brain's reads answer for, when a host holds one the plugin did not read itself. */
     reported?: () => readonly ProviderSessionObservation[];
   } = {},
@@ -327,7 +326,6 @@ export function pluginFor(
     readApiKey: overrides.readApiKey ?? (() => Effect.succeed(sealed)),
     baseUrl: TEST_BASE_URL,
     httpClient,
-    minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
     ...(overrides.reported ? { reported: overrides.reported } : undefined),
   });
 }
