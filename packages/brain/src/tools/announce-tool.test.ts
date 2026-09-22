@@ -5,7 +5,7 @@ import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { ANNOUNCE_TOOL, type AnnounceToolContext } from "./announce-tool.js";
-import { BRAIN_TOOL, maximumBriefingLength } from "./names.js";
+import { BRAIN_TOOL } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
 
 function context() {
@@ -24,7 +24,7 @@ function context() {
   return { ctx, announced };
 }
 
-it.effect("announce takes the briefing alone, hands it on bounded, and answers accepted", () =>
+it.effect("announce takes the briefing alone, hands it on whole, and answers accepted", () =>
   Effect.gen(function* () {
     assert.equal(ANNOUNCE_TOOL.name, BRAIN_TOOL.ANNOUNCE);
     const node = emitJsonSchema(ANNOUNCE_TOOL.inputSchema);
@@ -34,11 +34,9 @@ it.effect("announce takes the briefing alone, hands it on bounded, and answers a
     const { ctx, announced } = context();
     const answer = yield* ANNOUNCE_TOOL.execute({ briefing: "Checkout wants a decision." }, ctx);
     assert.deepEqual(answer, { status: ACTION_RESULT_STATUS.ACCEPTED });
-    yield* ANNOUNCE_TOOL.execute({ briefing: "x".repeat(maximumBriefingLength + 40) }, ctx);
-    assert.deepEqual(
-      announced.map((briefing) => briefing.length),
-      ["Checkout wants a decision.".length, maximumBriefingLength],
-    );
+    const long = "x".repeat(1_000);
+    yield* ANNOUNCE_TOOL.execute({ briefing: long }, ctx);
+    assert.deepEqual(announced, ["Checkout wants a decision.", long]);
   }),
 );
 

@@ -13,4 +13,3 @@ export {
   SESSION_LIST_SORT,
   type SessionListSort,
 } from "./guide.js";
-export { LUKE_PERSONA } from "./persona.js";

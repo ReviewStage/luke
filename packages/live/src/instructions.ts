@@ -12,69 +12,32 @@ export type LiveScene = (typeof LIVE_SCENE)[keyof typeof LIVE_SCENE];
 export const LiveSceneSchema = Schema.Literals(Object.values(LIVE_SCENE));
 
 /**
- * The Live prompting guide's starter template with its brackets filled in and
- * one block beside them. The guide's instruction for a migration from Realtime
- * is to start here and only add a rule once listening shows a behavior that
- * needs changing, so of the optional controls in its appendix — exact wording,
- * fixed response sequences, turn-taking, tool narration — only the response
- * length stands, in the block after the interruption policy, and the rest are
- * absent rather than tuned. That block is here because the model paraphrases
- * every commentary it is handed (the delegation guide has the backend return
- * facts and the voice choose the words), so the spoken words are chosen under
- * these instructions and under nothing in `@sidecar/guide`'s persona, which
- * shapes what the brain hands over and not how it is said. Each line of the
- * block is one labelled policy stating one behavior, the template's own shape
- * ("Backchannel policy: ..."), because the guide has a rule land best when it
- * is one specific behavior on its own line; none carries a sample line. The
- * one departure from the words the guide prints is "chief of staff" where the
- * template reads "voice assistant".
+ * The guide's Delegation section asks for concrete conditions, so the
+ * capabilities name the backend's tools themselves rather than a summary of
+ * them: the voice is choosing whether one call is needed, and a tool it
+ * cannot name is a capability it will not reach for. The closing two lines
+ * are the template's own. Note that the list is written out here rather than
+ * read from the catalog, because `@sidecar/actions` already reaches this
+ * package and an edge back would be a cycle, so a tool added to the catalog
+ * is added here by hand or the voice never delegates for it.
  */
-const instructionsFor = (delegationPolicy: string): string =>
-  `You are Luke, a calm, friendly chief of staff for the developer's coding agents.
-Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
-If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
-
-Backchannel policy: Use frequent, eager backchannels. Acknowledge naturally without competing with the main response.
-
-Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
-
-Response length: Give one or two short sentences a turn.
-Ordering policy: Say the thing first, then what happened to it.
-Naming policy: Call an agent by what it is doing, in a few plain words, never by its title, branch, or id.
-Numbers policy: Say no number unless the number is the point.
-Opening policy: Start with the news. Do not open with a greeting, an apology, or a heads-up.
-Variety policy: Do not start two replies the same way.
-Formatting policy: Speak plain sentences, with no lists or formatting.
-Greeting exception: A greeting these instructions ask you to give follows its own words and length. Everything else you say follows the policies above.
-
-${delegationPolicy}`;
-
-/**
- * The guide's Delegation section asks for concrete conditions — "the user asks
- * to change a booking" rather than "delegate when needed" — and fills its own
- * example the same way, so the capabilities and both lists name what Luke's
- * backend actually does. The closing two lines are the template's own, as is
- * the line about answering from a still-current result: the session is seeded
- * with the desk and told again when it moves, so which agents run, wait,
- * finished, or failed is a question it already holds the answer to.
- */
-const DESKTOP_DELEGATION_POLICY = `Delegation policy:
+const DELEGATION_POLICY = `Delegation policy:
 Backend tools:
-- Coding agents: read what each agent is doing, has finished, or is waiting on, and answer what needs the developer.
-- Actions: message an agent, open one, answer what it is waiting on, rename or create a workspace, move or comment on an issue.
-- Memory and settings: what the developer asked to remember, their settings, calendar holds, and issue tracker.
+- Read the desk: list_sessions, read_transcript, sessions_list, sessions_history.
+- Act on a chat: send_session_message, run_session_control, open_session.
+- Workspaces and names: create_workspace, add_workspace_agent, rename_workspace, rename_session.
+- The app itself: change_app_setting, show_panel, open_feedback_composer, run_update_action.
+- Memory: read_workspace_file, write_workspace_file, append_daily_note, list_daily_notes, memory_search, memory_get.
+- Hand off work: sessions_spawn, subagents.
+- Speak and load guidance: announce, load_skill.
 
 Delegate to the backend when:
-- The developer asks about an agent, what needs them, an issue, a setting, or something they asked you to remember.
-- The developer asks you to message, open, answer, rename, create, move, or comment.
-- A correction changes a request already in progress.
-- The answer needs careful reasoning beyond a simple reply.
+- The request needs a backend capability or careful reasoning.
+- A correction changes the work already requested.
 
 Do not delegate to the backend when:
-- The developer greets you, makes small talk, or asks you to repeat a result already given.
-- You can answer from the conversation or a still-current result, such as which agents are
-  running, waiting on the developer, finished, or failed.
-- You cannot tell what they are asking for without a brief clarification.
+- You can answer from the conversation or a still-current result.
+- You need a brief clarification to understand the request.
 
 Delegate before giving an answer that depends on backend work.
 Do not guess the result while waiting.`;
@@ -82,7 +45,7 @@ Do not guess the result while waiting.`;
 /**
  * Nothing answers a delegation during the introduction: the accountless
  * endpoint wires no carrier, so a model told it had backend tools would emit a
- * delegation nobody reads and promise an action it cannot reach — over a seed
+ * delegation nobody reads and promise an action it cannot reach, over a seed
  * that carries the developer's own detected session titles, which is exactly
  * what they will ask about first. This is the one thing the two scenes cannot
  * share.
@@ -98,8 +61,34 @@ Do not delegate to the backend when:
 - The developer asks anything at all: answer from the conversation, and where an answer would
   need their agents or an action, say what you will do for them once they sign in.`;
 
+/**
+ * The Live prompting guide's starter template, cut to who is speaking and
+ * how, the two policies about holding a conversation, and the delegation
+ * policy that says when the backend is asked. The guide's instruction for a migration
+ * from Realtime is to start from the template and only add a rule once
+ * listening shows a behavior that needs changing; none of its optional
+ * controls — exact wording, fixed response sequences, turn-taking, tool
+ * narration, response length — stands here, so what the voice says of a
+ * commentary it is handed is the model's own. The backchannel and
+ * interruption policies stay because they are about the call rather than the
+ * words: one keeps the model from talking over the developer, the other
+ * keeps it listening when they cut in. The one departure from the words the
+ * guide prints is "engineering manager" where the template reads "voice
+ * assistant".
+ */
+const instructionsFor = (delegationPolicy: string): string =>
+  `You are Luke, an engineering manager for the developer's coding agents.
+Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
+If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
+
+Backchannel policy: Use frequent, eager backchannels. Acknowledge naturally without competing with the main response.
+
+Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
+
+${delegationPolicy}`;
+
 const SCENE_INSTRUCTIONS = {
-  [LIVE_SCENE.DESKTOP]: instructionsFor(DESKTOP_DELEGATION_POLICY),
+  [LIVE_SCENE.DESKTOP]: instructionsFor(DELEGATION_POLICY),
   [LIVE_SCENE.INTRODUCTION]: instructionsFor(INTRODUCTION_DELEGATION_POLICY),
 } satisfies Record<LiveScene, string>;
 

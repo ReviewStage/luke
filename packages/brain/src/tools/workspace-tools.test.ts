@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { type DailyNoteListing, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
+import { type DailyNoteListing, WORKSPACE_FILE, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
@@ -115,10 +115,17 @@ it.effect(
       assert.deepEqual(written, [["USER.md", "- x"]]);
       assert.equal(journaled(), 1);
       assert.match(write.description, /append_daily_note/u);
-      assert.match(
-        write.description,
-        /AGENTS\.md, IDENTITY\.md, USER\.md, MEMORY\.md, or BOOTSTRAP\.md/u,
-      );
+      // Named one by one rather than as a phrase, so rewording the description
+      // does not fail a test about which files the tool writes.
+      for (const named of [
+        WORKSPACE_FILE.AGENTS,
+        WORKSPACE_FILE.IDENTITY,
+        WORKSPACE_FILE.USER,
+        WORKSPACE_FILE.MEMORY,
+        WORKSPACE_FILE.BOOTSTRAP,
+      ]) {
+        assert.ok(write.description.includes(named));
+      }
     }),
 );
 

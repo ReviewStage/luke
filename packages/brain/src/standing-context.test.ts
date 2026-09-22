@@ -8,7 +8,6 @@ import {
   recentBriefingsContextText,
   sessionContextText,
 } from "./standing-context.js";
-import { maximumBriefingLength } from "./tools/names.js";
 
 const OBSERVED_AT = 1_800_000_000_000;
 
@@ -105,7 +104,7 @@ test("the recent briefings read newest last under the bound, name each session b
   );
 });
 
-test("no briefings render no section, and a briefing's words are cut to the bound the tool announces under", () => {
+test("no briefings render no section, and a briefing's words are kept whole", () => {
   assert.equal(recentBriefingsContextText([], OBSERVED_AT), undefined);
   const text = recentBriefingsContextText(
     [
@@ -113,11 +112,11 @@ test("no briefings render no section, and a briefing's words are cut to the boun
         announcedAt: OBSERVED_AT,
         session: { providerId: "conductor", providerSessionId: "s" },
         title: "Long",
-        words: "x".repeat(maximumBriefingLength + 40),
+        words: "x".repeat(240),
       },
     ],
     OBSERVED_AT,
   );
   assert.ok(text);
-  assert.ok(text.endsWith(`"${"x".repeat(maximumBriefingLength)}"`));
+  assert.ok(text.endsWith(`"${"x".repeat(240)}"`));
 });

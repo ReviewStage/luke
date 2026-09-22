@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@sidecar/actions": "workspace:*",
-    "@sidecar/guide": "workspace:*",
     "@sidecar/memory": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",

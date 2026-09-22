@@ -136,7 +136,7 @@ async function composePrompt(host: BrainHost, session: Session) {
   if (!Result.isSuccess(admitted)) throw new Error("not admitted");
   const kind = host.turnKindOf(session.auth);
   assert.ok(kind);
-  return database.run(host.prompt(admitted.success, kind.trigger));
+  return database.run(host.prompt(admitted.success));
 }
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
