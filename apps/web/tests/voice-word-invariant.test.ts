@@ -8,7 +8,6 @@ import {
   type LiveBrainAsk,
   type LiveBrainSubmission,
   LiveSessionService,
-  type LiveSessionSource,
   ROW_WRITE_DEBOUNCE_MS,
   sidebandOverSocket,
 } from "@sidecar/voice/live-session";
@@ -413,38 +412,25 @@ function stand() {
       }
     });
     const observed: Promise<unknown>[] = [];
-    const source: LiveSessionSource = {
-      create: (input) =>
-        Effect.succeed({
-          sessionId: live.liveSessionId,
-          sdpAnswer: `answer-for-${input.sdpOffer}`,
-          attach: () =>
-            Effect.succeed(
-              observedSideband(sidebandOverSocket(socket), (served) => {
-                observed.push(database.run(record.observe(served)));
-              }),
-            ),
-        }),
-      setVoice: () => undefined,
-      diagnostics: () => {
-        throw new Error("not read here");
-      },
-    };
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
-        source: () => source,
-        conversationEntries: () => [],
-        quietNow: () => Effect.succeed(false),
-        releaseHeldBriefings: () => Effect.void,
-        emit: () => undefined,
         createId: () => `id-${++ids}`,
         report: () => undefined,
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
-    const created = yield* service.createSession("offer");
-    assert.ok(created);
+    const adopted = yield* service.adoptSession({
+      sessionId: live.liveSessionId,
+      attach: () =>
+        Effect.succeed(
+          observedSideband(sidebandOverSocket(socket), (served) => {
+            observed.push(database.run(record.observe(served)));
+          }),
+        ),
+      started: false,
+    });
+    assert.ok(adopted);
     socket.receive(sessionStarted(live.liveSessionId));
     const running: RunningFixture = {
       live,

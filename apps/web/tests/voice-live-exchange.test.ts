@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  LIVE_BRAIN_SUBMISSION,
-  type LiveSessionSource,
-  sidebandOverSocket,
-} from "@sidecar/voice/live-session";
+import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { Effect, Exit, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -192,18 +188,6 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
     await setVoiceSessionDeviceId(database.run, liveSessionId, deviceId);
   }
   const socket = new FakeLiveSocket();
-  const source: LiveSessionSource = {
-    create: (input) =>
-      Effect.succeed({
-        sessionId: liveSessionId,
-        sdpAnswer: `answer-for-${input.sdpOffer}`,
-        attach: () => Effect.succeed(sidebandOverSocket(socket)),
-      }),
-    setVoice: () => undefined,
-    diagnostics: () => {
-      throw new Error("not read here");
-    },
-  };
   // The session's side of every send, as OpenAI would answer it: each append acknowledged
   // on the timeline at once, and a close answered with the final event.
   socket.onSent((frame) => {
@@ -240,9 +224,6 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
         context: { keys: KEYS },
         writer,
         eve,
-        source: () => source,
-        conversationEntries: () => [],
-        emit: () => undefined,
         now: () => NOW,
         createId: () => randomUUID(),
         report: (message) => reports.push(message),
@@ -251,8 +232,14 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
     ),
   );
   const exchange = { ...standing, stop: () => database.run(Scope.close(scope, Exit.void)) };
-  const created = await database.run(exchange.service.createSession("offer"));
-  assert.ok(created);
+  const adopted = await database.run(
+    exchange.adopt({
+      sessionId: liveSessionId,
+      attach: () => Effect.succeed(sidebandOverSocket(socket)),
+      started: false,
+    }),
+  );
+  assert.ok(adopted);
   socket.receive(sessionStarted(liveSessionId));
   const commentary = (): LiveAppendEvent[] =>
     socket.sent

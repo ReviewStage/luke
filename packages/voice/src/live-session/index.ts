@@ -1,5 +1,4 @@
 export { holdSocket } from "../held-socket.js";
-export type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 export { type LiveSideband, sidebandOverSocket } from "../live-socket.js";
 export {
   LIVE_BRAIN_RUN_END,
@@ -17,7 +16,6 @@ export {
   type AdoptableSession,
   type BriefingDelivery,
   LiveSessionService,
-  type LiveSessionServiceOptions,
   ROW_WRITE_DEBOUNCE_MS,
   STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";

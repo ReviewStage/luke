@@ -1,15 +1,13 @@
 import { LIVE_CLIENT_EVENT, type LiveAppendEvent } from "@sidecar/live";
 import { Clock, Deferred, Duration, Effect, Exit, Option, Queue } from "effect";
 import type { LiveSideband } from "../live-socket.js";
-import { LIVE_TRACE_DECISION, type LiveTrace } from "./live-trace.js";
 
 /**
  * The host's sends on one session, in order, each awaiting the acknowledgment
  * or the error that names it. An error naming no client event is never read
  * as success, silence past the timeout counts as the append not taken, and a
  * commentary that was taken is settled spoken by the first output transcript
- * past its end and un-settled if a moderation error cuts that speech, as the
- * conversations guide has it. Closing the channel refuses everything still
+ * past its end, as the conversations guide has it. Closing the channel refuses everything still
  * waiting, so a dead session's deliveries are discarded rather than left
  * hanging.
  */
@@ -41,30 +39,27 @@ interface PendingAck {
 interface SendOptions {
   /** For a commentary append: called once its speech has settled. */
   onSpoken?: () => void;
-  /** Whether this send moves the idle clock. A note about the desk does not. */
+  /** Whether this send moves the idle clock. The stop instruction does not. */
   countsForIdle?: boolean;
 }
 
 interface AppendChannelOptions {
   sideband: LiveSideband;
   report: (message: string) => void;
-  trace: LiveTrace;
 }
 
 export class AppendChannel {
   readonly #options: AppendChannelOptions;
   readonly #pending = new Map<string, PendingAck>();
   #awaiting: AwaitingSpeech[] = [];
-  /** The commentary appends heard so far, newest last, so a moderation cut can un-settle the one it interrupted. */
-  readonly #spoken: AwaitingSpeech[] = [];
   readonly #work: Queue.Queue<Effect.Effect<void>>;
   /** Settled by `close`, so the fiber serializing the sends ends where it waits rather than outliving the session. */
   readonly #closed = Deferred.makeUnsafe<void>();
   #shut = false;
   /**
    * When the host last appended anything the session is worth keeping open
-   * for. A send asked not to count for idle leaves it where it was, so a note
-   * the host writes about the desk cannot hold a quiet session open forever.
+   * for. A send asked not to count for idle leaves it where it was, so an
+   * instruction the host writes cannot hold a quiet session open forever.
    */
   lastSentAt: number | undefined;
   /**
@@ -113,7 +108,6 @@ export class AppendChannel {
       const speech =
         event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND
           ? () => {
-              this.#options.trace(LIVE_TRACE_DECISION.SPOKEN);
               onSpoken?.();
             }
           : undefined;
@@ -127,11 +121,7 @@ export class AppendChannel {
         Duration.millis(APPEND_ACK_TIMEOUT_MS),
       );
       if (Option.isNone(settled)) this.#pending.delete(event.event_id);
-      const acknowledgment = Option.getOrElse(settled, () => NOT_TAKEN);
-      this.#options.trace(
-        acknowledgment.ok ? LIVE_TRACE_DECISION.APPENDED : LIVE_TRACE_DECISION.APPEND_REFUSED,
-      );
-      return acknowledgment.ok;
+      return Option.getOrElse(settled, () => NOT_TAKEN).ok;
     });
   }
 
@@ -150,15 +140,7 @@ export class AppendChannel {
     const heard = this.#awaiting.filter((awaiting) => endMs > awaiting.endMs);
     if (heard.length === 0) return;
     this.#awaiting = this.#awaiting.filter((awaiting) => !heard.includes(awaiting));
-    for (const awaiting of heard) {
-      this.#spoken.push(awaiting);
-      awaiting.onSpoken();
-    }
-  }
-
-  /** A moderation cut interrupted Luke mid-speech: the commentary he was saying is no longer counted delivered. */
-  interruptSpeech(): void {
-    if (this.#spoken.pop()) this.#options.trace(LIVE_TRACE_DECISION.UNSETTLED);
+    for (const awaiting of heard) awaiting.onSpoken();
   }
 
   /** The session is gone: nothing waiting is taken, and nothing further leaves. */

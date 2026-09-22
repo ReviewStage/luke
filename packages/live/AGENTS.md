@@ -59,17 +59,6 @@ The age bucket comes off `lastActivityAt`, the only timestamp any provider
 reports, so it says how long since the session was *written about* and never how
 long it has been working.
 
-`RosterTold` is what a session was actually given, held by identity, and never the
-roster it was meant to have. That is what keeps a diff honest under everything
-that can go wrong between deciding a refresh and delivering it — a refusal, a
-summary the append bound cut short, a change arriving mid-flight — since each
-leaves the rows it never carried exactly as they stood, to be said again. A
-departure leads an update, because a line the voice never hears leaves it
-uninformed where a withdrawal it never hears leaves it offering something gone.
-
-A refresh whose every line reads the same produces nothing, which is what keeps a
-conversation's cached prefix warm across a pass that observed no change.
-
 ## Tests
 
 The tests here assert values and structure only. **No test reads the prose.**
