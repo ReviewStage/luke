@@ -14,21 +14,18 @@ import {
   SESSION_STATUS,
   UNSUPPORTED_BY_OBSERVATION,
 } from "@sidecar/session";
-import { isWireString } from "@sidecar/wire";
 import {
   admittedForTest,
   atInstant,
-  fakeHttpClientLayer,
   HTTP_STATUS,
   jsonResponse,
   recordingHttpClient,
   runTest,
 } from "@sidecar/wire/testing";
-import { Cause, Duration, Effect, Exit, Fiber, type Layer, Predicate, Redacted } from "effect";
+import { Duration, Effect, Exit, Fiber, type Layer, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
-import { ADAPTER_DIAGNOSTIC_KIND, type AdapterDiagnosticCallback } from "./adapter-diagnostics.js";
 import { ADAPTER_FAILURE } from "./adapter-failure.js";
 import { type CloudPass, type CloudSessionPlugin, cloudPass, WRITE_SUBJECT } from "./cloud-pass.js";
 import {
@@ -98,7 +95,6 @@ type StubCloudPlugin = CloudSessionPlugin & {
   /** The raw pass, for a test that drives its retry cadence on `TestClock`. */
   readonly pass: CloudPass;
   readonly passes: number;
-  readonly forgottenIdentities: number;
   collected: readonly ProviderSessionObservation[];
   collectError: Error | undefined;
 };
@@ -106,7 +102,6 @@ type StubCloudPlugin = CloudSessionPlugin & {
 /** What one stub plugin's pass records for a test to read back. */
 interface StubState {
   passes: number;
-  forgottenIdentities: number;
   collected: readonly ProviderSessionObservation[];
   collectError: Error | undefined;
 }
@@ -114,8 +109,6 @@ interface StubState {
 interface StubOptions {
   apiKey?: string | undefined;
   readApiKey?: () => Effect.Effect<Redacted.Redacted | undefined>;
-  minimumRefreshIntervalMs?: number;
-  onDiagnostic?: AdapterDiagnosticCallback;
   /** Observes and routes nothing: a provider whose actions are all absent. */
   routesNothing?: boolean;
 }
@@ -132,7 +125,6 @@ function stubPluginFor(
   const apiKey = sealed("apiKey" in overrides ? overrides.apiKey : TEST_API_KEY);
   const state: StubState = {
     passes: 0,
-    forgottenIdentities: 0,
     collected: [],
     collectError: undefined,
   };
@@ -143,11 +135,6 @@ function stubPluginFor(
     readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
     httpClient,
-    minimumRefreshIntervalMs: overrides.minimumRefreshIntervalMs ?? 0,
-    ...(overrides.onDiagnostic ? { onDiagnostic: overrides.onDiagnostic } : undefined),
-    forget: () => {
-      state.forgottenIdentities += 1;
-    },
     collect(request, now) {
       if (overrides.routesNothing) return Effect.succeed([]);
       state.passes += 1;
@@ -184,9 +171,6 @@ function stubPluginFor(
     lastObservationFailure: () => pass.lastFailure(),
     get passes() {
       return state.passes;
-    },
-    get forgottenIdentities() {
-      return state.forgottenIdentities;
     },
     get collected() {
       return state.collected;
@@ -338,7 +322,7 @@ test("leaves a stopped session unknown once its timestamp goes stale", async () 
   assert.equal(observations[1]?.status, SESSION_STATUS.UNKNOWN);
 });
 
-test("forgets cached identity when the credential changes, and reports nothing without one", async () => {
+test("reads the credential afresh each pass, and reports nothing without one", async () => {
   const stub = stubClient();
   let apiKey: string | undefined = TEST_API_KEY;
   const plugin = stubPluginFor(stub.layer, { readApiKey: () => Effect.succeed(sealed(apiKey)) });
@@ -350,22 +334,15 @@ test("forgets cached identity when the credential changes, and reports nothing w
   apiKey = undefined;
   const afterRemoval = await observeAt(plugin);
 
-  assert.equal(plugin.passes, 2, "the replacement key did not trigger a pass");
   assert.equal(afterRotation.length, 1);
   assert.equal(stub.requests.at(-1)?.authorization, "Bearer replacement-key");
   assert.deepEqual(afterRemoval, []);
-  // Once when the first key was accepted, once for the rotation, once when the
-  // credential was removed.
-  assert.equal(plugin.forgottenIdentities, 3);
 });
 
 test("clears observations when the provider rejects the credential", async () => {
   let rejectRequests = false;
-  const diagnostics: unknown[] = [];
   const stub = stubClient(() => (rejectRequests ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.OK));
-  const plugin = stubPluginFor(stub.layer, {
-    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
-  });
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [observation("session-one")];
 
   const authorized = await observeAt(plugin);
@@ -374,142 +351,12 @@ test("clears observations when the provider rejects the credential", async () =>
 
   assert.equal(authorized.length, 1);
   assert.deepEqual(rejected, []);
-  // Once when the key was accepted, once when the provider rejected it.
-  assert.equal(plugin.forgottenIdentities, 2);
-  assert.deepEqual(diagnostics, []);
-});
-
-function deferred() {
-  let resolve = () => {};
-  const promise = new Promise<void>((settle) => {
-    resolve = settle;
-  });
-  return { promise, resolve };
-}
-
-/**
- * Reports whatever session the authenticated account can see, across two
- * requests, the way a real provider pass fans out. What it reports is decided
- * by the account that answers, not by anything cached on the adapter.
- */
-function accountBoundPlugin(options: {
-  readApiKey: () => Effect.Effect<Redacted.Redacted | undefined>;
-  httpClient: Layer.Layer<HttpClient.HttpClient>;
-  minimumRefreshIntervalMs: number;
-}) {
-  const { httpClient, ...rest } = options;
-  return cloudPass({
-    provider: STUB_PROVIDER,
-    defaultBaseUrl: TEST_BASE_URL,
-    baseUrl: TEST_BASE_URL,
-    ...rest,
-    httpClient,
-    collect: (request) =>
-      Effect.map(
-        Effect.all([request(["sessions", "first"]), request(["sessions", "second"])]),
-        ([first, second]) =>
-          [first, second]
-            .map((body) => {
-              const session = body.session;
-              if (!isWireString(session)) return undefined;
-              return observation(session);
-            })
-            .filter(Predicate.isNotUndefined),
-      ),
-  });
-}
-
-const OLD_ACCOUNT_SESSION = "session-from-old-account";
-const NEW_ACCOUNT_SESSION = "session-from-new-account";
-
-function accountBoundClient(options: { oldKeyGate: Promise<void>; oldKeyStatus?: number }) {
-  const sessionByAuthorization = new Map<string, string>([
-    ["Bearer first-key", OLD_ACCOUNT_SESSION],
-    ["Bearer second-key", NEW_ACCOUNT_SESSION],
-  ]);
-  const authorizations: string[] = [];
-  const layer = fakeHttpClientLayer(async (_url, init) => {
-    const authorization = new Headers(init.headers).get("authorization") ?? "";
-    authorizations.push(authorization);
-    let status: number = HTTP_STATUS.OK;
-    if (authorization === "Bearer first-key") {
-      await options.oldKeyGate;
-      status = options.oldKeyStatus ?? HTTP_STATUS.OK;
-    }
-    return jsonResponse({ session: sessionByAuthorization.get(authorization) }, status);
-  });
-  return { layer, authorizations };
-}
-
-function sessionIds(observations: readonly ProviderSessionObservation[]): string[] {
-  return observations.map((candidate) => candidate.providerSessionId);
-}
-
-test("a pass superseded by a key rotation neither lands nor keeps using the old key", async () => {
-  // A settings save refreshes the adapter while a timer-driven pass is still
-  // in flight with the key it replaced. The old account's sessions must not be
-  // served under the new credential, and the replaced key must not be used for
-  // the rest of the superseded pass.
-  const oldKeyRequest = deferred();
-  const { layer, authorizations } = accountBoundClient({ oldKeyGate: oldKeyRequest.promise });
-  let apiKey = "first-key";
-  const plugin = accountBoundPlugin({
-    readApiKey: () => Effect.succeed(sealed(apiKey)),
-    httpClient: layer,
-    minimumRefreshIntervalMs: 0,
-  });
-
-  const stalePass = runTest(plugin.run());
-  apiKey = "second-key";
-  const freshObservations = await runTest(plugin.run());
-  oldKeyRequest.resolve();
-  const staleObservations = await stalePass;
-
-  assert.deepEqual(sessionIds(freshObservations), [NEW_ACCOUNT_SESSION]);
-  assert.deepEqual(sessionIds(staleObservations), [NEW_ACCOUNT_SESSION]);
-  assert.equal(
-    authorizations.filter((value) => value === "Bearer first-key").length,
-    1,
-    "a superseded pass kept requesting with the replaced key",
-  );
-});
-
-test("a replaced key rejected mid-flight does not clear the new key's observations", async () => {
-  // The old key is often rotated out precisely because it was revoked, so its
-  // rejection arrives after the new key has already observed sessions.
-  const oldKeyRequest = deferred();
-  const { layer } = accountBoundClient({
-    oldKeyGate: oldKeyRequest.promise,
-    oldKeyStatus: HTTP_STATUS.UNAUTHORIZED,
-  });
-  let apiKey = "first-key";
-  const plugin = accountBoundPlugin({
-    readApiKey: () => Effect.succeed(sealed(apiKey)),
-    httpClient: layer,
-    minimumRefreshIntervalMs: 60_000,
-  });
-
-  const stalePass = runTest(plugin.run());
-  apiKey = "second-key";
-  await runTest(plugin.run());
-  oldKeyRequest.resolve();
-  const staleObservations = await stalePass;
-  // Inside the refresh interval this serves the cache, which is exactly where
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // a wrongly cleared snapshot would surface as vanished rows.
-  const cachedObservations = await runTest(plugin.run());
-
-  assert.deepEqual(sessionIds(staleObservations), [NEW_ACCOUNT_SESSION]);
-  assert.deepEqual(sessionIds(cachedObservations), [NEW_ACCOUNT_SESSION]);
 });
 
 test("a transient provider failure keeps the previous snapshot", async () => {
   let status: number = HTTP_STATUS.OK;
-  const diagnostics: unknown[] = [];
   const stub = stubClient(() => status);
-  const plugin = stubPluginFor(stub.layer, {
-    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
-  });
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [observation("session-one")];
 
   const first = await observeAt(plugin);
@@ -519,36 +366,6 @@ test("a transient provider failure keeps the previous snapshot", async () => {
   assert.equal(first.length, 1);
   assert.equal(second.length, 1);
   assert.equal(second[0]?.providerSessionId, "session-one");
-  assert.deepEqual(diagnostics, []);
-});
-
-test("a programming error during observation is reported rather than swallowed", async () => {
-  const diagnostics: unknown[] = [];
-  let now = TEST_TIME;
-  const stub = stubClient();
-  const plugin = stubPluginFor(stub.layer, {
-    minimumRefreshIntervalMs: 60_000,
-    onDiagnostic: (kind, error) => diagnostics.push([kind, error]),
-  });
-  plugin.collected = [observation("session-one")];
-
-  const first = await observeAt(plugin, now);
-  now += 60_000;
-  const bug = new TypeError("sessions is not iterable");
-  plugin.collectError = bug;
-
-  const failed = await runTest(Effect.exit(atInstant(now)(plugin.observe())));
-  assert.equal(Exit.isFailure(failed) ? Cause.squash(failed.cause) : undefined, bug);
-  assert.deepEqual(diagnostics, [[ADAPTER_DIAGNOSTIC_KIND.PASS_FAILURE, bug]]);
-
-  plugin.collectError = undefined;
-  const cached = await observeAt(plugin, now);
-  assert.equal(first.length, 1);
-  assert.equal(cached.length, 1);
-  assert.equal(cached[0]?.providerSessionId, "session-one");
-  // The interval has not elapsed, so the snapshot the programming error failed
-  // to replace is still served rather than collected again.
-  assert.equal(plugin.passes, 2);
 });
 
 test("issues no request at all when the credential cannot be read", async () => {
@@ -639,13 +456,13 @@ test("reports what became of a send the provider refused", async () => {
   assert.equal(failed.status, "rejected");
 });
 
-test("reports an unanswered send as indeterminate and makes the next refresh ask", async () => {
+test("reports an unanswered send as indeterminate", async () => {
   let failWrites = false;
   const { layer } = recordingHttpClient((request) => {
     if (failWrites && request.method === "POST") throw new Error("connection reset");
     return jsonResponse({});
   });
-  const plugin = stubPluginFor(layer, { minimumRefreshIntervalMs: 60_000 });
+  const plugin = stubPluginFor(layer);
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await observeAt(plugin);
 
@@ -662,16 +479,12 @@ test("reports an unanswered send as indeterminate and makes the next refresh ask
   // have taken it and only the answer was lost — so the refusal must hedge
   // rather than claim nothing was sent.
   assert.equal(result.status, "rejected");
-  // And because it may have landed, the next refresh asks the provider
-  // instead of serving the cache for the rest of the interval.
-  await observeAt(plugin);
-  assert.equal(plugin.passes, 2);
 });
 
-test("a write answered with an unnamed status makes the next refresh ask", async () => {
+test("a write answered with an unnamed status is reported as indeterminate", async () => {
   let status: number = HTTP_STATUS.OK;
   const stub = stubClient(() => status);
-  const plugin = stubPluginFor(stub.layer, { minimumRefreshIntervalMs: 60_000 });
+  const plugin = stubPluginFor(stub.layer);
   plugin.collected = [observation("session-one", { advertises: [{ kind: ACTION_KIND.MESSAGE }] })];
   await observeAt(plugin);
 
@@ -684,11 +497,9 @@ test("a write answered with an unnamed status makes the next refresh ask", async
     ),
   );
 
-  assert.equal(result.status, "rejected");
   // A gateway that gave up may stand in front of a write that finished, so
-  // the cache must not keep advertising what the provider may have taken.
-  await observeAt(plugin);
-  assert.equal(plugin.passes, 2);
+  // the refusal hedges rather than claims nothing was sent.
+  assert.equal(result.status, "rejected");
 });
 
 test("a write runs on the deadline its own route asked for", async () => {
@@ -700,7 +511,7 @@ test("a write runs on the deadline its own route asked for", async () => {
       request.init.signal?.addEventListener("abort", () => reject(new Error("deadline")));
     });
   });
-  const plugin = stubPluginFor(layer, { minimumRefreshIntervalMs: 60_000 });
+  const plugin = stubPluginFor(layer);
   plugin.collected = [observation("session-slow", { advertises: [STUB_SLOW_ACTION_CONTROL] })];
   await observeAt(plugin);
 
@@ -721,10 +532,6 @@ test("a write runs on the deadline its own route asked for", async () => {
   // out the shared bound here would mean the route's ask never reached the
   // request.
   assert.ok(performance.now() - startedAt < CLOUD_ADAPTER_DEFAULTS.REQUEST_TIMEOUT_MS / 2);
-  // The action may have finished behind the lost answer, so the next refresh
-  // asks the provider instead of serving the cache.
-  await observeAt(plugin);
-  assert.equal(plugin.passes, 2);
 });
 
 test("no route can widen a request past the slow bound", () => {
@@ -878,10 +685,12 @@ it.effect(
       const requestsBefore = stub.requests.length;
       const second = yield* forkAndSettle(plugin);
 
-      assert.deepEqual(sessionIds(second), ["session-one"]);
+      assert.deepEqual(
+        second.map((candidate) => candidate.providerSessionId),
+        ["session-one"],
+      );
       assert.equal(plugin.lastObservationFailure(), ADAPTER_FAILURE.RATE_LIMITED);
       assert.equal(stub.requests.length - requestsBefore, RATE_LIMIT_BACKOFF.MAXIMUM_RETRIES + 1);
-      assert.equal(plugin.forgottenIdentities, 1);
     }),
 );
 
@@ -1035,7 +844,6 @@ test("sends a POSTed read as the document the build fixed and nothing else", asy
     baseUrl: TEST_BASE_URL,
     readApiKey: () => Effect.succeed(Redacted.make(TEST_API_KEY)),
     httpClient: stub.layer,
-    minimumRefreshIntervalMs: 0,
     collect: (request) =>
       Effect.map(
         request(["v0", "transcripts"], { limit: "1" }, { document: STUB_READ_DOCUMENT }),
@@ -1074,7 +882,6 @@ test("a body that never arrives ends the read on its own deadline", async () => 
     baseUrl: TEST_BASE_URL,
     readApiKey: () => Effect.succeed(Redacted.make(TEST_API_KEY)),
     httpClient: stub.layer,
-    minimumRefreshIntervalMs: 0,
     collect: (request) =>
       Effect.map(request(["v0", "sessions"], {}, { timeoutMs: STUB_STALLED_DEADLINE_MS }), () => [
         observation("session-one"),
@@ -1097,7 +904,6 @@ test("a write whose answer never arrives hedges on its own deadline", async () =
     baseUrl: TEST_BASE_URL,
     readApiKey: () => Effect.succeed(Redacted.make(TEST_API_KEY)),
     httpClient: stub.layer,
-    minimumRefreshIntervalMs: 0,
     collect: () => Effect.succeed([]),
   });
 

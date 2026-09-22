@@ -219,12 +219,6 @@ export const CONDUCTOR_CONVERSATION_BOUNDS = {
    * the transcript does.
    */
   MAXIMUM_HISTORY_WINDOWS: 6,
-  /**
-   * How many sessions' transcript ends one credential's reads remember at
-   * once. A re-opened chat starts its walk where the last read of it reached,
-   * so the cache is what makes a re-open one request.
-   */
-  END_CACHE_ENTRIES: 50,
 } as const;
 
 /** The columns the transcripts read asks for, named as the view answers them. */

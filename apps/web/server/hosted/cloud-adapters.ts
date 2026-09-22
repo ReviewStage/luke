@@ -8,9 +8,7 @@ import { CLOUD_AGENT_PROVIDER_ID } from "../core.js";
 /**
  * What one invocation supplies to a cloud plugin: the caller's own decrypted
  * key behind the same read-at-action-time seam the desktop uses, and the
- * client and clock seams tests inject. The refresh debounce is always
- * bypassed — every server-side plugin lives for exactly one pass, so a
- * debounced pass could only ever answer with nothing.
+ * client and clock seams tests inject.
  */
 interface CloudAdapterSeams {
   readApiKey: () => Effect.Effect<Redacted.Redacted | undefined>;
@@ -29,7 +27,6 @@ type PluginBuilder = (seams: CloudAdapterSeams) => CloudSessionPlugin;
 function baseOptions(seams: CloudAdapterSeams) {
   return {
     readApiKey: seams.readApiKey,
-    minimumRefreshIntervalMs: 0,
     ...(seams.httpClient ? { httpClient: seams.httpClient } : undefined),
     ...(seams.now ? { now: seams.now } : undefined),
     ...(seams.reported ? { reported: seams.reported } : undefined),

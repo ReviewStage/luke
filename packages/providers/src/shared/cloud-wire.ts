@@ -17,7 +17,6 @@ const GIT_SUFFIX = ".git";
  * shared with every local provider.
  */
 export const CLOUD_ADAPTER_DEFAULTS = {
-  MINIMUM_REFRESH_INTERVAL_MS: 15 * 1000,
   REQUEST_TIMEOUT_MS: 8 * 1000,
   /**
    * For the rare read a provider documents as slow — Cursor's repository list

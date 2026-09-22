@@ -43,44 +43,21 @@ import {
  * the caller and nothing is kept here: the conversation stays the provider's.
  */
 
-/**
- * The newest offset a read of each session already reached, per credential.
- * It is the whole reason a re-opened chat costs one request: the walk starts
- * where the last read stopped instead of seeking the end again.
- */
-export interface ConductorConversationEnds {
-  reached: Map<string, number>;
-}
-
-export function conductorConversationEnds(): ConductorConversationEnds {
-  return { reached: new Map() };
-}
-
 /** One documented stored-messages read, with the query the mode composed. */
 function messagesPage(
   pass: CloudPass,
   providerSessionId: string,
   query: Readonly<Record<string, string>>,
 ): Effect.Effect<WireRecord, AdapterFailure> {
-  return Effect.suspend(() => {
-    let body: WireRecord = {};
-    return Effect.map(
-      pass.credentialBoundRead(
-        [
-          CONDUCTOR_ROUTE_SEGMENT.V0,
-          CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
-          providerSessionId,
-          CONDUCTOR_ROUTE_SEGMENT.MESSAGES,
-        ],
-        query,
-        undefined,
-        (answer) => {
-          body = answer;
-        },
-      ),
-      () => body,
-    );
-  });
+  return pass.read(
+    [
+      CONDUCTOR_ROUTE_SEGMENT.V0,
+      CONDUCTOR_ROUTE_SEGMENT.SESSIONS,
+      providerSessionId,
+      CONDUCTOR_ROUTE_SEGMENT.MESSAGES,
+    ],
+    query,
+  );
 }
 
 /**
@@ -187,59 +164,44 @@ const readConversationPage = /* @__PURE__ */ Effect.fn("providers/readConversati
  * The newest page of a chat, and where its stored transcript currently ends.
  *
  * The endpoint pages ascending and reports no total, so the end is walked to
- * rather than sought: the walk starts one page before the end a previous read
- * of this session already reached — zero the first time — asks for one page
- * there, and stops as soon as a page comes back short or says no more remain.
- * A re-opened chat therefore costs exactly one request, and a first open as
- * many as the transcript has pages. Every page the walk read is answered: the
- * reader that asked bounds what it keeps, and a page withheld here would be
- * the one the newest words were on.
+ * rather than sought: the walk starts at zero, asks for one page at a time,
+ * and stops as soon as a page comes back short or says no more remain, so an
+ * open costs as many requests as the transcript has pages. Every page the
+ * walk read is answered: the reader that asked bounds what it keeps, and a
+ * page withheld here would be the one the newest words were on.
  *
  * Every request in the walk carries only the fixed page size and an offset
  * this walk composed, so nothing stored can steer one.
  */
 function readTailPage(
   pass: CloudPass,
-  ends: ConductorConversationEnds,
   providerSessionId: string,
 ): Effect.Effect<ProviderConversationResult, AdapterFailure> {
-  const walk = /* @__PURE__ */ Effect.fn("providers/walkConductorConversation")(function* (
-    from: number,
-  ): Effect.fn.Return<{ pages: WalkedPage[]; end: number }, AdapterFailure> {
-    const pages: WalkedPage[] = [];
-    let offset = from;
-    for (;;) {
-      const body = yield* messagesPage(pass, providerSessionId, {
-        [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
-        [CONDUCTOR_QUERY.OFFSET]: String(offset),
-      });
-      const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
-      pages.push({
-        offset,
-        newestStoredId: newestStoredId(records),
-        messages: records.map(conversationMessageFromRecord).filter(Predicate.isNotUndefined),
-        length: records.length,
-      });
-      offset += records.length;
-      if (records.length === 0 || body[CONDUCTOR_FIELD.HAS_MORE] !== true) break;
-    }
-    return { pages, end: offset };
-  });
+  const walk = /* @__PURE__ */ Effect.fn("providers/walkConductorConversation")(
+    function* (): Effect.fn.Return<{ pages: WalkedPage[]; end: number }, AdapterFailure> {
+      const pages: WalkedPage[] = [];
+      let offset = 0;
+      for (;;) {
+        const body = yield* messagesPage(pass, providerSessionId, {
+          [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
+          [CONDUCTOR_QUERY.OFFSET]: String(offset),
+        });
+        const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
+        pages.push({
+          offset,
+          newestStoredId: newestStoredId(records),
+          messages: records.map(conversationMessageFromRecord).filter(Predicate.isNotUndefined),
+          length: records.length,
+        });
+        offset += records.length;
+        if (records.length === 0 || body[CONDUCTOR_FIELD.HAS_MORE] !== true) break;
+      }
+      return { pages, end: offset };
+    },
+  );
 
   return Effect.gen(function* () {
-    // One page back from the end the last read of this session reached, so a
-    // re-opened chat asks once and gets the newest page — starting at the end
-    // itself would answer an empty page and show the developer nothing.
-    const reached = ends.reached.get(providerSessionId) ?? 0;
-    const from = Math.max(0, reached - CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE);
-    let walked = yield* walk(from);
-    // A cached offset now sitting past the transcript — a chat cleared on
-    // Conductor's own surface — is the one backtrack, and it is bounded to one.
-    if (from > 0 && walked.pages.every((page) => page.length === 0)) {
-      ends.reached.delete(providerSessionId);
-      walked = yield* walk(0);
-    }
-    rememberEnd(ends, providerSessionId, walked.end);
+    const walked = yield* walk();
 
     const firstOffset = walked.pages[0]?.offset ?? walked.end;
     // The newest stored message of the whole walk, attributed or not: the poll
@@ -257,21 +219,6 @@ function readTailPage(
       ...(lastMessageId ? { lastMessageId } : undefined),
     };
   });
-}
-
-/** Least-recently-reached first, so the cache stays a cache and not a ledger. */
-function rememberEnd(
-  ends: ConductorConversationEnds,
-  providerSessionId: string,
-  end: number,
-): void {
-  ends.reached.delete(providerSessionId);
-  ends.reached.set(providerSessionId, end);
-  while (ends.reached.size > CONDUCTOR_CONVERSATION_BOUNDS.END_CACHE_ENTRIES) {
-    const oldest = ends.reached.keys().next();
-    if (oldest.done) break;
-    ends.reached.delete(oldest.value);
-  }
 }
 
 /**
@@ -340,13 +287,12 @@ export const readConductorTranscript = /* @__PURE__ */ Effect.fn(
 )(
   function* (
     pass: CloudPass,
-    ends: ConductorConversationEnds,
     reported: ReportedSessions,
     providerSessionId: string,
   ): Effect.fn.Return<ProviderTranscriptResult, AdapterFailure> {
     const observation = reportedSession(reported, providerSessionId);
     if (!observation) return NOT_REPORTED;
-    const tail = yield* readTailPage(pass, ends, providerSessionId);
+    const tail = yield* readTailPage(pass, providerSessionId);
     if (tail.status !== ACTION_RESULT_STATUS.ACCEPTED) return tail;
     const rendered = boundedTranscript(transcriptLines(observation, tail.messages));
     if (rendered === undefined) {
@@ -385,7 +331,6 @@ export const readConductorTranscriptSince = /* @__PURE__ */ Effect.fn(
 )(
   function* (
     pass: CloudPass,
-    ends: ConductorConversationEnds,
     reported: ReportedSessions,
     providerSessionId: string,
     cursor: string | undefined,
@@ -400,7 +345,7 @@ export const readConductorTranscriptSince = /* @__PURE__ */ Effect.fn(
     }
     const page: ProviderConversationResult =
       cursor === undefined
-        ? yield* readTailPage(pass, ends, providerSessionId)
+        ? yield* readTailPage(pass, providerSessionId)
         : yield* readNewerMessages(pass, providerSessionId, cursor);
     if (page.status !== ACTION_RESULT_STATUS.ACCEPTED) return page;
     const next = page.lastMessageId ?? cursor;
@@ -429,7 +374,6 @@ export const readConductorTranscriptSince = /* @__PURE__ */ Effect.fn(
 
 export function readConductorConversation(
   pass: CloudPass,
-  ends: ConductorConversationEnds,
   providerSessionId: string,
   page: ConversationPage,
 ): Effect.Effect<ProviderConversationResult> {
@@ -472,6 +416,6 @@ export function readConductorConversation(
     if (page.beforeOffset !== undefined) {
       return readConversationPage(pass, providerSessionId, page.beforeOffset);
     }
-    return readTailPage(pass, ends, providerSessionId);
+    return readTailPage(pass, providerSessionId);
   }).pipe(Effect.catch((failure) => Effect.succeed(readRefusal(failure, "conversation"))));
 }
