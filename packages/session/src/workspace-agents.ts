@@ -104,6 +104,8 @@ export const WORKSPACE_AGENT_MODELS = {
         { id: "gpt-5.3-codex", label: "GPT-5.3 Codex" },
         { id: "gpt-5.2-codex", label: "GPT-5.2 Codex" },
         { id: "gpt-6-astra", label: "GPT-6 Astra" },
+        { id: "gpt-6-sol", label: "GPT-6 Sol" },
+        { id: "gpt-6-luna", label: "GPT-6 Luna" },
       ],
       efforts: ["none", "low", "medium", "high", "xhigh", "max", "ultra"],
     },

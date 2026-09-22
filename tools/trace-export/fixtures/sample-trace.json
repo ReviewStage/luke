@@ -58,7 +58,7 @@
     {
       "type": "generation",
       "name": "brain-turn",
-      "model": "gpt-5.6-terra",
+      "model": "gpt-6-sol",
       "provider": "openai",
       "metrics": {
         "latency": 0.042,

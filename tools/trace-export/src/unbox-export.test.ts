@@ -270,9 +270,8 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   const [generation] = generations(trace);
   assert.ok(generation);
   assert.equal(generation.name, "brain-turn");
-  // A record carrying no model — a hosted turn — shows the keyed default
-  // rather than a blank.
-  assert.equal(generation.model, "gpt-5.6-terra");
+  // A hosted turn records no model; the export names the brain's one model.
+  assert.equal(generation.model, "gpt-6-sol");
   assert.deepEqual(generation.metrics, {
     latency: 0.321,
     tokens: { input: 1_500, output: 0 },
@@ -300,7 +299,7 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   );
 });
 
-test("a failed brain turn shows its error, and a keyed turn its model", () => {
+test("a failed brain turn shows its error", () => {
   const turn = JSON.stringify({
     at: "2026-08-25T10:05:00.000Z",
     kind: TRACE_ENTRY_KIND.BRAIN,
@@ -311,11 +310,9 @@ test("a failed brain turn shows its error, and a keyed turn its model", () => {
     deliveries: [],
     elapsedMs: 100,
     iterations: 0,
-    model: "gpt-5.6-luna",
     error: "request failed with status 500",
   });
   const [generation] = generations(unboxTraceFromLines([turn]));
-  assert.equal(generation?.model, "gpt-5.6-luna");
   const [input, output] = messagesOf(generation);
   assert.equal(
     input?.content,

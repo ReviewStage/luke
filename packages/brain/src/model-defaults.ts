@@ -5,5 +5,5 @@
  * no key of its own.
  */
 export const BRAIN_OPENAI_DEFAULTS = {
-  MODEL: "gpt-5.6-terra",
+  MODEL: "gpt-6-sol",
 } as const;
