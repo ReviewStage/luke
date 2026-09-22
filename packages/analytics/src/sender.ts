@@ -9,15 +9,9 @@ import {
 } from "@sidecar/hosted";
 import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
-import { Clock, Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
+import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import {
-  adoptableHeldProductEvents,
-  HELD_PRODUCT_EVENTS_VERSION,
-  type HeldProductEvents,
-  type HeldProductEventsRecord,
-} from "./held-events.js";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
@@ -61,11 +55,6 @@ export interface ProductEventSenderOptions extends AccountToken {
   sends: boolean;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /**
-   * Where a batch waits between runs while no credential can carry it. A
-   * sender given none holds nothing past its own life.
-   */
-  held?: HeldProductEvents;
   now?: () => number;
   requestTimeoutMs?: number;
   flushIntervalMs?: number;
@@ -85,16 +74,9 @@ export interface ProductEventSenderOptions extends AccountToken {
  * and never double-counting a day. {@link ProductEventSender.drop} clears the
  * queue rather than flushing it, because a request in `will-quit` either
  * delays the quit or is killed mid-flight, and an instant quit is worth a
- * minute of counts.
- *
- * The one batch that outlives a run is the one no credential could carry.
- * A flush that found no account leaves its events queued, and writes them to
- * the hold it was given, so a run that launched, was introduced, and quit
- * before any sign-in still posts under the account that signs in next — in a
- * later launch as readily as in this one. That moves when those counts
- * leave, never whether: a Mac that never signs in posts none of them, and the
- * hold is bounded to the queue's own limit and to the service's own age
- * window, past which an event goes rather than being posted to be re-dated.
+ * minute of counts. Nothing outlives a run: a count made while no account is
+ * signed in waits on the queue for a sign-in in this run, and goes with the
+ * run if none comes.
  *
  * No identity travels with an event. The service resolves the account from the
  * bearer token this sender already holds for the voice and review endpoints,
@@ -114,18 +96,13 @@ export class ProductEventSender {
   readonly #flushIntervalMs: number;
   readonly #queueLimit: number;
   readonly #queue: ProductEvent[] = [];
-  readonly #held: HeldProductEvents | undefined;
   /** Nested rather than an interpolated key: the name and the discriminator stay apart. */
   readonly #recordedDays = new Map<ProductEventName, Map<string, string>>();
   #armed = false;
-  /** Whether the hold on disk names any event, so an emptied queue clears it exactly once. */
-  #holdStanding = false;
-  /** The one adoption of the hold, memoized by {@link ProductEventSender.make}. */
-  #adoption: Effect.Effect<void> = Effect.void;
   /**
-   * One request at a time, as the queue's splice and the hold's write around
-   * it assume: a second flush asked for while one is under way waits for it
-   * and then carries whatever is queued by then.
+   * One request at a time, as the queue's splice assumes: a second flush
+   * asked for while one is under way waits for it and then carries whatever
+   * is queued by then.
    */
   readonly #gate = Semaphore.makeUnsafe(1);
 
@@ -165,7 +142,6 @@ export class ProductEventSender {
       requestTimeoutMs: options.requestTimeoutMs,
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
-    this.#held = options.held;
     this.#appVersion = options.appVersion;
     this.#sends = options.sends;
     this.#now = options.now ?? Date.now;
@@ -179,17 +155,13 @@ export class ProductEventSender {
   /**
    * One sender, with its flush cadence forked into the scope this is built
    * in: a run that sends no network forks none, since every tick of it would
-   * be a no-op. The hold's one read is memoized here rather than at the first
-   * flush, so the memo is made where an effect is already running; running it
-   * still waits for a flush of a run that counts.
+   * be a no-op.
    */
   static make(
     options: ProductEventSenderOptions,
   ): Effect.Effect<ProductEventSender, never, Scope.Scope> {
     return Effect.gen(function* () {
       const sender = new ProductEventSender(options);
-      const held = options.held;
-      if (held) sender.#adoption = yield* Effect.cached(sender.#readHold(held));
       // The day is marked on the tick rather than at launch alone, because a
       // Luke left running crosses midnight without relaunching — which is the
       // whole case this event exists for, and marking it only at launch would
@@ -267,84 +239,18 @@ export class ProductEventSender {
     return this.#sends && this.#armed;
   }
 
-  /**
-   * The hold is written ahead of the request, never behind it: what leaves
-   * the queue for the wire leaves the disk first, so a quit between the post
-   * and a write could only lose the batch, never post it twice — the direction
-   * this whole pipeline already takes. A refusal that requeues writes the
-   * hold again with the batch back in it.
-   */
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.andThen(
-      this.#adoptHold(),
-      Effect.suspend(() => {
-        if (this.#queue.length === 0) return this.#persistHold();
-        // Gone whatever becomes of the request, save for the one end that never
-        // authenticated at all.
-        const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
-        return this.#persistHold().pipe(
-          Effect.andThen(this.#send(events)),
-          Effect.flatMap((requeued) => (requeued ? this.#persistHold() : Effect.void)),
-        );
-      }),
-    );
-  }
-
-  /**
-   * The hold is read once, and only ahead of a flush of a run that counts:
-   * a fixture run and a sender not yet armed read nothing, nothing else reads
-   * the disk, and no write of the hold can happen before the read, so a run
-   * that quits ahead of its first flush leaves the earlier hold as it found
-   * it. What is adopted lands ahead of this run's own events, as the older
-   * counts they are, and a held day marker for a day this queue already marks
-   * is dropped, since a relaunch on the same day is one day used, not two.
-   */
-  #adoptHold(): Effect.Effect<void> {
-    if (!this.#held || !this.#allowed()) return Effect.void;
-    return this.#adoption;
-  }
-
-  /** The hold read and taken onto the queue, memoized by `make` so it happens once. */
-  #readHold(held: HeldProductEvents): Effect.Effect<void> {
-    return Effect.gen({ self: this }, function* () {
-      const record = yield* held.read;
-      if (!record) return;
-      const now = yield* Clock.currentTimeMillis;
-      this.#holdStanding = record.events.length > 0;
-      const adopted = adoptableHeldProductEvents(record, now, this.#queueLimit).filter(
-        (event) => !(event.name === PRODUCT_EVENT.APP_DAY_ACTIVE && this.#dayMarked(event.at)),
-      );
-      this.#queue.unshift(...adopted);
-      this.#trimQueue();
+    return Effect.suspend(() => {
+      if (this.#queue.length === 0) return Effect.void;
+      // Gone whatever becomes of the request, save for the one end that never
+      // authenticated at all.
+      const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
+      return this.#send(events);
     });
   }
 
-  #dayMarked(at: number): boolean {
-    const day = utcDay(at);
-    return this.#queue.some(
-      (queued) => queued.name === PRODUCT_EVENT.APP_DAY_ACTIVE && utcDay(queued.at) === day,
-    );
-  }
-
-  /**
-   * The hold follows the queue: written whenever the queue holds events, and
-   * written empty once when a hold that stood has nothing left behind it, so
-   * a quiet signed-in run writes nothing at all.
-   */
-  #persistHold(): Effect.Effect<void> {
-    const held = this.#held;
-    if (!held || !this.#allowed()) return Effect.void;
-    if (this.#queue.length === 0 && !this.#holdStanding) return Effect.void;
-    const record: HeldProductEventsRecord = {
-      version: HELD_PRODUCT_EVENTS_VERSION,
-      events: [...this.#queue],
-    };
-    this.#holdStanding = record.events.length > 0;
-    return held.write(record);
-  }
-
-  /** Posts one batch, answering whether it went back on the queue. */
-  #send(events: ProductEvent[]): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+  /** Posts one batch. */
+  #send(events: ProductEvent[]): Effect.Effect<void, never, HttpClient.HttpClient> {
     return Effect.suspend(() =>
       Effect.map(
         this.#call.send({
@@ -366,9 +272,7 @@ export class ProductEventSender {
           if (!callAnswered(answer) && answer.fault === CALL_FAULT.NO_CREDENTIAL) {
             this.#queue.unshift(...events);
             this.#trimQueue();
-            return true;
           }
-          return false;
         },
       ),
     );

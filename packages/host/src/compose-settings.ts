@@ -47,7 +47,6 @@ import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
-import { heldProductEvents } from "./held-product-events.js";
 import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { apiKeyRejection, SettingsStore, type StoredAccount } from "./settings-store.js";
@@ -196,8 +195,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
       store.readAccount().pipe(Effect.orElseSucceed(() => undefined));
 
-    // The quit's drain flushes ahead of this composer's stop, so a batch no
-    // account could carry at that flush is on disk before the queue is dropped.
     const productEvents = yield* ProductEventSender.make({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       appVersion: identity.appVersion,
@@ -205,7 +202,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
       refreshAccount: () => linked((links) => links.refreshAccount()),
       readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
-      held: heldProductEvents(kernel.stateRoot, report, fileSystemContext),
     });
     const hostedVault = new HostedVaultClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
