@@ -29,11 +29,10 @@ function advertising(advertises: readonly AdvertisedAction[]): Session {
   );
 }
 
-test("the action vocabulary is the advertisable kinds and the two nothing advertises", () => {
-  // An open follows an address the observation already reported and a creation
-  // is held to a provider's projects, so neither is a session's to advertise —
-  // but both are actions, and the vocabulary is one.
-  const unadvertisable: readonly ActionKind[] = [ACTION_KIND.OPEN, ACTION_KIND.CREATE_WORKSPACE];
+test("the action vocabulary is the advertisable kinds and the one nothing advertises", () => {
+  // A creation is held to a provider's projects, so it is no session's to
+  // advertise — but it is an action, and the vocabulary is one.
+  const unadvertisable: readonly ActionKind[] = [ACTION_KIND.CREATE_WORKSPACE];
   const advertisable: readonly AdvertisedActionKind[] = [
     ACTION_KIND.MESSAGE,
     ACTION_KIND.CONTROL,

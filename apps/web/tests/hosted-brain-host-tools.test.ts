@@ -195,7 +195,6 @@ it("an ask is offered the catalog under the hosted policy, an observation the sa
     observation.filter((name) => name !== BRAIN_TOOL.ANNOUNCE),
     ask.filter((name) => name !== ACTION_TOOL.SEND_SESSION_MESSAGE),
   );
-  assert.equal(ask.includes(ACTION_TOOL.OPEN_SESSION), false);
   // A child's task is answered in words like an ask and is offered the ask's set less the
   // session tools, so delegation stands one level deep; a child's completion is a note handed
   // to the requester and is offered the ask's set plus announce, the send included, since what

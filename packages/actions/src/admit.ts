@@ -18,28 +18,12 @@
  * consulted as a permission by nothing.
  */
 
-import {
-  APP_PANEL_TAB,
-  APP_SETTING_KIND,
-  APP_UPDATE_ACTION,
-  APP_UPDATE_WAIT,
-  type AppGuideSetting,
-  type AppGuideSnapshot,
-  type AppGuideUpdate,
-  appGuideSetting,
-  appToggleValue,
-  EMPTY_APP_GUIDE,
-} from "@sidecar/guide";
 import type { RunOrigin } from "@sidecar/runtime/vocabulary";
 import {
   advertisedActionFor,
   advertisedControl,
-  isSessionApplicationId,
-  matchesFilterSelection,
-  maximumSessionMessageLength,
   maximumWorkspaceNameLength,
   type ObservedWorkspaceProject,
-  SESSION_LOCATION,
   type Session,
   type SessionIdentity,
   WORKSPACE_TASK_SUPPORT,
@@ -50,7 +34,6 @@ import {
 import {
   ACTION_RESULT_STATUS,
   type Admitted,
-  isWireString,
   type UnparsedWireValue,
   type WireRecord,
   text as wireText,
@@ -63,19 +46,11 @@ import {
   type ActionPayloads,
   type ActionRequest,
   type CarriedAction,
-  SESSION_LIST_ALL,
-  SESSION_LIST_VOICE,
 } from "./action-kinds.js";
 import {
-  FEEDBACK_KIND,
   MESSAGE_TEXT,
   OPENING_TASK,
-  PANEL_FILTERS,
-  PANEL_SORT,
-  PANEL_TAB,
   SESSION_IDENTITY_FIELDS,
-  SESSION_LIST_FILTER_VALUES,
-  UPDATE_ACTION,
   WORKSPACE_NAME,
 } from "./action-schemas.js";
 
@@ -142,8 +117,6 @@ export interface AdmitContext {
   readonly roster: ActionRoster;
   /** Absent in a run that offers none, which then admits no creation. */
   readonly projects?: ActionProjects;
-  /** The app's own word about itself; absent in a run that reports none, which then admits no app action. */
-  readonly guide?: AppGuideSnapshot;
 }
 
 /**
@@ -160,8 +133,6 @@ export const ACTION_REFUSAL = {
   NO_MESSAGES: "That session does not take messages right now.",
   MESSAGE_BOUND: "That message is empty or too long.",
   NO_CONTROL: "That session advertises no such control.",
-  NO_ADDRESS: "That session has no address to open.",
-  NO_APP_ADDRESS: "No app carries an exact address for that session.",
   NO_PROJECT: "No listed project matches that identity.",
   MANY_PROJECTS: "More than one listed project matches; name the project and host.",
   NO_TARGET:
@@ -181,17 +152,6 @@ export const ACTION_REFUSAL = {
   NO_MODEL: "No documented model goes by that name here.",
   NO_EFFORT_LEVEL: "That model takes no effort level.",
   EFFORT_NEEDS_MODEL: "An effort rides a model; name the model too.",
-  NO_SETTING: "The app guide lists no such setting.",
-  NO_TAB: "The panel has no such tab.",
-  NO_SORT: "The list orders by urgency or by recency.",
-  NO_SEARCH: "The list offers a search only when more than one session is observed.",
-  FILTERS_SHAPE: "filters takes a list of filter values.",
-  ALL_STANDS_ALONE: `${SESSION_LIST_ALL} is the whole list, so it combines with nothing.`,
-  NO_FILTER_MATCH: "No observed session matches that combination of filters.",
-  NO_VOICE_SESSIONS: "No voice sessions are observed right now.",
-  NO_COMPOSER: "The composer writes feedback or a prompt, nothing else.",
-  NO_UPDATE_REPORT: "This run does not report where updates stand.",
-  NO_UPDATE_ACTION: "The Updates button checks, downloads, or restarts.",
 } as const;
 
 /** Why an action was not admitted. Disjoint from every carried action, by `kind`. */
@@ -408,99 +368,6 @@ function resolveWorkspaceAgentModel(
   return { selection };
 }
 
-/**
- * Validates the value a spoken change carries against the setting it names.
- * A toggle takes the guide's own two words (and their unambiguous synonyms);
- * a choice takes exactly one of the values the guide listed. Anything else is
- * refused with the accepted set, so the refusal is also the correction.
- */
-function appSettingValue(setting: AppGuideSetting, value: UnparsedWireValue): string | undefined {
-  if (setting.kind === APP_SETTING_KIND.TOGGLE) return appToggleValue(value);
-  if (!isWireString(value)) return undefined;
-  const normalized = value.trim().toLowerCase();
-  return setting.choices?.find((choice) => choice.toLowerCase() === normalized);
-}
-
-/**
- * Whether one observed session answers one spoken filter value. Every identity
- * a row carries is a filter on the same terms as its provider id — the agent
- * behind a hosted chat, an app associated with it, and a workspace manager's
- * scope id — so a spoken ask reaches exactly the rows the matching chip would
- * keep.
- */
-function sessionAnswersFilter(session: Session, filter: string): boolean {
-  if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
-    return session.location === filter;
-  }
-  if (filter === SESSION_LIST_VOICE) return session.realtimeVoice === true;
-  return (
-    session.providerId === filter ||
-    session.agent?.id === filter ||
-    session.workspace?.scopeId === filter ||
-    session.applications.some((application) => application.id === filter)
-  );
-}
-
-/**
- * Admits a spoken session-list narrowing against the sessions actually being
- * observed. A narrowing that would show nothing is refused rather than
- * applied: the panel would quietly fall back to showing everything, and Luke
- * would have reported a narrowing that never happened. Each value is checked
- * on its own first, so the refusal can name the value that is wrong rather
- * than only the combination — and then the combination is checked whole, on
- * the same axis terms the chips combine on, because two values a roster
- * answers separately can still name an intersection nothing occupies.
- */
-function admittedFilters(
-  filters: readonly string[],
-  sessions: readonly Session[],
-): { filters: readonly string[] } | Refusal {
-  // The enum on the tool's own schema already binds a compliant model to these
-  // tokens; this is the backstop for a call composed past it.
-  for (const filter of filters) {
-    if (!SESSION_LIST_FILTER_VALUES.includes(filter)) {
-      return refuse(`"${filter}" is not one of the filter values the tool lists.`);
-    }
-  }
-  const chosen = [...new Set(filters)];
-  if (chosen.includes(SESSION_LIST_ALL)) {
-    if (chosen.length > 1) return refuse(ACTION_REFUSAL.ALL_STANDS_ALONE);
-    return { filters: chosen };
-  }
-  for (const filter of chosen) {
-    if (sessions.some((session) => sessionAnswersFilter(session, filter))) continue;
-    if (filter === SESSION_LOCATION.LOCAL || filter === SESSION_LOCATION.CLOUD) {
-      return refuse(`No ${filter} sessions are observed right now.`);
-    }
-    if (filter === SESSION_LIST_VOICE) return refuse(ACTION_REFUSAL.NO_VOICE_SESSIONS);
-    return refuse(
-      `No observed session belongs to an agent, app, or workspace manager "${filter}".`,
-    );
-  }
-  if (
-    chosen.length > 1 &&
-    !sessions.some((session) =>
-      matchesFilterSelection(chosen, (filter) => sessionAnswersFilter(session, filter)),
-    )
-  ) {
-    return refuse(ACTION_REFUSAL.NO_FILTER_MATCH);
-  }
-  return { filters: chosen };
-}
-
-/**
- * What stands where the asked-for action would be, so a refusal can say why the
- * row is not offering it — the row's own detail says where the build stands,
- * and this names the one press that stands instead.
- */
-const UPDATE_BUTTON_STANDING = {
-  [APP_UPDATE_ACTION.CHECK]: "Its button offers a check right now.",
-  [APP_UPDATE_ACTION.DOWNLOAD]: "Its button offers the releases page in the browser right now.",
-  [APP_UPDATE_ACTION.RESTART]: "Its button offers Restart to update right now.",
-  [APP_UPDATE_WAIT.CHECKING]: "Nothing is pressable while the check is out.",
-  [APP_UPDATE_WAIT.DOWNLOADING]: "Nothing is pressable while the download runs.",
-} as const satisfies Record<AppGuideUpdate["button"], string>;
-
 type AdmittedPayload<Kind extends ActionKind> = ({ kind: Kind } & ActionPayloads[Kind]) | Refusal;
 
 /** One kind's gauntlet over the reads admission made: the payload it carries, or the refusal. */
@@ -509,16 +376,6 @@ type Admitter<Kind extends ActionKind> = (
   context: AdmitContext,
   reads: AdmittedReads,
 ) => Effect.Effect<AdmittedPayload<Kind>>;
-
-/** A kind's gauntlet that reads nothing, deciding on the fields and the context alone. */
-type Decider<Kind extends ActionKind> = (
-  fields: WireRecord,
-  context: AdmitContext,
-) => AdmittedPayload<Kind>;
-
-function decidedAtOnce<Kind extends ActionKind>(decide: Decider<Kind>): Admitter<Kind> {
-  return (fields, context) => Effect.sync(() => decide(fields, context));
-}
 
 const admittedSession = (
   fields: WireRecord,
@@ -550,42 +407,6 @@ const admitControl: Admitter<typeof ACTION_KIND.CONTROL> = (fields, _context, re
     const control = controlId ? advertisedControl(found.session, controlId) : undefined;
     if (!control) return refuse(ACTION_REFUSAL.NO_CONTROL);
     return { kind: ACTION_KIND.CONTROL, identity: found.identity, control };
-  });
-
-const admitOpen: Admitter<typeof ACTION_KIND.OPEN> = (fields, _context, reads) =>
-  Effect.gen(function* () {
-    const found = yield* admittedSession(fields, reads);
-    if ("status" in found) return found;
-    const { session, identity } = found;
-    // The action carries the identity — and, when the developer named an app, that
-    // app's id — never the address: the address is read back out of the roster
-    // by whoever performs the open, the same as a pressed row or a pressed app mark.
-    const applicationWord = textArgument(fields, "application");
-    if (applicationWord !== undefined) {
-      const normalized = applicationWord.trim().toLowerCase();
-      const application = session.applications.find(
-        (candidate) =>
-          candidate.displayName.toLowerCase() === normalized || candidate.id === normalized,
-      );
-      // An association without an exact address identifies the app but opens
-      // nothing, so it refuses like an app the roster never listed — and the
-      // refusal names the apps that can open, which the roster already carries.
-      // The id must be one the build fixed: the bridge takes no other.
-      const applicationId = application?.link ? application.id : undefined;
-      if (applicationId === undefined || !isSessionApplicationId(applicationId)) {
-        const openable = session.applications.filter((candidate) => candidate.link);
-        return openable.length > 0
-          ? refuse(
-              `That session opens in ${openable
-                .map((candidate) => candidate.displayName)
-                .join(" or ")}, not there.`,
-            )
-          : refuse(ACTION_REFUSAL.NO_APP_ADDRESS);
-      }
-      return { kind: ACTION_KIND.OPEN, identity, applicationId };
-    }
-    if (!session.detail.link) return refuse(ACTION_REFUSAL.NO_ADDRESS);
-    return { kind: ACTION_KIND.OPEN, identity };
   });
 
 const admitCreateWorkspace: Admitter<typeof ACTION_KIND.CREATE_WORKSPACE> = (
@@ -807,8 +628,8 @@ const admitRenameWorkspace: Admitter<typeof ACTION_KIND.RENAME_WORKSPACE> = (
     if ("status" in found) return found;
     // Only a session whose roster entry advertised renaming has a workspace a
     // rename can land on. The action carries the identity and the name, never the
-    // target: the workspace is resolved from the observed entry, the same way an
-    // open never carries an address.
+    // target: the workspace is resolved from the observed entry, so a caller's
+    // copy of one never redirects the effect.
     if (!advertisedActionFor(found.session, ACTION_KIND.RENAME_WORKSPACE)) {
       return refuse(ACTION_REFUSAL.NO_WORKSPACE_RENAME);
     }
@@ -829,117 +650,13 @@ const admitRenameSession: Admitter<typeof ACTION_KIND.RENAME_SESSION> = (fields,
     return { kind: ACTION_KIND.RENAME_SESSION, identity: found.identity, name };
   });
 
-const admitSetting: Decider<typeof ACTION_KIND.SETTING> = (fields, context) => {
-  const guide = context.guide ?? EMPTY_APP_GUIDE;
-  const setting = appGuideSetting(guide, textArgument(fields, "setting_id"));
-  if (!setting) return refuse(ACTION_REFUSAL.NO_SETTING);
-  if (!setting.adjustable) {
-    return refuse(`${setting.label} can only be changed by hand: ${setting.manual}`);
-  }
-  const value = appSettingValue(setting, fields.value);
-  if (value === undefined) {
-    const accepted =
-      setting.kind === APP_SETTING_KIND.TOGGLE ? "on or off" : (setting.choices ?? []).join(", ");
-    return refuse(`${setting.label} takes ${accepted}.`);
-  }
-  // An effort may ride only a value the guide lists levels for, so both halves
-  // of one stored pairing can be asked for in one change — matched like the
-  // value: case retold rather than copied, answered in the guide's own casing.
-  // A setting with no levels anywhere has no effort to pair: one volunteered
-  // beside it is a field admission does not read, dropped like an unknown key
-  // rather than allowed to block the change it rode in on. Only an
-  // effort-aware setting refuses, because there half the ask would be lost.
-  const effortWord = textArgument(fields, "effort");
-  if (effortWord === undefined || setting.efforts === undefined) {
-    return { kind: ACTION_KIND.SETTING, setting, value };
-  }
-  const levels = setting.efforts[value] ?? [];
-  if (levels.length === 0) return refuse(`${value} takes no effort level.`);
-  const normalizedEffort = effortWord.trim().toLowerCase();
-  const effort = levels.find((candidate) => candidate.toLowerCase() === normalizedEffort);
-  if (effort === undefined) return refuse(`${value}'s effort is one of ${levels.join(", ")}.`);
-  return { kind: ACTION_KIND.SETTING, setting, value, effort };
-};
-
-const admitPanel: Admitter<typeof ACTION_KIND.PANEL> = (fields, _context, reads) =>
-  Effect.gen(function* () {
-    const sessions = yield* reads.sessions;
-    if (!sessions) return refuse(ACTION_REFUSAL.TURN_OVER);
-    const askedTab = fields.tab ?? undefined;
-    const tab = askedTab === undefined ? APP_PANEL_TAB.SESSIONS : wireParse(PANEL_TAB, askedTab);
-    if (tab === undefined) return refuse(ACTION_REFUSAL.NO_TAB);
-    const sortWord = textArgument(fields, "sort");
-    const sort = sortWord === undefined ? undefined : wireParse(PANEL_SORT, sortWord);
-    if (sortWord !== undefined && sort === undefined) return refuse(ACTION_REFUSAL.NO_SORT);
-    // A search is bounded by the hand's own control: the magnifier is only
-    // offered beside a list with more than one session, and a spoken ask reaches
-    // no further than it. The words themselves are not validated against the
-    // rows the way a filter is — a query is read against the lines as the
-    // surface words them, which only the renderer knows, and a search matching
-    // nothing is the list's own honest answer rather than a stale narrowing to
-    // refuse.
-    const query = textArgument(fields, "query");
-    if (query !== undefined && sessions.length < 2) return refuse(ACTION_REFUSAL.NO_SEARCH);
-    const asked = readEither(PANEL_FILTERS)(fields.filters);
-    if (Result.isFailure(asked)) return refuse(ACTION_REFUSAL.FILTERS_SHAPE);
-    const action: { kind: typeof ACTION_KIND.PANEL } & ActionPayloads[typeof ACTION_KIND.PANEL] = {
-      kind: ACTION_KIND.PANEL,
-      tab,
-    };
-    if (asked.success !== undefined) {
-      const outcome = admittedFilters(asked.success, sessions);
-      if ("status" in outcome) return outcome;
-      action.filters = outcome.filters;
-    }
-    if (sort !== undefined) action.sort = sort;
-    if (query !== undefined) action.query = query;
-    return action;
-  });
-
-const admitFeedback: Decider<typeof ACTION_KIND.FEEDBACK> = (fields) => {
-  const composer = wireParse(FEEDBACK_KIND, fields.kind);
-  if (composer === undefined) return refuse(ACTION_REFUSAL.NO_COMPOSER);
-  // The draft is the developer's ask restated in their words, not a document,
-  // so it is bounded like a typed one; a blank draft is no draft, and the
-  // composer simply opens empty.
-  const draft = textArgument(fields, "draft")?.slice(0, maximumSessionMessageLength);
-  const action: {
-    kind: typeof ACTION_KIND.FEEDBACK;
-  } & ActionPayloads[typeof ACTION_KIND.FEEDBACK] = {
-    kind: ACTION_KIND.FEEDBACK,
-    composer,
-  };
-  if (draft) action.draft = draft;
-  return action;
-};
-
-const admitUpdate: Decider<typeof ACTION_KIND.UPDATE> = (fields, context) => {
-  // The guide's update entry is the roster here: a run that reported nothing
-  // about updates — a fixture, a pure caller — advertises no action to run.
-  const update = (context.guide ?? EMPTY_APP_GUIDE).update;
-  if (!update) return refuse(ACTION_REFUSAL.NO_UPDATE_REPORT);
-  const action = wireParse(UPDATE_ACTION, fields.action);
-  if (action === undefined) return refuse(ACTION_REFUSAL.NO_UPDATE_ACTION);
-  // One button, one action: only the press the row is actually drawing runs, so
-  // the refusal is the row's own words plus what stands in the action's place.
-  if (action !== update.button) {
-    return refuse(`${update.detail} ${UPDATE_BUTTON_STANDING[update.button]}`);
-  }
-  return { kind: ACTION_KIND.UPDATE, action };
-};
-
 const ADMITTERS = {
   [ACTION_KIND.MESSAGE]: admitMessage,
   [ACTION_KIND.CONTROL]: admitControl,
-  [ACTION_KIND.OPEN]: admitOpen,
   [ACTION_KIND.CREATE_WORKSPACE]: admitCreateWorkspace,
   [ACTION_KIND.ADD_AGENT]: admitAddAgent,
   [ACTION_KIND.RENAME_WORKSPACE]: admitRenameWorkspace,
   [ACTION_KIND.RENAME_SESSION]: admitRenameSession,
-  [ACTION_KIND.SETTING]: decidedAtOnce(admitSetting),
-  [ACTION_KIND.PANEL]: admitPanel,
-  [ACTION_KIND.FEEDBACK]: decidedAtOnce(admitFeedback),
-  [ACTION_KIND.UPDATE]: decidedAtOnce(admitUpdate),
 } as const satisfies { [K in ActionKind]: Admitter<K> };
 
 const turnOver = Effect.fail(new AdmitRefusal({ reason: ACTION_REFUSAL.TURN_OVER }));

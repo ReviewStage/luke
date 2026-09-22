@@ -18,7 +18,6 @@
 
 import {
   maximumSessionTitleLength,
-  SESSION_APPLICATION_ID,
   SESSION_CONTROL_KIND,
   type Session,
   type SessionControlKind,
@@ -51,8 +50,8 @@ export type ActionOutputStatus = (typeof ACTION_OUTPUT_STATUS)[keyof typeof ACTI
  * The target as it stood when the action ran. A session action names its
  * session and, where the roster still held it, the title and agent it wore
  * then; a creation names only the provider it resolved to, since it aims at
- * a project rather than a session. The control and application fields ride
- * only on the kinds that resolved one.
+ * a project rather than a session. The control fields ride only on the kind
+ * that resolved one.
  */
 export type ActionTargetSnapshot = {
   readonly providerId: string;
@@ -61,7 +60,6 @@ export type ActionTargetSnapshot = {
   readonly agentId?: string;
   readonly controlKind?: SessionControlKind;
   readonly controlLabel?: string;
-  readonly applicationId?: string;
 };
 
 type AcceptedActionOutput = {
@@ -178,9 +176,6 @@ const TARGET_SNAPSHOT_CORE = EffectSchema.Struct({
   agentId: optional(droppedField(identifier)),
   controlKind: optional(droppedField(EffectSchema.Literals(Object.values(SESSION_CONTROL_KIND)))),
   controlLabel: optional(droppedField(boundedText(maximumSessionTitleLength))),
-  applicationId: optional(
-    droppedField(EffectSchema.Literals(Object.values(SESSION_APPLICATION_ID))),
-  ),
 });
 
 const TARGET_SNAPSHOT = schemaAs<ActionTargetSnapshot>(omittingUndefinedKeys(TARGET_SNAPSHOT_CORE));
@@ -311,7 +306,7 @@ function sessionSnapshot(
  * The target of one admitted session action, as the roster held it when the
  * action ran. Every field is read back out of the admitted action or the
  * roster the performer holds — the control the advertisement itself supplied,
- * the application admission resolved, the provider a creation landed on —
+ * the provider a creation landed on —
  * never out of a caller's copy. A session the roster no longer holds still
  * names its identity, with no title to give.
  */
@@ -328,13 +323,6 @@ export function actionTargetSnapshot(
         controlLabel: label,
       };
     }
-    case ACTION_KIND.OPEN:
-      return {
-        ...sessionSnapshot(action.identity, sessions),
-        ...(action.applicationId !== undefined
-          ? { applicationId: action.applicationId }
-          : undefined),
-      };
     case ACTION_KIND.CREATE_WORKSPACE:
       return { providerId: action.providerId };
     case ACTION_KIND.MESSAGE:

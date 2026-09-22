@@ -67,11 +67,12 @@ export const OPEN_REFUSAL = {
 } as const;
 
 const REFUSAL = {
-  // The sentences `admit` already says for these. The performer refuses the
-  // same things at the last boundary before an effect, and a refusal worded
-  // twice is a refusal that drifts.
+  // The sentence `admit` already says for a session it cannot find. The
+  // performer refuses the same thing at the last boundary before an effect,
+  // and a refusal worded twice is a refusal that drifts. The address is the
+  // press's own question: no admitter asks it now that no tool opens a session.
   NO_SESSION: ACTION_REFUSAL.NO_SESSION,
-  NO_ADDRESS: ACTION_REFUSAL.NO_ADDRESS,
+  NO_ADDRESS: "That session has no address to open.",
   NO_APP_ADDRESS: "That session has no address to open in that app.",
   NO_CHANGE: "That session reports no pull request.",
   OPEN_FAILED: OPEN_REFUSAL.SESSION,

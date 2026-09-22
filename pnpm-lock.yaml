@@ -377,9 +377,6 @@ importers:
 
   packages/actions:
     dependencies:
-      '@sidecar/guide':
-        specifier: workspace:*
-        version: link:../guide
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime

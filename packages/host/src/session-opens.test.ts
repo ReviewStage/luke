@@ -140,7 +140,7 @@ it.effect(
       });
       assert.deepEqual(yield* f.performer.openSession(BARE_IDENTITY), {
         status: ACTION_RESULT_STATUS.UNSUPPORTED,
-        reason: ACTION_REFUSAL.NO_ADDRESS,
+        reason: "That session has no address to open.",
       });
       assert.equal(
         reasonOf(yield* f.performer.openSessionChange(BARE_IDENTITY)),

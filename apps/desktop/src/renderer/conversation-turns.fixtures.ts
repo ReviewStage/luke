@@ -104,12 +104,10 @@ const FIXTURE_TOOL_KINDS: ConversationViewToolKinds = new Map([
   ["announce", CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE],
   ["send_session_message", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["run_session_control", CONVERSATION_VIEW_TOOL_KIND.ACTION],
-  ["open_session", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["create_workspace", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["add_workspace_agent", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["rename_workspace", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["rename_session", CONVERSATION_VIEW_TOOL_KIND.ACTION],
-  ["change_app_setting", CONVERSATION_VIEW_TOOL_KIND.ACTION],
 ]);
 
 const identity = (providerSessionId: string) => ({
@@ -311,17 +309,6 @@ export const FIXTURE_INPUT: ConversationViewInput = {
           }),
         ),
         call(
-          "open_session",
-          { ...identity(FIXTURE_SESSION.HELD), application: "claude" },
-          accepted({
-            target: {
-              ...target(FIXTURE_SESSION.HELD, FIXTURE_TITLE.HELD_THEN),
-              applicationId: "claude",
-            },
-            note: "Opened in Claude.",
-          }),
-        ),
-        call(
           "create_workspace",
           { provider_id: PROVIDER, name: FIXTURE_TITLE.CREATED, agent: AGENT },
           accepted({
@@ -500,11 +487,10 @@ export const FIXTURE_INPUT: ConversationViewInput = {
           {},
           { status: "accepted", notes: [{ path: "memory/2026-09-14.md", chars: 40 }] },
         ),
-        call("change_app_setting", { setting_id: "announcements", value: "on" }, accepted({})),
         { type: "step-start" },
         {
           type: "text",
-          text: "You decided to clip the panel to the notch. Announcements are on.",
+          text: "You decided to clip the panel to the notch.",
           state: "done",
         },
       ]),

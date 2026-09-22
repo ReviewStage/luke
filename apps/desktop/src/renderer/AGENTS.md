@@ -94,10 +94,8 @@ back after the longest of them.
 
 ## Luke's knowledge of himself
 
-The guide is the one place Luke's self-knowledge is described, and the
-brain's `change_app_setting` and `show_panel` are validated against that same
-snapshot — so the guide is both what Luke can say about himself and the outer
-bound of what an ask can do to him.
+The guide is the one place Luke's self-knowledge is described, so it is what
+Luke can say about himself.
 
 **When you add a feature or a setting, teach the guide about it in the same
 change.** A capability the guide does not describe is one Luke will deny having,

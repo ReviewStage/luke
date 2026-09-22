@@ -9,17 +9,11 @@ import {
   actionToolKind,
   CONTROL_REQUEST,
   CREATE_WORKSPACE_REQUEST,
-  FEEDBACK_REQUEST,
   MESSAGE_REQUEST,
-  OPEN_REQUEST,
-  PANEL_REQUEST,
   RENAME_SESSION_REQUEST,
   RENAME_WORKSPACE_REQUEST,
-  SETTING_REQUEST,
-  UPDATE_REQUEST,
 } from "@sidecar/actions";
 import { BRAIN_TOOL, SUBAGENTS_ACTION } from "@sidecar/brain/tool-names";
-import { APP_PANEL_TAB, APP_UPDATE_ACTION } from "@sidecar/guide";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory/tool-names";
 import {
   SESSION_CONTROL_KIND,
@@ -58,7 +52,7 @@ function parsedRequest<Value, Encoded>(
 /**
  * How a tool call's part becomes a row: from the call's own arguments and
  * what its output carries, and nothing else. For an action the arguments say
- * what was asked — which session, what text, which control, which setting —
+ * what was asked — which session, what text, which control —
  * and the envelope says what became of it and what the target was when it
  * ran: its title, its agent, the control's label and kind, the session a
  * creation made. For every other tool — a roster look, a transcript read, a
@@ -105,7 +99,7 @@ type DetailKind = Exclude<ToolRowKind, ActionKind>;
 
 const ACTION_ROW_KINDS: ReadonlySet<string> = new Set<string>(Object.values(ACTION_KIND));
 
-/** Whether a row records an action — a thing done to a session or to Luke — rather than the turn's working. */
+/** Whether a row records an action — a thing done to a session — rather than the turn's working. */
 export function isActionRowKind(kind: ToolRowKind): kind is ActionKind {
   return ACTION_ROW_KINDS.has(kind);
 }
@@ -333,14 +327,6 @@ function identityFrom(
     : undefined;
 }
 
-/** The name an application id draws: the roster's own for the session, or the id where the roster no longer says. */
-function applicationName(applicationId: string, session: SessionView | undefined): string {
-  return (
-    session?.applications.find((application) => application.id === applicationId)?.name ??
-    applicationId
-  );
-}
-
 interface Composition {
   readonly runs: readonly ToolRowRun[];
   readonly providerId?: string;
@@ -408,22 +394,6 @@ function controlOf(
   };
 }
 
-/**
- * A setting as the row names it: its guide id in words, since the label its
- * row wears is built beside the current settings, which a row of the past
- * has no business reading.
- */
-function settingLabel(settingId: string): string {
-  return `the ${detailToolLabel(settingId)} setting`;
-}
-
-/** What each press of the Updates row did, in the row's words. */
-const UPDATE_WORDS = {
-  [APP_UPDATE_ACTION.CHECK]: "Checked for updates",
-  [APP_UPDATE_ACTION.DOWNLOAD]: "Opened the latest release to download",
-  [APP_UPDATE_ACTION.RESTART]: "Restarted into the downloaded update",
-} as const satisfies Record<(typeof APP_UPDATE_ACTION)[keyof typeof APP_UPDATE_ACTION], string>;
-
 function composeRuns(
   kind: ActionKind,
   part: StoredToolPart,
@@ -471,26 +441,6 @@ function composeRuns(
         runs: [{ text: lead }, { chip }],
         ...(providerId !== undefined ? { providerId } : undefined),
         ...(controlKind !== undefined ? { controlKind } : undefined),
-      };
-    }
-    case ACTION_KIND.OPEN: {
-      const read = parsedRequest(OPEN_REQUEST, input);
-      const { identity, chip, providerId } = namedSession(
-        Option.getOrUndefined(read),
-        target,
-        roster,
-      );
-      const applicationId =
-        target?.applicationId ?? (Option.isSome(read) ? read.value.application : undefined);
-      return {
-        runs: [
-          { text: "Opened " },
-          { chip },
-          ...(applicationId === undefined
-            ? []
-            : [{ text: ` in ${applicationName(applicationId, rosterSession(identity, roster))}` }]),
-        ],
-        ...(providerId !== undefined ? { providerId } : undefined),
       };
     }
     case ACTION_KIND.CREATE_WORKSPACE: {
@@ -554,47 +504,6 @@ function composeRuns(
           ...(Option.isSome(read) ? [{ text: ` to "${read.value.name}"` }] : []),
         ],
         ...(providerId !== undefined ? { providerId } : undefined),
-      };
-    }
-    case ACTION_KIND.SETTING: {
-      const read = parsedRequest(SETTING_REQUEST, input);
-      return {
-        runs: [
-          {
-            text: Option.isSome(read)
-              ? `Changed ${settingLabel(read.value.setting_id)} to "${read.value.value}"`
-              : "Changed a setting",
-          },
-        ],
-      };
-    }
-    case ACTION_KIND.PANEL: {
-      const read = parsedRequest(PANEL_REQUEST, input);
-      const tab = Option.isSome(read)
-        ? (read.value.tab ?? APP_PANEL_TAB.SESSIONS)
-        : APP_PANEL_TAB.SESSIONS;
-      return { runs: [{ text: `Showed the ${tab} tab` }] };
-    }
-    case ACTION_KIND.FEEDBACK: {
-      const read = parsedRequest(FEEDBACK_REQUEST, input);
-      return {
-        runs: [
-          {
-            text: Option.isSome(read)
-              ? `Opened the ${read.value.kind} composer`
-              : "Opened a composer",
-          },
-        ],
-      };
-    }
-    case ACTION_KIND.UPDATE: {
-      const read = parsedRequest(UPDATE_REQUEST, input);
-      return {
-        runs: [
-          {
-            text: Option.isSome(read) ? UPDATE_WORDS[read.value.action] : "Pressed the Updates row",
-          },
-        ],
       };
     }
   }

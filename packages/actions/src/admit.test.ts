@@ -7,29 +7,16 @@ import {
   maximumWorkspaceNameLength,
   normalizeSession,
   type ObservedWorkspaceProject,
-  PROVIDER_ID_LIST,
-  SESSION_APPLICATION_ID,
-  SESSION_APPLICATION_SCOPE,
   SESSION_CONTROL_KIND,
-  SESSION_LOCATION,
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
   workspaceAgentModels,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
-import {
-  ACTION_FAMILY,
-  ACTION_REFUSAL,
-  ACTION_TOOL,
-  ACTIONS,
-  SESSION_LIST_ALL,
-  SESSION_LIST_VOICE,
-} from "./index.js";
+import { ACTION_REFUSAL, ACTION_TOOL } from "./index.js";
 import { withoutAdmission } from "./testing/admitted.js";
-import { itemEnum, objectProperties } from "./testing/json-schema.js";
 import { type ActionFunctionCall, admitToolCall } from "./testing/tool-call.js";
 
 /**
@@ -116,16 +103,6 @@ it.effect("a tool call can act only on a session Luke was shown, doing what it a
         },
       },
     );
-    // The open action carries the identity and nothing else: the address stays
-    // in the main process's registry, where the press reads it back.
-    assert.deepEqual(
-      yield* sessionToolAction(messageCall(`{${identity}}`, ACTION_TOOL.OPEN_SESSION), roster),
-      {
-        kind: "open",
-        identity: { providerId: "conductor", providerSessionId: "conductor-1" },
-      },
-    );
-
     // Every way a call can point somewhere Luke was not shown is a refusal with
     // a reason he can say aloud, never a request that reaches a bridge.
     const refusals = [
@@ -162,15 +139,6 @@ it.effect("a tool call can act only on a session Luke was shown, doing what it a
       [quiet],
     );
     assert.equal(silentRefusal.status, ACTION_RESULT_STATUS.REJECTED);
-    // No address means nowhere to open, however real the identity is.
-    const nowhereToOpen = yield* sessionToolAction(
-      messageCall(
-        '{"provider_id":"codex","provider_session_id":"thread-1"}',
-        ACTION_TOOL.OPEN_SESSION,
-      ),
-      [quiet],
-    );
-    assert.equal(nowhereToOpen.status, ACTION_RESULT_STATUS.REJECTED);
 
     // The retired spoken transcript reading is no action at all: a call naming it
     // is refused as unknown rather than routed anywhere.
@@ -179,66 +147,6 @@ it.effect("a tool call can act only on a session Luke was shown, doing what it a
       roster,
     );
     assert.equal(retired.status, ACTION_RESULT_STATUS.REJECTED);
-  }),
-);
-
-it.effect("an open ask can pick the app, held to the roster's own associations", () =>
-  Effect.gen(function* () {
-    const held = normalizeSession(
-      { id: "codex", displayName: "Codex" },
-      {
-        providerSessionId: "thread-2",
-        title: "Codex: luke",
-        status: SESSION_STATUS.WAITING,
-        lastActivityAt: DECIDED_AT,
-        detail: { link: "codex://thread/thread-2" },
-        applications: [
-          {
-            id: SESSION_APPLICATION_ID.SUPERSET,
-            displayName: "Superset",
-            scope: SESSION_APPLICATION_SCOPE.SESSION,
-            link: "superset://v2-workspace/workspace-1?terminalId=terminal-1",
-          },
-          {
-            id: SESSION_APPLICATION_ID.CONDUCTOR,
-            displayName: "Conductor",
-            scope: SESSION_APPLICATION_SCOPE.WORKSPACE,
-          },
-        ],
-      },
-    );
-    const identity = '"provider_id":"codex","provider_session_id":"thread-2"';
-
-    // The developer's word for the app resolves to the build's id — by display
-    // name in any case, or by the id itself — and the action carries that id,
-    // never the address behind it.
-    assert.deepEqual(
-      yield* sessionToolAction(
-        messageCall(`{${identity},"application":"superset"}`, ACTION_TOOL.OPEN_SESSION),
-        [held],
-      ),
-      {
-        kind: "open",
-        identity: { providerId: "codex", providerSessionId: "thread-2" },
-        applicationId: SESSION_APPLICATION_ID.SUPERSET,
-      },
-    );
-
-    // An ask that names no app keeps the row's own destination.
-    assert.deepEqual(
-      yield* sessionToolAction(messageCall(`{${identity}}`, ACTION_TOOL.OPEN_SESSION), [held]),
-      { kind: "open", identity: { providerId: "codex", providerSessionId: "thread-2" } },
-    );
-
-    // An association without an address opens nothing, and an app the roster
-    // never listed opens nothing; each refusal says where the session does open.
-    for (const application of ["Conductor", "TextEdit"]) {
-      const refusal = yield* sessionToolAction(
-        messageCall(`{${identity},"application":"${application}"}`, ACTION_TOOL.OPEN_SESSION),
-        [held],
-      );
-      assert.equal(refusal.status, ACTION_RESULT_STATUS.REJECTED);
-    }
   }),
 );
 
@@ -899,28 +807,3 @@ it.effect("an opening task is held to the project's own word for it", () =>
     for (const refusal of refusals) assert.equal(refusal.status, ACTION_RESULT_STATUS.REJECTED);
   }),
 );
-
-it("each action belongs to one family", () => {
-  assert.equal(ACTIONS.CHANGE_APP_SETTING.family, ACTION_FAMILY.APP);
-  assert.equal(ACTIONS.SEND_SESSION_MESSAGE.family, ACTION_FAMILY.SESSION);
-});
-
-it("show_panel's filter enum carries the whole vocabulary its validator accepts", () => {
-  const values = itemEnum(objectProperties(emitJsonSchema(ACTIONS.SHOW_PANEL.request)).filters);
-
-  // The enum is what binds the model to real tokens instead of the
-  // developer's own words for them — a value the validator accepts but the
-  // enum never lists is a narrowing no ask can reach, and the sets must stay
-  // the ones the chips draw from so the two cannot drift.
-  const scopes = [
-    SESSION_LIST_ALL,
-    SESSION_LOCATION.LOCAL,
-    SESSION_LOCATION.CLOUD,
-    SESSION_LIST_VOICE,
-  ];
-  for (const value of [...scopes, ...PROVIDER_ID_LIST, ...Object.values(SESSION_APPLICATION_ID)]) {
-    assert.ok(values.includes(value), `the filter enum never lists "${value}"`);
-  }
-  // One token is one value however many sets carry it.
-  assert.equal(new Set(values).size, values.length);
-});

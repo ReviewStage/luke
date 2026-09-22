@@ -7,7 +7,6 @@ import Foundation
 public enum ConversationActionKind: String, Sendable {
     case message
     case control
-    case open
     case createWorkspace = "create-workspace"
     case addAgent = "add-agent"
     case renameWorkspace = "rename-workspace"
@@ -20,7 +19,6 @@ public enum ConversationActionKind: String, Sendable {
 public enum ConversationActionTool: String, Sendable {
     case sendSessionMessage = "send_session_message"
     case runSessionControl = "run_session_control"
-    case openSession = "open_session"
     case createWorkspace = "create_workspace"
     case addWorkspaceAgent = "add_workspace_agent"
     case renameWorkspace = "rename_workspace"
@@ -30,7 +28,6 @@ public enum ConversationActionTool: String, Sendable {
         switch self {
         case .sendSessionMessage: .message
         case .runSessionControl: .control
-        case .openSession: .open
         case .createWorkspace: .createWorkspace
         case .addWorkspaceAgent: .addAgent
         case .renameWorkspace: .renameWorkspace
@@ -189,7 +186,6 @@ public struct ConversationToolRow: Equatable, Sendable {
         static let providerId = "provider_id"
         static let providerSessionId = "provider_session_id"
         static let text = "text"
-        static let application = "application"
         static let name = "name"
         static let agent = "agent"
     }
@@ -259,14 +255,6 @@ public struct ConversationToolRow: Equatable, Sendable {
                 providerId: providerId,
                 controlKind: controlKind
             )
-        case .open:
-            var runs: [ConversationToolRowRun] = [
-                .text("Opened "), .chip(chip(named, target: target, roster: roster)),
-            ]
-            if let application = target?.applicationId ?? input?[Argument.application]?.stringValue {
-                runs.append(.text(" in \(application)"))
-            }
-            return Composition(runs: runs, providerId: providerId, controlKind: nil)
         case .createWorkspace:
             var created: SessionIdentity?
             if case .accepted(_, let session, _, _) = envelope { created = session }

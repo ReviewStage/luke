@@ -6,7 +6,6 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import {
   maximumSessionMessageLength,
@@ -114,21 +113,15 @@ function context(
 const FIELDS = {
   [ACTION_KIND.MESSAGE]: { ...IDENTITY, text: "go ahead" },
   [ACTION_KIND.CONTROL]: { ...IDENTITY, control_id: "cancel-run" },
-  [ACTION_KIND.OPEN]: { ...IDENTITY },
   [ACTION_KIND.CREATE_WORKSPACE]: { provider_id: "conductor", project_id: "luke" },
   [ACTION_KIND.ADD_AGENT]: { ...IDENTITY, agent: "codex" },
   [ACTION_KIND.RENAME_WORKSPACE]: { ...IDENTITY, name: "new name" },
   [ACTION_KIND.RENAME_SESSION]: { ...IDENTITY, name: "new name" },
-  [ACTION_KIND.SETTING]: { setting_id: "voice_captions", value: "on" },
-  [ACTION_KIND.PANEL]: { tab: "sessions" },
-  [ACTION_KIND.FEEDBACK]: { kind: "feedback" },
-  [ACTION_KIND.UPDATE]: { action: "check" },
 } satisfies Record<ActionKind, WireRecord>;
 
 const SESSION_KINDS = [
   ACTION_KIND.MESSAGE,
   ACTION_KIND.CONTROL,
-  ACTION_KIND.OPEN,
   ACTION_KIND.ADD_AGENT,
   ACTION_KIND.RENAME_WORKSPACE,
   ACTION_KIND.RENAME_SESSION,
@@ -291,7 +284,6 @@ it.effect(
       const quiet = context({ sessions: [local] });
       const named = { provider_id: local.providerId, provider_session_id: local.providerSessionId };
       for (const kind of SESSION_KINDS) {
-        if (kind === ACTION_KIND.OPEN) continue;
         assert.notEqual(
           refused(yield* decide({ kind, fields: { ...FIELDS[kind], ...named } }, quiet)),
           "",
@@ -307,18 +299,12 @@ it.effect("local sessions have no such endpoint and stay entirely read-only", ()
     const observed = context({ sessions: [local] });
     const named = { provider_id: local.providerId, provider_session_id: local.providerSessionId };
     for (const kind of SESSION_KINDS) {
-      if (kind === ACTION_KIND.OPEN) continue;
       assert.equal(
         (yield* decide({ kind, fields: { ...FIELDS[kind], ...named } }, observed)).kind,
         undefined,
         kind,
       );
     }
-    // An open is not a write, and a session reporting no address is offered nowhere to open.
-    assert.equal(
-      refused(yield* decide({ kind: ACTION_KIND.OPEN, fields: named }, observed)),
-      ACTION_REFUSAL.NO_ADDRESS,
-    );
   }),
 );
 
@@ -452,49 +438,6 @@ it.effect("who opened a turn is recorded on the action and is never by itself a 
   }),
 );
 
-it.effect("a setting the guide does not carry is one the conversation cannot change", () =>
-  Effect.gen(function* () {
-    assert.equal(
-      refused(
-        yield* decide(
-          { kind: ACTION_KIND.SETTING, fields: FIELDS[ACTION_KIND.SETTING] },
-          { ...context(), guide: EMPTY_APP_GUIDE },
-        ),
-      ),
-      ACTION_REFUSAL.NO_SETTING,
-    );
-    // A run that reports nothing about itself changes nothing about itself.
-    assert.equal(
-      refused(
-        yield* decide(
-          { kind: ACTION_KIND.SETTING, fields: FIELDS[ACTION_KIND.SETTING] },
-          context(),
-        ),
-      ),
-      ACTION_REFUSAL.NO_SETTING,
-    );
-    assert.equal(
-      refused(
-        yield* decide({ kind: ACTION_KIND.UPDATE, fields: FIELDS[ACTION_KIND.UPDATE] }, context()),
-      ),
-      ACTION_REFUSAL.NO_UPDATE_REPORT,
-    );
-  }),
-);
-
-it.effect(
-  "opening a session is not a write: the action carries an identity, never an address",
-  () =>
-    Effect.gen(function* () {
-      const admitted = yield* decide(
-        { kind: ACTION_KIND.OPEN, fields: FIELDS[ACTION_KIND.OPEN] },
-        context(),
-      );
-      assert.ok(admitted.kind === ACTION_KIND.OPEN);
-      assert.deepEqual(Object.keys(admitted).sort(), ["identity", "kind", "origin"]);
-    }),
-);
-
 /**
  * Which observed state each action is admitted against, and nothing wider. Only
  * an action whose target the roster holds reads the roster, and only a creation
@@ -505,15 +448,10 @@ it.effect(
 const READS = {
   [ACTION_KIND.MESSAGE]: ["roster"],
   [ACTION_KIND.CONTROL]: ["roster"],
-  [ACTION_KIND.OPEN]: ["roster"],
   [ACTION_KIND.CREATE_WORKSPACE]: ["projects", "defaults"],
   [ACTION_KIND.ADD_AGENT]: ["roster"],
   [ACTION_KIND.RENAME_WORKSPACE]: ["roster"],
   [ACTION_KIND.RENAME_SESSION]: ["roster"],
-  [ACTION_KIND.SETTING]: [],
-  [ACTION_KIND.PANEL]: ["roster"],
-  [ACTION_KIND.FEEDBACK]: [],
-  [ACTION_KIND.UPDATE]: [],
 } satisfies Record<ActionKind, readonly ("roster" | "projects" | "defaults")[]>;
 
 it.effect(
@@ -546,7 +484,6 @@ it.effect(
                 }),
               agentModels: () => [],
             },
-            guide: EMPTY_APP_GUIDE,
           },
         );
         // Sorted, because which of a creation's two reads runs first is admission's

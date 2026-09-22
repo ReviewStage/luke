@@ -374,7 +374,6 @@ private struct WatchActionRow: View {
         switch row.kind {
         case .message: return "paperplane"
         case .control: return "bolt"
-        case .open: return "arrow.up.right.square"
         case .createWorkspace, .addAgent: return "plus"
         case .renameWorkspace, .renameSession: return "pencil"
         }

@@ -3,11 +3,10 @@
  * table. Family membership, the spoken tool count, and the schema list are
  * derived from it; adding a tool is adding a row.
  *
- * The session actions are the ones the panel's rows offer — the writes, and the
- * press that opens a session where its provider keeps it. Creating a workspace
- * is the session action with no row yet to mirror. The last four are the same presses
- * turned toward the app itself: a settings change, showing the panel, opening
- * the feedback composer, and the Updates row's button.
+ * The session actions are the writes the panel's rows offer. Creating a
+ * workspace is the session action with no row yet to mirror. Nothing here
+ * reaches the developer's machine: the hosted brain is the only brain, and a
+ * device-reaching action is a fresh design over the hosted relay.
  *
  * Whether a call may run is not this file's question: `admit` answers it once,
  * and a row declares only its name, its family, its kind, its prose, and its
@@ -22,14 +21,9 @@ import {
   ADD_AGENT_REQUEST,
   CONTROL_REQUEST,
   CREATE_WORKSPACE_REQUEST,
-  FEEDBACK_REQUEST,
   MESSAGE_REQUEST,
-  OPEN_REQUEST,
-  PANEL_REQUEST,
   RENAME_SESSION_REQUEST,
   RENAME_WORKSPACE_REQUEST,
-  SETTING_REQUEST,
-  UPDATE_REQUEST,
 } from "./action-schemas.js";
 
 /** What a row declares: what it is called, what it is, what it says, and what it takes. */
@@ -90,18 +84,6 @@ export const ACTIONS = {
     description: "Run a control advertised by an observed session.",
     request: erase(CONTROL_REQUEST),
   },
-  OPEN_SESSION: {
-    name: "open_session",
-    family: ACTION_FAMILY.SESSION,
-    kind: ACTION_KIND.OPEN,
-    description:
-      "Open one observed session where its provider keeps it — only when the developer asks " +
-      "to open, go to, or jump into that specific session. An ask to show, see, or list " +
-      'sessions or agents — "show me the cloud agents" — filters the panel through ' +
-      "show_panel instead, never this. An ask to open one session per provider uses this tool " +
-      "once per matching provider in the same response, without filtering the panel first.",
-    request: erase(OPEN_REQUEST),
-  },
   CREATE_WORKSPACE: {
     name: "create_workspace",
     family: ACTION_FAMILY.SESSION,
@@ -135,41 +117,6 @@ export const ACTIONS = {
       "developer just chose, in their own words. Only chats whose roster entry says they can " +
       "be renamed take one; an ask that names the workspace renames the workspace instead.",
     request: erase(RENAME_SESSION_REQUEST),
-  },
-  CHANGE_APP_SETTING: {
-    name: "change_app_setting",
-    family: ACTION_FAMILY.APP,
-    kind: ACTION_KIND.SETTING,
-    description: "Change a Luke setting.",
-    request: erase(SETTING_REQUEST),
-  },
-  SHOW_PANEL: {
-    name: "show_panel",
-    family: ACTION_FAMILY.APP,
-    kind: ACTION_KIND.PANEL,
-    description:
-      "Show Luke's panel on a tab — and, on the sessions tab, narrow or reorder the list. " +
-      'An ask to show, see, or list sessions or agents of some kind — "show me the Codex ' +
-      'agents", "show me my local sessions" — is this tool with a filter, not open_session.',
-    request: erase(PANEL_REQUEST),
-  },
-  OPEN_FEEDBACK_COMPOSER: {
-    name: "open_feedback_composer",
-    family: ACTION_FAMILY.APP,
-    kind: ACTION_KIND.FEEDBACK,
-    description: "Open the feedback composer.",
-    request: erase(FEEDBACK_REQUEST),
-  },
-  RUN_UPDATE_ACTION: {
-    name: "run_update_action",
-    family: ACTION_FAMILY.APP,
-    kind: ACTION_KIND.UPDATE,
-    description:
-      "Press the Updates row's button for the developer: check for updates, open the latest " +
-      "release's page in the browser to download by hand, or restart into an update already " +
-      "downloaded. Only the action the button currently offers runs — the app guide's Updates " +
-      "line names it.",
-    request: erase(UPDATE_REQUEST),
   },
 } as const satisfies Record<string, ToolSpec<ActionFamily, ActionKind>>;
 

@@ -21,7 +21,6 @@ public struct ActionTargetSnapshot: Equatable, Sendable {
     public let agentId: String?
     public let controlKind: RosterSessionControlKind?
     public let controlLabel: String?
-    public let applicationId: String?
 
     public init(
         providerId: String,
@@ -29,8 +28,7 @@ public struct ActionTargetSnapshot: Equatable, Sendable {
         title: String? = nil,
         agentId: String? = nil,
         controlKind: RosterSessionControlKind? = nil,
-        controlLabel: String? = nil,
-        applicationId: String? = nil
+        controlLabel: String? = nil
     ) {
         self.providerId = providerId
         self.providerSessionId = providerSessionId
@@ -38,7 +36,6 @@ public struct ActionTargetSnapshot: Equatable, Sendable {
         self.agentId = agentId
         self.controlKind = controlKind
         self.controlLabel = controlLabel
-        self.applicationId = applicationId
     }
 
     /// The identifiers stay required and exact, because an effect hangs on
@@ -55,8 +52,7 @@ public struct ActionTargetSnapshot: Equatable, Sendable {
             title: json["title"]?.stringValue,
             agentId: json["agentId"]?.stringValue,
             controlKind: json["controlKind"]?.stringValue.flatMap(RosterSessionControlKind.init(rawValue:)),
-            controlLabel: json["controlLabel"]?.stringValue,
-            applicationId: json["applicationId"]?.stringValue
+            controlLabel: json["controlLabel"]?.stringValue
         )
     }
 }

@@ -226,7 +226,7 @@ describe("admitEffect", () => {
   it.effect("reads the roster once however many admitters ask for it", () =>
     Effect.gen(function* () {
       const standing = context();
-      yield* admitEffect({ kind: ACTION_KIND.PANEL, fields: { filters: ["conductor"] } }, standing);
+      yield* admitEffect(MESSAGE, standing);
       assert.equal(standing.rosterReads(), 1);
     }),
   );
