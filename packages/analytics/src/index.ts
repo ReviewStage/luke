@@ -1,11 +1,4 @@
 export {
-  adoptableHeldProductEvents,
-  HELD_PRODUCT_EVENTS_VERSION,
-  type HeldProductEvents,
-  type HeldProductEventsRecord,
-  HeldProductEventsRecordSchema,
-} from "./held-events.js";
-export {
   isProductExchangeKind,
   isProductSurfaceEventName,
   PRODUCT_ACCOUNT_ACTION,
