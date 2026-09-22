@@ -45,11 +45,11 @@ interface UpdateServiceHostDependencies {
 
 /**
  * The updater's lifecycle and the four actions the Updates row offers, built
- * on the ambient scope: `UpdateService`'s timed check, first check, and
- * publishing retry fork into it directly, so they are interrupted by the
+ * on the ambient scope: `UpdateService`'s timed check and first check fork
+ * into it directly, so they are interrupted by the
  * launch's own scope closing at quit rather than a scope this function made
- * and had to give back itself. `UpdateService` holds the feed, the schedule,
- * and the retry budget; what is here is when it begins and the counted event
+ * and had to give back itself. `UpdateService` holds the feed and the
+ * schedule; what is here is when it begins and the counted event
  * each press files. Construction alone does not start it: the caller's own
  * `start()` is what the launch calls once it has reached the right point in
  * its own order, never this function's own return.
@@ -94,8 +94,7 @@ export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("desktop/create
       },
     });
 
-    // The timed check and the publishing-window retry are handles the quit
-    // takes back: a check firing into a process already draining reads the
+    // The timed check and the first check are handles the quit takes back: a check firing into a process already draining reads the
     // fixed feed for a build that is leaving.
     yield* Effect.addFinalizer(() => Effect.sync(() => service.stop()));
 
