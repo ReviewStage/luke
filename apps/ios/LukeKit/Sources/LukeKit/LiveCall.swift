@@ -62,6 +62,9 @@ public enum LiveCallBounds {
 /// What the call is built over and reports to.
 public struct LiveCallSeams: Sendable {
     public var makePeerConnection: @MainActor @Sendable () throws -> any LivePeerConnection
+    /// `LivePeerSeams.activateAudio` and `releaseAudio`: the route that records, held for the peer's life.
+    public var activateAudio: @MainActor @Sendable () throws -> Void
+    public var releaseAudio: @MainActor @Sendable () -> Void
     public var openMicrophone: @MainActor @Sendable () throws -> any LiveAudioTrack
     /// The service creating one session for the offer, in the voice given.
     public var createSession: @MainActor @Sendable (_ sdp: String, _ voice: LiveVoice) async -> LiveSessionOpening
@@ -89,6 +92,8 @@ public struct LiveCallSeams: Sendable {
 
     public init(
         makePeerConnection: @MainActor @Sendable @escaping () throws -> any LivePeerConnection,
+        activateAudio: @MainActor @Sendable @escaping () throws -> Void = {},
+        releaseAudio: @MainActor @Sendable @escaping () -> Void = {},
         openMicrophone: @MainActor @Sendable @escaping () throws -> any LiveAudioTrack,
         createSession: @MainActor @Sendable @escaping (_ sdp: String, _ voice: LiveVoice) async -> LiveSessionOpening,
         voice: @MainActor @Sendable @escaping () -> LiveVoice,
@@ -104,6 +109,8 @@ public struct LiveCallSeams: Sendable {
         sessionCloseTimeout: Duration = LivePeerBounds.sessionClose
     ) {
         self.makePeerConnection = makePeerConnection
+        self.activateAudio = activateAudio
+        self.releaseAudio = releaseAudio
         self.openMicrophone = openMicrophone
         self.createSession = createSession
         self.voice = voice
@@ -294,6 +301,8 @@ public final class LiveCall {
         let peer = LivePeer(
             seams: LivePeerSeams(
                 makePeerConnection: seams.makePeerConnection,
+                activateAudio: seams.activateAudio,
+                releaseAudio: seams.releaseAudio,
                 openMicrophone: seams.openMicrophone,
                 createSession: { [weak self] sdp in await self?.createSession(sdp: sdp, opening: thisOpening) },
                 onStatus: { [weak self] status in self?.peerStatusChanged(status) },
