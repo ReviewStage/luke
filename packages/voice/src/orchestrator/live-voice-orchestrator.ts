@@ -170,6 +170,13 @@ export class LiveVoiceOrchestrator {
    * unmuting one nobody wants heard.
    */
   #pressHeld = false;
+  /**
+   * Whether the talk key itself is down, apart from any press. It is what a
+   * press that first has to hang another call up reads once that call is
+   * gone, since the key may have come up during the wait, before the press
+   * had marked itself held.
+   */
+  #keyDown = false;
   #reported: LiveVoiceView | undefined;
   /** The call whose exchange has been counted, so a session pausing between Luke's sentences is not a second exchange. */
   #countedCall: LiveVoiceCall | undefined;
@@ -198,16 +205,26 @@ export class LiveVoiceOrchestrator {
    * against a standing session it unmutes. It never mutes: the key coming up
    * does that, so a hold is heard for exactly as long as it lasts, and a
    * hold that ended while the system's microphone dialog stood, or while the
-   * session was opening, unmutes nothing.
+   * session was opening, unmutes nothing. A press made while the planning
+   * window holds the keyboard names that window's open plan: it speaks into
+   * the call about that plan, opening one if none stands and hanging up a
+   * call about anything else first, as the window's own button does. A press
+   * naming no plan speaks into whatever call stands.
    */
-  beginTalk(): Effect.Effect<void> {
+  beginTalk(planId?: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
         return;
       }
-      yield* this.#talk(undefined);
+      this.#keyDown = true;
+      if (planId !== undefined && this.#call !== undefined && this.#callPlan !== planId) {
+        yield* this.#hangUp();
+        // Note that a key let go of while the old call closed opens nothing.
+        if (!this.#keyDown) return;
+      }
+      yield* this.#talk(planId);
     });
   }
 
@@ -277,6 +294,7 @@ export class LiveVoiceOrchestrator {
    */
   endTalk(): Effect.Effect<void> {
     return Effect.suspend(() => {
+      this.#keyDown = false;
       if (!this.#pressHeld) return Effect.void;
       this.#pressHeld = false;
       if (this.#opening) return Effect.void;

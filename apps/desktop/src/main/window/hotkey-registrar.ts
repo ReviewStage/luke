@@ -41,6 +41,11 @@ export interface TalkKeyHandle {
 export interface HotkeyHost {
   voiceHost(): BrowserWindow | undefined;
   /**
+   * The plan a talk press is about: the planning window's open plan while
+   * that window holds the keyboard, and nothing otherwise.
+   */
+  talkPlanId(): string | undefined;
+  /**
    * One key's registration moved, so what the renderers are teaching is
    * written again. The raw accelerator is what travels, as in bootstrap: the
    * renderer draws the chord as its separate keys and says it as one word,
@@ -292,9 +297,15 @@ export class HotkeyRegistrar {
   }
 
   /** A press the recording row is owed rather than the voice host. */
-  #sendPress(channel: string): void {
+  #sendPress(channel: string, payload?: UnparsedWireValue): void {
     if (this.#shortcutCapturing) return;
-    this.#sendTo(this.#voiceHostContents(), channel);
+    this.#sendTo(this.#voiceHostContents(), channel, payload);
+  }
+
+  /** What a talk press carries: the plan it is about, where the planning window names one. */
+  #talkPress(): UnparsedWireValue | undefined {
+    const planId = this.#host.talkPlanId();
+    return planId === undefined ? undefined : { planId };
   }
 
   /**
@@ -308,9 +319,9 @@ export class HotkeyRegistrar {
     const voiceHost = this.#voiceHostContents();
     if (this.#shortcutCapturing || !voiceHost) return;
     this.#fallbackTalking = !this.#fallbackTalking;
-    voiceHost.send(
-      this.#fallbackTalking ? channels.onVoiceHotkeyPress : channels.onVoiceHotkeyRelease,
-    );
+    if (this.#fallbackTalking)
+      this.#sendTo(voiceHost, channels.onVoiceHotkeyPress, this.#talkPress());
+    else voiceHost.send(channels.onVoiceHotkeyRelease);
   }
 
   /**
@@ -363,7 +374,7 @@ export class HotkeyRegistrar {
     const candidates = state.candidates(state.chosen, this.#taken(HOTKEY_RANK.TALK));
     if (candidates.length === 0) return false;
     this.#talkKeyWatcher = this.#createTalkKeyWatcher({
-      onPress: () => this.#sendPress(channels.onVoiceHotkeyPress),
+      onPress: () => this.#sendPress(channels.onVoiceHotkeyPress, this.#talkPress()),
       onRelease: () => this.#sendTo(this.#voiceHostContents(), channels.onVoiceHotkeyRelease),
       onRegistered: (accelerator) => {
         state.accelerator = accelerator;

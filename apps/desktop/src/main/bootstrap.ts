@@ -67,6 +67,8 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
   const captureOutput = argumentValue(argv, "--capture-evidence");
   const fixtureName = argumentValue(argv, "--fixture");
   const captureMode = captureOutput !== undefined;
+  const fixtureMode = captureMode || fixtureName !== undefined;
+  const profile = argumentValue(argv, "--profile") ?? RUN_PROFILE.IDLE;
   const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
   dependencies.initializeCrashReporting(runMode);
 
@@ -87,12 +89,13 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     hostedServiceBaseUrl: accountBaseUrl.replace(/\/api\/auth\/?$/, ""),
     launch: {
       captureOutput,
-      profile: argumentValue(argv, "--profile") ?? RUN_PROFILE.IDLE,
+      profile,
       fixtureName,
       startPeeked: argv.includes("--peek"),
       startInSlot: argv.includes("--slot"),
+      startInPlanning: fixtureMode && profile === RUN_PROFILE.PLANNING,
       captureMode,
-      fixtureMode: captureMode || fixtureName !== undefined,
+      fixtureMode,
     },
     report: dependencies.report,
     openExternal: dependencies.openExternal,

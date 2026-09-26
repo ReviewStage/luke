@@ -1,5 +1,9 @@
 import type { GitHubRepository } from "@sidecar/hosted/github-wire";
-import type { GitHubCallFailure } from "@sidecar/hosted/planning-view";
+import {
+  type GitHubCallFailure,
+  PLAN_CALL_FAILURE,
+  type PlanningRepositoriesAnswer,
+} from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -22,7 +26,7 @@ export const REPOSITORY_LIST = {
   FAILED: "failed",
 } as const;
 
-type RepositoryList =
+export type RepositoryList =
   | { readonly status: typeof REPOSITORY_LIST.READING }
   | {
       readonly status: typeof REPOSITORY_LIST.READY;
@@ -30,6 +34,24 @@ type RepositoryList =
       readonly truncated: boolean;
     }
   | { readonly status: typeof REPOSITORY_LIST.FAILED; readonly failure: GitHubCallFailure };
+
+/**
+ * Reads the repository list through the ask the caller hands in and answers
+ * where the list stands. A refused ask is the failed list with Try again,
+ * never a rejection, so the sheet never stays on its reading line.
+ */
+export async function readRepositoryList(
+  ask: () => Promise<PlanningRepositoriesAnswer>,
+): Promise<RepositoryList> {
+  try {
+    const answer = await ask();
+    return "failure" in answer
+      ? { status: REPOSITORY_LIST.FAILED, failure: answer.failure }
+      : { status: REPOSITORY_LIST.READY, ...answer };
+  } catch {
+    return { status: REPOSITORY_LIST.FAILED, failure: PLAN_CALL_FAILURE.UNANSWERED };
+  }
+}
 
 interface RepositoryChoice {
   readonly owner: string;
@@ -191,15 +213,7 @@ export function SetupSheet({
 
   const readList = useCallback(() => {
     setList({ status: REPOSITORY_LIST.READING });
-    act(ACT_KIND.PLANNING_REPOSITORIES).then(
-      (answer) =>
-        setList(
-          "failure" in answer
-            ? { status: REPOSITORY_LIST.FAILED, failure: answer.failure }
-            : { status: REPOSITORY_LIST.READY, ...answer },
-        ),
-      (refused: Error) => setNote(refused.message),
-    );
+    readRepositoryList(() => act(ACT_KIND.PLANNING_REPOSITORIES)).then(setList, () => undefined);
   }, [act]);
   useEffect(readList, [readList]);
 

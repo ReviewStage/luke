@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { VOICE_HOTKEY_NONE } from "@sidecar/settings";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import type { BrowserWindow } from "electron";
 import { test } from "vitest";
 import { channels } from "#shared/bridge";
@@ -16,16 +17,28 @@ interface RecordedShortcut {
   callback: () => void;
 }
 
-function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
+function harness(
+  options: {
+    credentials?: boolean;
+    registers?: boolean;
+    talkPlanId?: () => string | undefined;
+  } = {},
+) {
   const registered: RecordedShortcut[] = [];
   const unregistered: string[] = [];
   let unregisterAllCount = 0;
   let talkEdges: TalkKeyEdges | undefined;
   let talkStart = true;
   const voiceHostSent: string[] = [];
+  const voiceHostPayloads: (UnparsedWireValue | undefined)[] = [];
   // SAFETY: the registrar reaches only `webContents.send` on the voice host.
   const voiceHost = {
-    webContents: { send: (channel: string) => voiceHostSent.push(channel) },
+    webContents: {
+      send: (channel: string, payload?: UnparsedWireValue) => {
+        voiceHostSent.push(channel);
+        voiceHostPayloads.push(payload);
+      },
+    },
   } as unknown as BrowserWindow;
 
   const shortcut: ShortcutSurface = {
@@ -52,6 +65,7 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     },
     host: {
       voiceHost: () => voiceHost,
+      talkPlanId: options.talkPlanId ?? (() => undefined),
       hotkeyChanged: () => {},
     },
   });
@@ -62,6 +76,7 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     unregistered: () => unregistered,
     unregisterAllCount: () => unregisterAllCount,
     voiceHostSent: () => voiceHostSent,
+    voiceHostPayloads: () => voiceHostPayloads,
     pressTalk() {
       const talk = registered.find((entry) => entry.accelerator === registrar.talk);
       assert.ok(talk, "the talk key is registered with Electron");
@@ -199,5 +214,30 @@ test("the native watcher's edges reach the voice host as they are", async () => 
   assert.deepEqual(context.voiceHostSent(), [
     channels.onVoiceHotkeyPress,
     channels.onVoiceHotkeyRelease,
+  ]);
+});
+
+test("a talk press names the planning window's open plan where it has one, and a release names nothing", async () => {
+  let planId: string | undefined = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  const context = harness({ talkPlanId: () => planId });
+  await context.registrar.reapply(HOTKEY_RANK.TALK);
+  context.talkEdges()?.onPress();
+  context.talkEdges()?.onRelease();
+  planId = undefined;
+  context.talkEdges()?.onPress();
+  assert.deepEqual(context.voiceHostPayloads(), [
+    { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+    undefined,
+    undefined,
+  ]);
+
+  const fallback = harness({ talkPlanId: () => "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" });
+  fallback.failTalkStart();
+  await fallback.registrar.reapply(HOTKEY_RANK.TALK);
+  fallback.pressTalk();
+  fallback.pressTalk();
+  assert.deepEqual(fallback.voiceHostPayloads(), [
+    { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+    undefined,
   ]);
 });

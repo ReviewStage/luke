@@ -387,3 +387,73 @@ Two existing rules carry over unchanged:
   a counted event, or a trace. The GitHub token lives in connection handling,
   and the model is told to keep secrets out of the plan and the prompt.
   Nothing scans for this, so each owning issue holds it by construction.
+
+## Known limitations and validation
+
+This section records what the MVP was checked against when it was
+integrated (LUKE-346) and what it was not. It records results only. It
+changes when a check is run, not when one is planned.
+
+### Validated
+
+- `./scripts/check.sh` exits 0 on the integrated branch, on Linux. That run
+  covers repository checks, types, lint, the hermetic unit and store tests,
+  and the builds.
+- The journey is held by hermetic tests at the model and transport
+  boundaries (fake OpenAI, fake eve, scripted model, fake GitHub MCP, PGlite):
+  - starting a plan at a resolved commit, and reads at that commit;
+  - `update_plan` saves, and the window's host follow draws them within one
+    beat;
+  - a spoken turn reaching the planning model in the plan's own
+    conversation, with the saved document on every turn;
+  - re-attaching and resuming on the same plan;
+  - switching plans ends the old plan's call, and the new plan is active
+    before that call has finished closing;
+  - the final review and the handoff written into the same document;
+  - Copy's Markdown, at the store's largest document;
+  - the talk key, pressed while the planning window holds the keyboard,
+    speaking into the open plan's call.
+- The planning window's regions render as static markup in tests: a
+  read-only checklist, no composer and no approve controls, and the empty,
+  failed, missing, and not-connected states.
+
+### Not validated
+
+- **A real Mac.** This Linux VM has no Mac, CI builds nothing for one, and
+  `./scripts/verify.sh` has not been run on the integrated application. The
+  normal window chrome, the Dock tile and Cmd-Tab, Cmd-W and Cmd-C, the menu
+  handing over between the planning window and the panel, and the voice bar
+  during a call have never been seen running. `./scripts/evidence.sh` now
+  captures the planning window over a synthetic plan
+  (`app-smoke-planning.png`, from `--profile planning`), but that capture has
+  not been taken yet.
+- **Real voice.** No spoken planning conversation has run against GPT Live:
+  ordinary assent, interruption, a continuing answer, a correction, resuming,
+  and switching plans by voice are untested outside the fakes.
+- **A live GitHub connection.** No repository has been read through GitHub's
+  hosted MCP service outside the fake.
+
+### Known limitations
+
+- **GitHub is not connected in production.** The plan, repository, and brain
+  routes run on `githubAccessWithoutConnections`
+  (`apps/web/server/hosted/github-source.ts`), which answers `not-connected`,
+  and the desktop's Connect GitHub press is refused ("Connecting GitHub from
+  Luke is not available yet"). So a deployed build cannot list repositories,
+  start a plan, or read a file. How a developer authorizes repository reads
+  is waiting on a product decision and will land as a separate LUKE-338
+  follow-up, with its `PRIVACY.md` disclosures.
+- **No thinking dots in the voice bar.** Nothing on the Mac hears that the
+  planning model is working on a delegated question. The sessions route
+  forwards `session.delegation.created`, but the host's live session holder
+  does not report it, so the planning window passes `thinking={false}`.
+  Luke's own spoken "let me look" is the only sign of work in progress.
+- **`read_web_page` checks addresses without pinning them.** Every host the
+  read reaches, and every redirect hop, is resolved and refused unless all of
+  its addresses are public unicast. The check is a lookup ahead of the
+  request, though, and the socket is not pinned to the checked address. A
+  host whose DNS answer changes between the lookup and the connection (DNS
+  rebinding) is the one case it does not cover.
+- **Updates are polled.** While the window is open the host re-reads the plan
+  list every 3 seconds, and re-reads the document when its `updatedAt`
+  moves. A save shows up within about one beat, not instantly.

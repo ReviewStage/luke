@@ -87,6 +87,21 @@ test("an evidence run is a capture run, and neither observes nor sends", () => {
   assert.equal(config.runMode.observesProviders, false);
 });
 
+test("the planning profile opens the planning window only in a fixture run", () => {
+  const capture = bootstrap(
+    [],
+    ["--capture-evidence", "/tmp/planning.png", "--profile", "planning"],
+  );
+  assert.equal(capture.launch.startInPlanning, true);
+  const fixture = bootstrap([], ["--fixture", "smoke", "--profile", "planning"]);
+  assert.equal(fixture.launch.startInPlanning, true);
+  // A live run names no synthetic plan, whatever profile it is handed.
+  const live = bootstrap([], ["--profile", "planning"]);
+  assert.equal(live.launch.startInPlanning, false);
+  const other = bootstrap([], ["--capture-evidence", "/tmp/speaking.png", "--profile", "speaking"]);
+  assert.equal(other.launch.startInPlanning, false);
+});
+
 test("the account override is read in a development run and never in a packaged one", () => {
   const steps: string[] = [];
   const development = bootstrapDesktop({
