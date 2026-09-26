@@ -240,6 +240,26 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     }),
   );
 
+  it.effect("a default branch with a slash in its name resolves to its commit", () =>
+    Effect.gen(function* () {
+      const github = fakeGitHub();
+      const { owner, ask } = yield* openAccounts(github, false);
+      const release = { ...relay(), defaultBranch: "release/1.0" };
+      release.branches.set("release/1.0", RELAY_COMMIT);
+      github.connect(owner, "fixture-token-release", [release]);
+
+      const started = yield* ask(request(PLANS, owner, { method: "POST", body: RELAY }));
+
+      assert.deepEqual(
+        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.repository,
+        {
+          ...RELAY_RESOLVED,
+          branch: "release/1.0",
+        },
+      );
+    }),
+  );
+
   it.effect("a repository the connection cannot read starts no plan, and says why", () =>
     Effect.gen(function* () {
       const github = fakeGitHub();
