@@ -640,14 +640,37 @@ authored planning instructions, the standing context each turn opens with is
 the plan's repository, commit, and saved document read again from the row,
 and the tools are the planning list alone, `update_plan` bound to the plan
 the conversation belongs to (`readPlanOfConversation`), and
-`get_file_contents` under the same binding, with the research reads to join
-them. A resumed session is seeded with the
+`get_file_contents` under the same binding, with the two public research
+reads beside them. A resumed session is seeded with the
 conversation so far like any other. A plan conversation primes and flushes no
 notebook, and never reaches the panel's reads, which name their kinds. The
 writer holds rows to `HOSTED_TOOL_SET`, the catalog and the planning tools,
 so a turn's `update_plan` calls are written and read back like any tool's.
 Question choice, agreement, assumption flags, and corrections are the
 instructions' alone: no code reads the document for meaning.
+
+The research reads (`server/hosted/public-research.ts`) are `search_web`,
+one query sent to OpenAI's Responses API with its own `web_search` tool on
+Luke's key and the brain's model, asked to store nothing, and
+`read_web_page`, one public HTTPS page fetched and reduced to its text.
+Neither knows the account or the plan: what leaves is the query and fixed
+instructions, or a GET for one URL with no credential of the account's, and
+the result goes back only to the call that asked. A query is one line of at
+most 200 characters with nothing shaped like a credential; keeping private
+repository text out of it is the planning instructions' rule, since plain
+words cannot be told apart by code. A search is `found` only with a cited
+public URL, each with the answer's words that cited it; an uncited answer is
+`no-results` and its words go no further, and every failure is `not-searched`
+or `not-read` in words that say nothing was found. A page read refuses any
+host whose address, resolved before each request and again on every redirect
+hop it follows by hand, is private, loopback, link-local, CGNAT, unique-local,
+or reserved; the check is a lookup ahead of the request, so a DNS answer that
+changes between the two is the case it does not cover. A turn gets at most
+4 searches and 6 page reads, 5 sources a search, and 20,000 characters of a
+page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
+inference on Luke's key, so each one spends one of the account's daily hosted
+uses before it is sent, and a spent allowance is answered as not searched.
+`tests/public-research.test.ts` holds both against scripted HTTP and DNS.
 `tests/hosted-planning.test.ts` runs the scripted model through the host and
 the relay, and the `brain-host` eval runs a plan conversation through eve.
 
