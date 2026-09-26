@@ -1,4 +1,4 @@
-import { planDocumentSchema } from "@sidecar/hosted/plan-wire";
+import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import {
@@ -9,7 +9,7 @@ import {
 } from "eve/evals";
 import { BRAIN_TOOL, WORKSPACE_FILE } from "../server/core.js";
 import { BRAIN_HOST_MODEL_FIXTURE } from "../server/hosted/brain-host/bounds.js";
-import { documentTextOf } from "../server/hosted/brain-host/planning.js";
+import { documentTextOf, repositoryTextOf } from "../server/hosted/brain-host/planning.js";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
 import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool.js";
 
@@ -23,7 +23,9 @@ import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool.js";
  * adds the developer's latest words as an unconfirmed assumption, saves the
  * whole document back, and answers with one question; told to look
  * something up, it searches the public web for it instead and answers with
- * the first source the search found, or says it found none. It is selected only by
+ * the first source the search found, or says it found none; asked for the
+ * prompt, it appends a handoff prompt naming the plan's repository and
+ * commit to the same body and saves it with the assumptions as they stand. It is selected only by
  * the fixture's own environment variable and a deployment never names it.
  */
 
@@ -35,16 +37,27 @@ export const SCRIPTED_PLANNING_REPLY = "Noted as an assumption. Who should be ab
 export const SCRIPTED_LOOK_UP = "Look up: ";
 export const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
 export const SCRIPTED_NO_SOURCE_REPLY = "I found no source for that, so it stays an open question.";
+/** What a developer's words start with when they ask the scripted planner for the handoff prompt. */
+export const SCRIPTED_WRITE_PROMPT = "Write the prompt.";
+export const SCRIPTED_HANDOFF_HEADING = "## Handoff prompt";
 
 const readDocument = Schema.decodeUnknownOption(Schema.fromJsonString(planDocumentSchema));
 
-/** The saved document the newest standing context carries; an empty one where none reads. */
-function handedDocument(request: MockModelRequest) {
+/** What the newest standing context carries, read by the reader handed in. */
+function newestStanding(
+  request: MockModelRequest,
+  read: (standingContext: string) => string | undefined,
+): string | undefined {
   const texts = request.messages
     .filter((message) => message.role === "system")
-    .map((message) => documentTextOf(message.text))
+    .map((message) => read(message.text))
     .filter((text) => text !== undefined);
-  const newest = texts.at(-1);
+  return texts.at(-1);
+}
+
+/** The saved document the newest standing context carries; an empty one where none reads. */
+function handedDocument(request: MockModelRequest) {
+  const newest = newestStanding(request, documentTextOf);
   const document = newest === undefined ? Option.none() : readDocument(newest);
   return Option.getOrElse(document, () => ({ body: "", assumptions: [] }));
 }
@@ -61,6 +74,24 @@ function researchReply(searched: MockModelToolResult): MockModelResponse {
   });
 }
 
+/** The handoff prompt appended to the saved body, saved with the assumptions exactly as handed. */
+function handoffResponse(request: MockModelRequest, document: PlanDocument): MockModelResponse {
+  const repository = newestStanding(request, repositoryTextOf) ?? "an unknown repository";
+  const prompt = `${SCRIPTED_HANDOFF_HEADING}\n\nYou are implementing this plan in ${repository}.\n`;
+  const body = document.body.trimEnd();
+  return {
+    toolCalls: [
+      {
+        name: UPDATE_PLAN_TOOL.name,
+        input: {
+          body: body.length === 0 ? prompt : `${body}\n\n${prompt}`,
+          assumptions: document.assumptions,
+        },
+      },
+    ],
+  };
+}
+
 function planningResponse(request: MockModelRequest): MockModelResponse {
   const searched = request.toolResults.find((result) => result.name === SEARCH_WEB_TOOL.name);
   if (searched) return researchReply(searched);
@@ -72,6 +103,9 @@ function planningResponse(request: MockModelRequest): MockModelResponse {
     return { toolCalls: [{ name: SEARCH_WEB_TOOL.name, input: { query } }] };
   }
   const document = handedDocument(request);
+  if (request.lastUserMessage.startsWith(SCRIPTED_WRITE_PROMPT)) {
+    return handoffResponse(request, document);
+  }
   return {
     toolCalls: [
       {

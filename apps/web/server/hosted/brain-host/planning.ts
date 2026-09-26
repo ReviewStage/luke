@@ -26,8 +26,10 @@ import type { HostedToolDeclaration } from "./tools.js";
  * a different tool list; nothing else about the turn changes. The
  * instructions below are the whole of the planning workflow: which question
  * comes next, when an answer counts as agreement, when an assumption is
- * confirmed, and how a correction moves the document are the model's
- * judgment, and no code here tracks, scores, or gates any of it. The service
+ * confirmed, how a correction moves the document, and when the spoken final
+ * review is done and the handoff prompt is written into the same document
+ * are the model's judgment, and no code here tracks, scores, or gates any of
+ * it. The service
  * hands the model the saved document at every turn and carries its tool
  * calls under the plan the conversation belongs to; it never reads the
  * document for meaning and never turns a tool result into a requirement.
@@ -72,11 +74,35 @@ Keep this coverage in mind as you choose questions, and skip what the feature do
 - A clear, direct answer to a precise proposal is agreement: set that assumption to confirmed true without asking the same question again.
 - Discussing an assumption does not confirm it. Neither do silence, a fragment, a hesitant or ambiguous answer, or your own reasoning; ask again or clarify instead.
 - Anything you inferred or added yourself (a detail the developer never said, a consequence you drew) is read back briefly and confirmed only once the developer agrees to it.
-- When a correction changes what an assumption means, rewrite it and set it back to confirmed false, unless the developer's correction itself states the new value clearly, in which case it is confirmed true. Then think through what the correction affects, revise those parts of the document, and reopen the questions it unsettles as open questions rather than silently changing other confirmed assumptions.`;
+- When a correction changes what an assumption means, rewrite it and set it back to confirmed false, unless the developer's correction itself states the new value clearly, in which case it is confirmed true. Then think through what the correction affects, revise those parts of the document, and reopen the questions it unsettles as open questions rather than silently changing other confirmed assumptions.
+
+# The final review
+
+- When the developer says the plan is done, or asks for the prompt before you have reviewed it together, review the saved document aloud with them before writing any prompt. The review is conversation: there is no screen, button, or approval for it, and you decide when the plan is ready.
+- Go through, one at a time and a short sentence each: every assumption still confirmed false, asking whether to keep it; every question left under "## Open questions"; any contradiction between sections; and the coding choices you propose to leave to the implementing agent.
+- Save as the review moves, exactly as in ordinary editing: confirm an assumption the developer agrees to, rewrite or drop one they change, move an answered question into the body, and move a question they rule out under "## Out of scope".
+- The developer may choose to leave an assumption unconfirmed. Then it stays confirmed false in the list and the prompt states it as a working assumption; never set a flag to true to finish the review.
+
+# The handoff prompt
+
+- Write the prompt only once the review is done and the developer asks for it. Save it with update_plan into the same document, as the body's final section under "## Handoff prompt", keeping the plan above it and sending the assumption list with every assumption and flag as it stands. There is no other place for the prompt and no separate export.
+- The prompt is for a coding agent that never heard this conversation and has only the repository and the prompt, so it stands on its own: never refer to "the plan above", "as discussed", or anything said aloud. It carries:
+  - the objective, in a sentence or two;
+  - the agreed scope, and what is out of it;
+  - the repository context: the repository as owner/name, the branch and the full commit the plan was read at, and the repository-relative paths of the files and modules the work touches, naming only what you read or the developer told you;
+  - the behavior, step by step, as agreed;
+  - the exceptions and failures that apply, and what the user sees in each;
+  - acceptance examples, concrete enough to check the work against;
+  - the working assumptions still unconfirmed, stated as such;
+  - the implementation freedom agreed on: what the agent may decide for itself.
+- Keep credentials, tokens, secrets, and private personal details out of the prompt, even where the repository or a tool result showed one.
+- Once it is saved, tell the developer in a sentence that the prompt is written and that Copy takes the whole document. Do not read the prompt aloud.
+- If the developer asks for a change after that, it is ordinary editing: revise the plan and the prompt together, so the prompt never disagrees with the plan, and save the whole document again.`;
 
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const PLAN_MARKER = "[plan]";
 const DOCUMENT_MARKER = "[saved document]";
+const REPOSITORY_LABEL = "Repository: ";
 
 /** What the standing context says in place of a document when the conversation's plan no longer stands. */
 const NO_PLAN_TEXT = "This plan no longer exists, so nothing can be saved.";
@@ -96,7 +122,7 @@ export function planningStandingContext(stored: StoredPlan | undefined, now: num
   return [
     heading,
     `Name: ${plan.name}`,
-    `Repository: ${repository.owner}/${repository.name}, branch ${repository.branch} at commit ${repository.commit}`,
+    `${REPOSITORY_LABEL}${repository.owner}/${repository.name}, branch ${repository.branch} at commit ${repository.commit}`,
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
   ].join("\n");
@@ -112,6 +138,12 @@ export function documentTextOf(standingContext: string): string | undefined {
   const lines = standingContext.split("\n");
   const at = lines.indexOf(DOCUMENT_MARKER);
   return at === -1 ? undefined : lines[at + 1];
+}
+
+/** The repository line the standing context carries, read back for the same fixture reader; nothing where it carries none. */
+export function repositoryTextOf(standingContext: string): string | undefined {
+  const line = standingContext.split("\n").find((text) => text.startsWith(REPOSITORY_LABEL));
+  return line?.slice(REPOSITORY_LABEL.length);
 }
 
 /** What one planning call runs under: the plan the conversation belongs to, and the turn's research bounds. */

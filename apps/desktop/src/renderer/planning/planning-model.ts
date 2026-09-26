@@ -1,5 +1,5 @@
 import { GITHUB_FAILURE, type GitHubRepository } from "@sidecar/hosted/github-wire";
-import type { Plan, PlanRepository } from "@sidecar/hosted/plan-wire";
+import type { Plan, PlanDocument, PlanRepository } from "@sidecar/hosted/plan-wire";
 import {
   type GitHubCallFailure,
   PLAN_CALL_FAILURE,
@@ -9,6 +9,7 @@ import {
 import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import type { VoiceView } from "#shared/messages/voice-view";
+import { planMarkdown } from "#shared/plan-markdown";
 import { captionSegments } from "../caption-layout";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { voiceErrorToShow, voiceNoticeToShow } from "../use-voice-view";
@@ -19,7 +20,7 @@ import { voiceErrorToShow, voiceNoticeToShow } from "../use-voice-view";
  * Every decision the window makes is here and pure, so the components only
  * lay it out: which state the document region is in, how a repository and
  * its commit read in the header, what a GitHub refusal tells the developer
- * to do, and which one line the voice bar shows.
+ * to do, what Copy shows, and which one line the voice bar shows.
  */
 
 /** The one line an empty document shows in its place. */
@@ -66,6 +67,55 @@ export function documentRegion(view: PlanningView): DocumentRegion {
 export function repositoryLine(repository: PlanRepository): string {
   const commit = repository.commit.slice(0, SHORT_COMMIT_CHARS);
   return `${repository.owner}/${repository.name} · ${repository.branch} @ ${commit}`;
+}
+
+/** What the Copy button shows: its resting glyph, the check mark, or the failure beside it. */
+export const COPY_SHOWN = {
+  IDLE: "idle",
+  COPIED: "copied",
+  FAILED: "failed",
+} as const;
+
+export type CopyShown = (typeof COPY_SHOWN)[keyof typeof COPY_SHOWN];
+
+/** What the last Copy press came to, and the Markdown it handed the clipboard. */
+export interface CopyOutcome {
+  readonly shown: typeof COPY_SHOWN.COPIED | typeof COPY_SHOWN.FAILED;
+  readonly words: string;
+}
+
+/** The sentence the header shows when the clipboard refused the copy. */
+export const COPY_FAILED_NOTE = "The plan could not be copied to the clipboard. Try again.";
+
+/**
+ * Copies the document as Markdown through the clipboard the caller hands in,
+ * and answers what came of it. A refusal from the clipboard is the failed
+ * outcome, never a rejection, so the header always has something to show.
+ */
+export async function copyPlanDocument(
+  document: PlanDocument,
+  writeClipboard: (words: string) => Promise<void>,
+): Promise<CopyOutcome> {
+  const words = planMarkdown(document);
+  try {
+    await writeClipboard(words);
+    return { shown: COPY_SHOWN.COPIED, words };
+  } catch {
+    return { shown: COPY_SHOWN.FAILED, words };
+  }
+}
+
+/**
+ * What Copy shows for the document drawn now. An outcome speaks only for the
+ * text it copied: once a save changes the document, the check mark no longer
+ * says what the clipboard holds, so the button returns to its resting glyph.
+ * Note that we compare the text rather than the document object, because
+ * every snapshot main sends is a fresh copy of the same document.
+ */
+export function copyShown(outcome: CopyOutcome | undefined, document: PlanDocument): CopyShown {
+  return outcome !== undefined && outcome.words === planMarkdown(document)
+    ? outcome.shown
+    : COPY_SHOWN.IDLE;
 }
 
 /** Whether the setup sheet should offer to connect GitHub rather than a list. */

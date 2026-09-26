@@ -63,6 +63,7 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
+import { PLAN_MARKDOWN_MAX_CHARS } from "../plan-markdown";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
 import { isSessionIdentity, type SessionOpenResult } from "./session";
 import type { UpdateSnapshot } from "./update";
@@ -688,7 +689,9 @@ export const ACT = {
   },
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {
-    payload: record({ words: exactText(100_000) }),
+    // A plan's whole document is copied through this act, so it admits the
+    // longest one the store can hold, and an empty document copies as the empty text it is.
+    payload: record({ words: exactTextAllowingEmpty(PLAN_MARKDOWN_MAX_CHARS) }),
     result: answersNothing,
     refusal: "Could not copy that to the clipboard on this system.",
   },
