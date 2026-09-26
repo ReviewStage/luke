@@ -1099,12 +1099,12 @@ it.effect(
         () => context.eve.opened.length === 1,
         () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
       );
-      const planConversation = await planConversationOf(context.target.userId, plan.id);
-      assert.ok(planConversation);
-      assert.notEqual(planConversation, context.target.conversationId);
+      const planned = await planConversationOf(context.target.userId, plan.id);
+      assert.ok(planned);
+      assert.notEqual(planned, context.target.conversationId);
       assert.deepEqual(
         context.eve.opened.map((message) => [message.conversationId, message.turn]),
-        [[planConversation, BRAIN_HOST_TURN.SPOKEN]],
+        [[planned, BRAIN_HOST_TURN.SPOKEN]],
       );
 
       // A fresh connection names no plan; the session's row binds it, and its words land in the same plan.
@@ -1122,6 +1122,13 @@ it.effect(
       );
       await sendText(reattach.socket, JSON.stringify(heard("Any member can invite.", 5000, 6400)));
       await sendText(reattach.socket, JSON.stringify(delegated("dl_2", 6500)));
+      // The line is attached to its ask once the brain took it, so the hang-up waits for the record.
+      const planConversation = await planConversationOf(context.target.userId, plan.id);
+      assert.ok(planConversation);
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        if ((await spokenDelegations(planConversation)).includes("dl_2")) break;
+        await sleep(5);
+      }
 
       await hangUpConnection(again.reader, reattach, reattachUpstream);
       await hangUpConnection(session.desktop, session.attach, session.upstream);
