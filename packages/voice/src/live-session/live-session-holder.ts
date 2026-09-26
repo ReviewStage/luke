@@ -91,6 +91,8 @@ export interface LiveSessionHolderOptions {
 
 interface HeldSession {
   readonly sessionId: string;
+  /** The plan a planning call is about, which the session is bound to for its life; none for every other session. */
+  readonly planId: string | undefined;
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
   /** The scope this one session stands in, closed by the fiber that reads it once the end is decided. */
@@ -191,14 +193,32 @@ export class LiveSessionHolder {
   }
 
   /**
+   * Ends the standing session where it is a planning call about any plan but
+   * `keep`: the planning window opened another plan, or none, and only one
+   * plan is ever the spoken conversation. A desk session, and the call about
+   * `keep` itself, are left standing.
+   */
+  endPlanCall(keep: string | undefined): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const session = this.#held;
+      if (session === undefined || session.planId === undefined || session.planId === keep) {
+        return Effect.void;
+      }
+      return this.#end(session);
+    });
+  }
+
+  /**
    * Creates the one session for the peer's offer, seeded with the bounded
    * roster summary and the recent conversation, and attaches the sideband
    * before the answer is returned, so no transcript precedes attachment. A
+   * planning call is created about its plan and seeded with nothing of the
+   * desk: what it knows is the plan's, and the service holds that. A
    * session already standing is closed gracefully first: there is one. The
    * scope the session stands in is opened before anything is created into it
    * and closed again unless a session came to stand there.
    */
-  createSession(sdpOffer: string): Effect.Effect<LiveSessionCreated | undefined> {
+  createSession(sdpOffer: string, planId?: string): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
       if (this.#held) yield* this.endSession();
       // The peer has answered the word, with this offer; whatever comes of it, the word is spent.
@@ -208,12 +228,8 @@ export class LiveSessionHolder {
         this.#beats.clear();
         return undefined;
       }
-      const seeded = rosterSeed(
-        this.#options.roster?.() ?? [],
-        this.#clock.currentTimeMillisUnsafe(),
-      );
       const scope = yield* Scope.fork(this.#sessions, "sequential");
-      const created = yield* Effect.onExit(this.#stand(source, sdpOffer, seeded, scope), (exit) =>
+      const created = yield* Effect.onExit(this.#stand(source, sdpOffer, planId, scope), (exit) =>
         Exit.isSuccess(exit) && exit.value !== undefined
           ? Effect.void
           : Scope.close(scope, Exit.void),
@@ -229,12 +245,18 @@ export class LiveSessionHolder {
   #stand(
     source: LiveSessionSource,
     sdpOffer: string,
-    seeded: RosterSummary | undefined,
+    planId: string | undefined,
     scope: Scope.Closeable,
   ): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
+      const input =
+        planId === undefined
+          ? this.#seedInput(
+              rosterSeed(this.#options.roster?.() ?? [], this.#clock.currentTimeMillisUnsafe()),
+            )
+          : [];
       const opened = yield* Scope.provide(
-        source.create({ sdpOffer, input: this.#seedInput(seeded) }),
+        source.create({ sdpOffer, input, ...(planId === undefined ? undefined : { planId }) }),
         scope,
       );
       if (!opened) return undefined;
@@ -242,6 +264,7 @@ export class LiveSessionHolder {
       const sideband = yield* Scope.provide(opened.attach(), scope);
       const session: HeldSession = {
         sessionId: opened.sessionId,
+        planId,
         sideband,
         opened,
         scope,
@@ -493,8 +516,13 @@ export class LiveSessionHolder {
     return this.endSession();
   }
 
-  /** Every beat still waiting goes to the service now, or nowhere on a session with no door. */
+  /**
+   * Every beat still waiting goes to the service now, or nowhere on a
+   * session with no door. A planning call speaks nothing of the desk, so a
+   * beat waits through it and ends with it, for the caller to ask again.
+   */
   #sendBeats(session: HeldSession): void {
+    if (session.planId !== undefined) return;
     const speak = session.opened.speakBeat;
     for (const [kind, standing] of [...this.#beats]) {
       if (standing.sent) continue;

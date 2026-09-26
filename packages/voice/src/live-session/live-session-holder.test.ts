@@ -102,6 +102,8 @@ interface Fixture {
   holder: LiveSessionHolder;
   sidebands: FakeSideband[];
   seeds: (readonly InitialItem[])[];
+  /** The plan each session was created about, in order; none for a desk session. */
+  plans: (string | undefined)[];
   changes: VoiceLiveSessionChanged[];
   /** Every idle report the source's door was handed, in order. */
   reports: boolean[];
@@ -126,6 +128,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
     const sidebands: FakeSideband[] = [];
     const seeds: (readonly InitialItem[])[] = [];
+    const plans: (string | undefined)[] = [];
     const changes: VoiceLiveSessionChanged[] = [];
     const reports: boolean[] = [];
     const beats: SessionBeatFrame[] = [];
@@ -144,6 +147,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       create: (input) =>
         Effect.sync(() => {
           seeds.push([...input.input]);
+          plans.push(input.planId);
           const sideband = new FakeSideband();
           sidebands.push(sideband);
           const opened: LiveSessionOpened = {
@@ -191,6 +195,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       holder,
       sidebands,
       seeds,
+      plans,
       changes,
       reports,
       entries,
@@ -715,5 +720,69 @@ it.effect(
       assert.deepEqual(sideband.sent, []);
       // Dropped rather than held: the kind may be asked for again.
       assert.equal(f.holder.speakBeat(ARRIVAL), true);
+    }),
+);
+
+const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const BILLING_PLAN = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+it.effect(
+  "a planning call is created about its plan with nothing of the desk seeded, and a beat waits through it rather than being spoken into it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "What needs me?", eventId: "e1" });
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      assert.ok(created);
+      assert.deepEqual(f.plans, [INVITES_PLAN]);
+      assert.deepEqual(f.seeds, [[]]);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+
+      assert.equal(f.holder.speakBeat(LAUNCH), true);
+      assert.deepEqual(f.beats, []);
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
+      yield* settle();
+
+      // The next desk session is seeded from the desk again and hears the beat asked for then.
+      const desk = yield* f.open();
+      assert.deepEqual(f.plans, [INVITES_PLAN, undefined]);
+      assert.equal(f.seeds[1]?.length, 1);
+      assert.equal(f.holder.speakBeat(LAUNCH), true);
+      assert.deepEqual(f.beats, [LAUNCH]);
+      assert.deepEqual(desk.sent, []);
+    }),
+);
+
+it.effect(
+  "ending the plan call ends a call about another plan gracefully, and leaves the same plan's call and a desk session standing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+
+      yield* f.holder.endPlanCall(INVITES_PLAN);
+      assert.equal(f.holder.sessionStands(), true);
+      assert.deepEqual(sideband.sent, []);
+
+      const ending = yield* Effect.forkChild(f.holder.endPlanCall(BILLING_PLAN));
+      yield* settle();
+      assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 5);
+      yield* Fiber.join(ending);
+      assert.equal(f.holder.sessionStands(), false);
+
+      const desk = yield* f.open();
+      yield* f.holder.endPlanCall(undefined);
+      yield* f.holder.endPlanCall(BILLING_PLAN);
+      assert.equal(f.holder.sessionStands(), true);
+      assert.deepEqual(desk.sent, []);
     }),
 );

@@ -165,6 +165,8 @@ export const ACT_KIND = {
   PLANNING_START: "planning.start",
   PLANNING_REPOSITORIES: "planning.repositories",
   PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
+  /** The planning window's microphone button: a call about the plan it has open, opened, or its microphone toggled. */
+  PLANNING_TALK: "planning.talk",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -625,6 +627,7 @@ export const ACT = {
     refusal: "Could not read your GitHub repositories on this system.",
   },
   [ACT_KIND.PLANNING_CONNECT_GITHUB]: press("Could not connect GitHub on this system."),
+  [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
       command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),

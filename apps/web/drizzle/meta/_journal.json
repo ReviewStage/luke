@@ -344,6 +344,13 @@
       "when": 1790350000000,
       "tag": "0049_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790375000000,
+      "tag": "0050_voice_session_plan",
+      "breakpoints": true
     }
   ]
 }

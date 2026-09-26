@@ -674,6 +674,29 @@ uses before it is sent, and a spent allowance is answered as not searched.
 `tests/hosted-planning.test.ts` runs the scripted model through the host and
 the relay, and the `brain-host` eval runs a plan conversation through eve.
 
+The developer talks to the planning model through the ordinary voice
+session. The planning window's call is a `/api/voice/sessions` session whose
+`session.create` names the plan (`planId`), which the service checks the
+account holds before anything is spent. It is created under the Live
+planning scene (`LIVE_SCENE.PLANNING` in `@sidecar/live`), whose delegation
+policy hands the developer's planning words to the backend and says back the
+finding and its one next question. The exchange lands every spoken ask and
+the session's record in the plan's conversation (`openPlanConversation`)
+rather than the account's standing main, so the delegation reaches the
+planning model with its document, its tools, and the conversation so far.
+The recent words ride the delegation as context, and whether an answer
+agrees to anything is the planning instructions' to judge. A planning call
+speaks nothing of the desk: no briefing look runs over it, so it claims no
+offer and a briefing takes its ordinary way to the phone, and a beat asked
+of it is dropped. The binding is the session's for life. It is written on
+the `voice_sessions` row as a plain `plan_id`, like the device's column,
+and a re-attach reads it from there, so a later connection cannot move a
+session onto another plan, and one whose plan was deleted is refused rather
+than landing in the main. The Mac holds one call at a time and ends a plan's
+call when the window opens another plan, starts one, or closes, so only one
+plan is ever spoken. `tests/voice-service-exchange.test.ts` drives both
+plans and the re-attach over the real store.
+
 A start names `owner/name` and nothing more: the service resolves the
 repository's default branch to one commit through the account's own GitHub
 connection (`resolveRepository` in `server/hosted/github-source.ts`), so the
@@ -874,10 +897,11 @@ one caller here: each presents that bearer, names its own `devices` row in
 calling is read from the row the handshake resolved
 (`VoiceSessionRecord.heldDevice`) rather than from anything the caller says of
 itself. The
-socket's first frame is `session.create` (the SDP offer, a voice, the seed);
+socket's first frame is `session.create` (the SDP offer, a voice, the seed,
+and, for the planning window's call, the id of the plan it is about);
 the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
-client delegation), attaches the trusted sideband, stands the hosted
+client delegation, and the plan a planning call is bound to), attaches the trusted sideband, stands the hosted
 exchange on it (below), and answers `session.created` with the id, the SDP
 answer, the quota, and the store's own id for the `voice_sessions` row
 (`voiceSessionId`), which is what a stored spoken row names as its
@@ -1247,7 +1271,7 @@ and OpenAI stands on. So a socket may also open with `session.attach` naming
 a session id. The function resolves the bearer, checks that this account is
 the one the session was created for (the `voice_sessions` row written at
 creation, indexed over the owner and the live session id for this lookup),
-attaches a fresh
+reads the plan a planning call was bound to off the same row, attaches a fresh
 sideband to OpenAI's `/v1/live/sessions/{id}/attach`, answers
 `session.attached`, and pipes as before. Nothing the session said between the
 two connections is replayed. The desktop's `HostedLiveSessionSource` in
@@ -1286,11 +1310,13 @@ its main process and the phone from `URLSession`), `503` while
 `OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
 in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
 reason: `invalid-request` for a first frame that is not a valid `session.create`
-or `session.attach`, an attach on the introduction, or, on the audio route, a
+or `session.attach`, an attach on the introduction, a plan named on the
+introduction, or, on the audio route, a
 first frame that is not the `session.create` naming a format, an attach
 included; `invalid-token` for a
 bearer no account stands behind, and for an attach to a session this account
-did not create; `quota-exhausted` for a spent allowance, or an introduction
+did not create; `not-found` for a planning call naming a plan the account
+does not hold, refused before the allowance is spent; `quota-exhausted` for a spent allowance, or an introduction
 past the shared ceiling; `upstream-error` when OpenAI refused the
 creation or the sideband could not attach; `upstream-throttled` when OpenAI
 answered 429.

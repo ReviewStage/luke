@@ -88,7 +88,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       const call = new LiveCall({
         events,
         acts: {
-          createSession: (sdp) => act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp }),
+          createSession: (sdp, planId) =>
+            act(
+              ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+              planId === undefined ? { sdp } : { sdp, planId },
+            ),
           endSession: () => tell(ACT_KIND.VOICE_END_LIVE_SESSION),
           reportTransport: (state) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, { state }),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
@@ -239,6 +243,14 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           drive(orchestrator.requestMicrophoneAccess());
         }
       }),
+    [drive, orchestrator],
+  );
+
+  // The planning window's microphone, about the plan it had open: a call about
+  // that plan opened and heard, or its microphone toggled, as the main process
+  // forwards the press.
+  useEffect(
+    () => window.sidecar.onPlanningTalk(({ planId }) => drive(orchestrator.talkAboutPlan(planId))),
     [drive, orchestrator],
   );
 

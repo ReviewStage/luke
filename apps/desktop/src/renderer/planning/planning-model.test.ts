@@ -131,12 +131,12 @@ test("the voice bar shows the status word, a voice error in its place, and the n
   });
 });
 
-test("the microphone asks for the permission first, then for a plan, and talks only once a call is bound", () => {
+test("the microphone asks for the permission first, then for a plan, and then talks about it or mutes", () => {
   const input = {
     voiceAvailable: true,
     microphoneStatus: MICROPHONE_STATUS.GRANTED,
     activePlanId: INVITES,
-    callBound: true,
+    listening: false,
   };
   assert.deepEqual(microphoneButton({ ...input, voiceAvailable: false }), {
     press: MICROPHONE_PRESS.NONE,
@@ -154,6 +154,12 @@ test("the microphone asks for the permission first, then for a plan, and talks o
     microphoneButton({ ...input, activePlanId: undefined }).press,
     MICROPHONE_PRESS.NONE,
   );
-  assert.equal(microphoneButton({ ...input, callBound: false }).press, MICROPHONE_PRESS.NONE);
-  assert.equal(microphoneButton(input).press, MICROPHONE_PRESS.TALK);
+  assert.deepEqual(microphoneButton(input), {
+    press: MICROPHONE_PRESS.TALK,
+    label: "Talk about this plan",
+  });
+  assert.deepEqual(microphoneButton({ ...input, listening: true }), {
+    press: MICROPHONE_PRESS.TALK,
+    label: "Mute the microphone",
+  });
 });

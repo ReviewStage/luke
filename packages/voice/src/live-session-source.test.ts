@@ -121,6 +121,25 @@ it.live(
     }),
 );
 
+it.live("a planning call's create frame names its plan and seeds nothing of the desk", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame())]);
+    const source = hosted(script, { voice: LIVE_VOICE.MARIN });
+    const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [], planId });
+
+    assert.equal(opened?.sessionId, SESSION_ID);
+    assert.deepEqual(JSON.parse(script.sockets[0]?.sent[0] ?? ""), {
+      type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+      sdp: SDP_OFFER,
+      voice: LIVE_VOICE.MARIN,
+      input: [],
+      planId,
+    });
+  }),
+);
+
 it.live(
   "the store's id for the session's row rides the created frame onto the opened session, where the service names one",
   () =>

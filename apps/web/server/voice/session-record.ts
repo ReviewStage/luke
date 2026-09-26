@@ -12,6 +12,7 @@ import {
   type VoiceCloseReason,
 } from "../db/voice-vocabulary.js";
 import { findHeldDevice } from "../hosted/device-store.js";
+import { readPlan } from "../hosted/plan-store.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.
@@ -32,6 +33,12 @@ import { findHeldDevice } from "../hosted/device-store.js";
  * column null — the column's own word for a session that names no device —
  * and a briefing on offer stays unclaimed rather than claimed as someone
  * else's.
+ *
+ * A planning call's row also names the plan it was opened about, checked to
+ * be the account's before anything is spent, and that binding is what a
+ * re-attach reads back: the attaching connection says nothing of a plan, so
+ * a session cannot be moved onto another plan, or off its own, by what a
+ * later connection sends.
  */
 /**
  * What every method answers: an effect over the ambient client, so the socket
@@ -44,11 +51,18 @@ type VoiceSessionRecordEffect<A> = Effect.Effect<
   SqlClient.SqlClient
 >;
 
-/** The session as its creation names it: the account, the live session, and the device the handshake claimed, if any. */
+/** The session as its creation names it: the account, the live session, the device the handshake claimed, and the plan a planning call is about, if any. */
 interface VoiceSessionRegistration {
   userId: string;
   sessionId: string;
   deviceId?: string | undefined;
+  planId?: string | undefined;
+}
+
+/** A plan as the account asking for a call about it names it. */
+interface VoiceSessionPlanClaim {
+  userId: string;
+  planId: string;
 }
 
 /** A device row as the account claiming it names it. */
@@ -74,6 +88,11 @@ interface VoiceSessionOwnership {
   sessionId: string;
 }
 
+/** A live session the account was shown to have opened: the plan its creation bound it to, if it was a planning call. */
+interface OwnedVoiceSession {
+  readonly planId: string | undefined;
+}
+
 /** A usage snapshot, unconfirmed until the close. */
 interface VoiceSessionUsage {
   sessionId: string;
@@ -95,8 +114,10 @@ export interface VoiceSessionRecord {
   register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<string | undefined>;
   /** The device row the account holds under the id named, or nothing: the check the door makes before a session is spent on the claim. */
   heldDevice(input: VoiceSessionDeviceClaim): VoiceSessionRecordEffect<HeldVoiceDevice | undefined>;
-  /** Whether the account created the live session named: one lookup over the indexed pair. */
-  owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<boolean>;
+  /** Whether the account holds the plan named: the check the door makes before a planning call is spent. */
+  heldPlan(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<boolean>;
+  /** The live session named, where the account created it, with the plan it was bound to: one lookup over the indexed pair. */
+  owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<OwnedVoiceSession | undefined>;
   noteUsage(input: VoiceSessionUsage): VoiceSessionRecordEffect<void>;
   close(input: VoiceSessionClose): VoiceSessionRecordEffect<void>;
 }
@@ -114,6 +135,7 @@ const RegisterRequestSchema = Schema.Struct({
   liveSessionId: Schema.String,
   delegationMode: Schema.Literal(VOICE_DELEGATION_MODE.CLIENT),
   deviceId: Schema.NullOr(Schema.String),
+  planId: Schema.NullOr(Schema.String),
 });
 
 /**
@@ -138,19 +160,20 @@ const registerSession = SqlSchema.void({
         liveSessionId: row.liveSessionId,
         delegationMode: row.delegationMode,
         deviceId: heldDeviceId(row.deviceId, row.userId),
+        planId: row.planId,
       })
       .onConflictDoNothing({ target: voiceSessions.liveSessionId }),
 });
 
 const OwnedKeySchema = Schema.Struct({ userId: Schema.String, liveSessionId: Schema.String });
-const OwnedRowSchema = Schema.Struct({ id: Schema.String });
+const OwnedRowSchema = Schema.Struct({ id: Schema.String, planId: Schema.NullOr(Schema.String) });
 
 const findOwnedSession = SqlSchema.findOneOption({
   Request: OwnedKeySchema,
   Result: OwnedRowSchema,
   execute: (key) =>
     db
-      .select({ id: voiceSessions.id })
+      .select({ id: voiceSessions.id, planId: voiceSessions.planId })
       .from(voiceSessions)
       .where(
         and(
@@ -202,6 +225,7 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           liveSessionId: input.sessionId,
           delegationMode: VOICE_DELEGATION_MODE.CLIENT,
           deviceId: input.deviceId ?? null,
+          planId: input.planId ?? null,
         }),
         Effect.map(
           findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
@@ -218,10 +242,14 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           }),
         }),
       ),
+    heldPlan: (input) => Effect.map(readPlan(input.userId, input.planId), Option.isSome),
     owned: (input) =>
       Effect.map(
         findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
-        Option.isSome,
+        Option.match({
+          onNone: () => undefined,
+          onSome: (row) => ({ planId: row.planId ?? undefined }),
+        }),
       ),
     noteUsage: (input) =>
       noteSessionUsage({

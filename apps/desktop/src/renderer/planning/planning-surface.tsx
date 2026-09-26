@@ -27,13 +27,6 @@ import { SetupSheet } from "./setup-sheet";
  * It does not record the session: that is the panel's alone.
  */
 
-/**
- * Whether a planning call can be opened for the open plan. The call is the
- * voice connection's to bind to the active plan (`state.planning.activePlanId`),
- * and until it does the microphone button asks for access and nothing more.
- */
-const PLANNING_CALL_BOUND = false;
-
 export function PlanningSurface(): React.JSX.Element {
   const state = useAppState();
   const { act, tell } = useAct();
@@ -75,12 +68,15 @@ export function PlanningSurface(): React.JSX.Element {
     voiceAvailable: state?.settings?.status.voiceAvailable === true,
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
     activePlanId: planning.activePlanId,
-    callBound: PLANNING_CALL_BOUND,
+    listening: voice.listening,
   });
+  // The press names no plan: main reads the one the host has open, and the
+  // voice window, which owns the call, opens it about that plan or toggles it.
   const pressMicrophone = () => {
     if (microphone.press === MICROPHONE_PRESS.ASK_ACCESS) voice.requestMicrophoneAccess();
     if (microphone.press === MICROPHONE_PRESS.OPEN_SETTINGS)
       tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
+    if (microphone.press === MICROPHONE_PRESS.TALK) tell(ACT_KIND.PLANNING_TALK);
   };
   const speaker = voice.speaking
     ? WAVEFORM_VOICE.LUKE
@@ -113,7 +109,7 @@ export function PlanningSurface(): React.JSX.Element {
           level={speaker === undefined ? 0 : voice.levels[speaker]}
           voice={speaker}
           voiceActive={speaker === undefined ? false : voice.voiceActive[speaker]}
-          // The planning model's delegated work is reported by the voice connection that binds the call.
+          // Nothing reports the planning model's delegated work to this window yet, so no dots are drawn.
           thinking={false}
           microphone={{
             label: microphone.label,

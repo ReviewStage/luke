@@ -64,8 +64,15 @@ export interface HostedLiveExchangeOptions {
   /** The account the session was opened for, resolved at the handshake; the deployment acts for it at eve's door. */
   readonly userId: string;
   readonly liveSessionId: string;
-  /** The account's standing main, which the spoken asks and the record land in. */
+  /** The conversation the spoken asks and the record land in: the account's standing main, or a planning call's plan conversation. */
   readonly conversationId: string;
+  /**
+   * Whether the session is a planning call. A planning call speaks none of
+   * the desk's proactive turns: a beat asked of it is dropped, and the
+   * caller starts no briefing look over it, so nothing of the desk enters the
+   * plan's conversation.
+   */
+  readonly planning?: boolean;
   readonly context: HostedStoreContext;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
@@ -98,6 +105,8 @@ export interface AttachedSession {
   readonly deviceId: string | undefined;
   /** The platform that device row named, which is what a report about this session is counted by; none where no row was resolved. */
   readonly platform: DevicePlatform | undefined;
+  /** The plan a planning call is bound to, which its asks and its record land in; none for every other session. */
+  readonly planId: string | undefined;
   /** The socket the route attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
   /** Whether the session is already running: a fresh connection to a standing session finds it started, and hears no `session.started` again. */
@@ -282,6 +291,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
         started: opened.started,
       }),
     speakBeat: (beat) => {
+      if (options.planning === true) return;
       service.speakBeat(beatTurn(beat, options.now()));
     },
   };

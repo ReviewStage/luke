@@ -24,8 +24,15 @@ const INTRODUCTION: ActSender = { ...PANEL, introduction: true };
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const REQUEST = { name: "Teammate invitations", repository: { owner: "acme", name: "relay" } };
 
+/** The plan the host has open, as the fixture's main process reads it. */
+interface OpenPlan {
+  activePlanId: string | undefined;
+}
+
 function fixture() {
   const asked: string[] = [];
+  const talked: string[] = [];
+  const view: OpenPlan = { activePlanId: PLAN_ID };
   let opened = 0;
   const rows = planningActRows({
     openWindow: () => {
@@ -53,11 +60,15 @@ function fixture() {
         }),
     },
     connectGitHub: connectGitHubPending,
+    activePlanId: () => view.activePlanId,
+    talkAboutPlan: (planId) => {
+      talked.push(planId);
+    },
   });
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, opened: () => opened };
+  return { router, asked, talked, view, opened: () => opened };
 }
 
 it.effect("the planning window's asks reach the host and answer what the host answered", () =>
@@ -140,4 +151,28 @@ it.effect("Connect GitHub says the connection is not available until its flow la
       reason: GITHUB_CONNECTION_PENDING,
     });
   }),
+);
+
+it.effect(
+  "the planning microphone tells the voice window about the plan the host has open, and is refused with none open or from any other window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const talked = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, PLANNING);
+      assert.equal(talked.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(f.talked, [PLAN_ID]);
+
+      for (const sender of [PANEL, VOICE, INTRODUCTION]) {
+        const refused = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, sender);
+        assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
+      }
+      f.view.activePlanId = undefined;
+      const unopened = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, PLANNING);
+      assert.deepEqual(unopened, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_TALK].refusal,
+      });
+      assert.deepEqual(f.talked, [PLAN_ID]);
+    }),
 );
