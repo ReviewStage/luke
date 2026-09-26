@@ -5,11 +5,15 @@ import {
   ChevronIcon,
   DisplayIcon,
   KeyboardIcon,
+  ListIcon,
   PlugIcon,
+  PopUpIcon,
   SpeakerIcon,
 } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { ACT_KIND } from "#shared/messages/acts";
+import { useAct } from "../act";
 import { SETTINGS_VIEW, type SettingsSubview, settingsNavRowId } from "../settings-views";
 import { AttentionMark } from "./marks";
 
@@ -82,6 +86,31 @@ export function SettingsNavRow({
       </span>
       {attention ? <AttentionMark note={attention} /> : null}
       <ChevronIcon />
+    </button>
+  );
+}
+
+/**
+ * The planning window's door: a row shaped like the pages' own, ending in the
+ * mark that says it opens a window rather than a page. The planning window is
+ * an ordinary Mac window of its own, so the press opens it, or brings the one
+ * already open forward, and the panel stays as it was.
+ */
+export function PlanningEntryRow(): React.JSX.Element {
+  const { tell } = useAct();
+  return (
+    <button
+      type="button"
+      className="settings-nav"
+      onClick={() => tell(ACT_KIND.PLANNING_OPEN_WINDOW)}
+    >
+      <span className="settings-nav-mark" aria-hidden="true">
+        <ListIcon />
+      </span>
+      <span className="settings-copy">
+        <strong>Plan a feature</strong>
+      </span>
+      <PopUpIcon />
     </button>
   );
 }

@@ -1,4 +1,4 @@
-import type { PlanAssumption } from "@sidecar/hosted";
+import type { PlanAssumption } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";

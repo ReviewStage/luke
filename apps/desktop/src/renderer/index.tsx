@@ -8,6 +8,7 @@ import { WINDOW_ROLE } from "#shared/messages/session";
 import { actRequest } from "./act";
 import { App } from "./app";
 import { IntroductionTakeover } from "./introduction/introduction-takeover";
+import { PlanningSurface } from "./planning/planning-surface";
 import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead, useAppState } from "./use-app-state";
 import { VoiceHost } from "./voice/voice-host";
@@ -27,9 +28,10 @@ function Surface(): React.JSX.Element | null {
   return state.introduction.playing ? <IntroductionTakeover /> : <App />;
 }
 
-// One root for the panels and the hidden voice window alike, mounting by the
-// role main decided for the window that asked. The voice window mounts
-// `VoiceHost` and never `App`, the one place recording starts.
+// One root for the panels, the hidden voice window, and the planning window
+// alike, mounting by the role main decided for the window that asked. The
+// voice window mounts `VoiceHost` and the planning window `PlanningSurface`,
+// and neither ever mounts `App`, the one place recording starts.
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Renderer root element is missing");
 const root = createRoot(rootElement);
@@ -56,7 +58,13 @@ void (async () => {
   }
   root.render(
     <RegistryContext.Provider value={rendererRegistry}>
-      {first.window.role === WINDOW_ROLE.VOICE ? <VoiceHost /> : <Surface />}
+      {first.window.role === WINDOW_ROLE.VOICE ? (
+        <VoiceHost />
+      ) : first.window.role === WINDOW_ROLE.PLANNING ? (
+        <PlanningSurface />
+      ) : (
+        <Surface />
+      )}
     </RegistryContext.Provider>,
   );
 })();

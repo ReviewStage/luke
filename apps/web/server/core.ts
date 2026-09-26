@@ -88,6 +88,10 @@ export {
   wireValidatedTool,
 } from "@sidecar/brain/tool-set";
 export * from "@sidecar/hosted";
+// The planning vocabulary stands behind doors of its own, which the barrel
+// above re-exports nothing of.
+export * from "@sidecar/hosted/github-wire";
+export * from "@sidecar/hosted/plan-wire";
 // The runtime's barrel and its vocabulary door carry no name in common, so
 // both stand open: server code names the prompt builder and the workspace
 // bounds from the one and the identifiers from the other.

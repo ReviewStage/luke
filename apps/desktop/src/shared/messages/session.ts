@@ -38,6 +38,8 @@ export const WINDOW_ROLE = {
   PANEL: "panel",
   /** The one hidden window that will hold the live conversation; it draws nothing. */
   VOICE: "voice",
+  /** The one ordinary Mac window a named plan is read and talked through in. */
+  PLANNING: "planning",
 } as const;
 
 export type WindowRole = (typeof WINDOW_ROLE)[keyof typeof WINDOW_ROLE];

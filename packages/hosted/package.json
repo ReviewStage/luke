@@ -5,6 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./github-wire": "./src/github-wire.js",
+    "./plan-wire": "./src/plan-wire.js",
+    "./planning-view": "./src/planning-view.js",
     "./reads-wire": "./src/reads-wire.js"
   },
   "types": "./src/index.ts",

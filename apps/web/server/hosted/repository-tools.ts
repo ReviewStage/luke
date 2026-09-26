@@ -1,4 +1,5 @@
-import { GITHUB_FAILURE, type GitHubFailure, type PlanRepository } from "@sidecar/hosted";
+import { GITHUB_FAILURE, type GitHubFailure } from "@sidecar/hosted/github-wire";
+import type { PlanRepository } from "@sidecar/hosted/plan-wire";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";

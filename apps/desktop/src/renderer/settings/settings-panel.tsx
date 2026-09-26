@@ -39,7 +39,7 @@ import type {
 } from "./controls";
 import { FeedbackSection } from "./feedback-section";
 import { MemorySection } from "./memory-page";
-import { SETTINGS_PAGE, SettingsNavRow, SettingsPageHeader } from "./pages";
+import { PlanningEntryRow, SETTINGS_PAGE, SettingsNavRow, SettingsPageHeader } from "./pages";
 import { pageResetControl } from "./reset";
 import { SchemaSettingRows } from "./schema-rows";
 import { ShortcutSection } from "./shortcuts-page";
@@ -269,6 +269,7 @@ export function SettingsPanel({
                 : undefined)}
             />
           ))}
+          {account.status === ACCOUNT_STATUS.SIGNED_IN ? <PlanningEntryRow /> : null}
         </section>
       ) : null}
 

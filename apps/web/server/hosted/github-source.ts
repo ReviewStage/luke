@@ -3,8 +3,8 @@ import {
   type GitHubFailure,
   type GitHubRepository,
   type GitHubRepositoryListAnswer,
-  type PlanRepository,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/github-wire";
+import type { PlanRepository } from "@sidecar/hosted/plan-wire";
 import { HTTP_STATUS } from "@sidecar/wire";
 import { Context, Data, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
