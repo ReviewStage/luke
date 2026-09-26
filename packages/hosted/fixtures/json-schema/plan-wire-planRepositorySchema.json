@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "properties": {
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "commit": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "owner",
+    "name",
+    "branch",
+    "commit"
+  ],
+  "additionalProperties": false
+}

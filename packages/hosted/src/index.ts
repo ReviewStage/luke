@@ -147,6 +147,27 @@ export {
   observeAnswerSchema,
 } from "./observe-wire.js";
 export {
+  PLAN_BOUNDS,
+  type Plan,
+  type PlanAnswer,
+  type PlanAssumption,
+  type PlanCreateRequest,
+  type PlanDeleteAnswer,
+  type PlanDocument,
+  type PlanListAnswer,
+  type PlanRepository,
+  type PlanSummary,
+  planAnswerSchema,
+  planAssumptionSchema,
+  planCreateRequestSchema,
+  planDeleteAnswerSchema,
+  planDocumentSchema,
+  planListAnswerSchema,
+  planRepositorySchema,
+  planSchema,
+  planSummarySchema,
+} from "./plan-wire.js";
+export {
   type HostedProjectsAnswer,
   type HostedWorkspaceAgentModels,
   type HostedWorkspaceProject,
@@ -221,6 +242,7 @@ export {
   brainTurnPath,
   conversationMessageRatingPath,
   HOSTED_SERVICE_PATH,
+  planPath,
   VOICE_SERVICE_PATH,
 } from "./service-paths.js";
 export {
