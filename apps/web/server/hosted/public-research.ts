@@ -81,6 +81,8 @@ export const PUBLIC_RESEARCH_BOUNDS = {
   MAX_PAGE_BYTES: 1_000_000,
   /** The most characters of one page's text returned; past it the text is cut and marked. */
   MAX_PAGE_CHARS: 20_000,
+  /** The most characters of one page's title returned, which the text's bound does not cover. */
+  MAX_TITLE_CHARS: 300,
   MAX_REDIRECTS: 3,
   SEARCHES_PER_TURN: 4,
   PAGE_READS_PER_TURN: 6,
@@ -698,7 +700,13 @@ function htmlText(html: string): PageText {
       "\n",
     )
     .replace(/<[^>]+>/gu, "");
-  const cleanTitle = title === undefined ? "" : decodeEntities(title).replace(/\s+/gu, " ").trim();
+  const cleanTitle =
+    title === undefined
+      ? ""
+      : decodeEntities(title.slice(0, PUBLIC_RESEARCH_BOUNDS.MAX_TITLE_CHARS * 2))
+          .replace(/\s+/gu, " ")
+          .trim()
+          .slice(0, PUBLIC_RESEARCH_BOUNDS.MAX_TITLE_CHARS);
   return {
     ...(cleanTitle ? { title: cleanTitle } : undefined),
     text: tidied(decodeEntities(text)),

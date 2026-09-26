@@ -436,6 +436,19 @@ it.effect("a long page is cut at the bound and marked", () =>
   }),
 );
 
+it.effect("a page's title is bounded too, however long the page makes it", () =>
+  Effect.gen(function* () {
+    const { read } = readWith(() =>
+      htmlResponse(`<title>${"t".repeat(100_000)}</title><p>Body.</p>`),
+    );
+
+    const result = pageText(yield* read({ url: "https://docs.example.com/long-title" }));
+
+    assert.equal(result.title, "t".repeat(PUBLIC_RESEARCH_BOUNDS.MAX_TITLE_CHARS));
+    assert.equal(result.text, "Body.");
+  }),
+);
+
 it.effect("no more than the byte bound of a page is read off the wire", () =>
   Effect.gen(function* () {
     const chunk = new TextEncoder().encode("a".repeat(64 * 1024));
