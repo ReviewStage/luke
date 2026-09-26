@@ -4,7 +4,13 @@ import type { Plan } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { DOCUMENT_REGION, EMPTY_PLAN_LINE } from "./planning-model";
+import {
+  COPY_FAILED_NOTE,
+  COPY_SHOWN,
+  type CopyShown,
+  DOCUMENT_REGION,
+  EMPTY_PLAN_LINE,
+} from "./planning-model";
 import { PlanDocumentView, PlanList } from "./planning-parts";
 import { REPOSITORY_LIST, SetupSheetView, type SetupSheetViewProps } from "./setup-sheet";
 
@@ -31,11 +37,14 @@ const PLAN: Plan = {
 
 const ignore = () => undefined;
 
-function documentMarkup(plan: Plan): string {
+const RESTING = { shown: COPY_SHOWN.IDLE, onPress: ignore };
+
+function documentMarkup(plan: Plan, copied: CopyShown = COPY_SHOWN.IDLE): string {
   return renderToStaticMarkup(
     createElement(PlanDocumentView, {
       region: { kind: DOCUMENT_REGION.READY, plan },
       onRetry: ignore,
+      copy: { shown: copied, onPress: ignore },
     }),
   );
 }
@@ -68,7 +77,9 @@ test("the document offers no way to write, confirm, or approve anything", () => 
   const markup = documentMarkup(PLAN);
 
   assert.doesNotMatch(markup, /<textarea|contenteditable|type="text"/u);
-  assert.doesNotMatch(markup, /<button/u);
+  // Copy is the document's one action, and it writes nothing.
+  const buttons = markup.match(/<button[^>]*>/gu) ?? [];
+  assert.deepEqual(buttons, ['<button type="button" class="plan-button plan-copy-button">']);
   assert.doesNotMatch(markup, /Approve|Version|History|Ready/u);
 });
 
@@ -79,9 +90,45 @@ test("an empty plan shows the one line that says how to begin, and no assumption
   assert.doesNotMatch(markup, /Assumptions/u);
 });
 
+test("Copy stands in the header, enabled, whatever the assumptions' flags say", () => {
+  const unconfirmed: Plan = {
+    ...PLAN,
+    document: {
+      body: PLAN.document.body,
+      assumptions: PLAN.document.assumptions.map((assumption) => ({
+        ...assumption,
+        confirmed: false,
+      })),
+    },
+  };
+
+  for (const plan of [PLAN, unconfirmed]) {
+    const header = documentMarkup(plan).match(/<header class="plan-header">[\s\S]*?<\/header>/u);
+    const button = header?.[0].match(/<button[^>]*class="plan-button plan-copy-button"[^>]*>/u);
+    assert.ok(button);
+    assert.doesNotMatch(button[0], /disabled/u);
+  }
+});
+
+test("Copy shows the check mark once copied, and the failure in words when the clipboard refused", () => {
+  assert.match(documentMarkup(PLAN), /<\/svg>Copy<\/button>/u);
+  assert.match(
+    documentMarkup(PLAN, COPY_SHOWN.COPIED),
+    /data-copied="true"[\s\S]*Copied<\/button>/u,
+  );
+
+  const failed = documentMarkup(PLAN, COPY_SHOWN.FAILED);
+  assert.ok(failed.includes(`role="alert">${COPY_FAILED_NOTE}</p>`));
+  assert.doesNotMatch(documentMarkup(PLAN), /role="alert"/u);
+});
+
 test("a document that could not be read shows the failure and Try again, never a document", () => {
   const markup = renderToStaticMarkup(
-    createElement(PlanDocumentView, { region: { kind: DOCUMENT_REGION.FAILED }, onRetry: ignore }),
+    createElement(PlanDocumentView, {
+      region: { kind: DOCUMENT_REGION.FAILED },
+      onRetry: ignore,
+      copy: RESTING,
+    }),
   );
 
   assert.match(markup, /could not be read/u);

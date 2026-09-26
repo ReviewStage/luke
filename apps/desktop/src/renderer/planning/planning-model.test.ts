@@ -8,6 +8,9 @@ import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import {
+  COPY_SHOWN,
+  copyPlanDocument,
+  copyShown,
   DOCUMENT_REGION,
   documentRegion,
   githubFailureNote,
@@ -170,4 +173,52 @@ test("the microphone asks for the permission first, then for a plan, and then ta
       "Talk about this plan",
     );
   }
+});
+
+const REVIEWED = {
+  body: "# Teammate invitations\n\n## Handoff prompt\n\nYou are implementing invitations.",
+  assumptions: [
+    { text: "Members and admins can both invite.", confirmed: true },
+    { text: "An invite expires after 7 days.", confirmed: false },
+  ],
+};
+
+test("Copy hands the clipboard the whole document, and shows the check mark for that document", async () => {
+  const clipboard: string[] = [];
+
+  const outcome = await copyPlanDocument(REVIEWED, async (words) => {
+    clipboard.push(words);
+  });
+
+  assert.deepEqual(clipboard, [
+    `${REVIEWED.body}
+
+## Assumptions
+
+- [x] Members and admins can both invite.
+- [ ] An invite expires after 7 days.
+`,
+  ]);
+  assert.equal(copyShown(outcome, REVIEWED), COPY_SHOWN.COPIED);
+  // A fresh snapshot of the same saved document still holds what was copied.
+  assert.equal(copyShown(outcome, structuredClone(REVIEWED)), COPY_SHOWN.COPIED);
+});
+
+test("a clipboard that refuses the copy shows the failure rather than the check mark", async () => {
+  const outcome = await copyPlanDocument(REVIEWED, async () => {
+    throw new Error("Could not copy that to the clipboard on this system.");
+  });
+
+  assert.equal(copyShown(outcome, REVIEWED), COPY_SHOWN.FAILED);
+});
+
+test("once a save changes the document, Copy returns to rest until pressed again", async () => {
+  const outcome = await copyPlanDocument(REVIEWED, async () => undefined);
+  const saved = {
+    ...REVIEWED,
+    assumptions: [...REVIEWED.assumptions, { text: "Invites are by email.", confirmed: false }],
+  };
+
+  assert.equal(copyShown(outcome, saved), COPY_SHOWN.IDLE);
+  assert.equal(copyShown(undefined, REVIEWED), COPY_SHOWN.IDLE);
 });

@@ -8,6 +8,10 @@ import { useAppState } from "../use-app-state";
 import { useVoiceView } from "../use-voice-view";
 import { WAVEFORM_VOICE } from "../waveform";
 import {
+  COPY_SHOWN,
+  type CopyOutcome,
+  copyPlanDocument,
+  copyShown,
   DOCUMENT_REGION,
   documentRegion,
   MICROPHONE_PRESS,
@@ -32,6 +36,7 @@ export function PlanningSurface(): React.JSX.Element {
   const { act, tell } = useAct();
   const voice = useVoiceView();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
 
   const signedIn = state?.account.status === ACCOUNT_STATUS.SIGNED_IN;
   const planning = state?.planning ?? IDLE_PLANNING_VIEW;
@@ -60,6 +65,16 @@ export function PlanningSurface(): React.JSX.Element {
     },
     [act],
   );
+  // Copy formats the document drawn now and hands it to main's clipboard;
+  // it asks the model nothing and reads no flag.
+  const openDocument = region.kind === DOCUMENT_REGION.READY ? region.plan.document : undefined;
+  const pressCopy = () => {
+    if (openDocument === undefined) return;
+    copyPlanDocument(openDocument, (words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then(
+      setCopied,
+      () => undefined,
+    );
+  };
   const retryDocument = () => {
     if (planning.activePlanId !== undefined) select(planning.activePlanId);
   };
@@ -104,7 +119,14 @@ export function PlanningSurface(): React.JSX.Element {
         onNewPlan={() => setSheetOpen(true)}
       />
       <div className="planning-main">
-        <PlanDocumentView region={region} onRetry={retryDocument} />
+        <PlanDocumentView
+          region={region}
+          onRetry={retryDocument}
+          copy={{
+            shown: openDocument === undefined ? COPY_SHOWN.IDLE : copyShown(copied, openDocument),
+            onPress: pressCopy,
+          }}
+        />
         <VoiceBar
           line={voiceBarLine(voice.view)}
           level={speaker === undefined ? 0 : voice.levels[speaker]}

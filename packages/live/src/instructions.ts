@@ -83,6 +83,7 @@ Backend tools:
 Delegate to the backend when:
 - The developer answers a question, corrects something, adds an idea, or asks about the code or the plan.
 - You need the next question to ask; the backend chooses it.
+- The developer says the plan is done, or asks for the prompt; the backend reviews it with them first.
 
 Do not delegate to the backend when:
 - The developer is only acknowledging, or you need them to repeat something you did not hear.

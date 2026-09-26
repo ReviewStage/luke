@@ -19,9 +19,11 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
+  SCRIPTED_HANDOFF_HEADING,
   SCRIPTED_LOOK_UP,
   SCRIPTED_NO_SOURCE_REPLY,
   SCRIPTED_RESEARCH_REPLY,
+  SCRIPTED_WRITE_PROMPT,
   scriptedModel,
 } from "../eve/scripted-model";
 import { user } from "../server/db/auth-schema";
@@ -541,6 +543,50 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.equal(added.length, 1);
         assert.ok(added[0]?.text.includes(CORRECTION));
         assert.equal(added[0]?.confirmed, false);
+      }),
+  );
+
+  it.effect(
+    "a handoff prompt the model writes on a spoken ask lands in the same document with every assumption kept, and a later change edits that document",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
+        const reviewed: PlanDocument = {
+          body: SAVED.body,
+          assumptions: [
+            ...SAVED.assumptions,
+            // Left unconfirmed in the review: the prompt carries it as a working assumption.
+            { text: "An invite expires after 7 days.", confirmed: false },
+          ],
+        };
+        yield* savePlanDocument(userId, planId, reviewed);
+
+        yield* planningTurn(
+          host,
+          session,
+          "turn_0",
+          SCRIPTED_WRITE_PROMPT,
+          noNetwork,
+          BRAIN_HOST_TURN.SPOKEN,
+        );
+
+        const handedOff = yield* windowDocument(userId, planId);
+        assert.ok(handedOff.body.startsWith(SAVED.body.trimEnd()));
+        const prompt = handedOff.body.slice(handedOff.body.indexOf(SCRIPTED_HANDOFF_HEADING));
+        assert.ok(prompt.startsWith(SCRIPTED_HANDOFF_HEADING));
+        assert.ok(prompt.includes(`${RELAY_PLAN.repository.owner}/${RELAY_PLAN.repository.name}`));
+        assert.ok(prompt.includes(RELAY_PLAN.repository.commit));
+        assert.deepEqual(handedOff.assumptions, reviewed.assumptions);
+
+        yield* planningTurn(host, session, "turn_1", CORRECTION, noNetwork, BRAIN_HOST_TURN.SPOKEN);
+
+        const edited = yield* windowDocument(userId, planId);
+        assert.equal(edited.body, handedOff.body);
+        assert.deepEqual(edited.assumptions, [
+          ...reviewed.assumptions,
+          { text: CORRECTION, confirmed: false },
+        ]);
       }),
   );
 
