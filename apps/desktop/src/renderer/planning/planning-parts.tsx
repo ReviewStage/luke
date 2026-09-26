@@ -1,9 +1,12 @@
 import type { PlanAssumption, PlanSummary } from "@sidecar/hosted/plan-wire";
-import { MicrophoneIcon, PlusIcon } from "@sidecar/panel";
+import { CheckIcon, CopyIcon, MicrophoneIcon, PlusIcon } from "@sidecar/panel";
 import { MarkdownMessage } from "../markdown-message";
 import { ThinkingDots } from "../thinking-dots";
 import { Waveform, type WaveformVoice } from "../waveform";
 import {
+  COPY_FAILED_NOTE,
+  COPY_SHOWN,
+  type CopyShown,
   DOCUMENT_REGION,
   type DocumentRegion,
   EMPTY_PLAN_LINE,
@@ -91,13 +94,50 @@ function AssumptionRow({ assumption }: { assumption: PlanAssumption }): React.JS
   );
 }
 
+/**
+ * Copy, the one action on the document: always enabled, whatever the flags
+ * say and whether or not a handoff prompt is written yet. The check mark
+ * stands while the clipboard holds the document drawn, and a refused copy
+ * says so beside the button.
+ */
+function CopyControl({
+  shown,
+  onPress,
+}: {
+  shown: CopyShown;
+  onPress: () => void;
+}): React.JSX.Element {
+  const copied = shown === COPY_SHOWN.COPIED;
+  return (
+    <div className="plan-copy">
+      {shown === COPY_SHOWN.FAILED ? (
+        <p className="plan-copy-failed" role="alert">
+          {COPY_FAILED_NOTE}
+        </p>
+      ) : null}
+      <button
+        type="button"
+        className="plan-button plan-copy-button"
+        data-copied={copied ? "true" : undefined}
+        onClick={onPress}
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
 /** The document region: the saved body and its assumptions, or the state that stands in their place. */
 export function PlanDocumentView({
   region,
   onRetry,
+  copy,
 }: {
   region: DocumentRegion;
   onRetry: () => void;
+  /** What Copy shows for the drawn document, and its press. */
+  copy: { shown: CopyShown; onPress: () => void };
 }): React.JSX.Element {
   switch (region.kind) {
     case DOCUMENT_REGION.NONE:
@@ -135,6 +175,7 @@ export function PlanDocumentView({
           <header className="plan-header">
             <h1 className="plan-title">{plan.name}</h1>
             <p className="plan-repository">{repositoryLine(plan.repository)}</p>
+            <CopyControl shown={copy.shown} onPress={copy.onPress} />
           </header>
           <div className="plan-document-scroll">
             {body.trim().length === 0 ? (
