@@ -835,3 +835,21 @@ it.effect("a switch to the plan being created leaves its call to stand", () =>
     assert.deepEqual(f.sidebands[0]?.sent, []);
   }),
 );
+
+it.effect(
+  "a switch while the prior session is still closing ahead of a planning call's creation creates nothing about the plan left behind",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const desk = yield* f.open();
+      const creating = yield* Effect.forkChild(f.holder.createSession("offer", INVITES_PLAN));
+      yield* settle();
+      assert.deepEqual(desk.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+
+      yield* f.holder.endPlanCall(BILLING_PLAN);
+      desk.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
+      assert.equal(yield* Fiber.join(creating), undefined);
+      assert.deepEqual(f.plans, [undefined]);
+      assert.equal(f.holder.sessionStands(), false);
+    }),
+);

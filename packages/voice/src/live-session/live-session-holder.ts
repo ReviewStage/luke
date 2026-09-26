@@ -228,25 +228,40 @@ export class LiveSessionHolder {
    * and closed again unless a session came to stand there.
    */
   createSession(sdpOffer: string, planId?: string): Effect.Effect<LiveSessionCreated | undefined> {
+    // The creation is named from its first step to its last, so a switch landing
+    // anywhere in it (the prior session's end, the create, the attach) is heard.
+    const creating = { planId, ended: false };
+    return Effect.ensuring(
+      Effect.suspend(() => {
+        this.#creating = creating;
+        return this.#create(sdpOffer, creating);
+      }),
+      Effect.sync(() => {
+        if (this.#creating === creating) this.#creating = undefined;
+      }),
+    );
+  }
+
+  #create(
+    sdpOffer: string,
+    creating: { readonly planId: string | undefined; ended: boolean },
+  ): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
       if (this.#held) yield* this.endSession();
       // The peer has answered the word, with this offer; whatever comes of it, the word is spent.
       this.#wantedAt = undefined;
       const source = this.#options.source();
-      if (!source) {
+      if (!source || creating.ended) {
         this.#beats.clear();
         return undefined;
       }
       const scope = yield* Scope.fork(this.#sessions, "sequential");
-      const creating = { planId, ended: false };
-      this.#creating = creating;
-      const created = yield* Effect.onExit(this.#stand(source, sdpOffer, planId, scope), (exit) =>
-        Effect.suspend(() => {
-          if (this.#creating === creating) this.#creating = undefined;
-          return Exit.isSuccess(exit) && exit.value !== undefined
+      const created = yield* Effect.onExit(
+        this.#stand(source, sdpOffer, creating.planId, scope),
+        (exit) =>
+          Exit.isSuccess(exit) && exit.value !== undefined
             ? Effect.void
-            : Scope.close(scope, Exit.void);
-        }),
+            : Scope.close(scope, Exit.void),
       );
       // A switch that landed while the call was being created ends it now that
       // it stands, so the peer is told to hang up and nothing is said into it.
