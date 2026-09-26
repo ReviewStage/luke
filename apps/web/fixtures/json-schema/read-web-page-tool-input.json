@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "maxLength": 2000,
+      "description": "The public https URL to read, such as \"https://docs.stripe.com/api/idempotent_requests\"."
+    }
+  },
+  "required": [
+    "url"
+  ],
+  "additionalProperties": false
+}

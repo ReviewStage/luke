@@ -33,6 +33,7 @@ import { cloudSessionPluginFor } from "../cloud-adapters.js";
 import { GitHubAccess } from "../github-source.js";
 import type { HostedRefusal } from "../http-effect.js";
 import { readPlanOfConversation } from "../plan-store.js";
+import { ResearchBudget } from "../public-research.js";
 import { askRecord } from "../store/asks.js";
 import { toolSetHashOf } from "../store/content-addressed.js";
 import {
@@ -330,6 +331,7 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
      * its start, and a plugin rebuilt for every call would forget it.
      */
     const rosters = new Map<string, LastRosterRead>();
+    const research = new ResearchBudget();
     /**
      * The plugins built for the accounts, bounded and keyed by the sealed key
      * each was built under: a rotated or removed key is another key here, so the
@@ -521,7 +523,16 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
             const plan = yield* planOf(target);
             return yield* runPlanningTool(
               name,
-              plan === undefined ? undefined : { userId: target.userId, planId: plan.plan.id },
+              plan === undefined
+                ? undefined
+                : {
+                    plan: { userId: target.userId, planId: plan.plan.id },
+                    research: {
+                      turnId: binding.turn.turnId,
+                      budget: research,
+                      openAi: seams.openAi(),
+                    },
+                  },
               input,
             ).pipe(Effect.provideService(GitHubAccess, seams.githubAccess));
           }

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
 import {
   generateText,
   type JSONValue,
@@ -12,11 +13,17 @@ import {
   type ToolSet,
   tool,
 } from "ai";
-import { Effect, Option, Redacted, Result, Schema } from "effect";
+import { Effect, type Layer, Option, Redacted, Result, Schema } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
-import { scriptedModel } from "../eve/scripted-model";
+import {
+  SCRIPTED_LOOK_UP,
+  SCRIPTED_NO_SOURCE_REPLY,
+  SCRIPTED_RESEARCH_REPLY,
+  scriptedModel,
+} from "../eve/scripted-model";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
@@ -26,6 +33,7 @@ import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
 } from "../server/hosted/brain-host/bounds";
+import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
 import { documentTextOf } from "../server/hosted/brain-host/planning";
@@ -45,6 +53,7 @@ import {
   readPlan,
   savePlanDocument,
 } from "../server/hosted/plan-store";
+import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import {
   GET_FILE_CONTENTS_TOOL,
   REPOSITORY_READ_REFUSAL,
@@ -92,6 +101,42 @@ const SAVED: PlanDocument = {
 
 const CORRECTION = "Any member should be able to invite, not only admins.";
 
+const EXPIRY_QUERY = "Stripe idempotency key expiry";
+const EXPIRY_SOURCE = "https://docs.stripe.com/api/idempotent_requests";
+const EXPIRY_ANSWER = "Stripe keeps idempotency keys for at least 24 hours. (docs.stripe.com)";
+
+/** OpenAI's search as a scripted table: one cited answer, or a server error. */
+function searchService(answered: boolean) {
+  return recordingHttpClient(() =>
+    answered
+      ? jsonResponse({
+          output: [
+            {
+              type: "message",
+              content: [
+                {
+                  type: "output_text",
+                  text: EXPIRY_ANSWER,
+                  annotations: [
+                    {
+                      type: "url_citation",
+                      url: EXPIRY_SOURCE,
+                      title: "Idempotent requests",
+                      start_index: EXPIRY_ANSWER.indexOf("("),
+                      end_index: EXPIRY_ANSWER.length,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+      : jsonResponse({ error: { message: "fixture: search down" } }, 500),
+  );
+}
+
+const TEST_OPENAI = () => ({ apiKey: Redacted.make("sk-test-planning"), modelId: "gpt-test" });
+
 function unreached(name: string): () => never {
   return () => {
     throw new Error(`${name} reached in a test that offers it nothing`);
@@ -99,7 +144,10 @@ function unreached(name: string): () => never {
 }
 
 /** The host over the test database, with the writer holding rows to the hosted tool set as production's does. */
-const planningHost = (githubAccess: GitHubAccessShape = GITHUB_ACCESS_WITHOUT_CONNECTIONS) =>
+const planningHost = (
+  githubAccess: GitHubAccessShape = GITHUB_ACCESS_WITHOUT_CONNECTIONS,
+  openAi: BrainHostSeams["openAi"] = () => undefined,
+) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
     const seams: BrainHostSeams = {
@@ -112,7 +160,7 @@ const planningHost = (githubAccess: GitHubAccessShape = GITHUB_ACCESS_WITHOUT_CO
         sessionOwner: unreached("sessionOwner"),
         ownsConversation: unreached("ownsConversation"),
       },
-      openAi: () => undefined,
+      openAi,
       embedder: () => undefined,
       deploymentSecret: () => undefined,
       scriptedModel: () => true,
@@ -205,7 +253,13 @@ function toolContext(session: Session, name: string): EveToolContext {
  * model with the turn's tools; each tool call carried through the host; and
  * every event relayed into the store. Answers what the model said.
  */
-const planningTurn = (host: BrainHost, session: Session, eveTurnId: string, words: string) =>
+const planningTurn = (
+  host: BrainHost,
+  session: Session,
+  eveTurnId: string,
+  words: string,
+  http: Layer.Layer<HttpClient.HttpClient> = noNetwork,
+) =>
   Effect.gen(function* () {
     const standing = yield* admitted(host, session);
     const turnKind = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
@@ -299,7 +353,7 @@ const planningTurn = (host: BrainHost, session: Session, eveTurnId: string, word
             unparsedWire(call.input as WireBoundaryInput),
             toolContext(session, call.toolName),
           )
-          .pipe(Effect.provide(noNetwork));
+          .pipe(Effect.provide(http));
         yield* relay({
           type: "action.result",
           data: {
@@ -397,7 +451,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered update_plan and get_file_contents and none of the brain's catalog",
+    "a planning turn is offered update_plan, the repository and research reads, and none of the brain's catalog",
     () =>
       Effect.gen(function* () {
         const { host, userId, conversationId } = yield* savedPlanWithConversation();
@@ -413,7 +467,12 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         assert.deepEqual(
           offered.map((declared) => declared.name),
-          [UPDATE_PLAN_TOOL.name, GET_FILE_CONTENTS_TOOL.name],
+          [
+            UPDATE_PLAN_TOOL.name,
+            GET_FILE_CONTENTS_TOOL.name,
+            SEARCH_WEB_TOOL.name,
+            READ_WEB_PAGE_TOOL.name,
+          ],
         );
       }),
   );
@@ -553,6 +612,71 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
       assert.equal(result.status, REPOSITORY_READ_STATUS.NOT_READ);
       assert.equal(result.reason, REPOSITORY_READ_REFUSAL.NOT_CONNECTED);
+    }),
+  );
+
+  it.effect(
+    "a search's findings reach the model of the plan whose conversation asked, and no other plan's",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const host = yield* planningHost(GITHUB_ACCESS_WITHOUT_CONNECTIONS, TEST_OPENAI);
+        const asking = yield* createPlan(userId, RELAY_PLAN);
+        const other = yield* createPlan(userId, { ...RELAY_PLAN, name: "Billing export" });
+        const askingConversation = Option.getOrThrow(
+          yield* openPlanConversation(userId, asking.id),
+        );
+        const otherConversation = Option.getOrThrow(yield* openPlanConversation(userId, other.id));
+        const askingSession = yield* startSession(host, userId, askingConversation);
+        const otherSession = yield* startSession(host, userId, otherConversation);
+        const search = searchService(true);
+
+        const reply = yield* planningTurn(
+          host,
+          askingSession,
+          "turn_0",
+          `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
+          search.layer,
+        );
+        yield* planningTurn(host, otherSession, "turn_0", CORRECTION, search.layer);
+
+        assert.equal(reply, `${SCRIPTED_RESEARCH_REPLY} ${EXPIRY_SOURCE}`);
+        assert.equal(search.requests.length, 1);
+        const sent = JSON.stringify(search.requests.map((request) => request.init.body));
+        assert.ok(!sent.includes(userId));
+        assert.ok(!sent.includes(asking.id));
+        const askingRows = yield* readRecentMessages(
+          (yield* admitted(host, askingSession)).target,
+          HOSTED_TOOL_SET,
+          10,
+        );
+        const otherRows = yield* readRecentMessages(
+          (yield* admitted(host, otherSession)).target,
+          HOSTED_TOOL_SET,
+          10,
+        );
+        assert.ok(JSON.stringify(askingRows).includes(EXPIRY_SOURCE));
+        assert.ok(!JSON.stringify(otherRows).includes(EXPIRY_SOURCE));
+      }),
+  );
+
+  it.effect("a failed search reaches the model as nothing found, not as a fact", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const host = yield* planningHost(GITHUB_ACCESS_WITHOUT_CONNECTIONS, TEST_OPENAI);
+      const started = yield* createPlan(userId, RELAY_PLAN);
+      const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+      const session = yield* startSession(host, userId, conversationId);
+
+      const reply = yield* planningTurn(
+        host,
+        session,
+        "turn_0",
+        `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
+        searchService(false).layer,
+      );
+
+      assert.equal(reply, SCRIPTED_NO_SOURCE_REPLY);
     }),
   );
 });
