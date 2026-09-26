@@ -1,7 +1,7 @@
 import {
   type Plan,
-  type PlanCreateRequest,
   type PlanDocument,
+  type PlanRepository,
   type PlanSummary,
   planAssumptionSchema,
 } from "@sidecar/hosted";
@@ -39,6 +39,12 @@ export type PlanStoreEffect<A> = Effect.Effect<A, PlanStoreFailure, SqlClient.Sq
 export interface StoredPlan {
   readonly plan: Plan;
   readonly conversationId: string | undefined;
+}
+
+/** A plan to start: its name and its repository, already resolved to one commit through GitHub. */
+export interface NewPlan {
+  readonly name: string;
+  readonly repository: PlanRepository;
 }
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -291,16 +297,16 @@ const setConversation = SqlSchema.findOneOption({
 });
 
 /** Starts a plan under the account with an empty document; it opens first in the list. */
-export function createPlan(userId: string, request: PlanCreateRequest): PlanStoreEffect<Plan> {
+export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Plan> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
     const row = yield* insertPlan({
       userId,
-      name: request.name,
-      owner: request.repository.owner,
-      repositoryName: request.repository.name,
-      branch: request.repository.branch,
-      commit: request.repository.commit,
+      name: started.name,
+      owner: started.repository.owner,
+      repositoryName: started.repository.name,
+      branch: started.repository.branch,
+      commit: started.repository.commit,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.

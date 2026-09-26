@@ -71,10 +71,18 @@ export const planRepositorySchema = EffectSchema.Struct({
 
 export type PlanRepository = typeof planRepositorySchema.Type;
 
-/** Starting a plan (POST): its name and the repository already resolved to one commit; the document starts empty. */
+/**
+ * Starting a plan (POST): its name and the repository it plans against; the
+ * document starts empty. The service resolves the default branch and its
+ * commit itself, through the account's GitHub connection, so a request
+ * naming either is refused rather than trusted.
+ */
 export const planCreateRequestSchema = EffectSchema.Struct({
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
-  repository: planRepositorySchema,
+  repository: EffectSchema.Struct({
+    owner: planRepositorySchema.fields.owner,
+    name: planRepositorySchema.fields.name,
+  }),
 });
 
 export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
