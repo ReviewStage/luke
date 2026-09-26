@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "deleted": {
+      "type": "boolean",
+      "enum": [
+        true
+      ]
+    }
+  },
+  "required": [
+    "deleted"
+  ],
+  "additionalProperties": false
+}

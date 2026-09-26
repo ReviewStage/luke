@@ -20,6 +20,10 @@
     "dest": "/api/turn-read.js?route=brain/turns/turn&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)",
+    "dest": "/api/default.js?route=plans/plan&id=$1"
+  },
+  {
     "src": "/api/account/delete",
     "dest": "/api/default.js?route=account/delete"
   },
@@ -126,6 +130,10 @@
   {
     "src": "/api/observe",
     "dest": "/api/default.js?route=observe"
+  },
+  {
+    "src": "/api/plans",
+    "dest": "/api/default.js?route=plans"
   },
   {
     "src": "/api/projects",
