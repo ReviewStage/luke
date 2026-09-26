@@ -609,8 +609,8 @@ the events and conversation-read tests use, since every case here mocks its
 
 `server/plans-app.ts` is the planning window's route group over the account's
 named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, most
-recently opened first, `POST /api/plans` starts one with its name and its
-repository already resolved to one commit and an empty document,
+recently opened first, `POST /api/plans` starts one with its name, its
+repository, and an empty document,
 `GET /api/plans/{id}` opens one with its saved document and moves it to the
 head of the list, and `DELETE /api/plans/{id}` deletes it, the id moved into
 the query by the segment rewrite the way the rating route's is.
@@ -639,8 +639,9 @@ swaps three things (`server/hosted/brain-host/planning.ts`): the prompt is the
 authored planning instructions, the standing context each turn opens with is
 the plan's repository, commit, and saved document read again from the row,
 and the tools are the planning list alone, `update_plan` bound to the plan
-the conversation belongs to (`readPlanOfConversation`), with the repository
-and research reads to join it. A resumed session is seeded with the
+the conversation belongs to (`readPlanOfConversation`), and
+`get_file_contents` under the same binding, with the research reads to join
+them. A resumed session is seeded with the
 conversation so far like any other. A plan conversation primes and flushes no
 notebook, and never reaches the panel's reads, which name their kinds. The
 writer holds rows to `HOSTED_TOOL_SET`, the catalog and the planning tools,
@@ -649,6 +650,38 @@ Question choice, agreement, assumption flags, and corrections are the
 instructions' alone: no code reads the document for meaning.
 `tests/hosted-planning.test.ts` runs the scripted model through the host and
 the relay, and the `brain-host` eval runs a plan conversation through eve.
+
+A start names `owner/name` and nothing more: the service resolves the
+repository's default branch to one commit through the account's own GitHub
+connection (`resolveRepository` in `server/hosted/github-source.ts`), so the
+commit a plan reads for its whole life is one GitHub answered to that
+account, and a request naming a branch or a commit is refused. A repository
+the connection cannot read, an empty one, a refused credential, or no
+connection at all starts no plan and answers `github-unavailable` with its
+`GITHUB_FAILURE` reason (`packages/hosted/src/github-wire.ts`).
+`server/github-app.ts`'s `GET /api/github/repositories` is the list a new
+plan picks from, since only the service holds the credential. Until the
+account-bound connection lands, production's `GitHubAccess` is
+`githubAccessWithoutConnections`, and every one of these answers
+`not-connected`.
+
+The planning model reads source through one tool,
+`get_file_contents({ path })` (`server/hosted/repository-tools.ts`), under
+the same binding as `update_plan`: the repository and the commit are read
+from the plan's row on every call, so a resumed conversation reads the
+commit its plan started at, and an argument naming an owner, a repository, a
+ref, or a commit, or a path climbing out with `..`, is refused. GitHub hosts
+the read: `server/hosted/github-mcp.ts` is a standard MCP client
+(`@ai-sdk/mcp`) opened for one call against GitHub's read-only repository
+toolset, `https://api.githubcopilot.com/mcp/x/repos/readonly`, with the
+account's credential in the `Authorization` header alone. The answer is read
+into the tool's own shape, a directory's entries or a file's text with the
+path, repository, and commit, cut and marked `truncated` past its bound, and
+GitHub's own text is never forwarded, since a large file's download link
+carries a credential of its own; anything else is a `not-read` result saying
+nothing was read and why. `tests/repository-tools.test.ts` holds it against
+`tests/support/github-fake.ts`, which answers GitHub's REST reads and its MCP
+endpoint behind the one `fetch` both clients send through.
 
 ## The admin group
 

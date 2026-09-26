@@ -137,6 +137,10 @@
           "dest": "/api/default.js?route=events"
         },
         {
+          "src": "/api/github/repositories",
+          "dest": "/api/default.js?route=github/repositories"
+        },
+        {
           "src": "/api/observe",
           "dest": "/api/default.js?route=observe"
         },

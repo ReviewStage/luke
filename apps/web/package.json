@@ -21,6 +21,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@ai-sdk/mcp": "2.0.48",
     "@ai-sdk/openai": "4.0.65",
     "@better-auth/drizzle-adapter": "1.6.29",
     "@better-auth/oauth-provider": "1.6.29",

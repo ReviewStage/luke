@@ -133,10 +133,15 @@ export const HOSTED_SERVICE_PATH = {
   CHANGES: "/api/changes",
   /**
    * The account's named feature plans: list them, most recently opened first
-   * (GET), or start one (POST) with its name and its repository already
-   * resolved to one commit. `plan-wire.ts` declares both.
+   * (GET), or start one (POST) with its name and its repository, which the
+   * service resolves to one commit. `plan-wire.ts` declares both.
    */
   PLANS: "/api/plans",
+  /**
+   * The repositories the account's GitHub connection can read (GET), the
+   * list a new plan picks its repository from. `github-wire.ts` declares it.
+   */
+  GITHUB_REPOSITORIES: "/api/github/repositories",
 } as const;
 
 /**

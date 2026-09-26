@@ -14,6 +14,7 @@ import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { payloadKeyRing } from "../encryption.js";
 import { HostedEnvironment } from "../environment.js";
+import { GITHUB_ACCESS_WITHOUT_CONNECTIONS, type GitHubAccessShape } from "../github-source.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http-effect.js";
 import { type HostedSpend, spendHostedMeter } from "../quota.js";
 import { type HostedStore, hostedStore, storeWriter } from "../store/index.js";
@@ -82,6 +83,8 @@ export interface BrainHostSeams {
     providerId: CloudAgentProviderId,
   ) => BrainHostEffect<Redacted.Redacted | undefined>;
   readonly executeAction: CloudActionExecutor;
+  /** The account's GitHub credential for the planning model's repository read. */
+  readonly githubAccess: GitHubAccessShape;
   readonly now: () => number;
 }
 
@@ -169,6 +172,8 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           ),
         ),
       executeAction: (input) => executeSessionAction(input),
+      // No account holds a GitHub connection until the account-bound connection lands.
+      githubAccess: GITHUB_ACCESS_WITHOUT_CONNECTIONS,
       now: () => Date.now(),
     };
   },

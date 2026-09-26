@@ -26,6 +26,7 @@ import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { GITHUB_ACCESS_WITHOUT_CONNECTIONS } from "../server/hosted/github-source";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -111,6 +112,7 @@ function hostOverTestDatabase(): TestHost {
     vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
     providerKey: unreached("providerKey"),
     executeAction: unreached("executeAction"),
+    githubAccess: GITHUB_ACCESS_WITHOUT_CONNECTIONS,
     now: () => NOW,
   };
   return { host: Effect.runSync(brainHost(seams)), storeReads: () => storeReads };

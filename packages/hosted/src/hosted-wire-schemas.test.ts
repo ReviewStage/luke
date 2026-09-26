@@ -12,6 +12,7 @@ import * as askWire from "./ask-wire.js";
 import * as conversationClearWire from "./conversation-clear-wire.js";
 import * as conversationWire from "./conversation-wire.js";
 import * as deviceWire from "./device-wire.js";
+import * as githubWire from "./github-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as notebookWire from "./notebook-wire.js";
 import * as observeWire from "./observe-wire.js";
@@ -81,6 +82,11 @@ const EFFECT_MODULE_SCHEMAS = {
   "observe-wire": {
     observeAnswerSchema: observeWire.observeAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof observeWire>,
+  "github-wire": {
+    githubFailureAnswerSchema: githubWire.githubFailureAnswerSchema,
+    githubRepositorySchema: githubWire.githubRepositorySchema,
+    githubRepositoryListAnswerSchema: githubWire.githubRepositoryListAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof githubWire>,
   "plan-wire": {
     planAssumptionSchema: planWire.planAssumptionSchema,
     planDocumentSchema: planWire.planDocumentSchema,

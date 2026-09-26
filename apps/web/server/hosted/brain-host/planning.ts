@@ -4,7 +4,9 @@ import type { ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
+import type { GitHubAccess } from "../github-source.js";
 import type { StoredPlan } from "../plan-store.js";
+import { GET_FILE_CONTENTS_TOOL, runGetFileContents } from "../repository-tools.js";
 import { type PlanToolBinding, runUpdatePlan, UPDATE_PLAN_TOOL } from "../update-plan-tool.js";
 import type { HostedToolDeclaration } from "./tools.js";
 
@@ -110,19 +112,28 @@ interface PlanningTool {
   readonly run: (
     binding: PlanToolBinding,
     input: UnparsedWireValue,
-  ) => Effect.Effect<WireRecord, never, SqlClient.SqlClient>;
+  ) => Effect.Effect<WireRecord, never, PlanningToolServices>;
 }
+
+/** What a planning call may reach: the store, and the account's GitHub access for the repository read. */
+type PlanningToolServices = SqlClient.SqlClient | GitHubAccess;
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.
- * `update_plan` is the one write. The repository reads at the plan's commit
- * (LUKE-338) and bounded public research (LUKE-339) join this list, each a
+ * `update_plan` is the one write; `get_file_contents` reads the plan's
+ * repository at the plan's commit through GitHub's hosted MCP tools, under
+ * the same binding. Bounded public research (LUKE-339) joins this list, a
  * read whose result goes back to the model as data.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...UPDATE_PLAN_TOOL,
     run: (binding, input) => Effect.map(runUpdatePlan(binding, input), (result) => ({ ...result })),
+  },
+  {
+    ...GET_FILE_CONTENTS_TOOL,
+    run: (binding, input) =>
+      Effect.map(runGetFileContents(binding, input), (result) => ({ ...result })),
   },
 ];
 
@@ -162,7 +173,7 @@ export function runPlanningTool(
   name: string,
   binding: PlanToolBinding | undefined,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, SqlClient.SqlClient> {
+): Effect.Effect<WireRecord, never, PlanningToolServices> {
   const tool = PLANNING_TOOLS_BY_NAME.get(name);
   if (!tool) {
     return Effect.succeed({
