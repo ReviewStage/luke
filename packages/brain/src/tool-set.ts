@@ -53,14 +53,24 @@ function validatedInput(schema: Schema.Codec<unknown, UnparsedWireValue>) {
   );
 }
 
+/**
+ * One tool as a stored row is held to it: its words, and its input read under
+ * the wire schema the model was offered. The catalog's tools are built this
+ * way, and so is a tool a hosted conversation is offered from outside the
+ * catalog, so a row naming either reads back the same way.
+ */
+export function wireValidatedTool(
+  description: string,
+  inputSchema: Schema.Codec<unknown, UnparsedWireValue>,
+): Tool {
+  return tool({ description, inputSchema: validatedInput(inputSchema) });
+}
+
 /** The registry stored rows are read under: the catalog's tools by name, inputs validated by their wire schemas. */
 export function catalogToolSet(): ToolSet {
   const tools: Record<string, Tool> = {};
   for (const [name, registration] of brainToolRegistry()) {
-    tools[name] = tool({
-      description: registration.description,
-      inputSchema: validatedInput(registration.inputSchema),
-    });
+    tools[name] = wireValidatedTool(registration.description, registration.inputSchema);
   }
   return tools;
 }

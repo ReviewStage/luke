@@ -7,7 +7,7 @@ import {
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
 import type { ToolHostUnavailable } from "@sidecar/runtime/vocabulary";
 import type { LanguageModel } from "ai";
-import { Cache, Data, Duration, Effect, Exit, Result, type Schema } from "effect";
+import { Cache, Data, Duration, Effect, Exit, Option, Result, type Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -28,9 +28,10 @@ import {
   type WireRecord,
 } from "../../core.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
-import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
+import { CATALOG_TOOL_SET, HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
 import type { HostedRefusal } from "../http-effect.js";
+import { readPlanOfConversation } from "../plan-store.js";
 import { askRecord } from "../store/asks.js";
 import { toolSetHashOf } from "../store/content-addressed.js";
 import {
@@ -67,6 +68,12 @@ import { flushMemory, MEMORY_FLUSH_REFUSAL } from "./memory-flush.js";
 import { meteredModel, openAiBrainModel } from "./model.js";
 import { hostedNotebookAccess } from "./notebook.js";
 import { hostedActionCarrier } from "./performer.js";
+import {
+  PLANNING_INSTRUCTIONS,
+  planningStandingContext,
+  planningToolDeclarations,
+  runPlanningTool,
+} from "./planning.js";
 import type { BrainHostSeams } from "./production.js";
 import { type RelayStateStore, StreamRelay } from "./relay.js";
 import {
@@ -97,7 +104,11 @@ import {
  * store's writer, which is the sole consumer and the only thing that writes
  * a message row. Nothing here decides on the user's behalf: every write runs
  * under the conversation the session was admitted for, and every action
- * through the same admission as everywhere else.
+ * through the same admission as everywhere else. A plan conversation runs
+ * the same loop under the planning model's instructions, its saved document
+ * as the standing context, and the planning tools alone (`planning.ts`); it
+ * primes and flushes no notebook, since a plan's words are the plan's and
+ * not what Luke keeps of the developer.
  */
 
 /** The turn a resolver or a tool runs in, as eve names it and as the store keys it; plain data, so a tool may capture it. */
@@ -160,6 +171,9 @@ class PluginKey extends Data.Class<{
   readonly sealedKey: string;
 }> {}
 
+/** What a turn's tools are chosen by: the conversation, and its kind, since a plan conversation is offered the planning tools alone. */
+type AdmittedTools = Pick<AdmittedConversation, "target" | "kind">;
+
 /** What a host function answers: an effect over the ambient client, which eve's own authored files run at the web's edge. */
 type HostEffect<A> = Effect.Effect<
   A,
@@ -184,7 +198,7 @@ export interface BrainHost {
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /** The tools one turn is offered, as declarations, read against the account's quiet as the turn starts; the eve project binds each to `runTool`. */
   toolDeclarations(
-    target: ConversationTarget,
+    admitted: AdmittedTools,
     turn: HostedTurn,
   ): HostEffect<readonly HostedToolDeclaration[]>;
   /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it; over the edge's `HttpClient` too, for the one embeddings call a notebook search makes. */
@@ -398,11 +412,20 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
      * briefing look read, so the three decide on one standing.
      */
     const declarationsFor = (
-      target: ConversationTarget,
+      { target, kind }: AdmittedTools,
       trigger: BrainTurnTrigger,
     ): HostEffect<readonly HostedToolDeclaration[]> =>
-      Effect.map(quietUntilByAccount(seams.now(), [target.userId]), (quiet) =>
-        hostedToolDeclarations(trigger, { quiet: quiet.has(target.userId) }),
+      kind === CONVERSATION_KIND.PLAN
+        ? Effect.succeed(planningToolDeclarations())
+        : Effect.map(quietUntilByAccount(seams.now(), [target.userId]), (quiet) =>
+            hostedToolDeclarations(trigger, { quiet: quiet.has(target.userId) }),
+          );
+
+    /** The plan a plan conversation belongs to, as the account owns it now; nothing once it is deleted. */
+    const planOf = (target: ConversationTarget) =>
+      Effect.map(
+        readPlanOfConversation(target.userId, target.conversationId),
+        Option.getOrUndefined,
       );
 
     return {
@@ -430,6 +453,9 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
 
       prompt: (admitted) =>
         Effect.gen(function* () {
+          if (admitted.kind === CONVERSATION_KIND.PLAN) {
+            return { text: PLANNING_INSTRUCTIONS, hash: promptHashOf(PLANNING_INSTRUCTIONS) };
+          }
           const store = yield* seams.store();
           yield* seedHostedWorkspace(store, admitted.target.userId, seams.now());
           const modelId = seams.openAi()?.modelId;
@@ -443,6 +469,9 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
         Effect.gen(function* () {
           const { userId } = admitted.target;
           const now = seams.now();
+          if (admitted.kind === CONVERSATION_KIND.PLAN) {
+            return planningStandingContext(yield* planOf(admitted.target), now);
+          }
           const roster = yield* rosterOf(userId);
           const defaults = yield* readWorkspaceDefaults(userId);
           // Main alone recalls what its observed conversations announced: an
@@ -467,11 +496,11 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
 
       seed: (admitted) =>
         Effect.map(
-          readRecentMessages(admitted.target, CATALOG_TOOL_SET, BRAIN_HOST.SEED_MESSAGES),
+          readRecentMessages(admitted.target, HOSTED_TOOL_SET, BRAIN_HOST.SEED_MESSAGES),
           (recent) => rotationSeedText(recent, seams.now()),
         ),
 
-      toolDeclarations: (target, turn) => declarationsFor(target, turn.trigger),
+      toolDeclarations: (admitted, turn) => declarationsFor(admitted, turn.trigger),
 
       runTool: (name, binding, input, context) =>
         Effect.gen(function* () {
@@ -484,6 +513,16 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
           });
           if (Result.isFailure(standing)) {
             return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.failure };
+          }
+          if (standing.success.kind === CONVERSATION_KIND.PLAN) {
+            // The plan is found again as the call runs, so a plan deleted mid-turn saves nothing.
+            const { target } = standing.success;
+            const plan = yield* planOf(target);
+            return yield* runPlanningTool(
+              name,
+              plan === undefined ? undefined : { userId: target.userId, planId: plan.plan.id },
+              input,
+            );
           }
           const client = yield* SqlClient.SqlClient;
           const http = yield* HttpClient.HttpClient;
@@ -562,6 +601,9 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
             standing: SESSION_STANDING.CURRENT,
           });
           if (Result.isFailure(admitted)) return skippedHousekeeping(admitted.failure);
+          if (admitted.success.kind === CONVERSATION_KIND.PLAN) {
+            return skippedHousekeeping(MEMORY_FLUSH_REFUSAL.PLAN);
+          }
           // OpenClaw's session-kind gate: a scaffolding turn — the roster's
           // observation, a child's task — produces no durable memory, so only
           // a turn the developer opened flushes, typed or spoken.
@@ -605,7 +647,9 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
             id: context.session.id,
             standing: SESSION_STANDING.CURRENT,
           });
-          if (Result.isFailure(admitted)) return null;
+          if (Result.isFailure(admitted) || admitted.success.kind === CONVERSATION_KIND.PLAN) {
+            return null;
+          }
           const store = yield* seams.store();
           const notes = yield* recentHostedDailyNotes(
             store,
@@ -637,9 +681,7 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
           // beside it.
           const toolSetHash =
             event.type === "turn.started" && turn !== undefined
-              ? toolSetHashOf(
-                  yield* declarationsFor(admitted.target, BRAIN_HOST_TURN_KIND[turn].trigger),
-                )
+              ? toolSetHashOf(yield* declarationsFor(admitted, BRAIN_HOST_TURN_KIND[turn].trigger))
               : undefined;
           const writer = yield* seams.writer();
           yield* relayOver(writer, yield* eveSessionsComposer).handle(event, {

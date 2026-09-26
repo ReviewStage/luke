@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import type { Route } from "../route.js";
 import { handleBrainTurnCancel } from "./brain-ask.js";
 import { brainAskRoute } from "./brain-ask-route.js";
-import { CATALOG_TOOL_SET } from "./brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { type StoreWriter, storeWriter } from "./store/writer.js";
 
 /**
@@ -17,7 +17,7 @@ let composedWriter: StoreWriter | undefined;
 const writer: Pick<StoreWriter, "requestTurnCancel"> = {
   requestTurnCancel: (target, cancel) =>
     Effect.gen(function* () {
-      composedWriter ??= yield* storeWriter({ tools: CATALOG_TOOL_SET });
+      composedWriter ??= yield* storeWriter({ tools: HOSTED_TOOL_SET });
       return yield* composedWriter.requestTurnCancel(target, cancel);
     }),
 };

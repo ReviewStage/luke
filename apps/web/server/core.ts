@@ -85,6 +85,7 @@ export {
 export {
   catalogToolSet,
   catalogViewToolKinds,
+  wireValidatedTool,
 } from "@sidecar/brain/tool-set";
 export * from "@sidecar/hosted";
 // The runtime's barrel and its vocabulary door carry no name in common, so
