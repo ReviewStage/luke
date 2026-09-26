@@ -27,7 +27,7 @@ export default defineDynamic({
           if (!turn) return null;
           const { target } = admitted.success;
           const binding: HostedToolBinding = { target, turn };
-          const declarations = yield* host.toolDeclarations(target, turn);
+          const declarations = yield* host.toolDeclarations(admitted.success, turn);
           return Object.fromEntries(
             declarations.map((declared) => {
               const name = declared.name;

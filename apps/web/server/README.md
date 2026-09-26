@@ -631,6 +631,25 @@ conversation `attachPlanConversation` associated, and it moves nothing.
 `tests/hosted-plans.test.ts` and `tests/plans-app.test.ts` hold both halves
 against a real dialect.
 
+The planning model is the hosted brain run over a `plan` conversation, which
+`openPlanConversation` opens once per plan and attaches; deleting the plan
+stamps it cleared, so the purge takes its words thirty days on. eve, the
+relay, and the store are unchanged, and for a plan conversation the host
+swaps three things (`server/hosted/brain-host/planning.ts`): the prompt is the
+authored planning instructions, the standing context each turn opens with is
+the plan's repository, commit, and saved document read again from the row,
+and the tools are the planning list alone, `update_plan` bound to the plan
+the conversation belongs to (`readPlanOfConversation`), with the repository
+and research reads to join it. A resumed session is seeded with the
+conversation so far like any other. A plan conversation primes and flushes no
+notebook, and never reaches the panel's reads, which name their kinds. The
+writer holds rows to `HOSTED_TOOL_SET`, the catalog and the planning tools,
+so a turn's `update_plan` calls are written and read back like any tool's.
+Question choice, agreement, assumption flags, and corrections are the
+instructions' alone: no code reads the document for meaning.
+`tests/hosted-planning.test.ts` runs the scripted model through the host and
+the relay, and the `brain-host` eval runs a plan conversation through eve.
+
 ## The admin group
 
 `server/admin-app.ts` is the dashboard's route group: its four reads and the

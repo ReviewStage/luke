@@ -7,11 +7,12 @@ import {
 } from "@sidecar/hosted";
 import { and, desc, eq, exists, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
@@ -21,9 +22,12 @@ import { InstantColumnSchema } from "./store/database.js";
  * plan id another account owns reads, saves, opens, and deletes exactly as an
  * id that names nothing: as no plan. A save is one `update` over the row that
  * stands and never an insert, so a plan deleted before a save lands stays
- * deleted, and a save that fails leaves the document as it was. Every
- * function is an effect over the ambient `SqlClient` and names no database of
- * its own.
+ * deleted, and a save that fails leaves the document as it was. A plan's
+ * conversation is a `plan` conversation of the same account, opened once and
+ * named on the row, and it goes with the plan: deleting the plan stamps it
+ * `deleted_at` on the terms of a Clear, so the purge takes its words thirty
+ * days on. Every function is an effect over the ambient `SqlClient` and names
+ * no database of its own.
  */
 
 type PlanStoreFailure = SqlError | Schema.SchemaError;
@@ -178,11 +182,77 @@ const replaceDocument = SqlSchema.findOneOption({
       .returning(PLAN_COLUMNS),
 });
 
+const findPlanOfConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: PlanRowSchema,
+  execute: ({ userId, conversationId }) =>
+    db
+      .select(PLAN_COLUMNS)
+      .from(plan)
+      .where(and(eq(plan.userId, userId), eq(plan.conversationId, conversationId)))
+      .limit(1),
+});
+
+const PlanConversationRowSchema = Schema.Struct({
+  conversationId: Schema.NullOr(Schema.String),
+  conversationDeletedAt: Schema.NullOr(InstantColumnSchema),
+});
+
+/** The plan row under its own lock, with the conversation it names and whether that conversation still stands. */
+const lockPlanConversation = SqlSchema.findOneOption({
+  Request: PlanKeySchema,
+  Result: PlanConversationRowSchema,
+  execute: ({ userId, planId }) =>
+    db
+      .select({
+        conversationId: plan.conversationId,
+        conversationDeletedAt: conversations.deletedAt,
+      })
+      .from(plan)
+      .leftJoin(conversations, eq(conversations.id, plan.conversationId))
+      .where(ownedPlan(userId, planId))
+      .for("update", { of: plan }),
+});
+
+const insertPlanConversation = SqlSchema.findOne({
+  Request: Schema.Struct({ userId: Schema.String, now: Schema.Date }),
+  Result: PlanIdRowSchema,
+  execute: ({ userId, now }) =>
+    db
+      .insert(conversations)
+      .values({ userId, kind: CONVERSATION_KIND.PLAN, createdAt: now, lastActivityAt: now })
+      .returning({ id: conversations.id }),
+});
+
 const removePlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
-  Result: PlanIdRowSchema,
+  Result: Schema.Struct({ conversationId: Schema.NullOr(Schema.String) }),
   execute: ({ userId, planId }) =>
-    db.delete(plan).where(ownedPlan(userId, planId)).returning({ id: plan.id }),
+    db
+      .delete(plan)
+      .where(ownedPlan(userId, planId))
+      .returning({ conversationId: plan.conversationId }),
+});
+
+const stampConversation = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: PlanIdRowSchema,
+  execute: ({ userId, conversationId, now }) =>
+    db
+      .update(conversations)
+      .set({ deletedAt: now })
+      .where(
+        and(
+          eq(conversations.id, conversationId),
+          eq(conversations.userId, userId),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .returning({ id: conversations.id }),
 });
 
 /**
@@ -289,9 +359,22 @@ export function savePlanDocument(
   });
 }
 
-/** Deletes the plan and its document; false where the account owned no such plan. */
+/** Deletes the plan and its document, and stamps its conversation cleared; false where the account owned no such plan. */
 export function deletePlan(userId: string, planId: string): PlanStoreEffect<boolean> {
-  return Effect.map(removePlan({ userId, planId }), Option.isSome);
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const removed = yield* removePlan({ userId, planId });
+        if (Option.isNone(removed)) return false;
+        const { conversationId } = removed.value;
+        if (conversationId !== null) {
+          const now = yield* DateTime.nowAsDate;
+          yield* stampConversation({ userId, conversationId, now });
+        }
+        return true;
+      }),
+    ),
+  );
 }
 
 /**
@@ -304,4 +387,51 @@ export function attachPlanConversation(
   conversationId: string,
 ): PlanStoreEffect<boolean> {
   return Effect.map(setConversation({ userId, planId, conversationId }), Option.isSome);
+}
+
+/**
+ * The conversation the plan's planning model runs in, opened and attached
+ * now where the plan names none that still stands; nothing where the account
+ * owns no such plan. The plan row's lock holds two opens of one plan one
+ * after the other, so the second finds the first's conversation rather than
+ * opening another.
+ */
+export function openPlanConversation(
+  userId: string,
+  planId: string,
+): PlanStoreEffect<Option.Option<string>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const locked = yield* lockPlanConversation({ userId, planId });
+        if (Option.isNone(locked)) return Option.none();
+        const { conversationId, conversationDeletedAt } = locked.value;
+        if (conversationId !== null && conversationDeletedAt === null) {
+          return Option.some(conversationId);
+        }
+        const now = yield* DateTime.nowAsDate;
+        const opened = yield* insertPlanConversation({ userId, now }).pipe(
+          // An insert that returned no row is the database breaking its own contract, not an outcome.
+          Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+        );
+        if (!(yield* attachPlanConversation(userId, planId, opened.id))) {
+          return yield* Effect.die(new Error("the plan's new conversation did not attach"));
+        }
+        return Option.some(opened.id);
+      }),
+    ),
+  );
+}
+
+/**
+ * The plan a conversation of the account belongs to, with its saved document;
+ * nothing for a conversation no plan of the account names. This is how a
+ * planning turn, admitted for a conversation, finds the document it is handed
+ * and the plan its `update_plan` is bound to.
+ */
+export function readPlanOfConversation(
+  userId: string,
+  conversationId: string,
+): PlanStoreEffect<Option.Option<StoredPlan>> {
+  return Effect.map(findPlanOfConversation({ userId, conversationId }), Option.map(storedPlanOf));
 }
