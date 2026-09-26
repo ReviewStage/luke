@@ -35,11 +35,12 @@ export class DockPresence {
   readonly #focusExpanded: (displayId?: number) => void;
   readonly #iconDirectory: string;
   readonly #dock: Electron.Dock | undefined;
-  /** The Dock state last asked for, and whether the applier is chasing it. */
-  #desired = false;
+  /** The setting's word, and whether an ordinary window holds the tile open, which together are the state asked for. */
+  #setting = false;
+  #windowHeld = false;
   #settling = false;
-  /** The display whose panel asked for the last Dock change, when one did. */
-  #askedFrom: number | undefined;
+  /** What is brought back forward once a change lands: the panel that held the switch, or the window that asked. */
+  #refocus: () => void = () => undefined;
 
   constructor(options: DockPresenceOptions) {
     this.#focusExpanded = options.focusExpanded;
@@ -76,9 +77,26 @@ export class DockPresence {
    * press was made rather than to whichever panel stands first.
    */
   apply(show: boolean, askedFrom?: number): void {
-    this.#desired = show;
-    this.#askedFrom = askedFrom;
+    this.#setting = show;
+    this.#refocus = () => this.#focusExpanded(askedFrom);
     void this.#settle();
+  }
+
+  /**
+   * Holds the tile open while an ordinary window stands, whatever the setting
+   * says: a titled window is in the Dock and Cmd-Tab like any app's, and
+   * letting go of the hold hands the tile back to the setting. `refocus` is
+   * that window brought back forward, since a change of process type can
+   * deactivate the app under it.
+   */
+  holdForWindow(held: boolean, refocus: () => void): void {
+    this.#windowHeld = held;
+    this.#refocus = refocus;
+    void this.#settle();
+  }
+
+  get #desired(): boolean {
+    return this.#setting || this.#windowHeld;
   }
 
   /**
@@ -101,9 +119,9 @@ export class DockPresence {
           this.#dock.hide();
         }
         // Either direction transforms the process type, which can deactivate
-        // the app; the panel the switch was pressed in is brought back forward
+        // the app; whoever asked for the change is brought back forward
         // rather than left to lose its caret.
-        this.#focusExpanded(this.#askedFrom);
+        this.#refocus();
         await new Promise((resolve) => setTimeout(resolve, DOCK_SETTLE_MS));
       }
     } finally {

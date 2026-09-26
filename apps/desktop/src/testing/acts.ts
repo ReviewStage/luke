@@ -88,6 +88,18 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT,
   },
   [ACT_KIND.NOTEBOOK_READ]: { kind: ACT_KIND.NOTEBOOK_READ },
+  [ACT_KIND.PLANNING_OPEN_WINDOW]: { kind: ACT_KIND.PLANNING_OPEN_WINDOW },
+  [ACT_KIND.PLANNING_REFRESH]: { kind: ACT_KIND.PLANNING_REFRESH },
+  [ACT_KIND.PLANNING_SELECT]: {
+    kind: ACT_KIND.PLANNING_SELECT,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  },
+  [ACT_KIND.PLANNING_START]: {
+    kind: ACT_KIND.PLANNING_START,
+    payload: { name: "Teammate invitations", repository: { owner: "acme", name: "relay" } },
+  },
+  [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
+  [ACT_KIND.PLANNING_CONNECT_GITHUB]: { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "clear-conversation" },

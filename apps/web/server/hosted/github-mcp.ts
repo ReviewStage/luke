@@ -1,5 +1,5 @@
 import { createMCPClient, type MCPClient } from "@ai-sdk/mcp";
-import { GITHUB_FAILURE, type GitHubFailure } from "@sidecar/hosted";
+import { GITHUB_FAILURE, type GitHubFailure } from "@sidecar/hosted/github-wire";
 import { HTTP_STATUS } from "@sidecar/wire";
 import { Duration, Effect, Option, Redacted, Schema } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";

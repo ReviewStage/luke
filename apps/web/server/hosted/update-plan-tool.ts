@@ -1,4 +1,4 @@
-import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted";
+import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted";
+import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import {
   generateText,

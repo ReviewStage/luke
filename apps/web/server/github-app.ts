@@ -3,7 +3,7 @@ import {
   GITHUB_UNAVAILABLE_ERROR,
   type GitHubFailure,
   type GitHubFailureAnswer,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/github-wire";
 import { Effect, Layer, Option, Result } from "effect";
 import {
   type HttpClient,

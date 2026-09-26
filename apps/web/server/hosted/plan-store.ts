@@ -4,7 +4,7 @@ import {
   type PlanRepository,
   type PlanSummary,
   planAssumptionSchema,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, exists, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";

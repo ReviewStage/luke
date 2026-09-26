@@ -4,7 +4,7 @@ import {
   GITHUB_FAILURE,
   GITHUB_UNAVAILABLE_ERROR,
   githubRepositoryListAnswerSchema,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/github-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result } from "effect";

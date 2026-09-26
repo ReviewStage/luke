@@ -27,6 +27,16 @@ export const GATEWAY_METHOD = {
   CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
   NOTEBOOK_READ: "notebook.read",
+  /** The planning window stands: the plan list read now, the active plan's document with it, and both followed until it closes. */
+  PLANNING_REFRESH: "planning.refresh",
+  /** One plan made the active one and its saved document read, replacing whichever was active. */
+  PLANNING_OPEN: "planning.open",
+  /** The planning window closed: no plan is active and nothing is followed. */
+  PLANNING_CLOSE: "planning.close",
+  /** A named plan started on a repository the account's GitHub connection reads, and made the active one. */
+  PLANNING_START: "planning.start",
+  /** The repositories the account's GitHub connection can read, for a new plan's picker. */
+  PLANNING_REPOSITORIES: "planning.repositories",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
@@ -389,6 +399,8 @@ export const GATEWAY_EVENT = {
   CONDUCTOR_KEY_ONBOARDING_CHANGED: "conductorKeyOnboarding.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
+  /** The planning window's plans, active plan, and document, whole, whenever a read moved them. */
+  PLANNING_CHANGED: "planning.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

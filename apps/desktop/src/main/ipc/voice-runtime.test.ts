@@ -53,6 +53,20 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
   const panelSender = {} as WebContents;
   // SAFETY: a second inert object, so the row reads two distinct windows.
   const voiceSender = {} as WebContents;
+  // SAFETY: a third inert object, the planning window.
+  const planningSender = {} as WebContents;
+  const sentToPlanning: { channel: string; payload: WireRecord }[] = [];
+  // SAFETY: the relay reads only `owns` and `current().webContents.send` off the planning window.
+  const planningWindow = {
+    owns: (sender: WebContents) => sender === planningSender,
+    current: () => ({
+      webContents: {
+        send: (channel: string, payload: WireRecord) => {
+          sentToPlanning.push({ channel, payload });
+        },
+      },
+    }),
+  } as unknown as VoiceRuntimeDependencies["planningWindow"];
   // SAFETY: the Clear path reads only `owns` and `current().webContents.send` off the voice window surface.
   const voiceWindow = {
     owns: (sender: WebContents) => sender === voiceSender,
@@ -73,6 +87,7 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
   const dependencies = {
     panels,
     voiceWindow,
+    planningWindow,
     state: new AppStateStore(initialAppState(RUN, false), Context.empty()),
     openExternal: async () => undefined,
     liveSession: {
@@ -115,6 +130,7 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
     sender,
     panel: sender === panelSender,
     voice: sender === voiceSender,
+    planning: sender === planningSender,
     introduction: false,
   });
   const command = (sender: WebContents) =>
@@ -132,8 +148,12 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
     report,
     liveCalls,
     sentToVoice,
+    sentToPlanning,
     panelSender,
     voiceSender,
+    planningSender,
+    levels: (sender: WebContents) =>
+      reports.reportVoiceLevel({ sender }, { developer: 0.5, luke: 0 }),
     state: dependencies.state,
     refreshes: () => refreshes,
   };
@@ -281,3 +301,43 @@ it("the voice window's report is written to the document and asks for a read onl
   assert.deepEqual(f.state.snapshot().voice.view, IDLE_VOICE_VIEW);
   assert.equal(f.refreshes(), 2);
 });
+
+it.effect(
+  "the planning window may ask for the microphone and nothing else of the voice window",
+  () =>
+    Effect.gen(function* () {
+      let clears = 0;
+      const f = fixture(() =>
+        Effect.sync(() => {
+          clears += 1;
+          return true;
+        }),
+      );
+
+      yield* f.perform(f.planningSender, {
+        kind: ACT_KIND.VOICE_COMMAND,
+        payload: { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS },
+      });
+      const cleared = yield* f.command(f.planningSender);
+
+      assert.deepEqual(
+        f.sentToVoice.map((sent) => sent.payload),
+        [{ command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS }],
+      );
+      assert.deepEqual(cleared, { status: "done", value: undefined });
+      assert.equal(clears, 0);
+    }),
+);
+
+it.effect("the voice window's levels reach the planning window's waveform", () =>
+  Effect.sync(() => {
+    const f = fixture(() => Effect.succeed(true));
+
+    f.levels(f.voiceSender);
+    f.levels(f.panelSender);
+
+    assert.deepEqual(f.sentToPlanning, [
+      { channel: "app:voice-level-changed", payload: { developer: 0.5, luke: 0 } },
+    ]);
+  }),
+);

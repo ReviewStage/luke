@@ -23,9 +23,27 @@ function answered(
   return answer as Effect.Effect<SessionWriteResult, Error>;
 }
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, introduction: false };
-const VOICE: ActSender = { sender: SENDER, panel: false, voice: true, introduction: false };
-const INTRODUCTION: ActSender = { sender: SENDER, panel: true, voice: false, introduction: true };
+const PANEL: ActSender = {
+  sender: SENDER,
+  panel: true,
+  voice: false,
+  planning: false,
+  introduction: false,
+};
+const VOICE: ActSender = {
+  sender: SENDER,
+  panel: false,
+  voice: true,
+  planning: false,
+  introduction: false,
+};
+const INTRODUCTION: ActSender = {
+  sender: SENDER,
+  panel: true,
+  voice: false,
+  planning: false,
+  introduction: true,
+};
 
 const IDENTITY: SessionIdentity = { providerId: "conductor", providerSessionId: "chat-1" };
 

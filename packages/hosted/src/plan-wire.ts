@@ -117,14 +117,8 @@ export const planListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(planSummarySchema),
 });
 
-export type PlanListAnswer = typeof planListAnswerSchema.Type;
-
 /** A started or opened plan (POST, GET), with its document as saved. */
 export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
 
-export type PlanAnswer = typeof planAnswerSchema.Type;
-
 /** A deleted plan (DELETE): its row, its document, and its association are gone. */
 export const planDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
-
-export type PlanDeleteAnswer = typeof planDeleteAnswerSchema.Type;

@@ -9,6 +9,7 @@ import { ActRefused, type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
+import { connectGitHubPending, planningActRows } from "./planning-acts";
 import { sessionActRows } from "./session-acts";
 import { settingsActRows } from "./settings-rows";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
@@ -38,6 +39,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const voiceRuntime = {
     panels,
     voiceWindow,
+    planningWindow: windows.planningWindow,
     state,
     // The Conversation Clear is the service's soft delete of the account's
     // main conversation, which is the thread every panel draws; a Clear the
@@ -97,6 +99,11 @@ export function registerDesktopIpc(services: DesktopServices): void {
       recordProductEvent,
     }),
     ...voiceRuntimeActRows(voiceRuntime),
+    ...planningActRows({
+      openWindow: () => windows.planningWindow.open(),
+      host: operator.host,
+      connectGitHub: connectGitHubPending,
+    }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
@@ -222,6 +229,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       sender,
       panel: panels.owns(sender),
       voice: voiceWindow.owns(sender),
+      planning: windows.planningWindow.owns(sender),
       // The introduction is a fullscreen mode of the panel rather than a
       // window of its own, so what a takeover-only row is owed is the
       // standing the document holds and the panel asking under it.

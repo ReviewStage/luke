@@ -23,6 +23,8 @@ export interface ActSender {
   panel: boolean;
   /** The hidden window the conversation lives in, and the one receiver of replies. */
   voice: boolean;
+  /** The planning window, the one ordinary window a named plan is read and talked through in. */
+  planning: boolean;
   /**
    * A panel the one-time introduction is holding, which stands before any
    * account exists. The takeover is a fullscreen mode of the panel, so this

@@ -18,7 +18,7 @@
  * token `connect` gave an account, and `not-connected` for any other.
  */
 
-import { GITHUB_FAILURE } from "@sidecar/hosted";
+import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import { Effect, Layer, Redacted } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { GITHUB_MCP_ENDPOINT } from "../../server/hosted/github-mcp";

@@ -22,6 +22,16 @@ import {
   voiceLiveSessionChangedSchema,
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
+import type { PlanCreateRequest } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_CALL_FAILURE,
+  type PlanningRepositoriesAnswer,
+  type PlanningStartAnswer,
+  type PlanningView,
+  planningRepositoriesAnswerSchema,
+  planningStartAnswerSchema,
+  planningViewSchema,
+} from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
   type ConversationViewSnapshot,
@@ -199,6 +209,16 @@ export interface HostOperator {
     messageId: string,
     rating: RatingWord,
   ): Effect.Effect<ConversationRateMessageResult>;
+  /** The planning window stands: the host reads the plan list and the active document now and follows both until the window closes. */
+  planningRefresh(): Effect.Effect<void>;
+  /** One plan made the active one, replacing whichever was; answers whether the host took it. */
+  planningOpen(planId: string): Effect.Effect<boolean>;
+  /** The planning window closed: no plan is active and nothing is followed. */
+  planningClose(): Effect.Effect<void>;
+  /** A named plan started on a repository and made the active one, or why none started. */
+  planningStart(request: PlanCreateRequest): Effect.Effect<PlanningStartAnswer>;
+  /** The repositories the account's GitHub connection can read, or why it could not be read. */
+  planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
   onboardingState(): Effect.Effect<
     | {
         calendarOnboardingOwed: boolean;
@@ -235,6 +255,7 @@ export interface HostOperator {
   onConductorKeyOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
+  onPlanningChanged(listener: (view: PlanningView) => void): () => void;
 }
 
 interface HostOperatorOptions {
@@ -554,6 +575,38 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : undefined) ?? { status: CONVERSATION_RATE_STATUS.UNAVAILABLE },
       ),
+    planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
+    planningOpen: (planId) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_OPEN, { planId }),
+        (answer) => record(answer)?.opened === true,
+      ),
+    planningClose: () => fire(client.call(GATEWAY_METHOD.PLANNING_CLOSE)),
+    planningStart: (request) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_START, {
+          name: request.name,
+          repository: { owner: request.repository.owner, name: request.repository.name },
+        }),
+        (answer): PlanningStartAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningStartAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningRepositories: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_REPOSITORIES),
+        (answer): PlanningRepositoriesAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
     onboardingState: () =>
       Effect.map(client.call(GATEWAY_METHOD.ONBOARDING_STATE), (result) => {
         const answer = record(result);
@@ -689,6 +742,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           Result.getOrUndefined(
             readEither(voiceLiveSessionChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    onPlanningChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PLANNING_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(planningViewSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),

@@ -4,7 +4,7 @@ import {
   type GatewayMethodTable,
   type GatewayShutdownSteps,
 } from "@sidecar/gateway";
-import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
+import { HostedChangesClient, HostedConversationClient, HostedPlanClient } from "@sidecar/hosted";
 import { observationSupervisor } from "@sidecar/runtime";
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
@@ -18,6 +18,7 @@ import { composeConversation } from "./compose-conversation.js";
 import { composeDevices } from "./compose-devices.js";
 import { composeLive } from "./compose-live.js";
 import { composeObservation } from "./compose-observation.js";
+import { composePlanning } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
@@ -35,7 +36,7 @@ import {
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
 
-/** The seven concerns, by the name each is built under. */
+/** The eight concerns, by the name each is built under. */
 export const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
@@ -44,6 +45,7 @@ export const HOST_CONCERN = {
   CALENDARS: "calendars",
   OBSERVATION: "observation",
   LIVE: "live",
+  PLANNING: "planning",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -61,6 +63,7 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.CALENDARS,
   HOST_CONCERN.OBSERVATION,
   HOST_CONCERN.LIVE,
+  HOST_CONCERN.PLANNING,
 ];
 
 /**
@@ -134,6 +137,14 @@ export const hostAssemblyLayer: Layer.Layer<
     // offer. The onboarding beats and the launch greeting are decided by the
     // live composer below and spoken by the service on its ask.
     const live = yield* composeLive({ settings, account, observation, calendars });
+    const planning = yield* composePlanning({
+      kernel,
+      account,
+      client: new HostedPlanClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+    });
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
     briefingsOffered = live.briefingsOffered;
@@ -190,6 +201,7 @@ export const hostAssemblyLayer: Layer.Layer<
       yield* capabilities.disarm;
       live.withdrawBeats();
       conversation.reset();
+      yield* planning.reset;
       observation.stopObservation();
       settings.forgetVaultKeys();
       yield* account.applyVoiceCredential;
@@ -229,6 +241,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.CALENDARS]: calendars,
       [HOST_CONCERN.OBSERVATION]: observation,
       [HOST_CONCERN.LIVE]: live,
+      [HOST_CONCERN.PLANNING]: planning,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**

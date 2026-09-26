@@ -16,6 +16,7 @@
 @import "./conversation.css";
 @import "./sign-in.css";
 @import "./voice.css";
+@import "./planning.css";
 /* After sessions.css and sign-in.css: the takeover restages their rows and
    provider buttons and its overrides have to win. */
 @import "./introduction.css";

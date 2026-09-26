@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  GITHUB_FAILURE,
-  GITHUB_UNAVAILABLE_ERROR,
-  planAnswerSchema,
-  planListAnswerSchema,
-} from "@sidecar/hosted";
+import { GITHUB_FAILURE, GITHUB_UNAVAILABLE_ERROR } from "@sidecar/hosted/github-wire";
+import { planAnswerSchema, planListAnswerSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result, type Schema } from "effect";
