@@ -20,7 +20,7 @@ import {
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
+import { Duration, Effect, Result, Schedule, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -83,6 +83,14 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   const { kernel, account, client } = dependencies;
   const intervalMs = dependencies.pollIntervalMs ?? PLANNING_POLL_INTERVAL_MS;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+
+  /**
+   * One read of the service at a time, beats and asks alike. Note that the
+   * answers are applied in the order the reads were made, because a list
+   * that left before a plan started, or a document read that left before a
+   * newer one, would otherwise land last and roll the view back.
+   */
+  const serial = (yield* Semaphore.make(1)).withPermits(1);
 
   let view: PlanningView = IDLE_PLANNING_VIEW;
   let published: PlanningView = view;
@@ -151,18 +159,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    * a landed list no longer names was deleted, which the window draws as
    * missing rather than as the last copy it read.
    */
-  const follow = Effect.gen(function* () {
-    if (!gate()) return;
-    yield* readList;
-    const planId = view.activePlanId;
-    if (planId === undefined || view.listStatus !== PLANNING_READ.READY) return;
-    const listed = view.plans.find((plan) => plan.id === planId);
-    if (listed === undefined) {
-      write({ document: { status: PLANNING_READ.MISSING } });
-      return;
-    }
-    if (heldPlanOf(planId)?.updatedAt !== listed.updatedAt) yield* readDocument(planId);
-  });
+  const follow = serial(
+    Effect.gen(function* () {
+      if (!gate()) return;
+      yield* readList;
+      const planId = view.activePlanId;
+      if (planId === undefined || view.listStatus !== PLANNING_READ.READY) return;
+      const listed = view.plans.find((plan) => plan.id === planId);
+      if (listed === undefined) {
+        write({ document: { status: PLANNING_READ.MISSING } });
+        return;
+      }
+      if (heldPlanOf(planId)?.updatedAt !== listed.updatedAt) yield* readDocument(planId);
+    }),
+  );
 
   // The cadence stands while a window does: armed by the window's refresh,
   // disarmed by its close and by a sign-out. `Effect.schedule` rather than a
@@ -178,9 +188,13 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       Effect.gen(function* () {
         if (!gate()) return {};
         yield* cadence.arm;
-        yield* readList;
-        const planId = view.activePlanId;
-        if (planId !== undefined) yield* readDocument(planId);
+        yield* serial(
+          Effect.gen(function* () {
+            yield* readList;
+            const planId = view.activePlanId;
+            if (planId !== undefined) yield* readDocument(planId);
+          }),
+        );
         return {};
       }),
     [GATEWAY_METHOD.PLANNING_OPEN]: (params) =>
@@ -189,20 +203,28 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         if (Result.isFailure(read)) return yield* invalid("opening a plan names one plan");
         if (!gate()) return { opened: false };
         const { planId } = read.success;
-        if (view.activePlanId !== planId) {
-          write({ activePlanId: planId, document: { status: PLANNING_READ.READING } });
-        }
-        yield* readDocument(planId);
-        // Opening moved the plan to the head of the list.
-        yield* readList;
+        yield* serial(
+          Effect.gen(function* () {
+            if (view.activePlanId !== planId) {
+              write({ activePlanId: planId, document: { status: PLANNING_READ.READING } });
+            }
+            yield* readDocument(planId);
+            // Opening moved the plan to the head of the list.
+            yield* readList;
+          }),
+        );
         return { opened: true };
       }),
     [GATEWAY_METHOD.PLANNING_CLOSE]: () =>
       Effect.gen(function* () {
         yield* cadence.disarm;
-        const { activePlanId: _closed, ...rest } = view;
-        view = { ...rest, document: { status: PLANNING_READ.IDLE } };
-        publish();
+        yield* serial(
+          Effect.sync(() => {
+            const { activePlanId: _closed, ...rest } = view;
+            view = { ...rest, document: { status: PLANNING_READ.IDLE } };
+            publish();
+          }),
+        );
         return {};
       }),
     [GATEWAY_METHOD.PLANNING_START]: (params) =>
@@ -212,12 +234,17 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           return yield* invalid("starting a plan names it and its repository");
         }
         if (!gate()) return carried<PlanningStartAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
-        const started = yield* Effect.provide(client.create(read.success), FetchHttpClient.layer);
-        if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
-        const plan = started.answer;
-        write({ activePlanId: plan.id, document: { status: PLANNING_READ.READY, plan } });
-        yield* readList;
-        return carried<PlanningStartAnswer>({ planId: plan.id });
+        const request = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const started = yield* Effect.provide(client.create(request), FetchHttpClient.layer);
+            if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
+            const plan = started.answer;
+            write({ activePlanId: plan.id, document: { status: PLANNING_READ.READY, plan } });
+            yield* readList;
+            return carried<PlanningStartAnswer>({ planId: plan.id });
+          }),
+        );
       }),
     [GATEWAY_METHOD.PLANNING_REPOSITORIES]: () =>
       Effect.gen(function* () {
@@ -237,8 +264,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     activePlanId: () => view.activePlanId,
     reset: Effect.gen(function* () {
       yield* cadence.disarm;
-      view = IDLE_PLANNING_VIEW;
-      publish();
+      yield* serial(
+        Effect.sync(() => {
+          view = IDLE_PLANNING_VIEW;
+          publish();
+        }),
+      );
     }),
     // The cadence is the gate's, and the gate's own finalizer disarms it when
     // the scope this concern was built in closes.

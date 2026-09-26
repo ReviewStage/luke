@@ -19,7 +19,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Duration, Effect, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composePlanning, type PlanningClient } from "./compose-planning.js";
 
@@ -51,6 +51,8 @@ function summary({ document: _document, ...rest }: Plan): PlanSummary {
 interface FakeService extends PlanningClient {
   plans: Plan[];
   listFails: boolean;
+  /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
+  listGate: Effect.Effect<void>;
   createAnswer: PlanCallResult<Plan, GitHubCallFailure>;
   repositoriesAnswer: PlanCallResult<
     { repositories: { owner: string; name: string; private: boolean }[]; truncated: boolean },
@@ -64,15 +66,18 @@ function fakeService(plans: Plan[]): FakeService {
   const service: FakeService = {
     plans,
     listFails: false,
+    listGate: Effect.void,
     createAnswer: { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED },
     repositoriesAnswer: { ok: true, answer: { repositories: [], truncated: false } },
     reads: [],
     list: () =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         service.reads.push("list");
-        return service.listFails
+        const answer = service.listFails
           ? { ok: false as const, failure: PLAN_CALL_FAILURE.UNANSWERED }
           : { ok: true as const, answer: service.plans.map(summary) };
+        yield* service.listGate;
+        return answer;
       }),
     open: (planId) =>
       Effect.sync((): PlanCallResult<Plan, PlanCallFailure> => {
@@ -303,5 +308,35 @@ it.effect("a sign-out drops the view the window drew", () =>
       listStatus: PLANNING_READ.IDLE,
       document: { status: PLANNING_READ.IDLE },
     });
+  }),
+);
+
+it.effect("a list read that left before a plan started never marks the new plan missing", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+    // A beat's list read leaves while the account holds no plan, and is held on the wire.
+    const held = yield* Deferred.make<void>();
+    service.listGate = Deferred.await(held);
+    yield* nextBeat();
+
+    const started = plan(INVITES, "Teammate invitations", "", 10);
+    service.plans = [started];
+    service.createAnswer = { ok: true, answer: started };
+    const starting = yield* Effect.forkChild(
+      call(GATEWAY_METHOD.PLANNING_START, {
+        name: "Teammate invitations",
+        repository: { owner: "acme", name: "relay" },
+      }),
+    );
+    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+    yield* Deferred.succeed(held, undefined);
+    yield* Fiber.join(starting);
+
+    assert.equal(last()?.activePlanId, INVITES);
+    assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: started });
+    assert.deepEqual(last()?.plans, [summary(started)]);
   }),
 );

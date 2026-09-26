@@ -199,7 +199,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // Closing the window is leaving the planning session: no plan stays
       // active, and the host stops following the service for it.
       void run(operator.host.planningClose());
-      dock.holdForWindow(false, () => undefined);
+      // Hiding the tile can deactivate the app, so an open panel is brought back forward.
+      dock.holdForWindow(false, () => panels.focusExpanded());
     },
   });
   // The Dock tile brings the planning window forward while it stands.
