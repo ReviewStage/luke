@@ -8,7 +8,7 @@ import {
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../hosted/brain-host/eve-sessions.js";
-import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { payloadKeyRing } from "../hosted/encryption.js";
 import { storeWriter } from "../hosted/store/index.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
@@ -114,7 +114,9 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
     const { encryptionSecret, deploymentSecret, origin } = yield* configuredSeams(seams);
     // The writer's composition probes every declared output schema, so a warm
     // instance pays that walk once rather than once per session.
-    const writer = yield* storeWriter({ tools: CATALOG_TOOL_SET });
+    // A planning call writes into a plan conversation, whose rows name the
+    // planning tools, so the writer holds rows to the hosted set as the brain's does.
+    const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
     // eve's client is composed once per instance too, over the client the seam names; a test's
     // fake eve stands in its place and composes none.
     const eve =

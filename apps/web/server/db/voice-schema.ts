@@ -59,6 +59,15 @@ export const voiceSessions = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** The `devices` row's id for the installation that opened the session; null once that row has gone. */
     deviceId: text("device_id"),
+    /**
+     * The plan a planning call was opened about, or null for every other
+     * session. A plain column like the device's rather than a reference:
+     * a session is bound to its plan for its whole life, so a re-attach
+     * after the plan was deleted must still read the binding and find no
+     * plan to land in, rather than read a null and land in the account's
+     * main.
+     */
+    planId: uuid("plan_id"),
     liveSessionId: text("live_session_id").notNull().unique(),
     delegationMode: text("delegation_mode").$type<VoiceDelegationMode>().notNull(),
     startedAt: instant("started_at").notNull().defaultNow(),

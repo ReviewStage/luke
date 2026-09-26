@@ -131,12 +131,13 @@ test("the voice bar shows the status word, a voice error in its place, and the n
   });
 });
 
-test("the microphone asks for the permission first, then for a plan, and talks only once a call is bound", () => {
+test("the microphone asks for the permission first, then for a plan, and then talks about it or mutes", () => {
   const input = {
     voiceAvailable: true,
     microphoneStatus: MICROPHONE_STATUS.GRANTED,
     activePlanId: INVITES,
-    callBound: true,
+    listening: false,
+    callPlanId: undefined,
   };
   assert.deepEqual(microphoneButton({ ...input, voiceAvailable: false }), {
     press: MICROPHONE_PRESS.NONE,
@@ -154,6 +155,19 @@ test("the microphone asks for the permission first, then for a plan, and talks o
     microphoneButton({ ...input, activePlanId: undefined }).press,
     MICROPHONE_PRESS.NONE,
   );
-  assert.equal(microphoneButton({ ...input, callBound: false }).press, MICROPHONE_PRESS.NONE);
-  assert.equal(microphoneButton(input).press, MICROPHONE_PRESS.TALK);
+  assert.deepEqual(microphoneButton(input), {
+    press: MICROPHONE_PRESS.TALK,
+    label: "Talk about this plan",
+  });
+  assert.deepEqual(microphoneButton({ ...input, listening: true, callPlanId: INVITES }), {
+    press: MICROPHONE_PRESS.TALK,
+    label: "Mute the microphone",
+  });
+  // A desk call or another plan's call heard is one the press hangs up, not one it mutes.
+  for (const callPlanId of [undefined, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"]) {
+    assert.equal(
+      microphoneButton({ ...input, listening: true, callPlanId }).label,
+      "Talk about this plan",
+    );
+  }
 });

@@ -32,6 +32,10 @@ export interface PlanningActsDependencies {
    * refused with a sentence the sheet draws.
    */
   connectGitHub: () => Effect.Effect<void, ActRefused>;
+  /** The plan the window has open, as main holds the host's view of it. */
+  activePlanId: () => string | undefined;
+  /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
+  talkAboutPlan: (planId: string) => void;
 }
 
 type PlanningActKind =
@@ -40,7 +44,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_SELECT
   | typeof ACT_KIND.PLANNING_START
   | typeof ACT_KIND.PLANNING_REPOSITORIES
-  | typeof ACT_KIND.PLANNING_CONNECT_GITHUB;
+  | typeof ACT_KIND.PLANNING_CONNECT_GITHUB
+  | typeof ACT_KIND.PLANNING_TALK;
 
 /** The refusal a window that is not the planning window hears, in its kind's own words. */
 function refuseUnlessPlanning(kind: PlanningActKind, sender: ActSender): void {
@@ -79,6 +84,16 @@ export function planningActRows(
     [ACT_KIND.PLANNING_CONNECT_GITHUB]: (_payload, sender) => {
       refuseUnlessPlanning(ACT_KIND.PLANNING_CONNECT_GITHUB, sender);
       return dependencies.connectGitHub();
+    },
+    // The press names no plan: the plan is the one the host has open, read
+    // here, so the window cannot open a call about a plan it is not showing.
+    [ACT_KIND.PLANNING_TALK]: (_payload, sender) => {
+      refuseUnlessPlanning(ACT_KIND.PLANNING_TALK, sender);
+      const planId = dependencies.activePlanId();
+      if (planId === undefined) {
+        throw new ActRefused({ message: ACT[ACT_KIND.PLANNING_TALK].refusal });
+      }
+      dependencies.talkAboutPlan(planId);
     },
   };
 }

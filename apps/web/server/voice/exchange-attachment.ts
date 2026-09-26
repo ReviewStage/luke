@@ -1,9 +1,10 @@
-import { Data, Effect, type Schema, type Scope } from "effect";
+import { Data, Effect, Option, type Schema, type Scope } from "effect";
 
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { standingMain } from "../hosted/brain-host/main.js";
+import { openPlanConversation } from "../hosted/plan-store.js";
 import type { HostedStoreContext } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
 import {
@@ -23,6 +24,10 @@ import { upstreamSideband } from "./live-sideband.js";
  * function's composition, which passes it composed over the deployment's
  * seams (`deployment-exchange.ts`) since E5-3 unwired the desktop's own
  * exchange in the same commit.
+ *
+ * A planning call is the one departure: its asks and its record land in the
+ * conversation of the plan the session is bound to, and it speaks nothing
+ * of the desk, neither a beat nor a briefing.
  *
  * One socket, one scope. The attachment builds the whole standing — the
  * account's main, the exchange, its adoption of the sideband, and the
@@ -50,6 +55,23 @@ class ExchangeCannotStand extends Data.TaggedError("ExchangeCannotStand")<{
 
 const EXCHANGE_CANNOT_STAND_MESSAGE = "the exchange could not stand on the session's sideband";
 
+const PLAN_GONE_MESSAGE = "the plan the session is bound to no longer stands";
+
+/**
+ * The conversation a planning call lands in: its plan's, opened and attached
+ * now where the plan has none yet. A plan deleted since the session was
+ * created has none to offer, and the session is refused rather than landing
+ * in the account's main.
+ */
+const planConversation = (userId: string, planId: string) =>
+  Effect.flatMap(
+    openPlanConversation(userId, planId),
+    Option.match({
+      onNone: () => Effect.fail(new ExchangeCannotStand({ message: PLAN_GONE_MESSAGE })),
+      onSome: (conversationId) => Effect.succeed(conversationId),
+    }),
+  );
+
 export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttachment {
   return (
     session,
@@ -59,11 +81,16 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     Scope.Scope | SqlClient.SqlClient
   > =>
     Effect.gen(function* () {
-      const conversationId = yield* standingMain(session.accountId, new Date(deps.now()));
+      const conversationId =
+        session.planId === undefined
+          ? yield* standingMain(session.accountId, new Date(deps.now()))
+          : yield* planConversation(session.accountId, session.planId);
+      const planning = session.planId !== undefined;
       const exchange = yield* hostedLiveExchange({
         userId: session.accountId,
         liveSessionId: session.sessionId,
         conversationId,
+        planning,
         context: deps.context,
         writer: deps.writer,
         eve: deps.eve(session.accountId),
@@ -85,8 +112,10 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         return yield* Effect.fail(
           new ExchangeCannotStand({ message: EXCHANGE_CANNOT_STAND_MESSAGE }),
         );
-      // The look at the account's open offers runs for as long as the session stands; the scope's close ends it.
-      yield* exchange.briefings.start;
+      // The look at the account's open offers runs for as long as the session
+      // stands; the scope's close ends it. A planning call looks at none, so
+      // it claims no briefing and the offer takes its ordinary way to the phone.
+      if (!planning) yield* exchange.briefings.start;
       return exchange;
     });
 }

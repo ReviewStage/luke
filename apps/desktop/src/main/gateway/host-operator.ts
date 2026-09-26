@@ -179,8 +179,14 @@ export interface HostOperator {
   workspaceProjects(): Effect.Effect<readonly ObservedWorkspaceProject[]>;
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
-  /** The peer's SDP offer, answered with the session the host created; a host that creates none answers nothing. */
-  createLiveSession(sdp: string): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
+  /**
+   * The peer's SDP offer, and the plan a planning call is about, answered with
+   * the session the host created; a host that creates none answers nothing.
+   */
+  createLiveSession(
+    sdp: string,
+    planId: string | undefined,
+  ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
   endLiveSession(): Effect.Effect<void>;
   reportLiveTransport(state: LiveTransportState): Effect.Effect<void>;
   /** The peer's own idle decision, from its local signals alone; the host decides the close. */
@@ -501,15 +507,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
         Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
       ),
-    createLiveSession: (sdp) =>
-      Effect.map(client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }), (answer) =>
-        answer.ok
-          ? Result.getSuccess(
-              readEither(voiceCreateLiveSessionResultSchema, { excess: EXCESS_KEYS.DROP })(
-                answer.result,
-              ),
-            )
-          : Option.none(),
+    createLiveSession: (sdp, planId) =>
+      Effect.map(
+        client.call(
+          GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION,
+          planId === undefined ? { sdp } : { sdp, planId },
+        ),
+        (answer) =>
+          answer.ok
+            ? Result.getSuccess(
+                readEither(voiceCreateLiveSessionResultSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : Option.none(),
       ),
     endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
     reportLiveTransport: (state) =>

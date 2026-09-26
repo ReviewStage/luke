@@ -32,6 +32,7 @@ import {
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
+  type BrainHostTurn,
 } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
@@ -142,6 +143,14 @@ function meter(allowed: boolean): BrainHostSeams["spend"] {
   return async () => ({ allowed, quota: { used: 1, limit: 100, resetsAt: NOW + 1 } });
 }
 
+/** A spoken ask as the voice's delegation words it: the recent lines, then the developer's latest named as the ask. */
+const SPOKEN_ASK = [
+  "Developer: So who can send an invite?",
+  "Luke: I'd say admins only, like the role check.",
+  `Developer: Actually no. ${CORRECTION}`,
+  `The developer's ask is their latest line above: Actually no. ${CORRECTION}`,
+].join("\n");
+
 function unreached(name: string): () => never {
   return () => {
     throw new Error(`${name} reached in a test that offers it nothing`);
@@ -205,14 +214,14 @@ function sessionId(): string {
   return `wrun_01P${String(minted).padStart(22, "0")}`;
 }
 
-function seat(userId: string, conversationId: string): SessionAuth {
+function seat(userId: string, conversationId: string, kind: BrainHostTurn): SessionAuth {
   const own: SessionAuthContext = {
     principalId: userId,
     principalType: "user",
     authenticator: "test",
     attributes: {
       [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId,
-      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.TYPED,
+      [BRAIN_HOST_ATTRIBUTE.TURN]: kind,
     },
   };
   return { current: own, initiator: own };
@@ -225,10 +234,15 @@ interface Session {
 }
 
 /** A session claiming the conversation as the store hook does at its start. */
-const startSession = (host: BrainHost, userId: string, conversationId: string) =>
+const startSession = (
+  host: BrainHost,
+  userId: string,
+  conversationId: string,
+  kind: BrainHostTurn = BRAIN_HOST_TURN.TYPED,
+) =>
   Effect.gen(function* () {
     const id = sessionId();
-    const auth = seat(userId, conversationId);
+    const auth = seat(userId, conversationId, kind);
     const starting = yield* host.admitStarting(auth, id);
     if (Result.isFailure(starting)) return assert.fail(starting.failure);
     assert.equal(yield* host.sessionStarted(starting.success, id), true);
@@ -265,12 +279,13 @@ const planningTurn = (
   eveTurnId: string,
   words: string,
   http: Layer.Layer<HttpClient.HttpClient> = noNetwork,
+  kind: BrainHostTurn = BRAIN_HOST_TURN.TYPED,
 ) =>
   Effect.gen(function* () {
     const standing = yield* admitted(host, session);
-    const turnKind = BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED];
+    const turnKind = BRAIN_HOST_TURN_KIND[kind];
     const turn = {
-      kind: BRAIN_HOST_TURN.TYPED,
+      kind,
       trigger: turnKind.trigger,
       turnId: hostTurnId(session.id, eveTurnId),
     };
@@ -502,6 +517,30 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           handedDocument(yield* host.standingContext(yield* admitted(host, session))),
           expected,
         );
+      }),
+  );
+
+  it.effect(
+    "a spoken ask the voice delegates on a plan's conversation reaches the planning model with the document, and its update_plan is what the window opens",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
+        yield* savePlanDocument(userId, planId, SAVED);
+        const standing = yield* admitted(host, session);
+        assert.equal(standing.kind, CONVERSATION_KIND.PLAN);
+        assert.deepEqual(handedDocument(yield* host.standingContext(standing)), SAVED);
+
+        // The question as the voice composes it: the recent words as context, and the latest line as the ask.
+        yield* planningTurn(host, session, "turn_0", SPOKEN_ASK, noNetwork, BRAIN_HOST_TURN.SPOKEN);
+
+        const saved = yield* windowDocument(userId, planId);
+        assert.equal(saved.body, SAVED.body);
+        assert.deepEqual(saved.assumptions.slice(0, SAVED.assumptions.length), SAVED.assumptions);
+        const added = saved.assumptions.slice(SAVED.assumptions.length);
+        assert.equal(added.length, 1);
+        assert.ok(added[0]?.text.includes(CORRECTION));
+        assert.equal(added[0]?.confirmed, false);
       }),
   );
 

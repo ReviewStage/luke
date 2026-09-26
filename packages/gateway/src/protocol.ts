@@ -171,8 +171,15 @@ function keptText(max: number): Schema.Codec<string, string> {
 /** SDP is line-oriented and ends its lines with CRLF, so it travels verbatim: nothing is trimmed, collapsed, or cut. */
 const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
-/** `voice.createLiveSession`: the peer's SDP offer, and nothing else. */
-export const voiceCreateLiveSessionParamsSchema = Schema.Struct({ sdp: sdpSchema });
+/**
+ * `voice.createLiveSession`: the peer's SDP offer, and the plan a planning
+ * call is about where the planning window opened it. The host creates a
+ * planning call only for the plan the window has open.
+ */
+export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
+  sdp: sdpSchema,
+  planId: Schema.optionalKey(text),
+});
 
 /**
  * What `voice.createLiveSession` answers: the session the provider named, the

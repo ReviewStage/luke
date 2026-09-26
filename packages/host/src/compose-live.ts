@@ -75,6 +75,8 @@ export interface LiveDependencies {
   account: AccountComposer;
   observation: ObservationComposer;
   calendars: CalendarsComposer;
+  /** The plan the planning window has open, the one plan a planning call may be created about; nothing while it has none. */
+  activePlanId: () => string | undefined;
 }
 
 /** The three beats this side decides, each withdrawn together at a sign-out. */
@@ -401,7 +403,15 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
           readEither(voiceCreateLiveSessionParamsSchema)(params),
         );
         if (!request) return yield* invalid("sdp must be the peer's offer");
-        const created = yield* service.createSession(request.sdp);
+        // An offer about a plan the window no longer has open (another was
+        // opened, or the window closed, while the offer was out) is refused, so
+        // no call about one plan is created while another is on screen.
+        if (request.planId !== undefined && request.planId !== dependencies.activePlanId()) {
+          return yield* Effect.fail(
+            new RefusedRefusal({ message: "the plan is not the one the planning window has open" }),
+          );
+        }
+        const created = yield* service.createSession(request.sdp, request.planId);
         if (!created)
           return yield* Effect.fail(
             new RefusedRefusal({ message: "no live session could be created" }),
