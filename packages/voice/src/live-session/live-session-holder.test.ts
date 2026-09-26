@@ -22,7 +22,7 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Clock, Duration, Effect, Exit, Fiber, Scope, type Stream } from "effect";
+import { Clock, Deferred, Duration, Effect, Exit, Fiber, Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
@@ -121,6 +121,8 @@ interface Fixture {
   sourceAvailable: boolean;
   /** Whether the source opens the doors for the idle report and the stop, as the hosted source does and the keyed one does not. */
   reportsActivity: boolean;
+  /** Where a creation waits before the source answers, so a test can hold one in flight. */
+  createGate: Effect.Effect<void>;
   open(): Effect.Effect<FakeSideband>;
 }
 
@@ -142,10 +144,11 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       reportsActivity: true,
       created: 0,
       stops: 0,
+      createGate: Effect.void satisfies Effect.Effect<void>,
     };
     const source: LiveSessionSource = {
       create: (input) =>
-        Effect.sync(() => {
+        Effect.map(state.createGate, () => {
           seeds.push([...input.input]);
           plans.push(input.planId);
           const sideband = new FakeSideband();
@@ -222,6 +225,12 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       set reportsActivity(value: boolean) {
         state.reportsActivity = value;
+      },
+      get createGate() {
+        return state.createGate;
+      },
+      set createGate(value: Effect.Effect<void>) {
+        state.createGate = value;
       },
       open: () =>
         Effect.gen(function* () {
@@ -785,4 +794,44 @@ it.effect(
       assert.equal(f.holder.sessionStands(), true);
       assert.deepEqual(desk.sent, []);
     }),
+);
+
+it.effect(
+  "a switch while a planning call is still being created ends that call the moment it stands, and the peer is answered nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const gate = yield* Deferred.make<void>();
+      f.createGate = Deferred.await(gate);
+      const creating = yield* Effect.forkChild(f.holder.createSession("offer", INVITES_PLAN));
+      yield* settle();
+
+      yield* f.holder.endPlanCall(BILLING_PLAN);
+      yield* Deferred.succeed(gate, undefined);
+      yield* settle();
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSING);
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
+      assert.equal(yield* Fiber.join(creating), undefined);
+      assert.equal(f.holder.sessionStands(), false);
+    }),
+);
+
+it.effect("a switch to the plan being created leaves its call to stand", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const gate = yield* Deferred.make<void>();
+    f.createGate = Deferred.await(gate);
+    const creating = yield* Effect.forkChild(f.holder.createSession("offer", INVITES_PLAN));
+    yield* settle();
+
+    yield* f.holder.endPlanCall(INVITES_PLAN);
+    yield* Deferred.succeed(gate, undefined);
+    const created = yield* Fiber.join(creating);
+    assert.ok(created);
+    assert.equal(f.holder.sessionStands(), true);
+    assert.deepEqual(f.sidebands[0]?.sent, []);
+  }),
 );

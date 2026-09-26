@@ -52,6 +52,8 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   liveConversationLines: readonly LiveCaptionRow[];
   /** Whether the developer is being heard and has not been transcribed yet. */
   spokenAskPending: boolean;
+  /** The plan the standing call is about, where the planning window opened it; none for a desk call or no call. */
+  callPlanId: string | undefined;
 }
 
 /** Who opened the exchange the count is about: a press, or Luke's own speech into a session opened for it. */
@@ -94,6 +96,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.developerCaptions === right.developerCaptions &&
     left.liveConversationLines === right.liveConversationLines &&
     left.spokenAskPending === right.spokenAskPending &&
+    left.callPlanId === right.callPlanId &&
     left.listening === right.listening &&
     left.lukeSpeaking === right.lukeSpeaking
   );
@@ -354,11 +357,15 @@ export class LiveVoiceOrchestrator {
           // one, and it finishes its own hang-up behind. Whether the developer
           // was being heard is read from the last status the call reported,
           // since its own end may have landed before this event did.
+          // A planning call lost is not listened to again on the desk session a
+          // wanted opens next: the plan's words belong to the plan's call alone.
           this.#resumeListening =
+            this.#callPlan === undefined &&
             this.#lastListening &&
             (change.reason === LIVE_CLOSE_REASON.EXPIRED ||
               change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST);
           this.#lastListening = false;
+          this.#releasePlanPress();
           if (this.#call) {
             this.#call = undefined;
             this.#status = LIVE_STATUS.IDLE;
@@ -425,6 +432,16 @@ export class LiveVoiceOrchestrator {
       this.#touch();
       return fiber ? Effect.asVoid(Fiber.interrupt(fiber)) : Effect.void;
     });
+  }
+
+  /**
+   * A planning call's press is a toggle that stands for minutes, so it ends
+   * with the call: nothing after it (a desk session opened for Luke's own
+   * speech, the talk key's release) reads it as the developer still wanting
+   * to be heard.
+   */
+  #releasePlanPress(): void {
+    if (this.#callPlan !== undefined) this.#pressHeld = false;
   }
 
   /** Signals the standing call's lifecycle fiber to end, which releases it by closing it exactly once. */
@@ -530,6 +547,7 @@ export class LiveVoiceOrchestrator {
       this.#call = undefined;
       this.#rows = [];
       this.#openedByPress = false;
+      this.#releasePlanPress();
       this.#endCall();
     }
     this.#recomposeCaptions();
@@ -592,6 +610,7 @@ export class LiveVoiceOrchestrator {
       developerCaptions: this.#developerCaptions,
       liveConversationLines: this.#liveLines,
       spokenAskPending: this.#status === LIVE_STATUS.LISTENING && !this.#askBeingSaid,
+      callPlanId: this.#call === undefined ? undefined : this.#callPlan,
     };
   }
 

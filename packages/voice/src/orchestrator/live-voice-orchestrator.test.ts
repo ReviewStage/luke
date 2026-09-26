@@ -873,3 +873,37 @@ it.effect(
       assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.LISTENING);
     }),
 );
+
+it.effect(
+  "a planning call lost while heard is not listened to again: the desk session a wanted opens next stays muted, and the view names no plan once it is gone",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const planCall = f.latest();
+      assert.ok(planCall);
+      planCall.started();
+      yield* Fiber.join(pressed);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.callPlanId, INVITES_PLAN);
+
+      const lost = yield* f.obey({
+        phase: LIVE_SESSION_PHASE.CLOSED,
+        sessionId: sessionIdOf(planCall),
+        reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
+      });
+      yield* Fiber.join(lost);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.callPlanId, undefined);
+
+      const wanted = yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
+      const deskCall = f.latest();
+      assert.ok(deskCall && deskCall !== planCall);
+      deskCall.started();
+      yield* Fiber.join(wanted);
+      assert.deepEqual(deskCall.openings, [{ byPress: false }]);
+      assert.equal(deskCall.status, LIVE_STATUS.MUTED);
+    }),
+);

@@ -124,6 +124,13 @@ export const WANTED_WORD = {
 export class LiveSessionHolder {
   readonly #options: LiveSessionHolderOptions;
   #held: HeldSession | undefined;
+  /**
+   * The session being created and not yet held: the plan it is about, and
+   * whether a switch has meanwhile asked for a call about that plan to end,
+   * so the session is ended the moment it stands rather than left standing
+   * about a plan no longer on screen.
+   */
+  #creating: { readonly planId: string | undefined; ended: boolean } | undefined;
   /** The release still running for the session last declared over, so an end asked for meanwhile waits for it. */
   #releasing: Deferred.Deferred<void> | undefined;
   /**
@@ -200,6 +207,8 @@ export class LiveSessionHolder {
    */
   endPlanCall(keep: string | undefined): Effect.Effect<void> {
     return Effect.suspend(() => {
+      const creating = this.#creating;
+      if (creating?.planId !== undefined && creating.planId !== keep) creating.ended = true;
       const session = this.#held;
       if (session === undefined || session.planId === undefined || session.planId === keep) {
         return Effect.void;
@@ -229,11 +238,23 @@ export class LiveSessionHolder {
         return undefined;
       }
       const scope = yield* Scope.fork(this.#sessions, "sequential");
+      const creating = { planId, ended: false };
+      this.#creating = creating;
       const created = yield* Effect.onExit(this.#stand(source, sdpOffer, planId, scope), (exit) =>
-        Exit.isSuccess(exit) && exit.value !== undefined
-          ? Effect.void
-          : Scope.close(scope, Exit.void),
+        Effect.suspend(() => {
+          if (this.#creating === creating) this.#creating = undefined;
+          return Exit.isSuccess(exit) && exit.value !== undefined
+            ? Effect.void
+            : Scope.close(scope, Exit.void);
+        }),
       );
+      // A switch that landed while the call was being created ends it now that
+      // it stands, so the peer is told to hang up and nothing is said into it.
+      const held = this.#held;
+      if (created !== undefined && creating.ended && held !== undefined) {
+        yield* this.#end(held);
+        return undefined;
+      }
       // A session that could not be stood leaves no beat waiting for it: the
       // caller decides again at its next reason, and asks then stand rather
       // than being refused for a kind still waiting on a session that never came.

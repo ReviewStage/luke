@@ -69,6 +69,7 @@ export function PlanningSurface(): React.JSX.Element {
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
     activePlanId: planning.activePlanId,
     listening: voice.listening,
+    callPlanId: voice.view.callPlanId,
   });
   // The press names no plan: main reads the one the host has open, and the
   // voice window, which owns the call, opens it about that plan or toggles it.

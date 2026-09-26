@@ -182,7 +182,8 @@ export interface MicrophoneButton {
  * The microphone permission comes first, on the panel's own rules, because a
  * press that cannot be heard is no press; then the plan, since a call is
  * always about the open plan. The press toggles: while the developer is
- * heard it mutes, and otherwise it opens the plan's call or hears it again,
+ * heard on this plan's own call it mutes, and otherwise it opens the plan's
+ * call or hears it again, hanging up a desk call or another plan's first,
  * which is also how a call that failed or was lost is tried again.
  */
 export function microphoneButton(input: {
@@ -190,6 +191,8 @@ export function microphoneButton(input: {
   microphoneStatus: MicrophoneStatus;
   activePlanId: string | undefined;
   listening: boolean;
+  /** The plan the standing call is about, as the voice window reports it. */
+  callPlanId: string | undefined;
 }): MicrophoneButton {
   if (!input.voiceAvailable) return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE };
   const row = microphoneAccessRow({ voiceAvailable: true, status: input.microphoneStatus });
@@ -204,6 +207,8 @@ export function microphoneButton(input: {
   if (input.activePlanId === undefined) {
     return { press: MICROPHONE_PRESS.NONE, label: "Open a plan to talk about it" };
   }
-  if (input.listening) return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone" };
+  if (input.listening && input.callPlanId === input.activePlanId) {
+    return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone" };
+  }
   return { press: MICROPHONE_PRESS.TALK, label: "Talk about this plan" };
 }
