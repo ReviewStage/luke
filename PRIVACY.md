@@ -99,6 +99,16 @@ calls they made from here; this version makes no such call, seeds nothing
 there, and reads nothing from it. Files an earlier version left are yours to
 keep or delete, and nothing on your Mac reads or writes them.
 
+**Feature plans.** When you start a named plan, our service stores it under
+your account: its name, the GitHub repository it plans against (owner and
+name), that repository's default branch and the commit it stood at when the
+plan started, and the plan's one document, a Markdown body and a list of
+assumptions each marked confirmed or not, written by Luke's planning model as
+you talk. It is stored as written, bound to your account and readable by our
+own operators, the same way the conversation described below is. A save
+replaces the document and no earlier version is kept; deleting a plan removes
+it at once, and deleting your account removes every plan.
+
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
 written summary of his own when it grows long — and it is kept where his
