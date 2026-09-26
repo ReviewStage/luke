@@ -151,6 +151,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   return {
     surround: (next: LiveVoiceSurroundings) => orchestrator.surround(next),
     beginTalk: () => orchestrator.beginTalk(),
+    talkAboutPlan: (planId: string) => orchestrator.talkAboutPlan(planId),
     endTalk: () => orchestrator.endTalk(),
     stopSpeaking: () => orchestrator.stopSpeaking(),
     stop: () => orchestrator.stop(),
@@ -798,4 +799,111 @@ it.effect("a session lost while both speakers stood listens again on the next", 
     // Nobody is heard on a call that is gone, whatever it was carrying when it went.
     assert.equal(f.views.at(-1)?.lukeSpeaking, false);
   }),
+);
+
+const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const BILLING_PLAN = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+it.effect(
+  "the planning button opens a call about its plan and hears it; the next press mutes it and the one after hears it again, on the same call",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      assert.deepEqual(call.openings, [{ byPress: true, planId: INVITES_PLAN }]);
+      call.started();
+      yield* Fiber.join(pressed);
+      assert.equal(call.status, LIVE_STATUS.LISTENING);
+
+      yield* f.talkAboutPlan(INVITES_PLAN);
+      assert.equal(call.status, LIVE_STATUS.MUTED);
+      yield* f.talkAboutPlan(INVITES_PLAN);
+      assert.equal(call.status, LIVE_STATUS.LISTENING);
+      assert.equal(f.calls.length, 1);
+    }),
+);
+
+it.effect(
+  "a planning press over a desk call or another plan's call hangs that call up before opening one about its plan, and the talk key speaks into the plan's call",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const desk = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const deskCall = f.latest();
+      assert.ok(deskCall);
+      deskCall.started();
+      yield* Fiber.join(desk);
+      yield* f.endTalk();
+
+      const invites = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      yield* settleFibers();
+      assert.equal(deskCall.status, LIVE_STATUS.IDLE);
+      const invitesCall = f.latest();
+      assert.ok(invitesCall && invitesCall !== deskCall);
+      assert.deepEqual(invitesCall.openings, [{ byPress: true, planId: INVITES_PLAN }]);
+      invitesCall.started();
+      yield* Fiber.join(invites);
+      assert.equal(invitesCall.status, LIVE_STATUS.LISTENING);
+
+      // The talk key's hold is heard on the plan's call rather than opening a desk call.
+      yield* f.talkAboutPlan(INVITES_PLAN);
+      yield* f.beginTalk();
+      assert.equal(f.latest(), invitesCall);
+      assert.equal(invitesCall.status, LIVE_STATUS.LISTENING);
+      yield* f.endTalk();
+
+      const billing = yield* Effect.forkChild(f.talkAboutPlan(BILLING_PLAN), {
+        startImmediately: true,
+      });
+      yield* settleFibers();
+      assert.equal(invitesCall.status, LIVE_STATUS.IDLE);
+      const billingCall = f.latest();
+      assert.ok(billingCall && billingCall !== invitesCall);
+      assert.deepEqual(billingCall.openings, [{ byPress: true, planId: BILLING_PLAN }]);
+      billingCall.started();
+      yield* Fiber.join(billing);
+      assert.equal(billingCall.status, LIVE_STATUS.LISTENING);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.LISTENING);
+    }),
+);
+
+it.effect(
+  "a planning call lost while heard is not listened to again: the desk session a wanted opens next stays muted, and the view names no plan once it is gone",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const planCall = f.latest();
+      assert.ok(planCall);
+      planCall.started();
+      yield* Fiber.join(pressed);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.callPlanId, INVITES_PLAN);
+
+      const lost = yield* f.obey({
+        phase: LIVE_SESSION_PHASE.CLOSED,
+        sessionId: sessionIdOf(planCall),
+        reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
+      });
+      yield* Fiber.join(lost);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.callPlanId, undefined);
+
+      const wanted = yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
+      const deskCall = f.latest();
+      assert.ok(deskCall && deskCall !== planCall);
+      deskCall.started();
+      yield* Fiber.join(wanted);
+      assert.deepEqual(deskCall.openings, [{ byPress: false }]);
+      assert.equal(deskCall.status, LIVE_STATUS.MUTED);
+    }),
 );

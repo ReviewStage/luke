@@ -95,9 +95,15 @@ function fakeService(plans: Plan[]): FakeService {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-function subject(service: FakeService, options: { signedIn?: boolean } = {}) {
+/** The one voice call as the live composer holds it: about a plan, about the desk, or none. */
+interface StandingCall {
+  about: { readonly planId: string | undefined } | undefined;
+}
+
+function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
   return Effect.gen(function* () {
     const told: PlanningView[] = [];
+    const standing = options.call ?? { about: undefined };
     const planning = yield* composePlanning({
       kernel: {
         runMode: { sendsNetwork: true },
@@ -110,6 +116,11 @@ function subject(service: FakeService, options: { signedIn?: boolean } = {}) {
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
+      endPlanCall: (keep) =>
+        Effect.sync(() => {
+          const planId = standing.about?.planId;
+          if (planId !== undefined && planId !== keep) standing.about = undefined;
+        }),
       pollIntervalMs: INTERVAL_MS,
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -339,4 +350,39 @@ it.effect("a list read that left before a plan started never marks the new plan 
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: started });
     assert.deepEqual(last()?.plans, [summary(started)]);
   }),
+);
+
+it.effect(
+  "only one plan is spoken: opening or starting another plan and closing the window each end the open plan's call, and a desk call or the same plan's call is left standing",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const call: StandingCall = { about: { planId: INVITES } };
+      const { call: ask } = yield* subject(service, { call });
+
+      yield* ask(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      assert.deepEqual(call.about, { planId: INVITES });
+      yield* ask(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
+      assert.equal(call.about, undefined);
+
+      call.about = { planId: BILLING };
+      const started = plan(INVITES, "Teammate invitations", "", 30);
+      service.createAnswer = { ok: true, answer: started };
+      yield* ask(GATEWAY_METHOD.PLANNING_START, {
+        name: "Teammate invitations",
+        repository: { owner: "acme", name: "relay" },
+      });
+      assert.equal(call.about, undefined);
+
+      call.about = { planId: INVITES };
+      yield* ask(GATEWAY_METHOD.PLANNING_CLOSE);
+      assert.equal(call.about, undefined);
+
+      call.about = { planId: undefined };
+      yield* ask(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
+      yield* ask(GATEWAY_METHOD.PLANNING_CLOSE);
+      assert.deepEqual(call.about, { planId: undefined });
+    }),
 );

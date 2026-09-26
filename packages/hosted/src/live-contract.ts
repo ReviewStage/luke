@@ -13,7 +13,7 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { hostedQuotaSchema } from "./service-wire.js";
+import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
  * A device's contract with the hosted voice service: the three Vercel
@@ -108,7 +108,7 @@ export function hostedVoiceServiceOrigin(options: {
  * connection, which the platform closes at the function's maximum duration.
  */
 export const VOICE_SERVICE_FRAME = {
-  /** The device's opening frame for a new session: the offer, the voice, and the seed; or, on the audio route, the voice and the format. */
+  /** The device's opening frame for a new session: the offer, the voice, the seed, and the plan a planning call is about; or, on the audio route, the voice and the format. */
   SESSION_CREATE: "session.create",
   /** The service's answer once OpenAI has created the session and the sideband stands, or once the service's own socket to it has started. */
   SESSION_CREATED: "session.created",
@@ -274,12 +274,22 @@ const liveInitialItemSchema = Schema.Union([
   seedMessage(SEED_ROLE.ASSISTANT, SEED_CONTENT_TYPE.OUTPUT_TEXT),
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
-/** The desktop's opening frame. */
+/**
+ * The desktop's opening frame: the offer, the voice, the seed, and, for a
+ * call about one saved plan, that plan's id. A plan-bound session is the
+ * planning window's: the service checks the plan is the account's, creates
+ * the session under the planning scene, lands its asks in the plan's
+ * conversation, and writes the binding on the session's row, so a later
+ * `session.attach` is bound to the same plan by that row and never by
+ * anything the attaching connection says. The id names the plan and
+ * nothing of its document; the introduction takes none.
+ */
 export const sessionCreateFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
   sdp: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
+  planId: Schema.optionalKey(wireUuidSchema),
 });
 
 export type SessionCreateFrame = typeof sessionCreateFrameSchema.Type;

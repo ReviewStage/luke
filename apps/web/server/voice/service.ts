@@ -566,6 +566,7 @@ export class VoiceService {
               sessionId,
               deviceId: opened.deviceId,
               platform,
+              planId: opened.planId,
               started: opened.started,
               sideband,
               // The service's one frame to the device after the handshake, sent

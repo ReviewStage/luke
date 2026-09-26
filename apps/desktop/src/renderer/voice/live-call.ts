@@ -62,7 +62,10 @@ const CAPTION_SETTLE_TICK_MS = 500;
 const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
 interface LiveCallActs {
-  createSession: (sdp: string) => Promise<VoiceCreateLiveSessionResult | undefined>;
+  createSession: (
+    sdp: string,
+    planId: string | undefined,
+  ) => Promise<VoiceCreateLiveSessionResult | undefined>;
   endSession: () => void;
   reportTransport: (state: LiveTransportState) => void;
   reportActivity: (idle: boolean) => void;
@@ -351,7 +354,7 @@ export class LiveCall implements LiveVoiceCall {
         createPeerConnection: this.#options.createPeerConnection,
         createSilence: this.#options.createSilence,
         ...(opening.byPress ? { openMicrophone: this.#options.openMicrophone } : undefined),
-        createSession: this.#options.acts.createSession,
+        createSession: (sdp) => this.#options.acts.createSession(sdp, opening.planId),
         onRemoteStream: (stream) => this.#options.onRemoteStream(stream),
       });
       if (opened.outcome !== LIVE_PEER_OUTCOME.OPENED) {

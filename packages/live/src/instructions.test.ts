@@ -47,3 +47,15 @@ test("the cue that follows it is one append's worth of commentary", () => {
   assert.equal(chunkForAppend(cue).length, 1);
   assert.equal(cue.includes("\n"), false);
 });
+
+test("a planning call is told the desktop's speaking policies over the planning model's tools", () => {
+  const desktop = blocksOf(LIVE_SCENE.DESKTOP);
+  const planning = blocksOf(LIVE_SCENE.PLANNING);
+  const policyAt = desktop.findIndex((block) => block.startsWith("Delegation policy:"));
+  const planningPolicy = planning.slice(policyAt).join("\n\n");
+
+  assert.deepEqual(planning.slice(1, policyAt), desktop.slice(1, policyAt));
+  assert.ok(planningPolicy.includes("update_plan"));
+  assert.ok(planningPolicy.includes("get_file_contents"));
+  assert.equal(planningPolicy.includes("list_sessions"), false);
+});

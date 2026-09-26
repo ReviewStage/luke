@@ -9,7 +9,7 @@ import {
 } from "@sidecar/voice/live-session";
 import { arrival } from "@sidecar/voice/testing";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
-import { Duration, Effect, Exit, Scope } from "effect";
+import { Duration, Effect, Exit, Option, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
@@ -26,16 +26,19 @@ import {
   type RelayStanding,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import type { MessageListRead } from "../server/hosted/store/message-reads";
+import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool";
 import {
   HOSTED_ASK_REFUSAL_NOTE,
   type HostedLiveBrain,
   type HostedLiveBrainOptions,
   hostedLiveBrain,
 } from "../server/voice/live-brain";
+import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { deleteConversation, insertConversation } from "./support/store-rows";
@@ -54,6 +57,17 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
+
+/** A plan the account starts, as the planning window's setup sheet saves one. */
+const PLAN = {
+  name: "Teammate invitations",
+  repository: {
+    owner: "acme",
+    name: "relay",
+    branch: "main",
+    commit: "4f2c9e1a7b3d5f60718293a4b5c6d7e8f9012345",
+  },
+} as const;
 /**
  * The follow's bounds narrowed so a poll is milliseconds, with the bound left
  * wide: a turn's events land through the store, and the store on CI is one
@@ -72,9 +86,10 @@ const QUICK = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.minutes(1) };
 /** The same cadence with the bound close enough to reach inside a test. */
 const BOUNDED = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.millis(150) };
 
+// The relay's writer holds rows to the hosted set, as production's does, so a planning turn's update_plan is written.
 const writer = await database.run(
   storeWriter({
-    tools: CATALOG_TOOL_SET,
+    tools: HOSTED_TOOL_SET,
   }),
 );
 const askEffects = askRecord();
@@ -150,6 +165,7 @@ async function stand(
   target: ConversationTarget,
   bounds: NonNullable<HostedLiveBrainOptions["bounds"]> = QUICK,
   store: HostedLiveBrainOptions["store"] = database.store,
+  pinned?: string,
 ): Promise<Stand> {
   const eve = fakeEve();
   const events: LiveBrainRunEvent[] = [];
@@ -159,6 +175,7 @@ async function stand(
     Scope.provide(
       hostedLiveBrain({
         userId: target.userId,
+        ...(pinned === undefined ? undefined : { conversationId: pinned }),
         asks: { asks: askEffects, eve },
         store,
         report: (message) => reports.push(message),
@@ -425,4 +442,117 @@ it.live("the stream's vocabulary and the service's are one set of words on each 
     );
     assert.deepEqual(Object.values(TURN_END).sort(), Object.values(LIVE_BRAIN_RUN_END).sort());
   }),
+);
+
+/** A planning turn as eve streams it: the spoken ask, one update_plan call and its saved result, and the reply. */
+function planningTurn(turnId: string, now: number): readonly MessageStreamEvent[] {
+  const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+    stampedEveEvent(event, now);
+  const sequence = 0;
+  const document = { body: "# Teammate invitations", assumptions: [] };
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({ type: "message.received", data: { turnId, sequence, message: "q" } }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        actions: [
+          { kind: "tool-call", callId: "call-1", toolName: UPDATE_PLAN_TOOL.name, input: document },
+        ],
+      },
+    }),
+    stamped({
+      type: "action.result",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId: "call-1",
+          toolName: UPDATE_PLAN_TOOL.name,
+          output: { status: "saved", document },
+        },
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 1,
+        finishReason: "stop",
+        message: "Saved. Who can withdraw an invite?",
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
+it.live(
+  "a planning call's ask lands in its plan's conversation, and a turn that saved the plan is followed to its reply rather than told as failed",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const planConversation = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* createPlan(target.userId, PLAN);
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+          }),
+        ),
+      );
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const accepted = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
+      );
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      assert.deepEqual(
+        f.eve.opened.map((message) => message.conversationId),
+        [planConversation],
+      );
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target: { userId: target.userId, conversationId: planConversation },
+        kind: CONVERSATION_KIND.PLAN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      yield* Effect.promise(() => play(planningTurn(FIRST_EVE_TURN, NOW), standing));
+      yield* f.arrived(4);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+
+      assert.deepEqual(
+        f.events.map((event) => event.kind),
+        [
+          LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+          LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+          LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+          LIVE_BRAIN_RUN_EVENT.ENDED,
+        ],
+      );
+      const end = f.events.at(-1);
+      assert.equal(
+        end?.kind === LIVE_BRAIN_RUN_EVENT.ENDED && end.end,
+        LIVE_BRAIN_RUN_END.COMPLETED,
+      );
+      assert.deepEqual(f.reports, []);
+      yield* Effect.promise(() => f.stop());
+    }),
 );

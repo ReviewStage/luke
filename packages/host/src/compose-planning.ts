@@ -57,6 +57,11 @@ export interface PlanningDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: PlanningClient;
+  /**
+   * Ends the planning call standing about any plan but `keep`, and waits for
+   * it to end; a desk session and the call about `keep` are left standing.
+   */
+  endPlanCall: (keep: string | undefined) => Effect.Effect<void>;
   /** A test's cadence in place of the production one. */
   pollIntervalMs?: number;
 }
@@ -74,13 +79,16 @@ export interface PlanningComposer extends Composer {
  * The planning window's plans as one concern. The view is told to every
  * client whole whenever it moves, and exactly one plan is active at a time:
  * opening or starting one replaces whichever was, and a read still out for
- * the replaced plan is dropped when it lands. Behind a closed account gate,
- * or on a run that sends nothing, nothing is read and nothing is followed.
+ * the replaced plan is dropped when it lands. Only one plan is ever the
+ * spoken conversation, so opening another plan, starting one, closing the
+ * window, or a sign-out ends the call about the plan that was open before
+ * anything else moves. Behind a closed account gate, or on a run that sends
+ * nothing, nothing is read and nothing is followed.
  */
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client } = dependencies;
+  const { kernel, account, client, endPlanCall } = dependencies;
   const intervalMs = dependencies.pollIntervalMs ?? PLANNING_POLL_INTERVAL_MS;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -203,6 +211,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         if (Result.isFailure(read)) return yield* invalid("opening a plan names one plan");
         if (!gate()) return { opened: false };
         const { planId } = read.success;
+        yield* endPlanCall(planId);
         yield* serial(
           Effect.gen(function* () {
             if (view.activePlanId !== planId) {
@@ -217,6 +226,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       }),
     [GATEWAY_METHOD.PLANNING_CLOSE]: () =>
       Effect.gen(function* () {
+        yield* endPlanCall(undefined);
         yield* cadence.disarm;
         yield* serial(
           Effect.sync(() => {
@@ -240,6 +250,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             const started = yield* Effect.provide(client.create(request), FetchHttpClient.layer);
             if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
             const plan = started.answer;
+            yield* endPlanCall(plan.id);
             write({ activePlanId: plan.id, document: { status: PLANNING_READ.READY, plan } });
             yield* readList;
             return carried<PlanningStartAnswer>({ planId: plan.id });
@@ -263,6 +274,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     snapshot: () => view,
     activePlanId: () => view.activePlanId,
     reset: Effect.gen(function* () {
+      yield* endPlanCall(undefined);
       yield* cadence.disarm;
       yield* serial(
         Effect.sync(() => {

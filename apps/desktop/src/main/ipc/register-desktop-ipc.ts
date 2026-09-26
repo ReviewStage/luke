@@ -3,6 +3,7 @@ import path from "node:path";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { Effect, Option } from "effect";
 import { BrowserWindow, clipboard, ipcMain } from "electron";
+import { channels } from "#shared/bridge";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { ActRefused, type ActRows, createActRouter } from "../act-router";
@@ -103,6 +104,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
       openWindow: () => windows.planningWindow.open(),
       host: operator.host,
       connectGitHub: connectGitHubPending,
+      activePlanId: () => state.snapshot().planning.activePlanId,
+      talkAboutPlan: (planId) => {
+        voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
+      },
     }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),

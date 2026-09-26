@@ -5,6 +5,8 @@ export const LIVE_SCENE = {
   DESKTOP: "desktop",
   /** The first launch's introduction: no account, no backend, nothing to act on. */
   INTRODUCTION: "introduction",
+  /** The planning window's call about one saved plan, with the planning model as its backend. */
+  PLANNING: "planning",
 } as const;
 
 export type LiveScene = (typeof LIVE_SCENE)[keyof typeof LIVE_SCENE];
@@ -62,6 +64,35 @@ Do not delegate to the backend when:
   need their agents or an action, say what you will do for them once they sign in.`;
 
 /**
+ * A planning call's backend is the planning model, which holds the saved
+ * document, reads the plan's repository, and is the one that decides the
+ * next question and saves the plan. The voice is its mouth: it hands the
+ * developer's planning words on and says back what comes back, so the
+ * policy names the backend's tools as the desktop's does and asks for a
+ * delegation on nearly every turn. The last two lines keep a half-heard
+ * sentence from being passed on as an answer: the delegation carries the
+ * recent words as context, and the planning model, not the voice, decides
+ * what counts as agreement.
+ */
+const PLANNING_DELEGATION_POLICY = `Delegation policy:
+Backend tools:
+- The plan: update_plan, which saves the plan document the developer sees.
+- The repository: get_file_contents, which reads the plan's repository.
+- Research: search_web and read_web_page, for public facts the repository cannot settle.
+
+Delegate to the backend when:
+- The developer answers a question, corrects something, adds an idea, or asks about the code or the plan.
+- You need the next question to ask; the backend chooses it.
+
+Do not delegate to the backend when:
+- The developer is only acknowledging, or you need them to repeat something you did not hear.
+
+Delegate before giving an answer that depends on backend work.
+Do not guess the result while waiting.
+When the backend answers, say its finding briefly and ask its one next question, then listen.
+A fragment, silence, or a backchannel is not an answer; let the developer finish before delegating.`;
+
+/**
  * The Live prompting guide's starter template, cut to who is speaking and
  * how, the two policies about holding a conversation, and the delegation
  * policy that says when the backend is asked. The guide's instruction for a migration
@@ -74,10 +105,15 @@ Do not delegate to the backend when:
  * words: one keeps the model from talking over the developer, the other
  * keeps it listening when they cut in. The one departure from the words the
  * guide prints is "engineering manager" where the template reads "voice
- * assistant".
+ * assistant", and a planning call's role line names the plan's partner in its
+ * place.
  */
-const instructionsFor = (delegationPolicy: string): string =>
-  `You are Luke, an engineering manager for the developer's coding agents.
+const MANAGER_ROLE = "You are Luke, an engineering manager for the developer's coding agents.";
+const PLANNING_ROLE =
+  "You are Luke, an opinionated senior engineer planning one feature with the developer, out loud.";
+
+const instructionsFor = (delegationPolicy: string, role = MANAGER_ROLE): string =>
+  `${role}
 Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
 If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
 
@@ -90,6 +126,7 @@ ${delegationPolicy}`;
 const SCENE_INSTRUCTIONS = {
   [LIVE_SCENE.DESKTOP]: instructionsFor(DELEGATION_POLICY),
   [LIVE_SCENE.INTRODUCTION]: instructionsFor(INTRODUCTION_DELEGATION_POLICY),
+  [LIVE_SCENE.PLANNING]: instructionsFor(PLANNING_DELEGATION_POLICY, PLANNING_ROLE),
 } satisfies Record<LiveScene, string>;
 
 /** The `instructions` a session of this scene is created with. */

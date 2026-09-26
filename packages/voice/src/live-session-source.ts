@@ -91,6 +91,8 @@ export interface LiveSessionCreateInput {
   sdpOffer: string;
   /** The startup history, already bounded by `conversationSeedItems`. */
   input: readonly InitialItem[];
+  /** The plan a planning call is about; absent for every other session. */
+  planId?: string;
 }
 
 /**
@@ -407,6 +409,7 @@ class ServiceLiveSessionSource {
         sdp: input.sdpOffer,
         voice: this.#voice,
         input: [...input.input],
+        ...(input.planId === undefined ? undefined : { planId: input.planId }),
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       const created = answer === undefined ? undefined : this.#readCreated(answer);

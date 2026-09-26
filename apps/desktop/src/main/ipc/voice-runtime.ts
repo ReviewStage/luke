@@ -113,9 +113,9 @@ export function voiceRuntimeActRows(
       }),
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
-    [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp }, { voice }) =>
+    [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp, planId }, { voice }) =>
       voice
-        ? Effect.map(liveSession.createLiveSession(sdp), Option.getOrUndefined)
+        ? Effect.map(liveSession.createLiveSession(sdp, planId), Option.getOrUndefined)
         : Effect.succeed(undefined),
     [ACT_KIND.VOICE_END_LIVE_SESSION]: (_payload, { voice }) =>
       voice ? Effect.as(liveSession.endLiveSession(), undefined) : Effect.succeed(undefined),

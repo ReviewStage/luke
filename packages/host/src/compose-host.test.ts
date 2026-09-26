@@ -128,3 +128,30 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "an offer for a planning call about a plan the planning window does not have open is refused before any session is asked for",
+  (t) =>
+    Effect.gen(function* () {
+      const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
+      yield* Effect.provide(
+        Effect.gen(function* () {
+          const host = yield* HostTag;
+          const sdp = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n";
+          const [aboutPlan, desk] = yield* Effect.all([
+            host.gateway.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, {
+              sdp,
+              planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+            }),
+            host.gateway.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }),
+          ]);
+          // A fixture host stands no voice source, so a desk offer is refused for want of a
+          // session; the planning offer is refused for its plan first, and never reaches that.
+          assert.ok(!aboutPlan.ok && !desk.ok);
+          assert.notEqual(aboutPlan.error.message, desk.error.message);
+          assert.match(aboutPlan.error.message, /plan/);
+        }),
+        fixtureHostLayer(stateRoot),
+      );
+    }),
+);

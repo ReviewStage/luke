@@ -235,6 +235,17 @@ export const BRIDGE = {
     result: result<VoiceLevels>(isVoiceLevels),
   }),
   /**
+   * The planning window's microphone press, forwarded by the main process to
+   * the voice window alone, carrying the plan the window had open when it was
+   * pressed and nothing else.
+   */
+  onPlanningTalk: entry({
+    kind: "subscribe",
+    channel: "app:planning-talk-forwarded",
+    args: noArgs,
+    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+  }),
+  /**
    * A panel's validated command, forwarded by the main process to the voice
    * window alone, carrying the command and nothing else.
    */

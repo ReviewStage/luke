@@ -159,13 +159,13 @@ export function voiceBarLine(view: VoiceView): VoiceBarLine {
 
 /** What the microphone button does when pressed. */
 export const MICROPHONE_PRESS = {
-  /** Nothing: voice cannot run, no plan is open, or the call is not bound to plans yet. */
+  /** Nothing: voice cannot run, or no plan is open. */
   NONE: "none",
   /** Raises macOS's own microphone prompt. */
   ASK_ACCESS: "ask-access",
   /** Opens System Settings, the one place a denial can be changed. */
   OPEN_SETTINGS: "open-settings",
-  /** Talks to Luke about the open plan. */
+  /** Talks to Luke about the open plan: opens the plan's call and hears it, or toggles its microphone. */
   TALK: "talk",
 } as const;
 
@@ -181,14 +181,18 @@ export interface MicrophoneButton {
  * The microphone button, from what voice can run on and which plan is open.
  * The microphone permission comes first, on the panel's own rules, because a
  * press that cannot be heard is no press; then the plan, since a call is
- * always about the open plan. `callBound` is whether a planning call can be
- * opened for the plan at all, which is the voice connection's to supply.
+ * always about the open plan. The press toggles: while the developer is
+ * heard on this plan's own call it mutes, and otherwise it opens the plan's
+ * call or hears it again, hanging up a desk call or another plan's first,
+ * which is also how a call that failed or was lost is tried again.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
   activePlanId: string | undefined;
-  callBound: boolean;
+  listening: boolean;
+  /** The plan the standing call is about, as the voice window reports it. */
+  callPlanId: string | undefined;
 }): MicrophoneButton {
   if (!input.voiceAvailable) return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE };
   const row = microphoneAccessRow({ voiceAvailable: true, status: input.microphoneStatus });
@@ -203,8 +207,8 @@ export function microphoneButton(input: {
   if (input.activePlanId === undefined) {
     return { press: MICROPHONE_PRESS.NONE, label: "Open a plan to talk about it" };
   }
-  if (!input.callBound) {
-    return { press: MICROPHONE_PRESS.NONE, label: "Talking about a plan is not available yet" };
+  if (input.listening && input.callPlanId === input.activePlanId) {
+    return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone" };
   }
   return { press: MICROPHONE_PRESS.TALK, label: "Talk about this plan" };
 }

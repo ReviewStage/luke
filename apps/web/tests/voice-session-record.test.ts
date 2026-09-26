@@ -9,6 +9,7 @@ import { db } from "../server/db/query";
 import { voiceSessions } from "../server/db/voice-schema";
 import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { registerDevice } from "../server/hosted/device-store";
+import { createPlan, deletePlan } from "../server/hosted/plan-store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { testSqlClient } from "./support/sql-client";
@@ -25,6 +26,16 @@ import { testSqlClient } from "./support/sql-client";
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 
 const record = voiceSessionRecord(() => NOW);
+
+const PLAN = {
+  name: "Teammate invitations",
+  repository: {
+    owner: "acme",
+    name: "relay",
+    branch: "main",
+    commit: "4f2c9e1a7b3d5f60718293a4b5c6d7e8f9012345",
+  },
+} as const;
 
 const openUser = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
@@ -69,9 +80,11 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         const rows = yield* readVoiceSession(liveSessionId);
         assert.equal(registered, rows[0]?.id);
         assert.equal(taken, undefined);
-        assert.equal(yield* record.owned({ userId: owner, sessionId: liveSessionId }), true);
-        assert.equal(yield* record.owned({ userId: other, sessionId: liveSessionId }), false);
-        assert.equal(yield* record.owned({ userId: owner, sessionId: "live_never" }), false);
+        assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
+          planId: undefined,
+        });
+        assert.equal(yield* record.owned({ userId: other, sessionId: liveSessionId }), undefined);
+        assert.equal(yield* record.owned({ userId: owner, sessionId: "live_never" }), undefined);
         assert.deepEqual(
           rows.map((row) => ({
             userId: row.userId,
@@ -88,6 +101,32 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
             },
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "a planning call names the owner's plan, and its re-attach reads that plan back even once the plan is deleted",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const other = yield* openUser;
+        const plan = yield* createPlan(owner, PLAN);
+        const liveSessionId = `live_p_${randomUUID()}`;
+
+        assert.equal(yield* record.heldPlan({ userId: owner, planId: plan.id }), true);
+        assert.equal(yield* record.heldPlan({ userId: other, planId: plan.id }), false);
+        yield* record.register({ userId: owner, sessionId: liveSessionId, planId: plan.id });
+        assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
+          planId: plan.id,
+        });
+
+        // The binding is the session's for life: a deleted plan leaves it naming a plan that
+        // no longer stands, never a desk session.
+        yield* deletePlan(owner, plan.id);
+        assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
+          planId: plan.id,
+        });
+        assert.equal(yield* record.heldPlan({ userId: owner, planId: plan.id }), false);
       }),
   );
 

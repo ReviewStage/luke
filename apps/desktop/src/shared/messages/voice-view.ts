@@ -55,6 +55,8 @@ export interface VoiceView extends VoiceSpeakers {
    * before anything is written.
    */
   spokenAskPending: boolean;
+  /** The plan the standing call is about, where the planning window opened it; none for a desk call or no call. */
+  callPlanId: string | undefined;
 }
 
 /**
@@ -122,6 +124,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   developerCaptions: undefined,
   liveConversationLines: [],
   spokenAskPending: false,
+  callPlanId: undefined,
 };
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
@@ -147,6 +150,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
   if (!isWireBoolean(value.spokenAskPending)) return false;
+  if (!isOptionalWireString(value.callPlanId)) return false;
   if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;
   if (
     !isOptionalWireStrings(value.lukeCaptions) ||

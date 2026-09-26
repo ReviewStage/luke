@@ -24,7 +24,7 @@ import {
   acceptAsk,
   askStanding,
 } from "../hosted/brain-ask.js";
-import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import type { HostedStore } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-event-stream.js";
@@ -171,10 +171,12 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     }
     const { turn } = standing;
     if (turn === undefined) return false;
+    // A planning call's turns call the planning tools, so the journal is read
+    // under every tool a hosted conversation's rows may name.
     const journal = yield* options.store.messages.byClientId(
       options.userId,
       turn.conversationId,
-      CATALOG_TOOL_SET,
+      HOSTED_TOOL_SET,
       turn.id,
     );
     if (!journal.ok) {

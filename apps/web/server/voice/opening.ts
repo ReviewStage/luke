@@ -23,6 +23,7 @@ import {
   LIVE_INPUT_BOUNDS,
   LIVE_SCENE,
   LIVE_SESSION_OUTCOME,
+  type LiveScene,
   livePrimarySessionConfig,
   liveSessionConfig,
   RENDERER_CLIENT_EVENTS,
@@ -30,7 +31,7 @@ import {
   SEED_ROLE,
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
-import { type SignedInRoute, VOICE_ROUTE } from "./frames.js";
+import { type SignedInRoute, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";
 import type { VoiceSessionRecord } from "./session-record.js";
@@ -117,6 +118,8 @@ type Opened =
       deviceId: string | undefined;
       /** The platform that device row named, which is what the log counts this caller by; none wherever no row was resolved. */
       platform: DevicePlatform | undefined;
+      /** The plan a planning call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row; none for every other session. */
+      planId: string | undefined;
       /**
        * Whether the session is already running: false for one just created
        * from a WebRTC offer, whose peer has yet to connect; true for one
@@ -171,6 +174,12 @@ function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
       item.content.every((part) => part.text.length <= SESSIONS_INPUT_BOUNDS.CHARS),
     )
   );
+}
+
+/** The scene a WebRTC session is created under: the introduction's, a planning call's, or the desktop's. */
+function sceneOf(route: VoiceRoute, planId: string | undefined): LiveScene {
+  if (route === VOICE_ROUTE.INTRODUCTION) return LIVE_SCENE.INTRODUCTION;
+  return planId === undefined ? LIVE_SCENE.DESKTOP : LIVE_SCENE.PLANNING;
 }
 
 /**
@@ -252,6 +261,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    */
   const admitAccount = (
     admission: SignedInAdmission,
+    planId: string | undefined,
   ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> =>
     Effect.gen(function* () {
       const account = yield* accounts.resolveUserId(admission.bearer);
@@ -265,6 +275,11 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       }
       const platform = claimed?.platform;
+      // A planning call names a plan, and a plan the account does not hold is
+      // refused before the spend exactly as a device it does not hold is.
+      if (planId !== undefined && !(yield* record.heldPlan({ userId: accountId, planId }))) {
+        return refused(HOSTED_API_ERROR.NOT_FOUND, platform);
+      }
       const spend = yield* accounts.spend(accountId);
       if (!spend.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED, platform);
       return { accountId, deviceId: admission.deviceId, platform, quota: spend.quota };
@@ -300,17 +315,22 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       // The introduction holds no account and names no device, so every
       // refusal on it counts no platform, here and below.
       if (route === VOICE_ROUTE.INTRODUCTION) {
-        if (!introductionInputAdmitted(frame)) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
+        // An accountless caller holds no plan to talk about.
+        if (!introductionInputAdmitted(frame) || frame.planId !== undefined) {
+          return refused(HOSTED_API_ERROR.INVALID_REQUEST);
+        }
         const introduction = yield* accounts.spendIntroduction();
         if (!introduction.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED);
       } else if (!sessionsInputAdmitted(frame)) {
         return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       }
       const account =
-        admission.route === VOICE_ROUTE.INTRODUCTION ? undefined : yield* admitAccount(admission);
+        admission.route === VOICE_ROUTE.INTRODUCTION
+          ? undefined
+          : yield* admitAccount(admission, frame.planId);
       if (account && "refusal" in account) return account;
       const config = liveSessionConfig({
-        scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
+        scene: sceneOf(route, frame.planId),
         model: options.model,
         voice: frame.voice,
         input: frame.input,
@@ -330,6 +350,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
             userId: account.accountId,
             sessionId,
             deviceId: account.deviceId,
+            ...(frame.planId === undefined ? undefined : { planId: frame.planId }),
           })
         : undefined;
       const sideband = yield* attach(upstream, sessionId);
@@ -348,6 +369,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         accountId: account?.accountId,
         deviceId: account?.deviceId,
         platform: account?.platform,
+        planId: account === undefined ? undefined : frame.planId,
         started: false,
         sideband,
         held: [],
@@ -372,7 +394,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
     frame: SessionAudioCreateFrame,
   ): SessionEffect<Opened> =>
     Effect.gen(function* () {
-      const account = yield* admitAccount(admission);
+      const account = yield* admitAccount(admission, undefined);
       if ("refusal" in account) return account;
       const opened = yield* upstream.openPrimary(
         livePrimarySessionConfig({
@@ -397,6 +419,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         accountId: account.accountId,
         deviceId: account.deviceId,
         platform: account.platform,
+        planId: undefined,
         started: true,
         sideband: socket,
         held,
@@ -413,6 +436,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * introduction never re-attaches. What is proven here is the session's
    * owner rather than a device, so no device row is read and nothing this
    * connection logs counts a platform, exactly as its `deviceId` names none.
+   * The plan a planning call is bound to is read off the same row, so the
+   * re-attached exchange lands in the plan the session was created about.
    */
   const openAttached = (
     upstream: LiveUpstream,
@@ -424,10 +449,10 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       }
       const account = yield* accounts.resolveUserId(admission.bearer);
-      if (
-        Option.isNone(account) ||
-        !(yield* record.owned({ userId: account.value, sessionId: frame.sessionId }))
-      ) {
+      const owned = Option.isNone(account)
+        ? undefined
+        : yield* record.owned({ userId: account.value, sessionId: frame.sessionId });
+      if (Option.isNone(account) || owned === undefined) {
         return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       }
       const accountId = account.value;
@@ -442,6 +467,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         accountId,
         deviceId: undefined,
         platform: undefined,
+        planId: owned.planId,
         started: true,
         sideband,
         held: [],

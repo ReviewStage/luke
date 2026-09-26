@@ -342,11 +342,18 @@ interface RecordedClose {
 }
 
 export interface FakeSessionRecord extends VoiceSessionRecord {
-  registered: Array<{ userId: string; sessionId: string; deviceId?: string | undefined }>;
+  registered: Array<{
+    userId: string;
+    sessionId: string;
+    deviceId?: string | undefined;
+    planId?: string | undefined;
+  }>;
   /** The store id the fake minted for each live session's row, by live session id, as `register` answered it. */
   voiceSessionIds: Map<string, string>;
   /** The device rows the fake holds, by the account that holds each and the platform each names. */
   devices: Array<{ userId: string; deviceId: string; platform: DevicePlatform }>;
+  /** The plans the fake holds, by the account that holds each. */
+  plans: Array<{ userId: string; planId: string }>;
   /** Every usage snapshot, in order. */
   usage: Array<{ sessionId: string; seconds: number }>;
   closes: RecordedClose[];
@@ -359,21 +366,22 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
  * database.
  */
 export function fakeSessionRecord(): FakeSessionRecord {
-  const owners = new Map<string, string>();
+  const owners = new Map<string, { userId: string; planId: string | undefined }>();
   const fake: FakeSessionRecord = {
     registered: [],
     voiceSessionIds: new Map(),
     devices: [],
+    plans: [],
     usage: [],
     closes: [],
     register: (input) =>
       Effect.sync(() => {
         fake.registered.push(input);
         if (!owners.has(input.sessionId)) {
-          owners.set(input.sessionId, input.userId);
+          owners.set(input.sessionId, { userId: input.userId, planId: input.planId });
           fake.voiceSessionIds.set(input.sessionId, randomUUID());
         }
-        return owners.get(input.sessionId) === input.userId
+        return owners.get(input.sessionId)?.userId === input.userId
           ? fake.voiceSessionIds.get(input.sessionId)
           : undefined;
       }),
@@ -384,7 +392,15 @@ export function fakeSessionRecord(): FakeSessionRecord {
         );
         return held === undefined ? undefined : { platform: held.platform };
       }),
-    owned: (input) => Effect.sync(() => owners.get(input.sessionId) === input.userId),
+    heldPlan: (input) =>
+      Effect.sync(() =>
+        fake.plans.some((plan) => plan.userId === input.userId && plan.planId === input.planId),
+      ),
+    owned: (input) =>
+      Effect.sync(() => {
+        const owner = owners.get(input.sessionId);
+        return owner?.userId === input.userId ? { planId: owner.planId } : undefined;
+      }),
     noteUsage: (input) =>
       Effect.sync(() => {
         fake.usage.push(input);

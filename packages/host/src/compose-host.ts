@@ -136,15 +136,26 @@ export const hostAssemblyLayer: Layer.Layer<
     // session speaks unprompted is what the hosted brain decided and put on
     // offer. The onboarding beats and the launch greeting are decided by the
     // live composer below and spoken by the service on its ask.
-    const live = yield* composeLive({ settings, account, observation, calendars });
+    // The planning composer is built after the live one and ends its calls, so
+    // the live composer reads the open plan through this late binding.
+    let activePlanId: () => string | undefined = () => undefined;
+    const live = yield* composeLive({
+      settings,
+      account,
+      observation,
+      calendars,
+      activePlanId: () => activePlanId(),
+    });
     const planning = yield* composePlanning({
       kernel,
       account,
+      endPlanCall: (keep) => live.service.endPlanCall(keep),
       client: new HostedPlanClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
     });
+    activePlanId = planning.activePlanId;
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
     briefingsOffered = live.briefingsOffered;
