@@ -98,6 +98,8 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 /** The one voice call as the live composer holds it: about a plan, about the desk, or none. */
 interface StandingCall {
   about: { readonly planId: string | undefined } | undefined;
+  /** Where ending a call waits before it lands, as a real call's close does. */
+  closing?: Effect.Effect<void>;
 }
 
 function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
@@ -117,9 +119,11 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       endPlanCall: (keep) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           const planId = standing.about?.planId;
-          if (planId !== undefined && planId !== keep) standing.about = undefined;
+          if (planId === undefined || planId === keep) return;
+          yield* standing.closing ?? Effect.void;
+          standing.about = undefined;
         }),
       pollIntervalMs: INTERVAL_MS,
     });
@@ -384,5 +388,36 @@ it.effect(
       yield* ask(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
       yield* ask(GATEWAY_METHOD.PLANNING_CLOSE);
       assert.deepEqual(call.about, { planId: undefined });
+    }),
+);
+
+it.effect(
+  "a plan opened while the old plan's call is still closing is already the active one",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+      const closed = yield* Deferred.make<void>();
+      const standing: StandingCall = { about: undefined };
+      const { call, last, planning } = yield* subject(fakeService([billing, invites]), {
+        call: standing,
+      });
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      standing.about = { planId: INVITES };
+      standing.closing = Deferred.await(closed);
+
+      const opening = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING }),
+      );
+      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+      // A press or an offer inside the wait reads the plan the window is moving to.
+      assert.deepEqual(standing.about, { planId: INVITES });
+      assert.equal(planning.activePlanId(), BILLING);
+      assert.equal(last()?.activePlanId, BILLING);
+
+      yield* Deferred.succeed(closed, undefined);
+      yield* Fiber.join(opening);
+      assert.equal(standing.about, undefined);
+      assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: billing });
     }),
 );

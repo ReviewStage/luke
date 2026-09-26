@@ -88,6 +88,7 @@ function fixtureConfig(
       fixtureName: "smoke",
       startPeeked: false,
       startInSlot: false,
+      startInPlanning: false,
       captureMode: false,
       fixtureMode: true,
     },

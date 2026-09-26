@@ -26,14 +26,17 @@ import type { VoiceView } from "./voice-view";
 /**
  * The launch profiles a window answers to. A capture run stages a
  * conversation it has no voice window for: Luke speaking, that with the
- * Mac's output off, and both speakers heard at once. Any other word — the
- * default included — stages nothing.
+ * Mac's output off, and both speakers heard at once; or, in any fixture run,
+ * the planning window over a synthetic plan. Any other word — the default
+ * included — stages nothing.
  */
 export const RUN_PROFILE = {
   IDLE: "idle",
   SPEAKING: "speaking",
   MUTED: "muted",
   DUPLEX: "duplex",
+  /** The planning window, opened at launch over a synthetic plan. */
+  PLANNING: "planning",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

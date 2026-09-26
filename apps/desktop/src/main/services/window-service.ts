@@ -348,6 +348,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     hasCredentials: () => operator.voiceAvailable() && !introductionPlaying(),
     host: {
       voiceHost: () => voiceWindow.current(),
+      talkPlanId: () =>
+        planningWindow.current()?.isFocused() ? state.snapshot().planning.activePlanId : undefined,
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
         const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;
@@ -573,6 +575,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         if (!launchStanding()) return;
       }
       raiseVoiceWindow();
+      // A fixture run under the planning profile stages the planning window
+      // over its synthetic plan, the one way an evidence run reaches it.
+      if (config.launch.startInPlanning) planningWindow.open();
       configurePermissions();
 
       app.on("second-instance", handleSecondInstance);

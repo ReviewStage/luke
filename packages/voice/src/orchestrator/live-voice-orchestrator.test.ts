@@ -150,7 +150,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   orchestrator.surround({ ...SURROUNDINGS, ...surroundings });
   return {
     surround: (next: LiveVoiceSurroundings) => orchestrator.surround(next),
-    beginTalk: () => orchestrator.beginTalk(),
+    beginTalk: (planId?: string) => orchestrator.beginTalk(planId),
     talkAboutPlan: (planId: string) => orchestrator.talkAboutPlan(planId),
     endTalk: () => orchestrator.endTalk(),
     stopSpeaking: () => orchestrator.stopSpeaking(),
@@ -871,6 +871,36 @@ it.effect(
       assert.equal(billingCall.status, LIVE_STATUS.LISTENING);
       yield* settleFibers();
       assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.LISTENING);
+    }),
+);
+
+it.effect(
+  "a talk key press naming the open plan opens a call about it, and over a desk call hangs the desk call up first",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const desk = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const deskCall = f.latest();
+      assert.ok(deskCall);
+      deskCall.started();
+      yield* Fiber.join(desk);
+      yield* f.endTalk();
+
+      const held = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
+      yield* settleFibers();
+      assert.equal(deskCall.status, LIVE_STATUS.IDLE);
+      const planCall = f.latest();
+      assert.ok(planCall && planCall !== deskCall);
+      assert.deepEqual(planCall.openings, [{ byPress: true, planId: INVITES_PLAN }]);
+      planCall.started();
+      yield* Fiber.join(held);
+      assert.equal(planCall.status, LIVE_STATUS.LISTENING);
+      // Still held to talk: the release mutes the plan's call and leaves it standing.
+      yield* f.endTalk();
+      assert.equal(planCall.status, LIVE_STATUS.MUTED);
+      yield* f.beginTalk(INVITES_PLAN);
+      assert.equal(f.latest(), planCall);
+      assert.equal(planCall.status, LIVE_STATUS.LISTENING);
     }),
 );
 

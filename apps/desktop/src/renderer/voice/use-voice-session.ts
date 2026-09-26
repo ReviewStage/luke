@@ -279,9 +279,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // it, so the device is open exactly while the key is down. A press during
   // a chord being recorded is held back in the main process, where the
   // recording is known; a release always lands, so a hold begun before the
-  // recording still ends.
+  // recording still ends. A press made over the planning window names its
+  // open plan, and is heard on that plan's call.
   useEffect(
-    () => window.sidecar.onVoiceHotkeyPress(() => drive(orchestrator.beginTalk())),
+    () =>
+      window.sidecar.onVoiceHotkeyPress((press) => drive(orchestrator.beginTalk(press?.planId))),
     [drive, orchestrator],
   );
   useEffect(

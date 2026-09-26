@@ -198,16 +198,23 @@ export class LiveVoiceOrchestrator {
    * against a standing session it unmutes. It never mutes: the key coming up
    * does that, so a hold is heard for exactly as long as it lasts, and a
    * hold that ended while the system's microphone dialog stood, or while the
-   * session was opening, unmutes nothing.
+   * session was opening, unmutes nothing. A press made while the planning
+   * window holds the keyboard names that window's open plan: it speaks into
+   * the call about that plan, opening one if none stands and hanging up a
+   * call about anything else first, as the window's own button does. A press
+   * naming no plan speaks into whatever call stands.
    */
-  beginTalk(): Effect.Effect<void> {
+  beginTalk(planId?: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
         return;
       }
-      yield* this.#talk(undefined);
+      if (planId !== undefined && this.#call !== undefined && this.#callPlan !== planId) {
+        yield* this.#hangUp();
+      }
+      yield* this.#talk(planId);
     });
   }
 

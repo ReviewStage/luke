@@ -211,12 +211,16 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         if (Result.isFailure(read)) return yield* invalid("opening a plan names one plan");
         if (!gate()) return { opened: false };
         const { planId } = read.success;
+        // Note that the plan becomes the active one before the old plan's
+        // call is asked to end, because that end waits on the call closing:
+        // a microphone press or an offer landing inside the wait must bind
+        // to the plan the window now shows, never the one it is leaving.
+        if (view.activePlanId !== planId) {
+          write({ activePlanId: planId, document: { status: PLANNING_READ.READING } });
+        }
         yield* endPlanCall(planId);
         yield* serial(
           Effect.gen(function* () {
-            if (view.activePlanId !== planId) {
-              write({ activePlanId: planId, document: { status: PLANNING_READ.READING } });
-            }
             yield* readDocument(planId);
             // Opening moved the plan to the head of the list.
             yield* readList;
@@ -250,8 +254,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             const started = yield* Effect.provide(client.create(request), FetchHttpClient.layer);
             if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
             const plan = started.answer;
-            yield* endPlanCall(plan.id);
+            // Active before the old call's end is waited on, as for opening.
             write({ activePlanId: plan.id, document: { status: PLANNING_READ.READY, plan } });
+            yield* endPlanCall(plan.id);
             yield* readList;
             return carried<PlanningStartAnswer>({ planId: plan.id });
           }),
