@@ -13,6 +13,7 @@ import {
   app,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
+  Menu,
   powerMonitor,
   screen,
   session,
@@ -25,6 +26,7 @@ import type { AppStateStore } from "../app-state";
 import { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { PanelManager } from "../window/panel-manager";
+import { PlanningWindow } from "../window/planning-window";
 import { VoiceWindow } from "../window/voice-window";
 import type { DesktopConfig } from "./desktop-config";
 import { IntroductionSession } from "./introduction-session";
@@ -57,6 +59,8 @@ export interface WindowServiceDependencies {
 export interface WindowService extends DesktopService {
   readonly panels: PanelManager;
   readonly voiceWindow: VoiceWindow;
+  /** The one ordinary window a named plan is read and talked through in, open only on the developer's ask. */
+  readonly planningWindow: PlanningWindow;
   readonly hotkeys: HotkeyRegistrar;
   readonly dock: DockPresence;
   /** The takeover's own voice session, opened through the accountless endpoint for the signed-in developer. */
@@ -172,6 +176,37 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   });
   const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
 
+  /**
+   * The app menu the planning window stands under while it holds the
+   * keyboard: the standard Edit roles, so Cmd-C copies a selection of the
+   * document, and the Window roles, so Cmd-W closes it. Luke otherwise runs
+   * with no menu at all, and the menu comes down again the moment another of
+   * his windows takes the keyboard, so a Cmd-W pressed in a panel never
+   * closes the panel.
+   */
+  const planningMenu =
+    process.platform === "darwin"
+      ? Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }])
+      : null;
+  const planningWindow: PlanningWindow = new PlanningWindow({
+    runMode,
+    preloadPath,
+    rendererHtmlPath,
+    rendererUrl,
+    onFocusChanged: (focused) => Menu.setApplicationMenu(focused ? planningMenu : null),
+    onOpened: () => dock.holdForWindow(true, () => planningWindow.open()),
+    onClosed: () => {
+      // Closing the window is leaving the planning session: no plan stays
+      // active, and the host stops following the service for it.
+      void run(operator.host.planningClose());
+      dock.holdForWindow(false, () => undefined);
+    },
+  });
+  // The Dock tile brings the planning window forward while it stands.
+  const handleActivate = (): void => {
+    if (planningWindow.current()) planningWindow.open();
+  };
+
   function raiseVoiceWindow(): void {
     // Not while the introduction plays: its own call runs in the panel it
     // took, and every voice of Luke's is held while the introduction is
@@ -189,14 +224,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   function broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
     panels.broadcast(channel, payload, except);
-    const voice = voiceWindow.current();
-    if (!voice || voice.webContents === except) return;
-    sendTo(voice.webContents, channel, payload);
+    for (const window of [voiceWindow.current(), planningWindow.current()]) {
+      if (!window || window.webContents === except) continue;
+      sendTo(window.webContents, channel, payload);
+    }
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
     if (voiceWindow.owns(sender)) {
       return { role: WINDOW_ROLE.VOICE, mode: panels.initialMode };
+    }
+    if (planningWindow.owns(sender)) {
+      return { role: WINDOW_ROLE.PLANNING, mode: panels.initialMode };
     }
     const displayId = panels.displayIdFor(sender);
     const display =
@@ -216,8 +255,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       sendTo(sender, channels.onAppState, snapshot);
     };
     for (const sender of panels.senders()) send(sender);
-    const voice = voiceWindow.current();
-    if (voice && !voice.isDestroyed()) send(voice.webContents);
+    for (const window of [voiceWindow.current(), planningWindow.current()]) {
+      if (window && !window.isDestroyed()) send(window.webContents);
+    }
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {
@@ -459,6 +499,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     name: "windows",
     panels,
     voiceWindow,
+    planningWindow,
     hotkeys,
     dock,
     introductionSession,
@@ -534,6 +575,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       configurePermissions();
 
       app.on("second-instance", handleSecondInstance);
+      app.on("activate", handleActivate);
       screen.on("display-added", handleDisplayChange);
       screen.on("display-removed", handleDisplayChange);
       screen.on("display-metrics-changed", handleDisplayChange);
@@ -543,6 +585,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     stop: async () => {
       app.removeListener("second-instance", handleSecondInstance);
+      app.removeListener("activate", handleActivate);
       screen.removeListener("display-added", handleDisplayChange);
       screen.removeListener("display-removed", handleDisplayChange);
       screen.removeListener("display-metrics-changed", handleDisplayChange);
@@ -553,6 +596,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       pendingWaits.clear();
       hotkeys.release();
       voiceWindow.closeForGood();
+      planningWindow.close();
       panels.clearCollapseTimers();
     },
   };

@@ -90,17 +90,6 @@ export {
   type PushEnvironment,
 } from "./device-wire.js";
 export {
-  GITHUB_FAILURE,
-  GITHUB_UNAVAILABLE_ERROR,
-  type GitHubFailure,
-  type GitHubFailureAnswer,
-  type GitHubRepository,
-  type GitHubRepositoryListAnswer,
-  githubFailureAnswerSchema,
-  githubRepositoryListAnswerSchema,
-  githubRepositorySchema,
-} from "./github-wire.js";
-export {
   HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,
@@ -158,26 +147,10 @@ export {
   observeAnswerSchema,
 } from "./observe-wire.js";
 export {
-  PLAN_BOUNDS,
-  type Plan,
-  type PlanAnswer,
-  type PlanAssumption,
-  type PlanCreateRequest,
-  type PlanDeleteAnswer,
-  type PlanDocument,
-  type PlanListAnswer,
-  type PlanRepository,
-  type PlanSummary,
-  planAnswerSchema,
-  planAssumptionSchema,
-  planCreateRequestSchema,
-  planDeleteAnswerSchema,
-  planDocumentSchema,
-  planListAnswerSchema,
-  planRepositorySchema,
-  planSchema,
-  planSummarySchema,
-} from "./plan-wire.js";
+  HostedPlanClient,
+  type HostedPlanClientOptions,
+  type PlanCallResult,
+} from "./plan-client.js";
 export {
   type HostedProjectsAnswer,
   type HostedWorkspaceAgentModels,

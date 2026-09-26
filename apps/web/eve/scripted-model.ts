@@ -1,4 +1,4 @@
-import { planDocumentSchema } from "@sidecar/hosted";
+import { planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import { type MockModelRequest, type MockModelResponse, mockModel } from "eve/evals";

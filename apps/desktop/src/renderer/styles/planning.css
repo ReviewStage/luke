@@ -1,0 +1,355 @@
+/* The planning window: an ordinary opaque Mac window, unlike the transparent
+   panels, so it restates the document's ground and lets the plan be selected.
+   The sidebar and the voice bar stay where they are; only the document
+   scrolls. */
+html[data-surface="planning"],
+html[data-surface="planning"] body,
+html[data-surface="planning"] #root {
+  background: var(--surface-overlay);
+  color: var(--text-primary);
+}
+
+.planning {
+  display: grid;
+  grid-template-columns: minmax(200px, 240px) 1fr;
+  height: 100%;
+  font-size: 13px;
+}
+
+.planning-signed-out {
+  display: grid;
+  grid-template-columns: 1fr;
+  place-items: center;
+  color: var(--text-secondary);
+}
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 16px 10px 12px;
+  border-right: 1px solid var(--hairline);
+}
+
+.plan-list-heading {
+  margin: 0 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.plan-list-note {
+  margin: 0 6px;
+  color: var(--text-secondary);
+}
+
+.plan-list-rows {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.plan-list-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 7px;
+  background: none;
+  text-align: left;
+}
+
+.plan-list-row:hover {
+  background: var(--raised);
+}
+
+.plan-list-row[aria-current="true"] {
+  background: var(--selected);
+}
+
+.plan-list-name {
+  font-weight: 600;
+}
+
+.plan-list-repository {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.plan-list-new,
+.plan-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  background: var(--raised-strong);
+}
+
+.plan-list-new:hover,
+.plan-button:hover:not(:disabled) {
+  background: var(--selected);
+}
+
+.plan-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.plan-button-primary {
+  background: var(--message-sent);
+}
+
+.link-button {
+  padding: 0;
+  background: none;
+  text-decoration: underline;
+}
+
+.planning-main {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.plan-document {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.plan-document-state {
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+
+.plan-header {
+  padding: 18px 28px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.plan-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 680;
+}
+
+.plan-repository {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+
+/* The document is the record: it reads as text and is selectable, so Cmd-C
+   on a selection copies it. */
+.plan-document-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 18px 28px 28px;
+  overflow-y: auto;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.plan-body {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* A plan is a document rather than a message, so its sections breathe. */
+.plan-body > .markdown-heading:not(:first-child) {
+  margin-top: 1.1em;
+}
+
+.plan-empty {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.plan-assumptions {
+  margin-top: 24px;
+}
+
+.plan-assumptions-heading {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.plan-assumptions ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-assumption {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+.plan-assumption input {
+  margin: 0;
+}
+
+.plan-assumption-status {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.plan-assumption[data-confirmed="true"] .plan-assumption-status {
+  color: var(--state-complete);
+}
+
+.plan-voice-bar {
+  display: grid;
+  grid-template-columns: auto auto auto auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--hairline);
+}
+
+.plan-microphone {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--raised-strong);
+}
+
+.plan-microphone:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.plan-voice-status {
+  min-width: 72px;
+  color: var(--text-secondary);
+}
+
+.plan-voice-status[data-tone="error"] {
+  color: var(--error-text);
+}
+
+.plan-caption {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+/* A sheet hangs from the top of the window, the way a Mac sheet does. */
+.plan-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(480px, calc(100% - 48px));
+  max-height: calc(100% - 24px);
+  padding: 18px 20px;
+  border-radius: 0 0 10px 10px;
+  background: var(--surface-overlay);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px var(--hairline);
+}
+
+.plan-sheet h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.plan-sheet input[type="text"],
+.plan-sheet input[type="search"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  background: var(--raised);
+  color: inherit;
+  font: inherit;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.plan-sheet-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-sheet-repositories {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.plan-sheet-repositories legend {
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.plan-sheet-repository-list {
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.plan-sheet-repository {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.plan-sheet-private,
+.plan-sheet-note {
+  color: var(--text-secondary);
+}
+
+.plan-sheet-note {
+  margin: 0;
+}
+
+.plan-sheet-github {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.plan-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

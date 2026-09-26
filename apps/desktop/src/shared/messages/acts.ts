@@ -21,6 +21,13 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
+import { planCreateRequestSchema } from "@sidecar/hosted/plan-wire";
+import {
+  type PlanningRepositoriesAnswer,
+  type PlanningStartAnswer,
+  planningRepositoriesAnswerSchema,
+  planningStartAnswerSchema,
+} from "@sidecar/hosted/planning-view";
 import { INTRODUCTION_SEED_BOUNDS, type LiveDiagnostics } from "@sidecar/live";
 import {
   isSessionApplicationId,
@@ -143,6 +150,21 @@ export const ACT_KIND = {
    * drawn once, read-only, on the panel alone. Nothing of it is kept.
    */
   NOTEBOOK_READ: "notebook.read",
+  /**
+   * The planning window: the panel's entry that opens it or brings it
+   * forward, and the window's own asks of the host — the plan list and the
+   * active document read now and followed while it stands, one plan made
+   * the active one, a plan started on a repository, the repositories the
+   * account's GitHub connection reads, and the connection itself. The view
+   * arrives on the document rather than as an answer; nothing here writes a
+   * plan's document, which the planning model alone saves.
+   */
+  PLANNING_OPEN_WINDOW: "planning.openWindow",
+  PLANNING_REFRESH: "planning.refresh",
+  PLANNING_SELECT: "planning.select",
+  PLANNING_START: "planning.start",
+  PLANNING_REPOSITORIES: "planning.repositories",
+  PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -585,6 +607,24 @@ export const ACT = {
     ),
     refusal: "Could not read Luke's memory on this system.",
   },
+  [ACT_KIND.PLANNING_OPEN_WINDOW]: press("Could not open the planning window on this system."),
+  [ACT_KIND.PLANNING_REFRESH]: press("Could not read your plans on this system."),
+  [ACT_KIND.PLANNING_SELECT]: {
+    payload: record({ planId: exactId }),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not open that plan on this system.",
+  },
+  [ACT_KIND.PLANNING_START]: {
+    payload: actSchema(planCreateRequestSchema),
+    result: wireResult<PlanningStartAnswer>(isReadable(planningStartAnswerSchema)),
+    refusal: "Could not start that plan on this system.",
+  },
+  [ACT_KIND.PLANNING_REPOSITORIES]: {
+    payload: noPayload,
+    result: wireResult<PlanningRepositoriesAnswer>(isReadable(planningRepositoriesAnswerSchema)),
+    refusal: "Could not read your GitHub repositories on this system.",
+  },
+  [ACT_KIND.PLANNING_CONNECT_GITHUB]: press("Could not connect GitHub on this system."),
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
       command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),

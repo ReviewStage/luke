@@ -1,6 +1,7 @@
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { LiveSessionPhase } from "@sidecar/gateway";
+import type { PlanningView } from "@sidecar/hosted/planning-view";
 import type {
   ConversationViewSnapshot,
   ObservedWorkspaceProject,
@@ -163,6 +164,13 @@ export interface AppState {
   agents: AgentsSnapshot;
   /** The one transcript the host holds open for this Mac, a child's or an observed session's; nothing while none is. Named `childTranscript` still, kept so the slice name stays put. */
   childTranscript: TranscriptSnapshot | undefined;
+  /**
+   * The planning window's named plans as the host's reads of the service
+   * hold them: the list, the one active plan, and its saved document. Only
+   * the planning window draws it, and the active plan is the one a voice
+   * session binds to.
+   */
+  planning: PlanningView;
   announcements: { held: boolean };
   /** The onboarding gates the host says stand: the key step ahead of the calendar's, both after the introduction. */
   onboarding: { calendarOwed: boolean; conductorKeyOwed: boolean };
