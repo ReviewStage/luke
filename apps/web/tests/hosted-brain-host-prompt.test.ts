@@ -20,6 +20,7 @@ import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { GITHUB_ACCESS_WITHOUT_CONNECTIONS } from "../server/hosted/github-source";
 import { type ConversationTarget, promptHashOf, storeWriter } from "../server/hosted/store";
 import { toolSetHashOf } from "../server/hosted/store/content-addressed";
 import { stampedEveEvent } from "./support/eve-events";
@@ -76,6 +77,7 @@ const seams: BrainHostSeams = {
   vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
   providerKey: unreached("providerKey"),
   executeAction: unreached("executeAction"),
+  githubAccess: GITHUB_ACCESS_WITHOUT_CONNECTIONS,
   now: () => NOW,
 };
 

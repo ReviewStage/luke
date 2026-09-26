@@ -57,12 +57,13 @@ export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
  * business, so the reads here and the planning model's source tool never
  * see where it came from.
  */
-export class GitHubAccess extends Context.Service<
-  GitHubAccess,
-  {
-    readonly token: (userId: string) => Effect.Effect<Redacted.Redacted, GitHubUnavailable>;
-  }
->()("GitHubAccess") {}
+export interface GitHubAccessShape {
+  readonly token: (userId: string) => Effect.Effect<Redacted.Redacted, GitHubUnavailable>;
+}
+
+export class GitHubAccess extends Context.Service<GitHubAccess, GitHubAccessShape>()(
+  "GitHubAccess",
+) {}
 
 /**
  * The deployment's GitHub access until the account-bound GitHub connection
@@ -70,9 +71,15 @@ export class GitHubAccess extends Context.Service<
  * `not-connected`, and the window and the planning model say GitHub has to
  * be connected rather than claiming anything was read.
  */
-export const githubAccessWithoutConnections = Layer.succeed(GitHubAccess, {
+export const GITHUB_ACCESS_WITHOUT_CONNECTIONS: GitHubAccessShape = {
   token: () => Effect.fail(new GitHubUnavailable({ reason: GITHUB_FAILURE.NOT_CONNECTED })),
-});
+};
+
+/** The same access as the layer a route provides. */
+export const githubAccessWithoutConnections = Layer.succeed(
+  GitHubAccess,
+  GITHUB_ACCESS_WITHOUT_CONNECTIONS,
+);
 
 const RepositoryRowSchema = Schema.Struct({
   name: Schema.String,

@@ -22,7 +22,11 @@ import { GITHUB_FAILURE } from "@sidecar/hosted";
 import { Effect, Layer, Redacted } from "effect";
 import { FetchHttpClient, type HttpClient } from "effect/unstable/http";
 import { GITHUB_MCP_ENDPOINT } from "../../server/hosted/github-mcp";
-import { GitHubAccess, GitHubUnavailable } from "../../server/hosted/github-source";
+import {
+  GitHubAccess,
+  type GitHubAccessShape,
+  GitHubUnavailable,
+} from "../../server/hosted/github-source";
 
 /** One file at one commit: its text, bytes that are not text, or a size past GitHub's 1 MB read. */
 type FakeFile =
@@ -44,6 +48,8 @@ export interface FakeRepository {
 export interface FakeGitHub {
   /** The fake's `fetch`, the `HttpClient` over it, and the account connections. */
   readonly layer: Layer.Layer<GitHubAccess | HttpClient.HttpClient>;
+  /** The account connections alone, for a seam that takes the access as a value. */
+  readonly access: GitHubAccessShape;
   /** Gives the account a connection under `token`, which reads `repositories`. */
   readonly connect: (
     userId: string,
@@ -275,21 +281,22 @@ export function fakeGitHub(): FakeGitHub {
     throw new Error(`the GitHub fake answers no ${url.href}`);
   };
 
-  const access = Layer.succeed(GitHubAccess, {
+  const access: GitHubAccessShape = {
     token: (userId: string) => {
       const token = tokenByUser.get(userId);
       return token === undefined
         ? Effect.fail(new GitHubUnavailable({ reason: GITHUB_FAILURE.NOT_CONNECTED }))
         : Effect.succeed(Redacted.make(token));
     },
-  });
+  };
 
   return {
     layer: Layer.mergeAll(
-      access,
+      Layer.succeed(GitHubAccess, access),
       FetchHttpClient.layer,
       Layer.succeed(FetchHttpClient.Fetch, fetch),
     ),
+    access,
     connect: (userId, token, repositories) => {
       tokenByUser.set(userId, token);
       readableByToken.set(token, readableOf(repositories));

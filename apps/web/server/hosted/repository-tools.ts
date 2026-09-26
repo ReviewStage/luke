@@ -92,13 +92,14 @@ interface ReadSource {
   readonly path: string;
 }
 
-interface RepositoryEntry {
+// A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
+type RepositoryEntry = {
   readonly path: string;
   /** GitHub's own kind: `file`, `dir`, `symlink`, or `submodule`. */
   readonly type: string;
   /** Bytes, for a file. */
   readonly size?: number;
-}
+};
 
 export type RepositoryReadResult =
   | (ReadSource & {
