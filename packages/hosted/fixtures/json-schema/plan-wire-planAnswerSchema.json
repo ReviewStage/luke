@@ -1,0 +1,112 @@
+{
+  "type": "object",
+  "properties": {
+    "plan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "repository": {
+          "type": "object",
+          "properties": {
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "branch": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "commit": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "owner",
+            "name",
+            "branch",
+            "commit"
+          ],
+          "additionalProperties": false
+        },
+        "createdAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "updatedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "openedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "document": {
+          "type": "object",
+          "properties": {
+            "body": {
+              "type": "string",
+              "maxLength": 200000
+            },
+            "assumptions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "confirmed": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "text",
+                  "confirmed"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 200
+            }
+          },
+          "required": [
+            "body",
+            "assumptions"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "repository",
+        "createdAt",
+        "updatedAt",
+        "openedAt",
+        "document"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "plan"
+  ],
+  "additionalProperties": false
+}

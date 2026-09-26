@@ -10,7 +10,7 @@ builds it, and once in the `server/db/*-schema.ts` module the query builder
 reads it through. "The data layer" below is what holds the two together.
 Better Auth is no exception, reaching its tables through its Drizzle adapter
 over `server/db/auth-schema.ts` (see below), which is in the same barrel as
-the nine Luke-owned modules, so a migration that changes an auth column's type
+the ten Luke-owned modules, so a migration that changes an auth column's type
 changes that declaration too.
 
 Every instant column is `timestamp with time zone` (migration 0026 moved the
@@ -604,6 +604,32 @@ refusals the store answers (`not_found`, `not_lukes`) are unchanged.
 `tests/support/no-database.ts`'s refusing `SqlClient` layer, the same runner
 the events and conversation-read tests use, since every case here mocks its
 `rate` seam and never reaches a real connection.
+
+## The plans group
+
+`server/plans-app.ts` is the planning window's route group over the account's
+named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, most
+recently opened first, `POST /api/plans` starts one with its name and its
+repository already resolved to one commit and an empty document,
+`GET /api/plans/{id}` opens one with its saved document and moves it to the
+head of the list, and `DELETE /api/plans/{id}` deletes it, the id moved into
+the query by the segment rewrite the way the rating route's is.
+`packages/hosted/src/plan-wire.ts` declares every request and answer. Each
+endpoint resolves the bearer first, and every statement in
+`server/hosted/plan-store.ts` names the account beside the plan, so another
+account's plan answers exactly as none does.
+
+Nothing in the group writes a document. The one writer is the planning
+model's `update_plan({ body, assumptions })` (`server/hosted/update-plan-tool.ts`),
+run under a binding of account and plan the service built rather than
+anything the model sends, and answering the document as saved or why nothing
+was: a malformed call, a plan deleted meanwhile, which a save never
+recreates because it is an `update` over the row that stands, and a store
+that could not be reached, each leaving the prior document in place.
+`readPlan` is the read the planning model starts and resumes from, with the
+conversation `attachPlanConversation` associated, and it moves nothing.
+`tests/hosted-plans.test.ts` and `tests/plans-app.test.ts` hold both halves
+against a real dialect.
 
 ## The admin group
 

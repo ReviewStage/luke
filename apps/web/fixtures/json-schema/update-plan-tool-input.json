@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "properties": {
+    "body": {
+      "type": "string",
+      "maxLength": 200000,
+      "description": "The plan's complete Markdown body. It replaces the saved body whole."
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "confirmed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "text",
+          "confirmed"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200,
+      "description": "Every assumption the plan holds, in order, each its text and whether the developer confirmed it. It replaces the saved list whole."
+    }
+  },
+  "required": [
+    "body",
+    "assumptions"
+  ],
+  "additionalProperties": false
+}

@@ -337,6 +337,13 @@
       "when": 1790325000000,
       "tag": "0048_observed_session_standing",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1790350000000,
+      "tag": "0049_plan",
+      "breakpoints": true
     }
   ]
 }
