@@ -14,6 +14,7 @@ final class ConversationReadsFixtureTests: XCTestCase {
 
     private enum Fixture {
         static let messages = "conversation-messages-answer.json"
+        static let history = "conversation-history-answer.json"
         static let events = "conversation-events-answer.json"
         static let turns = "brain-turns-answer.json"
         static let changesRequest = "changes-request.json"
@@ -159,6 +160,24 @@ final class ConversationReadsFixtureTests: XCTestCase {
         )
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer token")
         XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testHistoryReadsBackFromThePositionNamedAndFromTheTailForNone() async throws {
+        let http = StubHTTP()
+        http.body = try RepositoryFixtures.data(RepositoryFixtures.reads, Fixture.history)
+        let client = ConversationReadClient(serviceURL: serviceURL, http: http)
+        let tail = try await client.history(before: nil, accessToken: "token")
+        XCTAssertFalse(tail.groups.isEmpty)
+        XCTAssertFalse(tail.next.isEmpty)
+        XCTAssertFalse(tail.older.isEmpty)
+        _ = try await client.history(before: tail.older, accessToken: "token")
+        let requests = try http.requests.map { try XCTUnwrap(URLComponents(url: $0.url!, resolvingAgainstBaseURL: false)) }
+        XCTAssertEqual(requests.map(\.path), ["/api/conversation/history", "/api/conversation/history"])
+        XCTAssertEqual(requests[0].queryItems?.map(\.name), ["limit"])
+        XCTAssertEqual(
+            Set(requests[1].queryItems ?? []),
+            [URLQueryItem(name: "limit", value: "200"), URLQueryItem(name: "before", value: tail.older)]
+        )
     }
 
     func testAFirstReadCarriesNoCursor() async throws {
