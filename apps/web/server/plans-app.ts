@@ -1,8 +1,15 @@
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
-import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { planCreateRequestSchema, unparsedWire, wireUuidSchema } from "./core.js";
+import { githubFailureResponse } from "./github-app.js";
+import { GitHubAccess, resolveRepository } from "./hosted/github-source.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -27,6 +34,14 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * planning model's `update_plan` is the one writer (`update-plan-tool.ts`).
  * `GET /api/plans/{id}` is the window opening a plan, so it also moves the
  * plan to the head of the list.
+ *
+ * Starting a plan names a repository and nothing more: the service resolves
+ * its default branch to one commit through the account's own GitHub
+ * connection, so the commit a plan reads for its whole life is one GitHub
+ * answered to this account, never one a client asserted. A repository the
+ * connection cannot read starts no plan, and answers why
+ * (`GITHUB_UNAVAILABLE_ERROR` with a `GITHUB_FAILURE` reason) so the window
+ * can say what to do.
  */
 
 const PLANS_PATH = {
@@ -51,7 +66,14 @@ export interface PlansAppSeams {
   resolveUserId: UserIdResolver;
 }
 
-type PlansServices = SqlClient.SqlClient | HttpServerRequest.HttpServerRequest;
+type PlansServices =
+  | SqlClient.SqlClient
+  | HttpClient.HttpClient
+  | GitHubAccess
+  | HttpServerRequest.HttpServerRequest;
+
+/** What the routes may require of the function that stands them. */
+export type PlansAppServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubAccess;
 
 /** The bearer's account, or the invalid-token refusal. */
 const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -98,7 +120,17 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const body = yield* readJsonBodyEffect(MAXIMUM_CREATE_BODY_BYTES);
   const started = readEither(planCreateRequestSchema)(body);
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const plan = yield* hostedStoreOrUnavailable(createPlan(userId, started.success));
+  const github = yield* GitHubAccess;
+  const resolved = yield* github.token(userId).pipe(
+    Effect.flatMap((token) =>
+      resolveRepository(token, started.success.repository.owner, started.success.repository.name),
+    ),
+    Effect.result,
+  );
+  if (Result.isFailure(resolved)) return githubFailureResponse(resolved.failure);
+  const plan = yield* hostedStoreOrUnavailable(
+    createPlan(userId, { name: started.success.name, repository: resolved.success }),
+  );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan });
 });
 
@@ -131,7 +163,7 @@ function refusing<R>(
 }
 
 /** The group: the two plan paths, and the hosted vocabulary's own refusal for any other. */
-export function plansApp(seams: PlansAppSeams): WebRoutes<SqlClient.SqlClient> {
+export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COLLECTION, refusing(collectionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, refusing(oneEndpoint(seams))),

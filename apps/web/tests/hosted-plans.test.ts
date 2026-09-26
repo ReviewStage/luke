@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { PlanCreateRequest, PlanDocument } from "@sidecar/hosted";
+import type { PlanDocument } from "@sidecar/hosted";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -15,6 +15,7 @@ import {
   createPlan,
   deletePlan,
   listPlans,
+  type NewPlan,
   openPlan,
   readPlan,
 } from "../server/hosted/plan-store";
@@ -44,12 +45,12 @@ const COMMIT = {
   LEDGER: "0123456789abcdef0123456789abcdef01234567",
 } as const;
 
-const RELAY_PLAN: PlanCreateRequest = {
+const RELAY_PLAN: NewPlan = {
   name: "Teammate invitations",
   repository: { owner: "acme", name: "relay", branch: "main", commit: COMMIT.RELAY },
 };
 
-const LEDGER_PLAN: PlanCreateRequest = {
+const LEDGER_PLAN: NewPlan = {
   name: "Billing export",
   repository: { owner: "acme", name: "ledger", branch: "trunk", commit: COMMIT.LEDGER },
 };

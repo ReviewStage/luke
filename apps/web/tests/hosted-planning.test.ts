@@ -34,6 +34,10 @@ import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-h
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import {
+  GITHUB_ACCESS_WITHOUT_CONNECTIONS,
+  type GitHubAccessShape,
+} from "../server/hosted/github-source";
+import {
   createPlan,
   deletePlan,
   openPlan,
@@ -41,9 +45,15 @@ import {
   readPlan,
   savePlanDocument,
 } from "../server/hosted/plan-store";
+import {
+  GET_FILE_CONTENTS_TOOL,
+  REPOSITORY_READ_REFUSAL,
+  REPOSITORY_READ_STATUS,
+} from "../server/hosted/repository-tools";
 import { hostedStore, storeWriter } from "../server/hosted/store";
 import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool";
 import { stampedEveEvent } from "./support/eve-events";
+import { fakeGitHub } from "./support/github-fake";
 import { noNetwork } from "./support/no-network";
 import { testSqlClient } from "./support/sql-client";
 
@@ -89,31 +99,33 @@ function unreached(name: string): () => never {
 }
 
 /** The host over the test database, with the writer holding rows to the hosted tool set as production's does. */
-const planningHost = Effect.gen(function* () {
-  const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
-  const seams: BrainHostSeams = {
-    eveOrigin: () => undefined,
-    store: () =>
-      Effect.succeed(hostedStore({ keys: payloadKeyRing(Redacted.make("c".repeat(64))) })),
-    writer: () => Effect.succeed(writer),
-    userInfo: () => Effect.succeed(undefined),
-    ownership: {
-      sessionOwner: unreached("sessionOwner"),
-      ownsConversation: unreached("ownsConversation"),
-    },
-    openAi: () => undefined,
-    embedder: () => undefined,
-    deploymentSecret: () => undefined,
-    scriptedModel: () => true,
-    spend: unreached("spend"),
-    vaultRows: () => Effect.succeed([]),
-    vaultSecret: unreached("vaultSecret"),
-    providerKey: unreached("providerKey"),
-    executeAction: unreached("executeAction"),
-    now: () => NOW,
-  };
-  return yield* brainHost(seams);
-});
+const planningHost = (githubAccess: GitHubAccessShape = GITHUB_ACCESS_WITHOUT_CONNECTIONS) =>
+  Effect.gen(function* () {
+    const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
+    const seams: BrainHostSeams = {
+      eveOrigin: () => undefined,
+      store: () =>
+        Effect.succeed(hostedStore({ keys: payloadKeyRing(Redacted.make("c".repeat(64))) })),
+      writer: () => Effect.succeed(writer),
+      userInfo: () => Effect.succeed(undefined),
+      ownership: {
+        sessionOwner: unreached("sessionOwner"),
+        ownsConversation: unreached("ownsConversation"),
+      },
+      openAi: () => undefined,
+      embedder: () => undefined,
+      deploymentSecret: () => undefined,
+      scriptedModel: () => true,
+      spend: unreached("spend"),
+      vaultRows: () => Effect.succeed([]),
+      vaultSecret: unreached("vaultSecret"),
+      providerKey: unreached("providerKey"),
+      executeAction: unreached("executeAction"),
+      githubAccess,
+      now: () => NOW,
+    };
+    return yield* brainHost(seams);
+  });
 
 const openUser = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
@@ -122,13 +134,14 @@ const openUser = Effect.gen(function* () {
 });
 
 /** A plan with a saved document and its conversation opened, as the planning window would leave it. */
-const savedPlanWithConversation = Effect.gen(function* () {
-  const userId = yield* openUser;
-  const started = yield* createPlan(userId, RELAY_PLAN);
-  const host = yield* planningHost;
-  const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
-  return { host, userId, planId: started.id, conversationId };
-});
+const savedPlanWithConversation = (githubAccess?: GitHubAccessShape) =>
+  Effect.gen(function* () {
+    const userId = yield* openUser;
+    const started = yield* createPlan(userId, RELAY_PLAN);
+    const host = yield* planningHost(githubAccess);
+    const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+    return { host, userId, planId: started.id, conversationId };
+  });
 
 let minted = 0;
 
@@ -383,31 +396,33 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     }),
   );
 
-  it.effect("a planning turn is offered update_plan and none of the brain's catalog", () =>
-    Effect.gen(function* () {
-      const { host, userId, conversationId } = yield* savedPlanWithConversation;
-      const session = yield* startSession(host, userId, conversationId);
-      const standing = yield* admitted(host, session);
-      assert.equal(standing.kind, CONVERSATION_KIND.PLAN);
+  it.effect(
+    "a planning turn is offered update_plan and get_file_contents and none of the brain's catalog",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        const standing = yield* admitted(host, session);
+        assert.equal(standing.kind, CONVERSATION_KIND.PLAN);
 
-      const offered = yield* host.toolDeclarations(standing, {
-        kind: BRAIN_HOST_TURN.TYPED,
-        trigger: BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED].trigger,
-        turnId: hostTurnId(session.id, "turn_0"),
-      });
+        const offered = yield* host.toolDeclarations(standing, {
+          kind: BRAIN_HOST_TURN.TYPED,
+          trigger: BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED].trigger,
+          turnId: hostTurnId(session.id, "turn_0"),
+        });
 
-      assert.deepEqual(
-        offered.map((declared) => declared.name),
-        [UPDATE_PLAN_TOOL.name],
-      );
-    }),
+        assert.deepEqual(
+          offered.map((declared) => declared.name),
+          [UPDATE_PLAN_TOOL.name, GET_FILE_CONTENTS_TOOL.name],
+        );
+      }),
   );
 
   it.effect(
     "the model reads the document it is handed and its update_plan changes what the window and the next turn read",
     () =>
       Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation;
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
         const session = yield* startSession(host, userId, conversationId);
         yield* savePlanDocument(userId, planId, SAVED);
 
@@ -429,7 +444,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     "resuming the plan in a new session hands the model its saved document and the conversation so far",
     () =>
       Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation;
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
         const first = yield* startSession(host, userId, conversationId);
         const reply = yield* planningTurn(host, first, "turn_0", CORRECTION);
 
@@ -451,7 +466,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     "a deleted plan's conversation is cleared with it and admits its session no further",
     () =>
       Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation;
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
         const session = yield* startSession(host, userId, conversationId);
 
         assert.equal(yield* deletePlan(userId, planId), true);
@@ -460,5 +475,84 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.ok(Result.isFailure(admission));
         assert.equal(admission.failure, BRAIN_HOST_REFUSAL.NO_CONVERSATION);
       }),
+  );
+
+  it.effect(
+    "the model's get_file_contents reads the plan's repository at its commit through the host",
+    () => {
+      const github = fakeGitHub();
+      return Effect.gen(function* () {
+        const { host, userId, conversationId } = yield* savedPlanWithConversation(github.access);
+        github.connect(userId, "fixture-token-planning", [
+          {
+            owner: RELAY_PLAN.repository.owner,
+            name: RELAY_PLAN.repository.name,
+            private: true,
+            defaultBranch: RELAY_PLAN.repository.branch,
+            branches: new Map([[RELAY_PLAN.repository.branch, RELAY_PLAN.repository.commit]]),
+            commits: new Map([
+              [RELAY_PLAN.repository.commit, new Map([["README.md", { text: "# Relay\n" }]])],
+            ]),
+          },
+        ]);
+        const session = yield* startSession(host, userId, conversationId);
+        const standing = yield* admitted(host, session);
+        const turn = {
+          kind: BRAIN_HOST_TURN.TYPED,
+          trigger: BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED].trigger,
+          turnId: hostTurnId(session.id, "turn_0"),
+        };
+        const call = (input: WireBoundaryInput) =>
+          host.runTool(
+            GET_FILE_CONTENTS_TOOL.name,
+            { target: standing.target, turn },
+            unparsedWire(input),
+            toolContext(session, GET_FILE_CONTENTS_TOOL.name),
+          );
+
+        const readme = yield* call({ path: "README.md" }).pipe(Effect.provide(github.layer));
+        const steered = yield* call({ path: "README.md", sha: "0".repeat(40) }).pipe(
+          Effect.provide(github.layer),
+        );
+
+        assert.deepEqual(readme, {
+          status: REPOSITORY_READ_STATUS.FILE,
+          repository: { owner: RELAY_PLAN.repository.owner, name: RELAY_PLAN.repository.name },
+          commit: RELAY_PLAN.repository.commit,
+          path: "README.md",
+          content: "# Relay\n",
+          characters: 8,
+          truncated: false,
+        });
+        assert.equal(steered.reason, REPOSITORY_READ_REFUSAL.UNREADABLE);
+      });
+    },
+  );
+
+  it.effect("with no GitHub connection, the model's get_file_contents says nothing was read", () =>
+    Effect.gen(function* () {
+      const { host, userId, conversationId } = yield* savedPlanWithConversation();
+      const session = yield* startSession(host, userId, conversationId);
+      const standing = yield* admitted(host, session);
+
+      const result = yield* host
+        .runTool(
+          GET_FILE_CONTENTS_TOOL.name,
+          {
+            target: standing.target,
+            turn: {
+              kind: BRAIN_HOST_TURN.TYPED,
+              trigger: BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED].trigger,
+              turnId: hostTurnId(session.id, "turn_0"),
+            },
+          },
+          unparsedWire({ path: "" }),
+          toolContext(session, GET_FILE_CONTENTS_TOOL.name),
+        )
+        .pipe(Effect.provide(noNetwork));
+
+      assert.equal(result.status, REPOSITORY_READ_STATUS.NOT_READ);
+      assert.equal(result.reason, REPOSITORY_READ_REFUSAL.NOT_CONNECTED);
+    }),
   );
 });

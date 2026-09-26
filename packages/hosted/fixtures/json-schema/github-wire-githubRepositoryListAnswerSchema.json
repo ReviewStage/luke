@@ -1,0 +1,40 @@
+{
+  "type": "object",
+  "properties": {
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "private": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "owner",
+          "name",
+          "private"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "repositories",
+    "truncated"
+  ],
+  "additionalProperties": false
+}

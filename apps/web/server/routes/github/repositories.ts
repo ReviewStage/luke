@@ -1,12 +1,12 @@
 import { HttpRouter } from "effect/unstable/http";
+import { githubApp } from "../../github-app.js";
 import { githubAccessWithoutConnections } from "../../hosted/github-source.js";
 import { resolveHostedUserId } from "../../hosted/vault-route.js";
-import { plansApp } from "../../plans-app.js";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
-/** One plan the caller owns, by the id its path carries: open it (GET) or delete it (DELETE). */
+/** The repositories the account's GitHub connection can read (GET), for a new plan's picker. */
 export default routeFromHttpRouter(
-  plansApp({ resolveUserId: resolveHostedUserId }).pipe(
+  githubApp({ resolveUserId: resolveHostedUserId }).pipe(
     HttpRouter.provideRequest(githubAccessWithoutConnections),
   ),
 );

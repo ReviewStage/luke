@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "maxLength": 1000,
+      "description": "A directory or file path relative to the repository root, such as \"src/app\" or \"package.json\"; \"\" lists the root."
+    }
+  },
+  "required": [
+    "path"
+  ],
+  "additionalProperties": false
+}

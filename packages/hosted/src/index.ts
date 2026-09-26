@@ -90,6 +90,17 @@ export {
   type PushEnvironment,
 } from "./device-wire.js";
 export {
+  GITHUB_FAILURE,
+  GITHUB_UNAVAILABLE_ERROR,
+  type GitHubFailure,
+  type GitHubFailureAnswer,
+  type GitHubRepository,
+  type GitHubRepositoryListAnswer,
+  githubFailureAnswerSchema,
+  githubRepositoryListAnswerSchema,
+  githubRepositorySchema,
+} from "./github-wire.js";
+export {
   HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,

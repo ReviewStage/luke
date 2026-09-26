@@ -30,6 +30,7 @@ import {
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET, HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
+import { GitHubAccess } from "../github-source.js";
 import type { HostedRefusal } from "../http-effect.js";
 import { readPlanOfConversation } from "../plan-store.js";
 import { askRecord } from "../store/asks.js";
@@ -522,7 +523,7 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
               name,
               plan === undefined ? undefined : { userId: target.userId, planId: plan.plan.id },
               input,
-            );
+            ).pipe(Effect.provideService(GitHubAccess, seams.githubAccess));
           }
           const client = yield* SqlClient.SqlClient;
           const http = yield* HttpClient.HttpClient;
