@@ -58,7 +58,10 @@ import { HOSTED_OPENAI_DEFAULTS } from "./openai.js";
  *
  * Every read is also bounded per turn (`ResearchBudget`), counted once a
  * well-formed call is admitted, so a malformed call costs nothing and a turn
- * cannot spend the service's key or bandwidth past the bound.
+ * cannot spend the service's key or bandwidth past the bound. A search is
+ * a paid inference on Luke's key, so it also spends one of the account's
+ * daily hosted uses before it is sent, and an account whose allowance is
+ * spent is told nothing was searched.
  */
 
 export const PUBLIC_RESEARCH_BOUNDS = {
@@ -112,6 +115,9 @@ export const SEARCH_WEB_REFUSAL = {
   OVER_BUDGET:
     "Not searched: this turn has used all 4 of its searches. Nothing was found; keep the " +
     "question open or answer from what earlier searches found.",
+  ALLOWANCE_SPENT:
+    "Not searched: the account's daily hosted allowance is spent, so nothing was sent and " +
+    "nothing was found. Keep the question open.",
   RATE_LIMITED: "Not searched: the search service is rate limiting. Nothing was found.",
   FAILED:
     "Not searched: the search failed, timed out, or answered in a shape the service does not " +
@@ -197,7 +203,14 @@ export interface ResearchCall {
   readonly turnId: string;
   readonly budget: ResearchBudget;
   readonly openAi: ResearchOpenAi | undefined;
+  /** Spends one of the account's daily hosted uses; answers whether the allowance admitted it. */
+  readonly spend: Effect.Effect<boolean, MeterUnavailable>;
 }
+
+/** Why the account's daily allowance could not be read or spent. */
+export class MeterUnavailable extends Data.TaggedError("MeterUnavailable")<{
+  readonly cause: unknown;
+}> {}
 
 /** Why a host's addresses could not be read. */
 export class HostUnresolved extends Data.TaggedError("HostUnresolved")<{
@@ -471,7 +484,14 @@ export function runSearchWeb(
     if (!call.budget.take(PUBLIC_RESEARCH_TOOL.SEARCH_WEB, call.turnId)) {
       return refused(SEARCH_WEB_REFUSAL.OVER_BUDGET);
     }
-    return searchPublicWeb(call.openAi, query);
+    const { openAi } = call;
+    // Note that the allowance is spent before the search is sent, as the brain's own inferences are.
+    return call.spend.pipe(
+      Effect.flatMap((allowed) =>
+        allowed ? searchPublicWeb(openAi, query) : refused(SEARCH_WEB_REFUSAL.ALLOWANCE_SPENT),
+      ),
+      Effect.catchTag("MeterUnavailable", () => refused(SEARCH_WEB_REFUSAL.FAILED)),
+    );
   });
 }
 

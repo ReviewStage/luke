@@ -137,6 +137,11 @@ function searchService(answered: boolean) {
 
 const TEST_OPENAI = () => ({ apiKey: Redacted.make("sk-test-planning"), modelId: "gpt-test" });
 
+/** The daily meter as a fixed answer: every spend admitted, or every spend refused. */
+function meter(allowed: boolean): BrainHostSeams["spend"] {
+  return async () => ({ allowed, quota: { used: 1, limit: 100, resetsAt: NOW + 1 } });
+}
+
 function unreached(name: string): () => never {
   return () => {
     throw new Error(`${name} reached in a test that offers it nothing`);
@@ -147,6 +152,7 @@ function unreached(name: string): () => never {
 const planningHost = (
   githubAccess: GitHubAccessShape = GITHUB_ACCESS_WITHOUT_CONNECTIONS,
   openAi: BrainHostSeams["openAi"] = () => undefined,
+  spend: BrainHostSeams["spend"] = unreached("spend"),
 ) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
@@ -164,7 +170,7 @@ const planningHost = (
       embedder: () => undefined,
       deploymentSecret: () => undefined,
       scriptedModel: () => true,
-      spend: unreached("spend"),
+      spend,
       vaultRows: () => Effect.succeed([]),
       vaultSecret: unreached("vaultSecret"),
       providerKey: unreached("providerKey"),
@@ -620,7 +626,11 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const host = yield* planningHost(GITHUB_ACCESS_WITHOUT_CONNECTIONS, TEST_OPENAI);
+        const host = yield* planningHost(
+          GITHUB_ACCESS_WITHOUT_CONNECTIONS,
+          TEST_OPENAI,
+          meter(true),
+        );
         const asking = yield* createPlan(userId, RELAY_PLAN);
         const other = yield* createPlan(userId, { ...RELAY_PLAN, name: "Billing export" });
         const askingConversation = Option.getOrThrow(
@@ -663,7 +673,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   it.effect("a failed search reaches the model as nothing found, not as a fact", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const host = yield* planningHost(GITHUB_ACCESS_WITHOUT_CONNECTIONS, TEST_OPENAI);
+      const host = yield* planningHost(GITHUB_ACCESS_WITHOUT_CONNECTIONS, TEST_OPENAI, meter(true));
       const started = yield* createPlan(userId, RELAY_PLAN);
       const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
       const session = yield* startSession(host, userId, conversationId);
@@ -678,5 +688,33 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
       assert.equal(reply, SCRIPTED_NO_SOURCE_REPLY);
     }),
+  );
+
+  it.effect(
+    "a search with the account's allowance spent sends nothing and reaches the model as nothing found",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const host = yield* planningHost(
+          GITHUB_ACCESS_WITHOUT_CONNECTIONS,
+          TEST_OPENAI,
+          meter(false),
+        );
+        const started = yield* createPlan(userId, RELAY_PLAN);
+        const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+        const session = yield* startSession(host, userId, conversationId);
+        const search = searchService(true);
+
+        const reply = yield* planningTurn(
+          host,
+          session,
+          "turn_0",
+          `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
+          search.layer,
+        );
+
+        assert.equal(reply, SCRIPTED_NO_SOURCE_REPLY);
+        assert.equal(search.requests.length, 0);
+      }),
   );
 });

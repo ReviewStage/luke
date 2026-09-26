@@ -667,7 +667,9 @@ hop it follows by hand, is private, loopback, link-local, CGNAT, unique-local,
 or reserved; the check is a lookup ahead of the request, so a DNS answer that
 changes between the two is the case it does not cover. A turn gets at most
 4 searches and 6 page reads, 5 sources a search, and 20,000 characters of a
-page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`).
+page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
+inference on Luke's key, so each one spends one of the account's daily hosted
+uses before it is sent, and a spent allowance is answered as not searched.
 `tests/public-research.test.ts` holds both against scripted HTTP and DNS.
 `tests/hosted-planning.test.ts` runs the scripted model through the host and
 the relay, and the `brain-host` eval runs a plan conversation through eve.

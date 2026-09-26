@@ -33,7 +33,7 @@ import { cloudSessionPluginFor } from "../cloud-adapters.js";
 import { GitHubAccess } from "../github-source.js";
 import type { HostedRefusal } from "../http-effect.js";
 import { readPlanOfConversation } from "../plan-store.js";
-import { ResearchBudget } from "../public-research.js";
+import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import { askRecord } from "../store/asks.js";
 import { toolSetHashOf } from "../store/content-addressed.js";
 import {
@@ -531,6 +531,10 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
                       turnId: binding.turn.turnId,
                       budget: research,
                       openAi: seams.openAi(),
+                      spend: Effect.tryPromise({
+                        try: () => seams.spend(target.userId),
+                        catch: (cause) => new MeterUnavailable({ cause }),
+                      }).pipe(Effect.map((spent) => spent.allowed)),
                     },
                   },
               input,

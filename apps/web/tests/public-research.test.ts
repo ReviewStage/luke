@@ -13,6 +13,7 @@ import { Effect, Redacted, Schema } from "effect";
 import {
   HostResolver,
   HostUnresolved,
+  MeterUnavailable,
   PUBLIC_RESEARCH_BOUNDS,
   READ_WEB_PAGE_REFUSAL,
   READ_WEB_PAGE_STATUS,
@@ -46,6 +47,7 @@ function researchCall(overrides: Partial<ResearchCall> = {}): ResearchCall {
     turnId: "turn-1",
     budget: new ResearchBudget(),
     openAi: { apiKey: Redacted.make(OPENAI_KEY), modelId: MODEL_ID },
+    spend: Effect.succeed(true),
     ...overrides,
   };
 }
@@ -342,6 +344,33 @@ it.effect("a deployment without the key searches nothing", () =>
     );
     assert.equal(http.requests.length, 0);
   }),
+);
+
+it.effect(
+  "a search is refused, and nothing sent, once the account's allowance is spent or unreadable",
+  () =>
+    Effect.gen(function* () {
+      const spent = searchWith(unreached, researchCall({ spend: Effect.succeed(false) }));
+      const unreadable = searchWith(
+        unreached,
+        researchCall({
+          spend: Effect.fail(new MeterUnavailable({ cause: "fixture: store down" })),
+        }),
+      );
+
+      const refused = yield* spent.search({ query: "Stripe idempotency key expiry" });
+      const failed = yield* unreadable.search({ query: "Stripe idempotency key expiry" });
+
+      assert.equal(
+        refused.status === SEARCH_WEB_STATUS.NOT_SEARCHED && refused.reason,
+        SEARCH_WEB_REFUSAL.ALLOWANCE_SPENT,
+      );
+      assert.equal(
+        failed.status === SEARCH_WEB_STATUS.NOT_SEARCHED && failed.reason,
+        SEARCH_WEB_REFUSAL.FAILED,
+      );
+      assert.equal(spent.http.requests.length + unreadable.http.requests.length, 0);
+    }),
 );
 
 it.effect("a turn's searches stop at the bound, and the next turn has its own", () =>
