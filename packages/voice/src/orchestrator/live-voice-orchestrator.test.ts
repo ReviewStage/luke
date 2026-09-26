@@ -7,7 +7,7 @@ import {
 } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
-import { Context, Effect, Fiber } from "effect";
+import { Context, Deferred, Effect, Fiber } from "effect";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -41,6 +41,8 @@ class FakeCall implements LiveVoiceCall {
   mutes = 0;
   closes = 0;
   opensSucceed = true;
+  /** Where closing waits before it is done, as a real peer's close does. */
+  closing: Effect.Effect<void> = Effect.void;
   #release: (() => void) | undefined;
 
   constructor(readonly events: LiveVoiceCallEvents) {}
@@ -89,7 +91,7 @@ class FakeCall implements LiveVoiceCall {
   close(): Effect.Effect<void> {
     this.closes += 1;
     this.settle(LIVE_STATUS.IDLE);
-    return Effect.void;
+    return this.closing;
   }
 
   /** A status and the speakers it implies, which is every edge but a full-duplex one. */
@@ -902,6 +904,29 @@ it.effect(
       assert.equal(f.latest(), planCall);
       assert.equal(planCall.status, LIVE_STATUS.LISTENING);
     }),
+);
+
+it.effect("a talk key let go of while the desk call is still hanging up opens no plan call", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const desk = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const deskCall = f.latest();
+    assert.ok(deskCall);
+    deskCall.started();
+    yield* Fiber.join(desk);
+    yield* f.endTalk();
+
+    const closed = yield* Deferred.make<void>();
+    deskCall.closing = Deferred.await(closed);
+    const held = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
+    yield* settleFibers();
+    yield* f.endTalk();
+    yield* Deferred.succeed(closed, undefined);
+    yield* settleFibers();
+    assert.equal(deskCall.status, LIVE_STATUS.IDLE);
+    assert.equal(f.latest(), deskCall);
+    yield* Fiber.join(held);
+  }),
 );
 
 it.effect(

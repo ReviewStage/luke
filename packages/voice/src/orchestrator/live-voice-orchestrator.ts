@@ -170,6 +170,13 @@ export class LiveVoiceOrchestrator {
    * unmuting one nobody wants heard.
    */
   #pressHeld = false;
+  /**
+   * Whether the talk key itself is down, apart from any press. It is what a
+   * press that first has to hang another call up reads once that call is
+   * gone, since the key may have come up during the wait, before the press
+   * had marked itself held.
+   */
+  #keyDown = false;
   #reported: LiveVoiceView | undefined;
   /** The call whose exchange has been counted, so a session pausing between Luke's sentences is not a second exchange. */
   #countedCall: LiveVoiceCall | undefined;
@@ -211,8 +218,11 @@ export class LiveVoiceOrchestrator {
         if (unavailable) this.#strip.showNotice(unavailable);
         return;
       }
+      this.#keyDown = true;
       if (planId !== undefined && this.#call !== undefined && this.#callPlan !== planId) {
         yield* this.#hangUp();
+        // Note that a key let go of while the old call closed opens nothing.
+        if (!this.#keyDown) return;
       }
       yield* this.#talk(planId);
     });
@@ -284,6 +294,7 @@ export class LiveVoiceOrchestrator {
    */
   endTalk(): Effect.Effect<void> {
     return Effect.suspend(() => {
+      this.#keyDown = false;
       if (!this.#pressHeld) return Effect.void;
       this.#pressHeld = false;
       if (this.#opening) return Effect.void;
