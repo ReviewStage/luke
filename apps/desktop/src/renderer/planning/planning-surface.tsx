@@ -1,12 +1,13 @@
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { IDLE_PLANNING_VIEW, PLANNING_READ } from "@sidecar/hosted/planning-view";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { useAct } from "../act";
 import { useAppState } from "../use-app-state";
 import { useVoiceView } from "../use-voice-view";
 import { WAVEFORM_VOICE } from "../waveform";
+import { fixturePlanningView } from "./planning-fixture";
 import {
   COPY_SHOWN,
   type CopyOutcome,
@@ -39,7 +40,10 @@ export function PlanningSurface(): React.JSX.Element {
   const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
 
   const signedIn = state?.account.status === ACCOUNT_STATUS.SIGNED_IN;
-  const planning = state?.planning ?? IDLE_PLANNING_VIEW;
+  // A fixture run under the planning profile draws its synthetic plans in
+  // place of the account's, signed out as every fixture run is.
+  const fixture = state === undefined ? undefined : fixturePlanningView(state.run);
+  const planning = fixture ?? state?.planning ?? IDLE_PLANNING_VIEW;
   const region = documentRegion(planning);
 
   // The window standing is what asks the host to read the plans and follow
@@ -47,6 +51,15 @@ export function PlanningSurface(): React.JSX.Element {
   useEffect(() => {
     if (signedIn) tell(ACT_KIND.PLANNING_REFRESH);
   }, [signedIn, tell]);
+
+  // The report that the window has painted, once, which is what an evidence
+  // run of the planning profile waits on to capture it.
+  const reported = useRef(false);
+  useEffect(() => {
+    if (reported.current || state === undefined) return;
+    reported.current = true;
+    window.sidecar.notifyReady();
+  }, [state]);
 
   // The window is an ordinary opaque one, which its stylesheet keys on.
   useEffect(() => {
@@ -100,7 +113,7 @@ export function PlanningSurface(): React.JSX.Element {
       ? WAVEFORM_VOICE.DEVELOPER
       : undefined;
 
-  if (!signedIn) {
+  if (!signedIn && fixture === undefined) {
     return (
       <main className="planning planning-signed-out">
         <p>Sign in from Luke's panel to plan a feature.</p>

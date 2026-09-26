@@ -12,7 +12,12 @@ import {
   EMPTY_PLAN_LINE,
 } from "./planning-model";
 import { PlanDocumentView, PlanList } from "./planning-parts";
-import { REPOSITORY_LIST, SetupSheetView, type SetupSheetViewProps } from "./setup-sheet";
+import {
+  REPOSITORY_LIST,
+  readRepositoryList,
+  SetupSheetView,
+  type SetupSheetViewProps,
+} from "./setup-sheet";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -213,4 +218,14 @@ test("a refused start keeps the sheet open with the reason", () => {
 
   assert.match(markup, /role="alert">That repository has no commits/u);
   assert.match(markup, />Start plan<\/button>/u);
+});
+
+test("a repository read the system refused offers Try again rather than reading forever", async () => {
+  const list = await readRepositoryList(() =>
+    Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
+  );
+  const markup = sheet({ list });
+
+  assert.doesNotMatch(markup, /Reading your repositories/u);
+  assert.match(markup, />Try again<\/button>/u);
 });

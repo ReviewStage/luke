@@ -189,11 +189,17 @@ export const BRIDGE = {
     args: noArgs,
     result: result<string>(isWireString),
   }),
+  /**
+   * The talk key going down, carrying the planning window's open plan while
+   * that window holds the keyboard and nothing otherwise.
+   */
   onVoiceHotkeyPress: entry({
     kind: "subscribe",
     channel: "app:voice-hotkey-press",
     args: noArgs,
-    result: result<void>((v) => v === undefined),
+    result: result<{ planId: string } | undefined>(
+      (value) => value === undefined || (isRecord(value) && isWireString(value.planId)),
+    ),
   }),
   onVoiceHotkeyRelease: entry({
     kind: "subscribe",

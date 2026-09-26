@@ -12,6 +12,12 @@ interface DesktopLaunch {
   readonly fixtureName: string | undefined;
   readonly startPeeked: boolean;
   readonly startInSlot: boolean;
+  /**
+   * A fixture run under the planning profile: the planning window opens at
+   * launch over a synthetic plan, and it, not the panel, is what an evidence
+   * run captures.
+   */
+  readonly startInPlanning: boolean;
   readonly captureMode: boolean;
   readonly fixtureMode: boolean;
 }

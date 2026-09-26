@@ -15,7 +15,11 @@ import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-wind
  * is the service's.
  */
 
-/** The size a first open stands at, and the least it may be resized to. */
+/**
+ * The size a first open stands at, and the least it may be resized to, as
+ * the content under the title bar, which is also what an evidence run
+ * captures and `scripts/evidence.sh` checks.
+ */
 const PLANNING_WINDOW_SIZE = {
   WIDTH: 1_080,
   HEIGHT: 760,
@@ -60,6 +64,7 @@ export class PlanningWindow {
       height: PLANNING_WINDOW_SIZE.HEIGHT,
       minWidth: PLANNING_WINDOW_SIZE.MIN_WIDTH,
       minHeight: PLANNING_WINDOW_SIZE.MIN_HEIGHT,
+      useContentSize: true,
       webPreferences: hardenedWebPreferences({
         preloadPath: this.#options.preloadPath,
         runMode: this.#options.runMode,

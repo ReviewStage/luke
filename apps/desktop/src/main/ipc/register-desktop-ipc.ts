@@ -212,6 +212,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
     notifyReady: async (context) => {
       windows.notePanelReady(context.sender);
       if (!launch.captureOutput) return;
+      // Note that the panel paints in a planning run too, so the capture waits
+      // for the window the profile stages rather than the first to report.
+      if (windows.planningWindow.owns(context.sender) !== launch.startInPlanning) return;
       const window = BrowserWindow.fromWebContents(context.sender);
       if (!window || window.isDestroyed()) return;
       await new Promise((resolve) => setTimeout(resolve, 350));
