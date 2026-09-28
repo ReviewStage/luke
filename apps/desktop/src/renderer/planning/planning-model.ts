@@ -10,17 +10,15 @@ import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import type { VoiceView } from "#shared/messages/voice-view";
 import { planMarkdown } from "#shared/plan-markdown";
-import { captionSegments } from "../caption-layout";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
-import { voiceErrorToShow, voiceNoticeToShow } from "../use-voice-view";
 
 /**
- * planning-model.ts -- what the planning window draws, decided from the document and the voice view alone.
+ * planning-model.ts -- what the panel's Plans tab draws, decided from the document and the voice view alone.
  *
- * Every decision the window makes is here and pure, so the components only
- * lay it out: which state the document region is in, how a repository and
- * its commit read in the header, what a GitHub refusal tells the developer
- * to do, what Copy shows, and which one line the voice bar shows.
+ * Every decision the tab makes is here and pure, so the components only lay
+ * it out: which page shows, which state the document region is in, how a
+ * repository and its commit read in the header, what a GitHub refusal tells
+ * the developer to do, what Copy shows, and the word beside the microphone.
  */
 
 /** The one line an empty document shows in its place. */
@@ -29,9 +27,32 @@ export const EMPTY_PLAN_LINE = "Press the microphone and describe the feature.";
 /** How many characters of a commit the header shows, the length `git` abbreviates to. */
 const SHORT_COMMIT_CHARS = 7;
 
+/** Which of the Plans tab's pages shows. */
+export const PLANS_PAGE = {
+  /** Every plan the account owns, and New plan. */
+  LIST: "list",
+  /** The new plan's name, repository, and Connect GitHub. */
+  NEW: "new",
+  /** The open plan's saved document and its microphone. */
+  DOCUMENT: "document",
+} as const;
+
+export type PlansPage = (typeof PLANS_PAGE)[keyof typeof PLANS_PAGE];
+
+/**
+ * The page the tab shows. An open plan is the document page, in every panel
+ * alike, because the plan open is the host's and not one panel's: it stands
+ * until the developer leaves it, whatever tab or shape the panel is in.
+ * With none open, the new-plan form shows while this panel is composing one.
+ */
+export function plansPage(view: PlanningView, composing: boolean): PlansPage {
+  if (view.activePlanId !== undefined) return PLANS_PAGE.DOCUMENT;
+  return composing ? PLANS_PAGE.NEW : PLANS_PAGE.LIST;
+}
+
 /** Which state the document region draws. */
 export const DOCUMENT_REGION = {
-  /** No plan is open: the window asks for one. */
+  /** No plan is open: the tab shows the list instead. */
   NONE: "none",
   READING: "reading",
   /** The saved document, read. */
@@ -50,7 +71,7 @@ export type DocumentRegion =
   | { readonly kind: typeof DOCUMENT_REGION.MISSING };
 
 /**
- * The document region's state. The window never draws a document it did not
+ * The document region's state. The tab never draws a document it did not
  * read: a plan is drawn only when the held document is the active plan's.
  */
 export function documentRegion(view: PlanningView): DocumentRegion {
@@ -138,7 +159,7 @@ export function newestReadOnly<A>(): (read: Promise<A>, apply: (answer: A) => vo
 }
 
 /**
- * Runs `returned` each time the window takes focus again, which is the
+ * Runs `returned` each time the panel takes focus again, which is the
  * developer coming back from the Connect GitHub page in the browser, perhaps
  * before the link finished. Answers the cancel, for a wait that ended.
  */
@@ -147,12 +168,12 @@ export function onEachReturn(window: EventTarget, returned: () => void): () => v
   return () => window.removeEventListener("focus", returned);
 }
 
-/** Whether the setup sheet should offer to connect GitHub rather than a list. */
+/** Whether the new-plan form should offer to connect GitHub rather than a list. */
 export function offersGitHubConnect(failure: GitHubCallFailure): boolean {
   return failure === GITHUB_FAILURE.NOT_CONNECTED || failure === GITHUB_FAILURE.ACCESS_DENIED;
 }
 
-/** What a GitHub refusal tells the developer, in the setup sheet's words. */
+/** What a GitHub refusal tells the developer, in the new-plan form's words. */
 export function githubFailureNote(failure: GitHubCallFailure): string {
   switch (failure) {
     case GITHUB_FAILURE.NOT_CONNECTED:
@@ -184,7 +205,7 @@ export function repositoriesMatching(
   );
 }
 
-/** The status word the voice bar shows for a call, or nothing where none stands. */
+/** The status word beside the microphone for a call, or nothing where none stands. */
 const STATUS_WORD = {
   [LIVE_STATUS.UNAVAILABLE]: undefined,
   [LIVE_STATUS.IDLE]: undefined,
@@ -196,44 +217,18 @@ const STATUS_WORD = {
   [LIVE_STATUS.FAILED]: undefined,
 } as const satisfies Record<LiveStatus, string | undefined>;
 
-/** Which tone the voice bar's line is drawn in. */
-export const VOICE_LINE_TONE = {
-  STATUS: "status",
-  ERROR: "error",
-  NOTICE: "notice",
-} as const;
-
-type VoiceLineTone = (typeof VOICE_LINE_TONE)[keyof typeof VOICE_LINE_TONE];
-
-export interface VoiceBarLine {
-  /** The status word, or the voice error or notice standing in its place. */
-  readonly status: { readonly tone: VoiceLineTone; readonly text: string } | undefined;
-  /** The words being said now: Luke's, or the developer's own under the captions preference. */
-  readonly caption: string | undefined;
-}
-
 /**
- * The voice bar's line, on the panel's own rules: a voice error or notice
- * takes the status word's place and yields to the speakers exactly as the
- * panel's strip does, and the caption is the newest segment of whoever's
- * words the voice window is reporting, Luke's first. Nothing is kept here;
- * what matters lands in the document.
+ * The word beside the microphone: the call's status while one stands about
+ * the open plan, and nothing otherwise. A voice error or notice is not
+ * repeated here, since the panel's own strip already carries it under the
+ * shape, exactly as it does for any call.
  */
-export function voiceBarLine(view: VoiceView): VoiceBarLine {
-  const speakers = { listening: view.listening, lukeSpeaking: view.lukeSpeaking };
-  const error = voiceErrorToShow({ fixtureSpeaking: false, speakers, error: view.voiceError });
-  const notice = voiceNoticeToShow({ fixtureSpeaking: false, speakers, notice: view.voiceNotice });
-  const word = STATUS_WORD[view.voiceStatus];
-  const status =
-    error !== undefined
-      ? { tone: VOICE_LINE_TONE.ERROR, text: error }
-      : notice !== undefined
-        ? { tone: VOICE_LINE_TONE.NOTICE, text: notice }
-        : word !== undefined
-          ? { tone: VOICE_LINE_TONE.STATUS, text: word }
-          : undefined;
-  const caption = captionSegments(view.lukeCaptions ?? view.developerCaptions).live;
-  return { status, caption };
+export function microphoneStatusWord(
+  view: Pick<VoiceView, "voiceStatus" | "callPlanId">,
+  activePlanId: string | undefined,
+): string | undefined {
+  if (activePlanId === undefined || view.callPlanId !== activePlanId) return undefined;
+  return STATUS_WORD[view.voiceStatus];
 }
 
 /** What the microphone button does when pressed. */

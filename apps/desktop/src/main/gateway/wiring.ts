@@ -61,7 +61,7 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
 
   // What the host tells its clients: the Conversation as its reads of the
   // service compose it, the children and agents beside it, the one
-  // transcript held open, and the planning window's plans, each written to the document every window is told
+  // transcript held open, and the panel's plans, each written to the document every window is told
   // from. The subscriptions are the scope's, so the close that ends one ends
   // them all.
   const heard = [

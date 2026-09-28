@@ -4,6 +4,7 @@ import {
   PLAN_CALL_FAILURE,
   type PlanningRepositoriesAnswer,
 } from "@sidecar/hosted/planning-view";
+import { BackIcon } from "@sidecar/panel";
 import { useCallback, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -16,13 +17,14 @@ import {
 } from "./planning-model";
 
 /**
- * setup-sheet.tsx -- the new-plan sheet: Connect GitHub while the account has no connection, the plan's name, and the repository it plans against.
+ * new-plan-form.tsx -- the Plans tab's new-plan page: Connect GitHub while the account has no connection, the plan's name, and the repository it plans against.
  *
  * Ordinary setup fields and nothing spoken: nothing typed here reaches the
  * model as conversation. Start plan asks the host to start the plan, and the
  * service resolves the repository's default branch to the one commit the
- * plan reads for its whole life; a refusal keeps the sheet open with the
- * reason, and the button can be pressed again.
+ * plan reads for its whole life; a refusal keeps the page open with the
+ * reason, and the button can be pressed again. Escape and Back return to the
+ * list, the first through the panel's own Escape ladder.
  */
 
 /** Where the repository list stands. */
@@ -44,7 +46,7 @@ export type RepositoryList =
 /**
  * Reads the repository list through the ask the caller hands in and answers
  * where the list stands. A refused ask is the failed list with Try again,
- * never a rejection, so the sheet never stays on its reading line.
+ * never a rejection, so the page never stays on its reading line.
  */
 export async function readRepositoryList(
   ask: () => Promise<PlanningRepositoriesAnswer>,
@@ -64,14 +66,14 @@ interface RepositoryChoice {
   readonly name: string;
 }
 
-/** Everything the sheet draws, handed in whole so the layout decides nothing. */
-export interface SetupSheetViewProps {
+/** Everything the page draws, handed in whole so the layout decides nothing. */
+export interface NewPlanFormViewProps {
   name: string;
   filter: string;
   chosen: RepositoryChoice | undefined;
   list: RepositoryList;
   starting: boolean;
-  /** Why the last Start plan or Connect GitHub press did not land, in the sheet's words. */
+  /** Why the last Start plan or Connect GitHub press did not land, in the page's words. */
   note: string | undefined;
   onName: (name: string) => void;
   onFilter: (filter: string) => void;
@@ -86,16 +88,16 @@ function sameRepository(a: RepositoryChoice | undefined, b: RepositoryChoice): b
   return a !== undefined && a.owner === b.owner && a.name === b.name;
 }
 
-/** The repository half of the sheet: Connect GitHub, the reason a read failed, or the filterable list. */
-function RepositoryField(props: SetupSheetViewProps): React.JSX.Element {
+/** The repository half of the page: Connect GitHub, the reason a read failed, or the filterable list. */
+function RepositoryField(props: NewPlanFormViewProps): React.JSX.Element {
   const { list } = props;
   if (list.status === REPOSITORY_LIST.READING) {
-    return <p className="plan-sheet-note">Reading your repositories…</p>;
+    return <p className="plan-form-note">Reading your repositories…</p>;
   }
   if (list.status === REPOSITORY_LIST.FAILED) {
     return (
-      <div className="plan-sheet-github">
-        <p className="plan-sheet-note">{githubFailureNote(list.failure)}</p>
+      <div className="plan-form-github">
+        <p className="plan-form-note">{githubFailureNote(list.failure)}</p>
         {offersGitHubConnect(list.failure) ? (
           <button type="button" className="plan-button" onClick={props.onConnect}>
             Connect GitHub
@@ -110,22 +112,22 @@ function RepositoryField(props: SetupSheetViewProps): React.JSX.Element {
   }
   const shown = repositoriesMatching(list.repositories, props.filter);
   return (
-    <fieldset className="plan-sheet-repositories">
+    <fieldset className="plan-form-repositories">
       <legend>Repository</legend>
       <input
         type="search"
-        className="plan-sheet-filter"
+        className="plan-form-filter"
         placeholder="Filter repositories"
         aria-label="Filter repositories"
         value={props.filter}
         onChange={(event) => props.onFilter(event.currentTarget.value)}
       />
-      <ul className="plan-sheet-repository-list">
+      <ul className="plan-form-repository-list">
         {shown.map((repository, index) => (
           // A repository is its owner and name together; the radio's own checked state carries the choice, so a position is key enough.
           // oxlint-disable-next-line react/no-array-index-key -- the list is redrawn whole from the filter.
           <li key={index}>
-            <label className="plan-sheet-repository">
+            <label className="plan-form-repository">
               <input
                 type="radio"
                 name="repository"
@@ -135,39 +137,46 @@ function RepositoryField(props: SetupSheetViewProps): React.JSX.Element {
               <span>
                 {repository.owner}/{repository.name}
               </span>
-              {repository.private ? <small className="plan-sheet-private">Private</small> : null}
+              {repository.private ? <small className="plan-form-private">Private</small> : null}
             </label>
           </li>
         ))}
       </ul>
-      {shown.length === 0 ? <p className="plan-sheet-note">No repository matches.</p> : null}
+      {shown.length === 0 ? <p className="plan-form-note">No repository matches.</p> : null}
       {list.truncated ? (
-        <p className="plan-sheet-note">Only your most recently pushed repositories are listed.</p>
+        <p className="plan-form-note">Only your most recently pushed repositories are listed.</p>
       ) : null}
     </fieldset>
   );
 }
 
-export function SetupSheetView(props: SetupSheetViewProps): React.JSX.Element {
+export function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
   const titleId = useId();
   const canStart = props.name.trim().length > 0 && props.chosen !== undefined && !props.starting;
   return (
-    <div className="plan-sheet-backdrop">
+    <section className="plan-new" aria-labelledby={titleId}>
+      <header className="plan-header">
+        <button
+          type="button"
+          className="icon-button plan-back"
+          aria-label="Back to plans"
+          title="Back"
+          onClick={props.onCancel}
+        >
+          <BackIcon />
+        </button>
+        <h1 id={titleId} className="plan-title">
+          New plan
+        </h1>
+      </header>
       <form
-        className="plan-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
+        className="plan-form"
         onSubmit={(event) => {
           event.preventDefault();
           if (canStart) props.onStart();
         }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") props.onCancel();
-        }}
       >
-        <h2 id={titleId}>New plan</h2>
-        <label className="plan-sheet-name">
+        <label className="plan-form-name">
           <span>Name</span>
           <input
             type="text"
@@ -179,11 +188,11 @@ export function SetupSheetView(props: SetupSheetViewProps): React.JSX.Element {
         </label>
         <RepositoryField {...props} />
         {props.note !== undefined ? (
-          <p className="plan-sheet-note" role="alert">
+          <p className="plan-form-note" role="alert">
             {props.note}
           </p>
         ) : null}
-        <div className="plan-sheet-actions">
+        <div className="plan-form-actions">
           <button type="button" className="plan-button" onClick={props.onCancel}>
             Cancel
           </button>
@@ -192,20 +201,20 @@ export function SetupSheetView(props: SetupSheetViewProps): React.JSX.Element {
           </button>
         </div>
       </form>
-    </div>
+    </section>
   );
 }
 
-/** What the sheet says once the Connect GitHub page is open in the browser. */
+/** What the page says once the Connect GitHub page is open in the browser. */
 const GITHUB_CONNECT_IN_BROWSER = "Finish connecting GitHub in your browser, then come back here.";
 
 /**
- * The sheet with its own state: the fields, the repository list read when it
+ * The page with its own state: the fields, the repository list read when it
  * opens and again on Try again, and the Start plan and Connect GitHub presses.
  * `onStarted` closes it once the host says the plan started, which is also
  * when the new plan becomes the active one.
  */
-export function SetupSheet({
+export function NewPlanForm({
   onStarted,
   onCancel,
 }: {
@@ -247,8 +256,8 @@ export function SetupSheet({
       .finally(() => setStarting(false));
   };
 
-  // The link happens in the browser, so the press only opens it: the sheet
-  // says where to finish, and reads the list again when the window is back.
+  // The link happens in the browser, so the press only opens it: the page
+  // says where to finish, and reads the list again when the panel is back.
   const [connecting, setConnecting] = useState(false);
   const connect = () => {
     setNote(undefined);
@@ -273,7 +282,7 @@ export function SetupSheet({
   }, [connecting, list]);
 
   return (
-    <SetupSheetView
+    <NewPlanFormView
       name={name}
       filter={filter}
       chosen={chosen}

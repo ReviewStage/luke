@@ -25,7 +25,7 @@ import { createPlan, deletePlan, listPlans, openPlan } from "./hosted/plan-store
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * plans-app.ts -- the planning window's named plans: list, start, open, and delete.
+ * plans-app.ts -- the Mac Plans tab's named plans: list, start, open, and delete.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan id another account

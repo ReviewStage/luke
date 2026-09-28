@@ -93,7 +93,6 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
       fixtureName,
       startPeeked: argv.includes("--peek"),
       startInSlot: argv.includes("--slot"),
-      startInPlanning: fixtureMode && profile === RUN_PROFILE.PLANNING,
       captureMode,
       fixtureMode,
     },

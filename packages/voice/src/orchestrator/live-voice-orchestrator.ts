@@ -52,7 +52,7 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   liveConversationLines: readonly LiveCaptionRow[];
   /** Whether the developer is being heard and has not been transcribed yet. */
   spokenAskPending: boolean;
-  /** The plan the standing call is about, where the planning window opened it; none for a desk call or no call. */
+  /** The plan the standing call is about, where the panel's open plan opened it; none for a desk call or no call. */
   callPlanId: string | undefined;
 }
 
@@ -155,7 +155,7 @@ export class LiveVoiceOrchestrator {
   #resumeListening = false;
   /** Whether the session standing was opened by a press rather than for Luke's own speech. */
   #openedByPress = false;
-  /** The plan the call standing or opening is about, where the planning window opened it; none for every other call. */
+  /** The plan the call standing or opening is about, where the panel's open plan opened it; none for every other call. */
   #callPlan: string | undefined;
   /** The open still negotiating: a second ask reads its answer rather than building a second call. */
   #opening: Deferred.Deferred<LiveVoiceCall | undefined> | undefined;
@@ -229,7 +229,7 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The planning window's microphone button, about the plan the window has
+   * The Plans tab's microphone button, about the plan the panel has
    * open. It toggles rather than holds, because a planning conversation runs
    * for minutes: against the call about that plan, a press while the
    * developer is heard mutes, and a press while muted unmutes. Against no

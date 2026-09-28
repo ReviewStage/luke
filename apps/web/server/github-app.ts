@@ -25,7 +25,7 @@ import {
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * github-app.ts -- the repositories the account's GitHub connection can read, for the planning window's picker.
+ * github-app.ts -- the repositories the account's GitHub connection can read, for the Mac's new-plan picker.
  *
  * The window cannot ask GitHub itself, because only the service holds the
  * connection's credential, so it asks here: the bearer names the account,

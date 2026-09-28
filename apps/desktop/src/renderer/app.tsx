@@ -10,6 +10,7 @@ import {
   CREDENTIAL_SOURCE,
 } from "@sidecar/credentials/vocabulary";
 import { FEEDBACK_KIND } from "@sidecar/feedback";
+import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
@@ -25,6 +26,7 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { DisplayDiagnostic } from "#shared/messages/session";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
@@ -49,6 +51,8 @@ import {
   type PanelPresentation,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { fixturePlanningView } from "./planning/planning-fixture";
+import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { focusSearchField } from "./session-search";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
@@ -152,6 +156,9 @@ export function App(): React.JSX.Element {
   const display = state?.window.display;
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+  // Whether the Plans tab is on its new-plan form; an open plan is the host's
+  // and outlasts the tab, but a half-filled form is this panel's alone.
+  const [plansComposing, setPlansComposing] = useState(false);
   const { conversationPage, transcriptOpen, changeConversationPage, openTranscript } =
     useConversationPage(tell);
   /** The thread's reader reaching the top of what this Mac holds: one page of older turns, asked of the host. */
@@ -280,6 +287,7 @@ export function App(): React.JSX.Element {
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
       changeConversationPage(CONVERSATION_PAGE.THREAD);
+      setPlansComposing(false);
       // `PanelTab` and the counted tab are the same union: the vocabulary
       // derives its set from the guide's, which is what `PANEL_TAB` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
@@ -547,6 +555,21 @@ export function App(): React.JSX.Element {
     (outputSilent(outputAudio) &&
       lukeCaptions !== undefined &&
       !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+  // The Plans tab, drawn from the same voice report the strip reads, so a
+  // planning call's words and levels are the shape's as any call's are.
+  const plans = usePlansTab({
+    acts: { act, tell },
+    planning: state?.planning ?? IDLE_PLANNING_VIEW,
+    run: state?.run ?? { fixtureMode: false, profile: RUN_PROFILE.IDLE },
+    signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
+    voiceAvailable: state?.settings?.status.voiceAvailable === true,
+    microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
+    shown: presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS,
+    composing: plansComposing,
+    onComposingChange: setPlansComposing,
+    voice: { view: voiceView, listening, requestMicrophoneAccess },
+  });
+
   const caption = useCaptionPresentation({
     lukeCaptions,
     developerCaptions,
@@ -624,6 +647,9 @@ export function App(): React.JSX.Element {
     // by pressing Connect, which a capture run has no way to do, so the
     // entry the press would have begun is asked for directly. It carries
     // the shape with it, as it does anywhere else.
+    // Evidence too: the planning profile's run opens on the Plans tab over
+    // its synthetic plan, which no press reaches in a capture.
+    if (fixturePlanningView(run) !== undefined) changeTab(PANEL_TAB.PLANS);
     const [firstProvider] = CREDENTIAL_PROVIDER_LIST;
     if (run.startInSlot && pane.mode === "expanded" && firstProvider) {
       // The tab and page an entry begins on, so pressing the capsule from
@@ -773,7 +799,11 @@ export function App(): React.JSX.Element {
       } else if (tab === PANEL_TAB.CONVERSATION && conversationPage !== CONVERSATION_PAGE.THREAD) {
         changeConversationPage(CONVERSATION_PAGE.THREAD);
       } else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.SESSIONS);
-      else void changeMode(false);
+      // An open plan unwinds to the list, which leaves it and ends its call,
+      // the form to the list too, and the list to the Sessions tab.
+      else if (tab === PANEL_TAB.PLANS) {
+        if (!plans.back()) changeTab(PANEL_TAB.SESSIONS);
+      } else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -804,6 +834,7 @@ export function App(): React.JSX.Element {
     connections.consentWaiting,
     connections.signInWaitNow,
     listening,
+    plans.back,
     speaking,
     stopSpeaking,
     tab,
@@ -1039,6 +1070,7 @@ export function App(): React.JSX.Element {
             onConversationSearchClose={closeConversationSearch}
             tab={tab}
             onTabChange={changeTab}
+            plans={plans}
             settings={{
               account: state.account,
               onSignOut: async () => {

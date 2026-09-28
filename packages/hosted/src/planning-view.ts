@@ -7,7 +7,7 @@ import {
 import { planSchema, planSummarySchema } from "./plan-wire.js";
 
 /**
- * planning-view.ts -- the named plans as one Mac holds them for its planning window: the list, the one active plan, and its saved document.
+ * planning-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
  *
  * The host reads the service for these and tells the desktop the whole view
  * whenever it moves; the desktop writes it into the document the planning

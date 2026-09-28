@@ -40,7 +40,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const voiceRuntime = {
     panels,
     voiceWindow,
-    planningWindow: windows.planningWindow,
     state,
     // The Conversation Clear is the service's soft delete of the account's
     // main conversation, which is the thread every panel draws; a Clear the
@@ -101,11 +100,14 @@ export function registerDesktopIpc(services: DesktopServices): void {
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...planningActRows({
-      openWindow: () => windows.planningWindow.open(),
       host: operator.host,
       activePlanId: () => state.snapshot().planning.activePlanId,
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
+      },
+      isGone: (sender) => sender.isDestroyed(),
+      whenGone: (sender, gone) => {
+        sender.once("destroyed", () => void run(gone));
       },
     }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
@@ -211,9 +213,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     notifyReady: async (context) => {
       windows.notePanelReady(context.sender);
       if (!launch.captureOutput) return;
-      // Note that the panel paints in a planning run too, so the capture waits
-      // for the window the profile stages rather than the first to report.
-      if (windows.planningWindow.owns(context.sender) !== launch.startInPlanning) return;
       const window = BrowserWindow.fromWebContents(context.sender);
       if (!window || window.isDestroyed()) return;
       await new Promise((resolve) => setTimeout(resolve, 350));
@@ -236,7 +235,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       sender,
       panel: panels.owns(sender),
       voice: voiceWindow.owns(sender),
-      planning: windows.planningWindow.owns(sender),
       // The introduction is a fullscreen mode of the panel rather than a
       // window of its own, so what a takeover-only row is owed is the
       // standing the document holds and the panel asking under it.

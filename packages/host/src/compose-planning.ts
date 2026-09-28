@@ -29,11 +29,11 @@ import type { HostKernel } from "./host-kernel.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-planning.ts -- the planning window's named plans, read from the service: the list, the one active plan, and its saved document, followed while the window stands.
+ * compose-planning.ts -- the panel's named plans, read from the service: the list, the one active plan, and its saved document, followed while the Plans tab shows.
  *
  * Nothing here writes a document: the planning model's `update_plan` is the
- * one writer, on the service. What this concern owes the window is to show
- * that write soon after it lands, so while the window stands it reads the
+ * one writer, on the service. What this concern owes the panel is to show
+ * that write soon after it lands, so while the Plans tab shows it reads the
  * plan list on a short cadence and reads the active plan again whenever the
  * list says its document was saved since the copy held. The list read is a
  * read and nothing else; opening a plan moves it to the head of the list, so
@@ -41,10 +41,10 @@ import type { RunMode } from "./run-mode.js";
  */
 
 /**
- * How often the list is read while the planning window stands. A save the
- * model makes mid-conversation is drawn within one of these; the window is
- * open only while someone is planning, so the cadence costs nothing the rest
- * of the time.
+ * How often the list is read while the panel's Plans tab shows. A save the
+ * model makes mid-conversation is drawn within one of these; the tab shows
+ * only while someone is looking at a plan, so the cadence costs nothing the
+ * rest of the time.
  */
 const PLANNING_POLL_INTERVAL_MS = 3_000;
 
@@ -82,20 +82,22 @@ export interface PlanningDependencies {
 export interface PlanningComposer extends Composer {
   /** The view as this Mac holds it now. */
   snapshot: () => PlanningView;
-  /** The one active plan, which a voice session binds to; nothing while the window has none open. */
+  /** The one active plan, which a voice session binds to; nothing while the panel has none open. */
   activePlanId: () => string | undefined;
-  /** Drops everything held, for a sign-out, and tells every client the window has nothing. */
+  /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
   reset: Effect.Effect<void>;
 }
 
 /**
- * The planning window's plans as one concern. The view is told to every
- * client whole whenever it moves, and exactly one plan is active at a time:
- * opening or starting one replaces whichever was, and a read still out for
- * the replaced plan is dropped when it lands. Only one plan is ever the
- * spoken conversation, so opening another plan, starting one, closing the
- * window, or a sign-out ends the call about the plan that was open before
- * anything else moves. Behind a closed account gate, or on a run that sends
+ * The panel's plans as one concern. The view is told to every client whole
+ * whenever it moves, and exactly one plan is active at a time: opening or
+ * starting one replaces whichever was, and a read still out for the replaced
+ * plan is dropped when it lands. Only one plan is ever the spoken
+ * conversation, so opening another plan, starting one, leaving the open plan,
+ * or a sign-out ends the call about the plan that was open before anything
+ * else moves. Following the service is apart from which plan is open: the
+ * Plans tab showing arms it and the tab hiding pauses it, while the open plan
+ * and its call stand through both. Behind a closed account gate, or on a run that sends
  * nothing, nothing is read and nothing is followed.
  */
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
@@ -135,7 +137,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   const readList = Effect.gen(function* () {
     const listed = yield* Effect.provide(client.list(), FetchHttpClient.layer);
-    // A failed read keeps the list it last read: the window says the read
+    // A failed read keeps the list it last read: the panel says the read
     // failed beside the plans it already drew rather than emptying them.
     write(
       listed.ok
@@ -148,14 +150,14 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    * Reads the active plan's document. A copy of the same plan already held
    * stays drawn while the read is out, and stays drawn through a read that
    * failed, so a save redraws in place and a moment offline blanks nothing;
-   * with no copy held, the failure is what the window draws.
+   * with no copy held, the failure is what the panel draws.
    */
   function readDocument(planId: string) {
     return Effect.gen(function* () {
       const held = heldPlanOf(planId);
       if (held === undefined) write({ document: { status: PLANNING_READ.READING } });
       const opened = yield* Effect.provide(client.open(planId), FetchHttpClient.layer);
-      // Another plan opened while this read was out: its answer is not this window's any more.
+      // Another plan opened while this read was out: its answer is not the panel's any more.
       if (view.activePlanId !== planId) return;
       if (opened.ok) {
         write({ document: { status: PLANNING_READ.READY, plan: opened.answer } });
@@ -177,7 +179,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   /**
    * One beat of the cadence: the list read, and the active document read
    * again only where the list says it was saved since the copy held. A plan
-   * a landed list no longer names was deleted, which the window draws as
+   * a landed list no longer names was deleted, which the panel draws as
    * missing rather than as the last copy it read.
    */
   const follow = serial(
@@ -195,8 +197,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     }),
   );
 
-  // The cadence stands while a window does: armed by the window's refresh,
-  // disarmed by its close and by a sign-out. `Effect.schedule` rather than a
+  // The cadence stands while the Plans tab shows: armed by the tab's refresh,
+  // disarmed by its pause and by a sign-out. `Effect.schedule` rather than a
   // repeat, since the refresh that arms it has just read everything itself.
   const cadence = yield* cadenceGate(
     Effect.asVoid(
@@ -227,7 +229,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         // Note that the plan becomes the active one before the old plan's
         // call is asked to end, because that end waits on the call closing:
         // a microphone press or an offer landing inside the wait must bind
-        // to the plan the window now shows, never the one it is leaving.
+        // to the plan the panel now shows, never the one it is leaving.
         if (view.activePlanId !== planId) {
           write({ activePlanId: planId, document: { status: PLANNING_READ.READING } });
         }
@@ -241,10 +243,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         );
         return { opened: true };
       }),
+    [GATEWAY_METHOD.PLANNING_PAUSE]: () => Effect.as(cadence.disarm, {}),
+    // Leaving the plan returns to the list, which the cadence goes on
+    // following while the tab shows.
     [GATEWAY_METHOD.PLANNING_CLOSE]: () =>
       Effect.gen(function* () {
         yield* endPlanCall(undefined);
-        yield* cadence.disarm;
         yield* serial(
           Effect.sync(() => {
             const { activePlanId: _closed, ...rest } = view;
@@ -285,7 +289,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           listed.ok ? listed.answer : { failure: listed.failure },
         );
       }),
-    // Opened for a signed-in account only; the window reads the repositories
+    // Opened for a signed-in account only; the panel reads the repositories
     // again once the developer is back, so nothing here waits on the link.
     [GATEWAY_METHOD.PLANNING_CONNECT_GITHUB]: () =>
       Effect.gen(function* () {

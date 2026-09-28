@@ -16,13 +16,14 @@ import {
   githubFailureNote,
   MICROPHONE_PRESS,
   microphoneButton,
+  microphoneStatusWord,
   newestReadOnly,
   offersGitHubConnect,
   onEachReturn,
+  PLANS_PAGE,
+  plansPage,
   repositoriesMatching,
   repositoryLine,
-  VOICE_LINE_TONE,
-  voiceBarLine,
 } from "./planning-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -107,33 +108,28 @@ test("the repository filter narrows by owner and name, case-blind", () => {
   assert.equal(repositoriesMatching(repositories, "").length, 3);
 });
 
-test("the voice bar shows the status word, a voice error in its place, and the newest words said", () => {
-  assert.deepEqual(voiceBarLine({ ...IDLE_VOICE_VIEW, voiceStatus: LIVE_STATUS.LISTENING }), {
-    status: { tone: VOICE_LINE_TONE.STATUS, text: "Listening" },
-    caption: undefined,
-  });
-  assert.deepEqual(voiceBarLine(IDLE_VOICE_VIEW).status, undefined);
-  assert.deepEqual(
-    voiceBarLine({
-      ...IDLE_VOICE_VIEW,
-      voiceStatus: LIVE_STATUS.FAILED,
-      voiceError: "The connection dropped.",
-    }).status,
-    { tone: VOICE_LINE_TONE.ERROR, text: "The connection dropped." },
+test("an open plan is the document page whatever this panel was doing, and the form shows only with none open", () => {
+  assert.equal(plansPage(view({}), false), PLANS_PAGE.LIST);
+  assert.equal(plansPage(view({}), true), PLANS_PAGE.NEW);
+  // A plan another panel opened, or one just started from this form, is the document page here too.
+  assert.equal(plansPage(view({ activePlanId: INVITES }), true), PLANS_PAGE.DOCUMENT);
+  assert.equal(plansPage(view({ activePlanId: INVITES }), false), PLANS_PAGE.DOCUMENT);
+});
+
+test("the microphone's word is the open plan's call status, and nothing for a desk call or another plan's", () => {
+  const listening = { ...IDLE_VOICE_VIEW, voiceStatus: LIVE_STATUS.LISTENING };
+  assert.equal(microphoneStatusWord({ ...listening, callPlanId: INVITES }, INVITES), "Listening");
+  assert.equal(microphoneStatusWord({ ...listening, callPlanId: undefined }, INVITES), undefined);
+  assert.equal(microphoneStatusWord({ ...listening, callPlanId: BILLING }, INVITES), undefined);
+  assert.equal(microphoneStatusWord({ ...listening, callPlanId: INVITES }, undefined), undefined);
+  // A failed call says nothing here: the panel's strip carries the error under the shape.
+  assert.equal(
+    microphoneStatusWord(
+      { ...IDLE_VOICE_VIEW, voiceStatus: LIVE_STATUS.FAILED, callPlanId: INVITES },
+      INVITES,
+    ),
+    undefined,
   );
-  // Luke being heard is the thing to read over words that already failed.
-  const speaking = voiceBarLine({
-    ...IDLE_VOICE_VIEW,
-    voiceStatus: LIVE_STATUS.SPEAKING,
-    lukeSpeaking: true,
-    voiceError: "The connection dropped.",
-    lukeCaptions: ["You already have a memberships table.", "I'd add a pending state."],
-    developerCaptions: ["Sounds good"],
-  });
-  assert.deepEqual(speaking, {
-    status: { tone: VOICE_LINE_TONE.STATUS, text: "Speaking" },
-    caption: "I'd add a pending state.",
-  });
 });
 
 test("the microphone asks for the permission first, then for a plan, and then talks about it or mutes", () => {

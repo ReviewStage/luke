@@ -2,7 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { PLAN_BOUNDS } from "./plan-wire.js";
 
 /**
- * github-wire.ts -- what the planning window reads of the account's GitHub connection: the repositories it can read, and why a GitHub read failed.
+ * github-wire.ts -- what the Plans tab reads of the account's GitHub connection: the repositories it can read, and why a GitHub read failed.
  *
  * The connection's token never travels here: the service holds it, reads
  * GitHub under it, and answers only repository names and the reason a read

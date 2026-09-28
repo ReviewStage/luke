@@ -1,8 +1,6 @@
 import type { PlanAssumption, PlanSummary } from "@sidecar/hosted/plan-wire";
-import { CheckIcon, CopyIcon, MicrophoneIcon, PlusIcon } from "@sidecar/panel";
+import { BackIcon, CheckIcon, CopyIcon, MicrophoneIcon, PlusIcon } from "@sidecar/panel";
 import { MarkdownMessage } from "../markdown-message";
-import { ThinkingDots } from "../thinking-dots";
-import { Waveform, type WaveformVoice } from "../waveform";
 import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
@@ -11,19 +9,20 @@ import {
   type DocumentRegion,
   EMPTY_PLAN_LINE,
   repositoryLine,
-  type VoiceBarLine,
 } from "./planning-model";
 
 /**
- * planning-parts.tsx -- the planning window's regions as pure layouts: the plan list, the document, and the voice bar.
+ * planning-parts.tsx -- the Plans tab's pages as pure layouts: the plan list, and the open plan's document over its microphone row.
  *
  * Each part draws what it is handed and decides nothing, so what a region
- * shows is `planning-model.ts`'s answer and a press is a callback the surface
+ * shows is `planning-model.ts`'s answer and a press is a callback the tab
  * hands down. The document is read-only throughout: nothing drawn here edits
- * a plan, confirms an assumption, or reaches the model as conversation.
+ * a plan, confirms an assumption, or reaches the model as conversation. The
+ * waveform and the captions are the panel's own, drawn on the shape for a
+ * planning call exactly as for any other.
  */
 
-/** The sidebar: every plan the account owns, most recently opened first, and New plan at its foot. */
+/** The list page: every plan the account owns, most recently opened first, under New plan. */
 export function PlanList({
   plans,
   activePlanId,
@@ -42,7 +41,10 @@ export function PlanList({
 }): React.JSX.Element {
   return (
     <nav className="plan-list" aria-label="Plans">
-      <h2 className="plan-list-heading">Plans</h2>
+      <button type="button" className="plan-button plan-list-new" onClick={onNewPlan}>
+        <PlusIcon />
+        New plan
+      </button>
       {failed ? (
         <p className="plan-list-note" role="alert">
           Your plans could not be read.{" "}
@@ -69,10 +71,6 @@ export function PlanList({
           </li>
         ))}
       </ul>
-      <button type="button" className="plan-list-new" onClick={onNewPlan}>
-        <PlusIcon />
-        New plan
-      </button>
     </nav>
   );
 }
@@ -128,14 +126,52 @@ function CopyControl({
   );
 }
 
-/** The document region: the saved body and its assumptions, or the state that stands in their place. */
+/** The document page's header: the way back to the list, the plan's name and repository line, and Copy. */
+function PlanHeader({
+  title,
+  repository,
+  copy,
+  onBack,
+}: {
+  title: string;
+  repository?: string | undefined;
+  copy?: { shown: CopyShown; onPress: () => void } | undefined;
+  onBack: () => void;
+}): React.JSX.Element {
+  return (
+    <header className="plan-header">
+      <button
+        type="button"
+        className="icon-button plan-back"
+        aria-label="Back to plans"
+        title="Back"
+        onClick={onBack}
+      >
+        <BackIcon />
+      </button>
+      <div className="plan-heading">
+        <h1 className="plan-title">{title}</h1>
+        {repository !== undefined ? <p className="plan-repository">{repository}</p> : null}
+      </div>
+      {copy !== undefined ? <CopyControl shown={copy.shown} onPress={copy.onPress} /> : null}
+    </header>
+  );
+}
+
+/**
+ * The document page's region: the saved body and its assumptions under the
+ * header, which scroll between the header and the microphone row, or the
+ * state that stands in their place. Back leaves the plan, which ends its call.
+ */
 export function PlanDocumentView({
   region,
   onRetry,
+  onBack,
   copy,
 }: {
   region: DocumentRegion;
   onRetry: () => void;
+  onBack: () => void;
   /** What Copy shows for the drawn document, and its press. */
   copy: { shown: CopyShown; onPress: () => void };
 }): React.JSX.Element {
@@ -143,18 +179,21 @@ export function PlanDocumentView({
     case DOCUMENT_REGION.NONE:
       return (
         <section className="plan-document plan-document-state">
+          <PlanHeader title="Plans" onBack={onBack} />
           <p>Choose a plan, or start a new one.</p>
         </section>
       );
     case DOCUMENT_REGION.READING:
       return (
         <section className="plan-document plan-document-state" aria-busy="true">
+          <PlanHeader title="Plans" onBack={onBack} />
           <p>Reading the plan…</p>
         </section>
       );
     case DOCUMENT_REGION.FAILED:
       return (
         <section className="plan-document plan-document-state">
+          <PlanHeader title="Plans" onBack={onBack} />
           <p role="alert">The plan could not be read.</p>
           <button type="button" className="plan-button" onClick={onRetry}>
             Try again
@@ -164,6 +203,7 @@ export function PlanDocumentView({
     case DOCUMENT_REGION.MISSING:
       return (
         <section className="plan-document plan-document-state">
+          <PlanHeader title="Plans" onBack={onBack} />
           <p role="alert">This plan no longer exists.</p>
         </section>
       );
@@ -172,11 +212,12 @@ export function PlanDocumentView({
       const { body, assumptions } = plan.document;
       return (
         <section className="plan-document" aria-label={plan.name}>
-          <header className="plan-header">
-            <h1 className="plan-title">{plan.name}</h1>
-            <p className="plan-repository">{repositoryLine(plan.repository)}</p>
-            <CopyControl shown={copy.shown} onPress={copy.onPress} />
-          </header>
+          <PlanHeader
+            title={plan.name}
+            repository={repositoryLine(plan.repository)}
+            copy={copy}
+            onBack={onBack}
+          />
           <div className="plan-document-scroll">
             {body.trim().length === 0 ? (
               <p className="plan-empty">{EMPTY_PLAN_LINE}</p>
@@ -203,30 +244,20 @@ export function PlanDocumentView({
 }
 
 /**
- * The voice bar: the microphone button, the status word or the voice error
- * standing in its place, the waveform, and the words being said now.
+ * The microphone row under the document: the button, and the open plan's
+ * call status beside it. Only the button and the word are the tab's own;
+ * whoever is heard, and what is said, the panel draws on its shape.
  */
-export function VoiceBar({
-  line,
-  level,
-  voice,
-  voiceActive,
-  thinking,
+export function MicrophoneRow({
+  status,
   microphone,
 }: {
-  line: VoiceBarLine;
-  /** How loud whoever is talking is, in the unit interval. */
-  level: number;
-  /** Whose turn the waveform draws, absent while nobody is heard. */
-  voice: WaveformVoice | undefined;
-  /** Whether that voice is audibly talking, on the relayed levels' own hangover. */
-  voiceActive: boolean;
-  /** The planning model is working on a delegated question and Luke has nothing to say yet. */
-  thinking: boolean;
+  /** The call's status word, absent while no call about this plan stands. */
+  status: string | undefined;
   microphone: { label: string; enabled: boolean; onPress: () => void };
 }): React.JSX.Element {
   return (
-    <footer className="plan-voice-bar">
+    <footer className="plan-microphone-row">
       <button
         type="button"
         className="plan-microphone"
@@ -237,18 +268,7 @@ export function VoiceBar({
       >
         <MicrophoneIcon />
       </button>
-      <span
-        className="plan-voice-status"
-        data-tone={line.status?.tone}
-        role={line.status?.tone === "error" ? "alert" : undefined}
-      >
-        {line.status?.text ?? ""}
-      </span>
-      <Waveform level={level} voice={voice} voiceActive={voiceActive} />
-      {thinking ? <ThinkingDots /> : null}
-      <p className="plan-caption" aria-live="polite">
-        {line.caption ?? ""}
-      </p>
+      <span className="plan-voice-status">{status ?? microphone.label}</span>
     </footer>
   );
 }

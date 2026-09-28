@@ -215,11 +215,13 @@ export interface HostOperator {
     messageId: string,
     rating: RatingWord,
   ): Effect.Effect<ConversationRateMessageResult>;
-  /** The planning window stands: the host reads the plan list and the active document now and follows both until the window closes. */
+  /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
   planningRefresh(): Effect.Effect<void>;
+  /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
+  planningPause(): Effect.Effect<void>;
   /** One plan made the active one, replacing whichever was; answers whether the host took it. */
   planningOpen(planId: string): Effect.Effect<boolean>;
-  /** The planning window closed: no plan is active and nothing is followed. */
+  /** The developer left the open plan: its call ends and no plan is active. */
   planningClose(): Effect.Effect<void>;
   /** A named plan started on a repository and made the active one, or why none started. */
   planningStart(request: PlanCreateRequest): Effect.Effect<PlanningStartAnswer>;
@@ -589,6 +591,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : undefined) ?? { status: CONVERSATION_RATE_STATUS.UNAVAILABLE },
       ),
     planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
+    planningPause: () => fire(client.call(GATEWAY_METHOD.PLANNING_PAUSE)),
     planningOpen: (planId) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_OPEN, { planId }),

@@ -68,6 +68,8 @@ export interface AppGuideSetting {
 export const APP_PANEL_TAB = {
   SESSIONS: "sessions",
   CONVERSATION: "conversation",
+  /** The named plans, and the one open plan's saved document and call. */
+  PLANS: "plans",
   SETTINGS: "settings",
 } as const;
 

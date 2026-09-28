@@ -16,7 +16,7 @@ import { SOCIAL_PROVIDER, SOCIAL_PROVIDER_LABEL, type SocialProvider } from "./s
 import "./styles.css";
 
 /**
- * connect-github.tsx -- the Connect GitHub page the Mac's planning window opens: link GitHub to the Luke account signed in here, with the scope that reads private repositories.
+ * connect-github.tsx -- the Connect GitHub page the Mac's Plans tab opens: link GitHub to the Luke account signed in here, with the scope that reads private repositories.
  *
  * Sign-in asks GitHub for `read:user` and `user:email` alone; this page is
  * the one place Luke asks for `repo`, through Better Auth's own account link

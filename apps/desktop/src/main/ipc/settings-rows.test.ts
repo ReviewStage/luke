@@ -31,7 +31,6 @@ const PANEL: ActSender = {
   sender: {} as WebContents,
   panel: true,
   voice: false,
-  planning: false,
   introduction: false,
 };
 

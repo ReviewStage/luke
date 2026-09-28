@@ -195,7 +195,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** A plan with a saved document and its conversation opened, as the planning window would leave it. */
+/** A plan with a saved document and its conversation opened, as the Plans tab would leave it. */
 const savedPlanWithConversation = (githubAccess?: GitHubAccessShape) =>
   Effect.gen(function* () {
     const userId = yield* openUser;
@@ -432,7 +432,7 @@ function handedDocument(context: string): PlanDocument {
     : readDocument(text);
 }
 
-/** The document the planning window opens, failing the test where the plan does not open. */
+/** The document the Plans tab opens, failing the test where the plan does not open. */
 const windowDocument = (userId: string, planId: string) =>
   Effect.map(openPlan(userId, planId), (opened) =>
     Option.match(opened, {
