@@ -277,7 +277,7 @@ const liveInitialItemSchema = Schema.Union([
 /**
  * The desktop's opening frame: the offer, the voice, the seed, and, for a
  * call about one saved plan, that plan's id. A plan-bound session is the
- * planning window's: the service checks the plan is the account's, creates
+ * Plans tab's: the service checks the plan is the account's, creates
  * the session under the planning scene, lands its asks in the plan's
  * conversation, and writes the binding on the session's row, so a later
  * `session.attach` is bound to the same plan by that row and never by

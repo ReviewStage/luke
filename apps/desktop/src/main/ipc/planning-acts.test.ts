@@ -10,14 +10,7 @@ import { GITHUB_CONNECT_SIGNED_OUT, planningActRows } from "./planning-acts";
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = {
-  sender: SENDER,
-  panel: true,
-  voice: false,
-  planning: false,
-  introduction: false,
-};
-const PLANNING: ActSender = { ...PANEL, panel: false, planning: true };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, introduction: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 const INTRODUCTION: ActSender = { ...PANEL, introduction: true };
 
@@ -34,13 +27,11 @@ function fixture() {
   const talked: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
   const account = { signedIn: true };
-  let opened = 0;
   const rows = planningActRows({
-    openWindow: () => {
-      opened += 1;
-    },
     host: {
       planningRefresh: () => Effect.sync(() => void asked.push("refresh")),
+      planningPause: () => Effect.sync(() => void asked.push("pause")),
+      planningClose: () => Effect.sync(() => void asked.push("close")),
       planningOpen: (planId) =>
         Effect.sync(() => {
           asked.push(`open:${planId}`);
@@ -73,26 +64,28 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, view, account, opened: () => opened };
+  return { router, asked, talked, view, account };
 }
 
-it.effect("the planning window's asks reach the host and answer what the host answered", () =>
+it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
   Effect.gen(function* () {
     const f = fixture();
 
-    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, PLANNING);
+    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, PANEL);
     const selected = yield* f.router.performAct(
       { kind: ACT_KIND.PLANNING_SELECT, payload: { planId: PLAN_ID } },
-      PLANNING,
+      PANEL,
     );
     const started = yield* f.router.performAct(
       { kind: ACT_KIND.PLANNING_START, payload: REQUEST },
-      PLANNING,
+      PANEL,
     );
     const repositories = yield* f.router.performAct(
       { kind: ACT_KIND.PLANNING_REPOSITORIES },
-      PLANNING,
+      PANEL,
     );
+    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CLOSE }, PANEL);
+    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
 
     assert.deepEqual(selected, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(started, {
@@ -103,15 +96,22 @@ it.effect("the planning window's asks reach the host and answer what the host an
       status: ACT_OUTCOME_STATUS.DONE,
       value: { repositories: [{ owner: "acme", name: "relay", private: true }], truncated: false },
     });
-    assert.deepEqual(f.asked, ["refresh", `open:${PLAN_ID}`, "start:acme/relay", "repositories"]);
+    assert.deepEqual(f.asked, [
+      "refresh",
+      `open:${PLAN_ID}`,
+      "start:acme/relay",
+      "repositories",
+      "close",
+      "pause",
+    ]);
   }),
 );
 
-it.effect("no window but the planning window reaches the plans", () =>
+it.effect("neither the voice window nor the takeover reaches the plans", () =>
   Effect.gen(function* () {
     const f = fixture();
 
-    for (const sender of [PANEL, VOICE, INTRODUCTION]) {
+    for (const sender of [VOICE, INTRODUCTION]) {
       const selected = yield* f.router.performAct(
         { kind: ACT_KIND.PLANNING_SELECT, payload: { planId: PLAN_ID } },
         sender,
@@ -125,23 +125,6 @@ it.effect("no window but the planning window reaches the plans", () =>
   }),
 );
 
-it.effect("only a panel's entry opens the planning window", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-
-    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_OPEN_WINDOW }, PANEL);
-    const fromVoice = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_OPEN_WINDOW }, VOICE);
-    const fromTakeover = yield* f.router.performAct(
-      { kind: ACT_KIND.PLANNING_OPEN_WINDOW },
-      INTRODUCTION,
-    );
-
-    assert.equal(f.opened(), 1);
-    assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-    assert.equal(fromTakeover.status, ACT_OUTCOME_STATUS.REFUSED);
-  }),
-);
-
 it.effect(
   "Connect GitHub opens the page through the host, and says to sign in when it opened nothing",
   () =>
@@ -150,16 +133,16 @@ it.effect(
 
       const connected = yield* f.router.performAct(
         { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
-        PLANNING,
+        PANEL,
       );
       f.account.signedIn = false;
       const signedOut = yield* f.router.performAct(
         { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
-        PLANNING,
-      );
-      const fromPanel = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
         PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
+        VOICE,
       );
 
       assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
@@ -167,27 +150,27 @@ it.effect(
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: GITHUB_CONNECT_SIGNED_OUT,
       });
-      assert.equal(fromPanel.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
       assert.deepEqual(f.asked, ["connect", "connect"]);
     }),
 );
 
 it.effect(
-  "the planning microphone tells the voice window about the plan the host has open, and is refused with none open or from any other window",
+  "the Plans tab's microphone tells the voice window about the plan the host has open, and is refused with none open or from any other window",
   () =>
     Effect.gen(function* () {
       const f = fixture();
 
-      const talked = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, PLANNING);
+      const talked = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, PANEL);
       assert.equal(talked.status, ACT_OUTCOME_STATUS.DONE);
       assert.deepEqual(f.talked, [PLAN_ID]);
 
-      for (const sender of [PANEL, VOICE, INTRODUCTION]) {
+      for (const sender of [VOICE, INTRODUCTION]) {
         const refused = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, sender);
         assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
       }
       f.view.activePlanId = undefined;
-      const unopened = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, PLANNING);
+      const unopened = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, PANEL);
       assert.deepEqual(unopened, {
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.PLANNING_TALK].refusal,

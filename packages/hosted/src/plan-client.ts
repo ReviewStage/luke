@@ -31,7 +31,7 @@ import { HOSTED_SERVICE_PATH, planPath } from "./service-paths.js";
 import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
 
 /**
- * plan-client.ts -- the planning window's side of the named plans and the GitHub repository list, as the host asks the service for them.
+ * plan-client.ts -- the Plans tab's side of the named plans and the GitHub repository list, as the host asks the service for them.
  *
  * Every call is the one account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. What the window has to say about a
@@ -58,7 +58,7 @@ function succeeded<Answer>(answer: Answer) {
 }
 
 /**
- * The planning window's reads and its one write of the service: the list of
+ * The Plans tab's reads and its one write of the service: the list of
  * plans, one plan opened with its document, a plan started, and the
  * repositories the account's GitHub connection can read. Each resolves to a
  * result rather than failing, because every caller does the same thing with

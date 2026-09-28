@@ -190,8 +190,8 @@ export const BRIDGE = {
     result: result<string>(isWireString),
   }),
   /**
-   * The talk key going down, carrying the planning window's open plan while
-   * that window holds the keyboard and nothing otherwise.
+   * The talk key going down, carrying the panel's open plan while one is open
+   * and nothing otherwise.
    */
   onVoiceHotkeyPress: entry({
     kind: "subscribe",
@@ -241,8 +241,8 @@ export const BRIDGE = {
     result: result<VoiceLevels>(isVoiceLevels),
   }),
   /**
-   * The planning window's microphone press, forwarded by the main process to
-   * the voice window alone, carrying the plan the window had open when it was
+   * The Plans tab's microphone press, forwarded by the main process to the
+   * voice window alone, carrying the plan the panel had open when it was
    * pressed and nothing else.
    */
   onPlanningTalk: entry({

@@ -18,6 +18,7 @@ interface PanelTabDescriptor {
 const PANEL_TABS: readonly PanelTabDescriptor[] = [
   { id: PANEL_TAB.SESSIONS, label: "Sessions" },
   { id: PANEL_TAB.CONVERSATION, label: "Conversation" },
+  { id: PANEL_TAB.PLANS, label: "Plans" },
   { id: PANEL_TAB.SETTINGS, label: "Settings" },
 ];
 

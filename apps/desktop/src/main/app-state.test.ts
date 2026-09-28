@@ -25,7 +25,6 @@ const RUN = {
     fixtureName: undefined,
     startPeeked: false,
     startInSlot: false,
-    startInPlanning: false,
     captureMode: false,
     fixtureMode: false,
   },

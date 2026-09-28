@@ -2,7 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
- * plan-wire.ts -- a named feature plan and its one saved document, as the planning window and the service read them.
+ * plan-wire.ts -- a named feature plan and its one saved document, as the Plans tab and the service read them.
  *
  * A plan is its owner's name for it, the GitHub repository it plans against
  * with the default branch and the commit it was started at, and one current

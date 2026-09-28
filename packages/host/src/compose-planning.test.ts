@@ -58,7 +58,7 @@ interface FakeService extends PlanningClient {
     { repositories: { owner: string; name: string; private: boolean }[]; truncated: boolean },
     GitHubCallFailure
   >;
-  /** Every read the service answered, in order, so a test can see a closed window reads nothing. */
+  /** Every read the service answered, in order, so a test can see a paused follow reads nothing. */
   readonly reads: string[];
 }
 
@@ -302,7 +302,7 @@ it.effect(
     }),
 );
 
-it.effect("closing the window leaves no plan active and stops following the service", () =>
+it.effect("leaving the plan leaves no plan active and goes on following the list", () =>
   Effect.gen(function* () {
     const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
     const { call, last, planning } = yield* subject(service);
@@ -312,12 +312,29 @@ it.effect("closing the window leaves no plan active and stops following the serv
     yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
     const readsAtClose = service.reads.length;
     yield* nextBeat();
-    yield* nextBeat();
 
     assert.equal(last()?.activePlanId, undefined);
     assert.deepEqual(last()?.document, { status: PLANNING_READ.IDLE });
     assert.equal(planning.activePlanId(), undefined);
-    assert.deepEqual(service.reads.slice(readsAtClose), []);
+    assert.deepEqual(service.reads.slice(readsAtClose), ["list"]);
+  }),
+);
+
+it.effect("pausing stops following the service and keeps the open plan", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call, last, planning } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    yield* call(GATEWAY_METHOD.PLANNING_PAUSE);
+    const readsAtPause = service.reads.length;
+    yield* nextBeat();
+    yield* nextBeat();
+
+    assert.equal(last()?.activePlanId, INVITES);
+    assert.equal(planning.activePlanId(), INVITES);
+    assert.deepEqual(service.reads.slice(readsAtPause), []);
   }),
 );
 
@@ -386,7 +403,7 @@ it.effect("a list read that left before a plan started never marks the new plan 
 );
 
 it.effect(
-  "only one plan is spoken: opening or starting another plan and closing the window each end the open plan's call, and a desk call or the same plan's call is left standing",
+  "only one plan is spoken: opening or starting another plan and leaving the plan each end the open plan's call, and a desk call or the same plan's call is left standing",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);

@@ -17,7 +17,7 @@ import { type FakeGitHub, type FakeRepository, fakeGitHub } from "./support/gith
 import { testSqlClient } from "./support/sql-client";
 
 /**
- * The planning window's plan routes, answered by the group the way a
+ * The Plans tab's plan routes, answered by the group the way a
  * function answers them, over a real dialect: the bearer names the account
  * and nothing else does, a plan another account owns answers exactly as one
  * that does not exist, and what `update_plan` saved is what the window opens.

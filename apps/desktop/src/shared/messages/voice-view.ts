@@ -55,7 +55,7 @@ export interface VoiceView extends VoiceSpeakers {
    * before anything is written.
    */
   spokenAskPending: boolean;
-  /** The plan the standing call is about, where the planning window opened it; none for a desk call or no call. */
+  /** The plan the standing call is about, where the panel's open plan opened it; none for a desk call or no call. */
   callPlanId: string | undefined;
 }
 

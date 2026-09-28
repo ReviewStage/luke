@@ -27,11 +27,13 @@ export const GATEWAY_METHOD = {
   CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
   NOTEBOOK_READ: "notebook.read",
-  /** The planning window stands: the plan list read now, the active plan's document with it, and both followed until it closes. */
+  /** The panel's Plans tab shows: the plan list read now, the active plan's document with it, and both followed until it is paused. */
   PLANNING_REFRESH: "planning.refresh",
+  /** The panel's Plans tab stopped showing: nothing is followed, and the active plan and its call stand. */
+  PLANNING_PAUSE: "planning.pause",
   /** One plan made the active one and its saved document read, replacing whichever was active. */
   PLANNING_OPEN: "planning.open",
-  /** The planning window closed: no plan is active and nothing is followed. */
+  /** The developer left the open plan: its call ends and no plan is active. */
   PLANNING_CLOSE: "planning.close",
   /** A named plan started on a repository the account's GitHub connection reads, and made the active one. */
   PLANNING_START: "planning.start",
@@ -175,8 +177,8 @@ const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /**
  * `voice.createLiveSession`: the peer's SDP offer, and the plan a planning
- * call is about where the planning window opened it. The host creates a
- * planning call only for the plan the window has open.
+ * call is about where the panel's open plan opened it. The host creates a
+ * planning call only for the plan the panel has open.
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
@@ -408,7 +410,7 @@ export const GATEWAY_EVENT = {
   CONDUCTOR_KEY_ONBOARDING_CHANGED: "conductorKeyOnboarding.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
-  /** The planning window's plans, active plan, and document, whole, whenever a read moved them. */
+  /** The panel's plans, active plan, and document, whole, whenever a read moved them. */
   PLANNING_CHANGED: "planning.changed",
 } as const;
 

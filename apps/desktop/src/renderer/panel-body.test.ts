@@ -9,6 +9,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { UPDATE_STATUS } from "#shared/messages/update";
+import { plansControl } from "../testing/plans-control";
 import {
   agentTranscriptRow,
   CONVERSATION_PAGE,
@@ -25,6 +26,7 @@ import {
 } from "./conversation-turns.fixtures";
 import { PanelBody } from "./panel-body";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { DOCUMENT_REGION, PLANS_PAGE } from "./planning/planning-model";
 import { SESSION_SORT } from "./session-model";
 import type { SettingsPanelProps } from "./settings/settings-panel";
 
@@ -103,6 +105,7 @@ function bodyProps(
     tab,
     onTabChange: () => undefined,
     settings: SETTINGS,
+    plans: plansControl(),
     ...extra,
   };
 }
@@ -423,4 +426,77 @@ test("a transcript page's magnifier wears the transcript's words, and its field 
   });
   assert.deepEqual(engaged, [true]);
   assert.deepEqual(closes, [1]);
+});
+
+const PLAN = {
+  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  name: "Teammate invitations",
+  repository: {
+    owner: "acme",
+    name: "relay",
+    branch: "main",
+    commit: "4f2c9e1a0b3d5c7e9f1a2b3c4d5e6f708192a3b4",
+  },
+  createdAt: 1,
+  updatedAt: 2,
+  openedAt: 3,
+  document: { body: "# Teammate invitations", assumptions: [] },
+} as const;
+
+test("the tab bar offers Plans beside Conversation, and the Plans tab opens on the list under New plan", () => {
+  const opened: string[] = [];
+  const mounted = mount(
+    bodyProps(PANEL_TAB.PLANS, CONVERSATION_PAGE.THREAD, () => {}, {
+      plans: plansControl({
+        plans: [PLAN],
+        onNewPlan: () => opened.push("new"),
+        onSelect: (planId) => opened.push(planId),
+      }),
+    }),
+  );
+  const tabs = [...mounted.container.querySelectorAll('[role="tab"]')].map(
+    (tab) => tab.textContent,
+  );
+  assert.deepEqual(tabs, ["Sessions", "Conversation", "Plans", "Settings"]);
+  const rows = [...mounted.container.querySelectorAll<HTMLButtonElement>(".plan-list-row")];
+  assert.equal(rows.length, 1);
+  assert.match(rows[0]?.textContent ?? "", /Teammate invitations.*acme\/relay/u);
+
+  act(() => {
+    mounted.container.querySelector<HTMLButtonElement>(".plan-list-new")?.click();
+    rows[0]?.click();
+  });
+  assert.deepEqual(opened, ["new", PLAN.id]);
+});
+
+test("an open plan draws its document with Back, Copy, and the microphone row, and Back leaves the plan", () => {
+  const pressed: string[] = [];
+  const mounted = mount(
+    bodyProps(PANEL_TAB.PLANS, CONVERSATION_PAGE.THREAD, () => {}, {
+      plans: plansControl({
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        status: "Listening",
+        onLeavePlan: () => pressed.push("back"),
+        microphone: {
+          label: "Mute the microphone",
+          enabled: true,
+          onPress: () => pressed.push("mic"),
+        },
+      }),
+    }),
+  );
+  const { container } = mounted;
+  assert.equal(container.querySelector(".plan-title")?.textContent, "Teammate invitations");
+  assert.ok(container.querySelector(".plan-copy-button"));
+  assert.equal(container.querySelector(".plan-voice-status")?.textContent, "Listening");
+  // The list is not drawn behind the open plan: one page at a time.
+  assert.equal(container.querySelector(".plan-list"), null);
+
+  act(() => {
+    container.querySelector<HTMLButtonElement>(".plan-microphone")?.click();
+    container.querySelector<HTMLButtonElement>(".plan-back")?.click();
+  });
+  assert.deepEqual(pressed, ["mic", "back"]);
 });

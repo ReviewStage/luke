@@ -607,7 +607,7 @@ the events and conversation-read tests use, since every case here mocks its
 
 ## The plans group
 
-`server/plans-app.ts` is the planning window's route group over the account's
+`server/plans-app.ts` is the Mac's Plans tab's route group over the account's
 named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, most
 recently opened first, `POST /api/plans` starts one with its name, its
 repository, and an empty document,
@@ -675,7 +675,7 @@ uses before it is sent, and a spent allowance is answered as not searched.
 the relay, and the `brain-host` eval runs a plan conversation through eve.
 
 The developer talks to the planning model through the ordinary voice
-session. The planning window's call is a `/api/voice/sessions` session whose
+session. The Plans tab's call is a `/api/voice/sessions` session whose
 `session.create` names the plan (`planId`), which the service checks the
 account holds before anything is spent. It is created under the Live
 planning scene (`LIVE_SCENE.PLANNING` in `@sidecar/live`), whose delegation
@@ -711,7 +711,7 @@ plan picks from, since only the service holds the credential.
 The connection is the account's GitHub row in Better Auth's own `account`
 table. Sign-in asks GitHub for `read:user` and `user:email` alone; the
 Connect GitHub page (`src/connect-github.tsx`, `/connect-github.html`), which
-the Mac's setup sheet opens in the browser naming the account it is signed
+the Mac's new-plan form opens in the browser naming the account it is signed
 in as, links GitHub under the same OAuth App with `repo` on top, through
 Better Auth's `linkSocial` and the browser's own Luke session, refusing to
 link for a browser signed in as another account. Classic OAuth has no
@@ -930,7 +930,7 @@ calling is read from the row the handshake resolved
 (`VoiceSessionRecord.heldDevice`) rather than from anything the caller says of
 itself. The
 socket's first frame is `session.create` (the SDP offer, a voice, the seed,
-and, for the planning window's call, the id of the plan it is about);
+and, for the Plans tab's call, the id of the plan it is about);
 the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
 client delegation, and the plan a planning call is bound to), attaches the trusted sideband, stands the hosted

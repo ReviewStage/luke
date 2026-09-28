@@ -5,6 +5,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import {
+  NewPlanFormView,
+  type NewPlanFormViewProps,
+  REPOSITORY_LIST,
+  readRepositoryList,
+} from "./new-plan-form";
+import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   type CopyShown,
@@ -12,12 +18,6 @@ import {
   EMPTY_PLAN_LINE,
 } from "./planning-model";
 import { PlanDocumentView, PlanList } from "./planning-parts";
-import {
-  REPOSITORY_LIST,
-  readRepositoryList,
-  SetupSheetView,
-  type SetupSheetViewProps,
-} from "./setup-sheet";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -49,6 +49,7 @@ function documentMarkup(plan: Plan, copied: CopyShown = COPY_SHOWN.IDLE): string
     createElement(PlanDocumentView, {
       region: { kind: DOCUMENT_REGION.READY, plan },
       onRetry: ignore,
+      onBack: ignore,
       copy: { shown: copied, onPress: ignore },
     }),
   );
@@ -82,9 +83,12 @@ test("the document offers no way to write, confirm, or approve anything", () => 
   const markup = documentMarkup(PLAN);
 
   assert.doesNotMatch(markup, /<textarea|contenteditable|type="text"/u);
-  // Copy is the document's one action, and it writes nothing.
+  // Copy is the document's one action, and it writes nothing; Back only leaves it.
   const buttons = markup.match(/<button[^>]*>/gu) ?? [];
-  assert.deepEqual(buttons, ['<button type="button" class="plan-button plan-copy-button">']);
+  assert.deepEqual(buttons, [
+    '<button type="button" class="icon-button plan-back" aria-label="Back to plans" title="Back">',
+    '<button type="button" class="plan-button plan-copy-button">',
+  ]);
   assert.doesNotMatch(markup, /Approve|Version|History|Ready/u);
 });
 
@@ -132,6 +136,7 @@ test("a document that could not be read shows the failure and Try again, never a
     createElement(PlanDocumentView, {
       region: { kind: DOCUMENT_REGION.FAILED },
       onRetry: ignore,
+      onBack: ignore,
       copy: RESTING,
     }),
   );
@@ -160,11 +165,11 @@ test("the plan list marks the open plan and names each one's repository", () => 
   assert.doesNotMatch(rows[0] ?? "", /aria-current/u);
   assert.match(rows[1] ?? "", /aria-current="true"/u);
   assert.match(rows[1] ?? "", /Billing export[\s\S]*acme\/relay/u);
-  assert.match(markup, />New plan<\/button>/u);
+  assert.match(markup, /<\/svg>New plan<\/button>/u);
 });
 
-function sheet(patch: Partial<SetupSheetViewProps>): string {
-  const props: SetupSheetViewProps = {
+function form(patch: Partial<NewPlanFormViewProps>): string {
+  const props: NewPlanFormViewProps = {
     name: "",
     filter: "",
     chosen: undefined,
@@ -180,11 +185,11 @@ function sheet(patch: Partial<SetupSheetViewProps>): string {
     onCancel: ignore,
     ...patch,
   };
-  return renderToStaticMarkup(createElement(SetupSheetView, props));
+  return renderToStaticMarkup(createElement(NewPlanFormView, props));
 }
 
 test("an account with no GitHub connection is offered Connect GitHub in place of the list", () => {
-  const markup = sheet({
+  const markup = form({
     list: { status: REPOSITORY_LIST.FAILED, failure: GITHUB_FAILURE.NOT_CONNECTED },
   });
 
@@ -201,18 +206,18 @@ test("Start plan waits for both a name and a repository", () => {
   const startButton =
     /<button type="submit" class="plan-button plan-button-primary"( disabled="")?>/u;
 
-  assert.equal(sheet({ list, name: "Invites" }).match(startButton)?.[1], ' disabled=""');
+  assert.equal(form({ list, name: "Invites" }).match(startButton)?.[1], ' disabled=""');
   assert.equal(
-    sheet({ list, chosen: { owner: "acme", name: "relay" } }).match(startButton)?.[1],
+    form({ list, chosen: { owner: "acme", name: "relay" } }).match(startButton)?.[1],
     ' disabled=""',
   );
-  const ready = sheet({ list, name: "Invites", chosen: { owner: "acme", name: "relay" } });
+  const ready = form({ list, name: "Invites", chosen: { owner: "acme", name: "relay" } });
   assert.equal(ready.match(startButton)?.[1], undefined);
   assert.match(ready, /acme\/relay[\s\S]*Private/u);
 });
 
-test("a refused start keeps the sheet open with the reason", () => {
-  const markup = sheet({
+test("a refused start keeps the form open with the reason", () => {
+  const markup = form({
     note: "That repository has no commits on its default branch to plan against.",
   });
 
@@ -224,7 +229,7 @@ test("a repository read the system refused offers Try again rather than reading 
   const list = await readRepositoryList(() =>
     Promise.reject(new Error("Could not read your GitHub repositories on this system.")),
   );
-  const markup = sheet({ list });
+  const markup = form({ list });
 
   assert.doesNotMatch(markup, /Reading your repositories/u);
   assert.match(markup, />Try again<\/button>/u);

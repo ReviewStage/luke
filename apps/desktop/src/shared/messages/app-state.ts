@@ -27,7 +27,7 @@ import type { VoiceView } from "./voice-view";
  * The launch profiles a window answers to. A capture run stages a
  * conversation it has no voice window for: Luke speaking, that with the
  * Mac's output off, and both speakers heard at once; or, in any fixture run,
- * the planning window over a synthetic plan. Any other word — the default
+ * the panel's Plans tab over a synthetic plan. Any other word — the default
  * included — stages nothing.
  */
 export const RUN_PROFILE = {
@@ -35,7 +35,7 @@ export const RUN_PROFILE = {
   SPEAKING: "speaking",
   MUTED: "muted",
   DUPLEX: "duplex",
-  /** The planning window, opened at launch over a synthetic plan. */
+  /** The panel's Plans tab, opened at launch over a synthetic plan. */
   PLANNING: "planning",
 } as const;
 
@@ -168,10 +168,10 @@ export interface AppState {
   /** The one transcript the host holds open for this Mac, a child's or an observed session's; nothing while none is. Named `childTranscript` still, kept so the slice name stays put. */
   childTranscript: TranscriptSnapshot | undefined;
   /**
-   * The planning window's named plans as the host's reads of the service
+   * The Plans tab's named plans as the host's reads of the service
    * hold them: the list, the one active plan, and its saved document. Only
-   * the planning window draws it, and the active plan is the one a voice
-   * session binds to.
+   * the panel's Plans tab draws it, and the active plan is the one a voice
+   * session and the talk key bind to.
    */
   planning: PlanningView;
   announcements: { held: boolean };

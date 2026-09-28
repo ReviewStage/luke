@@ -3,9 +3,9 @@ import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view"
 import { RUN_PROFILE } from "#shared/messages/app-state";
 
 /**
- * planning-fixture.ts -- the synthetic plans a fixture run's planning window draws in place of the service's.
+ * planning-fixture.ts -- the synthetic plans a fixture run's Plans tab draws in place of the service's.
  *
- * A fixture run signs in to nothing and reads no plan, so the planning window
+ * A fixture run signs in to nothing and reads no plan, so the Plans tab
  * would show only its signed-out line. Under the planning profile it draws
  * the reference journey's plan from `docs/PLANNING.md` instead, which is what
  * `scripts/evidence.sh` captures. Every name, repository, and commit here is

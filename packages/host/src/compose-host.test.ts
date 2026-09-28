@@ -130,7 +130,7 @@ it.effect(
 );
 
 it.effect(
-  "an offer for a planning call about a plan the planning window does not have open is refused before any session is asked for",
+  "an offer for a planning call about a plan the panel does not have open is refused before any session is asked for",
   (t) =>
     Effect.gen(function* () {
       const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));

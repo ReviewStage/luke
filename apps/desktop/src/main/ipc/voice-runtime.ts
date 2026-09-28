@@ -32,8 +32,6 @@ type LiveSessionActs = Pick<
 export interface VoiceRuntimeDependencies {
   panels: PanelManager;
   voiceWindow: VoiceWindowSurface;
-  /** The planning window, which draws the same voice bar and hears the same levels. */
-  planningWindow: Pick<VoiceWindowSurface, "current" | "owns">;
   /** Where the voice window's own reports are written; every panel is told from it. */
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
@@ -95,12 +93,9 @@ export function voiceRuntimeActRows(
     // service that holds the thread; the voice window is told to retire its
     // own turns at the press, whatever the service later answers, and the
     // panel hears whether the Clear went.
-    [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel, planning }) =>
+    [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel }) =>
       Effect.gen(function* () {
-        // The planning window's voice bar asks for the microphone and
-        // nothing else: the thread a Clear deletes is not one it draws.
-        const admitted = panel || (planning && command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS);
-        if (!admitted) return undefined;
+        if (!panel) return undefined;
         // The voice window is told in this act's synchronous prefix — before
         // the service is waited on — so its turns, marks, and context retire
         // at the press. The answer, the service's, comes after and goes to
@@ -179,7 +174,6 @@ export function voiceRuntimeReports(
     reportVoiceLevel(context, levels) {
       if (!voiceWindow.owns(context.sender)) return;
       panels.broadcast(channels.onVoiceLevelChanged, levels);
-      dependencies.planningWindow.current()?.webContents.send(channels.onVoiceLevelChanged, levels);
     },
     setShortcutCapturing(context, capturing) {
       if (!panels.owns(context.sender)) return;
