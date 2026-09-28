@@ -24,14 +24,9 @@ export interface PlanningActsDependencies {
     planningOpen(planId: string): Effect.Effect<boolean>;
     planningStart(request: PlanCreateRequest): Effect.Effect<PlanningStartAnswer>;
     planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+    /** Opens the Connect GitHub page in the browser; whether it opened. */
+    planningConnectGitHub(): Effect.Effect<boolean>;
   };
-  /**
-   * The account-bound GitHub connection, begun from the setup sheet's
-   * Connect GitHub button. How the connection is made is not settled yet;
-   * this is the one door its flow fills, and until it does the press is
-   * refused with a sentence the sheet draws.
-   */
-  connectGitHub: () => Effect.Effect<void, ActRefused>;
   /** The plan the window has open, as main holds the host's view of it. */
   activePlanId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
@@ -81,9 +76,14 @@ export function planningActRows(
       refuseUnlessPlanning(ACT_KIND.PLANNING_REPOSITORIES, sender);
       return host.planningRepositories();
     },
+    // The link itself happens in the browser, under the developer's Luke
+    // session there; the press opens the page and the sheet reads the
+    // repositories again once the developer comes back.
     [ACT_KIND.PLANNING_CONNECT_GITHUB]: (_payload, sender) => {
       refuseUnlessPlanning(ACT_KIND.PLANNING_CONNECT_GITHUB, sender);
-      return dependencies.connectGitHub();
+      return Effect.flatMap(host.planningConnectGitHub(), (opened) =>
+        opened ? Effect.void : Effect.fail(new ActRefused({ message: GITHUB_CONNECT_SIGNED_OUT })),
+      );
     },
     // The press names no plan: the plan is the one the host has open, read
     // here, so the window cannot open a call about a plan it is not showing.
@@ -98,9 +98,5 @@ export function planningActRows(
   };
 }
 
-/** What the Connect GitHub press answers until the connection's own flow lands. */
-export const GITHUB_CONNECTION_PENDING = "Connecting GitHub from Luke is not available yet.";
-
-/** The connection door as it stands until its flow is built: every press refused, worded for the sheet. */
-export const connectGitHubPending = (): Effect.Effect<void, ActRefused> =>
-  Effect.fail(new ActRefused({ message: GITHUB_CONNECTION_PENDING }));
+/** What the Connect GitHub press answers when the host opened nothing, because no account is signed in. */
+export const GITHUB_CONNECT_SIGNED_OUT = "Sign in to Luke to connect GitHub.";

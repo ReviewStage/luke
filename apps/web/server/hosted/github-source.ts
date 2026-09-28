@@ -6,8 +6,9 @@ import {
 } from "@sidecar/hosted/github-wire";
 import type { PlanRepository } from "@sidecar/hosted/plan-wire";
 import { HTTP_STATUS } from "@sidecar/wire";
-import { Context, Data, Duration, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Context, Data, Duration, Effect, Option, Redacted, Schema } from "effect";
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 
 /**
  * github-source.ts -- the account's GitHub credential, and the two repository metadata reads a plan is set up with.
@@ -58,28 +59,14 @@ export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
  * see where it came from.
  */
 export interface GitHubAccessShape {
-  readonly token: (userId: string) => Effect.Effect<Redacted.Redacted, GitHubUnavailable>;
+  readonly token: (
+    userId: string,
+  ) => Effect.Effect<Redacted.Redacted, GitHubUnavailable, SqlClient.SqlClient>;
 }
 
 export class GitHubAccess extends Context.Service<GitHubAccess, GitHubAccessShape>()(
   "GitHubAccess",
 ) {}
-
-/**
- * The deployment's GitHub access until the account-bound GitHub connection
- * lands: no account holds a connection, so every GitHub read answers
- * `not-connected`, and the window and the planning model say GitHub has to
- * be connected rather than claiming anything was read.
- */
-export const GITHUB_ACCESS_WITHOUT_CONNECTIONS: GitHubAccessShape = {
-  token: () => Effect.fail(new GitHubUnavailable({ reason: GITHUB_FAILURE.NOT_CONNECTED })),
-};
-
-/** The same access as the layer a route provides. */
-export const githubAccessWithoutConnections = Layer.succeed(
-  GitHubAccess,
-  GITHUB_ACCESS_WITHOUT_CONNECTIONS,
-);
 
 const RepositoryRowSchema = Schema.Struct({
   name: Schema.String,

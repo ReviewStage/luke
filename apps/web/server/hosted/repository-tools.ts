@@ -63,8 +63,8 @@ export const REPOSITORY_READ_REFUSAL = {
     "Not read: the account has no GitHub connection, so nothing in the repository was read. " +
     "The developer has to connect GitHub.",
   ACCESS_DENIED:
-    "Not read: GitHub refused the account's connection (revoked, expired, or uninstalled), " +
-    "so nothing was read. The developer has to reconnect GitHub.",
+    "Not read: GitHub refused the account's connection, or it lacks access to repositories, " +
+    "so nothing was read. The developer has to connect GitHub again.",
   NOT_FOUND:
     "Not read: nothing exists at this path at the plan's commit, or the connection can no " +
     "longer read this repository.",

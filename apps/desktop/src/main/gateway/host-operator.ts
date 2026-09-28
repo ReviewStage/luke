@@ -225,6 +225,8 @@ export interface HostOperator {
   planningStart(request: PlanCreateRequest): Effect.Effect<PlanningStartAnswer>;
   /** The repositories the account's GitHub connection can read, or why it could not be read. */
   planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+  /** Opens the Connect GitHub page in the browser; whether it opened, which it does only for a signed-in account. */
+  planningConnectGitHub(): Effect.Effect<boolean>;
   onboardingState(): Effect.Effect<
     | {
         calendarOnboardingOwed: boolean;
@@ -617,6 +619,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 ),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningConnectGitHub: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB),
+        (answer) => record(answer)?.opened === true,
       ),
     onboardingState: () =>
       Effect.map(client.call(GATEWAY_METHOD.ONBOARDING_STATE), (result) => {

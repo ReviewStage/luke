@@ -16,7 +16,9 @@ import {
   githubFailureNote,
   MICROPHONE_PRESS,
   microphoneButton,
+  newestReadOnly,
   offersGitHubConnect,
+  onEachReturn,
   repositoriesMatching,
   repositoryLine,
   VOICE_LINE_TONE,
@@ -221,4 +223,46 @@ test("once a save changes the document, Copy returns to rest until pressed again
 
   assert.equal(copyShown(outcome, saved), COPY_SHOWN.IDLE);
   assert.equal(copyShown(undefined, REVIEWED), COPY_SHOWN.IDLE);
+});
+
+test("the sheet reads again on every return from the browser until the wait is cancelled", () => {
+  const window = new EventTarget();
+  let reads = 0;
+  const cancel = onEachReturn(window, () => {
+    reads += 1;
+  });
+
+  // Back once mid-way through GitHub's page, then again once the link landed.
+  window.dispatchEvent(new Event("focus"));
+  window.dispatchEvent(new Event("focus"));
+  cancel();
+  window.dispatchEvent(new Event("focus"));
+
+  assert.equal(reads, 2);
+});
+
+/** A read whose answer the test hands over when it chooses. */
+function heldRead() {
+  let answer: (value: string) => void = () => undefined;
+  const promise = new Promise<string>((resolve) => {
+    answer = resolve;
+  });
+  return { promise, resolve: (value: string) => answer(value) };
+}
+
+test("a list read that another read replaced is dropped when it lands late", async () => {
+  const applyNewest = newestReadOnly<string>();
+  const drawn: string[] = [];
+  const older = heldRead();
+  const newer = heldRead();
+
+  applyNewest(older.promise, (answer) => drawn.push(answer));
+  applyNewest(newer.promise, (answer) => drawn.push(answer));
+  newer.resolve("connected");
+  await newer.promise;
+  older.resolve("not-connected");
+  await older.promise;
+  await Promise.resolve();
+
+  assert.deepEqual(drawn, ["connected"]);
 });

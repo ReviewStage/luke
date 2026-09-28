@@ -11,6 +11,7 @@ import {
   HttpServerRequest,
   type HttpServerResponse,
 } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import { GitHubAccess, type GitHubUnavailable, listRepositories } from "./hosted/github-source.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -90,7 +91,9 @@ function refusing<R>(
 }
 
 /** The group: the repository list, and the hosted vocabulary's own refusal for any other path. */
-export function githubApp(seams: GitHubAppSeams): WebRoutes<HttpClient.HttpClient | GitHubAccess> {
+export function githubApp(
+  seams: GitHubAppSeams,
+): WebRoutes<HttpClient.HttpClient | SqlClient.SqlClient | GitHubAccess> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, GITHUB_PATH.REPOSITORIES, refusing(repositoriesEndpoint(seams))),
     hostedNotFoundRoute,

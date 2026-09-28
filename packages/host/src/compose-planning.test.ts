@@ -102,9 +102,13 @@ interface StandingCall {
   closing?: Effect.Effect<void>;
 }
 
+const SERVICE_BASE_URL = "https://luke.test";
+const ACCOUNT_ID = "user-mac";
+
 function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
   return Effect.gen(function* () {
     const told: PlanningView[] = [];
+    const opened: string[] = [];
     const standing = options.call ?? { about: undefined };
     const planning = yield* composePlanning({
       kernel: {
@@ -125,6 +129,11 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           yield* standing.closing ?? Effect.void;
           standing.about = undefined;
         }),
+      connectGitHub: {
+        serviceBaseUrl: SERVICE_BASE_URL,
+        accountId: () => Effect.succeed(ACCOUNT_ID),
+        openExternal: (url) => Effect.sync(() => void opened.push(url)),
+      },
       pollIntervalMs: INTERVAL_MS,
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
@@ -133,7 +142,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       return Effect.orDie(handler(params, context));
     };
     const last = () => told.at(-1);
-    return { planning, call, told, last };
+    return { planning, call, told, last, opened };
   });
 }
 
@@ -271,6 +280,26 @@ it.effect("the repository picker hears the list, or why the connection could not
       failure: GITHUB_FAILURE.NOT_CONNECTED,
     });
   }),
+);
+
+it.effect(
+  "Connect GitHub opens the page for this Mac's account, and nothing behind a closed gate",
+  () =>
+    Effect.gen(function* () {
+      const signedIn = yield* subject(fakeService([]));
+      const signedOut = yield* subject(fakeService([]), { signedIn: false });
+
+      assert.deepEqual(yield* signedIn.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB), {
+        opened: true,
+      });
+      assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB), {
+        opened: false,
+      });
+      assert.deepEqual(signedIn.opened, [
+        `${SERVICE_BASE_URL}/connect-github.html?account=${ACCOUNT_ID}`,
+      ]);
+      assert.deepEqual(signedOut.opened, []);
+    }),
 );
 
 it.effect("closing the window leaves no plan active and stops following the service", () =>

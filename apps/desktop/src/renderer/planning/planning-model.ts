@@ -118,6 +118,35 @@ export function copyShown(outcome: CopyOutcome | undefined, document: PlanDocume
     : COPY_SHOWN.IDLE;
 }
 
+/**
+ * A run of reads where only the newest one's answer is applied: an answer
+ * from a read that another read has since replaced is dropped, whenever it
+ * lands. A read that fails applies nothing.
+ */
+export function newestReadOnly<A>(): (read: Promise<A>, apply: (answer: A) => void) => void {
+  let newest = 0;
+  return (read, apply) => {
+    newest += 1;
+    const mine = newest;
+    read.then(
+      (answer) => {
+        if (mine === newest) apply(answer);
+      },
+      () => undefined,
+    );
+  };
+}
+
+/**
+ * Runs `returned` each time the window takes focus again, which is the
+ * developer coming back from the Connect GitHub page in the browser, perhaps
+ * before the link finished. Answers the cancel, for a wait that ended.
+ */
+export function onEachReturn(window: EventTarget, returned: () => void): () => void {
+  window.addEventListener("focus", returned);
+  return () => window.removeEventListener("focus", returned);
+}
+
 /** Whether the setup sheet should offer to connect GitHub rather than a list. */
 export function offersGitHubConnect(failure: GitHubCallFailure): boolean {
   return failure === GITHUB_FAILURE.NOT_CONNECTED || failure === GITHUB_FAILURE.ACCESS_DENIED;
