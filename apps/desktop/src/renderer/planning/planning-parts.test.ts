@@ -197,6 +197,15 @@ test("an account with no GitHub connection is offered Connect GitHub in place of
   assert.doesNotMatch(markup, /type="radio"/u);
 });
 
+test("the empty name field is labelled Plan name and offers an example to replace", () => {
+  const markup = form({});
+
+  assert.match(
+    markup,
+    /<span>Plan name<\/span><input type="text" placeholder="e\.g\. Dark mode toggle"[^>]* value=""\/>/u,
+  );
+});
+
 test("Start plan waits for both a name and a repository", () => {
   const list = {
     status: REPOSITORY_LIST.READY,
