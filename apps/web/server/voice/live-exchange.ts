@@ -15,6 +15,7 @@ import type { WebSocket } from "ws";
 import { db } from "../db/query.js";
 import { voiceSessions } from "../db/voice-schema.js";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
+import { PLANNING_OPENING_ASK } from "../hosted/brain-host/planning.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { askRecord } from "../hosted/store/asks.js";
 import type { HostedStoreContext } from "../hosted/store/database.js";
@@ -70,7 +71,8 @@ export interface HostedLiveExchangeOptions {
    * Whether the session is a planning call. A planning call speaks none of
    * the desk's proactive turns: a beat asked of it is dropped, and the
    * caller starts no briefing look over it, so nothing of the desk enters the
-   * plan's conversation.
+   * plan's conversation. It opens instead with the planning model's own
+   * first words, asked of it the moment a newly created call starts.
    */
   readonly planning?: boolean;
   readonly context: HostedStoreContext;
@@ -273,6 +275,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       onBriefingAppend: (delivery, eventId) =>
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
       ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
+      ...(options.planning === true ? { opening: PLANNING_OPENING_ASK } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );

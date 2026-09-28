@@ -9,7 +9,11 @@ import {
 } from "eve/evals";
 import { BRAIN_TOOL, WORKSPACE_FILE } from "../server/core.js";
 import { BRAIN_HOST_MODEL_FIXTURE } from "../server/hosted/brain-host/bounds.js";
-import { documentTextOf, repositoryTextOf } from "../server/hosted/brain-host/planning.js";
+import {
+  documentTextOf,
+  PLANNING_OPENING_ASK,
+  repositoryTextOf,
+} from "../server/hosted/brain-host/planning.js";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
 import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool.js";
 
@@ -21,7 +25,9 @@ import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool.js";
  * relay into the store without a key or a network. Offered `update_plan`, it
  * plans instead: it reads the saved document its standing context hands it,
  * adds the developer's latest words as an unconfirmed assumption, saves the
- * whole document back, and answers with one question; told to look
+ * whole document back, and answers with one question; asked to open a call,
+ * it saves nothing and greets a plan whose document is empty or recaps one
+ * that holds something, closing on a question either way; told to look
  * something up, it searches the public web for it instead and answers with
  * the first source the search found, or says it found none; asked for the
  * prompt, it appends a handoff prompt naming the plan's repository and
@@ -33,6 +39,12 @@ export const SCRIPTED_FACT = "The developer prefers short replies.";
 const SCRIPTED_USER_FILE = `# USER.md\n\n- 2026-09-15: ${SCRIPTED_FACT}\n`;
 const SCRIPTED_REPLY = "Noted: short replies from now on.";
 export const SCRIPTED_PLANNING_REPLY = "Noted as an assumption. Who should be able to do that?";
+export const SCRIPTED_OPENING_GREETING =
+  "I hear you have something new you want to work on. Let's plan it out together. What's the idea?";
+/** The resumed call's opening: a recap of how many assumptions stand, then the next question. */
+export function scriptedOpeningRecap(assumptions: number): string {
+  return `Welcome back. The plan holds ${assumptions} assumptions so far. Who should be able to do that?`;
+}
 /** What a developer's words start with when they ask the scripted planner to research the rest. */
 export const SCRIPTED_LOOK_UP = "Look up: ";
 export const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
@@ -103,6 +115,12 @@ function planningResponse(request: MockModelRequest): MockModelResponse {
     return { toolCalls: [{ name: SEARCH_WEB_TOOL.name, input: { query } }] };
   }
   const document = handedDocument(request);
+  if (request.lastUserMessage === PLANNING_OPENING_ASK) {
+    const empty = document.body.length === 0 && document.assumptions.length === 0;
+    return {
+      text: empty ? SCRIPTED_OPENING_GREETING : scriptedOpeningRecap(document.assumptions.length),
+    };
+  }
   if (request.lastUserMessage.startsWith(SCRIPTED_WRITE_PROMPT)) {
     return handoffResponse(request, document);
   }
