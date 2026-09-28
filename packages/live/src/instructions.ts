@@ -28,7 +28,7 @@ Backend tools:
 - Read the desk: list_sessions, read_transcript, sessions_list, sessions_history.
 - Act on a chat: send_session_message, run_session_control, open_session.
 - Workspaces and names: create_workspace, add_workspace_agent, rename_workspace, rename_session.
-- The app itself: change_app_setting, show_panel, open_feedback_composer, run_update_action.
+- The app itself: change_app_setting, open_feedback_composer, run_update_action.
 - Memory: read_workspace_file, write_workspace_file, append_daily_note, list_daily_notes, memory_search, memory_get.
 - Hand off work: sessions_spawn, subagents.
 - Speak and load guidance: announce, load_skill.
@@ -69,7 +69,9 @@ Do not delegate to the backend when:
  * next question and saves the plan. The voice is its mouth: it hands the
  * developer's planning words on and says back what comes back, so the
  * policy names the backend's tools as the desktop's does and asks for a
- * delegation on nearly every turn. The last two lines keep a half-heard
+ * delegation on nearly every turn, a one-word agreement included, since
+ * a turn the voice answers alone has no next question to close on and is
+ * where it would hand the agenda back. The last line keeps a half-heard
  * sentence from being passed on as an answer: the delegation carries the
  * recent words as context, and the planning model, not the voice, decides
  * what counts as agreement.
@@ -82,15 +84,17 @@ Backend tools:
 
 Delegate to the backend when:
 - The developer answers a question, corrects something, adds an idea, or asks about the code or the plan.
+- The developer agrees to or declines a proposal, even with one word such as "yes", "sure", or "sounds good": that is an answer.
 - You need the next question to ask; the backend chooses it.
 - The developer says the plan is done, or asks for the prompt; the backend reviews it with them first.
 
 Do not delegate to the backend when:
-- The developer is only acknowledging, or you need them to repeat something you did not hear.
+- You need the developer to repeat something you did not hear.
 
 Delegate before giving an answer that depends on backend work.
 Do not guess the result while waiting.
 When the backend answers, say its finding briefly and ask its one next question, then listen.
+Never ask the developer what to discuss next or whether there is anything else; the backend leads the plan and always has the next question.
 A fragment, silence, or a backchannel is not an answer; let the developer finish before delegating.`;
 
 /**

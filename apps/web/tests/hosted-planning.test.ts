@@ -22,9 +22,11 @@ import {
   SCRIPTED_HANDOFF_HEADING,
   SCRIPTED_LOOK_UP,
   SCRIPTED_NO_SOURCE_REPLY,
+  SCRIPTED_OPENING_GREETING,
   SCRIPTED_RESEARCH_REPLY,
   SCRIPTED_WRITE_PROMPT,
   scriptedModel,
+  scriptedOpeningRecap,
 } from "../eve/scripted-model";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
@@ -39,7 +41,7 @@ import {
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
-import { documentTextOf } from "../server/hosted/brain-host/planning";
+import { documentTextOf, PLANNING_OPENING_ASK } from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -540,6 +542,50 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.equal(added.length, 1);
         assert.ok(added[0]?.text.includes(CORRECTION));
         assert.equal(added[0]?.confirmed, false);
+      }),
+  );
+
+  it.effect(
+    "a new plan's call opens with the planning model's greeting, and the opening saves nothing",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
+        const before = yield* windowDocument(userId, planId);
+
+        const said = yield* planningTurn(
+          host,
+          session,
+          "turn_0",
+          PLANNING_OPENING_ASK,
+          noNetwork,
+          BRAIN_HOST_TURN.SPOKEN,
+        );
+
+        assert.equal(said, SCRIPTED_OPENING_GREETING);
+        assert.deepEqual(yield* windowDocument(userId, planId), before);
+      }),
+  );
+
+  it.effect(
+    "a resumed plan's call opens with a recap read from the saved document, and the opening saves nothing",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        yield* savePlanDocument(userId, planId, SAVED);
+        const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
+
+        const said = yield* planningTurn(
+          host,
+          session,
+          "turn_0",
+          PLANNING_OPENING_ASK,
+          noNetwork,
+          BRAIN_HOST_TURN.SPOKEN,
+        );
+
+        assert.equal(said, scriptedOpeningRecap(SAVED.assumptions.length));
+        assert.deepEqual(yield* windowDocument(userId, planId), SAVED);
       }),
   );
 

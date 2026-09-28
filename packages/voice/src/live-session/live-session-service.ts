@@ -156,6 +156,15 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
    * settles it.
    */
   onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
+  /**
+   * What the brain is asked, as the trusted side's own ask, the moment a
+   * session adopted before its start begins, so its reply opens the
+   * conversation before the developer has said a word. The reply is spoken
+   * as any reply is, with no delegation to answer. A session re-attached
+   * after its start is a conversation already under way and is asked
+   * nothing; absent, no session is.
+   */
+  opening?: string;
 }
 
 /**
@@ -233,6 +242,8 @@ interface StandingSession {
    * never come.
    */
   readonly released: Deferred.Deferred<void>;
+  /** The opening ask still owed at the session's start; taken once, and never for a session adopted already started. */
+  opening: string | undefined;
 }
 
 /**
@@ -256,9 +267,16 @@ interface Exchange {
   slowStepTold: boolean;
   finalize: SessionDelay | undefined;
   end: LiveBrainRunEnd | undefined;
+  /** Whether this is the session's opening, which answers no delegation and so is joined by none. */
+  readonly opening: boolean;
 }
 
-function newExchange(runId: string, delegationIds: string[], sessionId: string): Exchange {
+function newExchange(
+  runId: string,
+  delegationIds: string[],
+  sessionId: string,
+  opening = false,
+): Exchange {
   return {
     runIds: new Set([runId]),
     delegationIds,
@@ -271,6 +289,7 @@ function newExchange(runId: string, delegationIds: string[], sessionId: string):
     slowStepTold: false,
     finalize: undefined,
     end: undefined,
+    opening,
   };
 }
 
@@ -477,6 +496,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           const session = yield* this.#stand(opened.sessionId, sideband, scope);
           this.#standing = session;
           if (opened.started) this.#started(session);
+          else session.opening = this.#options.opening;
           return true;
         }),
       );
@@ -509,6 +529,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.started = true;
     this.#drain();
     this.#considerIdle(session);
+    const opening = session.opening;
+    session.opening = undefined;
+    if (opening !== undefined) this.#start(this.#open(session, opening));
   }
 
   /**
@@ -722,6 +745,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         settled: yield* Deferred.make<SidebandCloseResult>(),
         torn: yield* Deferred.make<void>(),
         released: yield* Deferred.make<void>(),
+        opening: undefined,
       };
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#start(serve);
@@ -1066,10 +1090,38 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     });
   }
 
+  /**
+   * The session's opening: the brain asked the trusted side's own question
+   * and its reply spoken as an exchange of its own, under no delegation,
+   * so Luke speaks first. Asked only while the conversation is unopened: a
+   * session Luke has already been asked to speak into, or on which either
+   * speaker has been heard, is past its opening. A delegation arriving
+   * while the reply is still coming opens its own exchange rather than
+   * joining this one, so the developer's words are answered as theirs. A
+   * refused opening says nothing, since nobody asked anything, and the
+   * developer opens the conversation instead.
+   */
+  #open(session: StandingSession, question: string): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      if (session.channel.commentarySent || session.ledger.lastActivityMs() !== undefined) return;
+      const submission = yield* this.#brain.submitAsk({
+        submissionId: this.#options.createId(),
+        question,
+      });
+      if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+        this.#options.report(`The session's opening was refused: ${submission.refusal}`);
+        return;
+      }
+      const exchange = newExchange(submission.runId, [], session.sessionId, true);
+      this.#exchanges.set(submission.runId, exchange);
+    });
+  }
+
   /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */
   #registerExchange(session: StandingSession, runId: string, delegationId: string): Exchange {
     const open = [...this.#exchanges.values()].find(
-      (exchange) => exchange.sessionId === session.sessionId && exchange.end === undefined,
+      (exchange) =>
+        exchange.sessionId === session.sessionId && exchange.end === undefined && !exchange.opening,
     );
     if (open) {
       open.delegationIds.push(delegationId);
@@ -1134,7 +1186,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /**
    * Ends an exchange once every run in it has: a run that ended with nothing
    * said is spoken as the standing note for how it ended, and a completed one
-   * that said nothing says nothing.
+   * that said nothing says nothing. Neither does an opening, however it
+   * ended, since the note answers an ask the developer never made.
    */
   #finalize(exchange: Exchange): void {
     exchange.finalize = undefined;
@@ -1143,7 +1196,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (held === exchange) this.#exchanges.delete(runId);
     }
     const unspoken = exchange.spokenChunks === 0 && exchange.buffered.length === 0;
-    if (!unspoken || exchange.end === undefined || exchange.end === LIVE_BRAIN_RUN_END.COMPLETED) {
+    if (
+      exchange.opening ||
+      !unspoken ||
+      exchange.end === undefined ||
+      exchange.end === LIVE_BRAIN_RUN_END.COMPLETED
+    ) {
       return;
     }
     this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
