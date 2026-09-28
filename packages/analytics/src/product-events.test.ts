@@ -166,6 +166,19 @@ test("a turn to the Plans tab is counted as the tab's name and nothing of a plan
   );
 });
 
+test("a turn to a tab hidden from the bar is not counted", () => {
+  for (const hidden of ["sessions", "conversation"]) {
+    assert.equal(
+      productEventFromWire({
+        name: PRODUCT_EVENT.PANEL_TAB_CHANGE,
+        at: AT,
+        properties: { [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: hidden },
+      }),
+      undefined,
+    );
+  }
+});
+
 test("a provider without a connection cannot pass as connection_id", () => {
   assert.equal(
     productEventFromWire({

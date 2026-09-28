@@ -183,8 +183,6 @@ type ProductUpdateAction = (typeof PRODUCT_UPDATE_ACTION)[keyof typeof PRODUCT_U
 
 /** Which half of the panel is drawn, said exactly as the guide says it. */
 const PRODUCT_PANEL_TAB = {
-  SESSIONS: APP_PANEL_TAB.SESSIONS,
-  CONVERSATION: APP_PANEL_TAB.CONVERSATION,
   PLANS: APP_PANEL_TAB.PLANS,
   SETTINGS: APP_PANEL_TAB.SETTINGS,
 } as const satisfies Record<string, AppPanelTab>;

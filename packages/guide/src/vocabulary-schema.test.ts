@@ -31,6 +31,6 @@ function settlesVocabulary<Member extends string>(
 test("a setting id is one of the ids the build declares", () => {
   settlesVocabulary(AppSettingIdSchema, Object.values(APP_SETTING_ID), [
     APP_SETTING_KIND.TOGGLE,
-    APP_PANEL_TAB.SESSIONS,
+    APP_PANEL_TAB.PLANS,
   ]);
 });

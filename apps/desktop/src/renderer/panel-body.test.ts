@@ -443,7 +443,7 @@ const PLAN = {
   document: { body: "# Teammate invitations", assumptions: [] },
 } as const;
 
-test("the tab bar offers Plans beside Conversation, and the Plans tab opens on the list under New plan", () => {
+test("the tab bar offers Plans and Settings alone, and the Plans tab opens on the list under New plan", () => {
   const opened: string[] = [];
   const mounted = mount(
     bodyProps(PANEL_TAB.PLANS, CONVERSATION_PAGE.THREAD, () => {}, {
@@ -457,7 +457,7 @@ test("the tab bar offers Plans beside Conversation, and the Plans tab opens on t
   const tabs = [...mounted.container.querySelectorAll('[role="tab"]')].map(
     (tab) => tab.textContent,
   );
-  assert.deepEqual(tabs, ["Sessions", "Conversation", "Plans", "Settings"]);
+  assert.deepEqual(tabs, ["Plans", "Settings"]);
   const rows = [...mounted.container.querySelectorAll<HTMLButtonElement>(".plan-list-row")];
   assert.equal(rows.length, 1);
   assert.match(rows[0]?.textContent ?? "", /Teammate invitations.*acme\/relay/u);
