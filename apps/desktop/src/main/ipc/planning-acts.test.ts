@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
-import { connectGitHubPending, GITHUB_CONNECTION_PENDING, planningActRows } from "./planning-acts";
+import { GITHUB_CONNECT_SIGNED_OUT, planningActRows } from "./planning-acts";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
@@ -33,6 +33,7 @@ function fixture() {
   const asked: string[] = [];
   const talked: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
+  const account = { signedIn: true };
   let opened = 0;
   const rows = planningActRows({
     openWindow: () => {
@@ -58,8 +59,12 @@ function fixture() {
             truncated: false,
           };
         }),
+      planningConnectGitHub: () =>
+        Effect.sync(() => {
+          asked.push("connect");
+          return account.signedIn;
+        }),
     },
-    connectGitHub: connectGitHubPending,
     activePlanId: () => view.activePlanId,
     talkAboutPlan: (planId) => {
       talked.push(planId);
@@ -68,7 +73,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, view, opened: () => opened };
+  return { router, asked, talked, view, account, opened: () => opened };
 }
 
 it.effect("the planning window's asks reach the host and answer what the host answered", () =>
@@ -137,20 +142,34 @@ it.effect("only a panel's entry opens the planning window", () =>
   }),
 );
 
-it.effect("Connect GitHub says the connection is not available until its flow lands", () =>
-  Effect.gen(function* () {
-    const f = fixture();
+it.effect(
+  "Connect GitHub opens the page through the host, and says to sign in when it opened nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
 
-    const connected = yield* f.router.performAct(
-      { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
-      PLANNING,
-    );
+      const connected = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
+        PLANNING,
+      );
+      f.account.signedIn = false;
+      const signedOut = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
+        PLANNING,
+      );
+      const fromPanel = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
+        PANEL,
+      );
 
-    assert.deepEqual(connected, {
-      status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: GITHUB_CONNECTION_PENDING,
-    });
-  }),
+      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(signedOut, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: GITHUB_CONNECT_SIGNED_OUT,
+      });
+      assert.equal(fromPanel.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, ["connect", "connect"]);
+    }),
 );
 
 it.effect(

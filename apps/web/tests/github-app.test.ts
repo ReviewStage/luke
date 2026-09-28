@@ -7,12 +7,13 @@ import {
 } from "@sidecar/hosted/github-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, Result } from "effect";
+import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { githubApp } from "../server/github-app";
 import { GITHUB_SOURCE_BOUNDS } from "../server/hosted/github-source";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { type FakeGitHub, type FakeRepository, fakeGitHub } from "./support/github-fake";
+import { noDatabase } from "./support/no-database";
 
 /**
  * The planning window's repository list, answered by the group the way a
@@ -50,7 +51,7 @@ const ask = (github: FakeGitHub, userId: string | undefined, method = "GET") =>
               incoming.headers.get("authorization") === `Bearer ${ACCOUNT}` ? ACCOUNT : undefined,
             ),
           ),
-      }).pipe(HttpRouter.provideRequest(github.layer)),
+      }).pipe(HttpRouter.provideRequest(Layer.mergeAll(github.layer, noDatabase))),
       { disableLogger: true },
     );
     const response = yield* Effect.promise(() =>

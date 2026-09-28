@@ -430,19 +430,21 @@ changes when a check is run, not when one is planned.
 - **Real voice.** No spoken planning conversation has run against GPT Live:
   ordinary assent, interruption, a continuing answer, a correction, resuming,
   and switching plans by voice are untested outside the fakes.
-- **A live GitHub connection.** No repository has been read through GitHub's
-  hosted MCP service outside the fake.
+- **A live GitHub connection.** No repository has been connected or read
+  through GitHub's OAuth App and hosted MCP service outside the fakes.
 
 ### Known limitations
 
-- **GitHub is not connected in production.** The plan, repository, and brain
-  routes run on `githubAccessWithoutConnections`
-  (`apps/web/server/hosted/github-source.ts`), which answers `not-connected`,
-  and the desktop's Connect GitHub press is refused ("Connecting GitHub from
-  Luke is not available yet"). So a deployed build cannot list repositories,
-  start a plan, or read a file. How a developer authorizes repository reads
-  is waiting on a product decision and will land as a separate LUKE-338
-  follow-up, with its `PRIVACY.md` disclosures.
+- **GitHub's `repo` scope is broader than Luke's use.** The Connect GitHub
+  step (`/connect-github.html`, opened by the setup sheet) links GitHub to the
+  Luke account under the existing OAuth App with the classic `repo` scope,
+  which grants read and write to every repository the developer can reach.
+  Luke only reads, through GitHub's read-only MCP endpoint, but the token
+  itself could write. Its `PRIVACY.md` disclosures are waiting on a product
+  decision.
+- **Connecting on a Preview.** The link runs through Better Auth on the
+  production OAuth App's callback; it has not been exercised on a Preview
+  deployment, where sign-in goes through the OAuth proxy.
 - **No thinking dots in the voice bar.** Nothing on the Mac hears that the
   planning model is working on a delegated question. The sessions route
   forwards `session.delegation.created`, but the host's live session holder

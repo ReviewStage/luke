@@ -15,7 +15,7 @@ import { PLAN_BOUNDS } from "./plan-wire.js";
 export const GITHUB_FAILURE = {
   /** The account holds no GitHub connection. */
   NOT_CONNECTED: "not-connected",
-  /** GitHub refused the connection's credential: revoked, expired, or uninstalled. */
+  /** GitHub refused the connection's credential (revoked or expired), or it was granted without repository access. */
   ACCESS_DENIED: "access-denied",
   /** The repository, or the path in it, does not exist or the connection cannot read it. */
   NOT_FOUND: "not-found",

@@ -706,10 +706,26 @@ the connection cannot read, an empty one, a refused credential, or no
 connection at all starts no plan and answers `github-unavailable` with its
 `GITHUB_FAILURE` reason (`packages/hosted/src/github-wire.ts`).
 `server/github-app.ts`'s `GET /api/github/repositories` is the list a new
-plan picks from, since only the service holds the credential. Until the
-account-bound connection lands, production's `GitHubAccess` is
-`githubAccessWithoutConnections`, and every one of these answers
-`not-connected`.
+plan picks from, since only the service holds the credential.
+
+The connection is the account's GitHub row in Better Auth's own `account`
+table. Sign-in asks GitHub for `read:user` and `user:email` alone; the
+Connect GitHub page (`src/connect-github.tsx`, `/connect-github.html`), which
+the Mac's setup sheet opens in the browser naming the account it is signed
+in as, links GitHub under the same OAuth App with `repo` on top, through
+Better Auth's `linkSocial` and the browser's own Luke session, refusing to
+link for a browser signed in as another account. Classic OAuth has no
+read-only form of `repo`: the token could write to every repository the
+developer reaches, though Luke only reads. Better Auth seals the token under
+the session secret (`encryptOAuthTokens`), a later sign-in never writes over
+it (`updateAccountOnSignIn: false`), and linking may name a GitHub account
+whose email differs, so an account signed in with Google connects the same
+way (`server/auth-policy.ts`). `server/hosted/github-connection.ts` is the
+production `GitHubAccess`: it opens the token under the same secret when a
+read needs it, and a row without `repo`, a token it cannot open, or GitHub
+answering 401 is `access-denied`, which the window and the model word as
+connect GitHub again. `tests/github-connection.test.ts` holds it against
+rows sealed the way Better Auth seals them.
 
 The planning model reads source through one tool,
 `get_file_contents({ path })` (`server/hosted/repository-tools.ts`), under

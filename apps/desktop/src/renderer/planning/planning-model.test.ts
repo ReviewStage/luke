@@ -17,6 +17,7 @@ import {
   MICROPHONE_PRESS,
   microphoneButton,
   offersGitHubConnect,
+  onceReturned,
   repositoriesMatching,
   repositoryLine,
   VOICE_LINE_TONE,
@@ -221,4 +222,21 @@ test("once a save changes the document, Copy returns to rest until pressed again
 
   assert.equal(copyShown(outcome, saved), COPY_SHOWN.IDLE);
   assert.equal(copyShown(undefined, REVIEWED), COPY_SHOWN.IDLE);
+});
+
+test("the sheet reads again once, when the window is back from the browser, and not after it closed", () => {
+  const window = new EventTarget();
+  let reads = 0;
+  onceReturned(window, () => {
+    reads += 1;
+  });
+  const cancel = onceReturned(window, () => {
+    reads += 100;
+  });
+  cancel();
+
+  window.dispatchEvent(new Event("focus"));
+  window.dispatchEvent(new Event("focus"));
+
+  assert.equal(reads, 1);
 });

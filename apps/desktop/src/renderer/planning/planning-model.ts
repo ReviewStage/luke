@@ -118,6 +118,16 @@ export function copyShown(outcome: CopyOutcome | undefined, document: PlanDocume
     : COPY_SHOWN.IDLE;
 }
 
+/**
+ * Runs `returned` once, the next time the window takes focus again, which is
+ * the developer coming back from the Connect GitHub page in the browser.
+ * Answers the cancel for a sheet that closes first.
+ */
+export function onceReturned(window: EventTarget, returned: () => void): () => void {
+  window.addEventListener("focus", returned, { once: true });
+  return () => window.removeEventListener("focus", returned);
+}
+
 /** Whether the setup sheet should offer to connect GitHub rather than a list. */
 export function offersGitHubConnect(failure: GitHubCallFailure): boolean {
   return failure === GITHUB_FAILURE.NOT_CONNECTED || failure === GITHUB_FAILURE.ACCESS_DENIED;

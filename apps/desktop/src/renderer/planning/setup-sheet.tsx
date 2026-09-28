@@ -7,7 +7,12 @@ import {
 import { useCallback, useEffect, useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
-import { githubFailureNote, offersGitHubConnect, repositoriesMatching } from "./planning-model";
+import {
+  githubFailureNote,
+  offersGitHubConnect,
+  onceReturned,
+  repositoriesMatching,
+} from "./planning-model";
 
 /**
  * setup-sheet.tsx -- the new-plan sheet: Connect GitHub while the account has no connection, the plan's name, and the repository it plans against.
@@ -190,6 +195,9 @@ export function SetupSheetView(props: SetupSheetViewProps): React.JSX.Element {
   );
 }
 
+/** What the sheet says once the Connect GitHub page is open in the browser. */
+const GITHUB_CONNECT_IN_BROWSER = "Finish connecting GitHub in your browser, then come back here.";
+
 /**
  * The sheet with its own state: the fields, the repository list read when it
  * opens and again on Try again, and the Start plan and Connect GitHub presses.
@@ -232,14 +240,27 @@ export function SetupSheet({
       .finally(() => setStarting(false));
   };
 
-  // The connection's own flow is not built yet; its door answers with the
-  // sentence the sheet draws, and a connection that lands reads the list again.
+  // The link happens in the browser, so the press only opens it: the sheet
+  // says where to finish, and reads the list again when the window is back.
+  const [connecting, setConnecting] = useState(false);
   const connect = () => {
     setNote(undefined);
-    act(ACT_KIND.PLANNING_CONNECT_GITHUB).then(readList, (refused: Error) =>
-      setNote(refused.message),
+    act(ACT_KIND.PLANNING_CONNECT_GITHUB).then(
+      () => {
+        setConnecting(true);
+        setNote(GITHUB_CONNECT_IN_BROWSER);
+      },
+      (refused: Error) => setNote(refused.message),
     );
   };
+  useEffect(() => {
+    if (!connecting) return;
+    return onceReturned(window, () => {
+      setConnecting(false);
+      setNote(undefined);
+      readList();
+    });
+  }, [connecting, readList]);
 
   return (
     <SetupSheetView

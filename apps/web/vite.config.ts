@@ -16,6 +16,7 @@ export default defineConfig({
         changelog: resolveEntry("./changelog.html"),
         "sign-in": resolveEntry("./sign-in.html"),
         consent: resolveEntry("./consent.html"),
+        "connect-github": resolveEntry("./connect-github.html"),
         admin: resolveEntry("./admin.html"),
       },
     },

@@ -44,10 +44,7 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
-import {
-  GITHUB_ACCESS_WITHOUT_CONNECTIONS,
-  type GitHubAccessShape,
-} from "../server/hosted/github-source";
+import type { GitHubAccessShape } from "../server/hosted/github-source";
 import {
   createPlan,
   deletePlan,
@@ -65,7 +62,7 @@ import {
 import { hostedStore, storeWriter } from "../server/hosted/store";
 import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool";
 import { stampedEveEvent } from "./support/eve-events";
-import { fakeGitHub } from "./support/github-fake";
+import { fakeGitHub, noGitHubConnections } from "./support/github-fake";
 import { noNetwork } from "./support/no-network";
 import { testSqlClient } from "./support/sql-client";
 
@@ -161,7 +158,7 @@ function unreached(name: string): () => never {
 
 /** The host over the test database, with the writer holding rows to the hosted tool set as production's does. */
 const planningHost = (
-  githubAccess: GitHubAccessShape = GITHUB_ACCESS_WITHOUT_CONNECTIONS,
+  githubAccess: GitHubAccessShape = noGitHubConnections,
   openAi: BrainHostSeams["openAi"] = () => undefined,
   spend: BrainHostSeams["spend"] = unreached("spend"),
 ) =>
@@ -711,11 +708,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const host = yield* planningHost(
-          GITHUB_ACCESS_WITHOUT_CONNECTIONS,
-          TEST_OPENAI,
-          meter(true),
-        );
+        const host = yield* planningHost(noGitHubConnections, TEST_OPENAI, meter(true));
         const asking = yield* createPlan(userId, RELAY_PLAN);
         const other = yield* createPlan(userId, { ...RELAY_PLAN, name: "Billing export" });
         const askingConversation = Option.getOrThrow(
@@ -758,7 +751,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   it.effect("a failed search reaches the model as nothing found, not as a fact", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const host = yield* planningHost(GITHUB_ACCESS_WITHOUT_CONNECTIONS, TEST_OPENAI, meter(true));
+      const host = yield* planningHost(noGitHubConnections, TEST_OPENAI, meter(true));
       const started = yield* createPlan(userId, RELAY_PLAN);
       const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
       const session = yield* startSession(host, userId, conversationId);
@@ -780,11 +773,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const host = yield* planningHost(
-          GITHUB_ACCESS_WITHOUT_CONNECTIONS,
-          TEST_OPENAI,
-          meter(false),
-        );
+        const host = yield* planningHost(noGitHubConnections, TEST_OPENAI, meter(false));
         const started = yield* createPlan(userId, RELAY_PLAN);
         const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
         const session = yield* startSession(host, userId, conversationId);
