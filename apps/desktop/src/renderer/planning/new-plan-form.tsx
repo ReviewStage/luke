@@ -177,11 +177,11 @@ export function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element 
         }}
       >
         <label className="plan-form-name">
-          <span>Name</span>
+          <span>Plan name</span>
           <input
             type="text"
             value={props.name}
-            placeholder="Teammate invitations"
+            placeholder="e.g. Dark mode toggle"
             maxLength={200}
             onChange={(event) => props.onName(event.currentTarget.value)}
           />
