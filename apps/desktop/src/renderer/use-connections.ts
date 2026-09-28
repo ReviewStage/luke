@@ -10,7 +10,7 @@ import type { ConsentConnectEntry } from "./consent-connect-slot";
 import type { CredentialEntry, CredentialEntryControl } from "./credential-entry";
 import { isSubmittable, removalEndsEntry } from "./credential-entry";
 import { PANEL_PRESENTATION } from "./panel-state";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { PANEL_TAB, type ShownPanelTab } from "./panel-tabs";
 import type { AppleCalendarControl, CalendarControl } from "./settings/controls";
 import {
   PANEL_STAND_DOWN,
@@ -33,7 +33,7 @@ interface UseConnectionsOptions {
    * the roster for one begun from the key gate or the empty desk, which
    * promised sessions and not a settings page.
    */
-  standDownTab: RefObject<PanelTab>;
+  standDownTab: RefObject<ShownPanelTab>;
   /** Brings the panel forward around what a landed sign-in just unlocked. */
   expand: () => void;
   calendars: readonly ObservedAccountCalendars[];
@@ -45,7 +45,7 @@ export interface Connections {
   credentialEntry: CredentialEntry | undefined;
   /** Opens the key entry directly, which only the evidence run needs. */
   beginEntry: (providerId: CredentialProviderId) => void;
-  /** The Connect press made where the roster would be, which comes back to the roster. */
+  /** The Connect press made where the roster would be, which comes back to the home tab. */
   connectFromRoster: (providerId: CredentialProviderId) => void;
   cancelEntry: () => void;
   /** Which entry the slot shape is drawn around, read as the render draws it. */
@@ -274,7 +274,7 @@ export function useConnections(options: UseConnectionsOptions): Connections {
    * fixes.
    */
   const connectEntry = useCallback(
-    (providerId: CredentialProviderId, returnTo: PanelTab = PANEL_TAB.SETTINGS) => {
+    (providerId: CredentialProviderId, returnTo: ShownPanelTab = PANEL_TAB.SETTINGS) => {
       standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.KEY, providerId });
       standDownTab.current = returnTo;
       slotOccupant.current = PANEL_STAND_DOWN.KEY;
@@ -286,11 +286,12 @@ export function useConnections(options: UseConnectionsOptions): Connections {
 
   /**
    * The same Connect, pressed where the roster would be — the key gate or the
-   * empty desk — so what comes back after the slot is the roster those
-   * promised, not the Connections page the row's own press returns to.
+   * empty desk — so what comes back after the slot is the panel's home tab,
+   * Plans while the roster's tab is hidden, not the Connections page the
+   * row's own press returns to.
    */
   const connectFromRoster = useCallback(
-    (providerId: CredentialProviderId) => connectEntry(providerId, PANEL_TAB.SESSIONS),
+    (providerId: CredentialProviderId) => connectEntry(providerId, PANEL_TAB.PLANS),
     [connectEntry],
   );
 

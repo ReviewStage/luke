@@ -57,6 +57,8 @@ capture_evidence() {
         "$@"
 }
 
+# The panel opens on Plans, the Sessions and Conversation tabs being hidden
+# for now: the fixture's synthetic plan list, with no plan open.
 capture_evidence expanded --expanded --capture-evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 capture_evidence compact --compact --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
 capture_evidence peek --compact --peek --capture-evidence "$SIDECAR_PEEK_EVIDENCE_PATH"

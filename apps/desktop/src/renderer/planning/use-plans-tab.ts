@@ -84,8 +84,8 @@ export function usePlansTab(input: {
   const { act, tell } = input.acts;
   const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
 
-  // A fixture run under the planning profile draws its synthetic plans in
-  // place of the account's, signed out as every fixture run is.
+  // A fixture run draws its synthetic plans in place of the account's,
+  // signed out as every fixture run is.
   const fixture = fixturePlanningView(input.run);
   const planning = fixture ?? input.planning;
   const signedIn = fixture !== undefined || input.signedIn;

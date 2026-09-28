@@ -40,14 +40,18 @@ A reviewer can hold the build to these as easily as to the layout:
 
 ## The Plans tab
 
-Planning is the panel's fourth tab, `Plans`, between `Conversation` and
-`Settings`. It draws inside the panel's own frame (620 wide, at most 520
-tall, the expanded window every tab shares), one page at a time, the way the
-Conversation tab turns between its thread and its agents:
+Planning is the panel's first tab, `Plans`, beside `Settings`, and the tab
+the panel opens on. The Sessions and Conversation tabs are hidden for now
+(LUKE-350): they are out of the tab bar and nothing opens them, not a key, a
+press, a composer's return, or a collapse, while the desk services, stores,
+and hosted endpoints behind them stand, so they come back by returning them
+to `APP_PANEL_TAB` and the bar's list in `panel-tabs.tsx`. The tab draws
+inside the panel's own frame (620 wide, at most 520 tall, the expanded window
+every tab shares), one page at a time:
 
 ```
  ┌──────────────────────────────────────────────────────────────┐
- │  Sessions   Conversation   [ Plans ]   Settings              │
+ │  [ Plans ]   Settings                                        │
  │  ‹  Teammate invitations                          [ Copy ]   │
  │     acme/relay · main @ 4f2c9e1                              │
  │ ──────────────────────────────────────────────────────────── │
@@ -74,7 +78,8 @@ Conversation tab turns between its thread and its agents:
 Escape unwinds one page at a time, after any open microphone has been muted
 (Escape mutes first, as it does for any call): the document page back to the
 list, which leaves the plan, the new-plan page back to the list, and the list
-to the Sessions tab. The panel with no plan open is the desk exactly as it was.
+closes the panel. Escape on the Settings tab's front page comes back to Plans,
+and the panel closing to the capsule turns it back to Plans as well.
 
 ### Opening, leaving, and the talk key
 
@@ -379,7 +384,7 @@ the exact shape.
 
 | Part | Reuse | New |
 | --- | --- | --- |
-| The tab | The panel's tab bar and its page idiom (`panel-tabs.tsx`, `panel-body.tsx`; the Conversation tab's pages in `agents-panel.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the tab bar and the counted `panel:tab_change` share | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`renderer/planning/plans-panel.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
+| The tab | The panel's tab bar and its page idiom (`panel-tabs.tsx`, `panel-body.tsx`; the Conversation tab's pages in `agents-panel.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the tab bar and the counted `panel:tab_change` share | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`renderer/planning/plans-panel.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). `SESSIONS` and `CONVERSATION` out of both, and every way into a tab typed to the shown set (`ShownPanelTab`) while the body still draws the hidden two (LUKE-350). |
 | Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list and its follow and pause, opening, leaving, and starting a plan, the repositories, Connect GitHub, and the microphone. |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list, the form, and the repository list read from the GitHub connection (LUKE-337, LUKE-338). |
 | GitHub connection | `ConsentConnectSlot` (`apps/desktop/src/renderer/consent-connect-slot.tsx`) and `useConnections` (`use-connections.ts`), the pattern the calendar consent uses | The repository connection itself, with its scopes and token held in connection handling and never in the renderer or a model-visible argument (LUKE-338). |
@@ -445,8 +450,10 @@ changes when a check is run, not when one is planned.
   the microphone row, and the capsule and captions during a planning call
   have never been seen running. `./scripts/evidence.sh` captures the panel
   expanded on the Plans tab over a synthetic plan
-  (`app-smoke-planning.png`, from `--profile planning --expanded`), but that
-  capture has not been taken yet.
+  (`app-smoke-planning.png`, from `--profile planning --expanded`) and over
+  the synthetic plan list with none open (`app-smoke-expanded.png`, the panel
+  opening on Plans with Sessions and Conversation hidden), but neither
+  capture has been taken yet.
 - **Real voice.** No spoken planning conversation has run against GPT Live:
   ordinary assent, interruption, a continuing answer, a correction, resuming,
   and switching plans by voice are untested outside the fakes.
