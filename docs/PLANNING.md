@@ -113,7 +113,8 @@ nothing spoken:
    connection. It is the account-bound GitHub connection LUKE-338 adds, and it
    is separate from GitHub sign-in, which asks for `read:user` and
    `user:email` alone.
-2. **Name**, a single-line field such as "Teammate invitations".
+2. **Plan name**, a single-line field whose placeholder, "e.g. Dark mode
+   toggle", reads as an example to replace rather than a filled value.
 3. **Repository**, a filterable list of the existing repositories the
    connection can read, private ones included. The filter narrows the list and
    nothing else.
