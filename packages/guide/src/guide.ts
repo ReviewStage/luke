@@ -62,12 +62,12 @@ export interface AppGuideSetting {
 }
 
 /**
- * The panel surfaces a spoken ask can bring forward. The set is the panel's
- * own tab bar; a surface outside it has no press to mirror.
+ * The panel's tab bar, and so the tabs a panel-tab change is counted as. The
+ * Sessions and Conversation tabs are hidden for now (LUKE-350): the renderer
+ * still draws them but nothing reaches them, and they come back by returning
+ * here and to the bar's own list.
  */
 export const APP_PANEL_TAB = {
-  SESSIONS: "sessions",
-  CONVERSATION: "conversation",
   /** The named plans, and the one open plan's saved document and call. */
   PLANS: "plans",
   SETTINGS: "settings",

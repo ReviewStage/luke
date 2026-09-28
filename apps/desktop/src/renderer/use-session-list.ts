@@ -48,8 +48,6 @@ interface UseSessionListOptions {
   tab: PanelTab;
   /** Gets the panel out of the way of whatever a press just brought forward. */
   dismissPanel: () => void;
-  /** Brings the list's own tab forward, which is where its field is drawn. */
-  showSessionsTab: () => void;
 }
 
 interface SessionList {
@@ -87,7 +85,7 @@ interface SessionList {
  */
 export function useSessionList(options: UseSessionListOptions): SessionList {
   const { act, tell, updateSetting } = useAct();
-  const { state, settings, tab, dismissPanel, showSessionsTab } = options;
+  const { state, settings, tab, dismissPanel } = options;
   const [view, setView] = useState<SessionArrangement>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -354,19 +352,19 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
   );
 
   /**
-   * The session search summons, from its magnifier or Command-F over the
-   * Sessions tab. It lands on that tab — the field it opens is that list's —
-   * and the caret follows the same frame-by-frame seek the ask field needs,
-   * because the field may not be drawn until React has answered.
+   * The session search summons, from its magnifier over the Sessions tab,
+   * the one place it is drawn, so it turns no tab: that tab is hidden for now
+   * and nothing else may bring it forward. The caret follows the same
+   * frame-by-frame seek the ask field needs, because the field may not be
+   * drawn until React has answered.
    */
   const openSearch = useCallback(() => {
-    showSessionsTab();
     setSearchOpen(true);
     focusSearchField(SESSION_SEARCH_INPUT_ID);
     window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
       search_surface: PRODUCT_SEARCH_SURFACE.SESSIONS,
     });
-  }, [showSessionsTab]);
+  }, []);
 
   /**
    * Closing the search lets go of its query in the same act: a field that

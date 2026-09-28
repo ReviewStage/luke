@@ -18,14 +18,19 @@ test("a fixture run under the planning profile draws a saved plan with both kind
   assert.ok(view.plans.some((plan) => plan.id === region.plan.id));
 });
 
-test("no other run draws the synthetic plans", () => {
+test("a fixture run under another profile draws the synthetic list with no plan open", () => {
+  for (const profile of [RUN_PROFILE.IDLE, RUN_PROFILE.SPEAKING]) {
+    const view = fixturePlanningView({ fixtureMode: true, profile });
+    assert.ok(view !== undefined);
+    assert.equal(view.plans.length > 1, true);
+    assert.equal(view.activePlanId, undefined);
+    assert.equal(documentRegion(view).kind, DOCUMENT_REGION.NONE);
+  }
+});
+
+test("a live run draws no synthetic plans", () => {
   assert.equal(
     fixturePlanningView({ fixtureMode: false, profile: RUN_PROFILE.PLANNING }),
-    undefined,
-  );
-  assert.equal(fixturePlanningView({ fixtureMode: true, profile: RUN_PROFILE.IDLE }), undefined);
-  assert.equal(
-    fixturePlanningView({ fixtureMode: true, profile: RUN_PROFILE.SPEAKING }),
     undefined,
   );
 });

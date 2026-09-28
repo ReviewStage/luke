@@ -6,9 +6,11 @@ import { RUN_PROFILE } from "#shared/messages/app-state";
  * planning-fixture.ts -- the synthetic plans a fixture run's Plans tab draws in place of the service's.
  *
  * A fixture run signs in to nothing and reads no plan, so the Plans tab
- * would show only its signed-out line. Under the planning profile it draws
- * the reference journey's plan from `docs/PLANNING.md` instead, which is what
- * `scripts/evidence.sh` captures. Every name, repository, and commit here is
+ * would show only its signed-out line. It draws the synthetic list instead,
+ * which is what the expanded capture in `scripts/evidence.sh` shows now that
+ * the panel opens on Plans, and under the planning profile it also opens the
+ * reference journey's plan from `docs/PLANNING.md`, which is what the
+ * planning capture shows. Every name, repository, and commit here is
  * invented; nothing is read from an account.
  */
 
@@ -65,7 +67,7 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
   },
 ];
 
-const FIXTURE_PLANNING_VIEW: PlanningView = {
+const FIXTURE_PLAN_LIST: PlanningView = {
   plans: [
     {
       id: FIXTURE_PLAN.id,
@@ -78,20 +80,24 @@ const FIXTURE_PLANNING_VIEW: PlanningView = {
     ...FIXTURE_OTHER_PLANS,
   ],
   listStatus: PLANNING_READ.READY,
+  document: { status: PLANNING_READ.IDLE },
+};
+
+const FIXTURE_OPEN_PLAN: PlanningView = {
+  ...FIXTURE_PLAN_LIST,
   activePlanId: FIXTURE_PLAN.id,
   document: { status: PLANNING_READ.READY, plan: FIXTURE_PLAN },
 };
 
 /**
- * The plans a fixture run under the planning profile draws, and nothing for
- * any other run: a live run, or a fixture run under another profile, draws
- * what the host read.
+ * The plans a fixture run draws: the list with its first plan open under the
+ * planning profile, the list alone under any other, and nothing for a live
+ * run, which draws what the host read.
  */
 export function fixturePlanningView(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
 }): PlanningView | undefined {
-  return run.fixtureMode && run.profile === RUN_PROFILE.PLANNING
-    ? FIXTURE_PLANNING_VIEW
-    : undefined;
+  if (!run.fixtureMode) return undefined;
+  return run.profile === RUN_PROFILE.PLANNING ? FIXTURE_OPEN_PLAN : FIXTURE_PLAN_LIST;
 }
