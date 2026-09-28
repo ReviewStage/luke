@@ -105,6 +105,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
       },
+      isGone: (sender) => sender.isDestroyed(),
       whenGone: (sender, gone) => {
         sender.once("destroyed", () => void run(gone));
       },

@@ -26,6 +26,7 @@ function fixture() {
   const asked: string[] = [];
   const talked: string[] = [];
   const gones = new Map<WebContents, Effect.Effect<void>>();
+  const destroyed = new Set<WebContents>();
   const view: OpenPlan = { activePlanId: PLAN_ID };
   const account = { signedIn: true };
   const rows = planningActRows({
@@ -61,6 +62,7 @@ function fixture() {
     talkAboutPlan: (planId) => {
       talked.push(planId);
     },
+    isGone: (sender) => destroyed.has(sender),
     whenGone: (sender, gone) => {
       gones.set(sender, gone);
     },
@@ -68,7 +70,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, view, account, gones };
+  return { router, asked, talked, view, account, gones, destroyed };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -203,6 +205,23 @@ it.effect(
       assert.deepEqual(f.asked, ["refresh", "refresh", "pause"]);
       // A pause from a panel that no longer counts asks for nothing more.
       yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
+      assert.deepEqual(f.asked, ["refresh", "refresh", "pause"]);
+    }),
+);
+
+it.effect(
+  "a refresh that lands after its panel was torn down leaves the follow to the panels still standing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      // SAFETY: a second inert object, the panel of a display just unplugged.
+      const unplugged: ActSender = { ...PANEL, sender: {} as WebContents };
+      f.destroyed.add(unplugged.sender);
+
+      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, PANEL);
+      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, unplugged);
+      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
+
       assert.deepEqual(f.asked, ["refresh", "refresh", "pause"]);
     }),
 );

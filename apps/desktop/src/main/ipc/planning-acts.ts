@@ -34,6 +34,8 @@ export interface PlanningActsDependencies {
   activePlanId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
   talkAboutPlan: (planId: string) => void;
+  /** Whether a panel's window is already destroyed, as one whose ask was still in flight can be. */
+  isGone: (sender: WebContents) => boolean;
   /** Runs `gone` once when a panel's window is destroyed, so a panel that vanished mid-follow stops counting. */
   whenGone: (sender: WebContents, gone: Effect.Effect<void>) => void;
 }
@@ -69,7 +71,9 @@ export function planningActRows(
   return {
     [ACT_KIND.PLANNING_REFRESH]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REFRESH, sender);
-      if (!showing.has(sender.sender)) {
+      // A refresh landing after its panel was torn down counts nothing, since
+      // no destroyed event is left to take it back out.
+      if (!showing.has(sender.sender) && !dependencies.isGone(sender.sender)) {
         showing.add(sender.sender);
         dependencies.whenGone(sender.sender, stopShowing(sender.sender));
       }
