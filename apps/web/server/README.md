@@ -847,6 +847,22 @@ provider code, it decrypts the proxy state and requires both the profile-return
 endpoint and its final page to match that allowlist. A Preview-held key therefore
 cannot turn production into a token relay to an origin outside the project.
 
+The Connect GitHub page's link (`linkSocial`) takes the same road, which the
+plugin itself does not: its hooks match only the sign-in paths, so a Preview's
+link would send GitHub the Preview's own callback, which the OAuth App refuses
+as not associated with it. `auth-proxy.ts` runs the plugin's two sign-in hooks
+on `/link-social` too, and makes the page's error address absolute on the
+Preview, since production is where GitHub's refusal is answered. Production's
+side is the relay it already was: the link half of the state (the Luke user it
+began signed in as) sits in the Preview's own verification row, and production
+never reads it. What differs is where the profile lands. The plugin's endpoint
+would turn it into a session for whoever owns the GitHub account, so a Preview
+consumes a profile whose stored state names a link itself: it requires the
+browser landing it to be signed in as that very user, since the proxy skips
+its browser-bound state cookie, and stores the tokens on that user's GitHub
+row, sealed as every row is, signing nobody in. Every other profile passes to
+the plugin's endpoint unchanged.
+
 Vercel Deployment Protection sits in front of all of this. The redirect back
 from production lands on the protected preview like any other request, so the
 browser needs that deployment's access cookie already; without it the dashboard
