@@ -442,9 +442,12 @@ changes when a check is run, not when one is planned.
   Luke only reads, through GitHub's read-only MCP endpoint, but the token
   itself could write. Its `PRIVACY.md` disclosures are waiting on a product
   decision.
-- **Connecting on a Preview.** The link runs through Better Auth on the
-  production OAuth App's callback; it has not been exercised on a Preview
-  deployment, where sign-in goes through the OAuth proxy.
+- **Connecting on a Preview.** A Preview's link goes through production's
+  registered callback on the OAuth proxy, as sign-in does, and lands on the
+  Preview's signed-in user (`apps/web/server/README.md`, the OAuth proxy);
+  it is held end to end against a fake GitHub in
+  `apps/web/tests/auth-proxy-link.test.ts` and has not yet been exercised
+  against a deployed Preview.
 - **No thinking dots in the voice bar.** Nothing on the Mac hears that the
   planning model is working on a delegated question. The sessions route
   forwards `session.delegation.created`, but the host's live session holder
