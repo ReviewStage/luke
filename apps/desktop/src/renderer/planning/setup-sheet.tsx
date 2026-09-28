@@ -9,6 +9,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import {
   githubFailureNote,
+  newestReadOnly,
   offersGitHubConnect,
   onEachReturn,
   repositoriesMatching,
@@ -219,10 +220,16 @@ export function SetupSheet({
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
 
+  // Reads overlap (a return from the browser, Try again), so only the newest
+  // one's answer is drawn: an older read landing late never undoes it.
+  const [applyNewest] = useState(() => newestReadOnly<RepositoryList>());
   const readList = useCallback(() => {
     setList({ status: REPOSITORY_LIST.READING });
-    readRepositoryList(() => act(ACT_KIND.PLANNING_REPOSITORIES)).then(setList, () => undefined);
-  }, [act]);
+    applyNewest(
+      readRepositoryList(() => act(ACT_KIND.PLANNING_REPOSITORIES)),
+      setList,
+    );
+  }, [act, applyNewest]);
   useEffect(readList, [readList]);
 
   const start = () => {

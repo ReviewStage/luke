@@ -16,6 +16,7 @@ import {
   githubFailureNote,
   MICROPHONE_PRESS,
   microphoneButton,
+  newestReadOnly,
   offersGitHubConnect,
   onEachReturn,
   repositoriesMatching,
@@ -238,4 +239,30 @@ test("the sheet reads again on every return from the browser until the wait is c
   window.dispatchEvent(new Event("focus"));
 
   assert.equal(reads, 2);
+});
+
+/** A read whose answer the test hands over when it chooses. */
+function heldRead() {
+  let answer: (value: string) => void = () => undefined;
+  const promise = new Promise<string>((resolve) => {
+    answer = resolve;
+  });
+  return { promise, resolve: (value: string) => answer(value) };
+}
+
+test("a list read that another read replaced is dropped when it lands late", async () => {
+  const applyNewest = newestReadOnly<string>();
+  const drawn: string[] = [];
+  const older = heldRead();
+  const newer = heldRead();
+
+  applyNewest(older.promise, (answer) => drawn.push(answer));
+  applyNewest(newer.promise, (answer) => drawn.push(answer));
+  newer.resolve("connected");
+  await newer.promise;
+  older.resolve("not-connected");
+  await older.promise;
+  await Promise.resolve();
+
+  assert.deepEqual(drawn, ["connected"]);
 });
