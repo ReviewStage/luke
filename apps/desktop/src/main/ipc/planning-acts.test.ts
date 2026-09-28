@@ -209,19 +209,18 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a refresh that lands after its panel was torn down leaves the follow to the panels still standing",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      // SAFETY: a second inert object, the panel of a display just unplugged.
-      const unplugged: ActSender = { ...PANEL, sender: {} as WebContents };
-      f.destroyed.add(unplugged.sender);
+it.effect("a refresh that lands after its panel was torn down asks the host for nothing", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    // SAFETY: a second inert object, the panel of a display just unplugged.
+    const unplugged: ActSender = { ...PANEL, sender: {} as WebContents };
+    f.destroyed.add(unplugged.sender);
 
-      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, PANEL);
-      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, unplugged);
-      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
+    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, PANEL);
+    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, unplugged);
+    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
 
-      assert.deepEqual(f.asked, ["refresh", "refresh", "pause"]);
-    }),
+    // The torn-down panel's refresh reads and arms nothing.
+    assert.deepEqual(f.asked, ["refresh", "pause"]);
+  }),
 );

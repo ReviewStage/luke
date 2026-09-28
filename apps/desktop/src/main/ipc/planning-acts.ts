@@ -71,9 +71,10 @@ export function planningActRows(
   return {
     [ACT_KIND.PLANNING_REFRESH]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REFRESH, sender);
-      // A refresh landing after its panel was torn down counts nothing, since
-      // no destroyed event is left to take it back out.
-      if (!showing.has(sender.sender) && !dependencies.isGone(sender.sender)) {
+      // A refresh landing after its panel was torn down asks for nothing,
+      // since no destroyed event is left to pause what it would arm.
+      if (dependencies.isGone(sender.sender)) return Effect.void;
+      if (!showing.has(sender.sender)) {
         showing.add(sender.sender);
         dependencies.whenGone(sender.sender, stopShowing(sender.sender));
       }
