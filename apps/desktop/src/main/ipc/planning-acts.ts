@@ -34,6 +34,8 @@ export interface PlanningActsDependencies {
   activePlanId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
   talkAboutPlan: (planId: string) => void;
+  /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
+  voiceReady: () => boolean;
   /** Whether a panel's window is already destroyed, as one whose ask was still in flight can be. */
   isGone: (sender: WebContents) => boolean;
   /** Runs `gone` once when a panel's window is destroyed, so a panel that vanished mid-follow stops counting. */
@@ -92,9 +94,19 @@ export function planningActRows(
       refuseUnlessPanel(ACT_KIND.PLANNING_CLOSE, sender);
       return host.planningClose();
     },
+    // Note that a started plan opens its call at once, because pressing
+    // Start plan is the developer's gesture and Luke opens a new plan by
+    // greeting it; where the call would first have to ask for the
+    // microphone, the plan's own microphone button asks instead.
     [ACT_KIND.PLANNING_START]: (request, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_START, sender);
-      return host.planningStart(request);
+      return Effect.tap(host.planningStart(request), (answer) =>
+        Effect.sync(() => {
+          if ("planId" in answer && dependencies.voiceReady()) {
+            dependencies.talkAboutPlan(answer.planId);
+          }
+        }),
+      );
     },
     [ACT_KIND.PLANNING_REPOSITORIES]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REPOSITORIES, sender);

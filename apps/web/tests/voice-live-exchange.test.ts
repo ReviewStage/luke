@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
@@ -16,6 +16,7 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { PLANNING_OPENING_ASK } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,
   type RelayStanding,
@@ -23,6 +24,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
+import { createPlan, openPlanConversation, savePlanDocument } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
@@ -181,7 +183,11 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
 const QUIET_MS = 30;
 
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
-async function stand(target: ConversationTarget, deviceId: string | undefined) {
+async function stand(
+  target: ConversationTarget,
+  deviceId: string | undefined,
+  options: { readonly planning?: boolean } = {},
+) {
   const liveSessionId = `sess_${randomUUID()}`;
   await database.run(sessionRecord.register({ userId: target.userId, sessionId: liveSessionId }));
   if (deviceId !== undefined) {
@@ -227,6 +233,7 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
         now: () => NOW,
         createId: () => randomUUID(),
         report: (message) => reports.push(message),
+        ...(options.planning === true ? { planning: true } : undefined),
       }),
       scope,
     ),
@@ -455,4 +462,89 @@ it.live(
       assert.deepEqual(f.eve.opened, []);
       yield* Effect.promise(() => f.exchange.stop());
     }),
+);
+
+/** A plan of the account's own, its conversation opened as a planning call's attachment opens it; resumed, it holds a saved document. */
+async function plan(userId: string, resumed: boolean): Promise<ConversationTarget> {
+  const created = await database.run(
+    createPlan(userId, {
+      name: "Teammate invitations",
+      repository: {
+        owner: "acme",
+        name: "relay",
+        branch: "main",
+        commit: "4f2c9e1a7b3d5f60718293a4b5c6d7e8f9012345",
+      },
+    }),
+  );
+  if (resumed) {
+    await database.run(
+      savePlanDocument(userId, created.id, {
+        body: "# Teammate invitations\n\n## Open questions\n- Who may invite?\n",
+        assumptions: [{ text: "Invites expire after a week.", confirmed: false }],
+      }),
+    );
+  }
+  const conversationId = await database.run(openPlanConversation(userId, created.id));
+  assert.ok(Option.isSome(conversationId));
+  return { userId, conversationId: conversationId.value };
+}
+
+for (const resumed of [false, true]) {
+  it.live(
+    `a planning call on a ${resumed ? "resumed" : "new"} plan opens with the planning model's own first words: the opening is asked in the plan's conversation as the session starts, before the developer speaks, and its reply is spoken under no delegation`,
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* Effect.promise(() => database.createUser());
+        const target = yield* Effect.promise(() => plan(userId, resumed));
+        const f = yield* Effect.promise(() => stand(target, undefined, { planning: true }));
+        yield* settled(
+          () => f.eve.opened.length === 1,
+          "the opening to reach eve",
+          async () => `reports ${JSON.stringify(f.reports)}`,
+        );
+        assert.deepEqual(
+          f.eve.opened.map((message) => [message.conversationId, message.message]),
+          [[target.conversationId, PLANNING_OPENING_ASK]],
+        );
+        const recorded = yield* Effect.promise(() =>
+          asks.latestSession(target.userId, target.conversationId),
+        );
+        assert.ok(recorded);
+        yield* Effect.promise(() =>
+          play(spokenTurn(FIRST_EVE_TURN, NOW), {
+            sessionId: recorded,
+            target,
+            kind: CONVERSATION_KIND.PLAN,
+            turn: BRAIN_HOST_TURN.SPOKEN,
+            model: "scripted-model",
+            state: memoryRelayState(),
+          }),
+        );
+        yield* settled(
+          () => f.commentary().length >= 2,
+          "the opening to be spoken",
+          async () => `reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`,
+        );
+        assert.deepEqual(
+          f.commentary().map((event) => [event.delegation_id, event.content]),
+          [
+            [null, "One agent finished."],
+            [null, "Another is waiting on you."],
+          ],
+        );
+        yield* Effect.promise(() => f.exchange.stop());
+      }),
+  );
+}
+
+it.live("a call that is not a planning call is asked no opening", () =>
+  Effect.gen(function* () {
+    const target = yield* Effect.promise(() => account());
+    const f = yield* Effect.promise(() => stand(target, undefined));
+    yield* Effect.sleep(QUIET_MS);
+    assert.deepEqual(f.eve.opened, []);
+    assert.deepEqual(f.commentary(), []);
+    yield* Effect.promise(() => f.exchange.stop());
+  }),
 );
