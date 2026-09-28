@@ -6,6 +6,7 @@ import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { ActRefused, type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
@@ -104,6 +105,13 @@ export function registerDesktopIpc(services: DesktopServices): void {
       activePlanId: () => state.snapshot().planning.activePlanId,
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
+      },
+      voiceReady: () => {
+        const snapshot = state.snapshot();
+        return (
+          snapshot.settings?.status.voiceAvailable === true &&
+          snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
+        );
       },
       isGone: (sender) => sender.isDestroyed(),
       whenGone: (sender, gone) => {
