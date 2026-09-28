@@ -10,7 +10,7 @@ import { useAct } from "../act";
 import {
   githubFailureNote,
   offersGitHubConnect,
-  onceReturned,
+  onEachReturn,
   repositoriesMatching,
 } from "./planning-model";
 
@@ -253,14 +253,17 @@ export function SetupSheet({
       (refused: Error) => setNote(refused.message),
     );
   };
+  // Every return reads again, since a return mid-way through GitHub's page
+  // finds no connection yet; the list reading at last is what ends the wait.
   useEffect(() => {
     if (!connecting) return;
-    return onceReturned(window, () => {
-      setConnecting(false);
-      setNote(undefined);
-      readList();
-    });
+    return onEachReturn(window, readList);
   }, [connecting, readList]);
+  useEffect(() => {
+    if (!connecting || list.status !== REPOSITORY_LIST.READY) return;
+    setConnecting(false);
+    setNote(undefined);
+  }, [connecting, list]);
 
   return (
     <SetupSheetView

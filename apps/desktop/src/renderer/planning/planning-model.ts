@@ -119,12 +119,12 @@ export function copyShown(outcome: CopyOutcome | undefined, document: PlanDocume
 }
 
 /**
- * Runs `returned` once, the next time the window takes focus again, which is
- * the developer coming back from the Connect GitHub page in the browser.
- * Answers the cancel for a sheet that closes first.
+ * Runs `returned` each time the window takes focus again, which is the
+ * developer coming back from the Connect GitHub page in the browser, perhaps
+ * before the link finished. Answers the cancel, for a wait that ended.
  */
-export function onceReturned(window: EventTarget, returned: () => void): () => void {
-  window.addEventListener("focus", returned, { once: true });
+export function onEachReturn(window: EventTarget, returned: () => void): () => void {
+  window.addEventListener("focus", returned);
   return () => window.removeEventListener("focus", returned);
 }
 
