@@ -15,8 +15,8 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { recentHostedDailyNotes } from "../server/hosted/brain-host/workspace";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { GITHUB_ACCESS_WITHOUT_CONNECTIONS } from "../server/hosted/github-source";
 import { storeWriter } from "../server/hosted/store";
+import { noGitHubConnections } from "./support/github-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
 
@@ -70,7 +70,7 @@ const seams: BrainHostSeams = {
   vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
   providerKey: unreached("providerKey"),
   executeAction: unreached("executeAction"),
-  githubAccess: GITHUB_ACCESS_WITHOUT_CONNECTIONS,
+  githubAccess: noGitHubConnections,
   now: () => NOW,
 };
 

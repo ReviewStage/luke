@@ -7,6 +7,7 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import type { HostedPlanClient } from "@sidecar/hosted";
+import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
 import { planCreateRequestSchema } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -62,6 +63,18 @@ export interface PlanningDependencies {
    * it to end; a desk session and the call about `keep` are left standing.
    */
   endPlanCall: (keep: string | undefined) => Effect.Effect<void>;
+  /**
+   * What opening the Connect GitHub page needs: the service it is on, the
+   * account this Mac is signed in as, which the page links GitHub for and no
+   * other, and the browser to open it in. The link itself happens there,
+   * under the browser's own Luke session; this process never holds GitHub's
+   * token.
+   */
+  connectGitHub: {
+    serviceBaseUrl: string;
+    accountId: () => Effect.Effect<string | undefined>;
+    openExternal: (url: string) => Effect.Effect<void>;
+  };
   /** A test's cadence in place of the production one. */
   pollIntervalMs?: number;
 }
@@ -88,7 +101,7 @@ export interface PlanningComposer extends Composer {
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client, endPlanCall } = dependencies;
+  const { kernel, account, client, endPlanCall, connectGitHub } = dependencies;
   const intervalMs = dependencies.pollIntervalMs ?? PLANNING_POLL_INTERVAL_MS;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -271,6 +284,17 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         return carried<PlanningRepositoriesAnswer>(
           listed.ok ? listed.answer : { failure: listed.failure },
         );
+      }),
+    // Opened for a signed-in account only; the window reads the repositories
+    // again once the developer is back, so nothing here waits on the link.
+    [GATEWAY_METHOD.PLANNING_CONNECT_GITHUB]: () =>
+      Effect.gen(function* () {
+        if (!gate()) return { opened: false };
+        const accountId = yield* connectGitHub.accountId();
+        yield* connectGitHub.openExternal(
+          connectGitHubPageAddress(connectGitHub.serviceBaseUrl, accountId),
+        );
+        return { opened: true };
       }),
   };
 

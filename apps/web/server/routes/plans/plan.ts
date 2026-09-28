@@ -1,5 +1,5 @@
 import { HttpRouter } from "effect/unstable/http";
-import { githubAccessWithoutConnections } from "../../hosted/github-source.js";
+import { githubConnectionLayer } from "../../hosted/github-connection.js";
 import { resolveHostedUserId } from "../../hosted/vault-route.js";
 import { plansApp } from "../../plans-app.js";
 import { routeFromHttpRouter } from "../../route-effect.js";
@@ -7,6 +7,6 @@ import { routeFromHttpRouter } from "../../route-effect.js";
 /** One plan the caller owns, by the id its path carries: open it (GET) or delete it (DELETE). */
 export default routeFromHttpRouter(
   plansApp({ resolveUserId: resolveHostedUserId }).pipe(
-    HttpRouter.provideRequest(githubAccessWithoutConnections),
+    HttpRouter.provideRequest(githubConnectionLayer),
   ),
 );

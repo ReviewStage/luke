@@ -10,7 +10,7 @@ import { ActRefused, type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
-import { connectGitHubPending, planningActRows } from "./planning-acts";
+import { planningActRows } from "./planning-acts";
 import { sessionActRows } from "./session-acts";
 import { settingsActRows } from "./settings-rows";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
@@ -103,7 +103,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...planningActRows({
       openWindow: () => windows.planningWindow.open(),
       host: operator.host,
-      connectGitHub: connectGitHubPending,
       activePlanId: () => state.snapshot().planning.activePlanId,
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });

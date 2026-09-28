@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./connect-github-page": "./src/connect-github-page.js",
     "./github-wire": "./src/github-wire.js",
     "./plan-wire": "./src/plan-wire.js",
     "./planning-view": "./src/planning-view.js",

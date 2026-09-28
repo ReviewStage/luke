@@ -154,6 +154,16 @@ export const hostAssemblyLayer: Layer.Layer<
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
+      connectGitHub: {
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        accountId: () =>
+          Effect.map(Effect.orDie(settings.store.readAccount()), (stored) => stored?.id),
+        // A browser that would not open is reported the way every other open is.
+        openExternal: (url) =>
+          Effect.tryPromise(() => kernel.openExternalThroughNode(url)).pipe(
+            Effect.catch((failure) => Effect.sync(() => kernel.reportOpenFailure(failure))),
+          ),
+      },
     });
     activePlanId = planning.activePlanId;
     onboardingWritten = live.requestOnboardingBeat;

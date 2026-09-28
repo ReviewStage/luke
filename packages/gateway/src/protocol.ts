@@ -37,6 +37,8 @@ export const GATEWAY_METHOD = {
   PLANNING_START: "planning.start",
   /** The repositories the account's GitHub connection can read, for a new plan's picker. */
   PLANNING_REPOSITORIES: "planning.repositories",
+  /** The Connect GitHub page opened in the browser, for the account this Mac is signed in as. */
+  PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
