@@ -41,8 +41,8 @@ export interface TalkKeyHandle {
 export interface HotkeyHost {
   voiceHost(): BrowserWindow | undefined;
   /**
-   * The plan a talk press is about: the planning window's open plan while
-   * that window holds the keyboard, and nothing otherwise.
+   * The plan a talk press is about: the plan open in the panel while one is,
+   * and nothing otherwise.
    */
   talkPlanId(): string | undefined;
   /**
@@ -302,7 +302,7 @@ export class HotkeyRegistrar {
     this.#sendTo(this.#voiceHostContents(), channel, payload);
   }
 
-  /** What a talk press carries: the plan it is about, where the planning window names one. */
+  /** What a talk press carries: the plan it is about, where the panel has one open. */
   #talkPress(): UnparsedWireValue | undefined {
     const planId = this.#host.talkPlanId();
     return planId === undefined ? undefined : { planId };

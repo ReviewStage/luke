@@ -217,7 +217,7 @@ test("the native watcher's edges reach the voice host as they are", async () => 
   ]);
 });
 
-test("a talk press names the planning window's open plan where it has one, and a release names nothing", async () => {
+test("a talk press names the panel's open plan where it has one, and a release names nothing", async () => {
   let planId: string | undefined = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
   const context = harness({ talkPlanId: () => planId });
   await context.registrar.reapply(HOTKEY_RANK.TALK);

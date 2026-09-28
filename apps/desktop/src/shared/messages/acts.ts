@@ -152,21 +152,22 @@ export const ACT_KIND = {
    */
   NOTEBOOK_READ: "notebook.read",
   /**
-   * The planning window: the panel's entry that opens it or brings it
-   * forward, and the window's own asks of the host — the plan list and the
-   * active document read now and followed while it stands, one plan made
-   * the active one, a plan started on a repository, the repositories the
-   * account's GitHub connection reads, and the connection itself. The view
-   * arrives on the document rather than as an answer; nothing here writes a
-   * plan's document, which the planning model alone saves.
+   * The panel's Plans tab asking the host: the plan list and the active
+   * document read now and followed while the tab shows, the follow paused
+   * when it stops showing, one plan made the active one, the open plan left,
+   * a plan started on a repository, the repositories the account's GitHub
+   * connection reads, and the connection itself. The view arrives on the
+   * document rather than as an answer; nothing here writes a plan's
+   * document, which the planning model alone saves.
    */
-  PLANNING_OPEN_WINDOW: "planning.openWindow",
   PLANNING_REFRESH: "planning.refresh",
+  PLANNING_PAUSE: "planning.pause",
   PLANNING_SELECT: "planning.select",
+  PLANNING_CLOSE: "planning.close",
   PLANNING_START: "planning.start",
   PLANNING_REPOSITORIES: "planning.repositories",
   PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
-  /** The planning window's microphone button: a call about the plan it has open, opened, or its microphone toggled. */
+  /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   VOICE_COMMAND: "voice.command",
   /**
@@ -610,13 +611,14 @@ export const ACT = {
     ),
     refusal: "Could not read Luke's memory on this system.",
   },
-  [ACT_KIND.PLANNING_OPEN_WINDOW]: press("Could not open the planning window on this system."),
   [ACT_KIND.PLANNING_REFRESH]: press("Could not read your plans on this system."),
+  [ACT_KIND.PLANNING_PAUSE]: press("Could not stop reading your plans on this system."),
   [ACT_KIND.PLANNING_SELECT]: {
     payload: record({ planId: exactId }),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not open that plan on this system.",
   },
+  [ACT_KIND.PLANNING_CLOSE]: press("Could not leave that plan on this system."),
   [ACT_KIND.PLANNING_START]: {
     payload: actSchema(planCreateRequestSchema),
     result: wireResult<PlanningStartAnswer>(isReadable(planningStartAnswerSchema)),

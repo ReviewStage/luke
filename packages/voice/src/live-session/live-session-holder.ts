@@ -201,7 +201,7 @@ export class LiveSessionHolder {
 
   /**
    * Ends the standing session where it is a planning call about any plan but
-   * `keep`: the planning window opened another plan, or none, and only one
+   * `keep`: the panel opened another plan, or left it, and only one
    * plan is ever the spoken conversation. A desk session, and the call about
    * `keep` itself, are left standing.
    */

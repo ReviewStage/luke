@@ -75,10 +75,10 @@ capture_evidence muted --profile muted --compact --peek --capture-evidence "$SID
 # face on the left wing and the developer's meter in the marks' place on the
 # right, both drawn from the profile's staged levels.
 capture_evidence duplex --profile duplex --compact --peek --capture-evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH"
-# The planning window over the fixture's synthetic plan: the plan list, the
-# saved document with its assumption checklist, and the idle voice bar. The
-# capture is the planning window's own, taken once it reports painted.
-capture_evidence planning --profile planning --capture-evidence "$SIDECAR_PLANNING_EVIDENCE_PATH"
+# The panel's Plans tab over the fixture's synthetic plan: the open plan's
+# saved document with its assumption checklist, scrolled inside the panel's
+# own ceiling, and the idle microphone row under it.
+capture_evidence planning --profile planning --expanded --capture-evidence "$SIDECAR_PLANNING_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -129,8 +129,8 @@ validate_evidence "$SIDECAR_SLOT_EVIDENCE_PATH" 700 560
 validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 700 294
 validate_evidence "$SIDECAR_MUTED_EVIDENCE_PATH" 700 294
 validate_evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH" 700 294
-# The planning window's content size (`PLANNING_WINDOW_SIZE` in planning-window.ts).
-validate_evidence "$SIDECAR_PLANNING_EVIDENCE_PATH" 1080 760
+# The Plans tab is drawn in the expanded window, like every other tab.
+validate_evidence "$SIDECAR_PLANNING_EVIDENCE_PATH" 700 560
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"

@@ -1,44 +1,28 @@
-/* The planning window: an ordinary opaque Mac window, unlike the transparent
-   panels, so it restates the document's ground and lets the plan be selected.
-   The sidebar and the voice bar stay where they are; only the document
-   scrolls. */
-html[data-surface="planning"],
-html[data-surface="planning"] body,
-html[data-surface="planning"] #root {
-  background: var(--surface-overlay);
-  color: var(--text-primary);
+/* The panel's Plans tab: one page at a time inside the panel's own ceiling.
+   On the document page the header and the microphone row hold still, and
+   only the document scrolls between them. */
+.plans-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12.5px;
 }
 
-.planning {
-  display: grid;
-  grid-template-columns: minmax(200px, 240px) 1fr;
-  height: 100%;
-  font-size: 13px;
-}
-
-.planning-signed-out {
-  display: grid;
-  grid-template-columns: 1fr;
-  place-items: center;
+.plans-signed-out {
+  align-items: center;
+  justify-content: center;
+  padding: 24px 0;
   color: var(--text-secondary);
 }
 
 .plan-list {
   display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
   gap: 8px;
-  min-height: 0;
-  padding: 16px 10px 12px;
-  border-right: 1px solid var(--hairline);
-}
-
-.plan-list-heading {
-  margin: 0 6px;
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .plan-list-note {
@@ -52,7 +36,10 @@ html[data-surface="planning"] #root {
   margin: 0;
   padding: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
 }
 
 .plan-list-row {
@@ -83,7 +70,10 @@ html[data-surface="planning"] #root {
   font-size: 12px;
 }
 
-.plan-list-new,
+.plan-list-new {
+  align-self: flex-start;
+}
+
 .plan-button {
   display: inline-flex;
   align-items: center;
@@ -94,7 +84,6 @@ html[data-surface="planning"] #root {
   background: var(--raised-strong);
 }
 
-.plan-list-new:hover,
 .plan-button:hover:not(:disabled) {
   background: var(--selected);
 }
@@ -108,47 +97,41 @@ html[data-surface="planning"] #root {
   background: var(--message-sent);
 }
 
-.link-button {
-  padding: 0;
-  background: none;
-  text-decoration: underline;
-}
-
-.planning-main {
-  display: grid;
-  grid-template-rows: 1fr auto;
-  min-width: 0;
-  min-height: 0;
-}
-
 .plan-document {
   display: flex;
-  flex-direction: column;
   min-height: 0;
+  flex: 1;
+  flex-direction: column;
 }
 
 .plan-document-state {
-  align-items: center;
-  justify-content: center;
   gap: 12px;
   color: var(--text-secondary);
 }
 
-/* The header's two lines on the left, and Copy on the right across both. */
+.plan-document-state > p {
+  margin: 0;
+}
+
+/* Back, then the plan's two lines, then Copy at the far end. */
 .plan-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 16px;
-  padding: 18px 28px 12px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 2px 10px;
   border-bottom: 1px solid var(--hairline);
+}
+
+.plan-heading {
+  min-width: 0;
+  flex: 1;
 }
 
 .plan-copy {
   display: flex;
-  grid-row: 1 / span 2;
-  grid-column: 2;
+  flex: 0 0 auto;
   align-items: center;
-  align-self: center;
   gap: 10px;
 }
 
@@ -160,15 +143,21 @@ html[data-surface="planning"] #root {
 
 .plan-title {
   margin: 0;
-  font-size: 18px;
+  overflow: hidden;
+  font-size: 14px;
   font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .plan-repository {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-secondary);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 /* The document is the record: it reads as text and is selectable, so Cmd-C
@@ -176,15 +165,18 @@ html[data-surface="planning"] #root {
 .plan-document-scroll {
   flex: 1;
   min-height: 0;
-  padding: 18px 28px 28px;
+  padding: 10px 2px 12px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
   -webkit-user-select: text;
   user-select: text;
 }
 
 .plan-body {
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 12.5px;
+  line-height: 1.5;
 }
 
 /* A plan is a document rather than a message, so its sections breathe. */
@@ -198,12 +190,12 @@ html[data-surface="planning"] #root {
 }
 
 .plan-assumptions {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 
 .plan-assumptions-heading {
-  margin: 0 0 8px;
-  font-size: 15px;
+  margin: 0 0 6px;
+  font-size: 13px;
   font-weight: 680;
 }
 
@@ -234,20 +226,23 @@ html[data-surface="planning"] #root {
   color: var(--state-complete);
 }
 
-.plan-voice-bar {
-  display: grid;
-  grid-template-columns: auto auto auto auto 1fr;
+/* The microphone row: the button and the call's word. The words spoken and
+   the levels are the panel's own, drawn on the shape under this row. */
+.plan-microphone-row {
+  display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 12px;
-  padding: 10px 20px;
+  gap: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--hairline);
 }
 
 .plan-microphone {
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: var(--raised-strong);
 }
@@ -258,52 +253,35 @@ html[data-surface="planning"] #root {
 }
 
 .plan-voice-status {
-  min-width: 72px;
-  color: var(--text-secondary);
-}
-
-.plan-voice-status[data-tone="error"] {
-  color: var(--error-text);
-}
-
-.plan-caption {
-  margin: 0;
+  min-width: 0;
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.plan-sheet-backdrop {
-  position: fixed;
-  inset: 0;
+.plan-new {
   display: flex;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
-}
-
-/* A sheet hangs from the top of the window, the way a Mac sheet does. */
-.plan-sheet {
-  display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
-  gap: 12px;
-  width: min(480px, calc(100% - 48px));
-  max-height: calc(100% - 24px);
-  padding: 18px 20px;
-  border-radius: 0 0 10px 10px;
-  background: var(--surface-overlay);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.5),
-    inset 0 0 0 1px var(--hairline);
+  gap: 10px;
 }
 
-.plan-sheet h2 {
-  margin: 0;
-  font-size: 15px;
+/* The form scrolls as a whole under its header when the repository list
+   is long, so Start plan is never pushed past the panel's ceiling unseen. */
+.plan-form {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.plan-sheet input[type="text"],
-.plan-sheet input[type="search"] {
+.plan-form input[type="text"],
+.plan-form input[type="search"] {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--hairline);
@@ -315,13 +293,13 @@ html[data-surface="planning"] #root {
   user-select: text;
 }
 
-.plan-sheet-name {
+.plan-form-name {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.plan-sheet-repositories {
+.plan-form-repositories {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -331,43 +309,43 @@ html[data-surface="planning"] #root {
   border: 0;
 }
 
-.plan-sheet-repositories legend {
+.plan-form-repositories legend {
   margin-bottom: 4px;
   padding: 0;
 }
 
-.plan-sheet-repository-list {
-  max-height: 240px;
+.plan-form-repository-list {
+  max-height: 180px;
   margin: 0;
   padding: 0;
   overflow-y: auto;
   list-style: none;
 }
 
-.plan-sheet-repository {
+.plan-form-repository {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 4px 2px;
 }
 
-.plan-sheet-private,
-.plan-sheet-note {
+.plan-form-private,
+.plan-form-note {
   color: var(--text-secondary);
 }
 
-.plan-sheet-note {
+.plan-form-note {
   margin: 0;
 }
 
-.plan-sheet-github {
+.plan-form-github {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
 }
 
-.plan-sheet-actions {
+.plan-form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;

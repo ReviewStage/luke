@@ -58,7 +58,7 @@ afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
 
-/** A plan the account starts, as the planning window's setup sheet saves one. */
+/** A plan the account starts, as the Plans tab's new-plan form saves one. */
 const PLAN = {
   name: "Teammate invitations",
   repository: {

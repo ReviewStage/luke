@@ -246,7 +246,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     [drive, orchestrator],
   );
 
-  // The planning window's microphone, about the plan it had open: a call about
+  // The Plans tab's microphone, about the plan the panel had open: a call about
   // that plan opened and heard, or its microphone toggled, as the main process
   // forwards the press.
   useEffect(
@@ -279,8 +279,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // it, so the device is open exactly while the key is down. A press during
   // a chord being recorded is held back in the main process, where the
   // recording is known; a release always lands, so a hold begun before the
-  // recording still ends. A press made over the planning window names its
-  // open plan, and is heard on that plan's call.
+  // recording still ends. A press made while the panel has a plan open names
+  // that plan, and is heard on that plan's call.
   useEffect(
     () =>
       window.sidecar.onVoiceHotkeyPress((press) => drive(orchestrator.beginTalk(press?.planId))),

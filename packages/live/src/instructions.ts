@@ -5,7 +5,7 @@ export const LIVE_SCENE = {
   DESKTOP: "desktop",
   /** The first launch's introduction: no account, no backend, nothing to act on. */
   INTRODUCTION: "introduction",
-  /** The planning window's call about one saved plan, with the planning model as its backend. */
+  /** The Plans tab's call about one saved plan, with the planning model as its backend. */
   PLANNING: "planning",
 } as const;
 

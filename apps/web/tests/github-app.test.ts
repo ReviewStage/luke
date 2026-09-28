@@ -16,7 +16,7 @@ import { type FakeGitHub, type FakeRepository, fakeGitHub } from "./support/gith
 import { noDatabase } from "./support/no-database";
 
 /**
- * The planning window's repository list, answered by the group the way a
+ * The new-plan form's repository list, answered by the group the way a
  * function answers it: the bearer names the account, the account's GitHub
  * connection is the one read, and what answers is each repository's owner,
  * name, and privacy, from a fake of GitHub at the process boundary.

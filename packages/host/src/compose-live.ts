@@ -75,7 +75,7 @@ export interface LiveDependencies {
   account: AccountComposer;
   observation: ObservationComposer;
   calendars: CalendarsComposer;
-  /** The plan the planning window has open, the one plan a planning call may be created about; nothing while it has none. */
+  /** The plan the panel has open, the one plan a planning call may be created about; nothing while it has none. */
   activePlanId: () => string | undefined;
 }
 
@@ -408,7 +408,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         // no call about one plan is created while another is on screen.
         if (request.planId !== undefined && request.planId !== dependencies.activePlanId()) {
           return yield* Effect.fail(
-            new RefusedRefusal({ message: "the plan is not the one the planning window has open" }),
+            new RefusedRefusal({ message: "the plan is not the one the panel has open" }),
           );
         }
         const created = yield* service.createSession(request.sdp, request.planId);
