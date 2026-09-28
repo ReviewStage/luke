@@ -25,6 +25,7 @@ interface OpenPlan {
 function fixture() {
   const asked: string[] = [];
   const talked: string[] = [];
+  const gones = new Map<WebContents, Effect.Effect<void>>();
   const view: OpenPlan = { activePlanId: PLAN_ID };
   const account = { signedIn: true };
   const rows = planningActRows({
@@ -60,11 +61,14 @@ function fixture() {
     talkAboutPlan: (planId) => {
       talked.push(planId);
     },
+    whenGone: (sender, gone) => {
+      gones.set(sender, gone);
+    },
   });
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, view, account };
+  return { router, asked, talked, view, account, gones };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -176,5 +180,29 @@ it.effect(
         reason: ACT[ACT_KIND.PLANNING_TALK].refusal,
       });
       assert.deepEqual(f.talked, [PLAN_ID]);
+    }),
+);
+
+it.effect(
+  "the follow pauses only once no panel shows the Plans tab, a destroyed panel included",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      // SAFETY: a second inert object, so the rows read two panels on two displays.
+      const other: ActSender = { ...PANEL, sender: {} as WebContents };
+
+      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, PANEL);
+      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, other);
+      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
+      assert.deepEqual(f.asked, ["refresh", "refresh"]);
+
+      // The other display's panel goes away while it still shows the tab.
+      const gone = f.gones.get(other.sender);
+      assert.ok(gone);
+      yield* gone;
+      assert.deepEqual(f.asked, ["refresh", "refresh", "pause"]);
+      // A pause from a panel that no longer counts asks for nothing more.
+      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
+      assert.deepEqual(f.asked, ["refresh", "refresh", "pause"]);
     }),
 );

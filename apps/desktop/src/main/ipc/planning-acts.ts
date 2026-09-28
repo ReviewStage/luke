@@ -4,6 +4,7 @@ import type {
   PlanningStartAnswer,
 } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
+import type { WebContents } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
@@ -14,7 +15,9 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
  * Plans tab, and the takeover and the hidden voice window draw no plan, so
  * every row refuses them. What the host does with an ask — which plan is
  * active, what the service answers, why GitHub refused — is the host's to
- * decide, and comes back as the panel's own answer.
+ * decide, and comes back as the panel's own answer. The one thing held here
+ * is which panels show the tab, since the host's follow is one for the whole
+ * process and each display has a panel of its own.
  */
 export interface PlanningActsDependencies {
   host: {
@@ -31,6 +34,8 @@ export interface PlanningActsDependencies {
   activePlanId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
   talkAboutPlan: (planId: string) => void;
+  /** Runs `gone` once when a panel's window is destroyed, so a panel that vanished mid-follow stops counting. */
+  whenGone: (sender: WebContents, gone: Effect.Effect<void>) => void;
 }
 
 type PlanningActKind =
@@ -54,14 +59,25 @@ export function planningActRows(
   dependencies: PlanningActsDependencies,
 ): Pick<ActRows, PlanningActKind> {
   const { host } = dependencies;
+  // Note that the follow is paused only once no panel shows the tab, because
+  // one display's panel closing must not stop the plan another is drawing.
+  const showing = new Set<WebContents>();
+  const stopShowing = (sender: WebContents) =>
+    Effect.suspend(() =>
+      showing.delete(sender) && showing.size === 0 ? host.planningPause() : Effect.void,
+    );
   return {
     [ACT_KIND.PLANNING_REFRESH]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REFRESH, sender);
+      if (!showing.has(sender.sender)) {
+        showing.add(sender.sender);
+        dependencies.whenGone(sender.sender, stopShowing(sender.sender));
+      }
       return host.planningRefresh();
     },
     [ACT_KIND.PLANNING_PAUSE]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_PAUSE, sender);
-      return host.planningPause();
+      return stopShowing(sender.sender);
     },
     [ACT_KIND.PLANNING_SELECT]: ({ planId }, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_SELECT, sender);

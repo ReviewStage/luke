@@ -105,6 +105,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
       },
+      whenGone: (sender, gone) => {
+        sender.once("destroyed", () => void run(gone));
+      },
     }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
