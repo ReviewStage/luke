@@ -31,6 +31,7 @@ const PROXY_PROFILE_CLOCK_SKEW_MS = 10_000;
 
 /** Why a proxied link was refused, as the `error` the Connect GitHub page is returned with. */
 const PROXY_LINK_REFUSAL = {
+  INVALID: "invalid_payload",
   EXPIRED: "payload_expired",
   STATE_MISMATCH: "state_mismatch",
   SESSION_MISMATCH: "session_mismatch",
@@ -72,11 +73,17 @@ const ProxiedProfile = Schema.fromJsonString(
 );
 type ProxiedProfile = typeof ProxiedProfile.Type;
 
+/** Just enough of a returned profile to find the state it answers, and the page a refusal returns to. */
+const ProfileState = Schema.fromJsonString(
+  Schema.Struct({ state: Schema.String, errorURL: Schema.optional(Schema.String) }),
+);
+
 /** The half of a stored OAuth state that makes it a link: the Luke user the flow began signed in as. */
 const LinkState = Schema.fromJsonString(
   Schema.Struct({ link: Schema.Struct({ userId: Schema.String, email: Schema.String }) }),
 );
 
+const decodeProfileState = Schema.decodeUnknownOption(ProfileState);
 const decodeProxiedProfile = Schema.decodeUnknownOption(ProxiedProfile);
 const decodeLinkState = Schema.decodeUnknownOption(LinkState);
 
@@ -300,12 +307,17 @@ function landProxiedLink(proxySecret: string) {
       } catch {
         return;
       }
-      const profile = Option.getOrUndefined(decodeProxiedProfile(decrypted));
-      if (profile === undefined) return;
-      const pending = await ctx.context.internalAdapter.findVerificationValue(profile.state);
+      const landed = Option.getOrUndefined(decodeProfileState(decrypted));
+      if (landed === undefined) return;
+      const pending = await ctx.context.internalAdapter.findVerificationValue(landed.state);
       if (pending === null || Option.isNone(decodeLinkState(pending.value))) return;
 
-      const errorURL = profile.errorURL ?? `${ctx.context.baseURL}/error`;
+      // From here the profile answers a link, so no failure may fall through to the sign-in endpoint.
+      const errorURL = landed.errorURL ?? `${ctx.context.baseURL}/error`;
+      const profile = Option.getOrUndefined(decodeProxiedProfile(decrypted));
+      if (profile === undefined) {
+        throw ctx.redirect(refusalURL(errorURL, PROXY_LINK_REFUSAL.INVALID));
+      }
       const age = Date.now() - profile.timestamp;
       if (age > PROXY_PROFILE_MAX_AGE_MS || age < -PROXY_PROFILE_CLOCK_SKEW_MS) {
         throw ctx.redirect(refusalURL(errorURL, PROXY_LINK_REFUSAL.EXPIRED));

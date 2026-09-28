@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
+import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { type AuthDeployment, authDeployment } from "../server/auth-deployment";
@@ -21,6 +22,8 @@ import type { WireValue } from "../server/core";
 
 const PRODUCTION_URL = "https://tryluke.dev";
 const PREVIEW_URL = "https://luke-abc123-stage-review.vercel.app";
+/** The Preview's second hostname, the branch alias, which it trusts but does not call itself. */
+const BRANCH_URL = "https://luke-git-planning-stage-review.vercel.app";
 const PROXY_SECRET = "proxy-secret-shared-by-both-ends-of-the-relay";
 const REGISTERED_CALLBACK = `${PRODUCTION_URL}/api/auth/callback/github`;
 const PROFILE_PATH = "/api/auth/oauth-proxy-callback";
@@ -38,6 +41,10 @@ const decodeSignedUp = Schema.decodeUnknownSync(
   Schema.Struct({ user: Schema.Struct({ id: Schema.String }) }),
 );
 const decodeStarted = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String }));
+/** The proxy's sealed `state`, opened: the nonce of the state the Preview stored. */
+const decodeStatePackage = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ state: Schema.String })),
+);
 
 /** Everything that left either end: every URL a browser was sent to, and every log line. */
 interface Trail {
@@ -86,6 +93,7 @@ function ends() {
     authDeployment({
       VERCEL_ENV: "preview",
       VERCEL_URL: new URL(PREVIEW_URL).host,
+      VERCEL_BRANCH_URL: new URL(BRANCH_URL).host,
       BETTER_AUTH_URL: PRODUCTION_URL,
       BETTER_AUTH_PROXY_SECRET: PROXY_SECRET,
     }),
@@ -143,11 +151,15 @@ function location(response: Response, trail: Trail): string {
   return next;
 }
 
-async function signUp(preview: Auth, email: string): Promise<{ userId: string; cookie: string }> {
+async function signUp(
+  preview: Auth,
+  email: string,
+  host = PREVIEW_URL,
+): Promise<{ userId: string; cookie: string }> {
   const response = await preview.handler(
-    new Request(`${PREVIEW_URL}/api/auth/sign-up/email`, {
+    new Request(`${host}/api/auth/sign-up/email`, {
       method: "POST",
-      headers: { origin: PREVIEW_URL, "content-type": "application/json" },
+      headers: { origin: host, "content-type": "application/json" },
       body: JSON.stringify({ email, password: PASSWORD, name: email }),
     }),
   );
@@ -156,11 +168,11 @@ async function signUp(preview: Auth, email: string): Promise<{ userId: string; c
 }
 
 /** The Connect GitHub page's press, as `connect-github.tsx` makes it; answers the provider's authorize URL. */
-async function startLink(ends: Ends, userId: string, cookie: string) {
+async function startLink(ends: Ends, userId: string, cookie: string, host = PREVIEW_URL) {
   const response = await ends.preview.handler(
-    new Request(`${PREVIEW_URL}/api/auth/link-social`, {
+    new Request(`${host}/api/auth/link-social`, {
       method: "POST",
-      headers: { origin: PREVIEW_URL, "content-type": "application/json", cookie },
+      headers: { origin: host, "content-type": "application/json", cookie },
       body: JSON.stringify({
         provider: "github",
         scopes: ["repo"],
@@ -251,6 +263,53 @@ test("a Preview's link goes through production's callback and lands, sealed, on 
     both.trail.logs.some((line) => line.includes(GITHUB_TOKEN)),
     false,
   );
+});
+
+test("a link begun on the Preview's branch hostname returns to that hostname, where its session is", async () => {
+  const both = ends();
+  const { userId, cookie } = await signUp(both.preview, "planner@luke.test", BRANCH_URL);
+  const { authorize, cookie: flowCookie } = await startLink(both, userId, cookie, BRANCH_URL);
+  assert.equal(authorize.searchParams.get("redirect_uri"), REGISTERED_CALLBACK);
+
+  const relayed = await githubReturns(both, authorize, `code=${GITHUB_CODE}`);
+  assert.equal(new URL(relayed).origin, BRANCH_URL);
+  const landed = await land(both, relayed, flowCookie);
+  assert.equal(location(landed, both.trail), `/connect-github.html?account=${userId}&connected=1`);
+  assert.equal((await githubAccounts(both.preview, userId)).length, 1);
+});
+
+test("a link's profile the Preview cannot read is refused rather than taken for a sign-in", async () => {
+  const both = ends();
+  const asker = await signUp(both.preview, "planner@luke.test");
+  const { authorize, cookie } = await startLink(both, asker.userId, asker.cookie);
+  // A profile sealed under the proxy key for the link's own state, missing the GitHub email.
+  const statePackage = decodeStatePackage(
+    await symmetricDecrypt({ key: PROXY_SECRET, data: authorize.searchParams.get("state") ?? "" }),
+  );
+  const profile = await symmetricEncrypt({
+    key: PROXY_SECRET,
+    data: JSON.stringify({
+      state: statePackage.state,
+      timestamp: NOW.getTime(),
+      callbackURL: `/connect-github.html?account=${asker.userId}&connected=1`,
+      errorURL: `${PREVIEW_URL}/connect-github.html?account=${asker.userId}`,
+      userInfo: { id: GITHUB_ACCOUNT_ID, name: "octocat", emailVerified: true },
+      account: { providerId: "github", accountId: GITHUB_ACCOUNT_ID, accessToken: GITHUB_TOKEN },
+    }),
+  });
+  const relayed = new URL(`${PREVIEW_URL}${PROFILE_PATH}`);
+  relayed.searchParams.set("callbackURL", "/connect-github.html");
+  relayed.searchParams.set("profile", profile);
+
+  const landed = await land(both, relayed.href, cookie);
+  assert.equal(
+    location(landed, both.trail),
+    `${PREVIEW_URL}/connect-github.html?account=${asker.userId}&error=invalid_payload`,
+  );
+  assert.equal(sessionCookieSet(landed), false);
+  assert.deepEqual(await githubAccounts(both.preview, asker.userId), []);
+  const context = await both.preview.$context;
+  assert.equal((await context.internalAdapter.listUsers()).length, 1);
 });
 
 test("a link landed in a browser signed in as anyone else is refused and writes nothing", async () => {
