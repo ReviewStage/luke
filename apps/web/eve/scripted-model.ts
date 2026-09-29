@@ -1,3 +1,4 @@
+import { EMPTY_PLAN_UPDATE, type PlanUpdate } from "@sidecar/hosted/plan-template";
 import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
@@ -24,14 +25,17 @@ import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool.js";
  * exercises eve's loop, the tool adapters, the workspace access, and the
  * relay into the store without a key or a network. Offered `update_plan`, it
  * plans instead: it reads the saved document its standing context hands it,
- * adds the developer's latest words as an unconfirmed assumption, saves the
- * whole document back, and answers with one question; asked to open a call,
- * it saves nothing and greets a plan whose document is empty or recaps one
- * that holds something, closing on a question either way; told to look
- * something up, it searches the public web for it instead and answers with
- * the first source the search found, or says it found none; asked for the
- * prompt, it appends a handoff prompt naming the plan's repository and
- * commit to the same body and saves it with the assumptions as they stand. It is selected only by
+ * adds the developer's latest words as an unconfirmed assumption, and saves
+ * the whole template back with its one scripted answer, the rest unanswered,
+ * and answers with one question; asked to open a call, it saves nothing and
+ * greets a plan that holds no assumption yet or recaps one that holds some,
+ * closing on a question either way; told to look something up, it searches
+ * the public web for it instead and answers with the first source the search
+ * found, or says it found none; asked for the prompt, it writes a handoff
+ * prompt naming the plan's repository and commit into the template's handoff
+ * field, keeps it on every later save, and saves it with the assumptions as
+ * they stand. It reads no field back out of the body: the one thing it looks
+ * for is its own handoff sentence. It is selected only by
  * the fixture's own environment variable and a deployment never names it.
  */
 
@@ -51,7 +55,10 @@ export const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
 export const SCRIPTED_NO_SOURCE_REPLY = "I found no source for that, so it stays an open question.";
 /** What a developer's words start with when they ask the scripted planner for the handoff prompt. */
 export const SCRIPTED_WRITE_PROMPT = "Write the prompt.";
-export const SCRIPTED_HANDOFF_HEADING = "## Handoff prompt";
+/** How the scripted handoff prompt begins, the one sentence of its own the scripted planner looks for. */
+export const SCRIPTED_HANDOFF_OPENING = "You are implementing this plan in";
+/** The one answer the scripted planner writes into the template. */
+export const SCRIPTED_PROBLEM = "Teammates cannot be invited to a workspace today.";
 
 const readDocument = Schema.decodeUnknownOption(Schema.fromJsonString(planDocumentSchema));
 
@@ -86,22 +93,26 @@ function researchReply(searched: MockModelToolResult): MockModelResponse {
   });
 }
 
-/** The handoff prompt appended to the saved body, saved with the assumptions exactly as handed. */
-function handoffResponse(request: MockModelRequest, document: PlanDocument): MockModelResponse {
+/**
+ * The template as the scripted planner saves it: its one answer, the handoff
+ * prompt where one is written, and the assumptions handed in.
+ */
+function scriptedUpdate(
+  request: MockModelRequest,
+  handoff: boolean,
+  assumptions: PlanDocument["assumptions"],
+): PlanUpdate {
   const repository = newestStanding(request, repositoryTextOf) ?? "an unknown repository";
-  const prompt = `${SCRIPTED_HANDOFF_HEADING}\n\nYou are implementing this plan in ${repository}.\n`;
-  const body = document.body.trimEnd();
   return {
-    toolCalls: [
-      {
-        name: UPDATE_PLAN_TOOL.name,
-        input: {
-          body: body.length === 0 ? prompt : `${body}\n\n${prompt}`,
-          assumptions: document.assumptions,
-        },
-      },
-    ],
+    ...EMPTY_PLAN_UPDATE,
+    purpose: { ...EMPTY_PLAN_UPDATE.purpose, problem: SCRIPTED_PROBLEM },
+    handoffPrompt: handoff ? `${SCRIPTED_HANDOFF_OPENING} ${repository}.` : null,
+    assumptions,
   };
+}
+
+function savedUpdate(update: PlanUpdate): MockModelResponse {
+  return { toolCalls: [{ name: UPDATE_PLAN_TOOL.name, input: update }] };
 }
 
 function planningResponse(request: MockModelRequest): MockModelResponse {
@@ -115,29 +126,21 @@ function planningResponse(request: MockModelRequest): MockModelResponse {
     return { toolCalls: [{ name: SEARCH_WEB_TOOL.name, input: { query } }] };
   }
   const document = handedDocument(request);
+  const { assumptions } = document;
   if (request.lastUserMessage === PLANNING_OPENING_ASK) {
-    const empty = document.body.length === 0 && document.assumptions.length === 0;
     return {
-      text: empty ? SCRIPTED_OPENING_GREETING : scriptedOpeningRecap(document.assumptions.length),
+      text:
+        assumptions.length === 0
+          ? SCRIPTED_OPENING_GREETING
+          : scriptedOpeningRecap(assumptions.length),
     };
   }
   if (request.lastUserMessage.startsWith(SCRIPTED_WRITE_PROMPT)) {
-    return handoffResponse(request, document);
+    return savedUpdate(scriptedUpdate(request, true, assumptions));
   }
-  return {
-    toolCalls: [
-      {
-        name: UPDATE_PLAN_TOOL.name,
-        input: {
-          body: document.body,
-          assumptions: [
-            ...document.assumptions,
-            { text: request.lastUserMessage, confirmed: false },
-          ],
-        },
-      },
-    ],
-  };
+  const handedOff = document.body.includes(SCRIPTED_HANDOFF_OPENING);
+  const added = [...assumptions, { text: request.lastUserMessage, confirmed: false }];
+  return savedUpdate(scriptedUpdate(request, handedOff, added));
 }
 
 /** The scripted responder, one response per model call. */

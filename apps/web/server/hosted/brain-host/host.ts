@@ -526,7 +526,11 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
               plan === undefined
                 ? undefined
                 : {
-                    plan: { userId: target.userId, planId: plan.plan.id },
+                    plan: {
+                      userId: target.userId,
+                      planId: plan.plan.id,
+                      header: { name: plan.plan.name, repository: plan.plan.repository },
+                    },
                     research: {
                       turnId: binding.turn.turnId,
                       budget: research,

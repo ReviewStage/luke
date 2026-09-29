@@ -11,9 +11,10 @@ import { SqlClient } from "effect/unstable/sql";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { runUpdatePlan } from "../server/hosted/update-plan-tool";
+import { runUpdatePlan, UPDATE_PLAN_STATUS } from "../server/hosted/update-plan-tool";
 import { plansApp } from "../server/plans-app";
 import { type FakeGitHub, type FakeRepository, fakeGitHub } from "./support/github-fake";
+import { INVITATIONS_DRAFT } from "./support/plan-updates";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -65,11 +66,6 @@ function blank(): FakeRepository {
     commits: new Map(),
   };
 }
-
-const INVITATIONS = {
-  body: "# Teammate invitations\n",
-  assumptions: [{ text: "Members and admins can both invite.", confirmed: true }],
-} as const;
 
 interface Answer {
   readonly status: number;
@@ -153,7 +149,11 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts(fakeGitHub());
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      yield* runUpdatePlan({ userId: owner, planId }, unparsedWire(INVITATIONS));
+      const saved = yield* runUpdatePlan(
+        { userId: owner, planId, header: { name: RELAY.name, repository: RELAY_RESOLVED } },
+        unparsedWire(INVITATIONS_DRAFT),
+      );
+      assert.equal(saved.status, UPDATE_PLAN_STATUS.SAVED);
 
       const listed = yield* ask(request(PLANS, owner));
       const opened = yield* ask(request(ONE_PLAN, owner, { id: planId }));
@@ -168,7 +168,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       );
       assert.deepEqual(
         readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.document,
-        INVITATIONS,
+        saved.status === UPDATE_PLAN_STATUS.SAVED ? saved.document : undefined,
       );
     }),
   );

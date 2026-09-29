@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { EMPTY_PLAN_UPDATE } from "@sidecar/hosted/plan-template";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
@@ -449,6 +450,7 @@ function planningTurn(turnId: string, now: number): readonly MessageStreamEvent[
   const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
     stampedEveEvent(event, now);
   const sequence = 0;
+  const update = EMPTY_PLAN_UPDATE;
   const document = { body: "# Teammate invitations", assumptions: [] };
   return [
     stamped({ type: "turn.started", data: { turnId, sequence } }),
@@ -461,7 +463,7 @@ function planningTurn(turnId: string, now: number): readonly MessageStreamEvent[
         sequence,
         stepIndex: 0,
         actions: [
-          { kind: "tool-call", callId: "call-1", toolName: UPDATE_PLAN_TOOL.name, input: document },
+          { kind: "tool-call", callId: "call-1", toolName: UPDATE_PLAN_TOOL.name, input: update },
         ],
       },
     }),
