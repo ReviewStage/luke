@@ -19,10 +19,11 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
-  SCRIPTED_HANDOFF_HEADING,
+  SCRIPTED_HANDOFF_OPENING,
   SCRIPTED_LOOK_UP,
   SCRIPTED_NO_SOURCE_REPLY,
   SCRIPTED_OPENING_GREETING,
+  SCRIPTED_PROBLEM,
   SCRIPTED_RESEARCH_REPLY,
   SCRIPTED_WRITE_PROMPT,
   scriptedModel,
@@ -66,6 +67,7 @@ import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool";
 import { stampedEveEvent } from "./support/eve-events";
 import { fakeGitHub, noGitHubConnections } from "./support/github-fake";
 import { noNetwork } from "./support/no-network";
+import { TEMPLATE_HEADINGS, templateHeadingsOf } from "./support/plan-updates";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -509,14 +511,17 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         yield* planningTurn(host, session, "turn_0", CORRECTION);
 
-        const expected: PlanDocument = {
-          body: SAVED.body,
-          assumptions: [...SAVED.assumptions, { text: CORRECTION, confirmed: false }],
-        };
-        assert.deepEqual(yield* windowDocument(userId, planId), expected);
+        const saved = yield* windowDocument(userId, planId);
+        assert.deepEqual(saved.assumptions, [
+          ...SAVED.assumptions,
+          { text: CORRECTION, confirmed: false },
+        ]);
+        assert.deepEqual(templateHeadingsOf(saved.body), TEMPLATE_HEADINGS);
+        assert.ok(saved.body.includes(SCRIPTED_PROBLEM));
+        assert.ok(saved.body.startsWith(`# ${RELAY_PLAN.name}\n`));
         assert.deepEqual(
           handedDocument(yield* host.standingContext(yield* admitted(host, session))),
-          expected,
+          saved,
         );
       }),
   );
@@ -536,7 +541,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         yield* planningTurn(host, session, "turn_0", SPOKEN_ASK, noNetwork, BRAIN_HOST_TURN.SPOKEN);
 
         const saved = yield* windowDocument(userId, planId);
-        assert.equal(saved.body, SAVED.body);
+        assert.ok(saved.body.includes(SCRIPTED_PROBLEM));
         assert.deepEqual(saved.assumptions.slice(0, SAVED.assumptions.length), SAVED.assumptions);
         const added = saved.assumptions.slice(SAVED.assumptions.length);
         assert.equal(added.length, 1);
@@ -615,9 +620,9 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         );
 
         const handedOff = yield* windowDocument(userId, planId);
-        assert.ok(handedOff.body.startsWith(SAVED.body.trimEnd()));
-        const prompt = handedOff.body.slice(handedOff.body.indexOf(SCRIPTED_HANDOFF_HEADING));
-        assert.ok(prompt.startsWith(SCRIPTED_HANDOFF_HEADING));
+        assert.deepEqual(templateHeadingsOf(handedOff.body), TEMPLATE_HEADINGS);
+        const prompt = handedOff.body.slice(handedOff.body.indexOf("\n## Handoff prompt\n"));
+        assert.ok(prompt.includes(`\n\n${SCRIPTED_HANDOFF_OPENING} `));
         assert.ok(prompt.includes(`${RELAY_PLAN.repository.owner}/${RELAY_PLAN.repository.name}`));
         assert.ok(prompt.includes(RELAY_PLAN.repository.commit));
         assert.deepEqual(handedOff.assumptions, reviewed.assumptions);

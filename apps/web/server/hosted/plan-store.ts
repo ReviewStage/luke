@@ -1,3 +1,4 @@
+import { EMPTY_PLAN_UPDATE, planBody } from "@sidecar/hosted/plan-template";
 import {
   type Plan,
   type PlanDocument,
@@ -137,7 +138,18 @@ const insertPlan = SqlSchema.findOne({
         repositoryName: write.repositoryName,
         repositoryBranch: write.branch,
         repositoryCommit: write.commit,
-        body: "",
+        body: planBody(
+          {
+            name: write.name,
+            repository: {
+              owner: write.owner,
+              name: write.repositoryName,
+              branch: write.branch,
+              commit: write.commit,
+            },
+          },
+          EMPTY_PLAN_UPDATE,
+        ),
         assumptions: [],
         createdAt: write.now,
         updatedAt: write.now,
@@ -296,7 +308,10 @@ const setConversation = SqlSchema.findOneOption({
       .returning({ id: plan.id }),
 });
 
-/** Starts a plan under the account with an empty document; it opens first in the list. */
+/**
+ * Starts a plan under the account with the fixed template untouched, every
+ * field unanswered and nothing assumed; it opens first in the list.
+ */
 export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Plan> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;

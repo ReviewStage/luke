@@ -1,3 +1,4 @@
+import { EMPTY_PLAN_UPDATE, type PlanUpdate, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { RUN_PROFILE } from "#shared/messages/app-state";
@@ -9,8 +10,8 @@ import { RUN_PROFILE } from "#shared/messages/app-state";
  * would show only its signed-out line. It draws the synthetic list instead,
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
  * the panel opens on Plans, and under the planning profile it also opens the
- * reference journey's plan from `docs/PLANNING.md`, which is what the
- * planning capture shows. Every name, repository, and commit here is
+ * reference journey's plan from `docs/PLANNING.md`, a draft of the fixed
+ * template partway through, which is what the planning capture shows. Every name, repository, and commit here is
  * invented; nothing is read from an account.
  */
 
@@ -21,23 +22,66 @@ const FIXTURE_REPOSITORY = {
   commit: "4f2c9e1a0b3d5c7e9f1a2b3c4d5e6f708192a3b4",
 } as const;
 
-const FIXTURE_BODY = `# Teammate invitations
-
-## Goal
-A workspace member invites a teammate by email; the teammate joins the workspace by opening the link.
-
-## Recommendation
-Model an invite as a \`memberships\` row with \`state = pending\` rather than a separate invitations table (\`src/db/schema/memberships.ts\`), so accepting is a state change and removal covers invites and members alike.
-
-## Behavior
-1. A member enters an email address and sends the invite.
-2. The invited person opens the link and signs in or signs up.
-3. Accepting moves the membership from \`pending\` to \`active\`.
-4. A withdrawn invite's link shows a generic "This invite is no longer valid" page.
-
-## Open questions
-- Who can withdraw an invite: the member who sent it, any admin, or both?
-`;
+/**
+ * The reference journey's plan partway through its conversation: the purpose,
+ * the existing system, a rule and an invariant, and a scenario settled, an
+ * acceptance example still without its outcome, and everything else
+ * unanswered, as the fixed template shows a draft.
+ */
+const FIXTURE_UPDATE: PlanUpdate = {
+  ...EMPTY_PLAN_UPDATE,
+  purpose: {
+    problem: "Only an admin can add someone to a workspace, by creating their account by hand.",
+    users: "Workspace members, and the teammates they invite.",
+    outcome: "A member invites a teammate by email; the teammate joins by opening the link.",
+  },
+  context: {
+    currentBehavior: "Fact: accounts are created by an admin in the settings page.",
+    relevantCode:
+      "Inspected at the plan's commit: `src/db/schema/memberships.ts` holds a `state` column. " +
+      "Hypothesis: nothing else writes to `memberships` outside `src/members/`.",
+    terminology: "An invite is a membership whose state is `pending`.",
+  },
+  behavior: {
+    rules:
+      "Any member may invite by email. Accepting moves the membership from `pending` to `active`.",
+    invariants: "A withdrawn or accepted invite link never grants access again.",
+    scenarios: [
+      {
+        name: "A teammate accepts an invite",
+        actor: "The invited teammate",
+        startingState: "A pending membership exists for the teammate's email address.",
+        trigger: "The teammate opens the invite link.",
+        steps: [
+          "The teammate signs in or signs up.",
+          "The service moves the membership to `active`.",
+        ],
+        expectedOutcome: "The teammate lands in the workspace.",
+        alternativesAndFailures:
+          'A withdrawn invite\'s link shows a generic "This invite is no longer valid" page.',
+      },
+    ],
+  },
+  delivery: {
+    ...EMPTY_PLAN_UPDATE.delivery,
+    decisions:
+      "Model an invite as a `memberships` row with `state = pending` rather than a separate " +
+      "invitations table, so removal covers invites and members alike. Alternative: an " +
+      "`invitations` table. Accepted cost: pending rows appear in membership queries.",
+  },
+  acceptance: {
+    examples: [
+      {
+        given: "A member invites dana@example.com",
+        when: "Dana opens the link",
+        // biome-ignore lint/suspicious/noThenProperty: `then` is the acceptance example's key in the fixed template's contract, and an example is data that is never awaited.
+        then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+      },
+    ],
+    verification: null,
+  },
+  openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
+};
 
 const FIXTURE_PLAN: Plan = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
@@ -47,7 +91,10 @@ const FIXTURE_PLAN: Plan = {
   updatedAt: 2,
   openedAt: 3,
   document: {
-    body: FIXTURE_BODY,
+    body: planBody(
+      { name: "Teammate invitations", repository: FIXTURE_REPOSITORY },
+      FIXTURE_UPDATE,
+    ),
     assumptions: [
       { text: "Invites reuse memberships with a pending state.", confirmed: true },
       { text: "Members and admins can both invite.", confirmed: true },

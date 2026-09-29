@@ -1,17 +1,20 @@
+import { PLAN_EMPTY_TEXT, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
 
 /**
  * plan-markdown.ts -- a plan's saved document as the readable Markdown Copy puts on the clipboard.
  *
  * Copy is direct formatting of the saved document and nothing else: the body
- * exactly as saved, then an `## Assumptions` checklist drawn from the saved
- * list, `- [x]` for a confirmed assumption and `- [ ]` for one that is not.
- * It reads no flag as a gate: a document with every assumption unconfirmed
- * copies the same way as one with all of them confirmed, and before or after
- * the handoff prompt is written (`docs/PLANNING.md`, "Copy").
+ * exactly as saved, which carries every section of the fixed template in its
+ * canonical order, then the template's last section, `## Assumptions`, drawn
+ * from the saved list, `- [x]` for a confirmed assumption and `- [ ]` for one
+ * that is not, or "None recorded" while the list is empty. It reads no flag
+ * as a gate: a draft with every field unanswered and every assumption
+ * unconfirmed copies the same way as a finished plan, before or after the
+ * handoff prompt is written (`docs/PLANNING.md`, "Copy").
  */
 
-const ASSUMPTIONS_HEADING = "## Assumptions";
+const ASSUMPTIONS_HEADING = `## ${PLAN_HEADING.ASSUMPTIONS}`;
 
 const CHECKBOX = {
   CONFIRMED: "- [x] ",
@@ -43,15 +46,17 @@ function checklistItem(text: string, confirmed: boolean): string {
 }
 
 /**
- * The document as Markdown: the body as saved, and the checklist after it
- * where the list holds anything. An empty document is empty text.
+ * The document as Markdown: the body as saved, then the assumptions'
+ * section, which stands whether or not the list holds anything.
  */
 export function planMarkdown(document: PlanDocument): string {
   const body = document.body.trimEnd();
-  if (document.assumptions.length === 0) return body.length === 0 ? "" : `${body}\n`;
-  const items = document.assumptions.map((assumption) =>
-    checklistItem(assumption.text, assumption.confirmed),
-  );
+  const items =
+    document.assumptions.length === 0
+      ? [PLAN_EMPTY_TEXT.NO_ASSUMPTIONS]
+      : document.assumptions.map((assumption) =>
+          checklistItem(assumption.text, assumption.confirmed),
+        );
   const checklist = [ASSUMPTIONS_HEADING, "", ...items].join("\n");
   return body.length === 0 ? `${checklist}\n` : `${body}\n\n${checklist}\n`;
 }

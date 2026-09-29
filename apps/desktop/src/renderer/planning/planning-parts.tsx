@@ -7,7 +7,7 @@ import {
   type CopyShown,
   DOCUMENT_REGION,
   type DocumentRegion,
-  EMPTY_PLAN_LINE,
+  NO_ASSUMPTIONS_LINE,
   repositoryLine,
 } from "./planning-model";
 
@@ -160,7 +160,8 @@ function PlanHeader({
 
 /**
  * The document page's region: the saved body and its assumptions under the
- * header, which scroll between the header and the microphone row, or the
+ * header, the assumptions' section standing even while the list is empty as
+ * the fixed template's last section, which scroll between the header and the microphone row, or the
  * state that stands in their place. Back leaves the plan, which ends its call.
  */
 export function PlanDocumentView({
@@ -219,14 +220,12 @@ export function PlanDocumentView({
             onBack={onBack}
           />
           <div className="plan-document-scroll">
-            {body.trim().length === 0 ? (
-              <p className="plan-empty">{EMPTY_PLAN_LINE}</p>
-            ) : (
-              <MarkdownMessage words={body} className="plan-body" />
-            )}
-            {assumptions.length > 0 ? (
-              <section className="plan-assumptions" aria-label="Assumptions">
-                <h2 className="plan-assumptions-heading">Assumptions</h2>
+            <MarkdownMessage words={body} className="plan-body" />
+            <section className="plan-assumptions" aria-label="Assumptions">
+              <h2 className="plan-assumptions-heading">Assumptions</h2>
+              {assumptions.length === 0 ? (
+                <p className="plan-assumptions-none">{NO_ASSUMPTIONS_LINE}</p>
+              ) : (
                 <ul>
                   {assumptions.map((assumption, index) => (
                     // An assumption has no id of its own: the list is replaced whole on every save.
@@ -234,8 +233,8 @@ export function PlanDocumentView({
                     <AssumptionRow key={index} assumption={assumption} />
                   ))}
                 </ul>
-              </section>
-            ) : null}
+              )}
+            </section>
           </div>
         </section>
       );
