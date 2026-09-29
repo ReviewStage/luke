@@ -201,29 +201,11 @@
 
 .plan-assumptions ul {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  padding-left: 18px;
 }
 
 .plan-assumption {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: baseline;
-  gap: 10px;
-  padding: 5px 0;
-}
-
-.plan-assumption input {
-  margin: 0;
-}
-
-.plan-assumption-status {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.plan-assumption[data-confirmed="true"] .plan-assumption-status {
-  color: var(--state-complete);
+  padding: 3px 0;
 }
 
 /* The microphone row: the button and the call's word. The words spoken and

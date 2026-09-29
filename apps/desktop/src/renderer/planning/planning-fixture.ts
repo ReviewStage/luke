@@ -1,4 +1,4 @@
-import { EMPTY_PLAN_UPDATE, type PlanUpdate, planBody } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_UPDATE, type FullPlanUpdate, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { RUN_PROFILE } from "#shared/messages/app-state";
@@ -28,7 +28,7 @@ const FIXTURE_REPOSITORY = {
  * acceptance example still without its outcome, and everything else
  * unanswered, as the fixed template shows a draft.
  */
-const FIXTURE_UPDATE: PlanUpdate = {
+const FIXTURE_UPDATE: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
   purpose: {
     problem: "Only an admin can add someone to a workspace, by creating their account by hand.",
@@ -96,9 +96,9 @@ const FIXTURE_PLAN: Plan = {
       FIXTURE_UPDATE,
     ),
     assumptions: [
-      { text: "Invites reuse memberships with a pending state.", confirmed: true },
-      { text: "Members and admins can both invite.", confirmed: true },
-      { text: "An invite expires after 7 days.", confirmed: false },
+      { text: "Invites reuse memberships with a pending state." },
+      { text: "Members and admins can both invite." },
+      { text: "An invite expires after 7 days." },
     ],
   },
 };

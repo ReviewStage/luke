@@ -1,4 +1,4 @@
-import { EMPTY_PLAN_UPDATE, type PlanUpdate } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_UPDATE, type FullPlanUpdate } from "@sidecar/hosted/plan-template";
 
 /**
  * plan-updates.ts -- synthetic `update_plan` arguments for the fixed template, as a planning model would send them.
@@ -72,7 +72,7 @@ export function headingLinesOf(body: string): readonly string[] {
  * a scenario whose steps are not yet known, an example with no outcome yet,
  * and everything else unanswered.
  */
-export const INVITATIONS_DRAFT: PlanUpdate = {
+export const INVITATIONS_DRAFT: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
   purpose: {
     problem: "A workspace member cannot bring a teammate in without an admin creating the account.",
@@ -107,8 +107,8 @@ export const INVITATIONS_DRAFT: PlanUpdate = {
   },
   openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
   assumptions: [
-    { text: "Invites reuse `memberships` with a `pending` state.", confirmed: true },
-    { text: "Only admins can invite teammates.", confirmed: false },
+    { text: "Invites reuse `memberships` with a `pending` state." },
+    { text: "Only admins can invite teammates." },
   ],
 };
 
@@ -117,7 +117,7 @@ export const INVITATIONS_DRAFT: PlanUpdate = {
  * and the four fields a small change could leave empty say so explicitly
  * rather than inventing a risk or an alternative to fill them.
  */
-export const SMALL_FEATURE: PlanUpdate = {
+export const SMALL_FEATURE: FullPlanUpdate = {
   purpose: {
     problem: "The empty plan list says nothing about how to start.",
     users: "Developers opening the Plans tab for the first time.",
@@ -181,8 +181,8 @@ export const SMALL_FEATURE: PlanUpdate = {
   openQuestions: [],
   handoffPrompt: null,
   assumptions: [
-    { text: "Constraints do not apply to a one-line copy change.", confirmed: true },
-    { text: "No risk is worth recording for this change.", confirmed: true },
+    { text: "Constraints do not apply to a one-line copy change." },
+    { text: "No risk is worth recording for this change." },
   ],
 };
 
@@ -211,7 +211,7 @@ export const BULK_IMPORT_AGREED = {
 } as const;
 
 /** A bulk import that meets an invalid row: the agreed invariant, its decision, prerequisite, risk, and check, and the handoff that carries them. */
-export const BULK_IMPORT: PlanUpdate = {
+export const BULK_IMPORT: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
   purpose: {
     problem: "Contacts are entered one at a time.",
@@ -268,8 +268,8 @@ export const BULK_IMPORT: PlanUpdate = {
     "If anything here conflicts with the agreed behavior, surface the conflict before overriding it.",
   ].join("\n\n"),
   assumptions: [
-    { text: BULK_IMPORT_AGREED.INVARIANT, confirmed: true },
-    { text: "One invalid row blocks the whole file.", confirmed: true },
-    { text: "A 50,000-row file fits in one transaction.", confirmed: false },
+    { text: BULK_IMPORT_AGREED.INVARIANT },
+    { text: "One invalid row blocks the whole file." },
+    { text: "A 50,000-row file fits in one transaction." },
   ],
 };

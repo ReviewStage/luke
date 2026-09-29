@@ -22,7 +22,7 @@ const PLAN = {
   ...SUMMARY,
   document: {
     body: "# Teammate invitations",
-    assumptions: [{ text: "Members and admins can both invite.", confirmed: true }],
+    assumptions: [{ text: "Members and admins can both invite." }],
   },
 };
 

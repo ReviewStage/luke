@@ -7,7 +7,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * A plan is its owner's name for it, the GitHub repository it plans against
  * with the default branch and the commit it was started at, and one current
  * document: a Markdown `body` and an `assumptions` list, each assumption its
- * text and whether the developer confirmed it (`docs/PLANNING.md`). The
+ * text (`docs/PLANNING.md`). The
  * document is the whole of what the planning model writes, through
  * `update_plan`, whose typed fields the service formats into the body as the
  * one fixed template (`plan-template.ts`), and it is replaced whole on every
@@ -45,8 +45,6 @@ function trimmedText(maximumChars: number) {
 export const planAssumptionSchema = EffectSchema.Struct({
   /** The assumption as one plain sentence. */
   text: trimmedText(PLAN_BOUNDS.MAX_ASSUMPTION_CHARS),
-  /** Whether the developer agreed to it; the model's reading of their answer, stored as given. */
-  confirmed: EffectSchema.Boolean,
 });
 
 export type PlanAssumption = typeof planAssumptionSchema.Type;

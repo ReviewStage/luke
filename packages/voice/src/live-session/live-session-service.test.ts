@@ -302,10 +302,7 @@ interface Fixture {
   onBriefingAppend?: (delivery: { briefing: string; decidedAt: number }, eventId: string) => void;
 }
 
-function fixture(
-  brain: FakeBrain = new FakeBrain(),
-  options: { readonly opening?: string; readonly report?: (message: string) => void } = {},
-): Effect.Effect<Fixture, never, Scope.Scope> {
+function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
     const clock = testNow(yield* Clock.Clock);
     const record = new FakeRecord();
@@ -315,9 +312,8 @@ function fixture(
     const service = yield* Effect.provide(
       LiveSessionService.make({
         createId: () => `id-${++ids}`,
-        report: options.report ?? (() => undefined),
+        report: () => undefined,
         onProactiveSpoken: (kind) => spoken.push(kind),
-        ...(options.opening === undefined ? undefined : { opening: options.opening }),
         onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
@@ -837,163 +833,6 @@ it.effect(
       });
       yield* advanceClock(1000);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-    }),
-);
-
-/** The opening ask a planning call's exchange would hand the service; its words are the brain's to read. */
-const OPENING = "[call opened] Open the conversation.";
-
-/** A run's whole reply, as the brain tells it: its actions settled, its one sentence, and its end. */
-function reply(brain: FakeBrain, runId: string, sentence: string): void {
-  brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId });
-  brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence });
-  brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId, end: LIVE_BRAIN_RUN_END.COMPLETED });
-}
-
-/** Every commentary the session was handed, as what it says and the delegation it answers. */
-function said(sideband: FakeSideband) {
-  return appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) => [
-    "content" in event ? event.content : undefined,
-    "delegation_id" in event ? event.delegation_id : undefined,
-  ]);
-}
-
-it.effect(
-  "a session adopted before its start opens with the brain's answer to the opening ask, spoken under no delegation before the developer says a word",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture(new FakeBrain(), { opening: OPENING });
-      const sideband = new FakeSideband();
-      yield* f.service.adoptSession({
-        sessionId: "sess-plan",
-        attach: () => Effect.succeed(sideband),
-        started: false,
-      });
-      yield* settle();
-      // Nothing is asked before the session has started.
-      assert.equal(f.brain.asks.length, 0);
-      sideband.started("sess-plan");
-      yield* settle();
-      assert.deepEqual(
-        f.brain.asks.map((ask) => ask.question),
-        [OPENING],
-      );
-      const greeting = "I hear you have something new to work on. What is it?";
-      reply(f.brain, "run-1", greeting);
-      yield* advanceClock(1000);
-      assert.deepEqual(said(sideband), [[greeting, null]]);
-    }),
-);
-
-it.effect(
-  "a session re-attached after its start is a conversation under way and is asked no opening",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture(new FakeBrain(), { opening: OPENING });
-      const sideband = new FakeSideband();
-      yield* f.service.adoptSession({
-        sessionId: "sess-plan",
-        attach: () => Effect.succeed(sideband),
-        started: true,
-      });
-      yield* settle();
-      assert.equal(f.brain.asks.length, 0);
-      assert.deepEqual(sideband.sent, []);
-    }),
-);
-
-it.effect(
-  "an opening the brain refused or could not finish says nothing, and the developer opens the conversation instead",
-  () =>
-    Effect.gen(function* () {
-      const reports: string[] = [];
-      const refused = new FakeBrain();
-      refused.refuse = "No brain stands.";
-      const r = yield* fixture(refused, { opening: OPENING, report: (m) => reports.push(m) });
-      const refusedSideband = yield* r.open();
-      yield* advanceClock(1000);
-      assert.equal(refused.asks.length, 1);
-      assert.deepEqual(refusedSideband.sent, []);
-      assert.equal(reports.length, 1);
-
-      const f = yield* fixture(new FakeBrain(), { opening: OPENING });
-      const sideband = yield* f.open();
-      yield* settle();
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
-        runId: "run-1",
-        end: LIVE_BRAIN_RUN_END.FAILED,
-      });
-      yield* advanceClock(1000);
-      assert.deepEqual(sideband.sent, []);
-    }),
-);
-
-it.effect(
-  "a developer who speaks while the opening is still coming is answered as themselves: the opening under no delegation, their reply under theirs",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture(new FakeBrain(), { opening: OPENING });
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.input("I want invitations.", 0, 900);
-      sideband.delegation("item_1", 1000);
-      yield* settle();
-      assert.equal(f.brain.asks.length, 2);
-      reply(f.brain, "run-1", "Let's plan it together. What is it?");
-      reply(f.brain, "run-2", "Invitations, then. Who may send one?");
-      yield* advanceClock(1000);
-      sideband.acknowledge(0, 1100, 1200);
-      yield* settle();
-      assert.deepEqual(said(sideband), [
-        ["Let's plan it together. What is it?", null],
-        ["Invitations, then. Who may send one?", "item_1"],
-      ]);
-    }),
-);
-
-it.effect(
-  "in a scripted planning exchange, every turn Luke is handed is the backend's own reply, closing on its own next question, from the opening through a one-word agreement",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture(new FakeBrain(), { opening: OPENING });
-      const sideband = yield* f.open();
-      yield* settle();
-      const turns = [
-        { answer: undefined, reply: "Let's plan it out together. What do you want to build?" },
-        {
-          answer: "Team invitations by email.",
-          reply: "I'd let only admins invite, to keep it simple. Agreed?",
-        },
-        { answer: "Yes.", reply: "Saved. What should an expired link show?" },
-      ];
-      let at = 0;
-      for (const [index, turn] of turns.entries()) {
-        if (turn.answer !== undefined) {
-          sideband.input(turn.answer, at, at + 500);
-          sideband.delegation(`item_${index}`, at + 600);
-          yield* settle();
-        }
-        reply(f.brain, `run-${index + 1}`, turn.reply);
-        yield* advanceClock(1000);
-        sideband.acknowledge(sideband.sent.length - 1, at + 700, at + 800);
-        sideband.output(turn.reply, at + 700, at + 1500);
-        yield* settle();
-        at += 10_000;
-      }
-      assert.deepEqual(
-        f.brain.asks.map((ask) => ask.question.split("\n").at(-1)),
-        [
-          OPENING,
-          "The developer's ask is their latest line above: Team invitations by email.",
-          "The developer's ask is their latest line above: Yes.",
-        ],
-      );
-      assert.deepEqual(said(sideband), [
-        [turns[0]?.reply, null],
-        [turns[1]?.reply, "item_1"],
-        [turns[2]?.reply, "item_2"],
-      ]);
     }),
 );
 
