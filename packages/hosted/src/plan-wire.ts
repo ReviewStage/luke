@@ -9,7 +9,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * document: a Markdown `body` and an `assumptions` list, each assumption its
  * text and whether the developer confirmed it (`docs/PLANNING.md`). The
  * document is the whole of what the planning model writes, through
- * `update_plan({ body, assumptions })`, and it is replaced whole on every
+ * `update_plan`, whose typed fields the service formats into the body as the
+ * one fixed template (`plan-template.ts`), and it is replaced whole on every
  * save: there is no version, no revision argument, and no per-assumption id.
  * The owning account and the conversation a plan resumes in are the
  * service's own and never travel here.
@@ -52,7 +53,7 @@ export type PlanAssumption = typeof planAssumptionSchema.Type;
 
 /** The one saved document of a plan, replaced whole by every save. */
 export const planDocumentSchema = EffectSchema.Struct({
-  /** Markdown, stored exactly as written; empty on a plan nothing has been saved to. */
+  /** The fixed template's canonical Markdown, stored exactly as formatted. */
   body: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_BODY_CHARS)),
   assumptions: EffectSchema.Array(planAssumptionSchema).check(
     EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_ASSUMPTIONS),
@@ -73,7 +74,7 @@ export type PlanRepository = typeof planRepositorySchema.Type;
 
 /**
  * Starting a plan (POST): its name and the repository it plans against; the
- * document starts empty. The service resolves the default branch and its
+ * document starts as the untouched template. The service resolves the default branch and its
  * commit itself, through the account's GitHub connection, so a request
  * naming either is refused rather than trusted.
  */

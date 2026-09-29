@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
+import { EMPTY_PLAN_UPDATE, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -15,7 +16,7 @@ import {
   COPY_SHOWN,
   type CopyShown,
   DOCUMENT_REGION,
-  EMPTY_PLAN_LINE,
+  NO_ASSUMPTIONS_LINE,
 } from "./planning-model";
 import { PlanDocumentView, PlanList } from "./planning-parts";
 
@@ -92,11 +93,37 @@ test("the document offers no way to write, confirm, or approve anything", () => 
   assert.doesNotMatch(markup, /Approve|Version|History|Ready/u);
 });
 
-test("an empty plan shows the one line that says how to begin, and no assumption section", () => {
-  const markup = documentMarkup({ ...PLAN, document: { body: "", assumptions: [] } });
+test("a new plan draws its whole template unanswered, and an assumptions section that says none is recorded", () => {
+  const body = planBody(PLAN, EMPTY_PLAN_UPDATE);
+  const markup = documentMarkup({ ...PLAN, document: { body, assumptions: [] } });
 
-  assert.match(markup, new RegExp(EMPTY_PLAN_LINE, "u"));
-  assert.doesNotMatch(markup, /Assumptions/u);
+  const sections = [
+    ...markup.matchAll(/<p class="markdown-heading" data-level="2">([^<]*)<\/p>/gu),
+  ];
+  assert.deepEqual(
+    sections.map((match) => match[1]),
+    [
+      "Purpose and users",
+      "Scope",
+      "Existing system",
+      "Behavior",
+      "Data and interfaces",
+      "Quality requirements",
+      "Implementation guidance",
+      "Acceptance",
+      "Open questions",
+      "Handoff prompt",
+    ],
+  );
+  assert.match(markup, /<em>Unanswered<\/em>/u);
+  assert.match(markup, /<em>Not prepared<\/em>/u);
+  assert.match(
+    markup,
+    new RegExp(
+      `<h2 class="plan-assumptions-heading">Assumptions</h2><p class="plan-assumptions-none">${NO_ASSUMPTIONS_LINE}</p>`,
+      "u",
+    ),
+  );
 });
 
 test("Copy stands in the header, enabled, whatever the assumptions' flags say", () => {

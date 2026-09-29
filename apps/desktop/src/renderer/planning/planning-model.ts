@@ -21,8 +21,8 @@ import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
  * the developer to do, what Copy shows, and the word beside the microphone.
  */
 
-/** The one line an empty document shows in its place. */
-export const EMPTY_PLAN_LINE = "Press the microphone and describe the feature.";
+/** What the assumptions' section says while the list is empty, the words Copy writes there. */
+export const NO_ASSUMPTIONS_LINE = "None recorded";
 
 /** How many characters of a commit the header shows, the length `git` abbreviates to. */
 const SHORT_COMMIT_CHARS = 7;

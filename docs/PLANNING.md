@@ -14,8 +14,10 @@ are not reopened here. The two that shape everything below:
 
 - **One saved document per named plan**, a Markdown `body` and an `assumptions`
   list of `{ text, confirmed }`, written only by the model through
-  `update_plan({ body, assumptions })`. There are no versions, no stale-revision
-  rejection, no approval state, and no export record.
+  `update_plan`. The body is always the one fixed template (LUKE-352, "The
+  fixed template" below): the model sends every field of it on every call,
+  and the service formats them into the body. There are no versions, no
+  stale-revision rejection, no approval state, and no export record.
 - **The model drives the workflow.** Question choice, agreement, corrections,
   the final review, and the handoff live in the planning model's instructions.
   The tab saves nothing of its own and decides nothing; it shows the saved
@@ -56,10 +58,17 @@ every tab shares), one page at a time:
  │     acme/relay · main @ 4f2c9e1                              │
  │ ──────────────────────────────────────────────────────────── │
  │  # Teammate invitations                          (scrolls)   │
- │  ## Goal                                                     │
- │  Let a workspace member invite a teammate by email...        │
+ │  Repository: acme/relay, branch main at commit 4f2c9e1...    │
+ │  ## Purpose and users                                        │
+ │  ### Problem                                                 │
+ │  Only an admin can add someone to a workspace...             │
+ │  ### Outcome                                                 │
+ │  Unanswered                                                  │
+ │  ...  (every section of the template, in order)              │
  │  ## Open questions                                           │
- │  - What happens to a pending invite when...                  │
+ │  - Who can withdraw an invite...                             │
+ │  ## Handoff prompt                                           │
+ │  Not prepared                                                │
  │  ## Assumptions                                              │
  │  ☑ Members and admins can both invite.        Confirmed      │
  │  ☐ An invite expires after 7 days.        Not confirmed      │
@@ -125,8 +134,8 @@ nothing spoken:
    nothing else.
 4. **Start plan**, enabled once both fields are filled. Pressing it resolves
    the repository's default branch to one commit, then saves the plan with its
-   name, `owner/repository`, default branch, and commit, and an empty
-   document, and opens it. If the resolution fails (access revoked, network,
+   name, `owner/repository`, default branch, and commit, and the untouched
+   template as its document, and opens it. If the resolution fails (access revoked, network,
    or an empty repository), the page stays open with the reason and the
    button can be pressed again.
 
@@ -146,17 +155,92 @@ same commit, and nothing refreshes it. The header shows it as
 ### Document
 
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
-  drawn from the saved `assumptions` list.
+  drawn from the saved `assumptions` list. The body is the fixed template, so
+  every section and field shows from the moment the plan starts, an
+  unanswered field as "Unanswered".
 - It is read-only and selectable, so a selection can be copied.
 - When a save lands, the document redraws in place and keeps its scroll
   position. There is no diff, highlight, or animation of what changed.
-- A new plan whose body is still empty shows one line in its place: "Press the
-  microphone and describe the feature."
 - Each assumption row is a disabled checkbox, the text, and a plain status
   field, `Confirmed` or `Not confirmed`. None of the three responds to a
-  click. With no assumptions, the section is absent.
+  click. With no assumptions, the section stands and reads "None recorded".
 - If the saved document cannot be read, the region shows the failure and a
   `Try again` button. The tab never draws a document it did not read.
+
+### The fixed template
+
+Every plan uses one fixed template (LUKE-352). There is no configurable
+template, no sections map, and no freeform body argument: `update_plan`'s
+arguments are exactly the sections below, every named field is required on
+every call, drafts included, and a call missing a field, naming one the
+template does not, sending a freeform `body`, or carrying a blank answer is
+refused with the offending field's path and saves nothing. The typed
+arguments are an input format only. The service formats them into the
+canonical Markdown `body` (`packages/hosted/src/plan-template.ts`), checks
+the formatted body against its bound, and saves the same `{ body,
+assumptions }` document as before; no code parses the body back, and the
+model reads the canonical Markdown on its next turn.
+
+| Section | Fields | What Luke establishes |
+| --- | --- | --- |
+| Purpose and users | `purpose.problem`, `users`, `outcome` | The current problem, who is affected, and the observable improvement. |
+| Scope | `scope.included`, `excluded`, `constraints` | What is in, what is explicitly out, and material limits. |
+| Existing system | `context.currentBehavior`, `relevantCode`, `terminology` | What happens today and the paths read at the plan's commit, facts kept apart from hypotheses and proposed changes. |
+| Behavior | `behavior.rules`, `invariants`, `scenarios` | Rules, what must stay true across success, failure, cancellation, and retry, and concrete rehearsals. |
+| Data and interfaces | `dataAndInterfaces.dataRules`, `interfaces` | Data ownership, validation, lifecycle, and affected contracts with their failure behavior. |
+| Quality requirements | `quality.permissionsAndPrivacy`, `usabilityAndAccessibility`, `performanceAndReliability` | Applicable expectations with cited or agreed bounds, never invented to fill a field. |
+| Implementation guidance | `delivery.approach`, `decisions`, `stepsAndDependencies`, `risksAndMitigations`, `compatibilityAndMigration`, `rolloutAndRecovery`, `delegatedChoices` | The approach, each consequential decision with its reason, alternative, and accepted cost, ordered steps with prerequisites, material risks with mitigations, and the freedom left to the implementing agent. |
+| Acceptance | `acceptance.examples`, `verification` | Concrete examples and the checks that establish the important rules and invariants, with what each proves. |
+| Open questions | `openQuestions` | What is still unresolved. |
+| Handoff prompt | `handoffPrompt` | The self-contained prompt, written only after the spoken review. |
+| Assumptions | `assumptions` | The existing `{ text, confirmed }` list. |
+
+- **Types.** An ordinary field is `null` or nonblank text, and `null` is the
+  only way to leave it unanswered; it renders as "Unanswered". A scenario is
+  exactly its name, actor, starting state, trigger, steps (null or a nonempty
+  ordered list), expected outcome, and alternatives and failures; an
+  acceptance example is exactly `given`, `when`, and `then`. Both lists are
+  null until one is identified. `openQuestions` is always a list, rendering
+  "No additional questions recorded" while empty, and `handoffPrompt` is null
+  until prepared, rendering "Not prepared".
+- **Order and containment.** The formatter owns every heading and its order,
+  so the body's order is the template's whatever order a call's keys arrive
+  in. Field text is contained where it stands: a line that would open a
+  heading or an HTML block is escaped, and a code fence left open is closed
+  at the end of its field, so no answer can impersonate a section or swallow
+  the ones after it.
+- **A new plan** is the template with every field unanswered, no open
+  question, no handoff, and no assumption. Luke reads that untouched template
+  as a new plan and greets the developer; opening saves nothing.
+- **Saving and resuming** go through the same whole-document save, so a plan
+  written in the template resumes with its answers and its flags intact.
+- **Structure is the tool's; agreement is the model's.** The schema
+  guarantees that every field is present and well formed, not that an answer
+  is understood, true, or agreed. Resolving each field, or agreeing an
+  explicit "Not applicable: <reason>" or a bounded delegation, is Luke's
+  work, and every proposal Luke adds (a default, an invariant, a decision, a
+  risk accepted, an exclusion, a non-applicable field, a delegated choice) is
+  an assumption that stays unconfirmed until the developer explicitly agrees.
+  Purpose, behavior, and acceptance can never be set aside as not applicable.
+  A populated template is not evidence that the developer agreed.
+
+The field selection is a Luke product decision informed by Microsoft ISE's
+[feature/story](https://microsoft.github.io/code-with-engineering-playbook/design/design-reviews/recipes/templates/feature-story-design-review/)
+and [task](https://microsoft.github.io/code-with-engineering-playbook/design/design-reviews/recipes/templates/template-task-design-review/)
+design-review templates, the design-doc practice in
+[Software Engineering at Google](https://abseil.io/resources/swe-book/html/ch10.html#design_docs)
+and the [React RFC template](https://github.com/reactjs/rfcs/blob/main/0000-template.md),
+the [TensorFlow](https://github.com/tensorflow/community/blob/master/rfcs/yyyymmdd-rfc-template.md)
+and [Fuchsia](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/docs/contribute/governance/rfcs/TEMPLATE.md)
+RFC templates, AWS's [formal-methods experience report](https://lamport.azurewebsites.net/tla/formal-methods-amazon.pdf)
+(adapted to plain-language invariants), Microsoft's
+[trade-study template](https://microsoft.github.io/code-with-engineering-playbook/design/design-reviews/trade-studies/template/)
+and [arc42](https://arc42.org/overview/), NASA's
+[requirements checklist](https://www.nasa.gov/reference/appendix-c-how-to-write-a-good-requirement/),
+and [Cockburn's use cases](https://www.cs.otago.ac.nz/coursework/cosc461/weucx.pdf),
+[Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/), and
+[EARS](https://alistairmavin.com/ears/). None of them validates these exact
+fields or a voice model; comparative evaluations are outside this work.
 
 ### Microphone row and the panel's voice
 
@@ -189,7 +273,8 @@ instructions.
 The developer opens the panel's Plans tab. They press
 `New plan`, connect GitHub once, name the plan "Teammate invitations", pick
 `acme/relay`, and press `Start plan`. The header reads
-`acme/relay · main @ 4f2c9e1`, and the document shows its empty-state line.
+`acme/relay · main @ 4f2c9e1`, and the document shows the untouched template,
+every field "Unanswered". Luke greets them first.
 
 They press the microphone and speak: "I want people to be able to invite a
 teammate into their workspace by email."
@@ -208,23 +293,53 @@ Luke comes back with a finding and a direction rather than a questionnaire:
 > that hasn't been accepted, and removing access works the same way for both.
 > Does that match how you think about it?"
 
-The developer answers "Yes, that's simpler", and the model saves:
+The developer answers "Yes, that's simpler", and the model saves every field
+of the template, most of them still null. The body it becomes reads, in part:
 
 ```markdown
 # Teammate invitations
 
-## Goal
-A workspace member invites a teammate by email; the teammate joins the
-workspace by opening the link.
+Repository: acme/relay, branch main at commit 4f2c9e1...
 
-## Recommendation
+## Purpose and users
+
+### Problem
+
+Only an admin can add someone to a workspace, by creating their account by hand.
+
+### Users
+
+Workspace members, and the teammates they invite.
+
+### Outcome
+
+A member invites a teammate by email; the teammate joins by opening the link.
+
+...
+
+## Implementation guidance
+
+### Approach
+
+_Unanswered_
+
+### Decisions
+
 Model an invite as a `memberships` row with `state = pending` rather than a
-separate invitations table (`src/db/schema/memberships.ts`), so accepting is a
-state change and removal covers invites and members alike.
+separate invitations table (`src/db/schema/memberships.ts`), so removal covers
+invites and members alike. Alternative: an `invitations` table. Accepted cost:
+pending rows appear in membership queries.
+
+...
 
 ## Open questions
+
 - Who may invite?
 - What does an invited person see after their invite is withdrawn?
+
+## Handoff prompt
+
+_Not prepared_
 ```
 
 ```json
@@ -247,10 +362,11 @@ answer unlocks the most:
 > removes it. She clicks the link. I'd show her a plain 'This invite is no
 > longer valid' page and not tell her who withdrew it. OK?"
 
-The developer agrees. The model adds a `## Behavior` section with the numbered
-walk-through (the invite is sent, the link is opened, the invite is accepted,
-the invite is withdrawn, the link is opened after withdrawal). It moves the
-withdrawal question out of `Open questions` and adds
+The developer agrees. The model fills `behavior.scenarios` with the
+rehearsal (its actor, starting state, trigger, the numbered steps, the
+expected outcome, and the withdrawn-invite failure), and states the invariant
+it implies: a withdrawn or accepted link never grants access again. It moves
+the withdrawal question out of `Open questions` and adds
 `{ text: "A withdrawn invite shows a generic invalid-invite page.", confirmed: true }`.
 It also adds `{ text: "An invite expires after 7 days.", confirmed: false }` as
 a recommended working assumption, which Luke names aloud as one.
@@ -265,7 +381,7 @@ The model treats the correction first, before its own line of questioning:
 - It rewrites the assumption to "Members and admins can both invite." and sets
   it to `confirmed: true`, because the developer's correction settles the new
   value.
-- It updates the body wherever "admin" was assumed.
+- It updates every field where "admin" was assumed.
 - It reopens the question the correction affects: "Then who can withdraw an
   invite: the member who sent it, any admin, or both?" It adds that question
   to `Open questions` until it is answered.
@@ -299,9 +415,11 @@ spoken conversation.
 
 ### 6. The spoken final review
 
-When the developer says "I think that's everything", Luke reviews the document
-aloud before any handoff. It covers:
+When the developer says "I think that's everything", Luke first checks every
+field of the template for an answer or an agreed reason it does not apply,
+then reviews the document aloud before any handoff. It covers:
 
+- every field still "Unanswered";
 - every assumption still `Not confirmed`, one at a time ("I assumed invites
   expire after 7 days. Keep that?");
 - anything left in `Open questions`;
@@ -309,42 +427,49 @@ aloud before any handoff. It covers:
 - the coding choices it proposes to leave to the implementing agent.
 
 The developer confirms the expiry, and the model sets that flag to `true`. They
-drop one open question as out of scope, and the model moves it under
-`## Out of scope`. The review is conversation, not a screen: the tab shows
+drop one open question as out of scope, and the model moves it into
+`scope.excluded`. The review is conversation, not a screen: the tab shows
 only the document changing as the model saves. The developer may also choose to
 leave an assumption unconfirmed, and it is carried into the handoff as a stated
 working assumption.
 
 ### 7. The model writes the handoff into the same document
 
-The developer asks: "OK, write the prompt." The model saves a body whose final
-section is the handoff prompt. The plan above it stays, and the assumption list
-is kept as it is:
+The developer asks: "OK, write the prompt." The model saves the template again
+with the prompt in its `handoffPrompt` field. Every other section stays as it
+was above it, and the assumption list is kept as it is:
 
 ```markdown
 ## Handoff prompt
 
-You are implementing teammate invitations in `acme/relay`, at commit
-`4f2c9e1` of `main`...
+**Objective:** teammate invitations in `acme/relay`, at commit `4f2c9e1` of
+`main`, because...
 
-Goal, agreed scope, and out of scope...
-Repository context: `src/db/schema/memberships.ts`, `src/auth/signup.ts`...
-Behavior, step by step, including the withdrawn and expired invite cases...
-Acceptance examples...
-Left to you: routine internal choices such as naming, file layout, and the
+**Scope, and what is out of it:** ...
+**Repository context:** `src/db/schema/memberships.ts`, `src/auth/signup.ts`...
+**Behavior and invariants:** step by step, including the withdrawn and expired
+invite cases; a withdrawn or accepted link never grants access again...
+**Steps, dependencies, and accepted risks:** ...
+**Acceptance and verification:** ...
+**Left to you:** routine internal choices such as naming, file layout, and the
 email template's markup...
+If anything here conflicts with the agreed behavior, surface the conflict
+before overriding it.
 ```
 
 The prompt is self-contained. It makes sense to an agent that never heard the
-conversation, names repository-relative paths and the commit, and carries no
-credential or secret. Luke says it is written and that Copy takes the whole
-document.
+conversation, carries the agreed details and adds no new requirement, names
+repository-relative paths and the commit, and carries no credential or
+secret. Luke says it is written and that Copy takes the whole document. A
+later change that invalidates the prompt is Luke's to revise or clear; no
+version mechanism tracks it.
 
 ### 8. Copy
 
 The developer presses `Copy`, and the button shows the check mark. The
 clipboard holds the current document as readable Markdown: the body as saved,
-then the assumption checklist:
+every section of the template in order, then the assumption checklist, which
+reads `_None recorded_` while the list is empty:
 
 ```markdown
 <body exactly as saved>
@@ -390,12 +515,12 @@ the exact shape.
 | GitHub connection | `ConsentConnectSlot` (`apps/desktop/src/renderer/consent-connect-slot.tsx`) and `useConnections` (`use-connections.ts`), the pattern the calendar consent uses | The repository connection itself, with its scopes and token held in connection handling and never in the renderer or a model-visible argument (LUKE-338). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Assumption checklist | None; it is drawn from `assumptions`, not from Markdown | A row with a disabled checkbox, the text, and the status field. |
-| Copy | `ConversationCopyButton`'s pattern (`conversation-copy.tsx`), `ACT_KIND.WINDOW_COPY_TEXT`, and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- [x]` / `- [ ]` lines (LUKE-342). |
+| Copy | `ConversationCopyButton`'s pattern (`conversation-copy.tsx`), `ACT_KIND.WINDOW_COPY_TEXT`, and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- [x]` / `- [ ]` lines (LUKE-342), or "None recorded" (LUKE-352). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`apps/desktop/src/shared/messages/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@sidecar/live`) | The status word beside the microphone, for the open plan's call alone. |
 | Captions, levels, errors | The panel's caption strip (`useCaptionPresentation`, `caption-layout.ts`) and the wings' waveform (`notch-wings.tsx`), unchanged | None. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
-| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and `update_plan` (LUKE-334), the instructions (LUKE-336), and research (LUKE-339). |
+| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and `update_plan` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), and the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352). |
 
 Two existing rules carry over unchanged:
 
@@ -432,6 +557,17 @@ changes when a check is run, not when one is planned.
     before that call has finished closing;
   - the final review and the handoff written into the same document;
   - Copy's Markdown, at the store's largest document;
+  - the fixed template (LUKE-352), through the tool against a real store: a
+    new plan's untouched template, an incomplete draft saving and resuming in
+    its sections, the body's order independent of key order, field text
+    unable to open a section, each of the four added fields (invariants,
+    decisions, steps and dependencies, risks and mitigations) as a draft null,
+    an answer, and a non-applicability, refused omissions of each, a renamed
+    field, an extra key, a blank answer, a freeform body, and an oversized
+    formatted body each leaving the saved document, a scripted proposal,
+    assent, correction, and agreed non-applicable field, and a handoff
+    carrying a bulk import's agreed invariant, decision, prerequisite, risk,
+    and check; these hold data flow, not model understanding;
   - the talk key, pressed while a plan is open, speaking into the open
     plan's call.
 - The Plans tab (LUKE-347) is held by renderer tests: the tab bar's four
@@ -439,14 +575,15 @@ changes when a check is run, not when one is planned.
   armed while the tab shows and paused when it goes, and the host keeping
   the open plan through a pause and following the list after a plan is left.
   Its regions render as static markup: a read-only checklist, no composer and
-  no approve controls, and the empty, failed, missing, and not-connected
-  states.
+  no approve controls, a new plan's untouched template with its empty
+  assumptions section, and the failed, missing, and not-connected states.
 
 ### Not validated
 
 - **A real Mac.** This Linux VM has no Mac, CI builds nothing for one, and
   `./scripts/verify.sh` has not been run on the integrated application. The
-  Plans tab in the panel, the document scrolling inside the panel's ceiling,
+  Plans tab in the panel, the fixed template's presentation (LUKE-352), the
+  document scrolling inside the panel's ceiling,
   the microphone row, and the capsule and captions during a planning call
   have never been seen running. `./scripts/evidence.sh` captures the panel
   expanded on the Plans tab over a synthetic plan

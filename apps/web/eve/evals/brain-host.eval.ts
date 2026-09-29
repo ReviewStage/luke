@@ -37,7 +37,7 @@ import { hostedStore } from "../../server/hosted/store";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import { UPDATE_PLAN_TOOL } from "../../server/hosted/update-plan-tool";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
-import { SCRIPTED_FACT, SCRIPTED_PLANNING_REPLY } from "../scripted-model";
+import { SCRIPTED_FACT, SCRIPTED_PLANNING_REPLY, SCRIPTED_PROBLEM } from "../scripted-model";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask under
@@ -269,10 +269,9 @@ export default defineEval({
       planningSession.calledTool(UPDATE_PLAN_TOOL.name);
       planningSession.notCalledTool(BRAIN_TOOL.WRITE_WORKSPACE_FILE);
       const afterFirst = [...PLAN_SAVED.assumptions, { text: PLAN_WORDS.FIRST, confirmed: false }];
-      assert.deepEqual(await planDocument(run, plan.id), {
-        body: PLAN_SAVED.body,
-        assumptions: afterFirst,
-      });
+      const firstSaved = await planDocument(run, plan.id);
+      assert.deepEqual(firstSaved.assumptions, afterFirst);
+      assert.ok(firstSaved.body.includes(SCRIPTED_PROBLEM));
       const planningRows = await readMessagesByTurn(
         run,
         planConversationId,
@@ -292,7 +291,7 @@ export default defineEval({
       const resumed = await openSession(planConversationId, PLAN_WORDS.RESUMED);
       (await t.target.attachSession(resumed.sessionId)).succeeded();
       assert.deepEqual(await planDocument(run, plan.id), {
-        body: PLAN_SAVED.body,
+        body: firstSaved.body,
         assumptions: [...afterFirst, { text: PLAN_WORDS.RESUMED, confirmed: false }],
       });
     } finally {

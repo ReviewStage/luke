@@ -111,7 +111,7 @@ export class HostedPlanClient {
   }
 
   /**
-   * Starts a plan with an empty document. The service resolves the
+   * Starts a plan with the fixed template untouched. The service resolves the
    * repository's default branch to one commit itself; a request the service
    * would refuse by shape is refused here without traveling at all.
    */
