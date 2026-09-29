@@ -14,9 +14,11 @@ import { readPlan, savePlanDocument } from "./plan-store.js";
 import { logStoreFailure } from "./store-failure.js";
 
 /**
- * update-plan-tool.ts -- the planning model's one write: change the open plan's document and read back what was saved.
+ * update-plan-tool.ts -- the plan's one write: change a plan's document and read back what was saved.
  *
- * The call's arguments are the fields of the plan's fixed template it changes
+ * Its one caller is a planning call's notetaker (`voice/plan-scribe.ts`),
+ * whose model answers with an update in this tool's input schema. The
+ * update is the fields of the plan's fixed template it changes
  * (`@sidecar/hosted/plan-template`), and the assumptions list where it
  * changes. They are merged over the fields the plan holds, the merged fields
  * are formatted into the canonical Markdown body under the header the service
@@ -30,12 +32,12 @@ import { logStoreFailure } from "./store-failure.js";
  * supplies, and an argument naming either is refused with the rest of a
  * malformed call, so a model cannot steer a save at another account or
  * another plan. The plan is read and then saved with no lock between, which
- * is safe because one plan's turns run one at a time. The save is
+ * is safe because the notetaker is the plan's only writer and its runs never
+ * overlap. The save is
  * `savePlanDocument`'s single update over the row that stands, so a plan deleted meanwhile answers as gone and is not
  * written back into being, and a save that fails answers as not saved with
- * the prior document standing. Every outcome is a result the model reads,
- * never a failure of the call: an unsaved change is the model's to say aloud
- * and try again (`docs/PLANNING.md`, "Failures the developer sees").
+ * the prior document standing. Every outcome is a result, never a failure of
+ * the call: an unsaved change leaves the notetaker's lines for its next run.
  */
 
 /** The account and plan a planning conversation writes, fixed by the service before the model runs. */
@@ -133,6 +135,22 @@ export const UPDATE_PLAN_TOOL = {
   inputSchema: planUpdateSchema,
 } as const;
 
+/** An update already read under the template's schema, saved under the plan the service bound. */
+export function saveUpdate(
+  binding: PlanDocumentBinding,
+  update: PlanUpdate,
+): Effect.Effect<UpdatePlanResult, never, SqlClient.SqlClient> {
+  return saveMerged(binding, update).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() =>
+      Effect.succeed<UpdatePlanResult>({
+        status: UPDATE_PLAN_STATUS.NOT_SAVED,
+        reason: UPDATE_PLAN_REFUSAL.UNAVAILABLE,
+      }),
+    ),
+  );
+}
+
 /** One call of `update_plan` under the plan the service bound, answered as the result the model reads. */
 export function runUpdatePlan(
   binding: PlanDocumentBinding,
@@ -148,14 +166,6 @@ export function runUpdatePlan(
         ...(field ? { field } : undefined),
       });
     }
-    return saveMerged(binding, update.success).pipe(
-      Effect.tapError(logStoreFailure),
-      Effect.catch(() =>
-        Effect.succeed<UpdatePlanResult>({
-          status: UPDATE_PLAN_STATUS.NOT_SAVED,
-          reason: UPDATE_PLAN_REFUSAL.UNAVAILABLE,
-        }),
-      ),
-    );
+    return saveUpdate(binding, update.success);
   });
 }

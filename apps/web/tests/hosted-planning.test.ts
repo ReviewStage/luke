@@ -19,12 +19,10 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
-  SCRIPTED_HANDOFF_OPENING,
   SCRIPTED_LOOK_UP,
   SCRIPTED_NO_SOURCE_REPLY,
-  SCRIPTED_PROBLEM,
+  SCRIPTED_PLANNING_REPLY,
   SCRIPTED_RESEARCH_REPLY,
-  SCRIPTED_WRITE_PROMPT,
   scriptedModel,
 } from "../eve/scripted-model";
 import { user } from "../server/db/auth-schema";
@@ -61,11 +59,9 @@ import {
   REPOSITORY_READ_STATUS,
 } from "../server/hosted/repository-tools";
 import { hostedStore, storeWriter } from "../server/hosted/store";
-import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool";
 import { stampedEveEvent } from "./support/eve-events";
 import { fakeGitHub, noGitHubConnections } from "./support/github-fake";
 import { noNetwork } from "./support/no-network";
-import { TEMPLATE_HEADINGS, templateHeadingsOf } from "./support/plan-updates";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -473,7 +469,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered update_plan, the repository and research reads, and none of the brain's catalog",
+    "a planning turn is offered the repository and research reads, no write to the plan, and none of the brain's catalog",
     () =>
       Effect.gen(function* () {
         const { host, userId, conversationId } = yield* savedPlanWithConversation();
@@ -489,40 +485,32 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         assert.deepEqual(
           offered.map((declared) => declared.name),
-          [
-            UPDATE_PLAN_TOOL.name,
-            GET_FILE_CONTENTS_TOOL.name,
-            SEARCH_WEB_TOOL.name,
-            READ_WEB_PAGE_TOOL.name,
-          ],
+          [GET_FILE_CONTENTS_TOOL.name, SEARCH_WEB_TOOL.name, READ_WEB_PAGE_TOOL.name],
         );
       }),
   );
 
   it.effect(
-    "the model reads the document it is handed and its update_plan changes what the window and the next turn read",
+    "the model is handed the saved document every turn, and its turn leaves the document as the notetaker saved it",
     () =>
       Effect.gen(function* () {
         const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
         const session = yield* startSession(host, userId, conversationId);
         yield* savePlanDocument(userId, planId, SAVED);
 
-        yield* planningTurn(host, session, "turn_0", CORRECTION);
+        const reply = yield* planningTurn(host, session, "turn_0", CORRECTION);
 
-        const saved = yield* windowDocument(userId, planId);
-        assert.deepEqual(saved.assumptions, [...SAVED.assumptions, { text: CORRECTION }]);
-        assert.deepEqual(templateHeadingsOf(saved.body), TEMPLATE_HEADINGS);
-        assert.ok(saved.body.includes(SCRIPTED_PROBLEM));
-        assert.ok(saved.body.startsWith(`# ${RELAY_PLAN.name}\n`));
+        assert.equal(reply, SCRIPTED_PLANNING_REPLY);
+        assert.deepEqual(yield* windowDocument(userId, planId), SAVED);
         assert.deepEqual(
           handedDocument(yield* host.standingContext(yield* admitted(host, session))),
-          saved,
+          SAVED,
         );
       }),
   );
 
   it.effect(
-    "a spoken ask the voice delegates on a plan's conversation reaches the planning model with the document, and its update_plan is what the window opens",
+    "a spoken ask the voice delegates on a plan's conversation reaches the planning model with the document",
     () =>
       Effect.gen(function* () {
         const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
@@ -533,49 +521,17 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.deepEqual(handedDocument(yield* host.standingContext(standing)), SAVED);
 
         // The question as the voice composes it: the recent words as context, and the latest line as the ask.
-        yield* planningTurn(host, session, "turn_0", SPOKEN_ASK, noNetwork, BRAIN_HOST_TURN.SPOKEN);
-
-        const saved = yield* windowDocument(userId, planId);
-        assert.ok(saved.body.includes(SCRIPTED_PROBLEM));
-        assert.deepEqual(saved.assumptions.slice(0, SAVED.assumptions.length), SAVED.assumptions);
-        const added = saved.assumptions.slice(SAVED.assumptions.length);
-        assert.equal(added.length, 1);
-        assert.ok(added[0]?.text.includes(CORRECTION));
-      }),
-  );
-
-  it.effect(
-    "a handoff prompt the model writes on a spoken ask lands in the same document with every assumption kept, and a later change edits that document",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
-        const reviewed: PlanDocument = {
-          body: SAVED.body,
-          assumptions: [...SAVED.assumptions, { text: "An invite expires after 7 days." }],
-        };
-        yield* savePlanDocument(userId, planId, reviewed);
-
-        yield* planningTurn(
+        const reply = yield* planningTurn(
           host,
           session,
           "turn_0",
-          SCRIPTED_WRITE_PROMPT,
+          SPOKEN_ASK,
           noNetwork,
           BRAIN_HOST_TURN.SPOKEN,
         );
 
-        const handedOff = yield* windowDocument(userId, planId);
-        assert.deepEqual(templateHeadingsOf(handedOff.body), TEMPLATE_HEADINGS);
-        const prompt = handedOff.body.slice(handedOff.body.indexOf("\n## Handoff prompt\n"));
-        assert.ok(prompt.includes(`\n\n${SCRIPTED_HANDOFF_OPENING}`));
-        assert.deepEqual(handedOff.assumptions, reviewed.assumptions);
-
-        yield* planningTurn(host, session, "turn_1", CORRECTION, noNetwork, BRAIN_HOST_TURN.SPOKEN);
-
-        const edited = yield* windowDocument(userId, planId);
-        assert.equal(edited.body, handedOff.body);
-        assert.deepEqual(edited.assumptions, [...reviewed.assumptions, { text: CORRECTION }]);
+        assert.equal(reply, SCRIPTED_PLANNING_REPLY);
+        assert.deepEqual(yield* windowDocument(userId, planId), SAVED);
       }),
   );
 
@@ -595,7 +551,6 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.ok(seed);
         assert.ok(seed.includes(CORRECTION));
         assert.ok(seed.includes(reply));
-        assert.ok(seed.includes(UPDATE_PLAN_TOOL.name));
         assert.deepEqual(handedDocument(context), yield* windowDocument(userId, planId));
       }),
   );

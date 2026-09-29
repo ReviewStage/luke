@@ -7,6 +7,7 @@ import {
   type BeatTurn,
   LiveSessionService,
 } from "@sidecar/voice/live-session";
+import type { LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 import { Cause, Effect, Layer, Option, Result, Schema, type Scope } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -35,6 +36,7 @@ import {
 } from "./live-briefings.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
+import { planScribe } from "./plan-scribe.js";
 
 /**
  * The live session service composed for the hosted tier, for one account's
@@ -74,6 +76,13 @@ export interface HostedLiveExchangeOptions {
    * first words, asked of it the moment a newly created call starts.
    */
   readonly planning?: boolean;
+  /**
+   * The notetaker a planning call writes its plan through: the plan the
+   * session is bound to and the model the scribe runs on. Absent for every
+   * other session, and for a planning call on a deployment with no model key,
+   * which then writes nothing.
+   */
+  readonly scribe?: { readonly planId: string; readonly model: LanguageModel };
   readonly context: HostedStoreContext;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
@@ -239,6 +248,21 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     report,
   });
 
+  const scribe =
+    options.scribe === undefined
+      ? undefined
+      : yield* planScribe({
+          userId,
+          planId: options.scribe.planId,
+          model: options.scribe.model,
+          createId: options.createId,
+          report,
+        });
+  if (scribe !== undefined) {
+    const unheard = brain.onRunEvent(scribe.observeRun);
+    yield* Effect.addFinalizer(() => Effect.sync(unheard));
+  }
+
   /** The device the session's row names now, read at each look so a row completed after creation is seen. */
   const deviceId = Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
     Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullishOr(found.deviceId))),
@@ -255,12 +279,13 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     report,
   });
 
-  /** The sideband with the record listening ahead of the service, on every session adopted. */
+  /** The sideband with the record, and a planning call's notetaker, listening ahead of the service, on every session adopted. */
   const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
     return () =>
       Effect.map(attach(), (sideband) =>
         observedSideband(sideband, (event) => {
           written.offerUnsafe(Effect.flatMap(writeReport(record.observe(event)), reported));
+          scribe?.observe(event);
         }),
       );
   };
