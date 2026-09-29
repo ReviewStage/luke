@@ -51,8 +51,8 @@ export const UPDATE_PLAN_STATUS = {
 export const UPDATE_PLAN_REFUSAL = {
   UNREADABLE:
     "Not saved: the arguments must be exactly the template's sections and fields, each " +
-    "field null or nonblank text of its type, and `assumptions` (each `text` and " +
-    "`confirmed`), within their bounds. The saved document is unchanged.",
+    "field null or nonblank text of its type, and `assumptions` (each `text`), within " +
+    "their bounds. The saved document is unchanged.",
   TOO_LONG:
     "Not saved: the formatted plan is longer than a plan may be. Shorten the longest " +
     "answers; the saved document is unchanged.",

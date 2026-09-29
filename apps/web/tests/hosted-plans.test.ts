@@ -342,7 +342,7 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
   );
 
   it.effect(
-    "a proposal, the developer's assent, a correction, and an agreed non-applicable field each save, while an unanswered field stays visible",
+    "a proposal, a correction, and a non-applicable field each save, while an unanswered field stays visible",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
@@ -357,49 +357,26 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
           dataAndInterfaces: { ...EMPTY_PLAN_UPDATE.dataAndInterfaces, interfaces },
         });
 
-        // Proposed, then agreed to in so many words.
         yield* updatePlan(binding, {
           ...withRules(everyMember, null),
-          assumptions: [{ text: everyMember, confirmed: false }],
+          assumptions: [{ text: everyMember }],
         });
         const proposed = yield* resumedDocument(userId, planId);
-        yield* updatePlan(binding, {
-          ...withRules(everyMember, null),
-          assumptions: [{ text: everyMember, confirmed: true }],
-        });
-        const agreed = yield* resumedDocument(userId, planId);
-        // Corrected: the rule is rewritten and its assumption set back to unconfirmed.
+        // Corrected: the rule is rewritten, and the non-applicable field set aside.
         yield* updatePlan(binding, {
           ...withRules(adminsOnly, noInterface),
-          assumptions: [
-            { text: adminsOnly, confirmed: false },
-            { text: noInterface, confirmed: false },
-          ],
-        });
-        const corrected = yield* resumedDocument(userId, planId);
-        // The non-applicable field agreed to.
-        yield* updatePlan(binding, {
-          ...withRules(adminsOnly, noInterface),
-          assumptions: [
-            { text: adminsOnly, confirmed: false },
-            { text: noInterface, confirmed: true },
-          ],
+          assumptions: [{ text: adminsOnly }, { text: noInterface }],
         });
         const settled = yield* openedDocument(userId, planId);
 
-        assert.deepEqual(proposed.assumptions, [{ text: everyMember, confirmed: false }]);
-        assert.deepEqual(agreed.assumptions, [{ text: everyMember, confirmed: true }]);
-        assert.equal(between(agreed.body, "### Rules", "### Invariants"), everyMember);
-        assert.equal(between(corrected.body, "### Rules", "### Invariants"), adminsOnly);
-        assert.deepEqual(corrected.assumptions, [
-          { text: adminsOnly, confirmed: false },
-          { text: noInterface, confirmed: false },
-        ]);
+        assert.deepEqual(proposed.assumptions, [{ text: everyMember }]);
+        assert.equal(between(proposed.body, "### Rules", "### Invariants"), everyMember);
+        assert.equal(between(settled.body, "### Rules", "### Invariants"), adminsOnly);
+        assert.deepEqual(settled.assumptions, [{ text: adminsOnly }, { text: noInterface }]);
         assert.equal(
           between(settled.body, "### Interfaces", "## Quality requirements"),
           noInterface,
         );
-        assert.deepEqual(settled.assumptions[1], { text: noInterface, confirmed: true });
         assert.equal(
           between(settled.body, "### Performance and reliability", "## Implementation guidance"),
           UNANSWERED,
@@ -656,13 +633,13 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
 
       const result = yield* updatePlan(
         bound(userId, planId),
-        reversedKeys({ ...INVITATIONS_DRAFT, assumptions: [{ text: "Unflagged." }] }),
+        reversedKeys({ ...INVITATIONS_DRAFT, assumptions: [{ text: "   " }] }),
       );
 
       assert.deepEqual(result, {
         status: UPDATE_PLAN_STATUS.NOT_SAVED,
         reason: UPDATE_PLAN_REFUSAL.UNREADABLE,
-        field: "assumptions.0.confirmed",
+        field: "assumptions.0.text",
       });
       assert.deepEqual(yield* resumedDocument(userId, planId), before);
     }),

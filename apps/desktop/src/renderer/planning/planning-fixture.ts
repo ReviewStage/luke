@@ -96,9 +96,9 @@ const FIXTURE_PLAN: Plan = {
       FIXTURE_UPDATE,
     ),
     assumptions: [
-      { text: "Invites reuse memberships with a pending state.", confirmed: true },
-      { text: "Members and admins can both invite.", confirmed: true },
-      { text: "An invite expires after 7 days.", confirmed: false },
+      { text: "Invites reuse memberships with a pending state." },
+      { text: "Members and admins can both invite." },
+      { text: "An invite expires after 7 days." },
     ],
   },
 };

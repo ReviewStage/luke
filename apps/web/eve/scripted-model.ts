@@ -21,7 +21,7 @@ import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool.js";
  * exercises eve's loop, the tool adapters, the workspace access, and the
  * relay into the store without a key or a network. Offered `update_plan`, it
  * plans instead: it reads the saved document its standing context hands it,
- * adds the developer's latest words as an unconfirmed assumption, and saves
+ * adds the developer's latest words as an assumption, and saves
  * the whole template back with its one scripted answer, the rest unanswered,
  * and answers with one question; told to look something up, it searches
  * the public web for it instead and answers with the first source the search
@@ -113,7 +113,7 @@ function planningResponse(request: MockModelRequest): MockModelResponse {
     return savedUpdate(scriptedUpdate(true, assumptions));
   }
   const handedOff = document.body.includes(SCRIPTED_HANDOFF_OPENING);
-  const added = [...assumptions, { text: request.lastUserMessage, confirmed: false }];
+  const added = [...assumptions, { text: request.lastUserMessage }];
   return savedUpdate(scriptedUpdate(handedOff, added));
 }
 

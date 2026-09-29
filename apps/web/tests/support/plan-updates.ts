@@ -107,8 +107,8 @@ export const INVITATIONS_DRAFT: PlanUpdate = {
   },
   openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
   assumptions: [
-    { text: "Invites reuse `memberships` with a `pending` state.", confirmed: true },
-    { text: "Only admins can invite teammates.", confirmed: false },
+    { text: "Invites reuse `memberships` with a `pending` state." },
+    { text: "Only admins can invite teammates." },
   ],
 };
 
@@ -181,8 +181,8 @@ export const SMALL_FEATURE: PlanUpdate = {
   openQuestions: [],
   handoffPrompt: null,
   assumptions: [
-    { text: "Constraints do not apply to a one-line copy change.", confirmed: true },
-    { text: "No risk is worth recording for this change.", confirmed: true },
+    { text: "Constraints do not apply to a one-line copy change." },
+    { text: "No risk is worth recording for this change." },
   ],
 };
 
@@ -268,8 +268,8 @@ export const BULK_IMPORT: PlanUpdate = {
     "If anything here conflicts with the agreed behavior, surface the conflict before overriding it.",
   ].join("\n\n"),
   assumptions: [
-    { text: BULK_IMPORT_AGREED.INVARIANT, confirmed: true },
-    { text: "One invalid row blocks the whole file.", confirmed: true },
-    { text: "A 50,000-row file fits in one transaction.", confirmed: false },
+    { text: BULK_IMPORT_AGREED.INVARIANT },
+    { text: "One invalid row blocks the whole file." },
+    { text: "A 50,000-row file fits in one transaction." },
   ],
 };

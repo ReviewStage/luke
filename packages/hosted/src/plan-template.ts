@@ -226,8 +226,7 @@ export const planUpdateSchema = EffectSchema.Struct({
   ),
   assumptions: describeWire(
     planDocumentSchema.fields.assumptions,
-    "Every assumption the plan holds, in order, each its text and whether the developer " +
-      "confirmed it.",
+    "Every assumption the plan holds, in order, each its text.",
   ),
 });
 

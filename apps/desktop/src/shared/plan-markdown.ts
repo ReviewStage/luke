@@ -7,19 +7,15 @@ import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
  * Copy is direct formatting of the saved document and nothing else: the body
  * exactly as saved, which carries every section of the fixed template in its
  * canonical order, then the template's last section, `## Assumptions`, drawn
- * from the saved list, `- [x]` for a confirmed assumption and `- [ ]` for one
- * that is not, or "None recorded" while the list is empty. It reads no flag
- * as a gate: a draft with every field unanswered and every assumption
- * unconfirmed copies the same way as a finished plan, before or after the
- * handoff prompt is written (`docs/PLANNING.md`, "Copy").
+ * from the saved list, one bullet per assumption, or "None recorded" while
+ * the list is empty. A draft with every field unanswered copies the same way
+ * as a finished plan, before or after the handoff prompt is written
+ * (`docs/PLANNING.md`, "Copy").
  */
 
 const ASSUMPTIONS_HEADING = `## ${PLAN_HEADING.ASSUMPTIONS}`;
 
-const CHECKBOX = {
-  CONFIRMED: "- [x] ",
-  UNCONFIRMED: "- [ ] ",
-} as const;
+const BULLET = "- ";
 
 /** The characters the heading and the blank lines around it add to the body. */
 const HEADING_OVERHEAD = ASSUMPTIONS_HEADING.length + 4;
@@ -27,22 +23,21 @@ const HEADING_OVERHEAD = ASSUMPTIONS_HEADING.length + 4;
 /**
  * The most characters the Markdown of any document the store admits can
  * spell: the longest body, then the heading, then the most assumptions, each
- * at its longest behind its checkbox and on its own line. The copy act admits
+ * at its longest behind its bullet and on its own line. The copy act admits
  * this much, so no saved document is too long to copy.
  */
 export const PLAN_MARKDOWN_MAX_CHARS =
   PLAN_BOUNDS.MAX_BODY_CHARS +
   HEADING_OVERHEAD +
-  PLAN_BOUNDS.MAX_ASSUMPTIONS * (CHECKBOX.CONFIRMED.length + PLAN_BOUNDS.MAX_ASSUMPTION_CHARS + 1);
+  PLAN_BOUNDS.MAX_ASSUMPTIONS * (BULLET.length + PLAN_BOUNDS.MAX_ASSUMPTION_CHARS + 1);
 
 /**
- * One assumption as a checklist item. Note that we fold a line break inside
- * the text into a space, because a blank line would end the item and leave
- * the rest of the sentence outside the checklist.
+ * One assumption as a list item. Note that we fold a line break inside the
+ * text into a space, because a blank line would end the item and leave the
+ * rest of the sentence outside the list.
  */
-function checklistItem(text: string, confirmed: boolean): string {
-  const oneLine = text.replace(/\s*\n\s*/gu, " ");
-  return `${confirmed ? CHECKBOX.CONFIRMED : CHECKBOX.UNCONFIRMED}${oneLine}`;
+function listItem(text: string): string {
+  return `${BULLET}${text.replace(/\s*\n\s*/gu, " ")}`;
 }
 
 /**
@@ -54,9 +49,7 @@ export function planMarkdown(document: PlanDocument): string {
   const items =
     document.assumptions.length === 0
       ? [PLAN_EMPTY_TEXT.NO_ASSUMPTIONS]
-      : document.assumptions.map((assumption) =>
-          checklistItem(assumption.text, assumption.confirmed),
-        );
-  const checklist = [ASSUMPTIONS_HEADING, "", ...items].join("\n");
-  return body.length === 0 ? `${checklist}\n` : `${body}\n\n${checklist}\n`;
+      : document.assumptions.map((assumption) => listItem(assumption.text));
+  const list = [ASSUMPTIONS_HEADING, "", ...items].join("\n");
+  return body.length === 0 ? `${list}\n` : `${body}\n\n${list}\n`;
 }

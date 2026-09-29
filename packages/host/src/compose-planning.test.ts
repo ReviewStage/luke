@@ -38,7 +38,7 @@ function plan(id: string, name: string, body: string, updatedAt: number): Plan {
     openedAt: updatedAt,
     document: {
       body,
-      assumptions: [{ text: "An invite expires after 7 days.", confirmed: false }],
+      assumptions: [{ text: "An invite expires after 7 days." }],
     },
   };
 }
@@ -189,7 +189,7 @@ it.effect("a save the planning model makes is drawn within one beat of the caden
       ...plan(INVITES, "Teammate invitations", "# Teammate invitations\n\n## Goal", 11),
       document: {
         body: "# Teammate invitations\n\n## Goal",
-        assumptions: [{ text: "Members and admins can both invite.", confirmed: true }],
+        assumptions: [{ text: "Members and admins can both invite." }],
       },
     };
     service.plans = [saved];

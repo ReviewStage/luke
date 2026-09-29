@@ -38,7 +38,7 @@ export const plan = pgTable(
     repositoryCommit: text("repository_commit").notNull(),
     /** The document's Markdown body; empty until the first save. */
     body: text("body").notNull().default(""),
-    /** The document's assumptions, each its text and whether it was confirmed. */
+    /** The document's assumptions, each its text. */
     assumptions: jsonb("assumptions")
       .$type<readonly PlanAssumption[]>()
       .notNull()

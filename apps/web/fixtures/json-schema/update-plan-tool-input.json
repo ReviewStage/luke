@@ -614,19 +614,15 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2000
-          },
-          "confirmed": {
-            "type": "boolean"
           }
         },
         "required": [
-          "text",
-          "confirmed"
+          "text"
         ],
         "additionalProperties": false
       },
       "maxItems": 200,
-      "description": "Every assumption the plan holds, in order, each its text and whether the developer confirmed it."
+      "description": "Every assumption the plan holds, in order, each its text."
     }
   },
   "required": [

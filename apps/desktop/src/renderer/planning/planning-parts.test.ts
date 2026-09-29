@@ -35,8 +35,8 @@ const PLAN: Plan = {
   document: {
     body: "# Teammate invitations\n\n## Goal\nInvite a teammate by email.",
     assumptions: [
-      { text: "Members and admins can both invite.", confirmed: true },
-      { text: "An invite expires after 7 days.", confirmed: false },
+      { text: "Members and admins can both invite." },
+      { text: "An invite expires after 7 days." },
     ],
   },
 };
@@ -65,19 +65,15 @@ test("the saved body is drawn as Markdown under the plan's name and repository l
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
-test("each assumption is a checkbox that cannot be clicked, its text, and its saved flag in words", () => {
+test("each assumption is a list item holding its text and nothing to click", () => {
   const markup = documentMarkup(PLAN);
 
-  const rows = markup.match(/<li class="plan-assumption"[\s\S]*?<\/li>/gu) ?? [];
-  assert.equal(rows.length, 2);
-  assert.match(rows[0] ?? "", /data-confirmed="true"/u);
-  assert.match(
-    rows[0] ?? "",
-    /<input type="checkbox" disabled="" readOnly="" tabindex="-1" checked=""\/>/u,
+  const rows = markup.match(/<li class="plan-assumption">[\s\S]*?<\/li>/gu) ?? [];
+  assert.deepEqual(
+    rows,
+    PLAN.document.assumptions.map(({ text }) => `<li class="plan-assumption">${text}</li>`),
   );
-  assert.match(rows[0] ?? "", />Confirmed</u);
-  assert.match(rows[1] ?? "", /<input type="checkbox" disabled="" readOnly="" tabindex="-1"\/>/u);
-  assert.match(rows[1] ?? "", />Not confirmed</u);
+  assert.doesNotMatch(markup, /type="checkbox"|Confirmed/u);
 });
 
 test("the document offers no way to write, confirm, or approve anything", () => {
@@ -126,24 +122,11 @@ test("a new plan draws its whole template unanswered, and an assumptions section
   );
 });
 
-test("Copy stands in the header, enabled, whatever the assumptions' flags say", () => {
-  const unconfirmed: Plan = {
-    ...PLAN,
-    document: {
-      body: PLAN.document.body,
-      assumptions: PLAN.document.assumptions.map((assumption) => ({
-        ...assumption,
-        confirmed: false,
-      })),
-    },
-  };
-
-  for (const plan of [PLAN, unconfirmed]) {
-    const header = documentMarkup(plan).match(/<header class="plan-header">[\s\S]*?<\/header>/u);
-    const button = header?.[0].match(/<button[^>]*class="plan-button plan-copy-button"[^>]*>/u);
-    assert.ok(button);
-    assert.doesNotMatch(button[0], /disabled/u);
-  }
+test("Copy stands in the header, enabled", () => {
+  const header = documentMarkup(PLAN).match(/<header class="plan-header">[\s\S]*?<\/header>/u);
+  const button = header?.[0].match(/<button[^>]*class="plan-button plan-copy-button"[^>]*>/u);
+  assert.ok(button);
+  assert.doesNotMatch(button[0], /disabled/u);
 });
 
 test("Copy shows the check mark once copied, and the failure in words when the clipboard refused", () => {
