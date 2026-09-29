@@ -110,15 +110,16 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("the tab showing follows the plans and the tab going away pauses the follow, leaving the open plan alone", () => {
+test("each time the tab shows it reads the plans again, and the tab going away leaves the open plan alone", () => {
   const tab = mount({ planning: OPEN });
   assert.deepEqual(tab.told, []);
 
   tab.stand({ shown: true });
   tab.stand({ shown: true });
   tab.stand({ shown: false });
+  tab.stand({ shown: true });
 
-  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_PAUSE]);
+  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_REFRESH]);
   assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT);
 });
 

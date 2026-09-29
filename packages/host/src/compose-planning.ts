@@ -18,10 +18,9 @@ import {
   type PlanningStartAnswer,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
-import { cadenceGate } from "@sidecar/runtime/effect";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Duration, Effect, Result, Schedule, Schema, type Scope, Semaphore } from "effect";
+import { Effect, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -29,25 +28,15 @@ import type { HostKernel } from "./host-kernel.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-planning.ts -- the panel's named plans, read from the service: the list, the one active plan, and its saved document, followed while the Plans tab shows.
+ * compose-planning.ts -- the panel's named plans, read from the service: the list, the one active plan, and its document, drawn as the notetaker writes it during a call.
  *
  * Nothing here writes a document: the plan's notetaker is the one writer, on
  * the service. What this concern owes the panel is to show that write as it
- * happens: during a planning call the notetaker's drafts arrive on the call's
- * own socket and are shown in place, and while the Plans tab shows it reads the
- * plan list on a short cadence and reads the active plan again whenever the
- * list says its document was saved since the copy held. The list read is a
- * read and nothing else; opening a plan moves it to the head of the list, so
- * the document is read only when it moved.
+ * happens. Every write happens during a planning call, and the notetaker's
+ * drafts arrive on that call's own socket and are drawn in place, so nothing
+ * here polls: the list and the open plan are read when the Plans tab shows,
+ * when a plan opens, and when one starts, and never on a clock.
  */
-
-/**
- * How often the list is read while the panel's Plans tab shows. A save the
- * model makes mid-conversation is drawn within one of these; the tab shows
- * only while someone is looking at a plan, so the cadence costs nothing the
- * rest of the time.
- */
-const PLANNING_POLL_INTERVAL_MS = 3_000;
 
 /** Opening a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
@@ -76,8 +65,6 @@ export interface PlanningDependencies {
     accountId: () => Effect.Effect<string | undefined>;
     openExternal: (url: string) => Effect.Effect<void>;
   };
-  /** A test's cadence in place of the production one. */
-  pollIntervalMs?: number;
 }
 
 export interface PlanningComposer extends Composer {
@@ -102,20 +89,18 @@ export interface PlanningComposer extends Composer {
  * plan is dropped when it lands. Only one plan is ever the spoken
  * conversation, so opening another plan, starting one, leaving the open plan,
  * or a sign-out ends the call about the plan that was open before anything
- * else moves. Following the service is apart from which plan is open: the
- * Plans tab showing arms it and the tab hiding pauses it, while the open plan
- * and its call stand through both. Behind a closed account gate, or on a run that sends
- * nothing, nothing is read and nothing is followed.
+ * else moves. The Plans tab showing reads the list and the open plan again,
+ * while the open plan and its call stand through the tab hiding. Behind a
+ * closed account gate, or on a run that sends nothing, nothing is read.
  */
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
   const { kernel, account, client, endPlanCall, connectGitHub } = dependencies;
-  const intervalMs = dependencies.pollIntervalMs ?? PLANNING_POLL_INTERVAL_MS;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
   /**
-   * One read of the service at a time, beats and asks alike. Note that the
+   * One read of the service at a time, whichever ask made it. Note that the
    * answers are applied in the order the reads were made, because a list
    * that left before a plan started, or a document read that left before a
    * newer one, would otherwise land last and roll the view back.
@@ -186,8 +171,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   function showDraft(draft: PlanDraftFrame): void {
     const held = heldPlanOf(draft.planId);
     if (held === undefined || view.activePlanId !== draft.planId) return;
-    // A saved draft carries its save's instant, so the next beat finds the
-    // copy current and reads nothing again.
+    // A saved draft carries its save's instant, so the copy held is the save's.
     const plan = {
       ...held,
       document: draft.document,
@@ -196,41 +180,10 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     write({ document: { status: PLANNING_READ.READY, plan } });
   }
 
-  /**
-   * One beat of the cadence: the list read, and the active document read
-   * again only where the list says it was saved since the copy held. A plan
-   * a landed list no longer names was deleted, which the panel draws as
-   * missing rather than as the last copy it read.
-   */
-  const follow = serial(
-    Effect.gen(function* () {
-      if (!gate()) return;
-      yield* readList;
-      const planId = view.activePlanId;
-      if (planId === undefined || view.listStatus !== PLANNING_READ.READY) return;
-      const listed = view.plans.find((plan) => plan.id === planId);
-      if (listed === undefined) {
-        write({ document: { status: PLANNING_READ.MISSING } });
-        return;
-      }
-      if (heldPlanOf(planId)?.updatedAt !== listed.updatedAt) yield* readDocument(planId);
-    }),
-  );
-
-  // The cadence stands while the Plans tab shows: armed by the tab's refresh,
-  // disarmed by its pause and by a sign-out. `Effect.schedule` rather than a
-  // repeat, since the refresh that arms it has just read everything itself.
-  const cadence = yield* cadenceGate(
-    Effect.asVoid(
-      Effect.forkScoped(Effect.schedule(follow, Schedule.spaced(Duration.millis(intervalMs)))),
-    ),
-  );
-
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
       Effect.gen(function* () {
         if (!gate()) return {};
-        yield* cadence.arm;
         yield* serial(
           Effect.gen(function* () {
             yield* readList;
@@ -263,9 +216,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         );
         return { opened: true };
       }),
-    [GATEWAY_METHOD.PLANNING_PAUSE]: () => Effect.as(cadence.disarm, {}),
-    // Leaving the plan returns to the list, which the cadence goes on
-    // following while the tab shows.
+    // Leaving the plan returns to the list, which was read when the tab showed.
     [GATEWAY_METHOD.PLANNING_CLOSE]: () =>
       Effect.gen(function* () {
         yield* endPlanCall(undefined);
@@ -329,7 +280,6 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     showDraft,
     reset: Effect.gen(function* () {
       yield* endPlanCall(undefined);
-      yield* cadence.disarm;
       yield* serial(
         Effect.sync(() => {
           view = IDLE_PLANNING_VIEW;
@@ -337,8 +287,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The cadence is the gate's, and the gate's own finalizer disarms it when
-    // the scope this concern was built in closes.
+    // Nothing here runs on its own: every read is an ask's.
     lifetime: Effect.void,
   };
 });
