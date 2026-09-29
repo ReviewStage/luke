@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
-import { LIVE_STATUS } from "@sidecar/live";
+import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { test } from "vitest";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
@@ -21,6 +21,7 @@ import {
   offersGitHubConnect,
   onEachReturn,
   PLANS_PAGE,
+  planningCallHoldsPanel,
   plansPage,
   repositoriesMatching,
   repositoryLine,
@@ -261,4 +262,17 @@ test("a list read that another read replaced is dropped when it lands late", asy
   await Promise.resolve();
 
   assert.deepEqual(drawn, ["connected"]);
+});
+
+test("a planning call in progress holds the panel open, and a desk call or a finished one does not", () => {
+  const on = (voiceStatus: LiveStatus, callPlanId: string | undefined) =>
+    planningCallHoldsPanel({ ...IDLE_VOICE_VIEW, voiceStatus, callPlanId });
+  assert.equal(on(LIVE_STATUS.CONNECTING, INVITES), true);
+  assert.equal(on(LIVE_STATUS.LISTENING, INVITES), true);
+  assert.equal(on(LIVE_STATUS.SPEAKING, INVITES), true);
+  assert.equal(on(LIVE_STATUS.MUTED, INVITES), true);
+  assert.equal(on(LIVE_STATUS.LISTENING, undefined), false);
+  assert.equal(on(LIVE_STATUS.CLOSING, INVITES), false);
+  assert.equal(on(LIVE_STATUS.FAILED, INVITES), false);
+  assert.equal(on(LIVE_STATUS.IDLE, undefined), false);
 });

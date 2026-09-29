@@ -125,6 +125,8 @@ export interface PanelPresentationOptions {
    * the pointer the way the ask field does.
    */
   entryDrawn: () => boolean;
+  /** A planning call in progress, which holds the panel open against the pointer too. */
+  planningHeld: () => boolean;
   /** A key or note being written, which keeps the settings tab through a close. */
   composerHeld: () => boolean;
   /** The sheet is only ever drawn inside the panel. */
@@ -178,7 +180,8 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
   const recededAt = useRef<number | undefined>(undefined);
 
   const heldAgainstPointer = useCallback(
-    () => optionsRef.current.entryDrawn() || askEngaged.current,
+    () =>
+      optionsRef.current.entryDrawn() || optionsRef.current.planningHeld() || askEngaged.current,
     [],
   );
 

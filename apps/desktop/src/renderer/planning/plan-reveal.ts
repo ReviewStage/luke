@@ -1,0 +1,172 @@
+/**
+ * plan-reveal.ts -- how the open plan types itself in: the body cut into the template's units, and each unit's shown words chasing the newest document.
+ *
+ * The formatter owns every section and field heading and escapes any heading
+ * the model writes, so a line opening `## ` or `### ` outside a fence is
+ * always the template's own, and the template's order is fixed, so units line
+ * up by position from one document to the next. Each unit holds its target,
+ * the newest words, and how much of them is shown; a frame grows the shown
+ * words toward the target, faster the further behind they are, so the caret
+ * keeps close behind a scribe streaming its draft and never jumps. Everything
+ * here is pure; the frame clock is the hook's.
+ */
+
+/** The pace a short change types at. */
+export const CHASE_BASE_CHARS_PER_SECOND = 60;
+
+/** How long any backlog takes to clear on top of the base pace, however long it is. */
+export const CHASE_CATCH_UP_MS = 400;
+
+/** A line the formatter opens a section or a field with. */
+const UNIT_HEADING = /^#{2,3} /u;
+
+/** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
+
+/** One unit: its newest words, how many of them are shown, and whether it has just finished typing. */
+interface ChaseUnit {
+  readonly target: string;
+  /** Characters of the target shown, fractional between frames. */
+  readonly shown: number;
+  /** Set when the unit catches up after typing, cleared when it starts again. */
+  readonly fresh: boolean;
+}
+
+/** Every unit of the open plan's body, and which assumptions the newest document added. */
+export interface ChaseState {
+  readonly units: readonly ChaseUnit[];
+  readonly freshAssumptions: ReadonlySet<number>;
+}
+
+/** What one unit draws: its words, how far, whether the caret is in it, and whether it is lit. */
+export interface UnitView {
+  readonly words: string;
+  /** Absent while the unit is shown whole. */
+  readonly reveal: { readonly upTo: number; readonly caret: boolean } | undefined;
+  readonly writing: boolean;
+  readonly fresh: boolean;
+}
+
+/** Whether a fence line closes the fence standing: the same character, at least as long. */
+function closesFence(marker: string, fence: string): boolean {
+  return marker[0] === fence[0] && marker.length >= fence.length;
+}
+
+/**
+ * How much of what is shown still stands under a new target. Words added
+ * after it keep all of it; a rewrite cuts back to the start of the first line
+ * that differs, so a rewritten answer never shows half an old word.
+ */
+function keptLength(shown: string, target: string): number {
+  if (target.startsWith(shown)) return shown.length;
+  let shared = 0;
+  while (shared < shown.length && shown[shared] === target[shared]) shared += 1;
+  return target.lastIndexOf("\n", shared) + 1;
+}
+
+function backlogOf(units: readonly ChaseUnit[]): number {
+  let backlog = 0;
+  for (const unit of units) backlog += unit.target.length - unit.shown;
+  return backlog;
+}
+
+/**
+ * The body cut before every section and field heading outside a fence: the
+ * header block, then each section's heading, then each field with its answer.
+ */
+export function planUnits(body: string): readonly string[] {
+  const units: string[] = [];
+  let current: string[] = [];
+  let fence: string | undefined;
+  for (const line of body.split("\n")) {
+    const marker = FENCE_LINE.exec(line)?.[1];
+    if (fence === undefined && marker !== undefined) fence = marker;
+    else if (fence !== undefined && marker !== undefined && closesFence(marker, fence)) {
+      fence = undefined;
+    } else if (fence === undefined && UNIT_HEADING.test(line) && current.length > 0) {
+      units.push(current.join("\n").trimEnd());
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) units.push(current.join("\n").trimEnd());
+  return units;
+}
+
+/** A plan as it opens: every unit shown whole, since what stood before is the document, not news. */
+export function chaseOpened(body: string): ChaseState {
+  return {
+    units: planUnits(body).map((target) => ({ target, shown: target.length, fresh: false })),
+    freshAssumptions: new Set(),
+  };
+}
+
+/**
+ * The same plan's newer document as the next target. What is shown and still
+ * stands stays; the rest types in. Under reduced motion every change is
+ * shown at once and lit.
+ */
+export function chaseRetargeted(
+  state: ChaseState,
+  body: string,
+  added: { readonly before: readonly string[]; readonly after: readonly string[] },
+  reduced: boolean,
+): ChaseState {
+  const units = planUnits(body).map((target, index): ChaseUnit => {
+    const previous = state.units[index];
+    if (previous?.target === target) return previous;
+    const shownWords = previous?.target.slice(0, Math.floor(previous.shown)) ?? "";
+    if (reduced) return { target, shown: target.length, fresh: true };
+    return { target, shown: keptLength(shownWords, target), fresh: false };
+  });
+  const before = new Set(added.before);
+  const freshAssumptions = new Set<number>();
+  added.after.forEach((text, index) => {
+    if (!before.has(text)) freshAssumptions.add(index);
+  });
+  return { units, freshAssumptions };
+}
+
+/** Whether any unit is still behind its target. */
+export function chaseBehind(state: ChaseState): boolean {
+  return state.units.some((unit) => unit.shown < unit.target.length);
+}
+
+/**
+ * One frame of `elapsedMs`: the budget is the base pace plus enough to clear
+ * the whole backlog within the catch-up window, spent on the units behind in
+ * document order.
+ */
+export function chaseStepped(state: ChaseState, elapsedMs: number): ChaseState {
+  const backlog = backlogOf(state.units);
+  if (backlog === 0) return state;
+  const perSecond = CHASE_BASE_CHARS_PER_SECOND + (backlog * 1_000) / CHASE_CATCH_UP_MS;
+  let budget = (Math.max(0, elapsedMs) * perSecond) / 1_000;
+  const units = state.units.map((unit): ChaseUnit => {
+    const behind = unit.target.length - unit.shown;
+    if (behind <= 0 || budget <= 0) return unit;
+    const step = Math.min(behind, budget);
+    budget -= step;
+    const shown = unit.shown + step;
+    return { target: unit.target, shown, fresh: shown >= unit.target.length };
+  });
+  return { units, freshAssumptions: state.freshAssumptions };
+}
+
+/** What each unit draws now: the caret and the writing mark on the first unit still behind. */
+export function chaseView(state: ChaseState): readonly UnitView[] {
+  let caretPlaced = false;
+  return state.units.map((unit) => {
+    if (unit.shown >= unit.target.length) {
+      return { words: unit.target, reveal: undefined, writing: false, fresh: unit.fresh };
+    }
+    const caret = !caretPlaced;
+    caretPlaced = true;
+    return {
+      words: unit.target,
+      reveal: { upTo: Math.floor(unit.shown), caret },
+      writing: caret,
+      fresh: false,
+    };
+  });
+}

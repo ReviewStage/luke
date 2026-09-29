@@ -68,6 +68,64 @@ const markMatches =
     markChildren(tree.children, tokens);
   };
 
+/** How far a message is drawn while it is being typed, and whether the caret stands at the end of it. */
+export interface MarkdownReveal {
+  /** The offset in the words the drawing stops at. */
+  upTo: number;
+  caret: boolean;
+}
+
+/** The caret a typed message ends in: a bar with no words of its own. */
+const CARET: HastChild = {
+  type: "element",
+  tagName: "span",
+  properties: { className: ["markdown-caret"], ariaHidden: "true" },
+  children: [],
+};
+
+/**
+ * Drops everything the words hold from `upTo` on, cutting the run of text
+ * it lands in, and answers whether anything was dropped. Every node carries
+ * its place in the words, so the cut is made on the drawn tree rather than
+ * on the Markdown, and a half-typed emphasis or list is still drawn whole.
+ */
+function cutChildren(children: HastNode[], upTo: number): boolean {
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index];
+    if (child === undefined) continue;
+    const start = child.position?.start.offset;
+    if (start !== undefined && start >= upTo) {
+      children.splice(index);
+      return true;
+    }
+    const end = child.position?.end.offset;
+    if (child.type === "text" && start !== undefined && end !== undefined && end > upTo) {
+      child.value = child.value.slice(0, upTo - start);
+      children.splice(index + 1);
+      return true;
+    }
+    if (child.type === "element" && cutChildren(child.children, upTo)) {
+      children.splice(index + 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** The innermost element the drawing ends in, where the caret goes. */
+function lastParent(parent: HastParent): HastParent {
+  const last = parent.children.at(-1);
+  return last?.type === "element" && last.children.length > 0 ? lastParent(last) : parent;
+}
+
+/** The rehype step that draws a message only as far as it has been typed. */
+const revealUpTo =
+  (reveal: MarkdownReveal) =>
+  (tree: HastParent): void => {
+    if (!cutChildren(tree.children, reveal.upTo) || !reveal.caret) return;
+    lastParent(tree).children.push(structuredClone(CARET));
+  };
+
 /**
  * GitHub's dialect, which is the one coding agents write: tables,
  * strikethrough, and task lists, with a single tilde left as the character it
@@ -133,14 +191,18 @@ export function MarkdownMessage({
   words,
   className,
   highlight,
+  reveal,
 }: {
   words: string;
   className?: string;
   /** A search's words, marked wherever they land in the drawn text; nothing marks without one. */
   highlight?: readonly string[] | undefined;
+  /** How far the words are typed; drawn whole without one. */
+  reveal?: MarkdownReveal | undefined;
 }): React.JSX.Element {
-  const rehypePlugins: Options["rehypePlugins"] =
-    highlight !== undefined && highlight.length > 0 ? [[markMatches, highlight]] : undefined;
+  const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
+  if (highlight !== undefined && highlight.length > 0) rehypePlugins.push([markMatches, highlight]);
+  if (reveal !== undefined) rehypePlugins.push([revealUpTo, reveal]);
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>
       <Markdown
