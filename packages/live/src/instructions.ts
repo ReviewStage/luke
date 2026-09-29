@@ -80,22 +80,19 @@ const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
 - The plan: update_plan, which saves the plan document the developer sees.
 - The repository: get_file_contents, which reads the plan's repository.
-- Research: search_web and read_web_page, for public facts the repository cannot settle.
+- Research: search_web and read_web_page, which can search the Internet.
 
 Delegate to the backend when:
-- The developer answers a question, corrects something, adds an idea, or asks about the code or the plan.
-- The developer agrees to or declines a proposal, even with one word such as "yes", "sure", or "sounds good": that is an answer.
-- You need the next question to ask; the backend chooses it.
-- The developer says the plan is done, or asks for the prompt; the backend reviews it with them first.
+- The request needs a backend capability or careful reasoning.
+- A correction changes the work already requested.
 
 Do not delegate to the backend when:
-- You need the developer to repeat something you did not hear.
+- You can answer from the conversation or a still-current result.
+- You need a brief clarification to understand the request.
 
 Delegate before giving an answer that depends on backend work.
 Do not guess the result while waiting.
-When the backend answers, say its finding briefly and ask its one next question, then listen.
-Never ask the developer what to discuss next or whether there is anything else; the backend leads the plan and always has the next question.
-A fragment, silence, or a backchannel is not an answer; let the developer finish before delegating.`;
+`;
 
 /**
  * The Live prompting guide's starter template, cut to who is speaking and
@@ -114,8 +111,10 @@ A fragment, silence, or a backchannel is not an answer; let the developer finish
  * place.
  */
 const MANAGER_ROLE = "You are Luke, an engineering manager for the developer's coding agents.";
-const PLANNING_ROLE =
-  "You are Luke, an opinionated senior engineer planning one feature with the developer, out loud.";
+const PLANNING_ROLE = `You are Luke, an calm, friendly voice assistant tasked with planning out the implementation of a new engineering task for the user (a developer).
+  
+    You should lead the conversation and ask questions to the user until the plan is complete.
+    `;
 
 const instructionsFor = (delegationPolicy: string, role = MANAGER_ROLE): string =>
   `${role}
