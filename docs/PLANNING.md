@@ -436,8 +436,7 @@ was above it, and the assumption list is kept as it is:
 ```markdown
 ## Handoff prompt
 
-**Objective:** teammate invitations in `acme/relay`, at commit `4f2c9e1` of
-`main`, because...
+**Objective:** teammate invitations, because...
 
 **Scope, and what is out of it:** ...
 **Repository context:** `src/db/schema/memberships.ts`, `src/auth/signup.ts`...
@@ -453,8 +452,7 @@ before overriding it.
 
 The prompt is self-contained. It makes sense to an agent that never heard the
 conversation, carries the agreed details and adds no new requirement, names
-repository-relative paths and the commit, and carries no credential or
-secret. Luke says it is written and that Copy takes the whole document. A
+repository-relative paths, and carries no credential or secret. Luke says it is written and that Copy takes the whole document. A
 later change that invalidates the prompt is Luke's to revise or clear; no
 version mechanism tracks it.
 
