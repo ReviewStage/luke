@@ -36,7 +36,7 @@ import {
 } from "./live-briefings.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
-import { planScribe } from "./plan-scribe.js";
+import { type PlanDraft, planScribe } from "./plan-scribe.js";
 
 /**
  * The live session service composed for the hosted tier, for one account's
@@ -82,7 +82,12 @@ export interface HostedLiveExchangeOptions {
    * other session, and for a planning call on a deployment with no model key,
    * which then writes nothing.
    */
-  readonly scribe?: { readonly planId: string; readonly model: LanguageModel };
+  readonly scribe?: {
+    readonly planId: string;
+    readonly model: LanguageModel;
+    /** Where each draft of the plan goes as the notetaker writes it; nowhere where the route sends nothing. */
+    readonly onDraft?: ((draft: PlanDraft) => void) | undefined;
+  };
   readonly context: HostedStoreContext;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
@@ -123,6 +128,8 @@ export interface AttachedSession {
   readonly started: boolean;
   /** The device's door for the service's word that a turn was spoken to its end; absent where the route sends it nothing of its own. */
   readonly onSpoken?: ((kind: ProactiveSpeechKind) => void) | undefined;
+  /** The device's door for a planning call's plan as its notetaker has it now; absent where the route sends it nothing of its own. */
+  readonly onPlanDraft?: ((draft: PlanDraft) => void) | undefined;
 }
 
 /**
@@ -255,6 +262,9 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
           userId,
           planId: options.scribe.planId,
           model: options.scribe.model,
+          ...(options.scribe.onDraft === undefined
+            ? undefined
+            : { onDraft: options.scribe.onDraft }),
           createId: options.createId,
           report,
         });

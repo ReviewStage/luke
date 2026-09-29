@@ -5,7 +5,7 @@ import {
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
-import type { LiveSessionCreated, SessionBeatFrame } from "@sidecar/hosted";
+import type { LiveSessionCreated, PlanDraftFrame, SessionBeatFrame } from "@sidecar/hosted";
 import {
   conversationSeedItems,
   type InitialItem,
@@ -88,6 +88,12 @@ export interface LiveSessionHolderOptions {
    * record of what was spoken and the counts that follow it are the caller's.
    */
   onSpoken?: (kind: ProactiveSpeechKind) => void;
+  /**
+   * The service's notetaker sent a draft of the plan the standing planning
+   * call is about: a draft for any other plan, or from a session already
+   * ended, never reaches it. What the draft is shown as is the caller's.
+   */
+  onPlanDraft?: (draft: PlanDraftFrame) => void;
 }
 
 /**
@@ -384,6 +390,7 @@ export class LiveSessionHolder {
       // lost or torn down with the holder's own scope closes it here.
       yield* Scope.addFinalizer(scope, sideband.close);
       opened.onSpoken?.((kind) => this.#spoken(session, kind));
+      opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -657,6 +664,12 @@ export class LiveSessionHolder {
     if (session.ended) return;
     if (kind !== PROACTIVE_SPEECH_KIND.BRIEFING) this.#beats.delete(kind);
     this.#options.onSpoken?.(kind);
+  }
+
+  /** A draft of the plan the session is bound to, passed on while the session stands. */
+  #drafted(session: HeldSession, draft: PlanDraftFrame): void {
+    if (session.ended || draft.planId !== session.planId) return;
+    this.#options.onPlanDraft?.(draft);
   }
 
   /**

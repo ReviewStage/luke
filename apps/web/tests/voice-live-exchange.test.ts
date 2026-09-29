@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { PlanUpdate } from "@sidecar/hosted/plan-template";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import type { LanguageModel } from "ai";
-import { MockLanguageModelV4 } from "ai/test";
 import { Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
@@ -38,10 +36,12 @@ import {
   type LiveServerEventType,
 } from "../server/live";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
+import type { PlanDraft } from "../server/voice/plan-scribe";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted } from "./support/live-events";
+import { scriptedScribeModel } from "./support/scribe-model";
 import { settled } from "./support/settle";
 import {
   insertConversation,
@@ -190,7 +190,11 @@ async function stand(
   deviceId: string | undefined,
   options: {
     readonly planning?: boolean;
-    readonly scribe?: { readonly planId: string; readonly model: LanguageModel };
+    readonly scribe?: {
+      readonly planId: string;
+      readonly model: LanguageModel;
+      readonly onDraft?: (draft: PlanDraft) => void;
+    };
   } = {},
 ) {
   const liveSessionId = `sess_${randomUUID()}`;
@@ -481,23 +485,8 @@ it.live("a call that is not a planning call is asked no opening", () =>
   }),
 );
 
-/** A model that answers every call with the one update given, as the planning call's notetaker is answered. */
-function answeringModel(update: PlanUpdate): LanguageModel {
-  return new MockLanguageModelV4({
-    doGenerate: {
-      content: [{ type: "text" as const, text: JSON.stringify(update) }],
-      finishReason: { unified: "stop" as const, raw: "stop" },
-      usage: {
-        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-        outputTokens: { total: 1, text: 1, reasoning: 0 },
-      },
-      warnings: [],
-    },
-  });
-}
-
 it.live(
-  "a planning call's notetaker writes what the developer said into the plan while the call goes on",
+  "a planning call's notetaker drafts what the developer said to the device and saves it into the plan",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
@@ -515,10 +504,15 @@ it.live(
           }),
         ),
       );
+      const drafts: PlanDraft[] = [];
       const f = yield* Effect.promise(() =>
         stand(target, undefined, {
           planning: true,
-          scribe: { planId: plan.id, model: answeringModel({ purpose: { problem } }) },
+          scribe: {
+            planId: plan.id,
+            model: scriptedScribeModel([{ purpose: { problem } }]).model,
+            onDraft: (draft) => drafts.push(draft),
+          },
         }),
       );
       f.socket.receive(said("What's the problem today?", 0, 1_200));
@@ -530,10 +524,13 @@ it.live(
           ),
         );
       yield* settled(
-        async () => (await body()).includes(problem),
-        "the plan to hold what the developer said",
+        () => drafts.at(-1)?.savedAt !== undefined,
+        "the saved plan to be drafted to the device",
         async () => `reports ${JSON.stringify(f.reports)}`,
       );
+      const saved = yield* Effect.promise(body);
+      assert.ok(saved.includes(problem));
+      assert.equal(drafts.at(-1)?.document.body, saved);
       yield* Effect.promise(() => f.exchange.stop());
     }),
 );

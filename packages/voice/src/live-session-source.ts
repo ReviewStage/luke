@@ -7,6 +7,8 @@ import {
   hostedQuotaSchema,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
+  type PlanDraftFrame,
+  planDraftFrameFromWire,
   type SessionActivityFrame,
   type SessionAttachFrame,
   type SessionBeatFrame,
@@ -148,6 +150,12 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * `reportActivity`.
    */
   onSpoken?(listener: (kind: ProactiveSpeechKind) => void): void;
+  /**
+   * Tells the listener each draft of a planning call's plan the service's
+   * notetaker sends as it writes, on the same socket and the same terms as
+   * `onSpoken`; the sideband never sees that frame either.
+   */
+  onPlanDraft?(listener: (draft: PlanDraftFrame) => void): void;
 }
 
 /**
@@ -854,13 +862,19 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           matches: (data) => sessionActivityFrameFromWire(decodeLivePayload(data)) !== undefined,
         },
       });
-      // The service's own word on a spoken turn rides the same socket as the
-      // session's events and is taken off it here, before the sideband's Live
-      // grammar would read it as nothing.
+      // The service's own words, a spoken turn and a plan's draft, ride the same
+      // socket as the session's events and are taken off it here, before the
+      // sideband's Live grammar would read them as nothing.
       const spokenListeners = new Set<(kind: ProactiveSpeechKind) => void>();
+      const draftListeners = new Set<(draft: PlanDraftFrame) => void>();
       const sideband = this.holdSideband(
-        withoutSpokenFrames(socket, (kind) => {
-          for (const listener of [...spokenListeners]) listener(kind);
+        withoutServiceFrames(socket, {
+          onSpoken: (kind) => {
+            for (const listener of [...spokenListeners]) listener(kind);
+          },
+          onPlanDraft: (draft) => {
+            for (const listener of [...draftListeners]) listener(draft);
+          },
         }),
       );
       return {
@@ -896,32 +910,46 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onSpoken: (listener) => {
           spokenListeners.add(listener);
         },
+        onPlanDraft: (listener) => {
+          draftListeners.add(listener);
+        },
       };
     });
   }
 }
 
 /**
- * The socket with the service's `session.spoken` frames taken off its
- * arrivals and told to the listener, so the sideband over it reads only what
- * the session said. Every frame is checked by the frame's own schema; the
- * substring test ahead of it is only what keeps a transcript delta from being
- * decoded twice.
+ * The socket with the service's own frames, `session.spoken` and
+ * `plan.draft`, taken off its arrivals and told to their listeners, so the
+ * sideband over it reads only what the session said. Every frame is checked
+ * by the frame's own schema; the substring test ahead of it is only what
+ * keeps a transcript delta from being decoded twice.
  */
-function withoutSpokenFrames(
+function withoutServiceFrames(
   socket: LiveSocket,
-  onSpoken: (kind: ProactiveSpeechKind) => void,
+  listeners: {
+    readonly onSpoken: (kind: ProactiveSpeechKind) => void;
+    readonly onPlanDraft: (draft: PlanDraftFrame) => void;
+  },
 ): LiveSocket {
   return {
     send: (data) => socket.send(data),
     close: () => socket.close(),
     arrivals: Stream.filter(socket.arrivals, (arrival) => {
       if ("close" in arrival) return true;
-      if (!arrival.frame.includes(VOICE_SERVICE_FRAME.SESSION_SPOKEN)) return true;
-      const spoken = sessionSpokenFrameFromWire(decodeLivePayload(arrival.frame));
-      if (spoken === undefined) return true;
-      onSpoken(spoken.kind);
-      return false;
+      if (arrival.frame.includes(VOICE_SERVICE_FRAME.SESSION_SPOKEN)) {
+        const spoken = sessionSpokenFrameFromWire(decodeLivePayload(arrival.frame));
+        if (spoken === undefined) return true;
+        listeners.onSpoken(spoken.kind);
+        return false;
+      }
+      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_DRAFT)) {
+        const draft = planDraftFrameFromWire(decodeLivePayload(arrival.frame));
+        if (draft === undefined) return true;
+        listeners.onPlanDraft(draft);
+        return false;
+      }
+      return true;
     }),
   };
 }

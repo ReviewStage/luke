@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import type { PlanUpdate } from "@sidecar/hosted/plan-template";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
-import { MockLanguageModelV4 } from "ai/test";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store";
-import { PLAN_SCRIBE, planScribe } from "../server/voice/plan-scribe";
+import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
+import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -33,33 +32,6 @@ const RELAY_PLAN: NewPlan = {
 const PROBLEM = "Only an admin can add someone to a workspace.";
 const USERS = "Workspace members, and the teammates they invite.";
 
-const USAGE = {
-  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-  outputTokens: { total: 1, text: 1, reasoning: 0 },
-};
-
-/** What the scripted model answers one run with: an update, or a failure of the call. */
-type Answer = PlanUpdate | Error;
-
-/** A model answering each call with the next scripted answer, and keeping what each call was handed. */
-function scriptedModel(answers: readonly Answer[]) {
-  const asked: string[] = [];
-  const model = new MockLanguageModelV4({
-    doGenerate: async (options) => {
-      asked.push(JSON.stringify(options.prompt));
-      const answer = answers[asked.length - 1] ?? {};
-      if (answer instanceof Error) throw answer;
-      return {
-        content: [{ type: "text" as const, text: JSON.stringify(answer) }],
-        finishReason: { unified: "stop" as const, raw: "stop" },
-        usage: USAGE,
-        warnings: [],
-      };
-    },
-  });
-  return { model, asked };
-}
-
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
@@ -77,24 +49,26 @@ const savedBody = (userId: string, planId: string) =>
 
 /** Lets the scribe's fiber run to its next wait, the store's and the model's promises included. */
 const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Duration.zero)), {
-  times: 50,
+  times: 500,
 });
 
 /** The developer's quiet elapsing, and the run it starts left to finish. */
 const quiet = Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS)), settle);
 
-const scribeFor = (userId: string, planId: string, answers: readonly Answer[]) =>
+const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
-    const { model, asked } = scriptedModel(answers);
+    const { model, asked } = scriptedScribeModel(answers);
     const reports: string[] = [];
+    const drafts: PlanDraft[] = [];
     const scribe = yield* planScribe({
       userId,
       planId,
       model,
+      onDraft: (draft) => drafts.push(draft),
       createId: randomUUID,
       report: (message) => reports.push(message),
     });
-    return { scribe, asked, reports };
+    return { scribe, asked, reports, drafts };
   });
 
 it.layer(testSqlClient)("the plan's notetaker", (it) => {
@@ -183,5 +157,53 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           assert.ok(asked[1]?.includes("Only admins can add people."));
         }),
       ),
+  );
+
+  it.effect(
+    "the plan is drafted to the device as the model writes, and the last draft is the saved plan",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe, drafts } = yield* scribeFor(userId, planId, [
+            { purpose: { problem: PROBLEM, users: USERS } },
+          ]);
+
+          scribe.observe(heard("Only admins can add people, and it hits members.", 0, 1_000));
+          yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
+          // The model streams its answer across drafts spaced a beat apart.
+          for (let beat = 0; beat < 20; beat += 1) {
+            yield* Effect.andThen(
+              TestClock.adjust(Duration.millis(PLAN_SCRIBE.DRAFT_EVERY_MS)),
+              settle,
+            );
+          }
+
+          const last = drafts.at(-1);
+          assert.ok(last?.savedAt !== undefined);
+          assert.equal(last.document.body, yield* savedBody(userId, planId));
+          assert.ok(drafts.length >= 2);
+          assert.ok(drafts.slice(0, -1).every((draft) => draft.savedAt === undefined));
+        }),
+      ),
+  );
+
+  it.effect("a run that breaks off mid-answer drafts the stored plan back and saves nothing", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const before = yield* savedBody(userId, planId);
+        const { scribe, drafts } = yield* scribeFor(userId, planId, [
+          { brokenAfter: { purpose: { problem: PROBLEM, users: USERS } } },
+        ]);
+
+        scribe.observe(heard("Only admins can add people.", 0, 1_000));
+        yield* quiet;
+
+        assert.equal(yield* savedBody(userId, planId), before);
+        assert.equal(drafts.at(-1)?.document.body, before);
+        assert.equal(drafts.at(-1)?.savedAt, undefined);
+      }),
+    ),
   );
 });

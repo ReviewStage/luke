@@ -183,6 +183,14 @@ answer through `update_plan`, the handoff prompt included when the developer
 asks for it. Its runs never overlap, so it is the plan's only writer, and a
 run that fails moves nothing forward.
 
+The notes type in while they are written. The call streams its answer, and
+each partial answer that reads under the template is merged and formatted
+exactly as a save would be and sent to the Mac on the call's own socket as a
+`plan.draft` frame, at most every 150 ms, then once more as saved. The host
+draws each draft in place of the open plan's document, and the Plans tab's
+chase types the difference in. A run that breaks off sends the saved document
+back, so no half-written draft is left standing.
+
 ### The fixed template
 
 Every plan uses one fixed template (LUKE-352). There is no configurable
