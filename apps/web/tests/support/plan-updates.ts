@@ -1,4 +1,4 @@
-import { EMPTY_PLAN_UPDATE, type PlanUpdate } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_UPDATE, type FullPlanUpdate } from "@sidecar/hosted/plan-template";
 
 /**
  * plan-updates.ts -- synthetic `update_plan` arguments for the fixed template, as a planning model would send them.
@@ -72,7 +72,7 @@ export function headingLinesOf(body: string): readonly string[] {
  * a scenario whose steps are not yet known, an example with no outcome yet,
  * and everything else unanswered.
  */
-export const INVITATIONS_DRAFT: PlanUpdate = {
+export const INVITATIONS_DRAFT: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
   purpose: {
     problem: "A workspace member cannot bring a teammate in without an admin creating the account.",
@@ -117,7 +117,7 @@ export const INVITATIONS_DRAFT: PlanUpdate = {
  * and the four fields a small change could leave empty say so explicitly
  * rather than inventing a risk or an alternative to fill them.
  */
-export const SMALL_FEATURE: PlanUpdate = {
+export const SMALL_FEATURE: FullPlanUpdate = {
   purpose: {
     problem: "The empty plan list says nothing about how to start.",
     users: "Developers opening the Plans tab for the first time.",
@@ -211,7 +211,7 @@ export const BULK_IMPORT_AGREED = {
 } as const;
 
 /** A bulk import that meets an invalid row: the agreed invariant, its decision, prerequisite, risk, and check, and the handoff that carries them. */
-export const BULK_IMPORT: PlanUpdate = {
+export const BULK_IMPORT: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
   purpose: {
     problem: "Contacts are entered one at a time.",

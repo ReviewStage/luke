@@ -1,4 +1,9 @@
-import { EMPTY_PLAN_UPDATE, planBody } from "@sidecar/hosted/plan-template";
+import {
+  EMPTY_PLAN_FIELDS,
+  type PlanFields,
+  planBody,
+  planFieldsSchema,
+} from "@sidecar/hosted/plan-template";
 import {
   type Plan,
   type PlanDocument,
@@ -36,9 +41,10 @@ type PlanStoreFailure = SqlError | Schema.SchemaError;
 /** What a plan store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type PlanStoreEffect<A> = Effect.Effect<A, PlanStoreFailure, SqlClient.SqlClient>;
 
-/** A plan as the service holds it: what the window reads, and the conversation it resumes in, if one is attached. */
+/** A plan as the service holds it: what the window reads, the fields its body was formatted from, and the conversation it resumes in, if one is attached. */
 export interface StoredPlan {
   readonly plan: Plan;
+  readonly fields: PlanFields;
   readonly conversationId: string | undefined;
 }
 
@@ -58,6 +64,7 @@ const PLAN_COLUMNS = {
   repositoryCommit: plan.repositoryCommit,
   body: plan.body,
   assumptions: plan.assumptions,
+  fields: plan.fields,
   conversationId: plan.conversationId,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
@@ -73,6 +80,7 @@ const PlanRowSchema = Schema.Struct({
   repositoryCommit: Schema.String,
   body: Schema.String,
   assumptions: Schema.Array(planAssumptionSchema),
+  fields: Schema.NullOr(planFieldsSchema),
   conversationId: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -92,6 +100,7 @@ function storedPlanOf(row: PlanRow): StoredPlan {
       ...summaryOf(row),
       document: { body: row.body, assumptions: row.assumptions },
     },
+    fields: row.fields ?? EMPTY_PLAN_FIELDS,
     conversationId: row.conversationId ?? undefined,
   };
 }
@@ -148,7 +157,7 @@ const insertPlan = SqlSchema.findOne({
               commit: write.commit,
             },
           },
-          EMPTY_PLAN_UPDATE,
+          EMPTY_PLAN_FIELDS,
         ),
         assumptions: [],
         createdAt: write.now,
@@ -189,13 +198,14 @@ const replaceDocument = SqlSchema.findOneOption({
     planId: Schema.String,
     body: Schema.String,
     assumptions: Schema.Array(planAssumptionSchema),
+    fields: Schema.optionalKey(planFieldsSchema),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
-  execute: ({ userId, planId, body, assumptions, now }) =>
+  execute: ({ userId, planId, body, assumptions, fields, now }) =>
     db
       .update(plan)
-      .set({ body, assumptions, updatedAt: now })
+      .set({ body, assumptions, ...(fields ? { fields } : undefined), updatedAt: now })
       .where(ownedPlan(userId, planId))
       .returning(PLAN_COLUMNS),
 });
@@ -359,13 +369,15 @@ export function openPlan(userId: string, planId: string): PlanStoreEffect<Option
 }
 
 /**
- * Replaces the plan's document whole and answers it as saved, or nothing
- * where the account owns no such plan; nothing is ever created here.
+ * Replaces the plan's document whole, with the fields its body was formatted
+ * from where they are handed, and answers it as saved, or nothing where the
+ * account owns no such plan; nothing is ever created here.
  */
 export function savePlanDocument(
   userId: string,
   planId: string,
   document: PlanDocument,
+  fields?: PlanFields,
 ): PlanStoreEffect<Option.Option<Plan>> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -374,6 +386,7 @@ export function savePlanDocument(
       planId,
       body: document.body,
       assumptions: document.assumptions,
+      ...(fields ? { fields } : undefined),
       now,
     });
     return Option.map(row, (saved) => storedPlanOf(saved).plan);

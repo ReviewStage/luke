@@ -44,11 +44,7 @@
           "description": "The observable improvement. Null while unanswered."
         }
       },
-      "required": [
-        "problem",
-        "users",
-        "outcome"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "scope": {
@@ -94,11 +90,7 @@
           "description": "Material limits on this change. Null while unanswered."
         }
       },
-      "required": [
-        "included",
-        "excluded",
-        "constraints"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "context": {
@@ -144,11 +136,7 @@
           "description": "Terms whose meaning matters. Null while unanswered."
         }
       },
-      "required": [
-        "currentBehavior",
-        "relevantCode",
-        "terminology"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "behavior": {
@@ -297,11 +285,7 @@
           "description": "Concrete rehearsals, each exactly its name, actor, starting state, trigger, steps, expected outcome, and alternatives and failures. Null until one is identified."
         }
       },
-      "required": [
-        "rules",
-        "invariants",
-        "scenarios"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "dataAndInterfaces": {
@@ -334,10 +318,7 @@
           "description": "Affected internal or external contracts and their failure behavior. Null while unanswered."
         }
       },
-      "required": [
-        "dataRules",
-        "interfaces"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "quality": {
@@ -383,11 +364,7 @@
           "description": "Applicable performance and reliability bounds, cited or agreed, never invented. Null while unanswered."
         }
       },
-      "required": [
-        "permissionsAndPrivacy",
-        "usabilityAndAccessibility",
-        "performanceAndReliability"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "delivery": {
@@ -485,15 +462,7 @@
           "description": "The precise freedom left to the implementing agent. Null while unanswered."
         }
       },
-      "required": [
-        "approach",
-        "decisions",
-        "stepsAndDependencies",
-        "risksAndMitigations",
-        "compatibilityAndMigration",
-        "rolloutAndRecovery",
-        "delegatedChoices"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "acceptance": {
@@ -576,10 +545,7 @@
           "description": "The checks that establish the important rules and invariants, and what each proves. Null while unanswered."
         }
       },
-      "required": [
-        "examples",
-        "verification"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "openQuestions": {
@@ -622,21 +588,9 @@
         "additionalProperties": false
       },
       "maxItems": 200,
-      "description": "Every assumption the plan holds, in order, each its text."
+      "description": "Every assumption the plan holds, in order, each its text. Sent whole when any changes."
     }
   },
-  "required": [
-    "purpose",
-    "scope",
-    "context",
-    "behavior",
-    "dataAndInterfaces",
-    "quality",
-    "delivery",
-    "acceptance",
-    "openQuestions",
-    "handoffPrompt",
-    "assumptions"
-  ],
+  "required": [],
   "additionalProperties": false
 }

@@ -15,8 +15,9 @@ are not reopened here. The two that shape everything below:
 - **One saved document per named plan**, a Markdown `body` and an `assumptions`
   list of `{ text }`, written only by the model through
   `update_plan`. The body is always the one fixed template (LUKE-352, "The
-  fixed template" below): the model sends every field of it on every call,
-  and the service formats them into the body. There are no versions, no
+  fixed template" below): the model sends the fields it changes, and the
+  service merges them over the plan's stored fields and formats the result
+  into the body. There are no versions, no
   stale-revision rejection, no approval state, and no export record.
 - **The model drives the workflow.** Question choice, agreement, corrections,
   the final review, and the handoff live in the planning model's instructions.
@@ -57,7 +58,7 @@ every tab shares), one page at a time:
  │     acme/relay · main @ 4f2c9e1                              │
  │ ──────────────────────────────────────────────────────────── │
  │  # Teammate invitations                          (scrolls)   │
- │  Repository: acme/relay, branch main at commit 4f2c9e1...    │
+ │  Repository: acme/relay, branch main                         │
  │  ## Purpose and users                                        │
  │  ### Problem                                                 │
  │  Only an admin can add someone to a workspace...             │
@@ -169,16 +170,18 @@ same commit, and nothing refreshes it. The header shows it as
 ### The fixed template
 
 Every plan uses one fixed template (LUKE-352). There is no configurable
-template, no sections map, and no freeform body argument: `update_plan`'s
-arguments are exactly the sections below, every named field is required on
-every call, drafts included, and a call missing a field, naming one the
-template does not, sending a freeform `body`, or carrying a blank answer is
-refused with the offending field's path and saves nothing. The typed
-arguments are an input format only. The service formats them into the
-canonical Markdown `body` (`packages/hosted/src/plan-template.ts`), checks
-the formatted body against its bound, and saves the same `{ body,
-assumptions }` document as before; no code parses the body back, and the
-model reads the canonical Markdown on its next turn.
+template, no sections map, and no freeform body argument: `update_plan`
+names only the sections and fields below that change. A field left out keeps
+its stored value, `null` clears it, and a list (scenarios, steps, examples,
+open questions, assumptions) is sent whole when any of it changes. A call
+naming a field the template does not, sending a freeform `body`, or carrying
+a blank answer is refused with the offending field's path and saves nothing.
+The service keeps the plan's fields in the row's `fields` column, merges the
+call over them, formats the result into the canonical Markdown `body`
+(`packages/hosted/src/plan-template.ts`), checks the formatted body against
+its bound, and saves the fields, the body, and the assumptions together; no
+code parses the body back, and the model reads the canonical Markdown on its
+next turn.
 
 | Section | Fields | What Luke establishes |
 | --- | --- | --- |
@@ -209,10 +212,10 @@ model reads the canonical Markdown on its next turn.
   at the end of its field, so no answer can impersonate a section or swallow
   the ones after it.
 - **A new plan** is the template with every field unanswered, no open
-  question, no handoff, and no assumption. Luke reads that untouched template
-  as a new plan and greets the developer; opening saves nothing.
-- **Saving and resuming** go through the same whole-document save, so a plan
-  written in the template resumes with its answers and its flags intact.
+  question, no handoff, and no assumption; its `fields` column is null until
+  the first save.
+- **Saving and resuming** go through the same save, so a plan written in the
+  template resumes with its answers and its assumptions intact.
 - **Structure is the tool's; agreement is the model's.** The schema
   guarantees that every field is present and well formed, not that an answer
   is understood, true, or agreed. Resolving each field, or agreeing an
@@ -298,7 +301,7 @@ of the template, most of them still null. The body it becomes reads, in part:
 ```markdown
 # Teammate invitations
 
-Repository: acme/relay, branch main at commit 4f2c9e1...
+Repository: acme/relay, branch main
 
 ## Purpose and users
 

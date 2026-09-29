@@ -1,26 +1,25 @@
 import { describeWire } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, Struct } from "effect";
 import { PLAN_BOUNDS, type PlanRepository, planDocumentSchema } from "./plan-wire.js";
 
 /**
  * plan-template.ts -- the one fixed template every feature plan is written in: the typed update the planning model sends, and the canonical Markdown body it becomes.
  *
- * Every plan has the same sections in the same order, and every named field
- * is required on every `update_plan` call, drafts included (`docs/PLANNING.md`,
- * "The fixed template"). An unanswered field is `null`, never an omitted key
- * or an empty string, and it renders as "Unanswered", so a field cannot be
- * skipped by choosing another layout. The typed update is an input format and
- * nothing more: it is formatted here into the document's Markdown `body`, and
- * the saved document stays `{ body, assumptions }` (`plan-wire.ts`). No code
- * reads the body back into fields; the model reads the canonical Markdown on
- * its next turn.
+ * Every plan has the same sections in the same order (`docs/PLANNING.md`,
+ * "The fixed template"). The service keeps the plan's fields as they stand,
+ * and an `update_plan` call names only what it changes: a key left out keeps
+ * its value, `null` clears it back to "Unanswered", and a list sent is the
+ * whole list. The merged fields are formatted here into the document's
+ * Markdown `body`, and the document the window and the model read stays
+ * `{ body, assumptions }` (`plan-wire.ts`). No code reads the body back into
+ * fields.
  *
  * The formatter owns every heading and its order. Field text is Markdown the
  * model wrote, contained where it stands: a line that would open a heading or
  * an HTML block is escaped, and a code fence left open is closed at the end of
  * its field, so no answer can impersonate a section or swallow the ones after
  * it. The schema guarantees shape only; whether an answer is understood or
- * agreed is the model's judgment, recorded in the assumption flags.
+ * agreed is the model's judgment.
  */
 
 /** Bounds on the typed update; the formatted body is held to `PLAN_BOUNDS.MAX_BODY_CHARS` after formatting. */
@@ -140,12 +139,8 @@ const acceptanceExampleSchema = EffectSchema.Struct({
   then: answer("The observable result."), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
 });
 
-/**
- * The whole of an `update_plan` call: every section, every field, in the
- * template's order. A key it does not name is refused at every level, and so
- * is a missing one.
- */
-export const planUpdateSchema = EffectSchema.Struct({
+/** Every section and field of the template, in its order: what the service keeps for a plan. */
+export const planFieldsSchema = EffectSchema.Struct({
   purpose: EffectSchema.Struct({
     problem: answer("The current problem."),
     users: answer("The people or callers affected."),
@@ -224,12 +219,40 @@ export const planUpdateSchema = EffectSchema.Struct({
     "The self-contained Markdown prompt for a coding agent, written only after the spoken " +
       "review. Null until prepared.",
   ),
-  assumptions: describeWire(
-    planDocumentSchema.fields.assumptions,
-    "Every assumption the plan holds, in order, each its text.",
+});
+
+/** A section whose every field may be left out, and which may itself be left out. */
+function partialSection<Fields extends EffectSchema.Struct.Fields>(
+  section: EffectSchema.Struct<Fields>,
+) {
+  return EffectSchema.optionalKey(section.mapFields(Struct.map(EffectSchema.optionalKey)));
+}
+
+/**
+ * The whole of an `update_plan` call: any section, any field within it, and
+ * the assumptions, each left out to keep what stands. A key the template does
+ * not name is refused at every level.
+ */
+export const planUpdateSchema = EffectSchema.Struct({
+  purpose: partialSection(planFieldsSchema.fields.purpose),
+  scope: partialSection(planFieldsSchema.fields.scope),
+  context: partialSection(planFieldsSchema.fields.context),
+  behavior: partialSection(planFieldsSchema.fields.behavior),
+  dataAndInterfaces: partialSection(planFieldsSchema.fields.dataAndInterfaces),
+  quality: partialSection(planFieldsSchema.fields.quality),
+  delivery: partialSection(planFieldsSchema.fields.delivery),
+  acceptance: partialSection(planFieldsSchema.fields.acceptance),
+  openQuestions: EffectSchema.optionalKey(planFieldsSchema.fields.openQuestions),
+  handoffPrompt: EffectSchema.optionalKey(planFieldsSchema.fields.handoffPrompt),
+  assumptions: EffectSchema.optionalKey(
+    describeWire(
+      planDocumentSchema.fields.assumptions,
+      "Every assumption the plan holds, in order, each its text. Sent whole when any changes.",
+    ),
   ),
 });
 
+export type PlanFields = typeof planFieldsSchema.Type;
 export type PlanUpdate = typeof planUpdateSchema.Type;
 type Scenario = typeof scenarioSchema.Type;
 type AcceptanceExample = typeof acceptanceExampleSchema.Type;
@@ -240,8 +263,8 @@ export interface PlanHeader {
   readonly repository: PlanRepository;
 }
 
-/** A new plan's update: every answer unanswered, no questions, no handoff, no assumptions. */
-export const EMPTY_PLAN_UPDATE: PlanUpdate = {
+/** A new plan's fields: every answer unanswered, no questions, no handoff. */
+export const EMPTY_PLAN_FIELDS: PlanFields = {
   purpose: { problem: null, users: null, outcome: null },
   scope: { included: null, excluded: null, constraints: null },
   context: { currentBehavior: null, relevantCode: null, terminology: null },
@@ -264,8 +287,33 @@ export const EMPTY_PLAN_UPDATE: PlanUpdate = {
   acceptance: { examples: null, verification: null },
   openQuestions: [],
   handoffPrompt: null,
-  assumptions: [],
 };
+
+/** An update that names every field and the assumptions: the whole template at once. */
+export type FullPlanUpdate = PlanFields & Required<Pick<PlanUpdate, "assumptions">>;
+
+/** The whole template as one update, every field unanswered and no assumptions. */
+export const EMPTY_PLAN_UPDATE: FullPlanUpdate = { ...EMPTY_PLAN_FIELDS, assumptions: [] };
+
+/**
+ * The fields an update leaves standing: each section's fields merged over
+ * what stood, and a list or the handoff prompt replaced where it was sent.
+ */
+export function mergePlanFields(stored: PlanFields, update: PlanUpdate): PlanFields {
+  return {
+    purpose: { ...stored.purpose, ...update.purpose },
+    scope: { ...stored.scope, ...update.scope },
+    context: { ...stored.context, ...update.context },
+    behavior: { ...stored.behavior, ...update.behavior },
+    dataAndInterfaces: { ...stored.dataAndInterfaces, ...update.dataAndInterfaces },
+    quality: { ...stored.quality, ...update.quality },
+    delivery: { ...stored.delivery, ...update.delivery },
+    acceptance: { ...stored.acceptance, ...update.acceptance },
+    openQuestions: update.openQuestions ?? stored.openQuestions,
+    // Note that null clears the prompt, so only a key left out keeps it.
+    handoffPrompt: update.handoffPrompt === undefined ? stored.handoffPrompt : update.handoffPrompt,
+  };
+}
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
@@ -407,19 +455,19 @@ function headerBlock(header: PlanHeader): string {
   const { repository } = header;
   return [
     `# ${oneLine(header.name)}`,
-    `Repository: ${repository.owner}/${repository.name}, branch ${repository.branch} at commit ${repository.commit}`,
+    `Repository: ${repository.owner}/${repository.name}, branch ${repository.branch}`,
   ].join("\n\n");
 }
 
 /**
  * The canonical Markdown body of a plan: the header the service supplies,
  * then every section and field in the template's order, whatever order the
- * update's keys arrived in. The assumptions are not part of the body; they
+ * fields' keys arrived in. The assumptions are not part of the body; they
  * are the document's own list, drawn after it as the template's last section.
  */
-export function planBody(header: PlanHeader, update: PlanUpdate): string {
-  const { purpose, scope, context, behavior, dataAndInterfaces, quality, delivery } = update;
-  const { acceptance, openQuestions, handoffPrompt } = update;
+export function planBody(header: PlanHeader, fields: PlanFields): string {
+  const { purpose, scope, context, behavior, dataAndInterfaces, quality, delivery } = fields;
+  const { acceptance, openQuestions, handoffPrompt } = fields;
   const blocks = [
     headerBlock(header),
     section(PLAN_HEADING.PURPOSE, [
