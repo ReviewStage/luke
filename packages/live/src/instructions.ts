@@ -65,16 +65,9 @@ Do not delegate to the backend when:
 
 /**
  * A planning call's backend is the planning model, which holds the saved
- * document, reads the plan's repository, and is the one that decides the
- * next question and saves the plan. The voice is its mouth: it hands the
- * developer's planning words on and says back what comes back, so the
- * policy names the backend's tools as the desktop's does and asks for a
- * delegation on nearly every turn, a one-word agreement included, since
- * a turn the voice answers alone has no next question to close on and is
- * where it would hand the agenda back. The last line keeps a half-heard
- * sentence from being passed on as an answer: the delegation carries the
- * recent words as context, and the planning model, not the voice, decides
- * what counts as agreement.
+ * document, reads the plan's repository, and saves the plan. The policy is
+ * the template's own conditions with the planning model's tools named, as
+ * the desktop's names the brain's.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
@@ -91,8 +84,7 @@ Do not delegate to the backend when:
 - You need a brief clarification to understand the request.
 
 Delegate before giving an answer that depends on backend work.
-Do not guess the result while waiting.
-`;
+Do not guess the result while waiting.`;
 
 /**
  * The Live prompting guide's starter template, cut to who is speaking and
@@ -107,14 +99,11 @@ Do not guess the result while waiting.
  * words: one keeps the model from talking over the developer, the other
  * keeps it listening when they cut in. The one departure from the words the
  * guide prints is "engineering manager" where the template reads "voice
- * assistant", and a planning call's role line names the plan's partner in its
- * place.
+ * assistant", and a planning call's role line is its own.
  */
 const MANAGER_ROLE = "You are Luke, an engineering manager for the developer's coding agents.";
-const PLANNING_ROLE = `You are Luke, an calm, friendly voice assistant tasked with planning out the implementation of a new engineering task for the user (a developer).
-  
-    You should lead the conversation and ask questions to the user until the plan is complete.
-    `;
+const PLANNING_ROLE = `You are Luke, a calm, friendly voice assistant tasked with planning out the implementation of a new engineering task for the user (a developer).
+You should lead the conversation and ask questions to the user until the plan is complete.`;
 
 const instructionsFor = (delegationPolicy: string, role = MANAGER_ROLE): string =>
   `${role}
