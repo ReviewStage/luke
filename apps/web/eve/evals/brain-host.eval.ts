@@ -73,7 +73,7 @@ const PLAN = {
 } as const;
 const PLAN_SAVED = {
   body: "# Teammate invitations\n\n## Open questions\n- Who may invite?\n",
-  assumptions: [{ text: "Invites reuse `memberships` with a `pending` state.", confirmed: true }],
+  assumptions: [{ text: "Invites reuse `memberships` with a `pending` state." }],
 } as const;
 const PLAN_WORDS = {
   FIRST: "Any member should be able to invite, not only admins.",
@@ -268,7 +268,7 @@ export default defineEval({
       planningSession.succeeded();
       planningSession.calledTool(UPDATE_PLAN_TOOL.name);
       planningSession.notCalledTool(BRAIN_TOOL.WRITE_WORKSPACE_FILE);
-      const afterFirst = [...PLAN_SAVED.assumptions, { text: PLAN_WORDS.FIRST, confirmed: false }];
+      const afterFirst = [...PLAN_SAVED.assumptions, { text: PLAN_WORDS.FIRST }];
       const firstSaved = await planDocument(run, plan.id);
       assert.deepEqual(firstSaved.assumptions, afterFirst);
       assert.ok(firstSaved.body.includes(SCRIPTED_PROBLEM));
@@ -292,7 +292,7 @@ export default defineEval({
       (await t.target.attachSession(resumed.sessionId)).succeeded();
       assert.deepEqual(await planDocument(run, plan.id), {
         body: firstSaved.body,
-        assumptions: [...afterFirst, { text: PLAN_WORDS.RESUMED, confirmed: false }],
+        assumptions: [...afterFirst, { text: PLAN_WORDS.RESUMED }],
       });
     } finally {
       await runtime.dispose();

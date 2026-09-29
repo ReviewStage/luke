@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { EMPTY_PLAN_UPDATE, type PlanUpdate } from "@sidecar/hosted/plan-template";
+import {
+  EMPTY_PLAN_UPDATE,
+  type FullPlanUpdate,
+  type PlanUpdate,
+} from "@sidecar/hosted/plan-template";
 import type { PlanDocument } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { Effect, Option } from "effect";
@@ -143,7 +147,7 @@ function reversedKeys(value: WireBoundaryInput): WireBoundaryInput {
 
 /** The update as JSON with one key of one section taken out, or put back under another name. */
 function reshaped(
-  update: PlanUpdate,
+  update: FullPlanUpdate,
   section: "behavior" | "delivery" | "purpose",
   key: string,
   renamed?: string,
@@ -166,9 +170,7 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
         assert.equal(started.name, RELAY_PLAN.name);
         assert.deepEqual(started.repository, RELAY_PLAN.repository);
         assert.ok(
-          body.startsWith(
-            `# Teammate invitations\n\nRepository: acme/relay, branch main at commit ${COMMIT.RELAY}\n`,
-          ),
+          body.startsWith("# Teammate invitations\n\nRepository: acme/relay, branch main\n"),
         );
         assert.deepEqual(templateHeadingsOf(body), TEMPLATE_HEADINGS);
         assert.equal(countOf(body, UNANSWERED), TEMPLATE_UNANSWERED_FIELDS);
@@ -194,10 +196,10 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
       const relayBody = (yield* openedDocument(userId, relay.id)).body;
       const ledgerBody = (yield* openedDocument(userId, ledger.id)).body;
       assert.ok(relayBody.startsWith("# Teammate invitations\n"));
-      assert.ok(relayBody.includes(COMMIT.RELAY));
+      assert.ok(!relayBody.includes(COMMIT.RELAY));
       assert.ok(relayBody.includes(INVITATIONS_DRAFT.purpose.problem ?? "?"));
       assert.ok(ledgerBody.startsWith("# Billing export\n"));
-      assert.ok(ledgerBody.includes(`branch trunk at commit ${COMMIT.LEDGER}`));
+      assert.ok(ledgerBody.includes("branch trunk\n"));
       assert.ok(ledgerBody.includes(SMALL_FEATURE.purpose.problem ?? "?"));
       assert.ok(!ledgerBody.includes(INVITATIONS_DRAFT.purpose.problem ?? "?"));
     }),
@@ -342,7 +344,7 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
   );
 
   it.effect(
-    "a proposal, the developer's assent, a correction, and an agreed non-applicable field each save, while an unanswered field stays visible",
+    "a proposal, a correction, and a non-applicable field each save, while an unanswered field stays visible",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
@@ -357,49 +359,26 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
           dataAndInterfaces: { ...EMPTY_PLAN_UPDATE.dataAndInterfaces, interfaces },
         });
 
-        // Proposed, then agreed to in so many words.
         yield* updatePlan(binding, {
           ...withRules(everyMember, null),
-          assumptions: [{ text: everyMember, confirmed: false }],
+          assumptions: [{ text: everyMember }],
         });
         const proposed = yield* resumedDocument(userId, planId);
-        yield* updatePlan(binding, {
-          ...withRules(everyMember, null),
-          assumptions: [{ text: everyMember, confirmed: true }],
-        });
-        const agreed = yield* resumedDocument(userId, planId);
-        // Corrected: the rule is rewritten and its assumption set back to unconfirmed.
+        // Corrected: the rule is rewritten, and the non-applicable field set aside.
         yield* updatePlan(binding, {
           ...withRules(adminsOnly, noInterface),
-          assumptions: [
-            { text: adminsOnly, confirmed: false },
-            { text: noInterface, confirmed: false },
-          ],
-        });
-        const corrected = yield* resumedDocument(userId, planId);
-        // The non-applicable field agreed to.
-        yield* updatePlan(binding, {
-          ...withRules(adminsOnly, noInterface),
-          assumptions: [
-            { text: adminsOnly, confirmed: false },
-            { text: noInterface, confirmed: true },
-          ],
+          assumptions: [{ text: adminsOnly }, { text: noInterface }],
         });
         const settled = yield* openedDocument(userId, planId);
 
-        assert.deepEqual(proposed.assumptions, [{ text: everyMember, confirmed: false }]);
-        assert.deepEqual(agreed.assumptions, [{ text: everyMember, confirmed: true }]);
-        assert.equal(between(agreed.body, "### Rules", "### Invariants"), everyMember);
-        assert.equal(between(corrected.body, "### Rules", "### Invariants"), adminsOnly);
-        assert.deepEqual(corrected.assumptions, [
-          { text: adminsOnly, confirmed: false },
-          { text: noInterface, confirmed: false },
-        ]);
+        assert.deepEqual(proposed.assumptions, [{ text: everyMember }]);
+        assert.equal(between(proposed.body, "### Rules", "### Invariants"), everyMember);
+        assert.equal(between(settled.body, "### Rules", "### Invariants"), adminsOnly);
+        assert.deepEqual(settled.assumptions, [{ text: adminsOnly }, { text: noInterface }]);
         assert.equal(
           between(settled.body, "### Interfaces", "## Quality requirements"),
           noInterface,
         );
-        assert.deepEqual(settled.assumptions[1], { text: noInterface, confirmed: true });
         assert.equal(
           between(settled.body, "### Performance and reliability", "## Implementation guidance"),
           UNANSWERED,
@@ -464,32 +443,29 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
   );
 
   it.effect(
-    "leaving out any of the four added fields is refused with its path and leaves the saved document",
+    "a call naming only what changes keeps every field it leaves out, and null clears a field",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
         const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
         yield* updatePlan(bound(userId, planId), BULK_IMPORT);
-        const before = yield* resumedDocument(userId, planId);
-        const omissions = [
-          { section: "behavior", key: "invariants" },
-          { section: "delivery", key: "decisions" },
-          { section: "delivery", key: "stepsAndDependencies" },
-          { section: "delivery", key: "risksAndMitigations" },
-        ] as const;
+        const decision = "Rows are validated before any is written.";
 
-        for (const omitted of omissions) {
-          const result = yield* updatePlan(
-            bound(userId, planId),
-            reshaped(BULK_IMPORT, omitted.section, omitted.key),
-          );
-          assert.deepEqual(result, {
-            status: UPDATE_PLAN_STATUS.NOT_SAVED,
-            reason: UPDATE_PLAN_REFUSAL.UNREADABLE,
-            field: `${omitted.section}.${omitted.key}`,
-          });
-        }
-        assert.deepEqual(yield* resumedDocument(userId, planId), before);
+        const result = yield* updatePlan(bound(userId, planId), {
+          behavior: { invariants: null },
+          delivery: { decisions: decision },
+        });
+
+        assert.equal(result.status, UPDATE_PLAN_STATUS.SAVED);
+        const { body, assumptions } = yield* resumedDocument(userId, planId);
+        assert.equal(between(body, "### Invariants", "### Scenarios"), UNANSWERED);
+        assert.equal(between(body, "### Decisions", "### Steps and dependencies"), decision);
+        assert.equal(
+          between(body, "### Steps and dependencies", "### Risks and mitigations"),
+          BULK_IMPORT_AGREED.PREREQUISITE,
+        );
+        assert.ok(body.includes(BULK_IMPORT.purpose.problem ?? "?"));
+        assert.deepEqual(assumptions, BULK_IMPORT.assumptions);
       }),
   );
 
@@ -656,13 +632,13 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
 
       const result = yield* updatePlan(
         bound(userId, planId),
-        reversedKeys({ ...INVITATIONS_DRAFT, assumptions: [{ text: "Unflagged." }] }),
+        reversedKeys({ ...INVITATIONS_DRAFT, assumptions: [{ text: "   " }] }),
       );
 
       assert.deepEqual(result, {
         status: UPDATE_PLAN_STATUS.NOT_SAVED,
         reason: UPDATE_PLAN_REFUSAL.UNREADABLE,
-        field: "assumptions.0.confirmed",
+        field: "assumptions.0.text",
       });
       assert.deepEqual(yield* resumedDocument(userId, planId), before);
     }),

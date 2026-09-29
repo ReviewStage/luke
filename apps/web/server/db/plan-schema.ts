@@ -1,3 +1,4 @@
+import type { PlanFields } from "@sidecar/hosted/plan-template";
 import type { PlanAssumption } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -13,7 +14,8 @@ import { conversations } from "./storage-schema.js";
  * with the default branch and the commit that branch stood at when it started
  * (fixed for the plan's life, and not a version of the plan), and the one
  * document the planning model saves, a Markdown body and the assumptions list
- * beside it. A save replaces both columns in one statement, so there is no
+ * beside it, with the template's fields the body was formatted from. A save
+ * replaces all three columns in one statement, so there is no
  * earlier document to fall back on and none half-written: a save that failed
  * left the row as it stood. The document is stored as written, like the
  * conversation, readable by an operator and kept the developer's own by the
@@ -38,11 +40,13 @@ export const plan = pgTable(
     repositoryCommit: text("repository_commit").notNull(),
     /** The document's Markdown body; empty until the first save. */
     body: text("body").notNull().default(""),
-    /** The document's assumptions, each its text and whether it was confirmed. */
+    /** The document's assumptions, each its text. */
     assumptions: jsonb("assumptions")
       .$type<readonly PlanAssumption[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    /** The template's fields the body was formatted from; null until the first save, an untouched template. */
+    fields: jsonb("fields").$type<PlanFields>(),
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),

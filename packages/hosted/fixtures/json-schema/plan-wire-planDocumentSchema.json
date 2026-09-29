@@ -14,14 +14,10 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 2000
-          },
-          "confirmed": {
-            "type": "boolean"
           }
         },
         "required": [
-          "text",
-          "confirmed"
+          "text"
         ],
         "additionalProperties": false
       },

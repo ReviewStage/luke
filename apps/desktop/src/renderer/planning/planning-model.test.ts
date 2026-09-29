@@ -176,8 +176,8 @@ test("the microphone asks for the permission first, then for a plan, and then ta
 const REVIEWED = {
   body: "# Teammate invitations\n\n## Handoff prompt\n\nYou are implementing invitations.",
   assumptions: [
-    { text: "Members and admins can both invite.", confirmed: true },
-    { text: "An invite expires after 7 days.", confirmed: false },
+    { text: "Members and admins can both invite." },
+    { text: "An invite expires after 7 days." },
   ],
 };
 
@@ -193,8 +193,8 @@ test("Copy hands the clipboard the whole document, and shows the check mark for 
 
 ## Assumptions
 
-- [x] Members and admins can both invite.
-- [ ] An invite expires after 7 days.
+- Members and admins can both invite.
+- An invite expires after 7 days.
 `,
   ]);
   assert.equal(copyShown(outcome, REVIEWED), COPY_SHOWN.COPIED);
@@ -214,7 +214,7 @@ test("once a save changes the document, Copy returns to rest until pressed again
   const outcome = await copyPlanDocument(REVIEWED, async () => undefined);
   const saved = {
     ...REVIEWED,
-    assumptions: [...REVIEWED.assumptions, { text: "Invites are by email.", confirmed: false }],
+    assumptions: [...REVIEWED.assumptions, { text: "Invites are by email." }],
   };
 
   assert.equal(copyShown(outcome, saved), COPY_SHOWN.IDLE);

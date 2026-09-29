@@ -17,7 +17,7 @@ import {
  * Each part draws what it is handed and decides nothing, so what a region
  * shows is `planning-model.ts`'s answer and a press is a callback the tab
  * hands down. The document is read-only throughout: nothing drawn here edits
- * a plan, confirms an assumption, or reaches the model as conversation. The
+ * a plan or reaches the model as conversation. The
  * waveform and the captions are the panel's own, drawn on the shape for a
  * planning call exactly as for any other.
  */
@@ -75,26 +75,13 @@ export function PlanList({
   );
 }
 
-/**
- * One assumption: a checkbox that cannot be clicked, the text, and the plain
- * status. The flag is the model's reading of the developer's agreement,
- * shown as stored; nothing here can change it.
- */
+/** One assumption, its text as stored. */
 function AssumptionRow({ assumption }: { assumption: PlanAssumption }): React.JSX.Element {
-  return (
-    <li className="plan-assumption" data-confirmed={String(assumption.confirmed)}>
-      <input type="checkbox" checked={assumption.confirmed} disabled readOnly tabIndex={-1} />
-      <span className="plan-assumption-text">{assumption.text}</span>
-      <span className="plan-assumption-status">
-        {assumption.confirmed ? "Confirmed" : "Not confirmed"}
-      </span>
-    </li>
-  );
+  return <li className="plan-assumption">{assumption.text}</li>;
 }
 
 /**
- * Copy, the one action on the document: always enabled, whatever the flags
- * say and whether or not a handoff prompt is written yet. The check mark
+ * Copy, the one action on the document: always enabled, whether or not a handoff prompt is written yet. The check mark
  * stands while the clipboard holds the document drawn, and a refused copy
  * says so beside the button.
  */

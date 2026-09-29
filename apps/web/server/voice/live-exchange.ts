@@ -15,7 +15,6 @@ import type { WebSocket } from "ws";
 import { db } from "../db/query.js";
 import { voiceSessions } from "../db/voice-schema.js";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
-import { PLANNING_OPENING_ASK } from "../hosted/brain-host/planning.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { askRecord } from "../hosted/store/asks.js";
 import type { HostedStoreContext } from "../hosted/store/database.js";
@@ -275,7 +274,6 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       onBriefingAppend: (delivery, eventId) =>
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
       ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
-      ...(options.planning === true ? { opening: PLANNING_OPENING_ASK } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );
