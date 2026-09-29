@@ -10,11 +10,7 @@ import {
 } from "eve/evals";
 import { BRAIN_TOOL, WORKSPACE_FILE } from "../server/core.js";
 import { BRAIN_HOST_MODEL_FIXTURE } from "../server/hosted/brain-host/bounds.js";
-import {
-  documentTextOf,
-  PLANNING_OPENING_ASK,
-  repositoryTextOf,
-} from "../server/hosted/brain-host/planning.js";
+import { documentTextOf } from "../server/hosted/brain-host/planning.js";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
 import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool.js";
 
@@ -27,13 +23,10 @@ import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool.js";
  * plans instead: it reads the saved document its standing context hands it,
  * adds the developer's latest words as an unconfirmed assumption, and saves
  * the whole template back with its one scripted answer, the rest unanswered,
- * and answers with one question; asked to open a call, it saves nothing and
- * greets a plan that holds no assumption yet or recaps one that holds some,
- * closing on a question either way; told to look something up, it searches
+ * and answers with one question; told to look something up, it searches
  * the public web for it instead and answers with the first source the search
  * found, or says it found none; asked for the prompt, it writes a handoff
- * prompt naming the plan's repository and commit into the template's handoff
- * field, keeps it on every later save, and saves it with the assumptions as
+ * prompt into the template's handoff field, keeps it on every later save, and saves it with the assumptions as
  * they stand. It reads no field back out of the body: the one thing it looks
  * for is its own handoff sentence. It is selected only by
  * the fixture's own environment variable and a deployment never names it.
@@ -43,12 +36,6 @@ export const SCRIPTED_FACT = "The developer prefers short replies.";
 const SCRIPTED_USER_FILE = `# USER.md\n\n- 2026-09-15: ${SCRIPTED_FACT}\n`;
 const SCRIPTED_REPLY = "Noted: short replies from now on.";
 export const SCRIPTED_PLANNING_REPLY = "Noted as an assumption. Who should be able to do that?";
-export const SCRIPTED_OPENING_GREETING =
-  "I hear you have something new you want to work on. Let's plan it out together. What's the idea?";
-/** The resumed call's opening: a recap of how many assumptions stand, then the next question. */
-export function scriptedOpeningRecap(assumptions: number): string {
-  return `Welcome back. The plan holds ${assumptions} assumptions so far. Who should be able to do that?`;
-}
 /** What a developer's words start with when they ask the scripted planner to research the rest. */
 export const SCRIPTED_LOOK_UP = "Look up: ";
 export const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
@@ -56,7 +43,7 @@ export const SCRIPTED_NO_SOURCE_REPLY = "I found no source for that, so it stays
 /** What a developer's words start with when they ask the scripted planner for the handoff prompt. */
 export const SCRIPTED_WRITE_PROMPT = "Write the prompt.";
 /** How the scripted handoff prompt begins, the one sentence of its own the scripted planner looks for. */
-export const SCRIPTED_HANDOFF_OPENING = "You are implementing this plan in";
+export const SCRIPTED_HANDOFF_OPENING = "You are implementing this plan.";
 /** The one answer the scripted planner writes into the template. */
 export const SCRIPTED_PROBLEM = "Teammates cannot be invited to a workspace today.";
 
@@ -97,16 +84,11 @@ function researchReply(searched: MockModelToolResult): MockModelResponse {
  * The template as the scripted planner saves it: its one answer, the handoff
  * prompt where one is written, and the assumptions handed in.
  */
-function scriptedUpdate(
-  request: MockModelRequest,
-  handoff: boolean,
-  assumptions: PlanDocument["assumptions"],
-): PlanUpdate {
-  const repository = newestStanding(request, repositoryTextOf) ?? "an unknown repository";
+function scriptedUpdate(handoff: boolean, assumptions: PlanDocument["assumptions"]): PlanUpdate {
   return {
     ...EMPTY_PLAN_UPDATE,
     purpose: { ...EMPTY_PLAN_UPDATE.purpose, problem: SCRIPTED_PROBLEM },
-    handoffPrompt: handoff ? `${SCRIPTED_HANDOFF_OPENING} ${repository}.` : null,
+    handoffPrompt: handoff ? SCRIPTED_HANDOFF_OPENING : null,
     assumptions,
   };
 }
@@ -127,20 +109,12 @@ function planningResponse(request: MockModelRequest): MockModelResponse {
   }
   const document = handedDocument(request);
   const { assumptions } = document;
-  if (request.lastUserMessage === PLANNING_OPENING_ASK) {
-    return {
-      text:
-        assumptions.length === 0
-          ? SCRIPTED_OPENING_GREETING
-          : scriptedOpeningRecap(assumptions.length),
-    };
-  }
   if (request.lastUserMessage.startsWith(SCRIPTED_WRITE_PROMPT)) {
-    return savedUpdate(scriptedUpdate(request, true, assumptions));
+    return savedUpdate(scriptedUpdate(true, assumptions));
   }
   const handedOff = document.body.includes(SCRIPTED_HANDOFF_OPENING);
   const added = [...assumptions, { text: request.lastUserMessage, confirmed: false }];
-  return savedUpdate(scriptedUpdate(request, handedOff, added));
+  return savedUpdate(scriptedUpdate(handedOff, added));
 }
 
 /** The scripted responder, one response per model call. */
