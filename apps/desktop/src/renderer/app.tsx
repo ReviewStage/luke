@@ -51,6 +51,7 @@ import {
   type PanelPresentation,
 } from "./panel-state";
 import { PANEL_TAB, type PanelTab, type ShownPanelTab } from "./panel-tabs";
+import { planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { focusSearchField } from "./session-search";
@@ -261,6 +262,8 @@ export function App(): React.JSX.Element {
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
+  /** Whether a planning call is in progress, mirrored from the voice view below. */
+  const planningHeld = useRef(false);
 
   /**
    * Recording follows the account: a sign-out ends it rather than leaving it
@@ -338,6 +341,7 @@ export function App(): React.JSX.Element {
     // panel open for one that is not drawn would leave the pointer unable to
     // close a panel showing nothing but sessions.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
+    planningHeld: () => planningHeld.current,
     composerHeld: () =>
       credentialHeld.current || feedbackHeld.current || consentConnectHeld.current,
     onNotPanel: () => {
@@ -540,6 +544,16 @@ export function App(): React.JSX.Element {
     liveConversationEntries,
   } = useVoiceView();
   const { voiceError, voiceNotice, talkOpening, spokenAskPending } = voiceView;
+  const planningCallHeld = planningCallHoldsPanel(voiceView);
+  planningHeld.current = planningCallHeld;
+  // A call ending while the pointer is already away releases its hold the
+  // way letting go of the ask field does: the pointer cannot leave twice.
+  const wasPlanningCallHeld = useRef(false);
+  useEffect(() => {
+    const released = wasPlanningCallHeld.current && !planningCallHeld;
+    wasPlanningCallHeld.current = planningCallHeld;
+    if (released && !pointerIsInside()) onHitRegionLeave();
+  }, [planningCallHeld, pointerIsInside, onHitRegionLeave]);
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };

@@ -51,6 +51,7 @@ function documentMarkup(plan: Plan, copied: CopyShown = COPY_SHOWN.IDLE): string
       region: { kind: DOCUMENT_REGION.READY, plan },
       onRetry: ignore,
       onBack: ignore,
+      live: false,
       copy: { shown: copied, onPress: ignore },
     }),
   );
@@ -147,6 +148,7 @@ test("a document that could not be read shows the failure and Try again, never a
       region: { kind: DOCUMENT_REGION.FAILED },
       onRetry: ignore,
       onBack: ignore,
+      live: false,
       copy: RESTING,
     }),
   );
