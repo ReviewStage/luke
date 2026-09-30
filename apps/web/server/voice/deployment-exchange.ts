@@ -8,11 +8,13 @@ import {
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../hosted/brain-host/eve-sessions.js";
+import { openAiBrainModel } from "../hosted/brain-host/model.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { payloadKeyRing } from "../hosted/encryption.js";
 import { storeWriter } from "../hosted/store/index.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment, ExchangeReport } from "./live-exchange.js";
+import { PLAN_SCRIBE } from "./plan-scribe.js";
 
 /**
  * The exchange attachment as the sessions route passes it: `exchangeAttachment`
@@ -37,6 +39,8 @@ interface DeploymentExchangeSeams {
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on; nothing refuses every session. */
   readonly eveOrigin: () => string | undefined;
+  /** The deployment's OpenAI key the plan's notetaker runs on; nothing means a planning call writes no plan. */
+  readonly openAiKey: () => Redacted.Redacted | undefined;
   /** eve as the deployment reaches it for one account; a test hands in a fake, the function composes the real client below. */
   readonly eve?: (accountId: string) => EveSessions;
   /**
@@ -130,6 +134,10 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
       context: { keys: payloadKeyRing(encryptionSecret) },
       writer,
       eve,
+      scribeModel: () => {
+        const key = seams.openAiKey();
+        return key === undefined ? undefined : openAiBrainModel(key, PLAN_SCRIBE.MODEL);
+      },
       now: seams.now,
       createId: () => randomUUID(),
       report: seams.report,

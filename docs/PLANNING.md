@@ -13,14 +13,17 @@ The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
 
 - **One saved document per named plan**, a Markdown `body` and an `assumptions`
-  list of `{ text }`, written only by the model through
-  `update_plan`. The body is always the one fixed template (LUKE-352, "The
-  fixed template" below): the model sends the fields it changes, and the
+  list of `{ text }`, written only by the plan's notetaker through
+  `update_plan` ("The notetaker" below). The body is always the one fixed
+  template (LUKE-352, "The fixed template" below): the notetaker sends the
+  fields it changes, and the
   service merges them over the plan's stored fields and formats the result
   into the body. There are no versions, no
   stale-revision rejection, no approval state, and no export record.
 - **The model drives the workflow.** Question choice, agreement, corrections,
-  the final review, and the handoff live in the planning model's instructions.
+  and the final review live in the planning model's instructions, and the
+  planning model never writes the document: it is handed the saved document
+  every turn, so Luke keeps talking while the notetaker writes.
   The tab saves nothing of its own and decides nothing; it shows the saved
   document and the voice state.
 
@@ -167,6 +170,19 @@ same commit, and nothing refreshes it. The header shows it as
 - If the saved document cannot be read, the region shows the failure and a
   `Try again` button. The tab never draws a document it did not read.
 
+### The notetaker
+
+A planning call's plan is written by a notetaker beside the call
+(`apps/web/server/voice/plan-scribe.ts`), following GPT-Live's guidance to
+react to the transcript on a small model while speech goes on. It keeps both
+speakers' words from the call's sideband and the planning model's replies as
+research notes. Once the developer has been quiet for about a second, it makes
+one `gpt-5.6-luna` call over the saved document and what was said since its
+last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves the
+answer through `update_plan`, the handoff prompt included when the developer
+asks for it. Its runs never overlap, so it is the plan's only writer, and a
+run that fails moves nothing forward.
+
 ### The fixed template
 
 Every plan uses one fixed template (LUKE-352). There is no configurable
@@ -266,7 +282,7 @@ fields or a voice model; comparative evaluations are outside this work.
 
 The reference plan is "Teammate invitations" on a private repository,
 `acme/relay`. Each step shows what the developer does, what Luke says (in
-brief), and the document after the model's `update_plan`. Luke's lines are
+brief), and the document after the notetaker's `update_plan`. Luke's lines are
 illustrations of tone and order, not prompt text: LUKE-336 writes the
 instructions.
 
@@ -488,9 +504,9 @@ change, the model updates the same document, and Copy copies the new one.
   appear in the panel's caption strip, as for any call ("the microphone is not
   allowed yet", "Voice is temporarily unavailable"). The microphone button
   retries.
-- **Save.** A failed `update_plan` is the model's result to act on, so Luke
-  says the change did not save and tries again. The tab keeps showing the
-  last saved document and never shows an unsaved one.
+- **Save.** A notetaker run that fails, or that the allowance refuses, saves
+  nothing and says nothing; the next run after the developer speaks again is
+  handed the same lines. The tab keeps showing the last saved document.
 - **Repository.** A failed or incomplete read is reported to the model as
   such. Luke says it could not read the file and never describes unread code
   as inspected. If access is revoked, the reads fail the same way. Starting a
@@ -515,7 +531,7 @@ the exact shape.
 | Captions, levels, errors | The panel's caption strip (`useCaptionPresentation`, `caption-layout.ts`) and the wings' waveform (`notch-wings.tsx`), unchanged | None. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
-| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and `update_plan` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), and the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352). |
+| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and `update_plan` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 
@@ -544,7 +560,8 @@ changes when a check is run, not when one is planned.
 - The journey is held by hermetic tests at the model and transport
   boundaries (fake OpenAI, fake eve, scripted model, fake GitHub MCP, PGlite):
   - starting a plan at a resolved commit, and reads at that commit;
-  - `update_plan` saves, and the host's follow draws them within one beat;
+  - the notetaker saves what the developer said once they are quiet a beat,
+    and the host's follow draws it within one beat;
   - a spoken turn reaching the planning model in the plan's own
     conversation, with the saved document on every turn;
   - re-attaching and resuming on the same plan;

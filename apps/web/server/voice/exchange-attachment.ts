@@ -1,3 +1,4 @@
+import type { LanguageModel } from "ai";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
 
 import type { SqlClient } from "effect/unstable/sql";
@@ -26,8 +27,9 @@ import { upstreamSideband } from "./live-sideband.js";
  * exchange in the same commit.
  *
  * A planning call is the one departure: its asks and its record land in the
- * conversation of the plan the session is bound to, and it speaks nothing
- * of the desk, neither a beat nor a briefing.
+ * conversation of the plan the session is bound to, a notetaker writes the
+ * plan as the call goes, and it speaks nothing of the desk, neither a beat
+ * nor a briefing.
  *
  * One socket, one scope. The attachment builds the whole standing — the
  * account's main, the exchange, its adoption of the sideband, and the
@@ -42,6 +44,8 @@ interface ExchangeAttachmentDeps {
   readonly writer: StoreWriter;
   /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
   readonly eve: (accountId: string) => EveSessions;
+  /** The model a planning call's notetaker runs on, composed by the caller so no key enters here; nothing where the deployment has none. */
+  readonly scribeModel: () => LanguageModel | undefined;
   readonly now: () => number;
   readonly createId: () => string;
   /** Where a standing exchange's own reports go, each named with the route and the platform of the session it stood on. */
@@ -86,11 +90,15 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
           ? yield* standingMain(session.accountId, new Date(deps.now()))
           : yield* planConversation(session.accountId, session.planId);
       const planning = session.planId !== undefined;
+      const scribeModel = session.planId === undefined ? undefined : deps.scribeModel();
       const exchange = yield* hostedLiveExchange({
         userId: session.accountId,
         liveSessionId: session.sessionId,
         conversationId,
         planning,
+        ...(session.planId !== undefined && scribeModel !== undefined
+          ? { scribe: { planId: session.planId, model: scribeModel } }
+          : undefined),
         context: deps.context,
         writer: deps.writer,
         eve: deps.eve(session.accountId),

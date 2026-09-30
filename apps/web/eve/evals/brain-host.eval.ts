@@ -35,19 +35,17 @@ import {
 } from "../../server/hosted/plan-store";
 import { hostedStore } from "../../server/hosted/store";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
-import { UPDATE_PLAN_TOOL } from "../../server/hosted/update-plan-tool";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
-import { SCRIPTED_FACT, SCRIPTED_PLANNING_REPLY, SCRIPTED_PROBLEM } from "../scripted-model";
+import { SCRIPTED_FACT, SCRIPTED_PLANNING_REPLY } from "../scripted-model";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask under
  * the scripted fixture model, the tool adapters carry one USER.md write
  * recording a fact about the developer, and the relay writes the turn into
  * the store through the writer. A plan's conversation then runs the same way
- * under the planning model: the scripted model reads the saved document its
- * standing context hands it and saves an update through `update_plan`, and a
- * second session over the same conversation, a resume, is handed the document
- * as that first session left it. The eve server runs in this process with the database the
+ * under the planning model: the scripted model is handed the saved document
+ * in its standing context and answers in words, leaving the document as the
+ * notetaker saved it. The eve server runs in this process with the database the
  * environment names, so the eval reads the rows back from the same Postgres.
  * Where no database is named the eval skips rather than pretending: the
  * relay and the writer meet PGlite in the store tests, and this is where
@@ -77,7 +75,6 @@ const PLAN_SAVED = {
 } as const;
 const PLAN_WORDS = {
   FIRST: "Any member should be able to invite, not only admins.",
-  RESUMED: "A withdrawn invite shows a generic invalid-invite page.",
 } as const;
 
 /** What eve answers a session's opening with, read for the one field the eval continues from. */
@@ -258,20 +255,17 @@ export default defineEval({
       const runtimeSessionId = await readConversationRuntimeSessionId(run, conversation.id);
       assert.equal(runtimeSessionId, accepted.sessionId);
 
-      // A plan's conversation: the planning model reads the saved document it
-      // is handed and saves the developer's words through update_plan.
+      // A plan's conversation: the planning model is handed the saved document
+      // and answers in words; the notetaker beside the call writes the plan,
+      // so the turn leaves the document as it stood.
       const plan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
       await run(savePlanDocument(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_SAVED));
       const planConversationId = await planConversation(run, plan.id);
       const planning = await openSession(planConversationId, PLAN_WORDS.FIRST);
       const planningSession = await t.target.attachSession(planning.sessionId);
       planningSession.succeeded();
-      planningSession.calledTool(UPDATE_PLAN_TOOL.name);
       planningSession.notCalledTool(BRAIN_TOOL.WRITE_WORKSPACE_FILE);
-      const afterFirst = [...PLAN_SAVED.assumptions, { text: PLAN_WORDS.FIRST }];
-      const firstSaved = await planDocument(run, plan.id);
-      assert.deepEqual(firstSaved.assumptions, afterFirst);
-      assert.ok(firstSaved.body.includes(SCRIPTED_PROBLEM));
+      assert.deepEqual(await planDocument(run, plan.id), PLAN_SAVED);
       const planningRows = await readMessagesByTurn(
         run,
         planConversationId,
@@ -279,21 +273,11 @@ export default defineEval({
       );
       const planningAnswer = planningRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
       assert.ok(planningAnswer);
-      const planningCall = planningAnswer.parts.find((part) => isToolUIPart(part));
-      assert.equal(planningCall?.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.ok(
         planningAnswer.parts.some(
           (part) => isTextUIPart(part) && part.text === SCRIPTED_PLANNING_REPLY,
         ),
       );
-
-      // Resumed in a new session, the model is handed the document the first left.
-      const resumed = await openSession(planConversationId, PLAN_WORDS.RESUMED);
-      (await t.target.attachSession(resumed.sessionId)).succeeded();
-      assert.deepEqual(await planDocument(run, plan.id), {
-        body: firstSaved.body,
-        assumptions: [...afterFirst, { text: PLAN_WORDS.RESUMED }],
-      });
     } finally {
       await runtime.dispose();
     }

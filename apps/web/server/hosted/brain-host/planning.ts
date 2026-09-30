@@ -15,7 +15,7 @@ import {
   SEARCH_WEB_TOOL,
 } from "../public-research.js";
 import { GET_FILE_CONTENTS_TOOL, runGetFileContents } from "../repository-tools.js";
-import { type PlanDocumentBinding, runUpdatePlan, UPDATE_PLAN_TOOL } from "../update-plan-tool.js";
+import type { PlanDocumentBinding } from "../update-plan-tool.js";
 import type { HostedToolDeclaration } from "./tools.js";
 
 /**
@@ -25,7 +25,7 @@ import type { HostedToolDeclaration } from "./tools.js";
  * the store, run under a different prompt, a different standing context, and
  * a different tool list; nothing else about the turn changes. The
  * instructions below are the whole of the planning workflow: which question
- * comes next, how a correction moves the document, and when the plan is
+ * comes next, how a correction is taken, and when the plan is
  * complete are the model's judgment, and no code here tracks, scores, or
  * gates any of it. The service
  * hands the model the saved document at every turn and carries its tool
@@ -53,7 +53,7 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Use
 
 The goal is to produce a highly detailed plan document that can be turned into a prompt that a separate agent can implement without having heard this conversation. The plan document should be detailed enough so there's no ambiguity and two different agents would implement the same document the exact same way. Every field of the document is a branch of the design tree.
 
-You are not allowed to write anything to the document that you assumed or guessed, only what the user has explicitly stated or implied.
+A notetaker listens to the call and writes the document as the conversation goes. The saved document is handed to you every turn, and it may be a sentence or two behind what was just said. You never write the document yourself.
 
 ## How to plan
 
@@ -69,13 +69,36 @@ The session is done when the frontier is empty: every branch of the design tree 
 
 ### Available tools
 
-- update_plan is the only way to change the document. Write to the document as often as possible so the user can see the plan progress.
 - get_file_contents reads the plan's repository. Use it to find the facts the repository holds.
 - search_web and read_web_page are ways to search the Internet.
 
 ## Return the result
 
 Return the relevant facts, the task's current status, and the next step. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
+`;
+
+/**
+ * The instructions the plan's notetaker runs under: the scribe that listens
+ * to a planning call and writes the document while Luke and the developer
+ * talk (`apps/web/server/voice/plan-scribe.ts`). It decides nothing of the
+ * conversation; it records what was said, in the template's fields.
+ */
+export const SCRIBE_INSTRUCTIONS = `
+You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You write the plan document while they talk.
+
+The goal is a plan detailed enough that a separate agent could implement it without having heard the call, and two different agents would implement it the same way.
+
+You are handed the saved document, the call's latest lines, and Luke's research notes. Answer with the fields of the fixed template that the latest lines change:
+
+- Write only what the developer stated, agreed to, or clearly implied. Luke's proposals and research count once the developer has agreed to them. Never write a guess.
+- Send only the fields that change. A field left out keeps its saved value; null clears it back to unanswered. A list (scenarios, steps, examples, open questions, assumptions) is sent whole when any of it changes.
+- Keep exact names from Luke's research notes: file paths, functions, tables, commands.
+- Write each answer as a Markdown bullet list, one point per bullet and a line or two each, so the plan can be skimmed. Use a sentence of prose only where the whole answer is one short point.
+- Keep each field's words as tight as a good design document's.
+- When the developer asks for the handoff prompt, write it into the handoff field from the whole document.
+- When the latest lines change nothing, answer an empty object.
+
+Transcripts can contain mistakes, unfinished phrases, and later corrections. Follow the latest correction.
 `;
 
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
@@ -85,8 +108,8 @@ const DOCUMENT_MARKER = "[saved document]";
 /**
  * What a planning turn is handed beside its instructions every turn: the
  * plan's name and the saved document as JSON, read again from the row each
- * turn so a save the model made is what the next turn reads. A plan that no
- * longer stands gets the heading alone; update_plan says why it cannot save.
+ * turn so what the notetaker saved is what the next turn reads. A plan that no
+ * longer stands gets the heading alone.
  */
 export function planningStandingContext(stored: StoredPlan | undefined, now: number): string {
   const heading = `${PLAN_MARKER} ${new Date(now).toISOString()}`;
@@ -129,17 +152,13 @@ type PlanningToolServices = SqlClient.SqlClient | GitHubAccess | HttpClient.Http
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.
- * `update_plan` is the one write; `get_file_contents` reads the plan's
+ * None writes the plan, which is the notetaker's; `get_file_contents` reads the plan's
  * repository at the plan's commit through GitHub's hosted MCP tools, under
  * the same binding; the public search and page read (`public-research.ts`)
  * answer what the repository cannot. Every read's result goes back to the
  * model as data.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
-  {
-    ...UPDATE_PLAN_TOOL,
-    run: (call, input) => Effect.map(runUpdatePlan(call.plan, input), (result) => ({ ...result })),
-  },
   {
     ...GET_FILE_CONTENTS_TOOL,
     run: (call, input) =>

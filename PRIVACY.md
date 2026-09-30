@@ -208,6 +208,19 @@ reads any of them. Asking Luke to forget removes the line you name from his
 than claiming it erased. Forgetting does not delete the conversation itself;
 Clear is still the separate action above.
 
+**How the plan is written during a planning call.** While you talk a plan
+through with Luke on a planning call, a notetaker on our service writes the
+plan document; Luke's own judgment no longer does. Once you have been quiet
+for about a second, it makes one call to OpenAI (`gpt-5.6-luna`) on our key,
+carrying the plan as it is saved, both sides of what was said since its last
+note with a few lines before them, and the words of Luke's own replies, and
+saves the fields that call answers into that one plan. It runs only during a
+planning call you started and only for that call's plan, each run counts
+against the same daily allowance as Luke's turns, and a run the allowance
+refuses, or that fails, writes nothing. Nothing it reads or answers is kept
+beyond the saved plan, said aloud, or shown anywhere but the plan itself, and
+OpenAI keeps the request and its reply under its own retention policy.
+
 **Seeing what he saved.** The Mac app's Settings has a Memory page that reads
 the notebook back to you: `MEMORY.md`, `USER.md`, and the newest of the dated
 notes under `memory/`, as they stand on our service, drawn as the Markdown they
@@ -550,7 +563,8 @@ Send.
   calls' billing prefix instead of paying for it again. It identifies nothing
   — no session id or title can be read out of a hash — and our service passes
   it upstream and keeps it no longer than the request. The same allowance
-  meters a request to count a call's tokens or to fold Luke's working memory.
+  meters a request to count a call's tokens or to fold Luke's working memory,
+  and each note the planning notetaker writes.
   A
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no
