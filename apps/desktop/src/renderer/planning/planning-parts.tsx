@@ -150,12 +150,15 @@ export function PlanDocumentView({
   onRetry,
   onBack,
   copy,
+  live,
 }: {
   region: DocumentRegion;
   onRetry: () => void;
   onBack: () => void;
   /** What Copy shows for the drawn document, and its press. */
   copy: { shown: CopyShown; onPress: () => void };
+  /** Whether the open plan's call is in progress, so the plan is still being written. */
+  live: boolean;
 }): React.JSX.Element {
   switch (region.kind) {
     case DOCUMENT_REGION.NONE:
@@ -199,7 +202,7 @@ export function PlanDocumentView({
             copy={copy}
             onBack={onBack}
           />
-          <PlanBody plan={plan} />
+          <PlanBody plan={plan} live={live} />
         </section>
       );
     }

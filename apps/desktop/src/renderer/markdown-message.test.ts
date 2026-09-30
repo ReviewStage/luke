@@ -71,5 +71,10 @@ test("a message typed partway is drawn as far as it has reached, its tags closed
   );
   // A unit the typing has not reached yet is cut without a caret, and one reached to its end is whole.
   assert.equal(draw("Invite ".length, false), '<div class="markdown"><p>Invite </p></div>');
-  assert.equal(draw(words.length), render(words));
+  assert.equal(draw(words.length, false), render(words));
+  // A caret waiting at the end of a whole message stands after its last word.
+  assert.equal(
+    draw(words.length),
+    render(words).replace("<li>second</li>", `<li>second${caret}</li>`),
+  );
 });

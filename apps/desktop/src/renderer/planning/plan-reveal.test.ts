@@ -28,7 +28,7 @@ function body(problem: string | null, users: string | null = null): string {
 
 /** The words each unit draws, cut where its reveal stops. */
 function drawn(state: ChaseState): readonly string[] {
-  return chaseView(state).map((view) =>
+  return chaseView(state, false).map((view) =>
     view.reveal === undefined ? view.words : view.words.slice(0, view.reveal.upTo),
   );
 }
@@ -91,7 +91,7 @@ test("a rewrite cuts back to the start of the line that changed and types forwar
 
 test("units behind type in document order, with the caret and the writing mark on the first", () => {
   const typing = retarget(chaseOpened(body(null)), body("Only an admin.", "Members."));
-  const views = chaseView(typing);
+  const views = chaseView(typing, false);
   assert.deepEqual(
     views.map((view) => [view.reveal?.caret, view.writing]),
     views.map((_, index) =>
@@ -106,12 +106,12 @@ test("units behind type in document order, with the caret and the writing mark o
 test("a unit is lit as it catches up, and reduced motion shows and lights a change at once", () => {
   const before = chaseOpened(body(null));
   const settled = chaseStepped(retarget(before, body("Only an admin.")), 60_000);
-  assert.equal(chaseView(settled)[2]?.fresh, true);
-  assert.equal(chaseView(settled)[3]?.fresh, false);
+  assert.equal(chaseView(settled, false)[2]?.fresh, true);
+  assert.equal(chaseView(settled, false)[3]?.fresh, false);
 
   const reduced = chaseRetargeted(before, body("Only an admin."), NO_ASSUMPTIONS, true);
   assert.equal(chaseBehind(reduced), false);
-  assert.equal(chaseView(reduced)[2]?.fresh, true);
+  assert.equal(chaseView(reduced, false)[2]?.fresh, true);
 });
 
 test("only an assumption the newer document added is lit", () => {
@@ -122,4 +122,15 @@ test("only an assumption the newer document added is lit", () => {
     false,
   );
   assert.deepEqual([...state.freshAssumptions], [1]);
+});
+
+test("once the typing catches up on a live call, the caret waits at the end of the field it last wrote", () => {
+  const typing = retarget(chaseOpened(body(null)), body("Only an admin.", "Members."));
+  const caught = chaseStepped(typing, 60_000);
+  const waiting = chaseView(caught, true).map((view) => [view.resting, view.reveal?.caret]);
+  assert.deepEqual(waiting[3], [true, true]);
+  assert.equal(waiting.filter(([resting]) => resting).length, 1);
+  // Off the call, or before anything has typed, no caret waits anywhere.
+  assert.ok(chaseView(caught, false).every((view) => view.reveal === undefined));
+  assert.ok(chaseView(chaseOpened(body("Only an admin.")), true).every((view) => !view.resting));
 });

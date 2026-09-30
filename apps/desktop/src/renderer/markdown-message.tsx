@@ -68,7 +68,7 @@ const markMatches =
     markChildren(tree.children, tokens);
   };
 
-/** How far a message is drawn while it is being typed, and whether the caret stands at the end of it. */
+/** How far a message is drawn while it is being typed, and whether the caret stands at the end of it, the whole message drawn included. */
 export interface MarkdownReveal {
   /** The offset in the words the drawing stops at. */
   upTo: number;
@@ -112,9 +112,14 @@ function cutChildren(children: HastNode[], upTo: number): boolean {
   return false;
 }
 
-/** The innermost element the drawing ends in, where the caret goes. */
+/** Whether a node is the line break the renderer leaves between block elements, which draws nothing. */
+function isBlockBreak(node: HastNode): boolean {
+  return node.type === "text" && node.value.trim() === "";
+}
+
+/** The innermost element the drawing ends in, past any block breaks, where the caret goes. */
 function lastParent(parent: HastParent): HastParent {
-  const last = parent.children.at(-1);
+  const last = parent.children.findLast((child) => !isBlockBreak(child));
   return last?.type === "element" && last.children.length > 0 ? lastParent(last) : parent;
 }
 
@@ -122,8 +127,8 @@ function lastParent(parent: HastParent): HastParent {
 const revealUpTo =
   (reveal: MarkdownReveal) =>
   (tree: HastParent): void => {
-    if (!cutChildren(tree.children, reveal.upTo) || !reveal.caret) return;
-    lastParent(tree).children.push(structuredClone(CARET));
+    cutChildren(tree.children, reveal.upTo);
+    if (reveal.caret) lastParent(tree).children.push(structuredClone(CARET));
   };
 
 /**

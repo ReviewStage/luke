@@ -196,6 +196,14 @@
   background: var(--accent);
 }
 
+/* The caret waiting where the last word went in, blinking as an editor's
+   idle cursor does, and held by `--loop-motion` like every animation with no
+   end of its own. */
+.plan-caret-resting .markdown-caret {
+  animation: plan-caret-blink 1060ms steps(1, end) infinite;
+  animation-play-state: var(--loop-motion);
+}
+
 /* The field the caret is typing in: a small accent dot after its heading,
    breathing on the skeleton's loop and held by `--loop-motion` like every
    animation with no end of its own. */
@@ -229,6 +237,12 @@
   animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
   content: "";
   pointer-events: none;
+}
+
+@keyframes plan-caret-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 @keyframes plan-fresh {

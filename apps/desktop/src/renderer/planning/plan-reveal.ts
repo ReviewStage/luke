@@ -29,18 +29,22 @@ interface ChaseUnit {
   readonly fresh: boolean;
 }
 
-/** Every unit of the open plan's body, and which assumptions the newest document added. */
+/** Every unit of the open plan's body, which assumptions the newest document added, and where the typing last stood. */
 export interface ChaseState {
   readonly units: readonly ChaseUnit[];
   readonly freshAssumptions: ReadonlySet<number>;
+  /** The unit the typing last grew, where the caret rests once it catches up; absent until anything types. */
+  readonly lastTyped: number | undefined;
 }
 
 /** What one unit draws: its words, how far, whether the caret is in it, and whether it is lit. */
 export interface UnitView {
   readonly words: string;
-  /** Absent while the unit is shown whole. */
+  /** Absent while the unit is shown whole with no caret in it. */
   readonly reveal: { readonly upTo: number; readonly caret: boolean } | undefined;
   readonly writing: boolean;
+  /** Whether the caret stands at the unit's end waiting, which blinks where a typing caret holds solid. */
+  readonly resting: boolean;
   readonly fresh: boolean;
 }
 
@@ -89,6 +93,7 @@ export function chaseOpened(body: string): ChaseState {
   return {
     units: planUnits(body).map((target) => ({ target, shown: target.length, fresh: false })),
     freshAssumptions: new Set(),
+    lastTyped: undefined,
   };
 }
 
@@ -103,10 +108,13 @@ export function chaseRetargeted(
   added: { readonly before: readonly string[]; readonly after: readonly string[] },
   reduced: boolean,
 ): ChaseState {
+  let lastTyped = state.lastTyped;
   const units = planUnits(body).map((target, index): ChaseUnit => {
     const previous = state.units[index];
     if (previous?.target === target) return previous;
     const shownWords = previous?.target.slice(0, Math.floor(previous.shown)) ?? "";
+    // Shown at once, a change is where the last word went in all the same.
+    if (reduced) lastTyped = index;
     if (reduced) return { target, shown: target.length, fresh: true };
     return { target, shown: keptLength(shownWords, target), fresh: false };
   });
@@ -115,7 +123,7 @@ export function chaseRetargeted(
   added.after.forEach((text, index) => {
     if (!before.has(text)) freshAssumptions.add(index);
   });
-  return { units, freshAssumptions };
+  return { units, freshAssumptions, lastTyped };
 }
 
 /** Whether any unit is still behind its target. */
@@ -127,31 +135,40 @@ export function chaseBehind(state: ChaseState): boolean {
 export function chaseStepped(state: ChaseState, elapsedMs: number): ChaseState {
   if (!chaseBehind(state)) return state;
   let budget = (Math.max(0, elapsedMs) * CHASE_CHARS_PER_SECOND) / 1_000;
-  const units = state.units.map((unit): ChaseUnit => {
+  let lastTyped = state.lastTyped;
+  const units = state.units.map((unit, index): ChaseUnit => {
     const behind = unit.target.length - unit.shown;
     if (behind <= 0 || budget <= 0) return unit;
     const step = Math.min(behind, budget);
     budget -= step;
+    lastTyped = index;
     const shown = unit.shown + step;
     return { target: unit.target, shown, fresh: shown >= unit.target.length };
   });
-  return { units, freshAssumptions: state.freshAssumptions };
+  return { units, freshAssumptions: state.freshAssumptions, lastTyped };
 }
 
-/** What each unit draws now: the caret and the writing mark on the first unit still behind. */
-export function chaseView(state: ChaseState): readonly UnitView[] {
+/**
+ * What each unit draws now: the caret and the writing mark on the first unit
+ * still behind. With nothing behind and the plan still `live`, being written
+ * on a call, the caret rests at the end of the unit the typing last grew, the
+ * way an editor's cursor waits where the last word went in.
+ */
+export function chaseView(state: ChaseState, live: boolean): readonly UnitView[] {
+  const resting = live && !chaseBehind(state) ? state.lastTyped : undefined;
   let caretPlaced = false;
-  return state.units.map((unit) => {
-    if (unit.shown >= unit.target.length) {
-      return { words: unit.target, reveal: undefined, writing: false, fresh: unit.fresh };
+  return state.units.map((unit, index) => {
+    const words = unit.target;
+    if (index === resting) {
+      const reveal = { upTo: words.length, caret: true };
+      return { words, reveal, writing: false, resting: true, fresh: unit.fresh };
+    }
+    if (unit.shown >= words.length) {
+      return { words, reveal: undefined, writing: false, resting: false, fresh: unit.fresh };
     }
     const caret = !caretPlaced;
     caretPlaced = true;
-    return {
-      words: unit.target,
-      reveal: { upTo: Math.floor(unit.shown), caret },
-      writing: caret,
-      fresh: false,
-    };
+    const reveal = { upTo: Math.floor(unit.shown), caret };
+    return { words, reveal, writing: caret, resting: false, fresh: false };
   });
 }

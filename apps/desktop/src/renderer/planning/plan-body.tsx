@@ -47,6 +47,9 @@ const FRESH_CLASS = "plan-fresh";
 /** The class of the unit the caret is typing in, whose heading wears the writing mark. */
 const WRITING_CLASS = "plan-writing";
 
+/** The class of the unit the caret waits at the end of, where it blinks. */
+const RESTING_CLASS = "plan-caret-resting";
+
 /** The presses that say the developer is reading somewhere of their own, which the caret stops following. */
 const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
 
@@ -79,7 +82,7 @@ function aimed(chase: Chase, plan: Plan): Chase {
  * behind. A document arriving mid-typing is aimed at from what is shown, so
  * the typing carries on toward it without a jump.
  */
-function usePlanChase(plan: Plan): PlanChase {
+function usePlanChase(plan: Plan, live: boolean): PlanChase {
   const [chase, setChase] = useState(() => opened(plan));
   let current = chase;
   const moved =
@@ -105,7 +108,7 @@ function usePlanChase(plan: Plan): PlanChase {
   }, [behind]);
 
   return {
-    views: chaseView(current.state),
+    views: chaseView(current.state, live),
     behind,
     freshAssumptions: current.state.freshAssumptions,
   };
@@ -113,6 +116,7 @@ function usePlanChase(plan: Plan): PlanChase {
 
 function unitClass(view: UnitView): string {
   if (view.writing) return `plan-unit ${WRITING_CLASS}`;
+  if (view.resting) return `plan-unit ${RESTING_CLASS}${view.fresh ? ` ${FRESH_CLASS}` : ""}`;
   return view.fresh ? `plan-unit ${FRESH_CLASS}` : "plan-unit";
 }
 
@@ -131,9 +135,13 @@ function AssumptionRow({
   );
 }
 
-/** The plan's body and its assumptions, the assumptions' section standing even while the list is empty. */
-export function PlanBody({ plan }: { plan: Plan }): React.JSX.Element {
-  const { views, behind, freshAssumptions } = usePlanChase(plan);
+/**
+ * The plan's body and its assumptions, the assumptions' section standing even
+ * while the list is empty. `live` is the plan's call in progress, which keeps
+ * the caret waiting where the typing last stopped.
+ */
+export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.JSX.Element {
+  const { views, behind, freshAssumptions } = usePlanChase(plan, live);
   const scroller = useRef<HTMLDivElement>(null);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
