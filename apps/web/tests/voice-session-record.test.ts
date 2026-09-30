@@ -113,8 +113,8 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         const plan = yield* createPlan(owner, PLAN);
         const liveSessionId = `live_p_${randomUUID()}`;
 
-        assert.equal(yield* record.heldPlan({ userId: owner, planId: plan.id }), true);
-        assert.equal(yield* record.heldPlan({ userId: other, planId: plan.id }), false);
+        assert.equal((yield* record.heldPlan({ userId: owner, planId: plan.id }))?.id, plan.id);
+        assert.equal(yield* record.heldPlan({ userId: other, planId: plan.id }), undefined);
         yield* record.register({ userId: owner, sessionId: liveSessionId, planId: plan.id });
         assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
           planId: plan.id,
@@ -126,7 +126,7 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
           planId: plan.id,
         });
-        assert.equal(yield* record.heldPlan({ userId: owner, planId: plan.id }), false);
+        assert.equal(yield* record.heldPlan({ userId: owner, planId: plan.id }), undefined);
       }),
   );
 

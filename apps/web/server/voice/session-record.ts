@@ -1,3 +1,4 @@
+import type { Plan } from "@sidecar/hosted/plan-wire";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -114,8 +115,8 @@ export interface VoiceSessionRecord {
   register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<string | undefined>;
   /** The device row the account holds under the id named, or nothing: the check the door makes before a session is spent on the claim. */
   heldDevice(input: VoiceSessionDeviceClaim): VoiceSessionRecordEffect<HeldVoiceDevice | undefined>;
-  /** Whether the account holds the plan named: the check the door makes before a planning call is spent. */
-  heldPlan(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<boolean>;
+  /** The plan named, where the account holds it: the check the door makes before a planning call is spent, and what the call opens knowing. */
+  heldPlan(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<Plan | undefined>;
   /** The live session named, where the account created it, with the plan it was bound to: one lookup over the indexed pair. */
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<OwnedVoiceSession | undefined>;
   noteUsage(input: VoiceSessionUsage): VoiceSessionRecordEffect<void>;
@@ -242,7 +243,11 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           }),
         }),
       ),
-    heldPlan: (input) => Effect.map(readPlan(input.userId, input.planId), Option.isSome),
+    heldPlan: (input) =>
+      Effect.map(
+        readPlan(input.userId, input.planId),
+        Option.match({ onNone: () => undefined, onSome: (stored) => stored.plan }),
+      ),
     owned: (input) =>
       Effect.map(
         findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),

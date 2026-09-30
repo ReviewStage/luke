@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { DevicePlatform } from "@sidecar/hosted";
+import type { Plan } from "@sidecar/hosted/plan-wire";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
@@ -353,7 +354,7 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
   /** The device rows the fake holds, by the account that holds each and the platform each names. */
   devices: Array<{ userId: string; deviceId: string; platform: DevicePlatform }>;
   /** The plans the fake holds, by the account that holds each. */
-  plans: Array<{ userId: string; planId: string }>;
+  plans: Array<{ userId: string; plan: Plan }>;
   /** Every usage snapshot, in order. */
   usage: Array<{ sessionId: string; seconds: number }>;
   closes: RecordedClose[];
@@ -393,8 +394,10 @@ export function fakeSessionRecord(): FakeSessionRecord {
         return held === undefined ? undefined : { platform: held.platform };
       }),
     heldPlan: (input) =>
-      Effect.sync(() =>
-        fake.plans.some((plan) => plan.userId === input.userId && plan.planId === input.planId),
+      Effect.sync(
+        () =>
+          fake.plans.find((held) => held.userId === input.userId && held.plan.id === input.planId)
+            ?.plan,
       ),
     owned: (input) =>
       Effect.sync(() => {

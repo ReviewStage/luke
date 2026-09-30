@@ -1,3 +1,4 @@
+import type { Plan } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -20,6 +21,9 @@ import {
 } from "../core.js";
 import {
   decodeLivePayload,
+  developerSeedItem,
+  ESTIMATED_CHARS_PER_TOKEN,
+  type InitialItem,
   LIVE_INPUT_BOUNDS,
   LIVE_SCENE,
   LIVE_SESSION_OUTCOME,
@@ -29,6 +33,7 @@ import {
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   SEED_ROLE,
+  seedItemTokens,
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { type SignedInRoute, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
@@ -95,6 +100,8 @@ type AdmittedAccount =
       deviceId: string | undefined;
       platform: DevicePlatform | undefined;
       quota: SessionCreatedFrame["quota"];
+      /** The plan a planning call is about, read as the account holds it; none for every other session. */
+      plan: Plan | undefined;
     }
   | Refusal;
 
@@ -174,6 +181,44 @@ function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
       item.content.every((part) => part.text.length <= SESSIONS_INPUT_BOUNDS.CHARS),
     )
   );
+}
+
+/** What the plan seed opens with, so the voice reads it as the service's note rather than the developer's words. */
+const PLAN_SEED_MARKER = "[plan]";
+
+/**
+ * The plan a planning call is about, as one developer message: its name, its
+ * repository, and the saved document as the developer sees it. Note that a
+ * call is seeded with the plan and nothing else, because the voice otherwise
+ * opens knowing no plan at all and reads its role as a new task; what was
+ * said on an earlier call is the planning model's, which the voice asks.
+ */
+function planSeedText(plan: Plan): string {
+  const assumptions = plan.document.assumptions.map((assumption) => `- ${assumption.text}`);
+  return [
+    `${PLAN_SEED_MARKER} This call continues the saved plan below. It is not a new plan.`,
+    `Name: ${plan.name}`,
+    `Repository: ${plan.repository.owner}/${plan.repository.name}`,
+    "",
+    plan.document.body,
+    ...(assumptions.length === 0 ? [] : ["", "Assumptions:", ...assumptions]),
+  ].join("\n");
+}
+
+/**
+ * The device's own input with the plan's seed ahead of it, the seed cut from
+ * its end to what the API's token bound leaves beside the device's items, so
+ * the name and the top of the document are what a long plan keeps. Nothing is
+ * added where there is no plan or no room.
+ */
+function withPlanSeed(
+  input: readonly InitialItem[],
+  plan: Plan | undefined,
+): readonly InitialItem[] {
+  if (plan === undefined || input.length >= LIVE_INPUT_BOUNDS.MESSAGES) return input;
+  const room = (LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input)) * ESTIMATED_CHARS_PER_TOKEN;
+  if (room <= PLAN_SEED_MARKER.length) return input;
+  return [developerSeedItem(planSeedText(plan).slice(0, room)), ...input];
 }
 
 /** The scene a WebRTC session is created under: the introduction's, a planning call's, or the desktop's. */
@@ -277,12 +322,14 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const platform = claimed?.platform;
       // A planning call names a plan, and a plan the account does not hold is
       // refused before the spend exactly as a device it does not hold is.
-      if (planId !== undefined && !(yield* record.heldPlan({ userId: accountId, planId }))) {
+      const plan =
+        planId === undefined ? undefined : yield* record.heldPlan({ userId: accountId, planId });
+      if (planId !== undefined && plan === undefined) {
         return refused(HOSTED_API_ERROR.NOT_FOUND, platform);
       }
       const spend = yield* accounts.spend(accountId);
       if (!spend.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED, platform);
-      return { accountId, deviceId: admission.deviceId, platform, quota: spend.quota };
+      return { accountId, deviceId: admission.deviceId, platform, quota: spend.quota, plan };
     });
 
   /**
@@ -333,7 +380,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         scene: sceneOf(route, frame.planId),
         model: options.model,
         voice: frame.voice,
-        input: frame.input,
+        input: withPlanSeed(frame.input, account?.plan),
         clientEvents: RENDERER_CLIENT_EVENTS,
         serverEvents: RENDERER_SERVER_EVENTS,
       });
