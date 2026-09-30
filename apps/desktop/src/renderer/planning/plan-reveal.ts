@@ -6,16 +6,13 @@
  * always the template's own, and the template's order is fixed, so units line
  * up by position from one document to the next. Each unit holds its target,
  * the newest words, and how much of them is shown; a frame grows the shown
- * words toward the target, faster the further behind they are, so the caret
- * keeps close behind a scribe streaming its draft and never jumps. Everything
- * here is pure; the frame clock is the hook's.
+ * words toward the target at a person's typing pace, so the plan reads as
+ * being written rather than pasted. Everything here is pure; the frame clock
+ * is the hook's.
  */
 
-/** The pace a short change types at. */
-export const CHASE_BASE_CHARS_PER_SECOND = 60;
-
-/** How long any backlog takes to clear on top of the base pace, however long it is. */
-export const CHASE_CATCH_UP_MS = 400;
+/** The pace every change types at: a fast typist, about 140 words a minute. */
+export const CHASE_CHARS_PER_SECOND = 12;
 
 /** A line the formatter opens a section or a field with. */
 const UNIT_HEADING = /^#{2,3} /u;
@@ -62,12 +59,6 @@ function keptLength(shown: string, target: string): number {
   let shared = 0;
   while (shared < shown.length && shown[shared] === target[shared]) shared += 1;
   return target.lastIndexOf("\n", shared) + 1;
-}
-
-function backlogOf(units: readonly ChaseUnit[]): number {
-  let backlog = 0;
-  for (const unit of units) backlog += unit.target.length - unit.shown;
-  return backlog;
 }
 
 /**
@@ -132,16 +123,10 @@ export function chaseBehind(state: ChaseState): boolean {
   return state.units.some((unit) => unit.shown < unit.target.length);
 }
 
-/**
- * One frame of `elapsedMs`: the budget is the base pace plus enough to clear
- * the whole backlog within the catch-up window, spent on the units behind in
- * document order.
- */
+/** One frame of `elapsedMs`: the typing pace's budget, spent on the units behind in document order. */
 export function chaseStepped(state: ChaseState, elapsedMs: number): ChaseState {
-  const backlog = backlogOf(state.units);
-  if (backlog === 0) return state;
-  const perSecond = CHASE_BASE_CHARS_PER_SECOND + (backlog * 1_000) / CHASE_CATCH_UP_MS;
-  let budget = (Math.max(0, elapsedMs) * perSecond) / 1_000;
+  if (!chaseBehind(state)) return state;
+  let budget = (Math.max(0, elapsedMs) * CHASE_CHARS_PER_SECOND) / 1_000;
   const units = state.units.map((unit): ChaseUnit => {
     const behind = unit.target.length - unit.shown;
     if (behind <= 0 || budget <= 0) return unit;

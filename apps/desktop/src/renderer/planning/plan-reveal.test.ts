@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { EMPTY_PLAN_UPDATE, planBody } from "@sidecar/hosted/plan-template";
 import { test } from "vitest";
 import {
-  CHASE_BASE_CHARS_PER_SECOND,
-  CHASE_CATCH_UP_MS,
+  CHASE_CHARS_PER_SECOND,
   type ChaseState,
   chaseBehind,
   chaseOpened,
@@ -63,32 +62,23 @@ test("an opened plan is drawn whole, and a document that changed nothing types n
   assert.deepEqual(drawn(state), planUnits(words));
 });
 
-test("added words type in from where the shown words end, at the base pace plus the backlog's share", () => {
+test("added words type in from where the shown words end, at a typist's pace however many there are", () => {
   const before = body("Only an admin.");
-  const after = body("Only an admin.\n\nBy hand, from the settings page.");
-  const added = "\n\nBy hand, from the settings page.".length;
+  const after = body(`Only an admin.\n\n${"By hand, from the settings page. ".repeat(20)}`);
   const typing = retarget(chaseOpened(before), after);
   assert.equal(drawn(typing)[2], "### Problem\n\nOnly an admin.");
 
-  const perSecond = CHASE_BASE_CHARS_PER_SECOND + (added * 1_000) / CHASE_CATCH_UP_MS;
-  const tenth = chaseStepped(typing, 100);
+  const second = chaseStepped(typing, 1_000);
   assert.equal(
-    drawn(tenth)[2]?.length,
-    "### Problem\n\nOnly an admin.".length + Math.floor(perSecond / 10),
+    drawn(second)[2]?.length,
+    "### Problem\n\nOnly an admin.".length + CHASE_CHARS_PER_SECOND,
   );
-  assert.equal(chaseBehind(chaseStepped(typing, CHASE_CATCH_UP_MS)), false);
-});
-
-test("however long the backlog, it clears inside the catch-up window", () => {
-  const long = "A sentence the scribe wrote. ".repeat(200);
-  const typing = retarget(chaseOpened(body(null)), body(long));
-  assert.equal(chaseBehind(chaseStepped(typing, CHASE_CATCH_UP_MS - 50)), true);
-  assert.equal(chaseBehind(chaseStepped(typing, CHASE_CATCH_UP_MS)), false);
+  assert.equal(chaseBehind(second), true);
 });
 
 test("a newer document mid-typing carries on from what is shown rather than restarting", () => {
   const opened = chaseOpened(body(null));
-  const first = chaseStepped(retarget(opened, body("Only an admin can")), 100);
+  const first = chaseStepped(retarget(opened, body("Only an admin can")), 1_000);
   const shown = drawn(first)[2] ?? "";
   const second = retarget(first, body("Only an admin can add a member."));
   assert.equal(drawn(second)[2], shown);
@@ -109,13 +99,13 @@ test("units behind type in document order, with the caret and the writing mark o
     ),
   );
   // Spent in order: the first field finishes before the second moves.
-  const partway = chaseStepped(typing, 50);
+  const partway = chaseStepped(typing, 500);
   assert.equal(drawn(partway)[3], "### Users\n\n");
 });
 
 test("a unit is lit as it catches up, and reduced motion shows and lights a change at once", () => {
   const before = chaseOpened(body(null));
-  const settled = chaseStepped(retarget(before, body("Only an admin.")), CHASE_CATCH_UP_MS);
+  const settled = chaseStepped(retarget(before, body("Only an admin.")), 60_000);
   assert.equal(chaseView(settled)[2]?.fresh, true);
   assert.equal(chaseView(settled)[3]?.fresh, false);
 
