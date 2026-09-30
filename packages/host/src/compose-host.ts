@@ -9,6 +9,7 @@ import { observationSupervisor } from "@sidecar/runtime";
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
@@ -238,7 +239,9 @@ export const hostAssemblyLayer: Layer.Layer<
       cloudKeyHeld: calendars.settleKeyGate,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
-      endLiveSession: Effect.suspend(() => live.service.endSession()),
+      endLiveSession: Effect.suspend(() =>
+        live.service.endSession(LIVE_SESSION_END_CAUSE.VOICE_CHANGED),
+      ),
       refreshAnnouncementHold: calendars.refreshAnnouncementHold,
       reportPresence: devices.reportPresence,
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
