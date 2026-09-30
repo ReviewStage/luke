@@ -97,7 +97,13 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         conversationId,
         planning,
         ...(session.planId !== undefined && scribeModel !== undefined
-          ? { scribe: { planId: session.planId, model: scribeModel } }
+          ? {
+              scribe: {
+                planId: session.planId,
+                model: scribeModel,
+                ...(session.onPlanDraft ? { onDraft: session.onPlanDraft } : undefined),
+              },
+            }
           : undefined),
         context: deps.context,
         writer: deps.writer,

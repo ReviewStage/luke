@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
   HOSTED_API_ERROR,
+  type PlanDraftFrame,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
@@ -714,6 +715,42 @@ it.live(
       assert.deepEqual(
         reading.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA],
+      );
+    }),
+);
+
+it.live(
+  "a plan's draft from the service's notetaker is taken off the socket for its listener and never reaches the sideband",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened?.onPlanDraft);
+      const drafts: PlanDraftFrame[] = [];
+      opened.onPlanDraft((draft) => drafts.push(draft));
+      const reading = yield* readSideband(yield* opened.attach());
+      const [first] = script.sockets;
+      assert.ok(first);
+      const draft: PlanDraftFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        planId: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
+        document: { body: "# Teammate invitations\n", assumptions: [] },
+      };
+      first.receive(draft);
+      first.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "e1",
+        session: { id: SESSION_ID },
+      });
+      yield* settled(
+        () => drafts.length === 1 && reading.events.length === 1,
+        "the draft and the session's event to land",
+      );
+      assert.deepEqual(drafts, [draft]);
+      assert.deepEqual(
+        reading.events.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED],
       );
     }),
 );

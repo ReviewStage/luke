@@ -13,6 +13,7 @@ import {
   type HostedApiError,
   HTTP_STATUS,
   isDeviceWireId,
+  type PlanDraftFrame,
   type SessionSpokenFrame,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
@@ -576,6 +577,18 @@ export class VoiceService {
                 const frame: SessionSpokenFrame = {
                   type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
                   kind,
+                };
+                this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
+              },
+              // A planning call's plan as its notetaker has it now, sent the
+              // same way, so the Plans tab types it in as the call goes on.
+              onPlanDraft: (draft) => {
+                if (opened.planId === undefined) return;
+                const frame: PlanDraftFrame = {
+                  type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+                  planId: opened.planId,
+                  document: draft.document,
+                  ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
                 };
                 this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
               },

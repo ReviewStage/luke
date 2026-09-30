@@ -13,6 +13,7 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
+import { planDocumentSchema } from "./plan-wire.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -146,6 +147,13 @@ export const VOICE_SERVICE_FRAME = {
    * desktop is told rather than left to infer it from the transcript.
    */
   SESSION_SPOKEN: "session.spoken",
+  /**
+   * The service's other frame to the desktop after the handshake, on a
+   * planning call alone: the plan's document as its notetaker is writing it,
+   * sent again as the draft grows and once more as saved, so the Plans tab
+   * types the plan in while the call goes on rather than waiting for a read.
+   */
+  PLAN_DRAFT: "plan.draft",
 } as const;
 
 /**
@@ -394,6 +402,21 @@ export const sessionSpokenFrameSchema = Schema.Struct({
 
 export type SessionSpokenFrame = typeof sessionSpokenFrameSchema.Type;
 
+/**
+ * The plan's document as the notetaker has it now: a draft while its model is
+ * still writing, and the saved document with the instant it was saved once
+ * the save lands, or the document as it stood where the run saved nothing.
+ */
+export const planDraftFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_DRAFT),
+  planId: wireUuidSchema,
+  document: planDocumentSchema,
+  /** Epoch milliseconds of the save the document is; absent while it is a draft. */
+  savedAt: Schema.optionalKey(Schema.Number),
+});
+
+export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
+
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -475,6 +498,11 @@ export function sessionSpokenFrameFromWire(
   value: UnparsedWireValue,
 ): SessionSpokenFrame | undefined {
   return admittedAnswer(sessionSpokenFrameSchema, value);
+}
+
+/** The service's draft of the open plan, read the answering way like the spoken frame beside it. */
+export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame | undefined {
+  return admittedAnswer(planDraftFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(
