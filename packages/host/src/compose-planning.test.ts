@@ -23,7 +23,6 @@ import { Deferred, Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composePlanning, type PlanningClient } from "./compose-planning.js";
 
-const INTERVAL_MS = 1_000;
 const COMMIT = "4f2c9e1a0b3d5c7e9f1a2b3c4d5e6f708192a3b4";
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -58,7 +57,7 @@ interface FakeService extends PlanningClient {
     { repositories: { owner: string; name: string; private: boolean }[]; truncated: boolean },
     GitHubCallFailure
   >;
-  /** Every read the service answered, in order, so a test can see a paused follow reads nothing. */
+  /** Every read the service answered, in order, so a test can see that nothing reads on a clock. */
   readonly reads: string[];
 }
 
@@ -134,7 +133,6 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         accountId: () => Effect.succeed(ACCOUNT_ID),
         openExternal: (url) => Effect.sync(() => void opened.push(url)),
       },
-      pollIntervalMs: INTERVAL_MS,
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = planning.methods[method];
@@ -143,14 +141,6 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
     };
     const last = () => told.at(-1);
     return { planning, call, told, last, opened };
-  });
-}
-
-/** The cadence's next beat let run: the clock moved, and the fiber the beat resumed given turns. */
-function nextBeat(): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    yield* TestClock.adjust(Duration.millis(INTERVAL_MS));
-    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
   });
 }
 
@@ -178,7 +168,22 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   }),
 );
 
-it.effect("a save the planning model makes is drawn within one beat of the cadence", () =>
+it.effect("with the tab showing and a plan open, time passing reads nothing: nothing polls", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+    const readsOpen = service.reads.length;
+
+    yield* TestClock.adjust(Duration.minutes(10));
+    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+    assert.deepEqual(service.reads.slice(readsOpen), []);
+  }),
+);
+
+it.effect("the tab showing again reads a save made since, and draws it", () =>
   Effect.gen(function* () {
     const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
     const { call, last } = yield* subject(service);
@@ -193,14 +198,14 @@ it.effect("a save the planning model makes is drawn within one beat of the caden
       },
     };
     service.plans = [saved];
-    yield* nextBeat();
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: saved });
   }),
 );
 
 it.effect(
-  "a draft the notetaker sends during a call is drawn in place of the open plan, and a saved one is not read again",
+  "a draft the notetaker sends during a call is drawn in place of the open plan, and the saved one carries its save",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
@@ -227,11 +232,6 @@ it.effect(
         document: saved,
         savedAt: 11,
       });
-      // The service now lists the save the draft already showed; the beat reads nothing over it.
-      service.plans = [
-        { ...invites, updatedAt: 11, document: { body: "# stale", assumptions: [] } },
-      ];
-      yield* nextBeat();
       assert.deepEqual(last()?.document, {
         status: PLANNING_READ.READY,
         plan: { ...invites, updatedAt: 11, document: saved },
@@ -264,7 +264,7 @@ it.effect("a plan deleted elsewhere is drawn as missing, never as its last copy"
     yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
     service.plans = [];
-    yield* nextBeat();
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
     assert.deepEqual(last()?.document, { status: PLANNING_READ.MISSING });
   }),
@@ -279,7 +279,7 @@ it.effect("a list read that fails keeps the plans and the document already drawn
     yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
     service.listFails = true;
-    yield* nextBeat();
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
     assert.equal(last()?.listStatus, PLANNING_READ.FAILED);
     assert.deepEqual(last()?.plans, [summary(invites)]);
@@ -359,7 +359,7 @@ it.effect(
     }),
 );
 
-it.effect("leaving the plan leaves no plan active and goes on following the list", () =>
+it.effect("leaving the plan leaves no plan active and draws the list", () =>
   Effect.gen(function* () {
     const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
     const { call, last, planning } = yield* subject(service);
@@ -367,31 +367,10 @@ it.effect("leaving the plan leaves no plan active and goes on following the list
     yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
     yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
-    const readsAtClose = service.reads.length;
-    yield* nextBeat();
 
     assert.equal(last()?.activePlanId, undefined);
     assert.deepEqual(last()?.document, { status: PLANNING_READ.IDLE });
     assert.equal(planning.activePlanId(), undefined);
-    assert.deepEqual(service.reads.slice(readsAtClose), ["list"]);
-  }),
-);
-
-it.effect("pausing stops following the service and keeps the open plan", () =>
-  Effect.gen(function* () {
-    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-    const { call, last, planning } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
-    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-
-    yield* call(GATEWAY_METHOD.PLANNING_PAUSE);
-    const readsAtPause = service.reads.length;
-    yield* nextBeat();
-    yield* nextBeat();
-
-    assert.equal(last()?.activePlanId, INVITES);
-    assert.equal(planning.activePlanId(), INVITES);
-    assert.deepEqual(service.reads.slice(readsAtPause), []);
   }),
 );
 
@@ -435,10 +414,11 @@ it.effect("a list read that left before a plan started never marks the new plan 
     const { call, last } = yield* subject(service);
     yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
-    // A beat's list read leaves while the account holds no plan, and is held on the wire.
+    // The tab showing again sends a list read while the account holds no plan, held on the wire.
     const held = yield* Deferred.make<void>();
     service.listGate = Deferred.await(held);
-    yield* nextBeat();
+    const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.PLANNING_REFRESH));
+    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
 
     const started = plan(INVITES, "Teammate invitations", "", 10);
     service.plans = [started];
@@ -451,6 +431,7 @@ it.effect("a list read that left before a plan started never marks the new plan 
     );
     for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
     yield* Deferred.succeed(held, undefined);
+    yield* Fiber.join(refreshing);
     yield* Fiber.join(starting);
 
     assert.equal(last()?.activePlanId, INVITES);

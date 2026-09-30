@@ -32,8 +32,6 @@ interface StartScript {
 function fixture() {
   const asked: string[] = [];
   const talked: string[] = [];
-  const gones = new Map<WebContents, Effect.Effect<void>>();
-  const destroyed = new Set<WebContents>();
   const view: OpenPlan = { activePlanId: PLAN_ID };
   const account = { signedIn: true };
   const start: StartScript = {
@@ -43,7 +41,6 @@ function fixture() {
   const rows = planningActRows({
     host: {
       planningRefresh: () => Effect.sync(() => void asked.push("refresh")),
-      planningPause: () => Effect.sync(() => void asked.push("pause")),
       planningClose: () => Effect.sync(() => void asked.push("close")),
       planningOpen: (planId) =>
         Effect.sync(() => {
@@ -74,15 +71,11 @@ function fixture() {
       talked.push(planId);
     },
     voiceReady: () => start.voiceReady,
-    isGone: (sender) => destroyed.has(sender),
-    whenGone: (sender, gone) => {
-      gones.set(sender, gone);
-    },
   });
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, view, account, start, gones, destroyed };
+  return { router, asked, talked, view, account, start };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -103,7 +96,6 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       PANEL,
     );
     yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CLOSE }, PANEL);
-    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
 
     assert.deepEqual(selected, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(started, {
@@ -120,7 +112,6 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       "start:acme/relay",
       "repositories",
       "close",
-      "pause",
     ]);
   }),
 );
@@ -195,46 +186,6 @@ it.effect(
       });
       assert.deepEqual(f.talked, [PLAN_ID]);
     }),
-);
-
-it.effect(
-  "the follow pauses only once no panel shows the Plans tab, a destroyed panel included",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      // SAFETY: a second inert object, so the rows read two panels on two displays.
-      const other: ActSender = { ...PANEL, sender: {} as WebContents };
-
-      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, PANEL);
-      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, other);
-      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
-      assert.deepEqual(f.asked, ["refresh", "refresh"]);
-
-      // The other display's panel goes away while it still shows the tab.
-      const gone = f.gones.get(other.sender);
-      assert.ok(gone);
-      yield* gone;
-      assert.deepEqual(f.asked, ["refresh", "refresh", "pause"]);
-      // A pause from a panel that no longer counts asks for nothing more.
-      yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
-      assert.deepEqual(f.asked, ["refresh", "refresh", "pause"]);
-    }),
-);
-
-it.effect("a refresh that lands after its panel was torn down asks the host for nothing", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    // SAFETY: a second inert object, the panel of a display just unplugged.
-    const unplugged: ActSender = { ...PANEL, sender: {} as WebContents };
-    f.destroyed.add(unplugged.sender);
-
-    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, PANEL);
-    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REFRESH }, unplugged);
-    yield* f.router.performAct({ kind: ACT_KIND.PLANNING_PAUSE }, PANEL);
-
-    // The torn-down panel's refresh reads and arms nothing.
-    assert.deepEqual(f.asked, ["refresh", "pause"]);
-  }),
 );
 
 it.effect(

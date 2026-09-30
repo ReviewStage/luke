@@ -218,7 +218,6 @@ export interface HostOperator {
   /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
   planningRefresh(): Effect.Effect<void>;
   /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
-  planningPause(): Effect.Effect<void>;
   /** One plan made the active one, replacing whichever was; answers whether the host took it. */
   planningOpen(planId: string): Effect.Effect<boolean>;
   /** The developer left the open plan: its call ends and no plan is active. */
@@ -591,7 +590,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : undefined) ?? { status: CONVERSATION_RATE_STATUS.UNAVAILABLE },
       ),
     planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
-    planningPause: () => fire(client.call(GATEWAY_METHOD.PLANNING_PAUSE)),
     planningOpen: (planId) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_OPEN, { planId }),

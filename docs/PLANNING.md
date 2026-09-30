@@ -107,10 +107,11 @@ and the panel closing to the capsule turns it back to Plans as well.
   call (LUKE-346). Only one plan is ever the spoken conversation.
 - While a plan is open, the talk key speaks into that plan's call, whatever
   the panel is showing. With no plan open, it is the desk's talk key.
-- The host follows the service (the list every 3 seconds, and the document
-  when it moved) only while a panel shows the Plans tab. Leaving the tab
-  pauses the follow and leaves the plan and its call standing; coming back
-  reads everything again.
+- Nothing polls. Every change to a plan happens during its call, and the
+  notetaker's drafts reach the open plan on the call's own socket as they
+  are written. The list and the open plan are read when a panel shows the
+  Plans tab, when a plan opens, and when one starts; leaving the tab leaves
+  the plan and its call standing, and coming back reads everything again.
 
 ### Plan list
 
@@ -529,7 +530,7 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The panel's tab bar and its page idiom (`panel-tabs.tsx`, `panel-body.tsx`; the Conversation tab's pages in `agents-panel.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the tab bar and the counted `panel:tab_change` share | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`renderer/planning/plans-panel.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). `SESSIONS` and `CONVERSATION` out of both, and every way into a tab typed to the shown set (`ShownPanelTab`) while the body still draws the hidden two (LUKE-350). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list and its follow and pause, opening, leaving, and starting a plan, the repositories, Connect GitHub, and the microphone. |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, and starting a plan, the repositories, Connect GitHub, and the microphone. |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list, the form, and the repository list read from the GitHub connection (LUKE-337, LUKE-338). |
 | GitHub connection | `ConsentConnectSlot` (`apps/desktop/src/renderer/consent-connect-slot.tsx`) and `useConnections` (`use-connections.ts`), the pattern the calendar consent uses | The repository connection itself, with its scopes and token held in connection handling and never in the renderer or a model-visible argument (LUKE-338). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
@@ -569,7 +570,7 @@ changes when a check is run, not when one is planned.
   boundaries (fake OpenAI, fake eve, scripted model, fake GitHub MCP, PGlite):
   - starting a plan at a resolved commit, and reads at that commit;
   - the notetaker saves what the developer said once they are quiet a beat,
-    and the host's follow draws it within one beat;
+    and its drafts are drawn on the Mac as the model writes them;
   - a spoken turn reaching the planning model in the plan's own
     conversation, with the saved document on every turn;
   - re-attaching and resuming on the same plan;
@@ -591,9 +592,9 @@ changes when a check is run, not when one is planned.
   - the talk key, pressed while a plan is open, speaking into the open
     plan's call.
 - The Plans tab (LUKE-347) is held by renderer tests: the tab bar's four
-  tabs, the list and document pages, Back leaving the plan, the follow
-  armed while the tab shows and paused when it goes, and the host keeping
-  the open plan through a pause and following the list after a plan is left.
+  tabs, the list and document pages, Back leaving the plan, the plans read
+  again each time the tab shows, and the host keeping the open plan through
+  the tab going away, with nothing read on a clock.
   Its regions render as static markup: a read-only assumption list, no composer and
   no approve controls, a new plan's untouched template with its empty
   assumptions section, and the failed, missing, and not-connected states.
@@ -643,6 +644,5 @@ changes when a check is run, not when one is planned.
   request, though, and the socket is not pinned to the checked address. A
   host whose DNS answer changes between the lookup and the connection (DNS
   rebinding) is the one case it does not cover.
-- **Updates are polled.** While a panel shows the Plans tab the host re-reads the plan
-  list every 3 seconds, and re-reads the document when its `updatedAt`
-  moves. A save shows up within about one beat, not instantly.
+- **The plan list is read, not followed.** A plan started on another Mac
+  appears in this Mac's list the next time its Plans tab shows.
