@@ -13,11 +13,11 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   gatewayEventReader,
-  type LiveTransportState,
   type NotebookReadResult,
   notebookReadResultSchema,
   type VoiceCreateLiveSessionResult,
   type VoiceLiveSessionChanged,
+  type VoiceReportLiveTransportParams,
   voiceCreateLiveSessionResultSchema,
   voiceLiveSessionChangedSchema,
   voiceStopSpeakingResultSchema,
@@ -188,7 +188,7 @@ export interface HostOperator {
     planId: string | undefined,
   ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
   endLiveSession(): Effect.Effect<void>;
-  reportLiveTransport(state: LiveTransportState): Effect.Effect<void>;
+  reportLiveTransport(report: VoiceReportLiveTransportParams): Effect.Effect<void>;
   /** The peer's own idle decision, from its local signals alone; the host decides the close. */
   reportLiveActivity(idle: boolean): Effect.Effect<void>;
   /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
@@ -527,8 +527,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             : Option.none(),
       ),
     endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
-    reportLiveTransport: (state) =>
-      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, { state })),
+    reportLiveTransport: (report) =>
+      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, report)),
     reportLiveActivity: (idle) =>
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
     stopSpeaking: () =>

@@ -18,7 +18,11 @@ import { serialQueue } from "@sidecar/runtime/effect";
 import { SESSION_STATUS } from "@sidecar/session";
 import { APP_SETTING_SCHEMA, voiceHotkeyCandidates, voiceHotkeyLabel } from "@sidecar/settings";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
-import { type BeatKind, LiveSessionHolder } from "@sidecar/voice/live-session";
+import {
+  type BeatKind,
+  LIVE_SESSION_END_CAUSE,
+  LiveSessionHolder,
+} from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
 import { Duration, Effect, Result, type Scope } from "effect";
 import {
@@ -418,7 +422,8 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
           );
         return carried(created);
       }),
-    [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () => Effect.as(service.endSession(), {}),
+    [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () =>
+      Effect.as(service.endSession(LIVE_SESSION_END_CAUSE.HANG_UP), {}),
     // The peer's transport is acted on here, where the transport is: a
     // failure is the session lost, a close is the graceful end.
     [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
@@ -426,7 +431,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         readEither(voiceReportLiveTransportParamsSchema)(params),
       );
       if (!report) return invalid("state is not one the peer connection reports");
-      service.reportTransport(report.state);
+      service.reportTransport(report.state, report.reason);
       return Effect.succeed({});
     },
     // The peer's idle is carried to the service, whose exchange alone knows

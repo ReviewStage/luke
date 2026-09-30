@@ -94,7 +94,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
               planId === undefined ? { sdp } : { sdp, planId },
             ),
           endSession: () => tell(ACT_KIND.VOICE_END_LIVE_SESSION),
-          reportTransport: (state) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, { state }),
+          reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
         },
         createPeerConnection: () => new RTCPeerConnection(),

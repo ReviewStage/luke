@@ -1,6 +1,7 @@
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
+  type LivePeerEndReason,
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
@@ -89,8 +90,50 @@ export interface LiveSessionHolderOptions {
   onSpoken?: (kind: ProactiveSpeechKind) => void;
 }
 
+/**
+ * Which hand ended a held session, named in the line the holder logs when a
+ * session ends, so a call that dropped says why without anyone reading the
+ * code for every path that could have closed it.
+ */
+export const LIVE_SESSION_END_CAUSE = {
+  /** The panel opened another plan than the one the call is about. */
+  PLAN_SWITCHED: "plan_switched",
+  /** The panel left the plan, or the account signed out. */
+  PLAN_LEFT: "plan_left",
+  /** The peer asked the host to hang up. */
+  HANG_UP: "hang_up",
+  /** The stored voice changed, which a standing session cannot follow. */
+  VOICE_CHANGED: "voice_changed",
+  /** The quit's drain. */
+  DRAIN: "drain",
+  /** The peer offered a new session while one stood. */
+  REPLACED: "replaced",
+  /** The peer reported its transport closed. */
+  PEER_CLOSED: "peer_closed",
+  /** The peer reported its transport failed. */
+  PEER_FAILED: "peer_failed",
+  /** The service's `session.closed` arrived unasked. */
+  SERVICE_CLOSED: "service_closed",
+  /** The sideband socket ended unasked. */
+  SIDEBAND_LOST: "sideband_lost",
+} as const;
+
+export type LiveSessionEndCause =
+  (typeof LIVE_SESSION_END_CAUSE)[keyof typeof LIVE_SESSION_END_CAUSE];
+
+/** A creation under way: the plan it is about, and the end a switch asked for meanwhile. */
+interface Creating {
+  readonly planId: string | undefined;
+  endedBy: LiveSessionEndCause | undefined;
+}
+
 interface HeldSession {
   readonly sessionId: string;
+  /** When the session came to stand, for the seconds its end reports. */
+  readonly stoodAt: number;
+  /** The hand that first decided the end, and the peer's own reason where it reported one. */
+  endCause: LiveSessionEndCause | undefined;
+  peerReason: LivePeerEndReason | undefined;
   /** The plan a planning call is about, which the session is bound to for its life; none for every other session. */
   readonly planId: string | undefined;
   readonly sideband: LiveSideband;
@@ -121,6 +164,26 @@ export const WANTED_WORD = {
   STANDS_MS: 30_000,
 } as const;
 
+/** What a line names of a session: its id and whether it is a planning call, never its words. */
+function sessionFields(session: HeldSession | undefined): string {
+  if (session === undefined) return "session=none";
+  return `session=${session.sessionId} planning=${session.planId !== undefined}`;
+}
+
+function transportLine(
+  state: LiveTransportState,
+  peerReason: LivePeerEndReason | undefined,
+  session: HeldSession | undefined,
+): string {
+  const reason = peerReason === undefined ? "" : ` peer_reason=${peerReason}`;
+  return `voice transport: state=${state}${reason} ${sessionFields(session)}`;
+}
+
+function endedLine(session: HeldSession, reason: string, seconds: number): string {
+  const peer = session.peerReason === undefined ? "" : ` peer_reason=${session.peerReason}`;
+  return `voice call ended: cause=${session.endCause}${peer} close_reason=${reason} ${sessionFields(session)} seconds=${seconds}`;
+}
+
 export class LiveSessionHolder {
   readonly #options: LiveSessionHolderOptions;
   #held: HeldSession | undefined;
@@ -130,7 +193,7 @@ export class LiveSessionHolder {
    * so the session is ended the moment it stands rather than left standing
    * about a plan no longer on screen.
    */
-  #creating: { readonly planId: string | undefined; ended: boolean } | undefined;
+  #creating: Creating | undefined;
   /** The release still running for the session last declared over, so an end asked for meanwhile waits for it. */
   #releasing: Deferred.Deferred<void> | undefined;
   /**
@@ -207,13 +270,17 @@ export class LiveSessionHolder {
    */
   endPlanCall(keep: string | undefined): Effect.Effect<void> {
     return Effect.suspend(() => {
+      const cause =
+        keep === undefined
+          ? LIVE_SESSION_END_CAUSE.PLAN_LEFT
+          : LIVE_SESSION_END_CAUSE.PLAN_SWITCHED;
       const creating = this.#creating;
-      if (creating?.planId !== undefined && creating.planId !== keep) creating.ended = true;
+      if (creating?.planId !== undefined && creating.planId !== keep) creating.endedBy ??= cause;
       const session = this.#held;
       if (session === undefined || session.planId === undefined || session.planId === keep) {
         return Effect.void;
       }
-      return this.#end(session);
+      return this.#end(session, cause);
     });
   }
 
@@ -230,7 +297,7 @@ export class LiveSessionHolder {
   createSession(sdpOffer: string, planId?: string): Effect.Effect<LiveSessionCreated | undefined> {
     // The creation is named from its first step to its last, so a switch landing
     // anywhere in it (the prior session's end, the create, the attach) is heard.
-    const creating = { planId, ended: false };
+    const creating: Creating = { planId, endedBy: undefined };
     return Effect.ensuring(
       Effect.suspend(() => {
         this.#creating = creating;
@@ -242,16 +309,13 @@ export class LiveSessionHolder {
     );
   }
 
-  #create(
-    sdpOffer: string,
-    creating: { readonly planId: string | undefined; ended: boolean },
-  ): Effect.Effect<LiveSessionCreated | undefined> {
+  #create(sdpOffer: string, creating: Creating): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
-      if (this.#held) yield* this.endSession();
+      if (this.#held) yield* this.endSession(LIVE_SESSION_END_CAUSE.REPLACED);
       // The peer has answered the word, with this offer; whatever comes of it, the word is spent.
       this.#wantedAt = undefined;
       const source = this.#options.source();
-      if (!source || creating.ended) {
+      if (!source || creating.endedBy !== undefined) {
         this.#beats.clear();
         return undefined;
       }
@@ -266,8 +330,8 @@ export class LiveSessionHolder {
       // A switch that landed while the call was being created ends it now that
       // it stands, so the peer is told to hang up and nothing is said into it.
       const held = this.#held;
-      if (created !== undefined && creating.ended && held !== undefined) {
-        yield* this.#end(held);
+      if (created !== undefined && creating.endedBy !== undefined && held !== undefined) {
+        yield* this.#end(held, creating.endedBy);
         return undefined;
       }
       // A session that could not be stood leaves no beat waiting for it: the
@@ -300,6 +364,9 @@ export class LiveSessionHolder {
       const sideband = yield* Scope.provide(opened.attach(), scope);
       const session: HeldSession = {
         sessionId: opened.sessionId,
+        stoodAt: this.#clock.currentTimeMillisUnsafe(),
+        endCause: undefined,
+        peerReason: undefined,
         planId,
         sideband,
         opened,
@@ -355,7 +422,11 @@ export class LiveSessionHolder {
         );
         return session.ended || session.closing
           ? Effect.void
-          : this.#lost(session, LIVE_CLOSE_REASON.CONNECTION_LOST);
+          : this.#lost(
+              session,
+              LIVE_CLOSE_REASON.CONNECTION_LOST,
+              LIVE_SESSION_END_CAUSE.SIDEBAND_LOST,
+            );
       }
       if (arrival.event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
         Deferred.doneUnsafe(
@@ -389,22 +460,24 @@ export class LiveSessionHolder {
    * The renderer's hang-up, the peer's closed transport, and the drain all
    * end the session the same way: whichever stands when the ask is run, or,
    * where one was declared over a turn ago and is still being released, that
-   * release, so the drain answers with the socket closed.
+   * release, so the drain answers with the socket closed. `cause` is the
+   * hand asking, named in the line the end is logged under.
    */
-  endSession(): Effect.Effect<void> {
+  endSession(cause: LiveSessionEndCause): Effect.Effect<void> {
     return Effect.suspend(() => {
       const session = this.#held;
-      if (session !== undefined) return this.#end(session);
+      if (session !== undefined) return this.#end(session, cause);
       const releasing = this.#releasing;
       return releasing === undefined ? Effect.void : Deferred.await(releasing);
     });
   }
 
-  #end(session: HeldSession): Effect.Effect<void> {
+  #end(session: HeldSession, cause: LiveSessionEndCause): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (session.ended) return yield* Deferred.await(session.released);
       const standing = session.closing;
       if (standing !== undefined) return yield* Deferred.await(standing);
+      session.endCause ??= cause;
       const closing = yield* Deferred.make<void>();
       session.closing = closing;
       yield* Effect.onExit(this.#close(session), (exit) => Deferred.done(closing, exit));
@@ -421,11 +494,13 @@ export class LiveSessionHolder {
       if (result.outcome === SIDEBAND_CLOSE_OUTCOME.CLOSED) {
         return yield* this.#onClosed(session, result.closed);
       }
+      // Note that the cause stands already: it is the hand that asked for this close.
       yield* this.#lost(
         session,
         result.outcome === SIDEBAND_CLOSE_OUTCOME.TIMED_OUT
           ? "close timed out"
           : LIVE_CLOSE_REASON.CONNECTION_LOST,
+        LIVE_SESSION_END_CAUSE.SIDEBAND_LOST,
       );
     });
   }
@@ -435,16 +510,22 @@ export class LiveSessionHolder {
    * transport is: a failed transport is a lost connection whatever the
    * sideband still shows, and a peer closed without a hang-up asked of the
    * host ends the session gracefully from here. Neither is told to the
-   * service; both reach it as the close they cause.
+   * service; both reach it as the close they cause. Every report is logged,
+   * with the peer's reason where it gave one, since the peer's own view of
+   * its connection is what a dropped call is read back from.
    */
-  reportTransport(state: LiveTransportState): void {
+  reportTransport(state: LiveTransportState, peerReason?: LivePeerEndReason): void {
     const session = this.#held;
+    this.#start(Effect.logInfo(transportLine(state, peerReason, session)));
     if (!session || session.ended) return;
+    session.peerReason ??= peerReason;
     if (state === LIVE_TRANSPORT_STATE.FAILED) {
-      this.#start(this.#lost(session, "peer transport failed"));
+      this.#start(this.#lost(session, "peer transport failed", LIVE_SESSION_END_CAUSE.PEER_FAILED));
       return;
     }
-    if (state === LIVE_TRANSPORT_STATE.CLOSED && !session.closing) this.#start(this.#end(session));
+    if (state === LIVE_TRANSPORT_STATE.CLOSED && !session.closing) {
+      this.#start(this.#end(session, LIVE_SESSION_END_CAUSE.PEER_CLOSED));
+    }
   }
 
   /**
@@ -549,7 +630,7 @@ export class LiveSessionHolder {
 
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
   stop(): Effect.Effect<void> {
-    return this.endSession();
+    return this.endSession(LIVE_SESSION_END_CAUSE.DRAIN);
   }
 
   /**
@@ -600,22 +681,24 @@ export class LiveSessionHolder {
   #onClosed(session: HeldSession, closed: LiveSessionClosed): Effect.Effect<void> {
     if (session.ended) return Deferred.await(session.released);
     session.usageSeconds = closed.usage.seconds;
-    return this.#tearDown(session, closed.reason);
+    return this.#tearDown(session, closed.reason, LIVE_SESSION_END_CAUSE.SERVICE_CLOSED);
   }
 
   /** The session ended without `session.closed`: the latest usage stands unconfirmed. */
-  #lost(session: HeldSession, reason: string): Effect.Effect<void> {
+  #lost(session: HeldSession, reason: string, cause: LiveSessionEndCause): Effect.Effect<void> {
     if (session.ended) return Deferred.await(session.released);
-    return this.#tearDown(session, reason);
+    return this.#tearDown(session, reason, cause);
   }
 
   /**
    * The session is over the instant this is called: `#held` and the phase
    * are settled here, on the hand that decided it. The release is the
    * reader's own to run, so what is handed back is that release to wait for.
+   * `cause` stands where no hand asked for the end before it was decided.
    */
-  #tearDown(session: HeldSession, reason: string): Effect.Effect<void> {
+  #tearDown(session: HeldSession, reason: string, cause: LiveSessionEndCause): Effect.Effect<void> {
     session.ended = true;
+    session.endCause ??= cause;
     if (this.#held === session) this.#held = undefined;
     // A beat the session ended on, sent or waiting, is not carried to the
     // next: the caller decides again at its next reason to, and a beat that
@@ -624,6 +707,10 @@ export class LiveSessionHolder {
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
+    // Note that the line is the holder's own task, because the hand that tore
+    // the session down may be its reader, interrupted the moment `torn` settles.
+    const seconds = Math.round((this.#clock.currentTimeMillisUnsafe() - session.stoodAt) / 1000);
+    this.#start(Effect.logInfo(endedLine(session, reason, seconds)));
     return Deferred.await(session.released);
   }
 }
