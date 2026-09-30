@@ -461,7 +461,7 @@ export function openPlanConversation(
  * The plan a conversation of the account belongs to, with its saved document;
  * nothing for a conversation no plan of the account names. This is how a
  * planning turn, admitted for a conversation, finds the document it is handed
- * and the plan its `update_plan` is bound to.
+ * and the plan its repository read is bound to.
  */
 export function readPlanOfConversation(
   userId: string,

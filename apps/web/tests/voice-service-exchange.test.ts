@@ -277,6 +277,7 @@ async function stand(offer: Offer): Promise<Stand> {
               offer === OFFER.UNCONFIGURED ? undefined : TEST_PAYLOAD_SECRET,
             deploymentSecret: () => Redacted.make("deployment-secret"),
             eveOrigin: () => "https://eve.test",
+            openAiKey: () => undefined,
             eve: () => eve,
             now: () => NOW,
             report: (reported) => reports.push(reported),

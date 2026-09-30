@@ -65,13 +65,13 @@ Do not delegate to the backend when:
 
 /**
  * A planning call's backend is the planning model, which holds the saved
- * document, reads the plan's repository, and saves the plan. The policy is
+ * document and reads the plan's repository; a notetaker beside the call
+ * writes the plan, so there is no save to delegate. The policy is
  * the template's own conditions with the planning model's tools named, as
  * the desktop's names the brain's.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
-- The plan: update_plan, which saves the plan document the developer sees.
 - The repository: get_file_contents, which reads the plan's repository.
 - Research: search_web and read_web_page, which can search the Internet.
 
