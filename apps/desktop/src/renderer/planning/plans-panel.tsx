@@ -35,6 +35,7 @@ export function PlansPanel({ control }: { control: PlansControl }): React.JSX.El
             onRetry={control.onRetryDocument}
             onBack={control.onLeavePlan}
             copy={control.copy}
+            live={control.live}
           />
           <MicrophoneRow status={control.status} microphone={control.microphone} />
         </section>

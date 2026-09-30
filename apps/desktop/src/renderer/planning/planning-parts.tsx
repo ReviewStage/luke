@@ -1,13 +1,12 @@
-import type { PlanAssumption, PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { BackIcon, CheckIcon, CopyIcon, MicrophoneIcon, PlusIcon } from "@sidecar/panel";
-import { MarkdownMessage } from "../markdown-message";
+import { PlanBody } from "./plan-body";
 import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   type CopyShown,
   DOCUMENT_REGION,
   type DocumentRegion,
-  NO_ASSUMPTIONS_LINE,
   repositoryLine,
 } from "./planning-model";
 
@@ -73,11 +72,6 @@ export function PlanList({
       </ul>
     </nav>
   );
-}
-
-/** One assumption, its text as stored. */
-function AssumptionRow({ assumption }: { assumption: PlanAssumption }): React.JSX.Element {
-  return <li className="plan-assumption">{assumption.text}</li>;
 }
 
 /**
@@ -156,12 +150,15 @@ export function PlanDocumentView({
   onRetry,
   onBack,
   copy,
+  live,
 }: {
   region: DocumentRegion;
   onRetry: () => void;
   onBack: () => void;
   /** What Copy shows for the drawn document, and its press. */
   copy: { shown: CopyShown; onPress: () => void };
+  /** Whether the open plan's call is in progress, so the plan is still being written. */
+  live: boolean;
 }): React.JSX.Element {
   switch (region.kind) {
     case DOCUMENT_REGION.NONE:
@@ -197,7 +194,6 @@ export function PlanDocumentView({
       );
     case DOCUMENT_REGION.READY: {
       const { plan } = region;
-      const { body, assumptions } = plan.document;
       return (
         <section className="plan-document" aria-label={plan.name}>
           <PlanHeader
@@ -206,23 +202,7 @@ export function PlanDocumentView({
             copy={copy}
             onBack={onBack}
           />
-          <div className="plan-document-scroll">
-            <MarkdownMessage words={body} className="plan-body" />
-            <section className="plan-assumptions" aria-label="Assumptions">
-              <h2 className="plan-assumptions-heading">Assumptions</h2>
-              {assumptions.length === 0 ? (
-                <p className="plan-assumptions-none">{NO_ASSUMPTIONS_LINE}</p>
-              ) : (
-                <ul>
-                  {assumptions.map((assumption, index) => (
-                    // An assumption has no id of its own: the list is replaced whole on every save.
-                    // oxlint-disable-next-line react/no-array-index-key -- the saved list's order is its identity.
-                    <AssumptionRow key={index} assumption={assumption} />
-                  ))}
-                </ul>
-              )}
-            </section>
-          </div>
+          <PlanBody plan={plan} live={live} />
         </section>
       );
     }

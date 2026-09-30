@@ -179,9 +179,80 @@
   line-height: 1.5;
 }
 
-/* A plan is a document rather than a message, so its sections breathe. */
-.plan-body > .markdown-heading:not(:first-child) {
+/* A plan is a document rather than a message, so its sections breathe. Every
+   unit after the header block opens on a section or field heading. */
+.plan-unit + .plan-unit {
   margin-top: 1.1em;
+}
+
+/* The caret a save is typed behind: solid, as a caret is while someone types. */
+.plan-body .markdown-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 1px;
+  vertical-align: -0.2em;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+/* The caret waiting where the last word went in, blinking as an editor's
+   idle cursor does, and held by `--loop-motion` like every animation with no
+   end of its own. */
+.plan-caret-resting .markdown-caret {
+  animation: plan-caret-blink 1060ms steps(1, end) infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+/* The field the caret is typing in: a small accent dot after its heading,
+   breathing on the skeleton's loop and held by `--loop-motion` like every
+   animation with no end of its own. */
+.plan-writing > .markdown-heading:first-child::after {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.15em;
+  animation: skeleton-pulse 1500ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+  content: "";
+}
+
+/* A unit or assumption as it settles: a tint behind it that fades, on
+   opacity alone so no text re-shapes. Zeroed tokens, as under reduced motion,
+   leave nothing lit. */
+.plan-fresh {
+  position: relative;
+  isolation: isolate;
+}
+
+.plan-fresh::before {
+  position: absolute;
+  z-index: -1;
+  inset: -2px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: plan-fresh calc(var(--duration-shape) * 3) ease-out both;
+  content: "";
+  pointer-events: none;
+}
+
+@keyframes plan-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes plan-fresh {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 .plan-assumptions-none {

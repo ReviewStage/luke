@@ -19,6 +19,7 @@ import {
   microphoneStatusWord,
   PLANS_PAGE,
   type PlansPage,
+  planningCallHoldsPanel,
   plansPage,
 } from "./planning-model";
 
@@ -46,6 +47,8 @@ export interface PlansControl {
   microphone: { label: string; enabled: boolean; onPress: () => void };
   /** The open plan's call status beside the microphone, absent while none stands. */
   status: string | undefined;
+  /** Whether the open plan's call is in progress, so the plan is still being written. */
+  live: boolean;
   onSelect: (planId: string) => void;
   onRetryList: () => void;
   onRetryDocument: () => void;
@@ -164,6 +167,7 @@ export function usePlansTab(input: {
       onPress: pressMicrophone,
     },
     status: microphoneStatusWord(voice.view, planning.activePlanId),
+    live: planningCallHoldsPanel(voice.view) && voice.view.callPlanId === planning.activePlanId,
     onSelect: select,
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),
     onRetryDocument: () => {
