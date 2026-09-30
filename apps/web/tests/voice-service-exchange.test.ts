@@ -29,12 +29,14 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { createPlan, readPlan } from "../server/hosted/plan-store";
+import { createPlan, readPlan, savePlanDocument } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
+  ESTIMATED_CHARS_PER_TOKEN,
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_AUDIO_APPEND,
+  LIVE_INPUT_BOUNDS,
   LIVE_SCENE,
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
@@ -1138,6 +1140,70 @@ it.effect(
       );
       assert.deepEqual(await spokenDelegations(planConversation), ["dl_1", "dl_2"]);
       assert.deepEqual(await spokenDelegations(context.target.conversationId), []);
+      await context.stop();
+    }),
+);
+
+/** The text of each startup message a created session was seeded with, by role. */
+function seededTexts(context: Stand, index: number): Array<{ role: unknown; text: unknown }> {
+  const create = context.openAi.creates[index];
+  assert.ok(create && isRecord(create.body.session));
+  const input = create.body.session.input;
+  assert.ok(Array.isArray(input));
+  return input.map((item) => {
+    assert.ok(isRecord(item) && Array.isArray(item.content) && isRecord(item.content[0]));
+    return { role: item.role, text: item.content[0].text };
+  });
+}
+
+it.effect(
+  "a planning call opens knowing its saved plan: the name, the document, and its assumptions, and a document past the startup bound is cut from its end",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      await database.run(
+        savePlanDocument(context.target.userId, plan.id, {
+          body: "# Teammate invitations\n\n## Goal\nOwners invite teammates by email.\n",
+          assumptions: [{ text: "Invitations expire after seven days." }],
+        }),
+      );
+      const saved = await openSession(context, plan.id);
+      const [seed, ...rest] = seededTexts(context, 0);
+      assert.deepEqual(rest, []);
+      assert.equal(seed?.role, SEED_ROLE.DEVELOPER);
+      const text = String(seed?.text);
+      for (const expected of [
+        PLAN.name,
+        `${PLAN.repository.owner}/${PLAN.repository.name}`,
+        "Owners invite teammates by email.",
+        "Invitations expire after seven days.",
+      ]) {
+        assert.ok(text.includes(expected), `the seed to carry ${expected}; it read ${text}`);
+      }
+      await hangUpConnection(saved.desktop, saved.attach, saved.upstream);
+
+      const long = await database.run(
+        createPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
+      );
+      const tail = "The last line of a very long plan.";
+      await database.run(
+        savePlanDocument(context.target.userId, long.id, {
+          body: `# Billing export\n\n${"Every invoice row is exported. ".repeat(4_000)}\n${tail}\n`,
+          assumptions: [],
+        }),
+      );
+      const cut = await openSession(context, long.id);
+      const [longSeed] = seededTexts(context, 1);
+      const longText = String(longSeed?.text);
+      assert.ok(longText.includes("Billing export"));
+      assert.ok(!longText.includes(tail));
+      assert.ok(longText.length <= LIVE_INPUT_BOUNDS.TOKENS * ESTIMATED_CHARS_PER_TOKEN);
+      await hangUpConnection(cut.desktop, cut.attach, cut.upstream);
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+        () => `both calls to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
       await context.stop();
     }),
 );
