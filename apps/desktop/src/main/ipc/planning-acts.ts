@@ -4,7 +4,6 @@ import type {
   PlanningStartAnswer,
 } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
-import type { WebContents } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
@@ -15,14 +14,11 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
  * Plans tab, and the takeover and the hidden voice window draw no plan, so
  * every row refuses them. What the host does with an ask — which plan is
  * active, what the service answers, why GitHub refused — is the host's to
- * decide, and comes back as the panel's own answer. The one thing held here
- * is which panels show the tab, since the host's follow is one for the whole
- * process and each display has a panel of its own.
+ * decide, and comes back as the panel's own answer. Nothing is held here.
  */
 export interface PlanningActsDependencies {
   host: {
     planningRefresh(): Effect.Effect<void>;
-    planningPause(): Effect.Effect<void>;
     planningOpen(planId: string): Effect.Effect<boolean>;
     planningClose(): Effect.Effect<void>;
     planningStart(request: PlanCreateRequest): Effect.Effect<PlanningStartAnswer>;
@@ -36,15 +32,10 @@ export interface PlanningActsDependencies {
   talkAboutPlan: (planId: string) => void;
   /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
   voiceReady: () => boolean;
-  /** Whether a panel's window is already destroyed, as one whose ask was still in flight can be. */
-  isGone: (sender: WebContents) => boolean;
-  /** Runs `gone` once when a panel's window is destroyed, so a panel that vanished mid-follow stops counting. */
-  whenGone: (sender: WebContents, gone: Effect.Effect<void>) => void;
 }
 
 type PlanningActKind =
   | typeof ACT_KIND.PLANNING_REFRESH
-  | typeof ACT_KIND.PLANNING_PAUSE
   | typeof ACT_KIND.PLANNING_SELECT
   | typeof ACT_KIND.PLANNING_CLOSE
   | typeof ACT_KIND.PLANNING_START
@@ -63,28 +54,10 @@ export function planningActRows(
   dependencies: PlanningActsDependencies,
 ): Pick<ActRows, PlanningActKind> {
   const { host } = dependencies;
-  // Note that the follow is paused only once no panel shows the tab, because
-  // one display's panel closing must not stop the plan another is drawing.
-  const showing = new Set<WebContents>();
-  const stopShowing = (sender: WebContents) =>
-    Effect.suspend(() =>
-      showing.delete(sender) && showing.size === 0 ? host.planningPause() : Effect.void,
-    );
   return {
     [ACT_KIND.PLANNING_REFRESH]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REFRESH, sender);
-      // A refresh landing after its panel was torn down asks for nothing,
-      // since no destroyed event is left to pause what it would arm.
-      if (dependencies.isGone(sender.sender)) return Effect.void;
-      if (!showing.has(sender.sender)) {
-        showing.add(sender.sender);
-        dependencies.whenGone(sender.sender, stopShowing(sender.sender));
-      }
       return host.planningRefresh();
-    },
-    [ACT_KIND.PLANNING_PAUSE]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_PAUSE, sender);
-      return stopShowing(sender.sender);
     },
     [ACT_KIND.PLANNING_SELECT]: ({ planId }, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_SELECT, sender);

@@ -113,10 +113,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
           snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
         );
       },
-      isGone: (sender) => sender.isDestroyed(),
-      whenGone: (sender, gone) => {
-        sender.once("destroyed", () => void run(gone));
-      },
     }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),

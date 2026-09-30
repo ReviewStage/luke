@@ -24,12 +24,12 @@ import {
 } from "./planning-model";
 
 /**
- * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's follow of the plans while the tab shows.
+ * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
  *
  * The tab draws the planning view main holds and the voice window's report,
  * and every press is an act. It saves nothing and decides nothing about a
- * plan: the planning model writes the document, and the tab redraws it in
- * place as the host's reads bring it. The plan the host has open is the
+ * plan: the plan's notetaker writes the document, and the tab redraws it in
+ * place as the host brings its drafts and its reads. The plan the host has open is the
  * document page in every panel, and it stays open through a tab switch or a
  * collapse; only Back, Escape, another plan, or a sign-out leaves it.
  */
@@ -95,16 +95,16 @@ export function usePlansTab(input: {
   const page = plansPage(planning, composing);
   const region = documentRegion(planning);
 
-  // The tab showing is what asks the host to read the plans and follow them,
-  // and the tab going away is what stops the follow; the open plan and its
-  // call stand through both. A fixture's plans are read from nowhere.
-  const following = shown && signedIn && fixture === undefined;
-  const wasFollowing = useRef(false);
+  // The tab showing is what asks the host to read the plans again; the open
+  // plan and its call stand through it going away, and a call's drafts reach
+  // the document without any read. A fixture's plans are read from nowhere.
+  const reading = shown && signedIn && fixture === undefined;
+  const wasReading = useRef(false);
   useEffect(() => {
-    if (following === wasFollowing.current) return;
-    wasFollowing.current = following;
-    tell(following ? ACT_KIND.PLANNING_REFRESH : ACT_KIND.PLANNING_PAUSE);
-  }, [following, tell]);
+    if (reading === wasReading.current) return;
+    wasReading.current = reading;
+    if (reading) tell(ACT_KIND.PLANNING_REFRESH);
+  }, [reading, tell]);
 
   const select = useCallback(
     (planId: string) => {

@@ -27,10 +27,8 @@ export const GATEWAY_METHOD = {
   CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
   NOTEBOOK_READ: "notebook.read",
-  /** The panel's Plans tab shows: the plan list read now, the active plan's document with it, and both followed until it is paused. */
+  /** The panel's Plans tab shows: the plan list read now, and the active plan's document with it. */
   PLANNING_REFRESH: "planning.refresh",
-  /** The panel's Plans tab stopped showing: nothing is followed, and the active plan and its call stand. */
-  PLANNING_PAUSE: "planning.pause",
   /** One plan made the active one and its saved document read, replacing whichever was active. */
   PLANNING_OPEN: "planning.open",
   /** The developer left the open plan: its call ends and no plan is active. */
