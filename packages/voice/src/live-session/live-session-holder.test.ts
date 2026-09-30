@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
+  LIVE_PEER_END_REASON,
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
   type VoiceLiveSessionChanged,
@@ -22,13 +23,13 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Clock, Deferred, Duration, Effect, Exit, Fiber, Scope, type Stream } from "effect";
+import { Clock, Deferred, Duration, Effect, Exit, Fiber, Logger, Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
-import { LiveSessionHolder, WANTED_WORD } from "./live-session-holder.js";
+import { LIVE_SESSION_END_CAUSE, LiveSessionHolder, WANTED_WORD } from "./live-session-holder.js";
 
 /**
  * The peer's holder of one hosted session, over a scripted source and
@@ -422,7 +423,7 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
-      const fiber = yield* Effect.forkChild(f.holder.endSession());
+      const fiber = yield* Effect.forkChild(f.holder.endSession(LIVE_SESSION_END_CAUSE.HANG_UP));
       yield* settle();
       assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
       assert.deepEqual(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSING);
@@ -436,7 +437,7 @@ it.effect(
       });
       assert.equal(f.holder.sessionStands(), false);
       // A second ask to end finds nothing standing and sends nothing more.
-      yield* f.holder.endSession();
+      yield* f.holder.endSession(LIVE_SESSION_END_CAUSE.HANG_UP);
       assert.equal(sideband.sent.length, 1);
     }),
 );
@@ -445,7 +446,7 @@ it.effect("a graceful close nobody answers is released at the timeout as a lost 
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
-    const fiber = yield* Effect.forkChild(f.holder.endSession());
+    const fiber = yield* Effect.forkChild(f.holder.endSession(LIVE_SESSION_END_CAUSE.HANG_UP));
     yield* settle();
     yield* TestClock.adjust(Duration.millis(SIDEBAND_CLOSE_TIMEOUT_MS));
     yield* Fiber.join(fiber);
@@ -852,4 +853,66 @@ it.effect(
       assert.deepEqual(f.plans, [undefined]);
       assert.equal(f.holder.sessionStands(), false);
     }),
+);
+
+/** Every line the holder logged while `body` ran, read off a logger standing in for the host's reporter. */
+function loggedLines<A>(
+  body: (lines: readonly string[]) => Effect.Effect<A, never, Scope.Scope>,
+): Effect.Effect<A, never, Scope.Scope> {
+  const lines: string[] = [];
+  return Effect.provide(
+    body(lines),
+    Logger.layer([
+      Logger.make((options) => {
+        lines.push(String(options.message));
+      }),
+    ]),
+  );
+}
+
+function endLines(lines: readonly string[]): readonly string[] {
+  return lines.filter((line) => line.startsWith("voice call ended:"));
+}
+
+it.effect(
+  "an ended call is logged with the hand that ended it, whether it was a planning call, and how long it stood",
+  () =>
+    loggedLines((lines) =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+        assert.ok(created);
+        const planning = f.sidebands[0];
+        assert.ok(planning);
+        planning.started(created.sessionId);
+        yield* settle();
+        yield* TestClock.adjust(Duration.seconds(204));
+        const switching = yield* Effect.forkChild(f.holder.endPlanCall(BILLING_PLAN));
+        yield* settle();
+        planning.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 204);
+        yield* Fiber.join(switching);
+
+        const desk = yield* f.open();
+        yield* TestClock.adjust(Duration.seconds(3));
+        f.holder.reportTransport(LIVE_TRANSPORT_STATE.CLOSED, LIVE_PEER_END_REASON.CHANNEL_CLOSED);
+        yield* settle();
+        desk.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
+        yield* settle();
+
+        const lost = yield* f.open();
+        lost.dropConnection();
+        yield* settle();
+
+        assert.deepEqual(endLines(lines), [
+          "voice call ended: cause=plan_switched close_reason=close_requested session=sess-1 planning=true seconds=204",
+          "voice call ended: cause=peer_closed peer_reason=channel_closed close_reason=close_requested session=sess-2 planning=false seconds=3",
+          "voice call ended: cause=sideband_lost close_reason=connection_lost session=sess-3 planning=false seconds=0",
+        ]);
+        assert.ok(
+          lines.includes(
+            "voice transport: state=closed peer_reason=channel_closed session=sess-2 planning=false",
+          ),
+        );
+      }),
+    ),
 );

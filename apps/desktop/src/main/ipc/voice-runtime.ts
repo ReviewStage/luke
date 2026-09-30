@@ -114,9 +114,9 @@ export function voiceRuntimeActRows(
         : Effect.succeed(undefined),
     [ACT_KIND.VOICE_END_LIVE_SESSION]: (_payload, { voice }) =>
       voice ? Effect.as(liveSession.endLiveSession(), undefined) : Effect.succeed(undefined),
-    [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: ({ state }, { voice }) =>
+    [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: (report, { voice }) =>
       voice
-        ? Effect.as(liveSession.reportLiveTransport(state), undefined)
+        ? Effect.as(liveSession.reportLiveTransport(report), undefined)
         : Effect.succeed(undefined),
     [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: ({ idle }, { voice }) =>
       voice

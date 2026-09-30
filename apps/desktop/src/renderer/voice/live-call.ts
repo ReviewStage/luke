@@ -1,7 +1,9 @@
 import { TRACE_DIRECTION, type TraceDirection } from "@sidecar/devtrace/vocabulary";
 import {
+  LIVE_PEER_END_REASON,
   LIVE_TRANSPORT_STATE,
-  type LiveTransportState,
+  type LivePeerEndReason,
+  type VoiceReportLiveTransportParams,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
 import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
@@ -28,7 +30,17 @@ import type {
 } from "@sidecar/voice/orchestrator";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Context, Deferred, Duration, Effect, Exit, Fiber, Result, type Scope } from "effect";
+import {
+  type Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Result,
+  type Scope,
+} from "effect";
 import { LiveCaptions } from "./live-captions";
 import {
   acquireLivePeer,
@@ -67,7 +79,8 @@ interface LiveCallActs {
     planId: string | undefined,
   ) => Promise<VoiceCreateLiveSessionResult | undefined>;
   endSession: () => void;
-  reportTransport: (state: LiveTransportState) => void;
+  /** The peer connection's state as it changed, and at the peer's end, why it ended. */
+  reportTransport: (report: VoiceReportLiveTransportParams) => void;
   reportActivity: (idle: boolean) => void;
 }
 
@@ -299,7 +312,10 @@ export class LiveCall implements LiveVoiceCall {
     },
     [LIVE_SERVER_EVENT.SESSION_CLOSED]: () => {
       Deferred.doneUnsafe(this.#announcedClose, Exit.void);
-      this.#tearDown(LIVE_STATUS.IDLE);
+      this.#tearDown(
+        LIVE_STATUS.IDLE,
+        this.#closing ? LIVE_PEER_END_REASON.HUNG_UP : LIVE_PEER_END_REASON.SERVICE_CLOSED,
+      );
     },
     [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED]: (event) => this.#acknowledge(event.client_event_id),
     [LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED]: (event) => this.#acknowledge(event.client_event_id),
@@ -372,7 +388,7 @@ export class LiveCall implements LiveVoiceCall {
       if (started) return true;
       if (!this.#ended) {
         this.#options.events.onError(SESSION_START_TIMEOUT_MESSAGE);
-        this.#tearDown(LIVE_STATUS.FAILED);
+        this.#tearDown(LIVE_STATUS.FAILED, LIVE_PEER_END_REASON.START_TIMED_OUT);
       }
       return false;
     });
@@ -453,15 +469,21 @@ export class LiveCall implements LiveVoiceCall {
       // whose sideband can still close the session gracefully.
       if (!this.#started || peer.channel.readyState !== "open") {
         this.#options.acts.endSession();
-        this.#tearDown(LIVE_STATUS.IDLE);
+        this.#tearDown(LIVE_STATUS.IDLE, LIVE_PEER_END_REASON.HUNG_UP);
         return;
       }
       this.#send(closeEvent(this.#nextId()));
-      yield* Effect.timeoutOption(
+      const answered = yield* Effect.timeoutOption(
         Deferred.await(this.#announcedClose),
         Duration.millis(SESSION_CLOSE_TIMEOUT_MS),
       );
-      if (!this.#ended) this.#tearDown(LIVE_STATUS.IDLE);
+      if (this.#ended) return;
+      this.#tearDown(
+        LIVE_STATUS.IDLE,
+        Option.isSome(answered)
+          ? LIVE_PEER_END_REASON.HUNG_UP
+          : LIVE_PEER_END_REASON.CLOSE_TIMED_OUT,
+      );
     });
   }
 
@@ -527,10 +549,10 @@ export class LiveCall implements LiveVoiceCall {
       }),
     )?.state;
     if (state === undefined) return;
-    this.#options.acts.reportTransport(state);
+    this.#options.acts.reportTransport({ state });
     if (state === LIVE_TRANSPORT_STATE.FAILED && !this.#ended) {
       Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
-      this.#tearDown(LIVE_STATUS.FAILED);
+      this.#tearDown(LIVE_STATUS.FAILED, LIVE_PEER_END_REASON.TRANSPORT_FAILED);
     }
   }
 
@@ -538,7 +560,7 @@ export class LiveCall implements LiveVoiceCall {
     if (this.#ended) return;
     Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
     Deferred.doneUnsafe(this.#announcedClose, Exit.void);
-    this.#tearDown(LIVE_STATUS.IDLE);
+    this.#tearDown(LIVE_STATUS.IDLE, LIVE_PEER_END_REASON.CHANNEL_CLOSED);
   }
 
   #onRows(rows: readonly LiveCaptionRow[]): void {
@@ -611,9 +633,10 @@ export class LiveCall implements LiveVoiceCall {
    * scope's to close, which completing {@link #ending} is what asks for; a
    * device this call opened after the offer is stopped here, and stopping a
    * track twice is a no-op, so the two cannot fight over the one the offer
-   * rode.
+   * rode. `reason` goes with that report, so the host's line about the end
+   * names which of the peer's ends this was.
    */
-  #tearDown(status: LiveStatus): void {
+  #tearDown(status: LiveStatus, reason: LivePeerEndReason): void {
     if (this.#ended) return;
     this.#ended = true;
     const peer = this.#peer;
@@ -630,7 +653,7 @@ export class LiveCall implements LiveVoiceCall {
       peer.channel.onclose = null;
       peer.connection.onconnectionstatechange = null;
       stopDevice(peer.microphoneStream);
-      this.#options.acts.reportTransport(LIVE_TRANSPORT_STATE.CLOSED);
+      this.#options.acts.reportTransport({ state: LIVE_TRANSPORT_STATE.CLOSED, reason });
     }
     this.#micLive = false;
     this.#lukeSpeaking = false;

@@ -131,6 +131,29 @@ export type LiveTransportState = (typeof LIVE_TRANSPORT_STATE)[keyof typeof LIVE
 const LIVE_TRANSPORT_STATES: readonly LiveTransportState[] = Object.values(LIVE_TRANSPORT_STATE);
 
 /**
+ * Why the peer ended its side of a call, told with the closed transport it
+ * reports, so the host's line about the end names the peer's own reason.
+ */
+export const LIVE_PEER_END_REASON = {
+  /** The developer or the policy above the peer hung up. */
+  HUNG_UP: "hung_up",
+  /** The hang-up's `session.closed` did not arrive within its bound. */
+  CLOSE_TIMED_OUT: "close_timed_out",
+  /** `session.closed` reached the peer unasked. */
+  SERVICE_CLOSED: "service_closed",
+  /** The data channel closed under the peer. */
+  CHANNEL_CLOSED: "channel_closed",
+  /** The peer connection reported itself failed. */
+  TRANSPORT_FAILED: "transport_failed",
+  /** The created session never announced itself started. */
+  START_TIMED_OUT: "start_timed_out",
+} as const;
+
+export type LivePeerEndReason = (typeof LIVE_PEER_END_REASON)[keyof typeof LIVE_PEER_END_REASON];
+
+const LIVE_PEER_END_REASONS: readonly LivePeerEndReason[] = Object.values(LIVE_PEER_END_REASON);
+
+/**
  * The most characters an SDP document may carry. A WebRTC offer for one audio
  * track and one data channel is a few kilobytes; the bound refuses an offer
  * no peer of this build composes rather than carrying it to a provider.
@@ -199,10 +222,13 @@ export const voiceCreateLiveSessionResultSchema = Schema.Struct({
 
 export type VoiceCreateLiveSessionResult = typeof voiceCreateLiveSessionResultSchema.Type;
 
-/** `voice.reportLiveTransport`: the peer connection's state as the peer saw it change. */
+/** `voice.reportLiveTransport`: the peer connection's state as the peer saw it change, and why the peer ended where it did. */
 export const voiceReportLiveTransportParamsSchema = Schema.Struct({
   state: Schema.Literals(LIVE_TRANSPORT_STATES),
+  reason: Schema.optionalKey(Schema.Literals(LIVE_PEER_END_REASONS)),
 });
+
+export type VoiceReportLiveTransportParams = typeof voiceReportLiveTransportParamsSchema.Type;
 
 /** `voice.reportLiveActivity`: whether the peer has decided, from its own local signals, that the exchange is idle. */
 export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.Boolean });
