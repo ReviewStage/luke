@@ -6,7 +6,7 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@sidecar/gateway";
-import type { PlanCallResult } from "@sidecar/hosted";
+import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
@@ -196,6 +196,63 @@ it.effect("a save the planning model makes is drawn within one beat of the caden
     yield* nextBeat();
 
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: saved });
+  }),
+);
+
+it.effect(
+  "a draft the notetaker sends during a call is drawn in place of the open plan, and a saved one is not read again",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const { call, last, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const drafting = { body: "# Draft\n\n## Goal", assumptions: [] };
+      planning.showDraft({
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        planId: INVITES,
+        document: drafting,
+      });
+      assert.deepEqual(last()?.document, {
+        status: PLANNING_READ.READY,
+        plan: { ...invites, document: drafting },
+      });
+
+      const saved = { body: "# Draft\n\n## Goal\n\nInvite by email.", assumptions: [] };
+      planning.showDraft({
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        planId: INVITES,
+        document: saved,
+        savedAt: 11,
+      });
+      // The service now lists the save the draft already showed; the beat reads nothing over it.
+      service.plans = [
+        { ...invites, updatedAt: 11, document: { body: "# stale", assumptions: [] } },
+      ];
+      yield* nextBeat();
+      assert.deepEqual(last()?.document, {
+        status: PLANNING_READ.READY,
+        plan: { ...invites, updatedAt: 11, document: saved },
+      });
+    }),
+);
+
+it.effect("a draft of a plan the panel does not have open is dropped", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+    const { call, last, planning } = yield* subject(fakeService([invites]));
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    planning.showDraft({
+      type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+      planId: BILLING,
+      document: { body: "# Billing export", assumptions: [] },
+    });
+
+    assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });
   }),
 );
 

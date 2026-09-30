@@ -95,6 +95,8 @@ export {
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
+  type PlanDraftFrame,
+  planDraftFrameFromWire,
   SESSION_CREATE_BOUNDS,
   type SessionActivityFrame,
   type SessionAttachedFrame,

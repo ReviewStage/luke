@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "plan.draft"
+      ]
+    },
+    "planId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "document": {
+      "type": "object",
+      "properties": {
+        "body": {
+          "type": "string",
+          "maxLength": 200000
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 200
+        }
+      },
+      "required": [
+        "body",
+        "assumptions"
+      ],
+      "additionalProperties": false
+    },
+    "savedAt": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "type",
+    "planId",
+    "document"
+  ],
+  "additionalProperties": false
+}

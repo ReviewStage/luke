@@ -4,7 +4,12 @@ import {
   type GatewayMethodTable,
   type GatewayShutdownSteps,
 } from "@sidecar/gateway";
-import { HostedChangesClient, HostedConversationClient, HostedPlanClient } from "@sidecar/hosted";
+import {
+  HostedChangesClient,
+  HostedConversationClient,
+  HostedPlanClient,
+  type PlanDraftFrame,
+} from "@sidecar/hosted";
 import { observationSupervisor } from "@sidecar/runtime";
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
@@ -138,14 +143,17 @@ export const hostAssemblyLayer: Layer.Layer<
     // offer. The onboarding beats and the launch greeting are decided by the
     // live composer below and spoken by the service on its ask.
     // The planning composer is built after the live one and ends its calls, so
-    // the live composer reads the open plan through this late binding.
+    // the live composer reads the open plan, and hands it the plan's drafts,
+    // through these late bindings.
     let activePlanId: () => string | undefined = () => undefined;
+    let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
       observation,
       calendars,
       activePlanId: () => activePlanId(),
+      showPlanDraft: (draft) => showPlanDraft(draft),
     });
     const planning = yield* composePlanning({
       kernel,
@@ -167,6 +175,7 @@ export const hostAssemblyLayer: Layer.Layer<
       },
     });
     activePlanId = planning.activePlanId;
+    showPlanDraft = planning.showDraft;
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
     briefingsOffered = live.briefingsOffered;

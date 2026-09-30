@@ -6,7 +6,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import type { HostedPlanClient } from "@sidecar/hosted";
+import type { HostedPlanClient, PlanDraftFrame } from "@sidecar/hosted";
 import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
 import { planCreateRequestSchema } from "@sidecar/hosted/plan-wire";
 import {
@@ -31,9 +31,10 @@ import type { RunMode } from "./run-mode.js";
 /**
  * compose-planning.ts -- the panel's named plans, read from the service: the list, the one active plan, and its saved document, followed while the Plans tab shows.
  *
- * Nothing here writes a document: the planning model's `update_plan` is the
- * one writer, on the service. What this concern owes the panel is to show
- * that write soon after it lands, so while the Plans tab shows it reads the
+ * Nothing here writes a document: the plan's notetaker is the one writer, on
+ * the service. What this concern owes the panel is to show that write as it
+ * happens: during a planning call the notetaker's drafts arrive on the call's
+ * own socket and are shown in place, and while the Plans tab shows it reads the
  * plan list on a short cadence and reads the active plan again whenever the
  * list says its document was saved since the copy held. The list read is a
  * read and nothing else; opening a plan moves it to the head of the list, so
@@ -86,6 +87,12 @@ export interface PlanningComposer extends Composer {
   activePlanId: () => string | undefined;
   /** Drops everything held, for a sign-out, and tells every client the panel has nothing. */
   reset: Effect.Effect<void>;
+  /**
+   * Shows a draft of the open plan the service's notetaker sent while a
+   * planning call writes it, in place of the document held; a draft of any
+   * other plan, or with no document of that plan held, is dropped.
+   */
+  showDraft: (draft: PlanDraftFrame) => void;
 }
 
 /**
@@ -174,6 +181,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             : { status: PLANNING_READ.READY, plan: held },
       });
     });
+  }
+
+  function showDraft(draft: PlanDraftFrame): void {
+    const held = heldPlanOf(draft.planId);
+    if (held === undefined || view.activePlanId !== draft.planId) return;
+    // A saved draft carries its save's instant, so the next beat finds the
+    // copy current and reads nothing again.
+    const plan = {
+      ...held,
+      document: draft.document,
+      ...(draft.savedAt === undefined ? undefined : { updatedAt: draft.savedAt }),
+    };
+    write({ document: { status: PLANNING_READ.READY, plan } });
   }
 
   /**
@@ -306,6 +326,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     methods,
     snapshot: () => view,
     activePlanId: () => view.activePlanId,
+    showDraft,
     reset: Effect.gen(function* () {
       yield* endPlanCall(undefined);
       yield* cadence.disarm;
