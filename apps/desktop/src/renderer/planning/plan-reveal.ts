@@ -6,13 +6,13 @@
  * always the template's own, and the template's order is fixed, so units line
  * up by position from one document to the next. Each unit holds its target,
  * the newest words, and how much of them is shown; a frame grows the shown
- * words toward the target at a person's typing pace, so the plan reads as
+ * words toward the target at a streaming model's pace, so the plan reads as
  * being written rather than pasted. Everything here is pure; the frame clock
  * is the hook's.
  */
 
-/** The pace every change types at: a fast typist, about 140 words a minute. */
-export const CHASE_CHARS_PER_SECOND = 12;
+/** The pace every change types at: a model streaming its answer, about 50 tokens a second. */
+export const CHASE_CHARS_PER_SECOND = 200;
 
 /** A line the formatter opens a section or a field with. */
 const UNIT_HEADING = /^#{2,3} /u;
