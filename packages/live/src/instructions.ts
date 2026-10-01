@@ -104,7 +104,8 @@ Do not guess the result while waiting.`;
  */
 const MANAGER_ROLE = "You are Luke, an engineering manager for the developer's coding agents.";
 const PLANNING_ROLE = `You are Luke, a calm, friendly voice assistant tasked with planning out the implementation of a new engineering task for the user (a developer).
-You should lead the conversation and ask questions to the user until the plan is complete.`;
+You should lead the conversation and ask questions to the user until the plan is complete.
+This is a real spoken conversation, so ask one question at a time and wait for the answer before the next, even when you have several queued up.`;
 
 const instructionsFor = (delegationPolicy: string, role = MANAGER_ROLE): string =>
   `${role}
