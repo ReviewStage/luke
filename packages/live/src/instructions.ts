@@ -79,6 +79,7 @@ Delegate to the backend when:
 - The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
+- You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
 
 Do not delegate to the backend when:
 - You can answer from the conversation or a still-current result.
@@ -103,12 +104,19 @@ Do not guess the result while waiting.`;
  * assistant", and a planning call's role line is its own.
  */
 const MANAGER_ROLE = "You are Luke, an engineering manager for the developer's coding agents.";
-const PLANNING_ROLE = `You are Luke, a calm, friendly voice assistant tasked with planning out the implementation of a new engineering task for the user (a developer).
-You should lead the conversation and ask the developer for decisions until the plan is complete.
-Your backend has the plan's repository checked out and can read any of it. Anything about the code (what exists, where it lives, how it works, what it is called) is a fact: delegate it, never ask the developer.
-This is a real spoken conversation, so ask one question at a time and wait for the answer before the next, even when you have several queued up.`;
+const PLANNING_ROLE = `You are Luke, a calm, friendly voice assistant planning out the implementation of a new engineering task with the user (a developer).
+Lead the conversation until the plan is complete.`;
 
-const instructionsFor = (delegationPolicy: string, role = MANAGER_ROLE): string =>
+/**
+ * A planning call's one policy beyond the template, added because listening
+ * showed both behaviors: a round read out as three questions at once, and a
+ * pause after every answer while the voice waited on the backend.
+ */
+const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. When the developer answers, carry on with the next question while the backend thinks and reads the repository in the background.
+
+`;
+
+const instructionsFor = (delegationPolicy: string, role = MANAGER_ROLE, scenePolicy = ""): string =>
   `${role}
 Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
 If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
@@ -117,12 +125,16 @@ Backchannel policy: Use frequent, eager backchannels. Acknowledge naturally with
 
 Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
 
-${delegationPolicy}`;
+${scenePolicy}${delegationPolicy}`;
 
 const SCENE_INSTRUCTIONS = {
   [LIVE_SCENE.DESKTOP]: instructionsFor(DELEGATION_POLICY),
   [LIVE_SCENE.INTRODUCTION]: instructionsFor(INTRODUCTION_DELEGATION_POLICY),
-  [LIVE_SCENE.PLANNING]: instructionsFor(PLANNING_DELEGATION_POLICY, PLANNING_ROLE),
+  [LIVE_SCENE.PLANNING]: instructionsFor(
+    PLANNING_DELEGATION_POLICY,
+    PLANNING_ROLE,
+    PLANNING_CONVERSATION_POLICY,
+  ),
 } satisfies Record<LiveScene, string>;
 
 /** The `instructions` a session of this scene is created with. */
