@@ -46,6 +46,7 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
@@ -499,6 +500,20 @@ test("the projection: a turn with no journal or no slow call tells no slow step,
     ],
   );
   assert.deepEqual(projectTurnEvents({ ...TURN, status: TURN_STATUS.QUEUED }, undefined), []);
+});
+
+test("the projection: a planning call's repository command is a slow step of its own, though no catalog policy offers the tool", () => {
+  assert.deepEqual(
+    projectTurnEvents(TURN, journal([toolPart(RUN_IN_REPOSITORY_TOOL.name, "c1")])),
+    [
+      {
+        turnId: TURN.id,
+        seq: 1,
+        kind: TURN_EVENT_KIND.SLOW_STEP,
+        step: TURN_SLOW_STEP.REPOSITORY_READ,
+      },
+    ],
+  );
 });
 
 test("the projection: a settled turn with no words tells the settled mark and the end alone, and one with words tells each sentence once, in order", () => {

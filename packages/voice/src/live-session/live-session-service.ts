@@ -101,6 +101,7 @@ export const RUN_END_NOTE = {
 const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
   ["transcript_read", "Luke is reading a session's transcript; this takes a moment."],
   ["provider_write", "Luke is carrying out the action; this takes a moment."],
+  ["repository_read", "Luke is reading the repository; this takes a moment."],
 ]);
 const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
 
