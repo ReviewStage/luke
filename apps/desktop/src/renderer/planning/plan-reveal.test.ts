@@ -62,7 +62,7 @@ test("an opened plan is drawn whole, and a document that changed nothing types n
   assert.deepEqual(drawn(state), planUnits(words));
 });
 
-test("added words type in from where the shown words end, at a typist's pace however many there are", () => {
+test("added words type in from where the shown words end, at the streaming pace however many there are", () => {
   const before = body("Only an admin.");
   const after = body(`Only an admin.\n\n${"By hand, from the settings page. ".repeat(20)}`);
   const typing = retarget(chaseOpened(before), after);
@@ -99,7 +99,7 @@ test("units behind type in document order, with the caret and the writing mark o
     ),
   );
   // Spent in order: the first field finishes before the second moves.
-  const partway = chaseStepped(typing, 500);
+  const partway = chaseStepped(typing, 30);
   assert.equal(drawn(partway)[3], "### Users\n\n");
 });
 
