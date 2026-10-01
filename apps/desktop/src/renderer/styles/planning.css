@@ -161,8 +161,12 @@
 }
 
 /* The document is the record: it reads as text and is selectable, so Cmd-C
-   on a selection copies it. */
+   on a selection copies it. Note that it sets its own accent, because
+   `--accent` is only ever set by a `data-state` ancestor and nothing above
+   the plan carries one: unset, the caret, the writing dot, and the fresh tint
+   all drew nothing. Luke is the one writing, so the accent is his. */
 .plan-document-scroll {
+  --accent: var(--voice-luke);
   flex: 1;
   min-height: 0;
   padding: 10px 2px 12px;
