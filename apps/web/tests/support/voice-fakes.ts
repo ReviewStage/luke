@@ -6,10 +6,11 @@ import type { Plan } from "@sidecar/hosted/plan-wire";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
+import { VOICE_CLOSE_REASON, type VoiceCloseReason } from "../../server/db/voice-vocabulary";
 import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import {
+  LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
   LIVE_SESSION_START,
   LIVE_SESSIONS_PATH,
@@ -94,6 +95,8 @@ export interface FakeOpenAi {
   createStatus: number;
   /** The status the next primary upgrade is refused with, where one is; a socket otherwise. */
   primaryStatus: number | undefined;
+  /** The status every attach is refused with, where one is, as OpenAI answers an attach to a session already gone; a socket otherwise. */
+  attachStatus: number | undefined;
   /**
    * Text frames written into the same chunk as `session.started`, behind it,
    * so they reach the door in the one tick that event does; none by default.
@@ -175,6 +178,7 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
     primaries,
     createStatus: HTTP_CREATED,
     primaryStatus: undefined,
+    attachStatus: undefined,
     startedBeside: [],
     startedThen: [],
     nextAttach: attachLine.next,
@@ -250,6 +254,10 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
     const match = ATTACH_PATH.exec(request.url ?? "");
     if (!match?.[1]) {
       socket.destroy();
+      return;
+    }
+    if (fake.attachStatus !== undefined) {
+      socket.end(`HTTP/1.1 ${fake.attachStatus} Refused\r\nConnection: close\r\n\r\n`);
       return;
     }
     const sessionId = decodeURIComponent(match[1]);
@@ -358,6 +366,8 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
   /** Every usage snapshot, in order. */
   usage: Array<{ sessionId: string; seconds: number }>;
   closes: RecordedClose[];
+  /** Every detach and re-attach the service wrote, in order, by the live session named. */
+  detachments: Array<{ sessionId: string; detached: boolean }>;
 }
 
 /**
@@ -375,6 +385,7 @@ export function fakeSessionRecord(): FakeSessionRecord {
     plans: [],
     usage: [],
     closes: [],
+    detachments: [],
     register: (input) =>
       Effect.sync(() => {
         fake.registered.push(input);
@@ -411,6 +422,23 @@ export function fakeSessionRecord(): FakeSessionRecord {
     close: (input) =>
       Effect.sync(() => {
         fake.closes.push(input);
+      }),
+    detach: (input) =>
+      Effect.sync(() => {
+        fake.detachments.push({ sessionId: input.sessionId, detached: true });
+      }),
+    attached: (input) =>
+      Effect.sync(() => {
+        fake.detachments.push({ sessionId: input.sessionId, detached: false });
+      }),
+    detached: () => Effect.succeed([]),
+    closeLost: (input) =>
+      Effect.sync(() => {
+        fake.closes.push({
+          sessionId: input.sessionId,
+          seconds: 0,
+          reason: VOICE_CLOSE_REASON.CONNECTION_LOST,
+        });
       }),
   };
   return fake;
@@ -486,6 +514,16 @@ export function connect(
 /** Sends one JSON frame and waits for the write to leave. */
 export function send(socket: WebSocket, frame: WireRecord): Promise<void> {
   return sendText(socket, JSON.stringify(frame));
+}
+
+/**
+ * The device's own hang-up, as the Mac's graceful close makes it: its
+ * `session.close` sent over the socket, and then the socket closed. A socket
+ * closed without the frame is a drop, which the sessions route detaches on.
+ */
+export async function hangUpDevice(socket: WebSocket, code: number): Promise<void> {
+  await send(socket, { type: LIVE_CLIENT_EVENT.CLOSE, event_id: randomUUID() });
+  socket.close(code);
 }
 
 export function sendText(socket: WebSocket, text: string): Promise<void> {

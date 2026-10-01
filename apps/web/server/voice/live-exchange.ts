@@ -57,9 +57,11 @@ import { type PlanDraft, planScribe } from "./plan-scribe.js";
  * into that scope — the one that reports what the record made of each live
  * event, the brain's follow of each accepted ask, the briefing look on its
  * schedule, and the service's own — so closing the scope when the socket
- * detaches interrupts each of them. The session's graceful close and the wait on every record
- * write already started are finalizers of the same scope, added so their
- * reverse order is the order the old `stop` ran them.
+ * detaches interrupts each of them. The session's graceful close (or, where
+ * the device's socket went with no hang-up, its release with nothing said to
+ * it) and the wait on every record write already started are finalizers of
+ * the same scope, added so their reverse order is the order the old `stop`
+ * ran them.
  */
 
 export interface HostedLiveExchangeOptions {
@@ -161,8 +163,26 @@ export interface ExchangeReport {
   readonly platform: DevicePlatform | undefined;
 }
 
+/**
+ * How the exchange's scope lets go of the session it stands on: closing it,
+ * the docs' graceful close, which is every ending but one; or detaching from
+ * it, which says nothing to the session, because the device's socket went
+ * with no hang-up and the device will attach to the same session again.
+ */
+export const EXCHANGE_ENDING = {
+  CLOSE: "close",
+  DETACH: "detach",
+} as const;
+
+export type ExchangeEnding = (typeof EXCHANGE_ENDING)[keyof typeof EXCHANGE_ENDING];
+
 export interface HostedLiveExchange {
   readonly service: LiveSessionService<HostedBriefingDelivery>;
+  /**
+   * Names how the scope's close is to end the session, asked before that
+   * close; an exchange never told closes it.
+   */
+  endAs(ending: ExchangeEnding): void;
   readonly brain: HostedLiveBrain;
   readonly briefings: HostedBriefings;
   readonly store: HostedStore;
@@ -313,10 +333,16 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );
 
-  yield* Effect.addFinalizer(() => service.stop());
+  let ending: ExchangeEnding = EXCHANGE_ENDING.CLOSE;
+  yield* Effect.addFinalizer(() =>
+    ending === EXCHANGE_ENDING.DETACH ? service.release() : service.stop(),
+  );
 
   return {
     service,
+    endAs: (next) => {
+      ending = next;
+    },
     brain,
     briefings,
     store,
