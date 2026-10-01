@@ -531,6 +531,8 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
                       planId: plan.plan.id,
                       header: { name: plan.plan.name, repository: plan.plan.repository },
                     },
+                    tool: context,
+                    bash: seams.bash,
                     research: {
                       turnId: binding.turn.turnId,
                       budget: research,

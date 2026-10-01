@@ -36,7 +36,6 @@ function repository(owner: string, name: string, isPrivate: boolean): FakeReposi
     private: isPrivate,
     defaultBranch: "main",
     branches: new Map(),
-    commits: new Map(),
   };
 }
 

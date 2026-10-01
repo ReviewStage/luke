@@ -72,10 +72,11 @@ Do not delegate to the backend when:
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
-- The repository: get_file_contents, which reads the plan's repository.
+- The repository: run_in_repository, which runs shell commands in a clone of the plan's repository.
 - Research: search_web and read_web_page, which can search the Internet.
 
 Delegate to the backend when:
+- The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
 

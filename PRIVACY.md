@@ -109,6 +109,16 @@ own operators, the same way the conversation described below is. A save
 replaces the document and no earlier version is kept; deleting a plan removes
 it at once, and deleting your account removes every plan.
 
+**How the planning model reads your repository.** During a planning call,
+Luke's planning model reads the plan's repository from a shallow copy of the
+one commit the plan started at. The copy is fetched from GitHub with your
+account's GitHub connection into an isolated Vercel Sandbox, our service's
+own, whose network is shut once the copy lands, so nothing run there can send
+your source anywhere; your GitHub token is added to that one fetch outside the
+sandbox and is never written into it. The copy is kept with the plan's
+planning conversation, and Vercel keeps the sandbox's saved filesystem while
+the conversation stands; deleting the plan does not yet delete the copy.
+
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
 written summary of his own when it grows long — and it is kept where his
@@ -631,6 +641,9 @@ Send.
   the SDK does not capture native crashes there.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
+- GitHub and Vercel, for a planning call's copy of your repository: GitHub
+  serves the fetch under your GitHub connection, and Vercel Sandbox holds the
+  copy, as described under "How the planning model reads your repository".
 
 We do not sell your information or use it for advertising. If you connect
 nothing, Luke sends nothing to any provider.

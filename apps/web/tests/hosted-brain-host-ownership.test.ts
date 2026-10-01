@@ -113,6 +113,7 @@ function hostOverTestDatabase(): TestHost {
     providerKey: unreached("providerKey"),
     executeAction: unreached("executeAction"),
     githubAccess: noGitHubConnections,
+    bash: unreached("bash"),
     now: () => NOW,
   };
   return { host: Effect.runSync(brainHost(seams)), storeReads: () => storeReads };
