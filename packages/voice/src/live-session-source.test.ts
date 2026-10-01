@@ -17,7 +17,7 @@ import {
   PROACTIVE_SPEECH_KIND,
 } from "@sidecar/live";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, Logger, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
@@ -833,6 +833,128 @@ it.effect("closing while a reattach wait stands interrupts it, opening no furthe
     yield* pause;
     assert.equal(script.sockets.length, 2);
   }),
+);
+
+it.effect("the hosted connection is pinged every thirty seconds, the first one interval in", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame())]);
+    const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+    assert.ok(opened);
+    const [socket] = script.sockets;
+    assert.ok(socket);
+
+    yield* TestClock.adjust("29 seconds");
+    assert.equal(socket.pings, 0);
+    yield* TestClock.adjust("1 second");
+    yield* settled(() => socket.pings >= 1, "the first ping");
+    assert.equal(socket.pings, 1);
+    yield* TestClock.adjust("30 seconds");
+    yield* settled(() => socket.pings >= 2, "the second ping");
+    assert.equal(socket.pings, 2);
+  }),
+);
+
+it.effect("closing the session's scope ends the pings", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame())]);
+    const socket = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+        assert.ok(opened);
+        const [first] = script.sockets;
+        assert.ok(first);
+        yield* TestClock.adjust("30 seconds");
+        yield* settled(() => first.pings >= 1, "the ping while the scope stands");
+        return first;
+      }),
+    );
+
+    yield* TestClock.adjust("5 minutes");
+    assert.equal(socket.pings, 1);
+  }),
+);
+
+it.effect(
+  "no ping is sent during a re-attach gap, and the pings after it reach the fresh connection",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([
+        answering(createdFrame()),
+        closingOnSend(1011),
+        answering(attachedFrame()),
+      ]);
+      const source = reattaching(script, { reattachDelaysMs: [0, 45_000] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      yield* readSideband(yield* opened.attach());
+
+      // The first try fails at once, so the gap stands across the ping due at thirty seconds.
+      script.sockets[0]?.closeFromServer({ code: 1006 });
+      yield* openedSockets(script, 2);
+      yield* TestClock.adjust("45 seconds");
+      yield* openedSockets(script, 3);
+      const fresh = script.sockets[2];
+      assert.ok(fresh);
+      yield* settled(() => fresh.received.length >= 1, "the attach answer on the fresh connection");
+      yield* TestClock.adjust("14 seconds");
+      assert.deepEqual(
+        script.sockets.map((socket) => socket.pings),
+        [0, 0, 0],
+      );
+
+      yield* TestClock.adjust("1 second");
+      yield* settled(() => fresh.pings >= 1, "the ping on the fresh connection");
+      assert.deepEqual(
+        script.sockets.map((socket) => socket.pings),
+        [0, 0, 1],
+      );
+    }),
+);
+
+/** Every line logged while `body` ran, read off a logger standing in for the host's reporter. */
+function loggedLines<A>(
+  body: (lines: readonly string[]) => Effect.Effect<A, never, Scope.Scope>,
+): Effect.Effect<A, never, Scope.Scope> {
+  const lines: string[] = [];
+  return Effect.provide(
+    body(lines),
+    Logger.layer([
+      Logger.make((options) => {
+        lines.push(String(options.message));
+      }),
+    ]),
+  );
+}
+
+it.effect(
+  "each connection's end is logged with its close, how long it stood, and whether a re-attach follows",
+  () =>
+    loggedLines((lines) =>
+      Effect.gen(function* () {
+        const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+        const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+        assert.ok(opened);
+        const read = yield* readSideband(yield* opened.attach());
+
+        yield* TestClock.adjust("12 seconds");
+        script.sockets[0]?.closeFromServer({ code: 1006, reason: "function recycled" });
+        yield* openedSockets(script, 2);
+        const fresh = script.sockets[1];
+        assert.ok(fresh);
+        yield* settled(() => fresh.received.length >= 1, "the attach answer");
+        yield* TestClock.adjust("5 seconds");
+        fresh.closeFromServer({ code: 1000 });
+        yield* closesReported(read.closes);
+
+        assert.deepEqual(
+          lines.filter((line) => line.startsWith("voice socket closed:")),
+          [
+            "voice socket closed: code=1006 reason=function recycled age=12s next=reattach",
+            "voice socket closed: code=1000 reason=none age=5s next=end",
+          ],
+        );
+      }),
+    ),
 );
 
 it.live("a service that refuses the attachment ends the tries at once", () =>

@@ -14,6 +14,8 @@ class FakeTransport implements SocketVerbs {
     this.sent.push(data);
   }
 
+  ping(): void {}
+
   close(): void {
     this.closedByClient = true;
   }

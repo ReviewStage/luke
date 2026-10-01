@@ -2,6 +2,9 @@ import { holdSocket, type OpenSocket, SOCKET_OPEN_FAULT, type SocketOpening } fr
 import { Effect } from "effect";
 import { type RawData, WebSocket } from "ws";
 
+/** The protocol's own ceiling on a close reason, in bytes; what is handed up is never longer. */
+const CLOSE_REASON_MAX_BYTES = 123;
+
 /**
  * The host's half of the trusted sideband: the socket seam `@sidecar/voice`'s
  * sources open their connections through, implemented here over `ws` so that
@@ -10,6 +13,12 @@ import { type RawData, WebSocket } from "ws";
  * grammar, the two reflected audio events dropped by type before any
  * consumer sees them.
  */
+
+/** A close frame's reason as text, cut to the protocol's ceiling; nothing where the frame carried none. */
+function closeReason(reason: Buffer): string | undefined {
+  if (reason.length === 0) return undefined;
+  return reason.subarray(0, CLOSE_REASON_MAX_BYTES).toString("utf8");
+}
 
 /**
  * Opens one WebSocket with the handshake headers it is handed, and answers
@@ -37,6 +46,11 @@ export const openSocketOverWs: OpenSocket = (url, headers) =>
     const socket = new WebSocket(url, { headers: { ...headers } });
     const hold = holdSocket({
       send: (data) => socket.send(data),
+      // Note that a ping on a socket still connecting or already closing is dropped, because `ws`
+      // throws on one and a heartbeat that outlives its socket by a beat is no fault.
+      ping: () => {
+        if (socket.readyState === WebSocket.OPEN) socket.ping();
+      },
       close: () => socket.close(),
     });
     let settled = false;
@@ -49,9 +63,10 @@ export const openSocketOverWs: OpenSocket = (url, headers) =>
       if (isBinary) return;
       hold.hear({ frame: data.toString() });
     });
-    socket.on("close", (code: number) => {
+    socket.on("close", (code: number, reason: Buffer) => {
       settle({ fault: SOCKET_OPEN_FAULT.NETWORK, errorName: "ClosedBeforeOpen" });
-      hold.hear({ close: { code } });
+      const text = closeReason(reason);
+      hold.hear({ close: text === undefined ? { code } : { code, reason: text } });
     });
     socket.once("open", () => settle({ socket: hold.socket }));
     socket.once("unexpected-response", (_request, response) => {

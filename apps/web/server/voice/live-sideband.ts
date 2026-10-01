@@ -29,6 +29,11 @@ export const upstreamSideband = /* @__PURE__ */ Effect.fn("web/upstreamSideband"
 ): Effect.fn.Return<LiveSideband, never, Scope.Scope> {
   const hold = holdSocket({
     send: (data) => socket.send(data),
+    // Note that nothing on the service pings its upstream; the verb is the seam's, answered here
+    // only where the socket is open, as the host's is.
+    ping: () => {
+      if (socket.readyState === socket.OPEN) socket.ping();
+    },
     close: () => socket.close(SOCKET_CLOSE_CODE.NORMAL),
   });
   yield* Effect.acquireRelease(

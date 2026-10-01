@@ -45,6 +45,7 @@ class FakeSideband implements LiveSideband {
   closed = false;
   readonly #hold: SocketHold = holdSocket({
     send: () => undefined,
+    ping: () => undefined,
     close: () => {
       this.closed = true;
     },
