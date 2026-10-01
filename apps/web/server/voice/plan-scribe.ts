@@ -47,21 +47,26 @@ import { saveUpdate, UPDATE_PLAN_STATUS } from "../hosted/update-plan-tool.js";
  * arrives, on a small model, while speech goes on; this is that for the plan.
  * The scribe keeps its own ledger of both speakers' words from the sideband
  * and the brain's reply sentences as Luke's research notes, and once the
- * developer has been quiet for a beat it makes one model call over what was
- * said since its cursor and saves the fields that call changed through
- * `saveUpdate`, the plan's one write; while the model writes, its partial
+ * call has been quiet for a beat, whoever spoke last, it makes one model call
+ * over what was said since its cursor and saves the fields that call
+ * changed through `saveUpdate`, the plan's one write; while the model writes, its partial
  * answer goes to the device as a draft of the plan, so the Plans tab types
  * the notes in as they are written. It is the plan's only writer and its
  * runs never overlap, one fiber reading the debounced stream in turn, so no
  * save races another. A run that fails, is refused, or saves nothing moves no
  * cursor, and the next run is handed those lines again. The scribe decides
  * nothing of the call: nothing it does is said aloud or reaches the voice.
+ *
+ * Note that GPT-Live marks no end of a turn, so the quiet is the turn
+ * boundary, and Luke's turns start a run as the developer's do: what he
+ * relays from the backend belongs in the plan too, and a notetaker that
+ * waited on the developer left it unwritten while they listened.
  */
 
 export const PLAN_SCRIBE = {
   /** A small, fast model for the side work, as the GPT-Live guide suggests; the brain stays on its own. */
   MODEL: "gpt-5.6-luna",
-  /** How long the developer is quiet before what they said is written down. */
+  /** How long the call is quiet before what was said is written down. */
   QUIET_MS: 1_000,
   /** How long one run's model call may take before it is given up and its lines left for the next. */
   TIMEOUT_MS: 30_000,
@@ -161,7 +166,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
    */
   const run = Effect.gen(function* () {
     const latest = ledger.utterances(undefined, { sinceMs: cursor.heardThrough });
-    if (!latest.some((line) => line.speaker === TRANSCRIPT_SPEAKER.USER)) return;
+    if (latest.length === 0) return;
     const heardThrough = ledger.lastActivityMs() ?? cursor.heardThrough;
     const notesRead = notes.length;
     const stored = yield* readPlan(options.userId, options.planId);
@@ -305,6 +310,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
           startMs: event.start_ms,
           endMs: event.end_ms,
         });
+        Queue.offerUnsafe(heard, undefined);
       }
     },
     observeRun: (event) => {

@@ -91,6 +91,20 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       ),
   );
 
+  it.effect("what Luke says is written into the plan without waiting on the developer", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const { scribe } = yield* scribeFor(userId, planId, [{ purpose: { problem: PROBLEM } }]);
+
+        scribe.observe(said("So the problem is that only an admin can add someone.", 0, 2_000));
+        yield* quiet;
+
+        assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+      }),
+    ),
+  );
+
   it.effect("the model is handed both speakers' lines and the brain's research notes", () =>
     Effect.scoped(
       Effect.gen(function* () {
