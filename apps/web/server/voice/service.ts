@@ -29,8 +29,14 @@ import {
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
-import type { AttachedSession, ExchangeAttachment, HostedLiveExchange } from "./live-exchange.js";
-import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
+import {
+  type AttachedSession,
+  EXCHANGE_ENDING,
+  type ExchangeAttachment,
+  type ExchangeEnding,
+  type HostedLiveExchange,
+} from "./live-exchange.js";
+import { FINALIZATION, LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
 import {
   type Admission,
@@ -83,7 +89,9 @@ import { replayHeldFrames, SOCKET_CLOSE_CODE, voiceSocket } from "./socket.js";
  *
  * A connection is one function invocation, and the platform closes it at the
  * function's maximum duration. On the sessions route the WebRTC session
- * between the device and OpenAI stands on past that, so a socket there may
+ * between the device and OpenAI stands on past that: a socket there that
+ * closes without the device's own `session.close` is a detach, which sends
+ * nothing upstream and leaves the session standing, and a socket there may
  * also open with `session.attach`: the account that created the session,
  * proven by the `voice_sessions` row creation wrote, attaches a fresh
  * sideband to it and the pipe resumes; whatever the session said between the
@@ -287,13 +295,17 @@ export interface VoiceServiceOptions {
 
 type UpgradeDecision = Admission | { status: number };
 
-/** The exchange standing on a session, if one was offered, and its stop: the close of the scope it stands in, or nothing where none stands. */
+/**
+ * The exchange standing on a session, if one was offered, and its stop: the
+ * close of the scope it stands in, ending the session as the stop names, or
+ * nothing where none stands.
+ */
 interface StandingExchange {
   readonly exchange: HostedLiveExchange | undefined;
-  readonly stop: Effect.Effect<void>;
+  readonly stop: (ending: ExchangeEnding) => Effect.Effect<void>;
 }
 
-const NO_EXCHANGE: StandingExchange = { exchange: undefined, stop: Effect.void };
+const NO_EXCHANGE: StandingExchange = { exchange: undefined, stop: () => Effect.void };
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -352,9 +364,11 @@ export class VoiceService {
    * ever ends a service is a test ending the scope it stood one in.
    *
    * The finalizers run in the order the session's own ending needs. Giving up
-   * the claim and closing every device socket comes first, so each relay runs
-   * its graceful close upstream and the seconds it owes are recorded; the
-   * drain waits for those fibers under their own timeouts; and only then does
+   * the claim and closing every device socket comes first, so each relay
+   * either detaches, on the sessions route, leaving the call to the device's
+   * re-attach, or runs its graceful close upstream and the seconds it owes are
+   * recorded; the drain waits for those fibers under their own timeouts; and
+   * only then does
    * the `ws` server close and the set interrupt whatever the drain left, which
    * is nothing a session that ended left behind.
    */
@@ -428,8 +442,10 @@ export class VoiceService {
 
   /**
    * Refuses new upgrades by giving up the server's claim, closes every device
-   * socket so each relay runs its graceful close upstream, and waits for those
-   * fibers to finalize under their own timeouts.
+   * socket, and waits for each session's fiber to finalize under its own
+   * timeouts. A sessions-route call is detached rather than ended, since its
+   * WebRTC session outlives this instance and the device re-attaches to it on
+   * another; every other route's relay runs its graceful close upstream.
    */
   get #drain(): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
@@ -602,13 +618,18 @@ export class VoiceService {
       // to a socket that is not there, and the exchange ends here rather than
       // being left standing for the invocation. The socket is handed what the
       // door held and resumed first, since the exchange's own graceful close
-      // waits for a `session.closed` a paused socket would never deliver.
+      // waits for a `session.closed` a paused socket would never deliver. A
+      // re-attach the device dropped is a detach, as the relay reads one: the
+      // session is still the device's to attach to again. A session created
+      // for a device that never heard its answer is no one's, and is closed.
       if (!(yield* device.isOpen)) {
         yield* Effect.sync(() => {
           replayHeldFrames(sideband, held);
           sideband.resume();
         });
-        yield* stopExchange;
+        const detached = route === VOICE_ROUTE.SESSIONS && opened.started;
+        yield* stopExchange(detached ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
+        if (detached) yield* this.#written(route, this.#record.detach({ sessionId }));
         return;
       }
       yield* device.send({ text: JSON.stringify(opened.answer) });
@@ -697,8 +718,13 @@ export class VoiceService {
       // The relay has settled and closed both transports; the exchange ends its
       // follows and its look, closes the session it holds (already gone, which
       // its sideband reports as the close it held), and waits for every record
-      // write already started, so no line begun before the settle is cut.
-      yield* stopExchange;
+      // write already started, so no line begun before the settle is cut. A
+      // relay that settled detached left the session standing for the
+      // device's re-attach, so the exchange lets go of it with nothing said,
+      // and the row is stamped so the tick ends it if no device comes back.
+      const detached = summary.finalization === FINALIZATION.DETACHED;
+      yield* stopExchange(detached ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
+      if (detached) yield* this.#written(route, this.#record.detach({ sessionId }));
       this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
     });
   }
@@ -732,15 +758,20 @@ export class VoiceService {
       // A stop that fails is the service's to report and never the session's
       // to inherit: the refusal, the relay's own ending, and the session's
       // log line all follow it whatever it did.
-      const stop = Effect.catchCause(Scope.close(scope, Exit.void), () => failed);
+      const close = Effect.catchCause(Scope.close(scope, Exit.void), () => failed);
       const stood = yield* Effect.exit(Scope.provide(attachment(session), scope));
       if (Exit.isFailure(stood)) {
-        yield* Effect.andThen(stop, failed);
+        yield* Effect.andThen(close, failed);
         return { refused: true } as const;
       }
       const exchange = stood.value;
       if (exchange === undefined) return NO_EXCHANGE;
       this.#log({ event: LOG_EVENT.EXCHANGE_ATTACHED, route: session.route });
+      const stop = (ending: ExchangeEnding): Effect.Effect<void> =>
+        Effect.andThen(
+          Effect.sync(() => exchange.endAs(ending)),
+          close,
+        );
       return { exchange, stop };
     });
   }

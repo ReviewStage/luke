@@ -638,6 +638,27 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     });
   }
 
+  /**
+   * The detach: `stop`'s bookkeeping with nothing said to the session. The
+   * run events and the queue are given up and the standing session is torn
+   * down here, its rows written and its transport released, but no
+   * `session.close` goes up, because the session is not this service's to
+   * end: its peer still holds it and will attach to it again elsewhere. Run
+   * once, and a `stop` after it closes nothing either.
+   */
+  release(): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#stopped) return;
+      this.#stopped = true;
+      this.#stopRunEvents();
+      this.#queue.clear();
+      const session = this.#standing;
+      const releasing = this.#releasing;
+      if (session !== undefined) yield* this.#over(session);
+      else if (releasing !== undefined) yield* Deferred.await(releasing);
+    });
+  }
+
   /** The standing session, once started and not yet ended: the only one an append can reach. */
   #speakable(): StandingSession | undefined {
     const session = this.#standing;

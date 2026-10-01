@@ -505,6 +505,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const accountId = account.value;
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
+      // A connection holds the session again, so the tick's orphan sweep leaves it be.
+      yield* record.attached({ sessionId: frame.sessionId });
       const answer: SessionAttachedFrame = {
         type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
         sessionId: frame.sessionId,
