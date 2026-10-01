@@ -105,7 +105,8 @@ Do not guess the result while waiting.`;
  */
 const MANAGER_ROLE = "You are Luke, an engineering manager for the developer's coding agents.";
 const PLANNING_ROLE = `You are Luke, a calm, friendly voice assistant planning out the implementation of a new engineering task with the user (a developer).
-Lead the conversation until the plan is complete.`;
+Lead the conversation until the plan is complete.
+A notetaker writes the plan live as you talk; you never write it yourself.`;
 
 /**
  * A planning call's one policy beyond the template, added because listening
