@@ -44,6 +44,8 @@ import type { HostedToolDeclaration } from "./tools.js";
  * tools rather than dispatching anything. His rounds are also replaced by
  * one question at a time, because a numbered round read aloud is a barrage,
  * and the frontier not yet asked rides in each reply so none is dropped.
+ * We add one sentence naming the repository clone as where the facts are
+ * found.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -66,7 +68,7 @@ The **frontier** is every decision whose prerequisites are already settled: the 
 
 Keep the rest of the frontier in your reply under "Still to ask", so no question is dropped between turns. Each answer reshapes the tree: settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier after every answer, and keep every question on it until the user has answered it. A question whose answer depends on another question still open belongs to a _later_ frontier, not this one.
 
-Finding _facts_ is your job, never the user's. Don't ask the user for anything you could look up yourself. The _decisions_ are the user's: put each to them and wait.
+Finding _facts_ is your job, never the user's. You have the plan's repository checked out through run_in_repository, so anything about the code (what exists, where it lives, how it works, what it is called) you look up yourself. Don't ask the user for anything you could look up yourself. The _decisions_ are the user's: put each to them and wait.
 
 The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.
 
