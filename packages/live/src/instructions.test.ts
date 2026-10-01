@@ -57,6 +57,6 @@ test("a planning call is told the desktop's speaking policies over the planning 
   assert.deepEqual(planning.slice(1, policyAt), desktop.slice(1, policyAt));
   // The notetaker writes the plan, so the voice never delegates to save it.
   assert.equal(planningPolicy.includes("update_plan"), false);
-  assert.ok(planningPolicy.includes("get_file_contents"));
+  assert.ok(planningPolicy.includes("run_in_repository"));
   assert.equal(planningPolicy.includes("list_sessions"), false);
 });

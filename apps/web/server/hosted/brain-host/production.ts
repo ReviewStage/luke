@@ -18,6 +18,7 @@ import { githubConnectionAccess } from "../github-connection.js";
 import type { GitHubAccessShape } from "../github-source.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http-effect.js";
 import { type HostedSpend, spendHostedMeter } from "../quota.js";
+import type { RunBash } from "../repository-shell.js";
 import { type HostedStore, hostedStore, storeWriter } from "../store/index.js";
 import { readApiKeyFor } from "../vault-keys.js";
 import type { VaultKeyRow } from "../vault-route.js";
@@ -86,6 +87,8 @@ export interface BrainHostSeams {
   readonly executeAction: CloudActionExecutor;
   /** The account's GitHub credential for the planning model's repository read. */
   readonly githubAccess: GitHubAccessShape;
+  /** eve's own `bash` tool's run, for the planning model's repository commands. */
+  readonly bash: RunBash;
   readonly now: () => number;
 }
 
@@ -117,7 +120,10 @@ const findVaultRows = SqlSchema.findAll({
  * never thrown: a deployment without the vault has no store to read.
  */
 export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productionBrainHostSeams")(
-  function* (run: WebStoreRun): Effect.fn.Return<BrainHostSeams, never, HostedEnvironment> {
+  function* (
+    run: WebStoreRun,
+    bash: RunBash,
+  ): Effect.fn.Return<BrainHostSeams, never, HostedEnvironment> {
     const environment = yield* HostedEnvironment;
     const vaultSecret: Effect.Effect<Redacted.Redacted, HostedRefusal> =
       environment.providerKeyEncryptionSecret === undefined
@@ -174,6 +180,7 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
         ),
       executeAction: (input) => executeSessionAction(input),
       githubAccess: githubConnectionAccess(environment.authSecret),
+      bash,
       now: () => Date.now(),
     };
   },

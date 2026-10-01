@@ -4,6 +4,7 @@ import type { ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
+import type { ToolContext } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import type { GitHubAccess } from "../github-source.js";
 import type { StoredPlan } from "../plan-store.js";
@@ -14,7 +15,7 @@ import {
   runSearchWeb,
   SEARCH_WEB_TOOL,
 } from "../public-research.js";
-import { GET_FILE_CONTENTS_TOOL, runGetFileContents } from "../repository-tools.js";
+import { RUN_IN_REPOSITORY_TOOL, type RunBash, runInRepository } from "../repository-shell.js";
 import type { PlanDocumentBinding } from "../update-plan-tool.js";
 import type { HostedToolDeclaration } from "./tools.js";
 
@@ -69,7 +70,7 @@ The session is done when the frontier is empty: every branch of the design tree 
 
 ### Available tools
 
-- get_file_contents reads the plan's repository. Use it to find the facts the repository holds.
+- run_in_repository runs a shell command (ls, find, grep, cat, git log) in a clone of the plan's repository at the plan's commit. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet.
 
 ## Return the result
@@ -130,9 +131,11 @@ export function documentTextOf(standingContext: string): string | undefined {
   return at === -1 ? undefined : lines[at + 1];
 }
 
-/** What one planning call runs under: the plan the conversation belongs to, and the turn's research bounds. */
+/** What one planning call runs under: the plan the conversation belongs to, eve's context for the call and its `bash`, and the turn's research bounds. */
 export interface PlanningCall {
   readonly plan: PlanDocumentBinding;
+  readonly tool: ToolContext;
+  readonly bash: RunBash;
   readonly research: ResearchCall;
 }
 
@@ -152,17 +155,19 @@ type PlanningToolServices = SqlClient.SqlClient | GitHubAccess | HttpClient.Http
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.
- * None writes the plan, which is the notetaker's; `get_file_contents` reads the plan's
- * repository at the plan's commit through GitHub's hosted MCP tools, under
- * the same binding; the public search and page read (`public-research.ts`)
+ * None writes the plan, which is the notetaker's; `run_in_repository` runs a
+ * command in a clone of the plan's repository at the plan's commit, under the
+ * same binding; the public search and page read (`public-research.ts`)
  * answer what the repository cannot. Every read's result goes back to the
  * model as data.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
-    ...GET_FILE_CONTENTS_TOOL,
+    ...RUN_IN_REPOSITORY_TOOL,
     run: (call, input) =>
-      Effect.map(runGetFileContents(call.plan, input), (result) => ({ ...result })),
+      Effect.map(runInRepository(call.tool, call.bash, input), (result) => ({
+        ...result,
+      })),
   },
   {
     ...SEARCH_WEB_TOOL,

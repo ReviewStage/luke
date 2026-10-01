@@ -41,7 +41,7 @@ import { logStoreFailure } from "./store-failure.js";
  */
 
 /** The account and plan a planning conversation writes, fixed by the service before the model runs. */
-export interface PlanToolBinding {
+interface PlanToolBinding {
   readonly userId: string;
   readonly planId: string;
 }

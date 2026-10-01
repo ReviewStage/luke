@@ -73,6 +73,7 @@ const seams: BrainHostSeams = {
   providerKey: unreached("providerKey"),
   executeAction: unreached("executeAction"),
   githubAccess: noGitHubConnections,
+  bash: unreached("bash"),
   now: () => NOW,
 };
 

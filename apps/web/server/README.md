@@ -640,7 +640,7 @@ authored planning instructions, the standing context each turn opens with is
 the plan's repository, commit, and saved document read again from the row,
 and the tools are the planning list alone, `update_plan` bound to the plan
 the conversation belongs to (`readPlanOfConversation`), and
-`get_file_contents` under the same binding, with the two public research
+`run_in_repository` under the same binding, with the two public research
 reads beside them. A resumed session is seeded with the
 conversation so far like any other. A plan conversation primes and flushes no
 notebook, and never reaches the panel's reads, which name their kinds. The
@@ -728,22 +728,21 @@ connect GitHub again. `tests/github-connection.test.ts` holds it against
 rows sealed the way Better Auth seals them.
 
 The planning model reads source through one tool,
-`get_file_contents({ path })` (`server/hosted/repository-tools.ts`), under
-the same binding as `update_plan`: the repository and the commit are read
-from the plan's row on every call, so a resumed conversation reads the
-commit its plan started at, and an argument naming an owner, a repository, a
-ref, or a commit, or a path climbing out with `..`, is refused. GitHub hosts
-the read: `server/hosted/github-mcp.ts` is a standard MCP client
-(`@ai-sdk/mcp`) opened for one call against GitHub's read-only repository
-toolset, `https://api.githubcopilot.com/mcp/x/repos/readonly`, with the
-account's credential in the `Authorization` header alone. The answer is read
-into the tool's own shape, a directory's entries or a file's text with the
-path, repository, and commit, cut and marked `truncated` past its bound, and
-GitHub's own text is never forwarded, since a large file's download link
-carries a credential of its own; anything else is a `not-read` result saying
-nothing was read and why. `tests/repository-tools.test.ts` holds it against
-`tests/support/github-fake.ts`, which answers GitHub's REST reads and its MCP
-endpoint behind the one `fetch` both clients send through.
+`run_in_repository({ command })` (`server/hosted/repository-shell.ts`), which
+runs the command through eve's own `bash` tool (handed to the host by
+`eve/host.ts`, since no function bundle may import eve) from `/workspace/repo`
+of the session's eve sandbox (`eve/sandbox.ts`, Vercel Sandbox, opened only by
+this tool). eve runs the sandbox's `onSession` hook once as it makes it, and
+for a plan conversation that hook clones the plan's repository at the plan's
+commit: the sandbox starts with no network, the fetch is let out to
+`github.com` under a firewall rule that adds the account's token as the
+request's `Authorization` header, so the token never enters the sandbox, and
+the network is shut again once it lands. A clone that fails leaves eve unable
+to open the sandbox, and the tool answers `not-run` with the clone's reason.
+eve snapshots the sandbox when it idles and resumes it with the clone in
+place; deleting the plan does not yet delete it.
+`tests/repository-shell.test.ts` holds it against a directory of its own and
+a real git repository beside it.
 
 ## The admin group
 

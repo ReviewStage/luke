@@ -53,14 +53,10 @@ import {
   savePlanDocument,
 } from "../server/hosted/plan-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
-import {
-  GET_FILE_CONTENTS_TOOL,
-  REPOSITORY_READ_REFUSAL,
-  REPOSITORY_READ_STATUS,
-} from "../server/hosted/repository-tools";
+import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { hostedStore, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
-import { fakeGitHub, noGitHubConnections } from "./support/github-fake";
+import { noGitHubConnections } from "./support/github-fake";
 import { noNetwork } from "./support/no-network";
 import { testSqlClient } from "./support/sql-client";
 
@@ -182,6 +178,7 @@ const planningHost = (
       providerKey: unreached("providerKey"),
       executeAction: unreached("executeAction"),
       githubAccess,
+      bash: unreached("bash"),
       now: () => NOW,
     };
     return yield* brainHost(seams);
@@ -485,7 +482,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         assert.deepEqual(
           offered.map((declared) => declared.name),
-          [GET_FILE_CONTENTS_TOOL.name, SEARCH_WEB_TOOL.name, READ_WEB_PAGE_TOOL.name],
+          [RUN_IN_REPOSITORY_TOOL.name, SEARCH_WEB_TOOL.name, READ_WEB_PAGE_TOOL.name],
         );
       }),
   );
@@ -568,85 +565,6 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.ok(Result.isFailure(admission));
         assert.equal(admission.failure, BRAIN_HOST_REFUSAL.NO_CONVERSATION);
       }),
-  );
-
-  it.effect(
-    "the model's get_file_contents reads the plan's repository at its commit through the host",
-    () => {
-      const github = fakeGitHub();
-      return Effect.gen(function* () {
-        const { host, userId, conversationId } = yield* savedPlanWithConversation(github.access);
-        github.connect(userId, "fixture-token-planning", [
-          {
-            owner: RELAY_PLAN.repository.owner,
-            name: RELAY_PLAN.repository.name,
-            private: true,
-            defaultBranch: RELAY_PLAN.repository.branch,
-            branches: new Map([[RELAY_PLAN.repository.branch, RELAY_PLAN.repository.commit]]),
-            commits: new Map([
-              [RELAY_PLAN.repository.commit, new Map([["README.md", { text: "# Relay\n" }]])],
-            ]),
-          },
-        ]);
-        const session = yield* startSession(host, userId, conversationId);
-        const standing = yield* admitted(host, session);
-        const turn = {
-          kind: BRAIN_HOST_TURN.TYPED,
-          trigger: BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED].trigger,
-          turnId: hostTurnId(session.id, "turn_0"),
-        };
-        const call = (input: WireBoundaryInput) =>
-          host.runTool(
-            GET_FILE_CONTENTS_TOOL.name,
-            { target: standing.target, turn },
-            unparsedWire(input),
-            toolContext(session, GET_FILE_CONTENTS_TOOL.name),
-          );
-
-        const readme = yield* call({ path: "README.md" }).pipe(Effect.provide(github.layer));
-        const steered = yield* call({ path: "README.md", sha: "0".repeat(40) }).pipe(
-          Effect.provide(github.layer),
-        );
-
-        assert.deepEqual(readme, {
-          status: REPOSITORY_READ_STATUS.FILE,
-          repository: { owner: RELAY_PLAN.repository.owner, name: RELAY_PLAN.repository.name },
-          commit: RELAY_PLAN.repository.commit,
-          path: "README.md",
-          content: "# Relay\n",
-          characters: 8,
-          truncated: false,
-        });
-        assert.equal(steered.reason, REPOSITORY_READ_REFUSAL.UNREADABLE);
-      });
-    },
-  );
-
-  it.effect("with no GitHub connection, the model's get_file_contents says nothing was read", () =>
-    Effect.gen(function* () {
-      const { host, userId, conversationId } = yield* savedPlanWithConversation();
-      const session = yield* startSession(host, userId, conversationId);
-      const standing = yield* admitted(host, session);
-
-      const result = yield* host
-        .runTool(
-          GET_FILE_CONTENTS_TOOL.name,
-          {
-            target: standing.target,
-            turn: {
-              kind: BRAIN_HOST_TURN.TYPED,
-              trigger: BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED].trigger,
-              turnId: hostTurnId(session.id, "turn_0"),
-            },
-          },
-          unparsedWire({ path: "" }),
-          toolContext(session, GET_FILE_CONTENTS_TOOL.name),
-        )
-        .pipe(Effect.provide(noNetwork));
-
-      assert.equal(result.status, REPOSITORY_READ_STATUS.NOT_READ);
-      assert.equal(result.reason, REPOSITORY_READ_REFUSAL.NOT_CONNECTED);
-    }),
   );
 
   it.effect(

@@ -51,7 +51,6 @@ function relay(): FakeRepository {
     private: true,
     defaultBranch: "main",
     branches: new Map([["main", RELAY_COMMIT]]),
-    commits: new Map([[RELAY_COMMIT, new Map([["README.md", { text: "# Relay\n" }]])]]),
   };
 }
 
@@ -63,7 +62,6 @@ function blank(): FakeRepository {
     private: false,
     defaultBranch: "main",
     branches: new Map(),
-    commits: new Map(),
   };
 }
 
