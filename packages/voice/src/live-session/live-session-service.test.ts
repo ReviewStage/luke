@@ -54,6 +54,7 @@ class FakeSideband implements LiveSideband {
   /** The hold a real socket has beneath its sideband, so what a test says before the session reads is held exactly as it would be. */
   readonly #hold: SocketHold = holdSocket({
     send: () => undefined,
+    ping: () => undefined,
     close: () => {
       this.closed = true;
     },
