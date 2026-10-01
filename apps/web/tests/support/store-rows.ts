@@ -569,6 +569,7 @@ const VoiceSessionRowSchema = Schema.Struct({
   closedAt: Schema.NullOr(InstantColumnSchema),
   closeReason: Schema.NullOr(Schema.String),
   usage: Schema.NullOr(Schema.Unknown),
+  detachedAt: Schema.NullOr(InstantColumnSchema),
 });
 export type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
 const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);

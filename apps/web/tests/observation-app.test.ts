@@ -141,6 +141,7 @@ const EXCHANGES: readonly Exchange[] = [
               unreadable: 0,
               waiting: 0,
             }),
+          sweepVoice: () => Effect.succeed({ closed: 0, lost: 0, failed: 0 }),
           sweepChildCompletions: () =>
             Effect.succeed({ delivered: 0, undelivered: 0, withheld: 0 }),
           observe: () => Effect.succeed({ complete: false }),

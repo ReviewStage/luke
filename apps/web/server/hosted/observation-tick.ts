@@ -1,6 +1,7 @@
 import { withFallback } from "@sidecar/runtime/effect";
 import { Clock, Duration, Effect, Fiber, type Redacted } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import type { VoiceOrphanSweepOutcome } from "../voice/orphan-sweep.js";
 import {
   type ChildCompletionSweepOutcome,
   NOTHING_DELIVERED,
@@ -28,7 +29,9 @@ import type { SpeechSweepOutcome } from "./store/speech.js";
  * turn opens with, and what the brain then decides is the turn's, in eve.
  * The one thing that leaves the service from a tick is a briefing already
  * decided, pushed to a phone by the speech push pass when no device is
- * placed to say it.
+ * placed to say it. One more bound rides on the tick and observes nothing:
+ * a voice session whose device detached and never came back is ended on
+ * Luke's key, as a connection would have ended it.
  */
 
 interface ObservedAccount {
@@ -83,6 +86,14 @@ interface ObservationTickReads {
    * never read as open here.
    */
   pushSpeech: (now: number) => TickRead<SpeechPushOutcome>;
+  /**
+   * The bound on a detached voice session: every open session whose device
+   * socket went without a hang-up longer ago than the grace is ended with
+   * `session.close` and written down, at most a bounded number a tick. It
+   * rides on the tick for the reason the purge does, and reads no word of
+   * any session.
+   */
+  sweepVoice: (now: number) => TickRead<VoiceOrphanSweepOutcome>;
   /** One read-only pass over the account's cloud providers, written down as the pass module does. */
   observe: (userId: string) => TickRead<AccountPassOutcome>;
   /**
@@ -139,6 +150,8 @@ interface ObservationTickAnswer {
   speech: SpeechSweepOutcome;
   /** What the push over the briefings still on offer did. */
   push: SpeechPushOutcome;
+  /** What the sweep over the detached voice sessions did. */
+  voice: VoiceOrphanSweepOutcome;
   /** What the accounts' sweeps over their ended children owed a completion did, summed. */
   children: ChildCompletionSweepOutcome;
   /** The turns the accounts' changed chats were opened as. */
@@ -250,6 +263,7 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("web/handleObserv
     const abandoned = yield* options.sweepAbandonedTurns(startedAt);
     const speech = yield* options.sweepSpeech(startedAt);
     const push = yield* options.pushSpeech(startedAt);
+    const voice = yield* options.sweepVoice(startedAt);
     const accounts = yield* options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
 
     const answer: ObservationTickAnswer = {
@@ -261,6 +275,7 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("web/handleObserv
       abandoned,
       speech,
       push,
+      voice,
       children: NOTHING_DELIVERED,
       turns: NOTHING_OPENED,
     };

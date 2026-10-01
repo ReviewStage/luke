@@ -1,9 +1,13 @@
 {
   "default.js": [
+    "buffer",
+    "bufferutil",
     "crypto",
     "dns",
     "events",
     "fs",
+    "http",
+    "https",
     "net",
     "node:async_hooks",
     "node:buffer",
@@ -22,14 +26,21 @@
     "stream",
     "string_decoder",
     "tls",
+    "url",
+    "utf-8-validate",
     "util",
-    "util/types"
+    "util/types",
+    "zlib"
   ],
   "observation-tick.js": [
+    "buffer",
+    "bufferutil",
     "crypto",
     "dns",
     "events",
     "fs",
+    "http",
+    "https",
     "net",
     "node:async_hooks",
     "node:buffer",
@@ -48,8 +59,11 @@
     "stream",
     "string_decoder",
     "tls",
+    "url",
+    "utf-8-validate",
     "util",
-    "util/types"
+    "util/types",
+    "zlib"
   ],
   "turn-events.js": [
     "crypto",

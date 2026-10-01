@@ -1066,6 +1066,12 @@ async function spokenDelegations(conversationId: string): Promise<(string | unde
   return rows.filter((row) => row.role === MESSAGE_ROLE.USER).map((row) => delegationOf(row));
 }
 
+/** The account's `voice_sessions` row for the live session named. */
+async function sessionRowOf(userId: string, sessionId: string) {
+  const rows = await readVoiceSessionsByUserTyped(database.run, userId);
+  return rows.find((row) => row.liveSessionId === sessionId);
+}
+
 /** The session hangs up from the desktop's side and answers the relay's close, as `hangUp` does for any connection. */
 async function hangUpConnection(
   desktop: SocketReader,
@@ -1176,6 +1182,10 @@ it.effect(
       const detached = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
       assert.ok(detached && detached.event === LOG_EVENT.SESSION_ENDED);
       assert.equal(detached.finalization, FINALIZATION.DETACHED);
+      // The row is stamped detached, so the tick would end the session if no device came back.
+      const detachedRow = await sessionRowOf(context.target.userId, sessionId);
+      assert.ok(detachedRow?.detachedAt);
+      assert.equal(detachedRow.closedAt, null);
 
       const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
         authorization: BEARER,
@@ -1185,6 +1195,8 @@ it.effect(
       const reattach = await context.openAi.nextAttach();
       const reattachUpstream = readSocket(reattach.socket);
       assert.equal(record(await again.reader.next()).type, VOICE_SERVICE_FRAME.SESSION_ATTACHED);
+      // The re-attach cleared the stamp: a connection holds the session again.
+      assert.equal((await sessionRowOf(context.target.userId, sessionId))?.detachedAt, null);
       await sendText(reattach.socket, JSON.stringify(heard("Any member can invite.", 5000, 6400)));
       await sendText(reattach.socket, JSON.stringify(delegated("dl_2", 6500)));
       for (let attempt = 0; attempt < 600; attempt += 1) {

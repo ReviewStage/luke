@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
@@ -74,8 +75,20 @@ export const voiceSessions = pgTable(
     closedAt: instant("closed_at"),
     closeReason: text("close_reason").$type<VoiceCloseReason>(),
     usage: jsonb("usage").$type<VoiceSessionUsage>(),
+    /**
+     * When the device's socket last went without a hang-up, leaving the
+     * WebRTC session standing for a re-attach; null while a connection holds
+     * the session, and cleared by the re-attach. An open row stamped longer
+     * ago than the grace is an orphan the scheduled tick closes.
+     */
+    detachedAt: instant("detached_at"),
   },
-  (table) => [index("voice_sessions_by_owner").on(table.userId, table.liveSessionId)],
+  (table) => [
+    index("voice_sessions_by_owner").on(table.userId, table.liveSessionId),
+    index("voice_sessions_detached")
+      .on(table.detachedAt)
+      .where(sql`${table.closedAt} is null and ${table.detachedAt} is not null`),
+  ],
 );
 
 /**

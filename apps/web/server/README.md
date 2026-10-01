@@ -1306,7 +1306,10 @@ and OpenAI stands on. A device socket on this route that closes without the
 device's own `session.close` is therefore a detach and not a hang-up: the
 relay sends nothing upstream, settles `detached` at once, closes only its
 sideband, records no close, and the exchange lets go of the session with
-nothing said to it. So a socket may also open with `session.attach` naming
+nothing said to it. The row is stamped `detached_at` (migration 0052) where it
+is still open, and a re-attach clears the stamp, so a session no device came
+back for is visible as an open row stamped longer ago than the grace, which
+the scheduled tick ends (below). So a socket may also open with `session.attach` naming
 a session id. The function resolves the bearer, checks that this account is
 the one the session was created for (the `voice_sessions` row written at
 creation, indexed over the owner and the live session id for this lookup),
@@ -1335,11 +1338,23 @@ docs' close sequence; a device socket that goes after that, or after a refused
 frame, or on the audio or introduction route, has `session.close` sent on its
 behalf on the same terms. A sessions-route socket that goes with neither is a
 detach (above): nothing is sent, nothing is recorded, and the unconfirmed
-snapshot stands until a re-attached connection reads `session.closed`. A sideband that ends first closes the device's socket
+snapshot stands until a re-attached connection reads `session.closed`. A
+detached session is bounded all the same, since a caller can drop the socket
+and keep its WebRTC up with nothing left to send `session.close`: once a
+minute the observation tick (`server/voice/orphan-sweep.ts`) takes up to 20
+open rows stamped detached more than `VOICE_DETACH_GRACE_MS` (60 seconds)
+ago, oldest first and ten at a time, attaches a fresh sideband to each through
+the same upstream, sends `session.close` through the same graceful close the
+exchange runs, and on `session.closed` writes the close and records the
+seconds through the same ledger; each attach and each wait for the final event
+is bounded at five seconds. A session OpenAI will not attach to is already
+gone, and one that never answers is let go of: both are closed as
+`connection_lost` with the last unconfirmed snapshot standing, so no row is
+swept twice. A deployment without the voice key sweeps nothing. A sideband that ends first closes the device's socket
 with code 1001 and reason `upstream-closed` and records nothing: the last
 unconfirmed snapshot standing with `closed_at` null is the honest record, and
 a re-attached connection's `session.closed` later confirms it. Only these
-functions write `voice_sessions`; the seconds ledger and it both cascade with
+functions and the tick's sweep write `voice_sessions`; the seconds ledger and it both cascade with
 the user row. The seconds ledger meters nothing on its own: a session still
 spends one call when it opens, until the seconds are what the allowance is
 measured in.
@@ -1777,16 +1792,20 @@ logic lives in `server/hosted/observation-tick.ts` and
 `server/hosted/observation-pass.ts`; the route hands them the deployment's
 seams and the account query. Vercel crons run only on production deployments.
 
-Three things ride on the tick because it is the one schedule the service
+Four things ride on the tick because it is the one schedule the service
 runs, and none observes anything: the purge of conversations a Clear stamped
 past their retention window; the sweep over turns still running an hour
 after they started (`server/hosted/store/abandoned-turns.ts`,
 `TURN_ABANDON.AFTER_MS`), whose end the relay never heard and which are
 settled as failed for `abandoned` through the same write the relay's own end
 takes, at most fifty a tick and counted as `abandoned` in the tick's answer;
-and the sweep over the briefings still on offer described under the hosted
+the sweep over the briefings still on offer described under the hosted
 store above, which reads the offers' events and the devices' quiet instants
-and never a word.
+and never a word; and the bound on a detached voice session described under
+"How a session ends", which ends every open session whose device went
+without a hang-up more than a minute ago, at most 20 a tick and each inside
+ten seconds, reads no word of any of them, and is counted as `voice` in the
+tick's answer.
 
 The tick needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. Without it the route answers
@@ -1830,7 +1849,8 @@ write them.
 The opener (`server/hosted/brain-host/opener.ts`) runs for each account
 right after that account's pass, inside the same 25-second share of the
 tick, so the tick's order is: forget the ineligible, purge, settle the
-abandoned turns, sweep the briefings on offer, then per batch of four
+abandoned turns, sweep the briefings on offer, push, end the detached voice
+sessions, then per batch of four
 accounts the pass and then the opening, each account under one deadline, and a batch started only while a
 whole deadline still fits the budget; an opening that outruns it is counted
 failed and what it did not carry waits for the next minute. What wakes it is

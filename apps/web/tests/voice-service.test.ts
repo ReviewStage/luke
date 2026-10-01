@@ -1044,6 +1044,11 @@ test("a desktop socket that drops without a hang-up detaches: nothing goes up, n
 
   const second = await reattach(context, first.created.sessionId);
   assert.equal(second.attach.sessionId, first.created.sessionId);
+  // Stamped detached as the connection ended, and cleared as the next one attached.
+  assert.deepEqual(context.record.detachments, [
+    { sessionId: first.created.sessionId, detached: true },
+    { sessionId: first.created.sessionId, detached: false },
+  ]);
   const caption = JSON.stringify({
     type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
     event_id: "e4",

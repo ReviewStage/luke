@@ -627,11 +627,9 @@ export class VoiceService {
           replayHeldFrames(sideband, held);
           sideband.resume();
         });
-        yield* stopExchange(
-          route === VOICE_ROUTE.SESSIONS && opened.started
-            ? EXCHANGE_ENDING.DETACH
-            : EXCHANGE_ENDING.CLOSE,
-        );
+        const detached = route === VOICE_ROUTE.SESSIONS && opened.started;
+        yield* stopExchange(detached ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
+        if (detached) yield* this.#written(route, this.#record.detach({ sessionId }));
         return;
       }
       yield* device.send({ text: JSON.stringify(opened.answer) });
@@ -722,12 +720,11 @@ export class VoiceService {
       // its sideband reports as the close it held), and waits for every record
       // write already started, so no line begun before the settle is cut. A
       // relay that settled detached left the session standing for the
-      // device's re-attach, so the exchange lets go of it with nothing said.
-      yield* stopExchange(
-        summary.finalization === FINALIZATION.DETACHED
-          ? EXCHANGE_ENDING.DETACH
-          : EXCHANGE_ENDING.CLOSE,
-      );
+      // device's re-attach, so the exchange lets go of it with nothing said,
+      // and the row is stamped so the tick ends it if no device comes back.
+      const detached = summary.finalization === FINALIZATION.DETACHED;
+      yield* stopExchange(detached ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
+      if (detached) yield* this.#written(route, this.#record.detach({ sessionId }));
       this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
     });
   }

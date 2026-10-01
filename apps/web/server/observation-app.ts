@@ -41,6 +41,7 @@ import { handleObservationTick, type ObservationTickOptions } from "./hosted/obs
 import { handleObserve } from "./hosted/observe.js";
 import type { PosthogPerson } from "./hosted/posthog.js";
 import { handleProjects } from "./hosted/projects.js";
+import { recordVoiceSeconds } from "./hosted/quota.js";
 import { pushSpeech, type SpeechPushOutcome } from "./hosted/speech-push.js";
 import { sweepAbandonedTurns } from "./hosted/store/abandoned-turns.js";
 import {
@@ -53,6 +54,9 @@ import { readStoredVaultKeys } from "./hosted/vault-key-store.js";
 import { readApiKeyFor } from "./hosted/vault-keys.js";
 import { hostedEncryptionSecretEffect, hostedVaultSeams } from "./hosted/vault-route.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
+import { createLiveUpstream } from "./voice/openai.js";
+import { NOTHING_ORPHANED, sweepVoiceOrphans, VOICE_ORPHAN_SWEEP } from "./voice/orphan-sweep.js";
+import { voiceSessionRecord } from "./voice/session-record.js";
 
 /**
  * The observation group: the routes that read and are read from the roster
@@ -273,7 +277,9 @@ const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
  * which every platform moves along while the app is open. A deployment
  * without the Apple push credential pushes nothing and reads nothing for it;
  * one with it opens a sender for the tick and closes it with the tick, so the
- * notifications share one connection to Apple. The opener reaches eve as the
+ * notifications share one connection to Apple. A deployment without the
+ * voice key sweeps no detached voice session, since it opened none; one with
+ * it ends them on the same upstream the voice functions attach through. The opener reaches eve as the
  * deployment acting for the one account the tick is passing over, under the
  * tick's own secret, so the account named to eve is only ever one this tick
  * enumerated.
@@ -297,6 +303,12 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("web/observationTickEffe
     : undefined;
   const cronSecret = environment.cronSecret;
   const eveOrigin = tickEveOrigin(request);
+  const voiceUpstream = environment.openAiKey
+    ? createLiveUpstream({
+        apiKey: Redacted.value(environment.openAiKey),
+        attachTimeoutMs: VOICE_ORPHAN_SWEEP.ATTACH_TIMEOUT_MS,
+      })
+    : undefined;
 
   const options: ObservationTickOptions = {
     request,
@@ -334,6 +346,18 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("web/observationTickEffe
               },
               { now },
             ),
+          ),
+    sweepVoice: (now) =>
+      voiceUpstream === undefined
+        ? Effect.succeed(NOTHING_ORPHANED)
+        : sweepVoiceOrphans(
+            {
+              upstream: voiceUpstream,
+              record: voiceSessionRecord(),
+              recordSeconds: (input) =>
+                Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
+            },
+            { now },
           ),
     observe: (userId) => {
       if (!store || !encryptionSecret) return Effect.succeed({ complete: false });
