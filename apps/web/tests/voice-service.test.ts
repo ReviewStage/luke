@@ -73,6 +73,7 @@ import {
   type FakeSessionRecord,
   fakeAccounts,
   fakeSessionRecord,
+  hangUpDevice,
   readSocket,
   send,
   sendText,
@@ -462,12 +463,12 @@ test("a seconds report that throws still finalizes the session: both ends are cl
   assert.equal(await context.sessions(), 0);
 });
 
-test("a desktop that hangs up first has session.close sent for it and its seconds still recorded", async () => {
+test("a desktop that hangs up first has its session.close carried up and its seconds still recorded", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
   const { desktop, upstream, created } = await openSession(context);
 
-  desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+  await hangUpDevice(desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
   const close = record(await upstream.next());
   assert.equal(close.type, LIVE_CLIENT_EVENT.CLOSE);
   assert.equal(Object.keys(close).length, 2);
@@ -492,7 +493,7 @@ test("a sideband that never answers session.close is released at the timeout wit
   onTestFinished(() => context.stop());
   const { desktop, upstream } = await openSession(context);
 
-  desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+  await hangUpDevice(desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
   await upstream.next();
   const end = await upstream.closed;
   assert.equal(end.code, SOCKET_CLOSE_CODE.NORMAL);
@@ -981,15 +982,20 @@ test("an upgrade carrying a browser Origin is refused with 403 on both routes", 
   assert.equal(context.accounts.resolved.length, 0);
 });
 
-test("closing the service closes every desktop socket and refuses new upgrades with 503", async () => {
+test("closing the service closes every desktop socket and detaches each call, leaving its session to the re-attach", async () => {
   const context = await stand();
   const { desktop, upstream } = await openSession(context);
   onTestFinished(() => context.openAi.close());
 
   const closing = context.close();
   assert.equal(await desktop.closed.then((end) => end.code), SOCKET_CLOSE_CODE.GOING_AWAY);
-  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  assert.equal((await upstream.closed).code, SOCKET_CLOSE_CODE.NORMAL);
+  assert.equal(await upstream.arrives(), false);
   await closing;
+  const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+  assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
+  assert.equal(ended.finalization, FINALIZATION.DETACHED);
+  assert.deepEqual(context.record.closes, []);
 });
 
 test("a fresh connection re-attaches its account's session, answers session.attached, and pipes again without spending", async () => {
@@ -997,7 +1003,7 @@ test("a fresh connection re-attaches its account's session, answers session.atta
   onTestFinished(() => context.stop());
   const first = await openSession(context);
   first.desktop.socket.terminate();
-  assert.equal(record(await first.upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  await first.upstream.closed;
 
   const second = await reattach(context, first.created.sessionId);
   assert.equal(second.attached.sessionId, first.created.sessionId);
@@ -1019,6 +1025,54 @@ test("a fresh connection re-attaches its account's session, answers session.atta
   });
   await sendText(second.upstream.socket, caption);
   assert.equal(await second.desktop.next(), caption);
+});
+
+test("a desktop socket that drops without a hang-up detaches: nothing goes up, nothing is recorded, a fresh connection resumes the session, and its later hang-up records the seconds once", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const first = await openSession(context);
+
+  first.desktop.socket.terminate();
+  assert.equal((await first.upstream.closed).code, SOCKET_CLOSE_CODE.NORMAL);
+  assert.equal(await first.upstream.arrives(), false);
+  const detached = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+  assert.ok(detached && detached.event === LOG_EVENT.SESSION_ENDED);
+  assert.equal(detached.finalization, FINALIZATION.DETACHED);
+  assert.equal(detached.seconds, undefined);
+  assert.equal(context.record.closes.length, 0);
+  assert.equal(context.accounts.reports.length, 0);
+
+  const second = await reattach(context, first.created.sessionId);
+  assert.equal(second.attach.sessionId, first.created.sessionId);
+  const caption = JSON.stringify({
+    type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+    event_id: "e4",
+    delta: "Still here",
+    start_ms: 0,
+    end_ms: 300,
+  });
+  await sendText(second.upstream.socket, caption);
+  assert.equal(await second.desktop.next(), caption);
+
+  await hangUpDevice(second.desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
+  assert.equal(record(await second.upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  await sendText(
+    second.upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "e9",
+      reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+      usage: { seconds: 900 },
+    }),
+  );
+  await second.upstream.closed;
+  assert.deepEqual(context.accounts.reports, [
+    { userId: FAKE_USER_ID, sessionId: first.created.sessionId, seconds: 900 },
+  ]);
+  assert.deepEqual(
+    context.record.closes.map((closed) => [closed.sessionId, closed.seconds]),
+    [[first.created.sessionId, 900]],
+  );
 });
 
 test("a desktop frame the sessions route does not admit closes the socket with a policy violation, and the session still ends gracefully with its seconds recorded", async () => {
@@ -1165,6 +1219,9 @@ test("seconds are recorded once across a re-attach, whichever connection sees se
   const context = await stand({ closeTimeoutMs: 5_000 });
   onTestFinished(() => context.stop());
   const first = await openSession(context);
+  // The hang-up went up and the socket dropped before its answer, so the
+  // first relay still holds its sideband for the final event.
+  await send(first.desktop.socket, { type: LIVE_CLIENT_EVENT.CLOSE, event_id: "x1" });
   first.desktop.socket.terminate();
   await first.upstream.next();
   const second = await reattach(context, first.created.sessionId);

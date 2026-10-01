@@ -10,6 +10,7 @@ import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
 import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import {
+  LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
   LIVE_SESSION_START,
   LIVE_SESSIONS_PATH,
@@ -486,6 +487,16 @@ export function connect(
 /** Sends one JSON frame and waits for the write to leave. */
 export function send(socket: WebSocket, frame: WireRecord): Promise<void> {
   return sendText(socket, JSON.stringify(frame));
+}
+
+/**
+ * The device's own hang-up, as the Mac's graceful close makes it: its
+ * `session.close` sent over the socket, and then the socket closed. A socket
+ * closed without the frame is a drop, which the sessions route detaches on.
+ */
+export async function hangUpDevice(socket: WebSocket, code: number): Promise<void> {
+  await send(socket, { type: LIVE_CLIENT_EVENT.CLOSE, event_id: randomUUID() });
+  socket.close(code);
 }
 
 export function sendText(socket: WebSocket, text: string): Promise<void> {

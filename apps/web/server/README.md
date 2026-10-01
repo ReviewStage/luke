@@ -1017,8 +1017,9 @@ The service itself is a scope. `VoiceService.make(options)` answers
 `Effect<VoiceService, never, Scope>`, and that scope owns the `ws` server, the
 `FiberSet` each session's fiber joins, and the claim on the server the function
 exported; closing it gives up the claim, closes every device socket so each
-relay runs its graceful close upstream, drains those fibers under their own
-timeouts, and only then closes the `ws` server. Nothing calls a `close` beside
+sessions-route relay detaches, leaving the WebRTC session for the device to
+re-attach to on another instance, and every other relay runs its graceful
+close upstream, drains those fibers under their own timeouts, and only then closes the `ws` server. Nothing calls a `close` beside
 it, because a Vercel function is frozen between invocations and discarded with
 no shutdown hook: `voice/function.ts` stands the service on `runWeb` in a scope
 held open by `Effect.never` and a test is the only caller that ever ends one.
@@ -1239,8 +1240,10 @@ for the socket, and every fiber the session runs is forked into that scope —
 the one that reports what the record made of each live event, the one that
 makes every record write in arrival order, the brain's follow of each
 accepted ask, and the briefing look on its schedule — so closing the scope
-interrupts each of them. The session's graceful close and the wait on every
-record write already started are finalizers of the same scope, added so their
+interrupts each of them. The session's graceful close (its release with
+nothing said, `LiveSessionService.release`, where the relay settled detached)
+and the wait on every record write already started are finalizers of the same
+scope, added so their
 reverse order is the order the exchange's old `stop` ran them. No composition
 below the exchange holds a runner, and none of them runs an effect at all:
 `LiveRecord`'s two utterance writes and `LiveBrain`'s submission answer
@@ -1299,7 +1302,11 @@ commit that unwires the desktop's, so both-live never exists.
 A WebSocket connection to a Vercel Function closes when the function reaches
 its maximum duration — `server/function-durations.ts` gives both functions
 800 seconds, the longest generally available — while the WebRTC session between the device
-and OpenAI stands on. So a socket may also open with `session.attach` naming
+and OpenAI stands on. A device socket on this route that closes without the
+device's own `session.close` is therefore a detach and not a hang-up: the
+relay sends nothing upstream, settles `detached` at once, closes only its
+sideband, records no close, and the exchange lets go of the session with
+nothing said to it. So a socket may also open with `session.attach` naming
 a session id. The function resolves the bearer, checks that this account is
 the one the session was created for (the `voice_sessions` row written at
 creation, indexed over the owner and the live session id for this lookup),
@@ -1322,9 +1329,13 @@ it, writes the row's `closed_at`, `close_reason`, and
 `recordVoiceSeconds` in `server/hosted/quota.ts`
 — the session row is the idempotency ledger: the seconds land only where none
 stand yet, so a report seen by two connections adds nothing — and closes both
-ends. A device that hangs up first has `session.close` sent
-on its behalf and the sideband held for `session.closed` for 15 seconds, the
-docs' close sequence. A sideband that ends first closes the device's socket
+ends. A device hangs up by sending `session.close` itself, which the relay
+forwards and then holds the sideband for `session.closed` for 15 seconds, the
+docs' close sequence; a device socket that goes after that, or after a refused
+frame, or on the audio or introduction route, has `session.close` sent on its
+behalf on the same terms. A sessions-route socket that goes with neither is a
+detach (above): nothing is sent, nothing is recorded, and the unconfirmed
+snapshot stands until a re-attached connection reads `session.closed`. A sideband that ends first closes the device's socket
 with code 1001 and reason `upstream-closed` and records nothing: the last
 unconfirmed snapshot standing with `closed_at` null is the honest record, and
 a re-attached connection's `session.closed` later confirms it. Only these
@@ -1684,8 +1695,8 @@ the previous ask's end and the delegation's offset or the end of the
 utterance the service's ledger grouped the ask as, whichever is later, and
 named with the session, the delegation, and the span. A row whose `closed_at` is still
 null may keep gaining segments, because an instance that dies at its
-duration bound never sends `session.closed` and the re-attach lands on the
-same row; the writer reads nothing from the row's state but its id. It
+duration bound never sends `session.closed`, its relay detaches rather than
+closing, and the re-attach lands on the same row; the writer reads nothing from the row's state but its id. It
 keeps one thing in memory, which message a commentary append carried until
 its speech lands, and reads everything else back from the record, so a
 fresh instance continues a session where the last one stopped.

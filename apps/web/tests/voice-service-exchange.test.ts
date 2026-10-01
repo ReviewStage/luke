@@ -49,7 +49,7 @@ import {
 import { deploymentExchange } from "../server/voice/deployment-exchange";
 import { VOICE_ROUTE } from "../server/voice/frames";
 import type { AttachedSession, ExchangeReport } from "../server/voice/live-exchange";
-import { LOG_EVENT, type LogEntry } from "../server/voice/log";
+import { FINALIZATION, LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { UNPERMITTED_FRAME_REASON } from "../server/voice/relay";
 import {
   listening,
@@ -81,6 +81,7 @@ import {
 import {
   connect,
   fakeAccounts,
+  hangUpDevice,
   readSocket,
   type SocketReader,
   send,
@@ -362,7 +363,7 @@ async function speak(attachSocket: Parameters<typeof sendText>[0], sessionId: st
 
 /** The desktop hangs up; the session answers the relay's close; the service reports the session ended. */
 async function hangUp(context: Stand, session: Awaited<ReturnType<typeof openSession>>) {
-  session.desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+  await hangUpDevice(session.desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
   const closing = clientEvent(await session.upstream.next());
   assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
   await sendText(
@@ -759,7 +760,8 @@ it.effect(
       const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
       assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
       assert.equal(ended.reportsRead, 2);
-      assert.equal(ended.framesToUpstream, 0);
+      // The hang-up's own `session.close` is the one device frame that went up.
+      assert.equal(ended.framesToUpstream, 1);
       await context.stop();
     }),
 );
@@ -949,7 +951,7 @@ it.effect(
         [again.reader, reattach, readSocket(reattach.socket)] as const,
         [first.desktop, first.attach, first.upstream] as const,
       ]) {
-        desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+        await hangUpDevice(desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
         const closing = clientEvent(await upstream.next(5_000));
         assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
         await sendText(
@@ -1070,7 +1072,7 @@ async function hangUpConnection(
   attach: { readonly socket: Parameters<typeof sendText>[0] },
   upstream: SocketReader,
 ): Promise<void> {
-  desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+  await hangUpDevice(desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
   const closing = clientEvent(await upstream.next(5_000));
   assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
   await sendText(
@@ -1138,6 +1140,62 @@ it.effect(
       await until(
         () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
         () => `both connections to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      assert.deepEqual(await spokenDelegations(planConversation), ["dl_1", "dl_2"]);
+      assert.deepEqual(await spokenDelegations(context.target.conversationId), []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a planning call whose socket drops mid-call is detached rather than closed, re-attaches, and its next ask lands in the plan's conversation",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const session = await openSession(context, plan.id);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await speak(session.attach.socket, sessionId);
+      const planConversation = await planConversationOf(context.target.userId, plan.id);
+      assert.ok(planConversation);
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        if ((await spokenDelegations(planConversation)).includes("dl_1")) break;
+        await sleep(5);
+      }
+
+      // The platform cuts the socket: no hang-up went up, so neither the
+      // relay nor the exchange says `session.close` to the session.
+      session.desktop.socket.terminate();
+      await session.upstream.closed;
+      const sentUp = await framesWithin(session.upstream, QUIET_MS);
+      assert.ok(sentUp.every((event) => event.type !== LIVE_CLIENT_EVENT.CLOSE));
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the dropped connection to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      const detached = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+      assert.ok(detached && detached.event === LOG_EVENT.SESSION_ENDED);
+      assert.equal(detached.finalization, FINALIZATION.DETACHED);
+
+      const again = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in again);
+      await send(again.reader.socket, { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId });
+      const reattach = await context.openAi.nextAttach();
+      const reattachUpstream = readSocket(reattach.socket);
+      assert.equal(record(await again.reader.next()).type, VOICE_SERVICE_FRAME.SESSION_ATTACHED);
+      await sendText(reattach.socket, JSON.stringify(heard("Any member can invite.", 5000, 6400)));
+      await sendText(reattach.socket, JSON.stringify(delegated("dl_2", 6500)));
+      for (let attempt = 0; attempt < 600; attempt += 1) {
+        if ((await spokenDelegations(planConversation)).includes("dl_2")) break;
+        await sleep(5);
+      }
+
+      await hangUpConnection(again.reader, reattach, reattachUpstream);
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+        () => `the re-attached connection to be reported ended; log ${JSON.stringify(context.log)}`,
       );
       assert.deepEqual(await spokenDelegations(planConversation), ["dl_1", "dl_2"]);
       assert.deepEqual(await spokenDelegations(context.target.conversationId), []);

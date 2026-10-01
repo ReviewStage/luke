@@ -1461,6 +1461,25 @@ it.effect("stop closes the session gracefully and takes nothing else with it", (
 );
 
 it.effect(
+  "release lets the session go with nothing sent up, the words said so far on record, and a stop after it closes nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Ship it.", 0, 800);
+      yield* settle();
+      yield* f.service.release();
+      yield* f.service.stop();
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 0);
+      assert.equal(f.service.sessionStands(), false);
+      assert.equal(sideband.closed, true);
+      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 0, 800]]);
+    }),
+);
+
+it.effect(
   "a close the session's own reader reads releases the scope that session stood in, finalizing what its attach left standing there",
   () =>
     Effect.gen(function* () {
