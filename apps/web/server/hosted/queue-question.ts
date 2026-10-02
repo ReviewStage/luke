@@ -14,8 +14,8 @@ import {
  * Note that the call does nothing when it runs. What carries the question is
  * the call itself: the store journals a tool call's input before it runs, so
  * the voice's follow reads it off the journal mid-turn
- * (`projectTurnEvents`) and hands it to GPT-Live as a thinking append, held
- * to be asked when the conversation reaches it rather than said on arrival.
+ * (`projectTurnEvents`) and hands it to GPT-Live as commentary, which the
+ * voice says as the next question once the last one is answered.
  * The model goes on reading the repository and thinking while the developer
  * hears the questions it has already queued.
  */

@@ -684,7 +684,7 @@ it.effect("a repository read's thinking append says the repository is being read
 );
 
 it.effect(
-  "every question the planning model queued is held as its own thinking append under the delegation, in order, and none is spoken",
+  "every question the planning model queued is handed to the voice as its own commentary under the delegation, in order, without waiting on the settle",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -705,16 +705,21 @@ it.effect(
         });
       }
       yield* settle();
-      const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+      // Each commentary append waits on the last one's acknowledgment, as every append does.
+      sideband.acknowledge(
+        sideband.sent.findIndex((event) => event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND),
+        1000,
+        1100,
+      );
+      yield* settle();
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
       assert.deepEqual(
-        thinking.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
+        commentary.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
         ["item_1", "item_1"],
       );
-      const contents = thinking.map((event) => ("content" in event ? event.content : ""));
-      assert.equal(contents.length, 2);
+      const contents = commentary.map((event) => ("content" in event ? event.content : ""));
       assert.ok(contents[0]?.includes("After how long?") && contents[0].includes("Seven days."));
       assert.ok(contents[1]?.includes("Can an admin re-send one?"));
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
     }),
 );
 
