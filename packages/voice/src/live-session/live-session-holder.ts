@@ -7,7 +7,7 @@ import {
 } from "@sidecar/gateway";
 import {
   type LiveSessionCreated,
-  type PlanBusyFrame,
+  type PlanActivityFrame,
   type PlanDraftFrame,
   type SessionBeatFrame,
   VOICE_SERVICE_FRAME,
@@ -101,11 +101,11 @@ export interface LiveSessionHolderOptions {
    */
   onPlanDraft?: (draft: PlanDraftFrame) => void;
   /**
-   * The service said whether its planning model is working on an ask of the
-   * standing planning call, on the same terms as `onPlanDraft`. A planning
-   * call's end is told as not busy, so the word never outlives the call.
+   * The service said what each part of Luke is doing on the standing
+   * planning call, on the same terms as `onPlanDraft`. A planning call's end
+   * is told as a snapshot with nothing doing, so none outlives the call.
    */
-  onPlanBusy?: (busy: PlanBusyFrame) => void;
+  onPlanActivity?: (activity: PlanActivityFrame) => void;
 }
 
 /**
@@ -403,7 +403,7 @@ export class LiveSessionHolder {
       yield* Scope.addFinalizer(scope, sideband.close);
       opened.onSpoken?.((kind) => this.#spoken(session, kind));
       opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
-      opened.onPlanBusy?.((busy) => this.#busy(session, busy));
+      opened.onPlanActivity?.((activity) => this.#activity(session, activity));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -685,10 +685,10 @@ export class LiveSessionHolder {
     this.#options.onPlanDraft?.(draft);
   }
 
-  /** The service's busy word about the plan the session is bound to, passed on while the session stands. */
-  #busy(session: HeldSession, busy: PlanBusyFrame): void {
-    if (session.ended || busy.planId !== session.planId) return;
-    this.#options.onPlanBusy?.(busy);
+  /** The service's activity about the plan the session is bound to, passed on while the session stands. */
+  #activity(session: HeldSession, activity: PlanActivityFrame): void {
+    if (session.ended || activity.planId !== session.planId) return;
+    this.#options.onPlanActivity?.(activity);
   }
 
   /**
@@ -736,13 +736,13 @@ export class LiveSessionHolder {
     // next: the caller decides again at its next reason to, and a beat that
     // was spoken settled itself before this.
     this.#beats.clear();
-    // Note that we say a planning call's end as not busy, because the
+    // Note that we say a planning call's end as nothing doing, because the
     // service's own last word may never arrive once the socket is gone.
     if (session.planId !== undefined) {
-      this.#options.onPlanBusy?.({
-        type: VOICE_SERVICE_FRAME.PLAN_BUSY,
+      this.#options.onPlanActivity?.({
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
         planId: session.planId,
-        busy: false,
+        notes: false,
       });
     }
     this.#releasing = session.released;

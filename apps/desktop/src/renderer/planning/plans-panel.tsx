@@ -12,14 +12,7 @@ import type { PlansControl } from "./use-plans-tab";
  * ceiling. It does not record anything of its own: the panel's session
  * replay masks every word it draws, as it does the rest of the panel.
  */
-export function PlansPanel({
-  control,
-  now,
-}: {
-  control: PlansControl;
-  /** The app's instant, which the status row counts Luke's thinking against. */
-  now: number;
-}): React.JSX.Element {
+export function PlansPanel({ control }: { control: PlansControl }): React.JSX.Element {
   if (!control.signedIn) {
     return (
       <section className="plans-view plans-signed-out">
@@ -44,12 +37,7 @@ export function PlansPanel({
             copy={control.copy}
             live={control.live}
           />
-          <MicrophoneRow
-            status={control.status}
-            microphone={control.microphone}
-            now={now}
-            clockFixed={control.clockFixed}
-          />
+          <MicrophoneRow status={control.status} microphone={control.microphone} />
         </section>
       );
     case PLANS_PAGE.LIST:

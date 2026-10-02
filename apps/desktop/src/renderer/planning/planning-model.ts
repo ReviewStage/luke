@@ -5,13 +5,14 @@ import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanningView,
+  VOICE_PHASE,
+  type VoicePhase,
 } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import type { VoiceView } from "#shared/messages/voice-view";
 import { planMarkdown } from "#shared/plan-markdown";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
-import { thinkingElapsedLabel } from "../thinking-elapsed";
 
 /**
  * planning-model.ts -- what the panel's Plans tab draws, decided from the document and the voice view alone.
@@ -218,45 +219,55 @@ const STATUS_WORD = {
   [LIVE_STATUS.FAILED]: undefined,
 } as const satisfies Record<LiveStatus, string | undefined>;
 
-/** What the microphone row says while the planning model works on an ask and Luke is silent. */
-const THINKING_WORD = "Thinking";
+/** The voice's word for each of its waits the service names, in place of the call's own. */
+const VOICE_PHASE_WORD = {
+  [VOICE_PHASE.HANDING_OFF]: "Handing off",
+  [VOICE_PHASE.ABOUT_TO_ANSWER]: "About to answer",
+} as const satisfies Record<VoicePhase, string>;
 
-/** The statuses whose own word gives way to Thinking: Luke is not speaking, and the call is not opening or closing. */
-const THINKING_SHOWN: ReadonlySet<LiveStatus> = new Set([LIVE_STATUS.MUTED, LIVE_STATUS.LISTENING]);
+/** The statuses whose own word gives way to the voice's wait: Luke is not speaking, and the call is not opening or closing. */
+const VOICE_PHASE_SHOWN: ReadonlySet<LiveStatus> = new Set([
+  LIVE_STATUS.MUTED,
+  LIVE_STATUS.LISTENING,
+]);
 
-/** The open plan's call as the microphone row draws it: the word, and since when Luke has been thinking where the word is Thinking. */
+/**
+ * The open plan's call as the microphone row draws it: the voice's word, and
+ * the backend's line, which is the planning model while it works, with its
+ * pending command where it has one, and whether the notetaker is writing.
+ */
 export interface CallStatus {
-  word: string;
-  busySince: number | undefined;
+  voiceWord: string;
+  backend: { planner: { action: string | undefined } | undefined; notes: boolean };
 }
 
 /**
- * The word beside the microphone: the call's status while one stands about
- * the open plan, and nothing otherwise. A voice error or notice is not
- * repeated here, since the panel's own strip already carries it under the
- * shape, exactly as it does for any call. While the planning model works on
- * an ask, a listening or muted call reads Thinking instead, so a silent Luke
- * who is working never reads as one who is waiting; speaking, connecting, and
- * closing keep their own word, since each says more than Thinking would.
+ * The microphone row's two lines while a call stands about the open plan,
+ * and nothing otherwise. A voice error or notice is not repeated here, since
+ * the panel's own strip already carries it under the shape, exactly as it
+ * does for any call. The voice line is the call's status, except that a
+ * listening or muted call reads the wait the service says the voice is in;
+ * speaking, connecting, and closing keep their own word, since each says
+ * more. The backend line is each backend part's own, so neither stands in
+ * for the voice.
  */
-export function microphoneStatusWord(
+export function callStatus(
   view: Pick<VoiceView, "voiceStatus" | "callPlanId">,
-  planning: Pick<PlanningView, "activePlanId" | "busySince">,
+  planning: Pick<PlanningView, "activePlanId" | "activity">,
 ): CallStatus | undefined {
-  const { activePlanId, busySince } = planning;
+  const { activePlanId, activity } = planning;
   if (activePlanId === undefined || view.callPlanId !== activePlanId) return undefined;
   const word = STATUS_WORD[view.voiceStatus];
   if (word === undefined) return undefined;
-  if (busySince === undefined || !THINKING_SHOWN.has(view.voiceStatus)) {
-    return { word, busySince: undefined };
-  }
-  return { word: THINKING_WORD, busySince };
-}
-
-/** What the row reads at `now`: the word, or how long Luke has been thinking once that is worth saying. */
-export function callStatusText(status: CallStatus, now: number): string {
-  if (status.busySince === undefined) return status.word;
-  return thinkingElapsedLabel(status.busySince, now) ?? status.word;
+  const phase = VOICE_PHASE_SHOWN.has(view.voiceStatus) ? activity?.voice : undefined;
+  const planner = activity?.planner;
+  return {
+    voiceWord: phase === undefined ? word : VOICE_PHASE_WORD[phase],
+    backend: {
+      planner: planner === undefined ? undefined : { action: planner.action },
+      notes: activity?.notes ?? false,
+    },
+  };
 }
 
 /** The statuses of a call still in progress, the ones a planning call holds the panel open through. */

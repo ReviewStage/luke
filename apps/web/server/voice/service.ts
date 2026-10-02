@@ -13,7 +13,7 @@ import {
   type HostedApiError,
   HTTP_STATUS,
   isDeviceWireId,
-  type PlanBusyFrame,
+  type PlanActivityFrame,
   type PlanDraftFrame,
   type SessionSpokenFrame,
   VOICE_SERVICE_FRAME,
@@ -609,14 +609,14 @@ export class VoiceService {
                 };
                 this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
               },
-              // Whether the planning model is working on an ask, sent the same
-              // way, so the Plans tab says Luke is thinking while he is silent.
-              onBusy: (busy) => {
+              // What each part of Luke is doing, sent the same way, so the
+              // Plans tab says the voice's state and the backend's apart.
+              onActivity: (activity) => {
                 if (opened.planId === undefined) return;
-                const frame: PlanBusyFrame = {
-                  type: VOICE_SERVICE_FRAME.PLAN_BUSY,
+                const frame: PlanActivityFrame = {
+                  type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
                   planId: opened.planId,
-                  busy,
+                  ...activity,
                 };
                 this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
               },

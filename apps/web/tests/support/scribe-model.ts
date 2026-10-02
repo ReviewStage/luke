@@ -13,9 +13,14 @@ const DELTA_CHARS = 12;
 
 /**
  * What the scripted model answers one call with: an update, a failure of the
- * call, or an update whose stream breaks off with an error halfway through.
+ * call, an update whose stream breaks off with an error halfway through, or a
+ * stream that opens and never says another word.
  */
-export type ScribeAnswer = PlanUpdate | Error | { readonly brokenAfter: PlanUpdate };
+export type ScribeAnswer =
+  | PlanUpdate
+  | Error
+  | { readonly brokenAfter: PlanUpdate }
+  | { readonly stalls: true };
 
 /**
  * A model answering each call with the next scripted answer, streamed as the
@@ -29,6 +34,7 @@ export function scriptedScribeModel(answers: readonly ScribeAnswer[]) {
       asked.push(JSON.stringify(options.prompt));
       const answer = answers[asked.length - 1] ?? {};
       if (answer instanceof Error) throw answer;
+      if ("stalls" in answer) return { stream: new ReadableStream() };
       const broken = "brokenAfter" in answer;
       const whole = JSON.stringify(broken ? answer.brokenAfter : answer);
       const text = broken ? whole.slice(0, Math.ceil(whole.length / 2)) : whole;

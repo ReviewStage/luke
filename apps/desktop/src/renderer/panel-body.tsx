@@ -486,7 +486,7 @@ export function PanelBody({
       {tab === PANEL_TAB.SETTINGS ? (
         <SettingsPanel {...settings} />
       ) : tab === PANEL_TAB.PLANS ? (
-        <PlansPanel control={plans} now={now} />
+        <PlansPanel control={plans} />
       ) : agentsPage ? (
         <AgentsPanel
           subagents={subagents}

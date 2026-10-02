@@ -21,6 +21,7 @@ export {
   type AdoptableSession,
   type BriefingDelivery,
   LiveSessionService,
+  type LiveSessionStatus,
   ROW_WRITE_DEBOUNCE_MS,
   STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";
