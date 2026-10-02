@@ -271,7 +271,7 @@ test("a brain turn becomes its own generation, and junk lines cost only themselv
   assert.ok(generation);
   assert.equal(generation.name, "brain-turn");
   // A hosted turn records no model; the export names the brain's one model.
-  assert.equal(generation.model, "gpt-6-sol");
+  assert.equal(generation.model, "gpt-6.1-sol");
   assert.deepEqual(generation.metrics, {
     latency: 0.321,
     tokens: { input: 1_500, output: 0 },
