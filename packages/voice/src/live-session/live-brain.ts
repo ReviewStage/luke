@@ -14,6 +14,7 @@ import type { Effect } from "effect";
 /** The run seams the service consumes, named one by one; a newer brain may fire kinds this build does not read. */
 export const LIVE_BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
+  QUESTION_QUEUED: "question_queued",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
   ENDED: "ended",
@@ -44,6 +45,13 @@ export type LiveBrainRunEvent =
       readonly runId: string;
       /** Which kind of slow step began, in the brain's own vocabulary; the service words it. */
       readonly step: string;
+    }
+  | {
+      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED;
+      readonly runId: string;
+      /** A question the planning model queued for the developer, and the answer it recommends. */
+      readonly question: string;
+      readonly recommendation: string;
     }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {

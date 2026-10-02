@@ -107,6 +107,15 @@ const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
 const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
 
 /**
+ * A question the planning model queued, as the voice holds it: a thinking
+ * append, never said on arrival, framed so the voice asks it when the
+ * conversation reaches it and one question at a time.
+ */
+function queuedQuestionNote(question: string, recommendation: string): string {
+  return `Queued question for the developer. Ask it when you reach it, one question at a time, in the order the questions were queued: ${question} Recommended answer: ${recommendation}`;
+}
+
+/**
  * How long after a fragment lands its row's write is put off, so a burst of
  * deltas is one write rather than one per syllable. Each fragment re-arms it,
  * and silence arms nothing: a row whose write has landed owes the record
@@ -1178,14 +1187,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         exchange.slowStepTold = true;
         const session = this.#sessionOf(exchange);
         if (!session) return;
-        const note = SLOW_STEP_NOTE.get(event.step) ?? SLOW_STEP_GENERAL_NOTE;
-        session.channel.enqueue(
-          Effect.suspend(() =>
-            Effect.asVoid(
-              session.channel.send(thinkingAppend(this.#input(this.#delegationOf(exchange), note))),
-            ),
-          ),
-        );
+        this.#think(session, exchange, SLOW_STEP_NOTE.get(event.step) ?? SLOW_STEP_GENERAL_NOTE);
+        return;
+      }
+      // Every queued question is held, unlike the one slow-step note an exchange earns.
+      case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED: {
+        const session = this.#sessionOf(exchange);
+        if (!session) return;
+        this.#think(session, exchange, queuedQuestionNote(event.question, event.recommendation));
         return;
       }
       // The brain tells the settle as soon as no write of the run is still
@@ -1263,6 +1272,17 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         }),
       );
     }
+  }
+
+  /** One thinking append into an exchange's session under its delegation: held by the voice, not said on arrival. */
+  #think(session: StandingSession, exchange: Exchange, note: string): void {
+    session.channel.enqueue(
+      Effect.suspend(() =>
+        Effect.asVoid(
+          session.channel.send(thinkingAppend(this.#input(this.#delegationOf(exchange), note))),
+        ),
+      ),
+    );
   }
 
   #speakInto(session: StandingSession, delegationId: LiveDelegationId, text: string): void {

@@ -81,7 +81,7 @@ Delegate to the backend when:
 - The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
-- The developer answers a question: pass the answer to the backend so it can update the question queue.
+- The developer answers a question: pass the answer to the backend so it can queue what the answer unblocked.
 - You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
 
 Do not delegate to the backend when:
@@ -116,7 +116,7 @@ A notetaker writes the plan live as you talk; you never write it yourself.`;
  * showed both behaviors: several questions read out at once, and a pause
  * after every answer while the voice waited on the backend.
  */
-const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time, from the top of the backend's latest question queue. When the developer answers, carry on with the next question while the backend updates the queue and reads the repository in the background.
+const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. The backend queues its questions to you as it thinks of them: ask them in the order they were queued, and drop one the backend says is moot. When the developer answers, carry on with the next queued question while the backend thinks and reads the repository in the background.
 
 `;
 

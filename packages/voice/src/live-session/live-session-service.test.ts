@@ -684,6 +684,41 @@ it.effect("a repository read's thinking append says the repository is being read
 );
 
 it.effect(
+  "every question the planning model queued is held as its own thinking append under the delegation, in order, and none is spoken",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Invites should expire.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      for (const { question, recommendation } of [
+        { question: "After how long?", recommendation: "Seven days." },
+        { question: "Can an admin re-send one?", recommendation: "Yes." },
+      ]) {
+        f.brain.fire({
+          kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+          runId: "run-1",
+          question,
+          recommendation,
+        });
+      }
+      yield* settle();
+      const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+      assert.deepEqual(
+        thinking.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
+        ["item_1", "item_1"],
+      );
+      const contents = thinking.map((event) => ("content" in event ? event.content : ""));
+      assert.equal(contents.length, 2);
+      assert.ok(contents[0]?.includes("After how long?") && contents[0].includes("Seven days."));
+      assert.ok(contents[1]?.includes("Can an admin re-send one?"));
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+    }),
+);
+
+it.effect(
   "a slow step earns the exchange's one thinking append, and the reply streams only after the actions settled, each chunk awaiting its ack",
   () =>
     Effect.gen(function* () {
