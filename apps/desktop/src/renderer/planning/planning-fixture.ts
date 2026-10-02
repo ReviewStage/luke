@@ -2,7 +2,6 @@ import { EMPTY_PLAN_UPDATE, type FullPlanUpdate, planBody } from "@sidecar/hoste
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
-import { FIXTURE_EPOCH_MS } from "@sidecar/session/fixtures";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
 
@@ -14,7 +13,7 @@ import type { VoiceView } from "#shared/messages/voice-view";
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
  * the panel opens on Plans, and under the planning profile it also opens the
  * reference journey's plan from `docs/PLANNING.md`, a draft of the fixed
- * template partway through with Luke thinking on the call about it, which is
+ * template partway through with Luke working on the call about it, which is
  * what the planning capture shows. Every name, repository, and commit here is
  * invented; nothing is read from an account.
  */
@@ -135,15 +134,15 @@ const FIXTURE_PLAN_LIST: PlanningView = {
 };
 
 /**
- * The open plan mid-call, the planning model fourteen seconds into an ask,
- * measured back from the fixture's own epoch, which is the clock a capture
- * run reads, so the capture shows the status row's wait with its age.
+ * The open plan mid-call, the planning model running a repository command
+ * while the notetaker writes, so the capture shows both of the status row's
+ * lines.
  */
 const FIXTURE_OPEN_PLAN: PlanningView = {
   ...FIXTURE_PLAN_LIST,
   activePlanId: FIXTURE_PLAN.id,
   document: { status: PLANNING_READ.READY, plan: FIXTURE_PLAN },
-  busySince: FIXTURE_EPOCH_MS - 14_000,
+  activity: { planner: { action: "grep -rn pending src/members" }, notes: true },
 };
 
 /** The call a fixture run's status row reads: listening, about the fixture's open plan. */

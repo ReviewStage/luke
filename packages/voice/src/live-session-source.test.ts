@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
   HOSTED_API_ERROR,
-  type PlanBusyFrame,
+  type PlanActivityFrame,
   type PlanDraftFrame,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
@@ -757,21 +757,30 @@ it.live(
 );
 
 it.live(
-  "the service's word that a planning call's model is busy is taken off the socket for its listener and never reaches the sideband",
+  "the service's word of what a planning call's parts are doing is taken off the socket for its listener and never reaches the sideband",
   () =>
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame())]);
       const source = reattaching(script);
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened?.onPlanBusy);
-      const told: PlanBusyFrame[] = [];
-      opened.onPlanBusy((busy) => told.push(busy));
+      assert.ok(opened?.onPlanActivity);
+      const told: PlanActivityFrame[] = [];
+      opened.onPlanActivity((activity) => told.push(activity));
       const reading = yield* readSideband(yield* opened.attach());
       const [first] = script.sockets;
       assert.ok(first);
       const planId = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
-      const busy: PlanBusyFrame = { type: VOICE_SERVICE_FRAME.PLAN_BUSY, planId, busy: true };
-      const idle: PlanBusyFrame = { type: VOICE_SERVICE_FRAME.PLAN_BUSY, planId, busy: false };
+      const busy: PlanActivityFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
+        planId,
+        planner: { action: "ls src" },
+        notes: true,
+      };
+      const idle: PlanActivityFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
+        planId,
+        notes: false,
+      };
       first.receive(busy);
       first.receive({
         type: LIVE_SERVER_EVENT.SESSION_STARTED,
@@ -781,7 +790,7 @@ it.live(
       first.receive(idle);
       yield* settled(
         () => told.length === 2 && reading.events.length === 1,
-        "both busy words and the session's event to land",
+        "both activity frames and the session's event to land",
       );
       assert.deepEqual(told, [busy, idle]);
       assert.deepEqual(

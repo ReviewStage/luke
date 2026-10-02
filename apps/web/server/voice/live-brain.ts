@@ -1,3 +1,4 @@
+import { PLAN_ACTIVITY_ACTION_MAX_CHARS } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
@@ -6,10 +7,14 @@ import {
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
-import { Cause, Duration, Effect, Result, Schedule, type Scope } from "effect";
+import { Cause, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import {
   ASK_ORIGIN,
+  isSettledToolPartState,
+  isStoredToolPart,
+  type StoredUIMessage,
+  storedToolName,
   TURN_END,
   TURN_EVENT_KIND,
   type TurnEnd,
@@ -25,6 +30,7 @@ import {
   askStanding,
 } from "../hosted/brain-ask.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
+import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import type { HostedStore } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-event-stream.js";
@@ -77,7 +83,7 @@ export const HOSTED_ASK_REFUSAL_NOTE = {
   [ASK_REFUSAL.STORE]: "I couldn't write that ask down, so I'm not going to answer it here.",
 } as const satisfies Record<(typeof ASK_REFUSAL)[keyof typeof ASK_REFUSAL], string>;
 
-/** The stream's four kinds in the service's vocabulary; one word each, held equal by a test. */
+/** The stream's four kinds in the service's vocabulary, one word each; the live brain's own activity is none of them, and a test holds the rest equal. */
 const RUN_EVENT_OF_TURN_EVENT = {
   [TURN_EVENT_KIND.SLOW_STEP]: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
   [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
@@ -107,6 +113,34 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
         end: RUN_END_OF_TURN_END[event.end],
       };
   }
+}
+
+/** What a follow has told of its turn so far: the last event's number, and the activity last said. */
+interface FollowTold {
+  seq: number;
+  action: string | undefined;
+}
+
+const isRepositoryCommand = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);
+
+/**
+ * What the turn is doing now, read off its journal: the latest call not yet
+ * answered, as its command where it is a repository command and as its
+ * tool's name otherwise, cut to what a `plan.activity` frame carries; nothing
+ * while every call is answered. Note that we read the call's input and never
+ * its output, because the line is shown on the developer's Mac and a
+ * command's output is the repository's own text.
+ */
+function pendingActionOf(journal: StoredUIMessage | undefined): string | undefined {
+  const pending = journal?.parts
+    .filter(isStoredToolPart)
+    .findLast((part) => !isSettledToolPartState(part.state));
+  if (pending === undefined) return undefined;
+  const action = isRepositoryCommand(pending.input)
+    ? pending.input.command
+    : storedToolName(pending);
+  if (action.length <= PLAN_ACTIVITY_ACTION_MAX_CHARS) return action;
+  return `${action.slice(0, PLAN_ACTIVITY_ACTION_MAX_CHARS - 1)}…`;
 }
 
 export interface HostedLiveBrainOptions {
@@ -156,14 +190,15 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
 
   /**
    * One look at where the ask stands: the events its turn has produced so
-   * far, those past the ones already told emitted under the ask's id.
+   * far, those past the ones already told emitted under the ask's id, and
+   * what it is doing now where that differs from what was last told.
    * Answers whether the turn has ended. An ask the record no longer holds
    * ends as failed, since nothing of it can be told again, and so does a
    * turn whose journal the store cannot read: its sentences are in that
    * journal, so telling the turn's end without them would be a reply the
    * voice says nothing of, and reading again finds the same rows.
    */
-  const look = Effect.fnUntraced(function* (askId: string, told: { seq: number }) {
+  const look = Effect.fnUntraced(function* (askId: string, told: FollowTold) {
     const standing = yield* askStanding(reads, options.userId, askId);
     if (standing === undefined) {
       endFailed(askId);
@@ -184,7 +219,14 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       endFailed(askId);
       return true;
     }
-    const events = projectTurnEvents(turn, journal.value[0]?.message);
+    const message = journal.value[0]?.message;
+    // The activity goes ahead of the events, so a call answered in the turn's last step is told before its end.
+    const action = pendingActionOf(message);
+    if (action !== told.action) {
+      told.action = action;
+      emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: askId, action });
+    }
+    const events = projectTurnEvents(turn, message);
     for (const event of events.slice(told.seq)) {
       emit(runEventOf(event, askId));
       told.seq = event.seq;
@@ -203,7 +245,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   function follow(askId: string) {
     if (followed.has(askId)) return Effect.void;
     followed.add(askId);
-    const told = { seq: 0 };
+    const told: FollowTold = { seq: 0, action: undefined };
     const cadence = Schedule.spaced(bounds.POLL).pipe(
       Schedule.setInputType<boolean>(),
       Schedule.while(({ input }) => !input),

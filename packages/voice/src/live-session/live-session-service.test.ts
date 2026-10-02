@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
+import { VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -34,6 +35,7 @@ import {
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
   LiveSessionService,
+  type LiveSessionStatus,
   ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
@@ -296,8 +298,8 @@ interface Fixture {
   /** Every sideband adopted so far, in order; the session adopted over the nth is `sess-n`. */
   sidebands: FakeSideband[];
   spoken: string[];
-  /** Every change `onBusy` was told, in order. */
-  busy: boolean[];
+  /** Every status `onStatus` was told, in order. */
+  statuses: LiveSessionStatus[];
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
@@ -311,7 +313,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const record = new FakeRecord();
     const sidebands: FakeSideband[] = [];
     const spoken: string[] = [];
-    const busy: boolean[] = [];
+    const statuses: LiveSessionStatus[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
@@ -319,7 +321,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         report: () => undefined,
         onProactiveSpoken: (kind) => spoken.push(kind),
         onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
-        onBusy: (value) => busy.push(value),
+        onStatus: (status) => statuses.push(status),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -329,7 +331,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       record,
       sidebands,
       spoken,
-      busy,
+      statuses,
       service,
       open: () =>
         Effect.gen(function* () {
@@ -860,42 +862,64 @@ it.effect(
     }),
 );
 
+/** Nothing doing: the voice in no wait, and no exchange open. */
+const IDLE_STATUS = { voice: undefined, planner: undefined } as const;
+
 it.effect(
-  "an accepted ask reports the brain busy until its exchange is finalized, and a steering ask joins it without a second report",
+  "an ask is told as handing off, then the planner and its pending command, then Luke about to answer, and nothing once he begins",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
       yield* settle();
-      sideband.input("What is failing?", 0, 800);
+      sideband.input("Where are invites sent?", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      assert.deepEqual(f.busy, [true]);
-      sideband.input("In the API repo, I mean.", 1500, 2300);
-      sideband.delegation("item_2", 2400);
-      yield* settle();
-      assert.deepEqual(f.busy, [true]);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: "run-1", action: "ls src" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: "run-1", action: undefined });
       f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
-      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Two." });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "In src.",
+      });
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.ENDED,
         runId: "run-1",
         end: LIVE_BRAIN_RUN_END.COMPLETED,
       });
       yield* advanceClock(1000);
-      // One run of the exchange is still out, so it is not finalized yet.
-      assert.deepEqual(f.busy, [true]);
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
-        runId: "run-2",
-        end: LIVE_BRAIN_RUN_END.COMPLETED,
-      });
-      yield* advanceClock(1000);
-      assert.deepEqual(f.busy, [true, false]);
+      sideband.output("In src.", 2000, 2400);
+      yield* settle();
+      assert.deepEqual(f.statuses, [
+        { voice: VOICE_PHASE.HANDING_OFF, planner: undefined },
+        { voice: undefined, planner: { action: undefined } },
+        { voice: undefined, planner: { action: "ls src" } },
+        { voice: undefined, planner: { action: undefined } },
+        { voice: VOICE_PHASE.ABOUT_TO_ANSWER, planner: { action: undefined } },
+        { voice: VOICE_PHASE.ABOUT_TO_ANSWER, planner: undefined },
+        IDLE_STATUS,
+      ]);
     }),
 );
 
-it.effect("a run that ends with nothing said reports the brain no longer busy", () =>
+it.effect("a refused submission goes from handing off to about to answer its refusal", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.brain.refuse = "No brain stands.";
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Hello?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    assert.deepEqual(f.statuses, [
+      { voice: VOICE_PHASE.HANDING_OFF, planner: undefined },
+      { voice: VOICE_PHASE.ABOUT_TO_ANSWER, planner: undefined },
+    ]);
+  }),
+);
+
+it.effect("a run that completes with nothing said ends with nothing doing", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
@@ -906,15 +930,15 @@ it.effect("a run that ends with nothing said reports the brain no longer busy", 
     f.brain.fire({
       kind: LIVE_BRAIN_RUN_EVENT.ENDED,
       runId: "run-1",
-      end: LIVE_BRAIN_RUN_END.FAILED,
+      end: LIVE_BRAIN_RUN_END.COMPLETED,
     });
     yield* advanceClock(1000);
-    assert.deepEqual(f.busy, [true, false]);
+    assert.deepEqual(f.statuses.at(-1), IDLE_STATUS);
   }),
 );
 
 it.effect(
-  "a session that closes mid-run reports the brain no longer busy, and the run ending after it reports nothing more",
+  "a session that closes mid-run is told as nothing doing, and the run ending after it tells nothing more",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -925,28 +949,16 @@ it.effect(
       yield* settle();
       sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 12);
       yield* settle();
-      assert.deepEqual(f.busy, [true, false]);
+      assert.deepEqual(f.statuses.at(-1), IDLE_STATUS);
+      const told = f.statuses.length;
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.ENDED,
         runId: "run-1",
         end: LIVE_BRAIN_RUN_END.COMPLETED,
       });
       yield* advanceClock(1000);
-      assert.deepEqual(f.busy, [true, false]);
+      assert.equal(f.statuses.length, told);
     }),
-);
-
-it.effect("a refused submission never reports the brain busy", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    f.brain.refuse = "No brain stands.";
-    const sideband = yield* f.open();
-    yield* settle();
-    sideband.input("Hello?", 0, 800);
-    sideband.delegation("item_1", 900);
-    yield* settle();
-    assert.deepEqual(f.busy, []);
-  }),
 );
 
 it.effect("a refused submission is spoken as its refusal under the delegation", () =>

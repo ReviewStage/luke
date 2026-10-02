@@ -13,13 +13,14 @@ import {
   type GitHubCallFailure,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
+  type PlanActivity,
   type PlanCallFailure,
   type PlanningView,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Deferred, Duration, Effect, Fiber, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composePlanning, type PlanningClient } from "./compose-planning.js";
 
@@ -256,13 +257,13 @@ it.effect("a draft of a plan the panel does not have open is dropped", () =>
   }),
 );
 
-/** The service's word that the planning model is working, or no longer is, on an ask about the plan named. */
-function busyWord(planId: string, busy: boolean) {
-  return { type: VOICE_SERVICE_FRAME.PLAN_BUSY, planId, busy } as const;
+/** The service's word of what each part of Luke is doing on the call about the plan named. */
+function activityFrame(planId: string, activity: PlanActivity) {
+  return { type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY, planId, ...activity } as const;
 }
 
 it.effect(
-  "the planning model working on an ask about the open plan is drawn as the instant it began, kept through a repeat, and cleared when it ends",
+  "what each part of Luke is doing on the open plan's call is drawn as the service last said it",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
@@ -270,37 +271,31 @@ it.effect(
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
-      const began = yield* Clock.currentTimeMillis;
-      planning.showBusy(busyWord(INVITES, true));
-      assert.equal(last()?.busySince, began);
-      yield* TestClock.adjust(Duration.seconds(12));
-      planning.showBusy(busyWord(INVITES, true));
-      assert.equal(last()?.busySince, began);
-
-      planning.showBusy(busyWord(INVITES, false));
-      assert.equal(last()?.busySince, undefined);
+      const working = { planner: { action: "ls src" }, notes: true };
+      planning.showActivity(activityFrame(INVITES, working));
+      assert.deepEqual(last()?.activity, working);
+      planning.showActivity(activityFrame(INVITES, { notes: false }));
+      assert.deepEqual(last()?.activity, { notes: false });
       assert.equal(last()?.activePlanId, INVITES);
     }),
 );
 
-it.effect(
-  "the planning model working on an ask about a plan the panel does not have open is dropped",
-  () =>
-    Effect.gen(function* () {
-      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
-      const { call, planning, told } = yield* subject(fakeService([invites]));
-      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
-      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-      const drawn = told.length;
+it.effect("activity on the call about a plan the panel does not have open is dropped", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const { call, planning, told } = yield* subject(fakeService([invites]));
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+    const drawn = told.length;
 
-      planning.showBusy(busyWord(BILLING, true));
+    planning.showActivity(activityFrame(BILLING, { planner: {}, notes: false }));
 
-      assert.equal(told.length, drawn);
-      assert.equal(planning.snapshot().busySince, undefined);
-    }),
+    assert.equal(told.length, drawn);
+    assert.equal(planning.snapshot().activity, undefined);
+  }),
 );
 
-it.effect("leaving the open plan or switching to another clears the busy word drawn for it", () =>
+it.effect("leaving the open plan or switching to another clears the activity drawn for it", () =>
   Effect.gen(function* () {
     const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
     const billing = plan(BILLING, "Billing export", "# Billing export", 20);
@@ -308,15 +303,15 @@ it.effect("leaving the open plan or switching to another clears the busy word dr
     yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
     yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
-    planning.showBusy(busyWord(INVITES, true));
+    planning.showActivity(activityFrame(INVITES, { planner: {}, notes: true }));
     yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
     assert.equal(last()?.activePlanId, BILLING);
-    assert.equal(last()?.busySince, undefined);
+    assert.equal(last()?.activity, undefined);
 
-    planning.showBusy(busyWord(BILLING, true));
+    planning.showActivity(activityFrame(BILLING, { planner: {}, notes: true }));
     yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
     assert.equal(last()?.activePlanId, undefined);
-    assert.equal(last()?.busySince, undefined);
+    assert.equal(last()?.activity, undefined);
   }),
 );
 

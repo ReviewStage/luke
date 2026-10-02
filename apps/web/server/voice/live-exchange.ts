@@ -1,4 +1,5 @@
 import type { DevicePlatform, SessionBeatFrame } from "@sidecar/hosted";
+import type { PlanActivity } from "@sidecar/hosted/planning-view";
 import { PROACTIVE_SPEECH_KIND, type ProactiveSpeechKind } from "@sidecar/live";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
@@ -6,6 +7,7 @@ import {
   type AdoptableSession,
   type BeatTurn,
   LiveSessionService,
+  type LiveSessionStatus,
 } from "@sidecar/voice/live-session";
 import type { LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
@@ -110,8 +112,8 @@ export interface HostedLiveExchangeOptions {
    * route tells it in the service's own frame.
    */
   readonly onProactiveSpoken?: (kind: ProactiveSpeechKind) => void;
-  /** Whether the brain is working on an ask of the session, told on a change alone; a planning call's device is shown it. */
-  readonly onBusy?: (busy: boolean) => void;
+  /** What the voice, the brain, and the notetaker are doing, told whole on each change; a planning call's device is shown it. */
+  readonly onActivity?: (activity: PlanActivity) => void;
 }
 
 /** One signed-in session the sessions route created or re-attached, as an exchange is offered it. */
@@ -134,8 +136,8 @@ export interface AttachedSession {
   readonly onSpoken?: ((kind: ProactiveSpeechKind) => void) | undefined;
   /** The device's door for a planning call's plan as its notetaker has it now; absent where the route sends it nothing of its own. */
   readonly onPlanDraft?: ((draft: PlanDraft) => void) | undefined;
-  /** The device's door for whether the brain is working on an ask of the call; absent where the route sends it nothing of its own. */
-  readonly onBusy?: ((busy: boolean) => void) | undefined;
+  /** The device's door for what each part of Luke is doing on the call; absent where the route sends it nothing of its own. */
+  readonly onActivity?: ((activity: PlanActivity) => void) | undefined;
 }
 
 /**
@@ -279,6 +281,24 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     report,
   });
 
+  /**
+   * What the service and the notetaker last said of themselves, merged into
+   * one snapshot the device is told whole each time either changes, so the
+   * device holds the frame as it stands and derives nothing from a sequence.
+   */
+  let status: LiveSessionStatus = { voice: undefined, planner: undefined };
+  let notes = false;
+  const tellActivity = () => {
+    const { voice: phase, planner } = status;
+    options.onActivity?.({
+      ...(phase === undefined ? undefined : { voice: phase }),
+      ...(planner === undefined
+        ? undefined
+        : { planner: planner.action === undefined ? {} : { action: planner.action } }),
+      notes,
+    });
+  };
+
   const scribe =
     options.scribe === undefined
       ? undefined
@@ -289,6 +309,10 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
           ...(options.scribe.onDraft === undefined
             ? undefined
             : { onDraft: options.scribe.onDraft }),
+          onWriting: (writing) => {
+            notes = writing;
+            tellActivity();
+          },
           createId: options.createId,
           report,
         });
@@ -333,7 +357,10 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       onBriefingAppend: (delivery, eventId) =>
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
       ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
-      ...(options.onBusy ? { onBusy: options.onBusy } : undefined),
+      onStatus: (told) => {
+        status = told;
+        tellActivity();
+      },
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );

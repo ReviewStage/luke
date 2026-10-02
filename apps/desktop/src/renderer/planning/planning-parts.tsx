@@ -1,6 +1,5 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { BackIcon, CheckIcon, CopyIcon, MicrophoneIcon, PlusIcon } from "@sidecar/panel";
-import { useThinkingClock } from "../conversation-rows";
 import { ThinkingDots } from "../thinking-dots";
 import { PlanBody } from "./plan-body";
 import {
@@ -8,7 +7,6 @@ import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   type CopyShown,
-  callStatusText,
   DOCUMENT_REGION,
   type DocumentRegion,
   repositoryLine,
@@ -25,8 +23,13 @@ import {
  * planning call exactly as for any other.
  */
 
-/** What a reader is told while Luke is thinking; the sighted read the dots and the word. */
-const PLAN_THINKING_LABEL = "Luke is thinking";
+/** What a reader is told while the backend works; the sighted read the dots and the line. */
+const PLAN_WORKING_LABEL = "Luke is working on it";
+
+/** The backend line's names for its two parts, and what the planning model says with no command pending. */
+const PLANNER_NAME = "Planning model";
+const PLANNER_THINKING = "Thinking";
+const NOTETAKER_WRITING = "Notetaker · Writing notes";
 
 /** The list page: every plan the account owns, most recently opened first, under New plan. */
 export function PlanList({
@@ -217,46 +220,25 @@ export function PlanDocumentView({
 }
 
 /**
- * The status word while Luke is thinking, and its age once that is worth
- * saying. Its own component, so the second-by-second clock runs only while
- * Luke is thinking; a capture's fixed clock is read as it stands.
- */
-function ThinkingWord({
-  status,
-  now,
-  clockFixed,
-}: {
-  status: CallStatus;
-  now: number;
-  clockFixed: boolean;
-}): React.JSX.Element {
-  const clock = useThinkingClock(now);
-  return (
-    <span className="plan-voice-word">{callStatusText(status, clockFixed ? now : clock)}</span>
-  );
-}
-
-/**
- * The microphone row under the document: the button, and the open plan's
- * call status beside it. Only the button and the word are the tab's own;
- * whoever is heard, and what is said, the panel draws on its shape. While
- * the planning model works on an ask the word is Thinking, with the dots the
- * Conversation's wait rides beside it and the reader's status line, since
- * the dots are decorative. The line is the live region and the age is not,
- * so a ticking count is never read out second by second.
+ * The microphone row under the document: the button, and beside it the open
+ * plan's call in two lines. The first is the voice's word. The second stands
+ * only while the backend works: the planning model with its pending command
+ * set in monospace, or Thinking where it has none, and the notetaker while it
+ * writes, each named so neither reads as the voice. The dots are decorative,
+ * so a reader is told by a status line of its own. Only the button and the
+ * lines are the tab's own; whoever is heard, and what is said, the panel
+ * draws on its shape.
  */
 export function MicrophoneRow({
   status,
   microphone,
-  now,
-  clockFixed,
 }: {
   /** The call's status, absent while no call about this plan stands. */
   status: CallStatus | undefined;
   microphone: { label: string; enabled: boolean; onPress: () => void };
-  now: number;
-  clockFixed: boolean;
 }): React.JSX.Element {
+  const planner = status?.backend.planner;
+  const notes = status?.backend.notes ?? false;
   return (
     <footer className="plan-microphone-row">
       <button
@@ -270,17 +252,26 @@ export function MicrophoneRow({
         <MicrophoneIcon />
       </button>
       <span className="plan-voice-status">
-        {status?.busySince !== undefined ? (
-          <>
+        <span className="plan-voice-word">{status?.voiceWord ?? microphone.label}</span>
+        {planner !== undefined || notes ? (
+          <span className="plan-backend">
             <ThinkingDots />
-            <ThinkingWord status={status} now={now} clockFixed={clockFixed} />
+            {planner === undefined ? null : (
+              <span className="plan-backend-part">
+                {PLANNER_NAME} ·{" "}
+                {planner.action === undefined ? (
+                  PLANNER_THINKING
+                ) : (
+                  <span className="plan-backend-action">{planner.action}</span>
+                )}
+              </span>
+            )}
+            {notes ? <span className="plan-backend-part">{NOTETAKER_WRITING}</span> : null}
             <span className="visually-hidden" role="status">
-              {PLAN_THINKING_LABEL}
+              {PLAN_WORKING_LABEL}
             </span>
-          </>
-        ) : (
-          <span className="plan-voice-word">{status?.word ?? microphone.label}</span>
-        )}
+          </span>
+        ) : null}
       </span>
     </footer>
   );

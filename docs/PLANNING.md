@@ -277,16 +277,27 @@ fields or a voice model; comparative evaluations are outside this work.
   only while a key is held, because a planning conversation runs for minutes.
   The existing talk key keeps its hold-to-talk meaning, and speaks into the
   open plan's call.
-- **Status**, beside the button: the one word `LIVE_STATUS` already names,
-  `Connecting`, `Listening`, `Muted`, `Speaking` (Luke), or `Closing`, while
-  a call about this plan stands, and the button's own label otherwise. While
-  the planning model works on an ask, a listening or muted call reads
-  `Thinking` with the thinking dots instead, and `Still thinking · m:ss` once
-  it has worked for ten seconds. The service sends a `plan.busy` frame on the
-  call's own socket when an ask opens an exchange and again when the exchange
-  is finalized. The host stamps the instant into the planning view, and the
-  call ending clears it. A silent Luke whose row reads `Listening` is not
-  working, and that is a bug to chase rather than a pause to wait out.
+- **Status**, beside the button, in two lines, each part of Luke saying only
+  what it is doing. The first is the voice: the one word `LIVE_STATUS`
+  already names, `Connecting`, `Listening`, `Muted`, `Speaking` (Luke), or
+  `Closing`, while a call about this plan stands, and the button's own label
+  otherwise. A listening or muted call reads `Handing off` from the voice
+  model's delegation until the planning model takes the ask (or it is
+  refused), and `About to answer` from words queued for Luke until his voice
+  begins them. The second line stands only while the backend works, with the
+  thinking dots: `Planning model ·` the command of its pending
+  `run_in_repository` call (the tool's name for any other call), or
+  `Thinking` with none pending, while an exchange is open; and `Notetaker ·
+  Writing notes` while the notetaker's model call runs. No tool's output is
+  shown, and the command is cut to 120 characters. The service sends the
+  whole snapshot as a `plan.activity` frame on the call's own socket each
+  time any part changes: the live session service reports the voice's wait
+  and the exchange, the live brain reads the pending call off the turn's
+  journal on its own poll, and the notetaker reports its model call. The
+  host holds the snapshot in the planning view as it stands, clears it on
+  leaving or switching plans, and the call's end is told as nothing doing. A
+  silent Luke whose row reads `Listening` with no second line is not working,
+  and that is a bug to chase rather than a pause to wait out.
 - **Everything else is the panel's own.** The waveform is the wings', the
   captions (Luke's current words, and the developer's own under the captions
   preference) ride the panel's caption strip at its foot, and a voice error

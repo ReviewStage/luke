@@ -8,13 +8,13 @@ import {
   conversationDistanceFromTail,
   followsConversationTail,
 } from "./conversation-panel";
+import { thinkingElapsedLabel } from "./conversation-rows";
 import {
   FIXTURE_NOW,
   FIXTURE_ROSTER,
   FIXTURE_TURN,
   fixtureConversationTurns,
 } from "./conversation-turns.fixtures";
-import { thinkingElapsedLabel } from "./thinking-elapsed";
 
 const NOW = FIXTURE_NOW;
 

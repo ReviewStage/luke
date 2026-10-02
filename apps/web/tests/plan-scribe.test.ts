@@ -60,15 +60,17 @@ const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswe
     const { model, asked } = scriptedScribeModel(answers);
     const reports: string[] = [];
     const drafts: PlanDraft[] = [];
+    const writing: boolean[] = [];
     const scribe = yield* planScribe({
       userId,
       planId,
       model,
       onDraft: (draft) => drafts.push(draft),
+      onWriting: (value) => writing.push(value),
       createId: randomUUID,
       report: (message) => reports.push(message),
     });
-    return { scribe, asked, reports, drafts };
+    return { scribe, asked, reports, drafts, writing };
   });
 
 it.layer(testSqlClient)("the plan's notetaker", (it) => {
@@ -217,6 +219,49 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         assert.equal(yield* savedBody(userId, planId), before);
         assert.equal(drafts.at(-1)?.document.body, before);
         assert.equal(drafts.at(-1)?.savedAt, undefined);
+      }),
+    ),
+  );
+
+  it.effect("the notetaker is told as writing for its model call, and no longer once it ends", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const { scribe, writing } = yield* scribeFor(userId, planId, [
+          { purpose: { problem: PROBLEM } },
+        ]);
+
+        scribe.observe(heard("Only admins can add people.", 0, 1_000));
+        yield* settle;
+        assert.deepEqual(writing, []);
+        yield* quiet;
+        // The model streams its answer across drafts spaced a beat apart.
+        for (let beat = 0; beat < 20; beat += 1) {
+          yield* Effect.andThen(
+            TestClock.adjust(Duration.millis(PLAN_SCRIBE.DRAFT_EVERY_MS)),
+            settle,
+          );
+        }
+
+        assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+        assert.deepEqual(writing, [true, false]);
+      }),
+    ),
+  );
+
+  it.effect("a model call that times out is told as writing until it is given up", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const { scribe, writing, reports } = yield* scribeFor(userId, planId, [{ stalls: true }]);
+
+        scribe.observe(heard("Only admins can add people.", 0, 1_000));
+        yield* quiet;
+        assert.deepEqual(writing, [true]);
+
+        yield* Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.TIMEOUT_MS)), settle);
+        assert.deepEqual(writing, [true, false]);
+        assert.equal(reports.length, 1);
       }),
     ),
   );

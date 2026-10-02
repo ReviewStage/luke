@@ -3,7 +3,6 @@ import { FACE_MOTION } from "@sidecar/surface";
 import { useEffect, useState } from "react";
 import { createConversationTimeBreakFormatter } from "./conversation-time-break";
 import { ThinkingDots } from "./thinking-dots";
-import { thinkingElapsedLabel } from "./thinking-elapsed";
 
 /**
  * The rows the thread draws that belong to no message: Luke's wait, the
@@ -30,22 +29,22 @@ const CONVERSATION_THINKING_LABEL = "Luke is thinking";
 /** What a reader is told while a spoken turn is still owed its first words. */
 const CONVERSATION_LISTENING_LABEL = "Luke is listening";
 
+/** How long a run goes before the wait says how long it has been. */
+const THINKING_ELAPSED_AFTER_MS = 10_000;
+
 /** How often the wait's own clock moves once it is saying its age. */
 const THINKING_CLOCK_MS = 1_000;
 
 /**
- * A wait's own clock, past the app's, which moves only when the app renders:
- * a count of how long a run has been going has to move on its own. Never
- * behind the app's clock, so a fixed clock is never contradicted by this one.
- * The Plans tab's status row keeps the same clock while Luke is thinking.
+ * What the wait says once a run has gone on long enough to be worth a word,
+ * and nothing before that: a quick reply earns no sentence, and a run that has
+ * stood for minutes must not read like one that started a second ago.
  */
-export function useThinkingClock(now: number): number {
-  const [clock, setClock] = useState(now);
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), THINKING_CLOCK_MS);
-    return () => window.clearInterval(timer);
-  }, []);
-  return Math.max(clock, now);
+export function thinkingElapsedLabel(since: number, now: number): string | undefined {
+  const elapsed = now - since;
+  if (elapsed < THINKING_ELAPSED_AFTER_MS) return undefined;
+  const seconds = Math.floor(elapsed / 1000);
+  return `Still thinking · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 /**
@@ -65,7 +64,16 @@ export function ConversationThinkingRow({
   since: number;
   now: number;
 }): React.JSX.Element {
-  const elapsed = thinkingElapsedLabel(since, useThinkingClock(now));
+  // The wait keeps a clock of its own past the app's, which moves only when
+  // the app renders: a count of how long a run has been going has to move on
+  // its own. Never behind the app's clock, so a fixed clock is never
+  // contradicted by this one.
+  const [clock, setClock] = useState(now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), THINKING_CLOCK_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+  const elapsed = thinkingElapsedLabel(since, Math.max(clock, now));
   return (
     <li
       className="conversation-entry"
