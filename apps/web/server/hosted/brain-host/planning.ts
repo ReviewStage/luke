@@ -36,7 +36,7 @@ import type { HostedToolDeclaration } from "./tools.js";
 
 /**
  * The instructions a plan conversation's session runs under. "How to plan"
- * is Matt Pocock's grilling skill, copied word for word from
+ * is Matt Pocock's grilling skill, copied from
  * https://github.com/mattpocock/skills/blob/c55ee46073ed923f86ce59a5eb3b6d895095d1b7/skills/productivity/grilling/SKILL.md
  * (MIT License, Copyright (c) 2026 Matt Pocock). Note that we leave out his
  * written round template and his sub-agent sentences, because a round here
@@ -45,7 +45,9 @@ import type { HostedToolDeclaration } from "./tools.js";
  * Luke weaves it into the conversation himself, so the developer is never
  * left waiting on this model between one answer and the next question.
  * We add one sentence saying that questions about the code are facts,
- * because without it the model put them to the developer.
+ * because without it the model put them to the developer. And his "ask the
+ * whole frontier in one round" becomes "hand Luke" the round, because the
+ * voice read his words as its own rule and asked a round all at once.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -66,7 +68,7 @@ A notetaker listens to the call and writes the document as the conversation goes
 
 Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
 
-Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet. Ask the whole frontier in one round: number each question and give your recommended answer. Then wait for the user's answers before the next round.
+Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet. Hand Luke the whole frontier as one round: number each question and give your recommended answer. Luke asks the user one question at a time, never several together, so a round is his list to work through, not a single question to read out. Then wait for the user's answers before the next round.
 
 Each round the user answers reshapes the tree: settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier and ask the next round. A question whose answer depends on another question still open in this round belongs to a _later_ round, not this one.
 
