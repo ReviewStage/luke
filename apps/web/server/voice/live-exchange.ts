@@ -1,5 +1,9 @@
 import type { DevicePlatform, SessionBeatFrame } from "@sidecar/hosted";
-import { PROACTIVE_SPEECH_KIND, type ProactiveSpeechKind } from "@sidecar/live";
+import {
+  PROACTIVE_SPEECH_KIND,
+  type ProactiveSpeechKind,
+  planningQuietInstruction,
+} from "@sidecar/live";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
@@ -37,6 +41,13 @@ import {
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
 import { type PlanDraft, planScribe } from "./plan-scribe.js";
+
+/**
+ * How long a planning call stays quiet, with nothing running, before its
+ * voice is nudged back to the backend: long enough for the developer to think
+ * before answering, short enough that a stalled Luke is not waited out.
+ */
+const PLANNING_QUIET_MS = 10_000;
 
 /**
  * The live session service composed for the hosted tier, for one account's
@@ -334,6 +345,9 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
       ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
       ...(options.onBusy ? { onBusy: options.onBusy } : undefined),
+      ...(options.planning === true
+        ? { quietNudge: { afterMs: PLANNING_QUIET_MS, instruction: planningQuietInstruction() } }
+        : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );

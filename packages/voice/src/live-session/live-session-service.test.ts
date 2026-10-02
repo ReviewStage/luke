@@ -33,7 +33,9 @@ import {
 } from "./live-brain.js";
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
+  type BriefingDelivery,
   LiveSessionService,
+  type LiveSessionServiceOptions,
   ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
@@ -305,7 +307,10 @@ interface Fixture {
   onBriefingAppend?: (delivery: { briefing: string; decidedAt: number }, eventId: string) => void;
 }
 
-function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, never, Scope.Scope> {
+function fixture(
+  brain: FakeBrain = new FakeBrain(),
+  options: Pick<LiveSessionServiceOptions<BriefingDelivery>, "quietNudge"> = {},
+): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
     const clock = testNow(yield* Clock.Clock);
     const record = new FakeRecord();
@@ -320,6 +325,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         onProactiveSpoken: (kind) => spoken.push(kind),
         onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
         onBusy: (value) => busy.push(value),
+        ...options,
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -1380,6 +1386,60 @@ it.effect(
       assert.equal(f.record.rows.length, 3);
       assert.notEqual(f.record.rows[2]?.rowId, first.rowId);
     }),
+);
+
+const QUIET_NUDGE = { afterMs: 10_000, instruction: "Go back to the backend." } as const;
+
+function nudges(sideband: FakeSideband): readonly unknown[] {
+  return appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).filter(
+    (event) => "content" in event && event.content === QUIET_NUDGE.instruction,
+  );
+}
+
+it.effect(
+  "a quiet call with nothing running is nudged once, until the developer speaks again",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture(new FakeBrain(), { quietNudge: QUIET_NUDGE });
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.output("I think the plan is done.", 0, 900);
+      yield* advanceClock(9_000);
+      assert.equal(nudges(sideband).length, 0);
+      yield* advanceClock(1_500);
+      assert.equal(nudges(sideband).length, 1);
+      // Luke answering the nudge starts the quiet over, but the same silence is not nudged twice.
+      sideband.output("Let me check.", 11_000, 11_600);
+      yield* advanceClock(20_000);
+      assert.equal(nudges(sideband).length, 1);
+      sideband.input("Okay.", 32_000, 32_400);
+      yield* advanceClock(11_000);
+      assert.equal(nudges(sideband).length, 2);
+    }),
+);
+
+it.effect("a quiet call is not nudged while the brain works on an ask", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture(new FakeBrain(), { quietNudge: QUIET_NUDGE });
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("How do budgets work?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    yield* advanceClock(30_000);
+    assert.equal(nudges(sideband).length, 0);
+  }),
+);
+
+it.effect("a session given no quiet nudge is told nothing however long it is quiet", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.output("Anything else?", 0, 900);
+    yield* advanceClock(60_000);
+    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
+  }),
 );
 
 it.effect(

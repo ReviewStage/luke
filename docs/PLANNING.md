@@ -388,6 +388,13 @@ second is Luke's working assumption, drawn from the existing `role` check.
 
 ### 3. Concrete feature rehearsal
 
+The voice holds one round at a time and goes back to the planning model once
+it is answered. It has been heard calling the plan done instead, so a
+planning call that sits quiet for 10 seconds with nothing running is told
+once, by a fixed instruction, to delegate for the next round if every
+question it holds is answered (`planningQuietInstruction`); the developer
+speaking again re-arms it.
+
 Luke rehearses behavior in rounds, asking every question whose prerequisites
 are already settled, each with his recommended answer:
 

@@ -199,6 +199,22 @@ export function launchGreetingInstruction(firstName: string | undefined): string
 }
 
 /**
+ * What a planning call is told once the call has gone quiet with nothing
+ * running, sent as one `session.instructions.append`. Note that the voice
+ * holds one round at a time and has been heard calling a plan done once its
+ * round was answered, so the quiet is the moment to go back to the backend
+ * rather than wait on a developer who believes it is Luke's turn.
+ */
+export function planningQuietInstruction(): string {
+  return [
+    "The call has gone quiet.",
+    "If every question you hold has been answered, delegate to the backend now for the next round;",
+    "the plan is complete only when the backend says so.",
+    "If you are still waiting on the developer's answer, keep waiting.",
+  ].join(" ");
+}
+
+/**
  * The cue that follows the greeting's acknowledgment, sent as one
  * `session.commentary.append` with a null delegation. It is the guide's own
  * sentence for a greeting that has to follow application instructions, kept

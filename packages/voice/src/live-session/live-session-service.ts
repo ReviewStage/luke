@@ -163,6 +163,13 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
    * finalized or the session ends with one open. Told on a change alone.
    */
   onBusy?: (busy: boolean) => void;
+  /**
+   * What the session is told once it has been quiet this long with nothing
+   * running, at most once until the developer next speaks; absent, a quiet
+   * session is told nothing. A planning call sets it, since its voice can
+   * stall believing the plan done.
+   */
+  quietNudge?: { readonly afterMs: number; readonly instruction: string };
 }
 
 /**
@@ -205,6 +212,10 @@ interface StandingSession {
   readonly pendingRows: Map<string, SessionDelay>;
   idleReported: boolean;
   idleTimer: SessionDelay | undefined;
+  /** The quiet nudge's wait, armed by every spoken fragment and every exchange's end. */
+  quietTimer: SessionDelay | undefined;
+  /** Whether the quiet nudge was sent since the developer last spoke, so a silence is nudged once. */
+  quietNudged: boolean;
   /**
    * The rows already composed as a spoken ask: a later delegation is not
    * about them. The row itself keeps growing under its own id, on record and
@@ -688,6 +699,38 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     });
   }
 
+  /**
+   * Starts the quiet over: the nudge is sent once the session has heard no
+   * fragment and ended no exchange for the whole wait. Note that it is
+   * decided again when the wait runs out rather than here, because an
+   * exchange may open in the meantime.
+   */
+  #armQuiet(session: StandingSession): void {
+    const nudge = this.#options.quietNudge;
+    if (nudge === undefined) return;
+    this.#cancelDelay(session.quietTimer);
+    session.quietTimer = this.#after(nudge.afterMs, () => {
+      session.quietTimer = undefined;
+      this.#nudgeQuiet(session, nudge.instruction);
+    });
+  }
+
+  /** The quiet nudge, sent where nothing is running and this silence was not nudged yet. */
+  #nudgeQuiet(session: StandingSession, instruction: string): void {
+    if (this.#speakable() !== session || session.quietNudged) return;
+    if (this.#exchangeInFlight(session) || session.openAsks.size > 0) return;
+    session.quietNudged = true;
+    session.channel.enqueue(
+      Effect.suspend(() =>
+        Effect.asVoid(
+          session.channel.send(instructionsAppend(this.#input(null, instruction)), {
+            countsForIdle: false,
+          }),
+        ),
+      ),
+    );
+  }
+
   /** Whether a reply is still coming that this session would speak: a delegation's under it. */
   #exchangeInFlight(session: StandingSession): boolean {
     for (const exchange of this.#exchanges.values()) {
@@ -748,6 +791,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         pendingRows: new Map(),
         idleReported: false,
         idleTimer: undefined,
+        quietTimer: undefined,
+        quietNudged: false,
         askedRows: new Set(),
         settled: yield* Deferred.make<SidebandCloseResult>(),
         torn: yield* Deferred.make<void>(),
@@ -839,6 +884,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
         this.#fragment(session, TRANSCRIPT_SPEAKER.USER, event.delta, event.start_ms, event.end_ms);
         this.#composeRetained(session);
+        session.quietNudged = false;
+        this.#armQuiet(session);
         return Effect.void;
       case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA:
         this.#fragment(
@@ -849,6 +896,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           event.end_ms,
         );
         session.channel.outputReached(event.end_ms);
+        this.#armQuiet(session);
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
         if (isClientDelegation(event))
@@ -1191,6 +1239,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (held === exchange) this.#exchanges.delete(runId);
     }
     this.#reportBusy();
+    const session = this.#sessionOf(exchange);
+    if (session) this.#armQuiet(session);
     const unspoken = exchange.spokenChunks === 0 && exchange.buffered.length === 0;
     if (!unspoken || exchange.end === undefined || exchange.end === LIVE_BRAIN_RUN_END.COMPLETED) {
       return;
@@ -1364,6 +1414,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // The writes put off are the release's to make now; the delays behind them are given up here so none fires beside it.
     for (const delay of session.pendingRows.values()) this.#cancelDelay(delay);
     this.#cancelDelay(session.idleTimer);
+    this.#cancelDelay(session.quietTimer);
     session.channel.close();
     session.retained = [];
     if (this.#standing === session) this.#standing = undefined;
