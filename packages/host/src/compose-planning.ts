@@ -6,7 +6,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import type { HostedPlanClient, PlanDraftFrame } from "@sidecar/hosted";
+import type { HostedPlanClient, PlanBusyFrame, PlanDraftFrame } from "@sidecar/hosted";
 import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
 import { planCreateRequestSchema } from "@sidecar/hosted/plan-wire";
 import {
@@ -20,7 +20,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result, Schema, type Scope, Semaphore } from "effect";
+import { Clock, Effect, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -80,6 +80,12 @@ export interface PlanningComposer extends Composer {
    * other plan, or with no document of that plan held, is dropped.
    */
   showDraft: (draft: PlanDraftFrame) => void;
+  /**
+   * Shows whether the planning model is working on an ask of the call about
+   * the open plan, as the instant it began; a word about any other plan is
+   * dropped. Leaving or switching plans clears it, and so does the call's end.
+   */
+  showBusy: (busy: PlanBusyFrame) => void;
 }
 
 /**
@@ -98,6 +104,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
   const { kernel, account, client, endPlanCall, connectGitHub } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+  const clock = yield* Clock.Clock;
 
   /**
    * One read of the service at a time, whichever ask made it. Note that the
@@ -119,6 +126,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   function write(next: Partial<PlanningView>): void {
     view = { ...view, ...next };
     publish();
+  }
+
+  /** The view with no busy word, as a plan left behind or a call ended leaves it. */
+  function notBusy({ busySince: _busySince, ...rest }: PlanningView): PlanningView {
+    return rest;
   }
 
   /** The document of `planId` as held now, if the held one is that plan's. */
@@ -180,6 +192,21 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     write({ document: { status: PLANNING_READ.READY, plan } });
   }
 
+  /**
+   * Note that a repeated busy word keeps the instant first stamped, because
+   * the Plans tab counts the wait from when the model began, not from the
+   * last time it was told.
+   */
+  function showBusy(busy: PlanBusyFrame): void {
+    if (view.activePlanId !== busy.planId) return;
+    if (busy.busy) {
+      if (view.busySince === undefined) write({ busySince: clock.currentTimeMillisUnsafe() });
+      return;
+    }
+    view = notBusy(view);
+    publish();
+  }
+
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
       Effect.gen(function* () {
@@ -204,7 +231,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         // a microphone press or an offer landing inside the wait must bind
         // to the plan the panel now shows, never the one it is leaving.
         if (view.activePlanId !== planId) {
-          write({ activePlanId: planId, document: { status: PLANNING_READ.READING } });
+          view = {
+            ...notBusy(view),
+            activePlanId: planId,
+            document: { status: PLANNING_READ.READING },
+          };
+          publish();
         }
         yield* endPlanCall(planId);
         yield* serial(
@@ -222,7 +254,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         yield* endPlanCall(undefined);
         yield* serial(
           Effect.sync(() => {
-            const { activePlanId: _closed, ...rest } = view;
+            const { activePlanId: _closed, ...rest } = notBusy(view);
             view = { ...rest, document: { status: PLANNING_READ.IDLE } };
             publish();
           }),
@@ -243,7 +275,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
             const plan = started.answer;
             // Active before the old call's end is waited on, as for opening.
-            write({ activePlanId: plan.id, document: { status: PLANNING_READ.READY, plan } });
+            view = {
+              ...notBusy(view),
+              activePlanId: plan.id,
+              document: { status: PLANNING_READ.READY, plan },
+            };
+            publish();
             yield* endPlanCall(plan.id);
             yield* readList;
             return carried<PlanningStartAnswer>({ planId: plan.id });
@@ -278,6 +315,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     snapshot: () => view,
     activePlanId: () => view.activePlanId,
     showDraft,
+    showBusy,
     reset: Effect.gen(function* () {
       yield* endPlanCall(undefined);
       yield* serial(

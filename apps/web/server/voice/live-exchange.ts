@@ -110,6 +110,8 @@ export interface HostedLiveExchangeOptions {
    * route tells it in the service's own frame.
    */
   readonly onProactiveSpoken?: (kind: ProactiveSpeechKind) => void;
+  /** Whether the brain is working on an ask of the session, told on a change alone; a planning call's device is shown it. */
+  readonly onBusy?: (busy: boolean) => void;
 }
 
 /** One signed-in session the sessions route created or re-attached, as an exchange is offered it. */
@@ -132,6 +134,8 @@ export interface AttachedSession {
   readonly onSpoken?: ((kind: ProactiveSpeechKind) => void) | undefined;
   /** The device's door for a planning call's plan as its notetaker has it now; absent where the route sends it nothing of its own. */
   readonly onPlanDraft?: ((draft: PlanDraft) => void) | undefined;
+  /** The device's door for whether the brain is working on an ask of the call; absent where the route sends it nothing of its own. */
+  readonly onBusy?: ((busy: boolean) => void) | undefined;
 }
 
 /**
@@ -329,6 +333,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       onBriefingAppend: (delivery, eventId) =>
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
       ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
+      ...(options.onBusy ? { onBusy: options.onBusy } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );

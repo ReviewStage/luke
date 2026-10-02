@@ -309,12 +309,22 @@
   opacity: 0.45;
 }
 
+/* The call's word, beside the wait's dots while Luke is thinking. The word
+   alone is cut short, so the dots never are. */
 .plan-voice-status {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.plan-voice-word {
   min-width: 0;
   overflow: hidden;
-  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .plan-new {

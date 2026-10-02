@@ -223,6 +223,20 @@ async function framesWithin(reader: SocketReader, ms: number): Promise<LiveClien
   return frames;
 }
 
+/** The type of every frame the desktop is handed within the quiet window. */
+async function desktopTypesWithin(reader: SocketReader, ms: number): Promise<string[]> {
+  const types: string[] = [];
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    try {
+      types.push(String(record(await reader.next(Math.max(1, deadline - Date.now()))).type));
+    } catch {
+      break;
+    }
+  }
+  return types;
+}
+
 async function until(predicate: () => boolean, what: () => string): Promise<void> {
   for (let attempt = 0; attempt < 600; attempt += 1) {
     if (predicate()) return;
@@ -495,6 +509,13 @@ it.effect(
       }
       assert.deepEqual(spoken, ["One agent finished.", "Another is waiting on you."]);
       assert.equal(kinds.includes(LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND), false);
+      // A desk call's desktop is told nothing of the brain being busy, before the reply or after its finalize.
+      assert.equal(
+        (await desktopTypesWithin(session.desktop, QUIET_MS * 4)).includes(
+          VOICE_SERVICE_FRAME.PLAN_BUSY,
+        ),
+        false,
+      );
 
       await hangUp(context, session);
       // The record was drained before the session was reported ended: the developer's line stands attached to the delegation.
@@ -1149,6 +1170,71 @@ it.effect(
       );
       assert.deepEqual(await spokenDelegations(planConversation), ["dl_1", "dl_2"]);
       assert.deepEqual(await spokenDelegations(context.target.conversationId), []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a planning call tells the desktop its plan's brain is busy once the ask is accepted, and no longer busy once the reply is finalized",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const session = await openSession(context, plan.id);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await speak(session.attach.socket, sessionId);
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      const nextBusy = async (): Promise<WireRecord> => {
+        for (let index = 0; index < 12; index += 1) {
+          const frame = record(await session.desktop.next(5_000));
+          if (frame.type === VOICE_SERVICE_FRAME.PLAN_BUSY) return frame;
+        }
+        return assert.fail("no plan.busy frame reached the desktop");
+      };
+      assert.deepEqual(await nextBusy(), {
+        type: VOICE_SERVICE_FRAME.PLAN_BUSY,
+        planId: plan.id,
+        busy: true,
+      });
+
+      const planned = await planConversationOf(context.target.userId, plan.id);
+      const eveSession = await asks.latestSession(context.target.userId, planned ?? "");
+      assert.ok(planned && eveSession);
+      const standing = {
+        sessionId: eveSession,
+        target: { userId: context.target.userId, conversationId: planned },
+        kind: CONVERSATION_KIND.PLAN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      for (const event of spokenTurn(FIRST_EVE_TURN, NOW))
+        await database.run(relay.handle(event, standing));
+      // Each append is acknowledged as OpenAI would, so the reply is spoken and the run can end.
+      let spoken = 0;
+      while (spoken < 2) {
+        const sent = clientEvent(await session.upstream.next(5_000));
+        if (sent.type === LIVE_CLIENT_EVENT.THINKING_APPEND) {
+          await sendText(session.attach.socket, JSON.stringify(thinkingAppended(sent.event_id)));
+          continue;
+        }
+        if (sent.type !== LIVE_CLIENT_EVENT.COMMENTARY_APPEND) continue;
+        spoken += 1;
+        await sendText(
+          session.attach.socket,
+          JSON.stringify(appended(sent.event_id, 3000 + spoken * 1000, 4000 + spoken * 1000)),
+        );
+      }
+      assert.deepEqual(await nextBusy(), {
+        type: VOICE_SERVICE_FRAME.PLAN_BUSY,
+        planId: plan.id,
+        busy: false,
+      });
+
+      await hangUp(context, session);
       await context.stop();
     }),
 );

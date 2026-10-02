@@ -12,7 +12,12 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
-import { type PlanDraftFrame, type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import {
+  type PlanBusyFrame,
+  type PlanDraftFrame,
+  type SessionBeatFrame,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { SESSION_STATUS } from "@sidecar/session";
@@ -83,6 +88,8 @@ export interface LiveDependencies {
   activePlanId: () => string | undefined;
   /** Where a draft of the open plan goes as the service's notetaker writes it during a planning call. */
   showPlanDraft: (draft: PlanDraftFrame) => void;
+  /** Where the service's word that a planning call's model is working goes, and the call's end clearing it. */
+  showPlanBusy: (busy: PlanBusyFrame) => void;
 }
 
 /** The three beats this side decides, each withdrawn together at a sign-out. */
@@ -171,6 +178,8 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     },
     // The plan a planning call is writing, as the service's notetaker drafts it.
     onPlanDraft: (draft) => dependencies.showPlanDraft(draft),
+    // Whether the planning model is working on an ask of the call, as the service says it.
+    onPlanBusy: (busy) => dependencies.showPlanBusy(busy),
     // The service's word that a turn was spoken to its end, by kind: the
     // counts and the arrival's moment are this side's record, kept here as
     // they were when the queue that spoke them stood on this Mac.

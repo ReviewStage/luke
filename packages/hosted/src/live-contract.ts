@@ -154,6 +154,12 @@ export const VOICE_SERVICE_FRAME = {
    * types the plan in while the call goes on rather than waiting for a read.
    */
   PLAN_DRAFT: "plan.draft",
+  /**
+   * The service's third frame to the desktop, on a planning call alone: the
+   * planning model began or finished working on what the developer asked,
+   * so the Plans tab can say Luke is thinking while he is silent.
+   */
+  PLAN_BUSY: "plan.busy",
 } as const;
 
 /**
@@ -417,6 +423,15 @@ export const planDraftFrameSchema = Schema.Struct({
 
 export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
 
+/** Whether the planning model is working on an ask of the call about the plan named; nothing of the ask itself. */
+export const planBusyFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_BUSY),
+  planId: wireUuidSchema,
+  busy: Schema.Boolean,
+});
+
+export type PlanBusyFrame = typeof planBusyFrameSchema.Type;
+
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -503,6 +518,11 @@ export function sessionSpokenFrameFromWire(
 /** The service's draft of the open plan, read the answering way like the spoken frame beside it. */
 export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame | undefined {
   return admittedAnswer(planDraftFrameSchema, value);
+}
+
+/** The service's word that the planning model is working, read the same answering way. */
+export function planBusyFrameFromWire(value: UnparsedWireValue): PlanBusyFrame | undefined {
+  return admittedAnswer(planBusyFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

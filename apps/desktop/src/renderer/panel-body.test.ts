@@ -477,7 +477,7 @@ test("an open plan draws its document with Back, Copy, and the microphone row, a
         page: PLANS_PAGE.DOCUMENT,
         activePlanId: PLAN.id,
         region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-        status: "Listening",
+        status: { word: "Listening", busySince: undefined },
         onLeavePlan: () => pressed.push("back"),
         microphone: {
           label: "Mute the microphone",
