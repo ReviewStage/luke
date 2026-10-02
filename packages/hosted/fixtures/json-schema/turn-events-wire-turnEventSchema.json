@@ -22,7 +22,8 @@
           "type": "string",
           "enum": [
             "transcript_read",
-            "provider_write"
+            "provider_write",
+            "repository_read"
           ]
         }
       },

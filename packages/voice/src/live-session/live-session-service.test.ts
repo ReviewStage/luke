@@ -658,6 +658,24 @@ it.effect("a retained delegation dies with its session", () =>
   }),
 );
 
+it.effect("a repository read's thinking append says the repository is being read", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("How do invites work today?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP, runId: "run-1", step: "repository_read" });
+    yield* settle();
+    const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+    assert.deepEqual(
+      thinking.map((event) => ("content" in event ? event.content : undefined)),
+      ["Luke is reading the repository; this takes a moment."],
+    );
+  }),
+);
+
 it.effect(
   "a slow step earns the exchange's one thinking append, and the reply streams only after the actions settled, each chunk awaiting its ack",
   () =>

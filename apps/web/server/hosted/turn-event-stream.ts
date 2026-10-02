@@ -9,6 +9,7 @@ import {
   isStoredToolPart,
   READ_QUERY,
   replySentences,
+  SLOW_STEP_KIND,
   type SlowStepKind,
   type StoredUIMessage,
   slowStepOf,
@@ -33,6 +34,7 @@ import { CATALOG_TOOL_SET } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import type { UserIdResolver } from "./http-effect.js";
 import { makeRateBrake } from "./rate-brake.js";
+import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
 /**
@@ -123,7 +125,13 @@ export type ProjectedTurn = Pick<StoredTurnRecord, "id" | "origin" | "status">;
 
 type JournalParts = StoredUIMessage["parts"];
 
-/** The first slow step the journal's calls began, in the order the calls were written; the desktop tells one per run and so does this. */
+/**
+ * The first slow step the journal's calls began, in the order the calls were
+ * written; the desktop tells one per run and so does this. Note that a
+ * planning call's repository command is named before the policy is asked,
+ * because it is a planning tool and no catalog policy offers it, so the
+ * brain's own `slowStepOf` would never count it.
+ */
 function slowStepOfJournal(
   parts: JournalParts,
   trigger: BrainTurnTrigger,
@@ -131,7 +139,11 @@ function slowStepOfJournal(
   const policy = hostedTurnPolicy(trigger);
   for (const part of parts) {
     if (!isStoredToolPart(part)) continue;
-    const step = slowStepOf(policy, storedToolName(part));
+    const name = storedToolName(part);
+    const step =
+      name === RUN_IN_REPOSITORY_TOOL.name
+        ? SLOW_STEP_KIND.REPOSITORY_READ
+        : slowStepOf(policy, name);
     if (step !== undefined) return step;
   }
   return undefined;

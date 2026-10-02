@@ -62,10 +62,11 @@ export const BRAIN_RUN_EVENT = {
   TURN_ENDED: "turn_ended",
 } as const;
 
-/** The kinds of step that count as slow: a whole transcript read, or a write the provider carries. */
+/** The kinds of step that count as slow: a whole transcript read, a write the provider carries, or a planning call's look into its repository. */
 export const SLOW_STEP_KIND = {
   TRANSCRIPT_READ: "transcript_read",
   PROVIDER_WRITE: "provider_write",
+  REPOSITORY_READ: "repository_read",
 } as const;
 
 export type SlowStepKind = (typeof SLOW_STEP_KIND)[keyof typeof SLOW_STEP_KIND];
