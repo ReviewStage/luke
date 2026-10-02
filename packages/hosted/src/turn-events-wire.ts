@@ -45,10 +45,11 @@ export const TURN_EVENT_KIND = {
 
 export type TurnEventKind = (typeof TURN_EVENT_KIND)[keyof typeof TURN_EVENT_KIND];
 
-/** Which kind of slow step began: a whole transcript read, or a write the provider carries. */
+/** Which kind of slow step began: a whole transcript read, a write the provider carries, or a planning call's look into its repository. */
 export const TURN_SLOW_STEP = {
   TRANSCRIPT_READ: "transcript_read",
   PROVIDER_WRITE: "provider_write",
+  REPOSITORY_READ: "repository_read",
 } as const;
 
 export type TurnSlowStep = (typeof TURN_SLOW_STEP)[keyof typeof TURN_SLOW_STEP];
