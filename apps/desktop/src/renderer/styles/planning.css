@@ -189,15 +189,28 @@
   margin-top: 1.1em;
 }
 
-/* The caret a save is typed behind: solid, as a caret is while someone types. */
+/* The caret a save is typed behind: solid, as a caret is while someone types.
+   Note that it and the selection are inline, so they take none of the gap
+   `markdown.css` opens between a list item's blocks, which as an inline-block
+   the caret would otherwise take after a selection or an emphasis. */
 .plan-body .markdown-caret {
   display: inline-block;
   width: 2px;
   height: 1.1em;
+  margin-top: 0;
   margin-left: 1px;
   vertical-align: -0.2em;
   border-radius: 1px;
   background: var(--accent);
+}
+
+/* The words the caret is selecting to erase or cut, tinted as an editor
+   tints a selection, in the writer's own accent. */
+.plan-body .markdown-selection {
+  margin-top: 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: inherit;
 }
 
 /* The caret waiting where the last word went in, blinking as an editor's
