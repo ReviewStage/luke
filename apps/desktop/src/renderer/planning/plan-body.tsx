@@ -18,19 +18,21 @@ import { NO_ASSUMPTIONS_LINE } from "./planning-model";
  *
  * Every document the host hands over for the open plan becomes the chase's
  * target, whether a saved plan or a draft still being written, so a stream of
- * drafts types in as one continuous hand rather than restarting on each. The
- * view follows the caret unless the developer has scrolled the document
- * themselves, and lights each unit and new assumption as it settles. Opening
+ * drafts is worked in by one continuous hand rather than restarting on each.
+ * The view follows the caret, bringing a jump to the middle, unless the
+ * developer has scrolled the document themselves, and lights each unit and new assumption as it settles. Opening
  * a plan draws it whole, and reduced motion draws each document at once. The
  * fixed template always runs past the panel's ceiling, so the typing grows
  * the scrolled document and never the surface.
  */
 
-/** The document the chase was last aimed at, and where its typing stands. */
+/** The document the chase was last aimed at, the save and call it was aimed under, and where its typing stands. */
 interface Chase {
   readonly planId: string;
   readonly body: string;
   readonly assumptions: readonly string[];
+  readonly updatedAt: number;
+  readonly live: boolean;
   readonly state: ChaseState;
 }
 
@@ -39,6 +41,8 @@ interface PlanChase {
   readonly views: readonly UnitView[];
   readonly behind: boolean;
   readonly freshAssumptions: ReadonlySet<number>;
+  /** How many times the caret has jumped, so the view can bring a jump to the middle. */
+  readonly jumps: number;
 }
 
 /** The class of a unit or assumption lit as it settles. */
@@ -61,20 +65,35 @@ function sameTexts(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((text, index) => text === right[index]);
 }
 
-function opened(plan: Plan): Chase {
+function opened(plan: Plan, live: boolean): Chase {
   const { body, assumptions } = plan.document;
-  return { planId: plan.id, body, assumptions: textsOf(assumptions), state: chaseOpened(body) };
+  const { id: planId, updatedAt } = plan;
+  return {
+    planId,
+    body,
+    assumptions: textsOf(assumptions),
+    updatedAt,
+    live,
+    state: chaseOpened(body),
+  };
 }
 
-/** The chase aimed at the plan as handed over now: a new target for the same plan, a fresh start for another. */
-function aimed(chase: Chase, plan: Plan): Chase {
-  if (chase.planId !== plan.id) return opened(plan);
+/**
+ * The chase aimed at the plan as handed over now: a new target for the same
+ * plan, a fresh start for another. A save, which moves the plan's
+ * `updatedAt`, or the call ending settles every unit, since nothing is
+ * streaming any more.
+ */
+function aimed(chase: Chase, plan: Plan, live: boolean): Chase {
+  if (chase.planId !== plan.id) return opened(plan, live);
   const { body } = plan.document;
   const assumptions = textsOf(plan.document.assumptions);
   const added = { before: chase.assumptions, after: assumptions };
+  const settle = plan.updatedAt !== chase.updatedAt || !live;
   // Read at the retarget rather than held, since it is the one moment it decides anything.
-  const state = chaseRetargeted(chase.state, body, added, prefersReducedMotion());
-  return { planId: plan.id, body, assumptions, state };
+  const aim = { reduced: prefersReducedMotion(), settle };
+  const state = chaseRetargeted(chase.state, body, added, aim);
+  return { planId: plan.id, body, assumptions, updatedAt: plan.updatedAt, live, state };
 }
 
 /**
@@ -83,14 +102,16 @@ function aimed(chase: Chase, plan: Plan): Chase {
  * the typing carries on toward it without a jump.
  */
 function usePlanChase(plan: Plan, live: boolean): PlanChase {
-  const [chase, setChase] = useState(() => opened(plan));
+  const [chase, setChase] = useState(() => opened(plan, live));
   let current = chase;
   const moved =
     chase.planId !== plan.id ||
     chase.body !== plan.document.body ||
+    chase.updatedAt !== plan.updatedAt ||
+    chase.live !== live ||
     !sameTexts(chase.assumptions, textsOf(plan.document.assumptions));
   if (moved) {
-    current = aimed(chase, plan);
+    current = aimed(chase, plan, live);
     setChase(current);
   }
   const behind = chaseBehind(current.state);
@@ -111,6 +132,7 @@ function usePlanChase(plan: Plan, live: boolean): PlanChase {
     views: chaseView(current.state, live),
     behind,
     freshAssumptions: current.state.freshAssumptions,
+    jumps: current.state.jumps,
   };
 }
 
@@ -141,10 +163,12 @@ function AssumptionRow({
  * the caret waiting where the typing last stopped.
  */
 export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.JSX.Element {
-  const { views, behind, freshAssumptions } = usePlanChase(plan, live);
+  const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
   const scroller = useRef<HTMLDivElement>(null);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
+  /** The caret's jumps when the view last followed it. */
+  const followedJumps = useRef(jumps);
 
   useEffect(() => {
     const element = scroller.current;
@@ -164,10 +188,15 @@ export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.J
   }, [behind]);
 
   // Note that the caret is scrolled to on every frame it moves, because
-  // "nearest" is nothing while it is already in view.
+  // "nearest" is nothing while it is already in view. A jump is brought to
+  // the middle instead, so the developer sees where the caret went and what
+  // stands around it.
   useEffect(() => {
+    const jumped = jumps !== followedJumps.current;
+    followedJumps.current = jumps;
     if (!behind || scrolledAway.current) return;
-    scroller.current?.querySelector(".markdown-caret")?.scrollIntoView({ block: "nearest" });
+    const block = jumped ? "center" : "nearest";
+    scroller.current?.querySelector(".markdown-caret")?.scrollIntoView({ block });
   });
 
   const { assumptions } = plan.document;
@@ -181,7 +210,7 @@ export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.J
             key={index}
             words={view.words}
             className={unitClass(view)}
-            reveal={view.reveal}
+            edit={view.edit}
           />
         ))}
       </div>
