@@ -68,7 +68,8 @@ Do not delegate to the backend when:
  * document and reads the plan's repository; a notetaker beside the call
  * writes the plan, so there is no save to delegate. The policy is
  * the template's own conditions with the planning model's tools named, as
- * the desktop's names the brain's.
+ * the desktop's names the brain's. Note that the voice holds one round at a
+ * time, so an answered round is a reason to delegate.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
@@ -79,6 +80,7 @@ Delegate to the backend when:
 - The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
+- The developer has answered every question you hold: ask the backend for the next round.
 - You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
 
 Do not delegate to the backend when:
@@ -105,7 +107,7 @@ Do not guess the result while waiting.`;
  */
 const MANAGER_ROLE = "You are Luke, an engineering manager for the developer's coding agents.";
 const PLANNING_ROLE = `You are Luke, a calm, friendly voice assistant planning out the implementation of a new engineering task with the user (a developer).
-Lead the conversation until the plan is complete.
+Lead the conversation until the backend says the plan is complete.
 A notetaker writes the plan live as you talk; you never write it yourself.`;
 
 /**
