@@ -1175,7 +1175,7 @@ it.effect(
 );
 
 it.effect(
-  "a planning call tells the desktop its plan's brain is busy once the ask is accepted, and no longer busy once the reply is finalized",
+  "a planning call tells the desktop its plan's brain is busy once the ask is delegated, and no longer busy once Luke begins the reply",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
@@ -1228,6 +1228,7 @@ it.effect(
           JSON.stringify(appended(sent.event_id, 3000 + spoken * 1000, 4000 + spoken * 1000)),
         );
       }
+      await sendText(session.attach.socket, JSON.stringify(said("One agent", 6000, 6400)));
       assert.deepEqual(await nextBusy(), {
         type: VOICE_SERVICE_FRAME.PLAN_BUSY,
         planId: plan.id,

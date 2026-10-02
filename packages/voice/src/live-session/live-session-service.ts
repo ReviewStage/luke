@@ -158,9 +158,10 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
    */
   onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
   /**
-   * Whether the brain is working on an exchange of the standing session:
-   * true when an accepted ask opens one, false when the last one is
-   * finalized or the session ends with one open. Told on a change alone.
+   * Whether Luke is working on an ask of the standing session: true from
+   * the delegation, through the brain's exchange, until he begins saying
+   * what it owes; false once he does, once an exchange with nothing to say
+   * is finalized, or once the session ends. Told on a change alone.
    */
   onBusy?: (busy: boolean) => void;
 }
@@ -218,6 +219,14 @@ interface StandingSession {
    * by its own attach, whichever comes first, and never by the next delegation.
    */
   readonly openAsks: Map<string, OpenAsk>;
+  /**
+   * Whether Luke owes the developer words he has not begun to say: set when a
+   * delegation is claimed and when words are queued for him to say, cleared
+   * by his next spoken fragment. It keeps the session busy across the waits
+   * on either side of the brain's run, since a hosted reply reaches the model
+   * whole at the run's end and he takes a moment to start saying it.
+   */
+  awaitingVoice: boolean;
   /**
    * The session's last word, settled by its own reader: the `session.closed`
    * it read, or the close that ended the arrivals before one came. The
@@ -744,6 +753,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
         openAsks: new Map(),
+        awaitingVoice: false,
         retained: [],
         pendingRows: new Map(),
         idleReported: false,
@@ -849,6 +859,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           event.end_ms,
         );
         session.channel.outputReached(event.end_ms);
+        this.#awaitVoice(session, false);
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
         if (isClientDelegation(event))
@@ -985,6 +996,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #delegation(session: StandingSession, id: string, offsetMs: number): void {
     if (session.claimedDelegations.has(id)) return;
     session.claimedDelegations.add(id);
+    this.#awaitVoice(session, true);
     // The words said so far are on record before the ask is composed on them.
     this.#flushRows(session);
     if (!session.ledger.askContext(session.lastDelegationOffsetMs).ask) {
@@ -1098,6 +1110,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */
   #registerExchange(session: StandingSession, runId: string, delegationId: string): Exchange {
+    // The exchange keeps the session busy from here, so the delegation's own wait is over.
+    session.awaitingVoice = false;
     const open = [...this.#exchanges.values()].find(
       (exchange) => exchange.sessionId === session.sessionId && exchange.end === undefined,
     );
@@ -1113,18 +1127,25 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return exchange;
   }
 
+  #awaitVoice(session: StandingSession, awaiting: boolean): void {
+    session.awaitingVoice = awaiting;
+    this.#reportBusy();
+  }
+
   /**
-   * Tells `onBusy` whether the standing session has an exchange open. Note
-   * that we derive it from `#exchanges` rather than counting opens and
-   * closes, because an exchange of a session already over is still held
-   * until its runs end, and it must not keep the next session busy.
+   * Tells `onBusy` whether the standing session is working: Luke owes words
+   * he has not begun, or an exchange is open. Note that we derive the
+   * exchange from `#exchanges` rather than counting opens and closes,
+   * because an exchange of a session already over is still held until its
+   * runs end, and it must not keep the next session busy.
    */
   #reportBusy(): void {
     const session = this.#standing;
     const busy =
       session !== undefined &&
       !session.ended &&
-      [...this.#exchanges.values()].some((exchange) => exchange.sessionId === session.sessionId);
+      (session.awaitingVoice ||
+        [...this.#exchanges.values()].some((exchange) => exchange.sessionId === session.sessionId));
     if (busy === this.#busy) return;
     this.#busy = busy;
     this.#options.onBusy?.(busy);
@@ -1190,12 +1211,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     for (const [runId, held] of [...this.#exchanges]) {
       if (held === exchange) this.#exchanges.delete(runId);
     }
-    this.#reportBusy();
     const unspoken = exchange.spokenChunks === 0 && exchange.buffered.length === 0;
-    if (!unspoken || exchange.end === undefined || exchange.end === LIVE_BRAIN_RUN_END.COMPLETED) {
-      return;
+    if (unspoken && exchange.end !== undefined && exchange.end !== LIVE_BRAIN_RUN_END.COMPLETED) {
+      this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
     }
-    this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
+    // Told after the note is queued, so a note still to be said keeps the session busy without a gap.
+    this.#reportBusy();
   }
 
   /** One sentence of an exchange's reply, into its session under its delegation; a session since closed hears nothing of it. */
@@ -1211,6 +1232,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     delegationId: LiveDelegationId,
     sentence: string,
   ): void {
+    this.#awaitVoice(session, true);
     for (const chunk of chunkForAppend(sentence)) {
       session.channel.enqueue(
         Effect.gen({ self: this }, function* () {
@@ -1224,6 +1246,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   #speakInto(session: StandingSession, delegationId: LiveDelegationId, text: string): void {
+    this.#awaitVoice(session, true);
     for (const chunk of chunkForAppend(text)) {
       session.channel.enqueue(
         Effect.suspend(() =>

@@ -283,8 +283,8 @@ fields or a voice model; comparative evaluations are outside this work.
   the planning model works on an ask, a listening or muted call reads
   `Thinking` with the thinking dots instead, and `Still thinking · m:ss` once
   it has worked for ten seconds. The service sends a `plan.busy` frame on the
-  call's own socket when an ask opens an exchange and again when the exchange
-  is finalized. The host stamps the instant into the planning view, and the
+  call's own socket when the voice delegates an ask, and again when Luke
+  begins saying the reply (or the exchange ends with nothing to say). The host stamps the instant into the planning view, and the
   call ending clears it. A silent Luke whose row reads `Listening` is not
   working, and that is a bug to chase rather than a pause to wait out.
 - **Everything else is the panel's own.** The waveform is the wings', the
