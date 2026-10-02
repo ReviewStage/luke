@@ -1,4 +1,5 @@
 import { PLAN_EMPTY_TEXT } from "@sidecar/hosted/plan-template";
+import { diffArrays } from "diff";
 
 /**
  * plan-diff.ts -- where one unit of the plan differs from its newer words: the edits a person would make, word by word, and a line moved whole.
@@ -7,13 +8,15 @@ import { PLAN_EMPTY_TEXT } from "@sidecar/hosted/plan-template";
  * someone editing a document would make them rather than the shortest way:
  * whole words, a lone shared word between two changes folded into one change,
  * and a line that left one place and arrived unchanged at another paired as
- * a move. While a field is still streaming in, its newer words are cut off
+ * a move. The comparison itself is jsdiff's (`diffArrays`, over this file's
+ * words); what is here is how its changes are cut for a hand. While a field
+ * is still streaming in, its newer words are cut off
  * partway, and `heldWords` says how far they can be trusted. Everything here
  * is pure.
  */
 
-/** The most cells a longest-common-run table may hold before a change is taken as one replacement. */
-const MAX_TABLE_CELLS = 1_000_000;
+/** The most words and spaces a diff may change before the whole unit is taken as one replacement. */
+const MAX_EDIT_TOKENS = 400;
 
 /** The shortest line, without its break, worth playing as a move rather than an erase and a retype. */
 const MOVE_MIN_CHARS = 8;
@@ -46,44 +49,6 @@ const PLACEHOLDERS: ReadonlySet<string> = new Set(Object.values(PLAN_EMPTY_TEXT)
 
 function tokens(words: string): readonly string[] {
   return words.match(TOKEN) ?? [];
-}
-
-/**
- * The pairs of positions where the longest run the two sequences share
- * lines up, in order, or nothing when the table would be too large to hold.
- * Note that a tie prefers dropping from the old side first, so a replacement
- * reads as an erase followed by the typing.
- */
-function commonPairs(
-  old: readonly string[],
-  next: readonly string[],
-): ReadonlyArray<readonly [number, number]> | undefined {
-  const rows = old.length + 1;
-  const columns = next.length + 1;
-  if (rows * columns > MAX_TABLE_CELLS) return undefined;
-  const longest = new Uint32Array(rows * columns);
-  for (let i = old.length - 1; i >= 0; i -= 1) {
-    for (let j = next.length - 1; j >= 0; j -= 1) {
-      const here = i * columns + j;
-      longest[here] =
-        old[i] === next[j]
-          ? 1 + (longest[here + columns + 1] ?? 0)
-          : Math.max(longest[here + columns] ?? 0, longest[here + 1] ?? 0);
-    }
-  }
-  const pairs: Array<readonly [number, number]> = [];
-  let i = 0;
-  let j = 0;
-  while (i < old.length && j < next.length) {
-    const here = i * columns + j;
-    if (old[i] === next[j]) {
-      pairs.push([i, j]);
-      i += 1;
-      j += 1;
-    } else if ((longest[here + columns] ?? 0) >= (longest[here + 1] ?? 0)) i += 1;
-    else j += 1;
-  }
-  return pairs;
 }
 
 /** The same text with one line break taken off either end, which is how a line reads wherever it moved. */
@@ -211,41 +176,36 @@ function folded(old: string, hunks: readonly Hunk[]): readonly Hunk[] {
 /**
  * The edits that turn the old words into the newer ones, in document order,
  * offsets in the old words. Words are compared whole, and only the letters
- * that differ at a changed word's ends are touched; a change too large to compare word by word is one replacement of everything between
- * the shared start and the shared end.
+ * that differ at a changed word's ends are touched; a change past
+ * `MAX_EDIT_TOKENS` is one replacement of the whole unit.
  */
 export function diffHunks(old: string, next: string): readonly Hunk[] {
   if (old === next) return [];
-  const before = tokens(old);
-  const after = tokens(next);
-  let head = 0;
-  while (head < before.length && head < after.length && before[head] === after[head]) head += 1;
-  let tail = 0;
-  while (
-    tail < before.length - head &&
-    tail < after.length - head &&
-    before[before.length - 1 - tail] === after[after.length - 1 - tail]
-  ) {
-    tail += 1;
-  }
-  const oldMiddle = before.slice(head, before.length - tail);
-  const nextMiddle = after.slice(head, after.length - tail);
-  const start = before.slice(0, head).join("").length;
-  const pairs = commonPairs(oldMiddle, nextMiddle) ?? [];
-
+  const changes = diffArrays([...tokens(old)], [...tokens(next)], {
+    maxEditLength: MAX_EDIT_TOKENS,
+  });
+  if (changes === undefined) return [{ from: 0, to: old.length, insert: next }];
   const hunks: Hunk[] = [];
-  let i = 0;
-  let j = 0;
-  let at = start;
-  // A sentinel pair past both ends closes the last change.
-  for (const [pairI, pairJ] of [...pairs, [oldMiddle.length, nextMiddle.length] as const]) {
-    const erased = oldMiddle.slice(i, pairI).join("");
-    const typed = nextMiddle.slice(j, pairJ).join("");
-    if (erased !== "" || typed !== "")
-      hunks.push({ from: at, to: at + erased.length, insert: typed });
-    at += erased.length + (oldMiddle[pairI] ?? "").length;
-    i = pairI + 1;
-    j = pairJ + 1;
+  let at = 0;
+  let open: { from: number; erased: string; typed: string } | undefined;
+  for (const change of changes) {
+    const words = change.value.join("");
+    if (!change.added && !change.removed) {
+      if (open !== undefined) {
+        hunks.push({ from: open.from, to: open.from + open.erased.length, insert: open.typed });
+      }
+      open = undefined;
+      at += words.length;
+      continue;
+    }
+    open ??= { from: at, erased: "", typed: "" };
+    if (change.removed) {
+      open.erased += words;
+      at += words.length;
+    } else open.typed += words;
+  }
+  if (open !== undefined) {
+    hunks.push({ from: open.from, to: open.from + open.erased.length, insert: open.typed });
   }
   return pairedMoves(
     old,
