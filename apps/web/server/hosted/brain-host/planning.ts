@@ -47,9 +47,9 @@ import type { HostedToolDeclaration } from "./tools.js";
  * rule and asked a round all at once. Each question is queued through
  * `queue_question` the moment it is ready, which reaches the voice mid-turn,
  * so Luke holds the next question while this model is still reading the
- * repository and never waits on it between one answer and the next. We add one sentence saying that
- * questions about the code are facts, because without it the model put
- * them to the developer.
+ * repository and never waits on it between one answer and the next. We add
+ * one sentence saying that questions about the code are facts, because
+ * without it the model put them to the developer.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context

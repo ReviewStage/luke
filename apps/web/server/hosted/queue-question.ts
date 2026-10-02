@@ -1,4 +1,4 @@
-import { describeWire, readEither } from "@sidecar/wire/effect";
+import { describeWire } from "@sidecar/wire/effect";
 import { Result, Schema } from "effect";
 import {
   ACTION_RESULT_STATUS,
@@ -44,10 +44,8 @@ const QUEUE_QUESTION_INPUT = Schema.Struct({
 /** A question the planning model queued, read back off its journaled call. */
 export type QueuedQuestion = typeof QUEUE_QUESTION_INPUT.Type;
 
-const readQueueQuestionInput = readEither(QUEUE_QUESTION_INPUT);
-
 // Note that a journaled call's input is the stored row's, which the AI SDK types as unknown.
-const readJournaledInput = Schema.decodeUnknownResult(QUEUE_QUESTION_INPUT);
+const readQueuedQuestion = Schema.decodeUnknownResult(QUEUE_QUESTION_INPUT);
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
 export const QUEUE_QUESTION_TOOL = {
@@ -66,12 +64,12 @@ export const QUEUE_QUESTION_TOOL = {
  */
 export function queuedQuestionOf(part: StoredToolPart): QueuedQuestion | undefined {
   if (part.state === TOOL_PART_STATE.INPUT_STREAMING) return undefined;
-  return Result.getOrUndefined(readJournaledInput(part.input));
+  return Result.getOrUndefined(readQueuedQuestion(part.input));
 }
 
 /** Runs one call: accepted when its input reads, since the journal has already carried it. */
 export function runQueueQuestion(input: UnparsedWireValue): WireRecord {
-  return Result.isFailure(readQueueQuestionInput(input))
+  return Result.isFailure(readQueuedQuestion(input))
     ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "Not queued: the question is unreadable." }
     : { status: ACTION_RESULT_STATUS.ACCEPTED };
 }
