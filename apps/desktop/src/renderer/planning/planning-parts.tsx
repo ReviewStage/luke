@@ -1,10 +1,14 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { BackIcon, CheckIcon, CopyIcon, MicrophoneIcon, PlusIcon } from "@sidecar/panel";
+import { useThinkingClock } from "../conversation-rows";
+import { ThinkingDots } from "../thinking-dots";
 import { PlanBody } from "./plan-body";
 import {
+  type CallStatus,
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   type CopyShown,
+  callStatusText,
   DOCUMENT_REGION,
   type DocumentRegion,
   repositoryLine,
@@ -20,6 +24,9 @@ import {
  * waveform and the captions are the panel's own, drawn on the shape for a
  * planning call exactly as for any other.
  */
+
+/** What a reader is told while Luke is thinking; the sighted read the dots and the word. */
+const PLAN_THINKING_LABEL = "Luke is thinking";
 
 /** The list page: every plan the account owns, most recently opened first, under New plan. */
 export function PlanList({
@@ -210,17 +217,45 @@ export function PlanDocumentView({
 }
 
 /**
+ * The status word while Luke is thinking, and its age once that is worth
+ * saying. Its own component, so the second-by-second clock runs only while
+ * Luke is thinking; a capture's fixed clock is read as it stands.
+ */
+function ThinkingWord({
+  status,
+  now,
+  clockFixed,
+}: {
+  status: CallStatus;
+  now: number;
+  clockFixed: boolean;
+}): React.JSX.Element {
+  const clock = useThinkingClock(now);
+  return (
+    <span className="plan-voice-word">{callStatusText(status, clockFixed ? now : clock)}</span>
+  );
+}
+
+/**
  * The microphone row under the document: the button, and the open plan's
  * call status beside it. Only the button and the word are the tab's own;
- * whoever is heard, and what is said, the panel draws on its shape.
+ * whoever is heard, and what is said, the panel draws on its shape. While
+ * the planning model works on an ask the word is Thinking, with the dots the
+ * Conversation's wait rides beside it and the reader's status line, since
+ * the dots are decorative. The line is the live region and the age is not,
+ * so a ticking count is never read out second by second.
  */
 export function MicrophoneRow({
   status,
   microphone,
+  now,
+  clockFixed,
 }: {
-  /** The call's status word, absent while no call about this plan stands. */
-  status: string | undefined;
+  /** The call's status, absent while no call about this plan stands. */
+  status: CallStatus | undefined;
   microphone: { label: string; enabled: boolean; onPress: () => void };
+  now: number;
+  clockFixed: boolean;
 }): React.JSX.Element {
   return (
     <footer className="plan-microphone-row">
@@ -234,7 +269,19 @@ export function MicrophoneRow({
       >
         <MicrophoneIcon />
       </button>
-      <span className="plan-voice-status">{status ?? microphone.label}</span>
+      <span className="plan-voice-status">
+        {status?.busySince !== undefined ? (
+          <>
+            <ThinkingDots />
+            <ThinkingWord status={status} now={now} clockFixed={clockFixed} />
+            <span className="visually-hidden" role="status">
+              {PLAN_THINKING_LABEL}
+            </span>
+          </>
+        ) : (
+          <span className="plan-voice-word">{status?.word ?? microphone.label}</span>
+        )}
+      </span>
     </footer>
   );
 }

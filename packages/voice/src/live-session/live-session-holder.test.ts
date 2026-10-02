@@ -6,7 +6,7 @@ import {
   LIVE_TRANSPORT_STATE,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
-import { type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import { type PlanBusyFrame, type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import {
   type InitialItem,
   LIVE_CLIENT_EVENT,
@@ -117,6 +117,10 @@ interface Fixture {
   spoken: ProactiveSpeechKind[];
   /** The service's word that a turn was spoken, as the source's door would deliver it. */
   tellSpoken(kind: ProactiveSpeechKind): void;
+  /** Every busy word the holder told its caller, in order. */
+  busy: PlanBusyFrame[];
+  /** The service's busy word, as the source's door would deliver it. */
+  tellBusy(busy: PlanBusyFrame): void;
   created: number;
   entries: ConversationEntry[];
   roster: RosterSeedSession[];
@@ -138,6 +142,8 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const beats: SessionBeatFrame[] = [];
     const spoken: ProactiveSpeechKind[] = [];
     let spokenListener: ((kind: ProactiveSpeechKind) => void) | undefined;
+    const busy: PlanBusyFrame[] = [];
+    let busyListener: ((busy: PlanBusyFrame) => void) | undefined;
     const entries: ConversationEntry[] = [];
     const roster: RosterSeedSession[] = [];
     let ids = 0;
@@ -173,6 +179,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   onSpoken: (listener: (kind: ProactiveSpeechKind) => void) => {
                     spokenListener = listener;
                   },
+                  onPlanBusy: (listener: (busy: PlanBusyFrame) => void) => {
+                    busyListener = listener;
+                  },
                 }
               : undefined),
           };
@@ -191,6 +200,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       createId: () => `id-${++ids}`,
       onSpoken: (kind) => {
         spoken.push(kind);
+      },
+      onPlanBusy: (word) => {
+        busy.push(word);
       },
       onSessionCreated: () => {
         state.created += 1;
@@ -221,6 +233,10 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       spoken,
       tellSpoken: (kind) => {
         spokenListener?.(kind);
+      },
+      busy,
+      tellBusy: (word) => {
+        busyListener?.(word);
       },
       get reportsActivity() {
         return state.reportsActivity;
@@ -853,6 +869,37 @@ it.effect(
       assert.equal(yield* Fiber.join(creating), undefined);
       assert.deepEqual(f.plans, [undefined]);
       assert.equal(f.holder.sessionStands(), false);
+    }),
+);
+
+it.effect(
+  "a planning call passes on the service's busy word about its own plan, drops one about another, and its end is told as not busy where a desk session's end tells nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+
+      const working = { type: VOICE_SERVICE_FRAME.PLAN_BUSY, planId: INVITES_PLAN, busy: true };
+      f.tellBusy(working);
+      f.tellBusy({ type: VOICE_SERVICE_FRAME.PLAN_BUSY, planId: BILLING_PLAN, busy: true });
+      assert.deepEqual(f.busy, [working]);
+
+      sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 4);
+      yield* settle();
+      assert.deepEqual(f.busy, [working, { ...working, busy: false }]);
+      // A word arriving after the call ended reaches nobody.
+      f.tellBusy(working);
+      assert.equal(f.busy.length, 2);
+
+      const desk = yield* f.open();
+      desk.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 1);
+      yield* settle();
+      assert.equal(f.busy.length, 2);
     }),
 );
 

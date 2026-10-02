@@ -9,6 +9,7 @@ import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import {
   COPY_SHOWN,
+  callStatusText,
   copyPlanDocument,
   copyShown,
   DOCUMENT_REGION,
@@ -119,18 +120,62 @@ test("an open plan is the document page whatever this panel was doing, and the f
 
 test("the microphone's word is the open plan's call status, and nothing for a desk call or another plan's", () => {
   const listening = { ...IDLE_VOICE_VIEW, voiceStatus: LIVE_STATUS.LISTENING };
-  assert.equal(microphoneStatusWord({ ...listening, callPlanId: INVITES }, INVITES), "Listening");
-  assert.equal(microphoneStatusWord({ ...listening, callPlanId: undefined }, INVITES), undefined);
-  assert.equal(microphoneStatusWord({ ...listening, callPlanId: BILLING }, INVITES), undefined);
-  assert.equal(microphoneStatusWord({ ...listening, callPlanId: INVITES }, undefined), undefined);
+  const open = { activePlanId: INVITES };
+  assert.deepEqual(microphoneStatusWord({ ...listening, callPlanId: INVITES }, open), {
+    word: "Listening",
+    busySince: undefined,
+  });
+  assert.equal(microphoneStatusWord({ ...listening, callPlanId: undefined }, open), undefined);
+  assert.equal(microphoneStatusWord({ ...listening, callPlanId: BILLING }, open), undefined);
+  assert.equal(microphoneStatusWord({ ...listening, callPlanId: INVITES }, {}), undefined);
   // A failed call says nothing here: the panel's strip carries the error under the shape.
   assert.equal(
     microphoneStatusWord(
       { ...IDLE_VOICE_VIEW, voiceStatus: LIVE_STATUS.FAILED, callPlanId: INVITES },
-      INVITES,
+      open,
     ),
     undefined,
   );
+});
+
+test("while the planning model works, a listening or muted call reads Thinking, and speaking, connecting, and closing keep their own word", () => {
+  const busy = { activePlanId: INVITES, busySince: 5_000 };
+  const call = (voiceStatus: LiveStatus) => ({
+    ...IDLE_VOICE_VIEW,
+    voiceStatus,
+    callPlanId: INVITES,
+  });
+  for (const status of [LIVE_STATUS.LISTENING, LIVE_STATUS.MUTED]) {
+    assert.deepEqual(microphoneStatusWord(call(status), busy), {
+      word: "Thinking",
+      busySince: 5_000,
+    });
+  }
+  assert.deepEqual(microphoneStatusWord(call(LIVE_STATUS.SPEAKING), busy), {
+    word: "Speaking",
+    busySince: undefined,
+  });
+  assert.deepEqual(microphoneStatusWord(call(LIVE_STATUS.CONNECTING), busy), {
+    word: "Connecting",
+    busySince: undefined,
+  });
+  assert.deepEqual(microphoneStatusWord(call(LIVE_STATUS.CLOSING), busy), {
+    word: "Closing",
+    busySince: undefined,
+  });
+  // Another plan's call reads nothing here, busy or not.
+  assert.equal(
+    microphoneStatusWord({ ...call(LIVE_STATUS.LISTENING), callPlanId: BILLING }, busy),
+    undefined,
+  );
+});
+
+test("Thinking says how long it has been once Luke has thought for ten seconds, and a call's own word never does", () => {
+  const thinking = { word: "Thinking", busySince: 5_000 };
+  assert.equal(callStatusText(thinking, 14_999), "Thinking");
+  assert.equal(callStatusText(thinking, 15_000), "Still thinking · 0:10");
+  assert.equal(callStatusText(thinking, 80_000), "Still thinking · 1:15");
+  assert.equal(callStatusText({ word: "Listening", busySince: undefined }, 80_000), "Listening");
 });
 
 test("the microphone asks for the permission first, then for a plan, and then talks about it or mutes", () => {

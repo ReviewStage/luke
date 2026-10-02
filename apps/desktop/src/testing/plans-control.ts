@@ -15,6 +15,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     copy: { shown: COPY_SHOWN.IDLE, onPress: ignore },
     microphone: { label: "Talk about this plan", enabled: true, onPress: ignore },
     status: undefined,
+    clockFixed: false,
     live: false,
     onSelect: ignore,
     onRetryList: ignore,

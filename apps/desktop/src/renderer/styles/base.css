@@ -1029,7 +1029,8 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 }
 
 /* The wait's three dots, one drawing wherever a run of Luke's is still going:
-   the Conversation bubble and the notch strip both ride them beside his face. */
+   the Conversation bubble rides them beside his face, and the Plans tab's
+   status row beside its word. */
 .thinking-dots {
   display: inline-flex;
   height: 12px;

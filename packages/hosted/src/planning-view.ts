@@ -52,6 +52,12 @@ export const planningViewSchema = EffectSchema.Struct({
   /** The one active plan, absent while the window has none open. */
   activePlanId: EffectSchema.optionalKey(EffectSchema.String),
   document: planningDocumentSchema,
+  /**
+   * Epoch milliseconds, on the host's clock, since the planning model began
+   * working on an ask of the call about the active plan; absent while it is
+   * not, so the Plans tab can say Luke is thinking while he is silent.
+   */
+  busySince: EffectSchema.optionalKey(EffectSchema.Number),
 });
 
 export type PlanningView = typeof planningViewSchema.Type;
