@@ -156,3 +156,14 @@ test("the microphone asks for the open plan's call, and the planning profile's f
   });
   assert.deepEqual(fixture.told, []);
 });
+
+test("the planning profile's fixture shows Luke thinking on its open plan against its own fixed clock, and a live run's idle call shows nothing", () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
+  assert.equal(fixture.control().status?.word, "Thinking");
+  assert.notEqual(fixture.control().status?.busySince, undefined);
+  assert.equal(fixture.control().clockFixed, true);
+
+  const live = mount({ shown: true, planning: { ...OPEN, busySince: 1_000 } });
+  assert.equal(live.control().status, undefined);
+  assert.equal(live.control().clockFixed, false);
+});

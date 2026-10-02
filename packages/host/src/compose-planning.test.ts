@@ -19,7 +19,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Duration, Effect, Fiber, Result } from "effect";
+import { Clock, Deferred, Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composePlanning, type PlanningClient } from "./compose-planning.js";
 
@@ -253,6 +253,70 @@ it.effect("a draft of a plan the panel does not have open is dropped", () =>
     });
 
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });
+  }),
+);
+
+/** The service's word that the planning model is working, or no longer is, on an ask about the plan named. */
+function busyWord(planId: string, busy: boolean) {
+  return { type: VOICE_SERVICE_FRAME.PLAN_BUSY, planId, busy } as const;
+}
+
+it.effect(
+  "the planning model working on an ask about the open plan is drawn as the instant it began, kept through a repeat, and cleared when it ends",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const { call, last, planning } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const began = yield* Clock.currentTimeMillis;
+      planning.showBusy(busyWord(INVITES, true));
+      assert.equal(last()?.busySince, began);
+      yield* TestClock.adjust(Duration.seconds(12));
+      planning.showBusy(busyWord(INVITES, true));
+      assert.equal(last()?.busySince, began);
+
+      planning.showBusy(busyWord(INVITES, false));
+      assert.equal(last()?.busySince, undefined);
+      assert.equal(last()?.activePlanId, INVITES);
+    }),
+);
+
+it.effect(
+  "the planning model working on an ask about a plan the panel does not have open is dropped",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const { call, planning, told } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      const drawn = told.length;
+
+      planning.showBusy(busyWord(BILLING, true));
+
+      assert.equal(told.length, drawn);
+      assert.equal(planning.snapshot().busySince, undefined);
+    }),
+);
+
+it.effect("leaving the open plan or switching to another clears the busy word drawn for it", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+    const { call, last, planning } = yield* subject(fakeService([billing, invites]));
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    planning.showBusy(busyWord(INVITES, true));
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
+    assert.equal(last()?.activePlanId, BILLING);
+    assert.equal(last()?.busySince, undefined);
+
+    planning.showBusy(busyWord(BILLING, true));
+    yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
+    assert.equal(last()?.activePlanId, undefined);
+    assert.equal(last()?.busySince, undefined);
   }),
 );
 

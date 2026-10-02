@@ -157,6 +157,12 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
    * settles it.
    */
   onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
+  /**
+   * Whether the brain is working on an exchange of the standing session:
+   * true when an accepted ask opens one, false when the last one is
+   * finalized or the session ends with one open. Told on a change alone.
+   */
+  onBusy?: (busy: boolean) => void;
 }
 
 /**
@@ -339,6 +345,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /** The door a synchronous edge starts a task through: the queue forks it into the set. */
   readonly #tasks: SerialQueue;
   #stopped = false;
+  /** What `onBusy` was last told, so it hears a change and never a repeat. */
+  #busy = false;
   /**
    * The release still running for the session last declared over. A
    * tear-down clears `#standing` where it is decided and releases a turn
@@ -1101,7 +1109,25 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     }
     const exchange = newExchange(runId, [delegationId], session.sessionId);
     this.#exchanges.set(runId, exchange);
+    this.#reportBusy();
     return exchange;
+  }
+
+  /**
+   * Tells `onBusy` whether the standing session has an exchange open. Note
+   * that we derive it from `#exchanges` rather than counting opens and
+   * closes, because an exchange of a session already over is still held
+   * until its runs end, and it must not keep the next session busy.
+   */
+  #reportBusy(): void {
+    const session = this.#standing;
+    const busy =
+      session !== undefined &&
+      !session.ended &&
+      [...this.#exchanges.values()].some((exchange) => exchange.sessionId === session.sessionId);
+    if (busy === this.#busy) return;
+    this.#busy = busy;
+    this.#options.onBusy?.(busy);
   }
 
   #onRunEvent(event: LiveBrainRunEvent): void {
@@ -1164,6 +1190,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     for (const [runId, held] of [...this.#exchanges]) {
       if (held === exchange) this.#exchanges.delete(runId);
     }
+    this.#reportBusy();
     const unspoken = exchange.spokenChunks === 0 && exchange.buffered.length === 0;
     if (!unspoken || exchange.end === undefined || exchange.end === LIVE_BRAIN_RUN_END.COMPLETED) {
       return;
@@ -1340,6 +1367,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.channel.close();
     session.retained = [];
     if (this.#standing === session) this.#standing = undefined;
+    this.#reportBusy();
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);
     return Deferred.await(session.released);

@@ -279,7 +279,14 @@ fields or a voice model; comparative evaluations are outside this work.
   open plan's call.
 - **Status**, beside the button: the one word `LIVE_STATUS` already names,
   `Connecting`, `Listening`, `Muted`, `Speaking` (Luke), or `Closing`, while
-  a call about this plan stands, and the button's own label otherwise.
+  a call about this plan stands, and the button's own label otherwise. While
+  the planning model works on an ask, a listening or muted call reads
+  `Thinking` with the thinking dots instead, and `Still thinking · m:ss` once
+  it has worked for ten seconds. The service sends a `plan.busy` frame on the
+  call's own socket when an ask opens an exchange and again when the exchange
+  is finalized. The host stamps the instant into the planning view, and the
+  call ending clears it. A silent Luke whose row reads `Listening` is not
+  working, and that is a bug to chase rather than a pause to wait out.
 - **Everything else is the panel's own.** The waveform is the wings', the
   captions (Luke's current words, and the developer's own under the captions
   preference) ride the panel's caption strip at its foot, and a voice error
@@ -633,11 +640,6 @@ changes when a check is run, not when one is planned.
   it is held end to end against a fake GitHub in
   `apps/web/tests/auth-proxy-link.test.ts` and has not yet been exercised
   against a deployed Preview.
-- **No thinking dots for the planning model.** Nothing on the Mac hears that
-  the planning model is working on a delegated question. The sessions route
-  forwards `session.delegation.created`, but the host's live session holder
-  does not report it, so the Plans tab draws no dots. Luke's own spoken "let
-  me look" is the only sign of work in progress.
 - **`read_web_page` checks addresses without pinning them.** Every host the
   read reaches, and every redirect hop, is resolved and refused unless all of
   its addresses are public unicast. The check is a lookup ahead of the

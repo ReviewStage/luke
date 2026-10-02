@@ -13,6 +13,7 @@ import {
   type HostedApiError,
   HTTP_STATUS,
   isDeviceWireId,
+  type PlanBusyFrame,
   type PlanDraftFrame,
   type SessionSpokenFrame,
   VOICE_SERVICE_FRAME,
@@ -605,6 +606,17 @@ export class VoiceService {
                   planId: opened.planId,
                   document: draft.document,
                   ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
+                };
+                this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
+              },
+              // Whether the planning model is working on an ask, sent the same
+              // way, so the Plans tab says Luke is thinking while he is silent.
+              onBusy: (busy) => {
+                if (opened.planId === undefined) return;
+                const frame: PlanBusyFrame = {
+                  type: VOICE_SERVICE_FRAME.PLAN_BUSY,
+                  planId: opened.planId,
+                  busy,
                 };
                 this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
               },

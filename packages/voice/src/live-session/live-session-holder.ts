@@ -5,7 +5,13 @@ import {
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
-import type { LiveSessionCreated, PlanDraftFrame, SessionBeatFrame } from "@sidecar/hosted";
+import {
+  type LiveSessionCreated,
+  type PlanBusyFrame,
+  type PlanDraftFrame,
+  type SessionBeatFrame,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/hosted";
 import {
   conversationSeedItems,
   type InitialItem,
@@ -94,6 +100,12 @@ export interface LiveSessionHolderOptions {
    * ended, never reaches it. What the draft is shown as is the caller's.
    */
   onPlanDraft?: (draft: PlanDraftFrame) => void;
+  /**
+   * The service said whether its planning model is working on an ask of the
+   * standing planning call, on the same terms as `onPlanDraft`. A planning
+   * call's end is told as not busy, so the word never outlives the call.
+   */
+  onPlanBusy?: (busy: PlanBusyFrame) => void;
 }
 
 /**
@@ -391,6 +403,7 @@ export class LiveSessionHolder {
       yield* Scope.addFinalizer(scope, sideband.close);
       opened.onSpoken?.((kind) => this.#spoken(session, kind));
       opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
+      opened.onPlanBusy?.((busy) => this.#busy(session, busy));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -672,6 +685,12 @@ export class LiveSessionHolder {
     this.#options.onPlanDraft?.(draft);
   }
 
+  /** The service's busy word about the plan the session is bound to, passed on while the session stands. */
+  #busy(session: HeldSession, busy: PlanBusyFrame): void {
+    if (session.ended || busy.planId !== session.planId) return;
+    this.#options.onPlanBusy?.(busy);
+  }
+
   /**
    * What a session opens knowing: the desk first, then the recent
    * conversation. The roster item is never the one dropped, so the
@@ -717,6 +736,15 @@ export class LiveSessionHolder {
     // next: the caller decides again at its next reason to, and a beat that
     // was spoken settled itself before this.
     this.#beats.clear();
+    // Note that we say a planning call's end as not busy, because the
+    // service's own last word may never arrive once the socket is gone.
+    if (session.planId !== undefined) {
+      this.#options.onPlanBusy?.({
+        type: VOICE_SERVICE_FRAME.PLAN_BUSY,
+        planId: session.planId,
+        busy: false,
+      });
+    }
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
