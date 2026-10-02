@@ -12,6 +12,7 @@ import {
   readRepositoryList,
 } from "./new-plan-form";
 import {
+  type CallStatus,
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   type CopyShown,
@@ -256,31 +257,44 @@ test("a repository read the system refused offers Try again rather than reading 
   assert.match(markup, />Try again<\/button>/u);
 });
 
-function microphoneRowMarkup(status: { word: string; busySince: number | undefined }): string {
+function microphoneRowMarkup(status: CallStatus): string {
   return renderToStaticMarkup(
     createElement(MicrophoneRow, {
       status,
       microphone: { label: "Mute the microphone", enabled: true, onPress: ignore },
-      now: 20_000,
-      clockFixed: false,
     }),
   );
 }
 
-test("the microphone row draws the dots, the word, and a reader's status line while Luke is thinking", () => {
-  const markup = microphoneRowMarkup({ word: "Thinking", busySince: 15_000 });
+test("the microphone row's second line names the planning model's command and the notetaker, with the dots and a reader's status line", () => {
+  const markup = microphoneRowMarkup({
+    voiceWord: "Listening",
+    backend: { planner: { action: "grep -rn invite src" }, notes: true },
+  });
+  assert.match(markup, /class="plan-voice-word">Listening</u);
   assert.match(markup, /class="thinking-dots" aria-hidden="true"/u);
-  assert.match(markup, /class="plan-voice-word">Thinking</u);
-  assert.match(markup, /role="status">Luke is thinking</u);
+  assert.match(
+    markup,
+    /Planning model · <span class="plan-backend-action">grep -rn invite src<\/span>/u,
+  );
+  assert.match(markup, />Notetaker · Writing notes</u);
+  assert.match(markup, /role="status">Luke is working on it</u);
 });
 
-test("the microphone row says how long Luke has been thinking past ten seconds", () => {
-  const markup = microphoneRowMarkup({ word: "Thinking", busySince: 5_000 });
-  assert.match(markup, /class="plan-voice-word">Still thinking · 0:15</u);
+test("the planning model with no command pending reads Thinking", () => {
+  const markup = microphoneRowMarkup({
+    voiceWord: "Handing off",
+    backend: { planner: { action: undefined }, notes: false },
+  });
+  assert.match(markup, />Planning model · Thinking</u);
+  assert.doesNotMatch(markup, /Notetaker/u);
 });
 
-test("the microphone row draws a call's own word with no dots and no status line", () => {
-  const markup = microphoneRowMarkup({ word: "Listening", busySince: undefined });
+test("an idle backend draws the voice's word alone, with no dots and no status line", () => {
+  const markup = microphoneRowMarkup({
+    voiceWord: "Listening",
+    backend: { planner: undefined, notes: false },
+  });
   assert.match(markup, /class="plan-voice-word">Listening</u);
   assert.doesNotMatch(markup, /thinking-dots/u);
   assert.doesNotMatch(markup, /role="status"/u);

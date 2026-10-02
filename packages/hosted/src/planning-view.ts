@@ -45,6 +45,42 @@ const planningDocumentSchema = EffectSchema.Struct({
 
 export type PlanningDocument = typeof planningDocumentSchema.Type;
 
+/**
+ * The two waits on the voice side that no live status names: the voice model
+ * delegated an ask the planning model has not yet taken, or words are queued
+ * for Luke that his voice has not begun to say.
+ */
+export const VOICE_PHASE = {
+  HANDING_OFF: "handing_off",
+  ABOUT_TO_ANSWER: "about_to_answer",
+} as const;
+
+export type VoicePhase = (typeof VOICE_PHASE)[keyof typeof VOICE_PHASE];
+
+/** The most of the planning model's pending command an activity carries; the service cuts it there. */
+export const PLAN_ACTIVITY_ACTION_MAX_CHARS = 120;
+
+/**
+ * What each part of Luke is doing on a planning call, whole, as the service's
+ * `plan.activity` frame says it: the voice's wait where it is in one, the
+ * planning model while it works on an ask with the command it is running
+ * where one is pending, and whether the notetaker is writing. Nothing of the
+ * ask, and no tool's output.
+ */
+export const planActivitySchema = EffectSchema.Struct({
+  voice: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(VOICE_PHASE))),
+  planner: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      action: EffectSchema.optionalKey(
+        EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_ACTIVITY_ACTION_MAX_CHARS)),
+      ),
+    }),
+  ),
+  notes: EffectSchema.Boolean,
+});
+
+export type PlanActivity = typeof planActivitySchema.Type;
+
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, most recently opened first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
@@ -52,12 +88,8 @@ export const planningViewSchema = EffectSchema.Struct({
   /** The one active plan, absent while the window has none open. */
   activePlanId: EffectSchema.optionalKey(EffectSchema.String),
   document: planningDocumentSchema,
-  /**
-   * Epoch milliseconds, on the host's clock, since the planning model began
-   * working on an ask of the call about the active plan; absent while it is
-   * not, so the Plans tab can say Luke is thinking while he is silent.
-   */
-  busySince: EffectSchema.optionalKey(EffectSchema.Number),
+  /** What each part of Luke is doing on the call about the active plan, as last told; absent with no plan open or no word yet. */
+  activity: EffectSchema.optionalKey(planActivitySchema),
 });
 
 export type PlanningView = typeof planningViewSchema.Type;

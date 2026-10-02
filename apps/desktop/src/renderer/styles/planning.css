@@ -309,13 +309,14 @@
   opacity: 0.45;
 }
 
-/* The call's word, beside the wait's dots while Luke is thinking. The word
-   alone is cut short, so the dots never are. */
+/* The call in two lines: the voice's word, and under it the backend's line
+   while the backend works. Each line is cut short on one line, so a long
+   command never wraps the row and the dots are never cut. */
 .plan-voice-status {
-  display: inline-flex;
+  display: flex;
   min-width: 0;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 2px;
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -323,8 +324,25 @@
 .plan-voice-word {
   min-width: 0;
   overflow: hidden;
-  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
+}
+
+.plan-backend {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.plan-backend-part {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-backend-action {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 .plan-new {

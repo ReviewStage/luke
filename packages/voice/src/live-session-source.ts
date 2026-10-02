@@ -7,9 +7,9 @@ import {
   hostedQuotaSchema,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
-  type PlanBusyFrame,
+  type PlanActivityFrame,
   type PlanDraftFrame,
-  planBusyFrameFromWire,
+  planActivityFrameFromWire,
   planDraftFrameFromWire,
   type SessionActivityFrame,
   type SessionAttachFrame,
@@ -159,10 +159,10 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    */
   onPlanDraft?(listener: (draft: PlanDraftFrame) => void): void;
   /**
-   * Tells the listener each time the service says a planning call's model
-   * began or finished working on an ask, on the same terms as `onPlanDraft`.
+   * Tells the listener each time the service says what each part of Luke is
+   * doing on a planning call, on the same terms as `onPlanDraft`.
    */
-  onPlanBusy?(listener: (busy: PlanBusyFrame) => void): void;
+  onPlanActivity?(listener: (activity: PlanActivityFrame) => void): void;
 }
 
 /**
@@ -932,12 +932,12 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           matches: (data) => sessionActivityFrameFromWire(decodeLivePayload(data)) !== undefined,
         },
       });
-      // The service's own words, a spoken turn and a plan's draft and busy word,
+      // The service's own words, a spoken turn and a plan's draft and its activity,
       // ride the same socket as the session's events and are taken off it here,
       // before the sideband's Live grammar would read them as nothing.
       const spokenListeners = new Set<(kind: ProactiveSpeechKind) => void>();
       const draftListeners = new Set<(draft: PlanDraftFrame) => void>();
-      const busyListeners = new Set<(busy: PlanBusyFrame) => void>();
+      const activityListeners = new Set<(activity: PlanActivityFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
           onSpoken: (kind) => {
@@ -946,8 +946,8 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           onPlanDraft: (draft) => {
             for (const listener of [...draftListeners]) listener(draft);
           },
-          onPlanBusy: (busy) => {
-            for (const listener of [...busyListeners]) listener(busy);
+          onPlanActivity: (activity) => {
+            for (const listener of [...activityListeners]) listener(activity);
           },
         }),
       );
@@ -987,8 +987,8 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onPlanDraft: (listener) => {
           draftListeners.add(listener);
         },
-        onPlanBusy: (listener) => {
-          busyListeners.add(listener);
+        onPlanActivity: (listener) => {
+          activityListeners.add(listener);
         },
       };
     });
@@ -997,7 +997,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
 
 /**
  * The socket with the service's own frames, `session.spoken`, `plan.draft`,
- * and `plan.busy`, taken off its arrivals and told to their listeners, so the
+ * and `plan.activity`, taken off its arrivals and told to their listeners, so the
  * sideband over it reads only what the session said. Every frame is checked
  * by the frame's own schema; the substring test ahead of it is only what
  * keeps a transcript delta from being decoded twice.
@@ -1007,7 +1007,7 @@ function withoutServiceFrames(
   listeners: {
     readonly onSpoken: (kind: ProactiveSpeechKind) => void;
     readonly onPlanDraft: (draft: PlanDraftFrame) => void;
-    readonly onPlanBusy: (busy: PlanBusyFrame) => void;
+    readonly onPlanActivity: (activity: PlanActivityFrame) => void;
   },
 ): LiveSocket {
   return {
@@ -1028,10 +1028,10 @@ function withoutServiceFrames(
         listeners.onPlanDraft(draft);
         return false;
       }
-      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_BUSY)) {
-        const busy = planBusyFrameFromWire(decodeLivePayload(arrival.frame));
-        if (busy === undefined) return true;
-        listeners.onPlanBusy(busy);
+      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_ACTIVITY)) {
+        const activity = planActivityFrameFromWire(decodeLivePayload(arrival.frame));
+        if (activity === undefined) return true;
+        listeners.onPlanActivity(activity);
         return false;
       }
       return true;

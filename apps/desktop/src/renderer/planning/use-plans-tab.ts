@@ -10,6 +10,7 @@ import {
   COPY_SHOWN,
   type CopyOutcome,
   type CopyShown,
+  callStatus,
   copyPlanDocument,
   copyShown,
   DOCUMENT_REGION,
@@ -17,7 +18,6 @@ import {
   documentRegion,
   MICROPHONE_PRESS,
   microphoneButton,
-  microphoneStatusWord,
   PLANS_PAGE,
   type PlansPage,
   planningCallHoldsPanel,
@@ -48,8 +48,6 @@ export interface PlansControl {
   microphone: { label: string; enabled: boolean; onPress: () => void };
   /** The open plan's call status beside the microphone, absent while none stands. */
   status: CallStatus | undefined;
-  /** Whether the app's clock is a capture's fixed one, which the status row's own clock must not move past. */
-  clockFixed: boolean;
   /** Whether the open plan's call is in progress, so the plan is still being written. */
   live: boolean;
   onSelect: (planId: string) => void;
@@ -169,13 +167,9 @@ export function usePlansTab(input: {
       enabled: microphone.press !== MICROPHONE_PRESS.NONE,
       onPress: pressMicrophone,
     },
-    // A fixture's open plan is drawn on a call with Luke thinking, read from
+    // A fixture's open plan is drawn on a call with Luke working, read from
     // the fixture's own call rather than a voice window that holds none.
-    status: microphoneStatusWord(
-      fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL,
-      planning,
-    ),
-    clockFixed: fixture !== undefined,
+    status: callStatus(fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL, planning),
     live: planningCallHoldsPanel(voice.view) && voice.view.callPlanId === planning.activePlanId,
     onSelect: select,
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_HEADER, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import {
   LIVE_AUDIO_FORMAT,
   PROACTIVE_SPEECH_KIND,
@@ -509,10 +511,10 @@ it.effect(
       }
       assert.deepEqual(spoken, ["One agent finished.", "Another is waiting on you."]);
       assert.equal(kinds.includes(LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND), false);
-      // A desk call's desktop is told nothing of the brain being busy, before the reply or after its finalize.
+      // A desk call's desktop is told nothing of what Luke's parts are doing, before the reply or after its finalize.
       assert.equal(
         (await desktopTypesWithin(session.desktop, QUIET_MS * 4)).includes(
-          VOICE_SERVICE_FRAME.PLAN_BUSY,
+          VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
         ),
         false,
       );
@@ -1175,7 +1177,7 @@ it.effect(
 );
 
 it.effect(
-  "a planning call tells the desktop its plan's brain is busy once the ask is accepted, and no longer busy once the reply is finalized",
+  "a planning call tells the desktop what each part of Luke is doing, from the hand-off to nothing doing once Luke begins the reply",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
@@ -1187,17 +1189,18 @@ it.effect(
         () => context.eve.opened.length === 1,
         () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
       );
-      const nextBusy = async (): Promise<WireRecord> => {
+      const nextActivity = async (): Promise<WireRecord> => {
         for (let index = 0; index < 12; index += 1) {
           const frame = record(await session.desktop.next(5_000));
-          if (frame.type === VOICE_SERVICE_FRAME.PLAN_BUSY) return frame;
+          if (frame.type === VOICE_SERVICE_FRAME.PLAN_ACTIVITY) return frame;
         }
-        return assert.fail("no plan.busy frame reached the desktop");
+        return assert.fail("no plan.activity frame reached the desktop");
       };
-      assert.deepEqual(await nextBusy(), {
-        type: VOICE_SERVICE_FRAME.PLAN_BUSY,
+      assert.deepEqual(await nextActivity(), {
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
         planId: plan.id,
-        busy: true,
+        voice: VOICE_PHASE.HANDING_OFF,
+        notes: false,
       });
 
       const planned = await planConversationOf(context.target.userId, plan.id);
@@ -1228,11 +1231,14 @@ it.effect(
           JSON.stringify(appended(sent.event_id, 3000 + spoken * 1000, 4000 + spoken * 1000)),
         );
       }
-      assert.deepEqual(await nextBusy(), {
-        type: VOICE_SERVICE_FRAME.PLAN_BUSY,
-        planId: plan.id,
-        busy: false,
-      });
+      await sendText(session.attach.socket, JSON.stringify(said("One agent", 6000, 6400)));
+      const idle = { type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY, planId: plan.id, notes: false };
+      const told: WireRecord[] = [];
+      while (!isDeepStrictEqual(told.at(-1), idle) && told.length < 12) {
+        told.push(await nextActivity());
+      }
+      assert.deepEqual(told.at(-1), idle);
+      assert.ok(told.some((frame) => frame.voice === VOICE_PHASE.ABOUT_TO_ANSWER));
 
       await hangUp(context, session);
       await context.stop();

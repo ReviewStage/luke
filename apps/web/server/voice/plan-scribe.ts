@@ -97,6 +97,8 @@ export interface PlanScribeOptions {
   readonly model: LanguageModel;
   /** Where each draft of the plan goes as it is written, and the saved document once it lands. */
   readonly onDraft?: (draft: PlanDraft) => void;
+  /** Whether a run's model call is writing: true as it starts, false once it ends however it ends. */
+  readonly onWriting?: (writing: boolean) => void;
   readonly createId: () => string;
   readonly report: (message: string) => void;
 }
@@ -244,7 +246,11 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
     }).pipe(Effect.timeout(Duration.millis(PLAN_SCRIBE.TIMEOUT_MS)));
 
     const landed = Effect.gen(function* () {
-      const output = yield* written;
+      options.onWriting?.(true);
+      const output = yield* Effect.ensuring(
+        written,
+        Effect.sync(() => options.onWriting?.(false)),
+      );
       if (Result.isFailure(output)) {
         options.report(
           `The plan's notetaker answered outside the template: ${output.failure.path.join(".")}`,

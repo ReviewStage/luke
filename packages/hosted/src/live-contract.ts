@@ -14,6 +14,7 @@ import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wi
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { planDocumentSchema } from "./plan-wire.js";
+import { planActivitySchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -155,11 +156,12 @@ export const VOICE_SERVICE_FRAME = {
    */
   PLAN_DRAFT: "plan.draft",
   /**
-   * The service's third frame to the desktop, on a planning call alone: the
-   * planning model began or finished working on what the developer asked,
-   * so the Plans tab can say Luke is thinking while he is silent.
+   * The service's third frame to the desktop, on a planning call alone: what
+   * each part of Luke is doing now, the voice, the planning model, and the
+   * notetaker, sent whole each time any of them changes, so the Plans tab
+   * says each part's own state rather than one word for all of them.
    */
-  PLAN_BUSY: "plan.busy",
+  PLAN_ACTIVITY: "plan.activity",
 } as const;
 
 /**
@@ -423,14 +425,14 @@ export const planDraftFrameSchema = Schema.Struct({
 
 export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
 
-/** Whether the planning model is working on an ask of the call about the plan named; nothing of the ask itself. */
-export const planBusyFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_BUSY),
+/** The activity on the call about the plan named, as the service sends it to the desktop. */
+export const planActivityFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_ACTIVITY),
   planId: wireUuidSchema,
-  busy: Schema.Boolean,
+  ...planActivitySchema.fields,
 });
 
-export type PlanBusyFrame = typeof planBusyFrameSchema.Type;
+export type PlanActivityFrame = typeof planActivityFrameSchema.Type;
 
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
@@ -520,9 +522,9 @@ export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame
   return admittedAnswer(planDraftFrameSchema, value);
 }
 
-/** The service's word that the planning model is working, read the same answering way. */
-export function planBusyFrameFromWire(value: UnparsedWireValue): PlanBusyFrame | undefined {
-  return admittedAnswer(planBusyFrameSchema, value);
+/** What each part of Luke is doing on a planning call, read the same answering way. */
+export function planActivityFrameFromWire(value: UnparsedWireValue): PlanActivityFrame | undefined {
+  return admittedAnswer(planActivityFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(
