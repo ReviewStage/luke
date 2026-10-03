@@ -399,8 +399,8 @@ second is Luke's working assumption, drawn from the existing `role` check.
 
 ### 3. Concrete feature rehearsal
 
-Luke rehearses behavior in rounds, asking every question whose prerequisites
-are already settled, each with his recommended answer:
+Luke rehearses behavior one question at a time, from a queue of every question
+whose prerequisites are already settled, each with his recommended answer:
 
 > "Picture this: Priya gets an invite, and before she opens it the admin
 > removes it. She clicks the link. I'd show her a plain 'This invite is no
