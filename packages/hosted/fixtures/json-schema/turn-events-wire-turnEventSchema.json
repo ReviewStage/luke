@@ -50,6 +50,40 @@
         "kind": {
           "type": "string",
           "enum": [
+            "question_queued"
+          ]
+        },
+        "question": {
+          "type": "string"
+        },
+        "recommendation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "turnId",
+        "seq",
+        "kind",
+        "question",
+        "recommendation"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "turnId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
             "actions_settled"
           ]
         }

@@ -1,6 +1,7 @@
 import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
+import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 
 /**
  * The input schemas the planning model is offered its public research
@@ -24,5 +25,13 @@ test("read_web_page offers exactly a bounded URL, with no header or credential t
     ROOT,
     "read-web-page-tool-input",
     jsonSchemaOf(READ_WEB_PAGE_TOOL.inputSchema),
+  );
+});
+
+test("queue_question offers exactly a bounded question and recommendation, with nothing else to carry", async () => {
+  await settleJsonSchemaGolden(
+    ROOT,
+    "queue-question-tool-input",
+    jsonSchemaOf(QUEUE_QUESTION_TOOL.inputSchema),
   );
 });

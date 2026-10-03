@@ -59,7 +59,6 @@ export {
   runOriginOf,
   type SessionToolModule,
   SLOW_STEP_KIND,
-  type SlowStepKind,
   STEP_START_PART,
   sessionContextText,
   sessionToolNamed,

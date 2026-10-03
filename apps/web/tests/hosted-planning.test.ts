@@ -53,6 +53,7 @@ import {
   savePlanDocument,
 } from "../server/hosted/plan-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
+import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { hostedStore, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
@@ -466,7 +467,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered the repository and research reads, no write to the plan, and none of the brain's catalog",
+    "a planning turn is offered the question queue, the repository and research reads, no write to the plan, and none of the brain's catalog",
     () =>
       Effect.gen(function* () {
         const { host, userId, conversationId } = yield* savedPlanWithConversation();
@@ -482,7 +483,12 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         assert.deepEqual(
           offered.map((declared) => declared.name),
-          [RUN_IN_REPOSITORY_TOOL.name, SEARCH_WEB_TOOL.name, READ_WEB_PAGE_TOOL.name],
+          [
+            QUEUE_QUESTION_TOOL.name,
+            RUN_IN_REPOSITORY_TOOL.name,
+            SEARCH_WEB_TOOL.name,
+            READ_WEB_PAGE_TOOL.name,
+          ],
         );
       }),
   );
