@@ -68,8 +68,9 @@ Do not delegate to the backend when:
  * document and reads the plan's repository; a notetaker beside the call
  * writes the plan, so there is no save to delegate. The policy is
  * the template's own conditions with the planning model's tools named, as
- * the desktop's names the brain's. Note that the voice holds one round at a
- * time, so an answered round is a reason to delegate.
+ * the desktop's names the brain's. Note that the backend keeps the question
+ * queue, so every answer is a reason to delegate: it is what keeps the queue
+ * the voice asks from current.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
@@ -80,7 +81,7 @@ Delegate to the backend when:
 - The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
-- The developer has answered every question you hold: ask the backend for the next round.
+- The developer answers a question: pass the answer to the backend so it can update the question queue.
 - You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
 
 Do not delegate to the backend when:
@@ -112,10 +113,10 @@ A notetaker writes the plan live as you talk; you never write it yourself.`;
 
 /**
  * A planning call's one policy beyond the template, added because listening
- * showed both behaviors: a round read out as three questions at once, and a
- * pause after every answer while the voice waited on the backend.
+ * showed both behaviors: several questions read out at once, and a pause
+ * after every answer while the voice waited on the backend.
  */
-const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. When the developer answers, carry on with the next question while the backend thinks and reads the repository in the background.
+const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time, from the top of the backend's latest question queue. When the developer answers, carry on with the next question while the backend updates the queue and reads the repository in the background.
 
 `;
 
