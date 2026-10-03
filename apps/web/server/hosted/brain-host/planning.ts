@@ -15,6 +15,7 @@ import {
   runSearchWeb,
   SEARCH_WEB_TOOL,
 } from "../public-research.js";
+import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL, type RunBash, runInRepository } from "../repository-shell.js";
 import type { PlanDocumentBinding } from "../update-plan-tool.js";
 import type { HostedToolDeclaration } from "./tools.js";
@@ -43,11 +44,12 @@ import type { HostedToolDeclaration } from "./tools.js";
  * spoken and the planning model reads the repository through its own tools
  * rather than dispatching anything. His rounds become one standing queue,
  * because the voice read "ask the whole frontier in one round" as its own
- * rule and asked a round all at once; the queue comes back whole every turn,
- * so Luke always holds a next question and never waits on this model
- * between one answer and the next. We add one sentence saying that
- * questions about the code are facts, because without it the model put
- * them to the developer.
+ * rule and asked a round all at once. Each question is queued through
+ * `queue_question` the moment it is ready, which reaches the voice mid-turn,
+ * so Luke holds the next question while this model is still reading the
+ * repository and never waits on it between one answer and the next. We add
+ * one sentence saying that questions about the code are facts, because
+ * without it the model put them to the developer.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -56,7 +58,7 @@ You are helping an assistant in a live voice conversation. The assistant is Luke
 
 Transcripts can contain mistakes, unfinished phrases, and later corrections. Use the latest context and verified records. If a needed detail is still unclear, ask for that detail instead of guessing.
 
-Luke puts your questions to the user himself, conversationally and in his own order, while you keep thinking. Answers may arrive one at a time while you are still thinking about the last one.
+Luke puts your questions to the user himself, one at a time, while you keep working. Answers may arrive one at a time while you are still thinking about the last one.
 
 ## The plan document
 
@@ -68,9 +70,9 @@ A notetaker listens to the call and writes the document as the conversation goes
 
 Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
 
-Keep a **question queue**: every decision whose prerequisites are already settled, the questions that can be asked _now_ without guessing at answers you haven't heard yet, most important first, each with your recommended answer. Luke asks the user from the top of the queue, one question at a time, never several together.
+Keep a **question queue** in your head: every decision whose prerequisites are already settled, the questions that can be asked _now_ without guessing at answers you haven't heard yet, most important first. Put each question on Luke's queue with queue_question the moment you have it, with your recommended answer, before you read the repository or think further. Luke holds every question you queue and asks them one at a time, in the order you queued them, so never queue a question twice.
 
-Every answer reshapes the tree: settled decisions push the queue outward and unblock questions that depended on them. After every answer, drop what it settled, add what it unblocked, and re-order. A question whose answer depends on another question still open stays off the queue until that one is answered. Keep every open question on the queue until the user has answered it, so none is dropped.
+Every answer reshapes the tree: settled decisions push the queue outward and unblock questions that depended on them. After every answer, queue what it unblocked. A question whose answer depends on another question still open stays off the queue until that one is answered.
 
 Finding _facts_ is your job, never the user's. Don't ask the user for anything you could look up yourself. Anything about the code (what exists, where it lives, how it works, what it is called) is a fact: find it with run_in_repository and leave it off the queue. The _decisions_ are the user's: put each to them and wait.
 
@@ -78,12 +80,13 @@ The session is done when the queue is empty: every branch of the design tree vis
 
 ### Available tools
 
+- queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a clone of the plan's repository at the plan's commit. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet.
 
 ## Return the result
 
-Return the relevant facts, the task's current status, and the whole question queue in order, each question with your recommended answer. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
+Return the relevant facts, the task's current status, and any queued question an answer has made moot, so Luke drops it. Don't repeat the questions you queued: Luke already holds them. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
 `;
 
 /**
@@ -164,13 +167,18 @@ type PlanningToolServices = SqlClient.SqlClient | GitHubAccess | HttpClient.Http
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.
- * None writes the plan, which is the notetaker's; `run_in_repository` runs a
+ * None writes the plan, which is the notetaker's; `queue_question` hands the
+ * voice a question mid-turn (`queue-question.ts`); `run_in_repository` runs a
  * command in a clone of the plan's repository at the plan's commit, under the
  * same binding; the public search and page read (`public-research.ts`)
  * answer what the repository cannot. Every read's result goes back to the
  * model as data.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
+  {
+    ...QUEUE_QUESTION_TOOL,
+    run: (_call, input) => Effect.succeed(runQueueQuestion(input)),
+  },
   {
     ...RUN_IN_REPOSITORY_TOOL,
     run: (call, input) =>

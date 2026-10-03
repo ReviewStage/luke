@@ -29,6 +29,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
@@ -115,12 +116,15 @@ function mintSession(): string {
 
 interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];
+  /** The delivery id each send into a standing session was answered with, in order. */
+  readonly delivered: string[];
   failNext: number | undefined;
 }
 
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
+    delivered: [],
     failNext: undefined,
     open(message) {
       eve.opened.push(message);
@@ -132,11 +136,9 @@ function fakeEve(): FakeEve {
       return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: mintSession() });
     },
     send(sessionId) {
-      return Effect.succeed({
-        outcome: EVE_SEND_OUTCOME.ACCEPTED,
-        sessionId,
-        deliveryId: "delivery-1",
-      });
+      const deliveryId = `delivery-${randomUUID()}`;
+      eve.delivered.push(deliveryId);
+      return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId });
     },
     cancel() {
       return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED });
@@ -462,6 +464,48 @@ it.live(
     }),
 );
 
+it.live(
+  "two asks eve folded into one turn hear its reply once between them, and each hears the turn's end",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      const first = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q1" })),
+      );
+      const second = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q2" })),
+      );
+      assert.equal(first.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      assert.equal(second.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (first.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      if (second.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, first.runId)),
+        target,
+        kind: CONVERSATION_KIND.MAIN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      yield* Effect.promise(() => play(spokenTurn(FIRST_EVE_TURN, NOW, f.eve.delivered), standing));
+      yield* f.arrived(6);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+
+      const sentences = f.events.flatMap((event) =>
+        event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE ? [event.sentence] : [],
+      );
+      assert.deepEqual(sentences, ["One agent finished.", "Another is waiting on you."]);
+      const ended = f.events.flatMap((event) =>
+        event.kind === LIVE_BRAIN_RUN_EVENT.ENDED ? [event.runId] : [],
+      );
+      assert.deepEqual(new Set(ended), new Set([first.runId, second.runId]));
+      assert.equal(ended.length, 2);
+      assert.deepEqual(f.reports, []);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
 /** The one call a planning turn makes, as eve names its input and its result. */
 interface PlanningCall {
   readonly toolName: string;
@@ -643,6 +687,62 @@ it.live(
         runId: accepted.runId,
         action: undefined,
       });
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a question the planning model queued reaches the service while its turn still runs, ahead of the reply",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const planConversation = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* createPlan(target.userId, PLAN);
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+          }),
+        ),
+      );
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const accepted = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
+      );
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target: { userId: target.userId, conversationId: planConversation },
+        kind: CONVERSATION_KIND.PLAN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const queued = { question: "Who can withdraw an invite?", recommendation: "Admins only." };
+      const events = planningTurn(FIRST_EVE_TURN, NOW, {
+        toolName: QUEUE_QUESTION_TOOL.name,
+        input: queued,
+        output: { status: "accepted" },
+      });
+      const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* f.arrived(1);
+      assert.deepEqual(f.events, [
+        { kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED, runId: accepted.runId, ...queued },
+      ]);
+      yield* Effect.promise(() => play(events.slice(requested), standing));
+      yield* f.arrived(5);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      assert.deepEqual(
+        f.events.map((event) => event.kind),
+        [
+          LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+          LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+          LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+          LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+          LIVE_BRAIN_RUN_EVENT.ENDED,
+        ],
+      );
       yield* Effect.promise(() => f.stop());
     }),
 );

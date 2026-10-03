@@ -1545,6 +1545,7 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
     // than the record.
     case BRAIN_RUN_EVENT.COMPACTION_COMPLETED:
     case BRAIN_RUN_EVENT.SLOW_STEP:
+    case BRAIN_RUN_EVENT.QUESTION_QUEUED:
     case BRAIN_RUN_EVENT.ACTIONS_SETTLED:
     case BRAIN_RUN_EVENT.REPLY_SENTENCE:
     case BRAIN_RUN_EVENT.ENDED:

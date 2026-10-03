@@ -641,7 +641,9 @@ the plan's repository, commit, and saved document read again from the row,
 and the tools are the planning list alone, `update_plan` bound to the plan
 the conversation belongs to (`readPlanOfConversation`), and
 `run_in_repository` under the same binding, with the two public research
-reads beside them. A resumed session is seeded with the
+reads beside them, and `queue_question` (`server/hosted/queue-question.ts`),
+which runs nothing: its journaled call is how a question reaches the voice
+while the turn still runs. A resumed session is seeded with the
 conversation so far like any other. A plan conversation primes and flushes no
 notebook, and never reaches the panel's reads, which name their kinds. The
 writer holds rows to `HOSTED_TOOL_SET`, the catalog and the planning tools,
@@ -1142,7 +1144,10 @@ the socket detaching interrupts it and nothing is emitted after. A turn that
 does not end inside the follow bound, or an ask the record no longer holds,
 is told as a failed end so the exchange settles rather than waiting forever. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
-mid-turn is the slow step and the actions settling. A refusal at the door is
+mid-turn is the slow step, each question a planning turn queued, and the
+actions settling. eve folds asks that waited together into one turn, so
+several follows can project one turn: the first to reach it tells it, and
+the rest tell only its end, so a reply is never said once per folded ask. A refusal at the door is
 spoken as the build's own note for it, never composed with the ask. One
 spoken ask leaves one developer line: the transcript's row, cut at the
 delegation by the voice writer under the delegation's id. Eve's received
@@ -1391,9 +1396,9 @@ the model. Nothing else: no separate service, secret, or origin. Tests run again
 the path's id handed over by a `routes` rewrite as the one `id` query parameter
 the way the rating route's is, as Server-Sent Events for the voice session that
 just asked the turn and wants to speak commentary while it runs. The logic is
-`server/hosted/turn-event-stream.ts`. Nothing is stored for it: the four events
-— a slow step began, every action settled, one sentence of the reply, the turn
-ended — are a projection over the turn row and the turn's journal, the
+`server/hosted/turn-event-stream.ts`. Nothing is stored for it: the five events
+— a slow step began, a planning turn queued a question, every action settled,
+one sentence of the reply, the turn ended — are a projection over the turn row and the turn's journal, the
 assistant message the store writer opens under the turn's id and amends as each
 call is written ahead of its run, read again every quarter second, and the
 projection only grows while the turn runs, so each event keeps the number it

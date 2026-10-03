@@ -107,6 +107,16 @@ const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
 const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
 
 /**
+ * A question the planning model queued, as the voice is handed it: spoken
+ * commentary, as the delegation guide has a result the voice should say,
+ * framed so the voice puts one question at a time and holds the rest until
+ * the developer has answered what it already asked.
+ */
+function queuedQuestionNote(question: string, recommendation: string): string {
+  return `Ask the developer this next, one question at a time, once they have answered anything you have already asked: ${question} Recommended answer: ${recommendation}`;
+}
+
+/**
  * How long after a fragment lands its row's write is put off, so a burst of
  * deltas is one write rather than one per syllable. Each fragment re-arms it,
  * and silence arms nothing: a row whose write has landed owes the record
@@ -1188,6 +1198,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         );
         return;
       }
+      // A queued question is no action's result, so it is spoken without waiting on the settle.
+      case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED:
+        this.#speakSentence(exchange, queuedQuestionNote(event.question, event.recommendation));
+        return;
       // The brain tells the settle as soon as no write of the run is still
       // out, which for a read-only run is at its first words, so the gate
       // below releases the reply earlier without meaning anything weaker.

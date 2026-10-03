@@ -46,6 +46,7 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
@@ -462,13 +463,18 @@ function journal(parts: StoredUIMessage["parts"]): StoredUIMessage {
   };
 }
 
-function toolPart(name: string, callId: string): StoredUIMessage["parts"][number] {
+function toolPart(
+  name: string,
+  callId: string,
+  input: Readonly<Record<string, string>> = {},
+  state = "input-available",
+): StoredUIMessage["parts"][number] {
   // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one ahead of its run.
   return {
     type: `tool-${name}`,
     toolCallId: callId,
-    state: "input-available",
-    input: {},
+    state,
+    input,
   } as unknown as StoredUIMessage["parts"][number];
 }
 
@@ -513,6 +519,53 @@ test("the projection: a planning call's repository command is a slow step of its
         step: TURN_SLOW_STEP.REPOSITORY_READ,
       },
     ],
+  );
+});
+
+test("the projection: every question a planning call queued is told before the turn ends, in the order queued, around the one slow step", () => {
+  const first = {
+    question: "Should a withdrawn invite say who withdrew it?",
+    recommendation: "No.",
+  };
+  const second = { question: "Can an admin re-send it?", recommendation: "Yes, once a day." };
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(QUEUE_QUESTION_TOOL.name, "c1", first),
+        toolPart(RUN_IN_REPOSITORY_TOOL.name, "c2"),
+        toolPart(QUEUE_QUESTION_TOOL.name, "c3", second),
+        toolPart(RUN_IN_REPOSITORY_TOOL.name, "c4"),
+      ]),
+    ),
+    [
+      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...first },
+      {
+        turnId: TURN.id,
+        seq: 2,
+        kind: TURN_EVENT_KIND.SLOW_STEP,
+        step: TURN_SLOW_STEP.REPOSITORY_READ,
+      },
+      { turnId: TURN.id, seq: 3, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...second },
+    ],
+  );
+});
+
+test("the projection: a queued question still streaming in, or one that does not read, is not told", () => {
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(
+          QUEUE_QUESTION_TOOL.name,
+          "c1",
+          { question: "Should a", recommendation: "N" },
+          "input-streaming",
+        ),
+        toolPart(QUEUE_QUESTION_TOOL.name, "c2", { question: "No recommendation" }),
+      ]),
+    ),
+    [],
   );
 });
 

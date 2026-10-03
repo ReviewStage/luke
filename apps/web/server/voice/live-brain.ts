@@ -83,9 +83,10 @@ export const HOSTED_ASK_REFUSAL_NOTE = {
   [ASK_REFUSAL.STORE]: "I couldn't write that ask down, so I'm not going to answer it here.",
 } as const satisfies Record<(typeof ASK_REFUSAL)[keyof typeof ASK_REFUSAL], string>;
 
-/** The stream's four kinds in the service's vocabulary, one word each; the live brain's own activity is none of them, and a test holds the rest equal. */
+/** The stream's kinds in the service's vocabulary, one word each; the live brain's own activity is none of them, and a test holds the rest equal. */
 const RUN_EVENT_OF_TURN_EVENT = {
   [TURN_EVENT_KIND.SLOW_STEP]: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
+  [TURN_EVENT_KIND.QUESTION_QUEUED]: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
   [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
   [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
   [TURN_EVENT_KIND.ENDED]: LIVE_BRAIN_RUN_EVENT.ENDED,
@@ -102,6 +103,13 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
   switch (event.kind) {
     case TURN_EVENT_KIND.SLOW_STEP:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, step: event.step };
+    case TURN_EVENT_KIND.QUESTION_QUEUED:
+      return {
+        kind: RUN_EVENT_OF_TURN_EVENT[event.kind],
+        runId,
+        question: event.question,
+        recommendation: event.recommendation,
+      };
     case TURN_EVENT_KIND.ACTIONS_SETTLED:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId };
     case TURN_EVENT_KIND.REPLY_SENTENCE:
@@ -177,6 +185,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
   const followed = new Set<string>();
+  // Note that eve folds asks that waited together into one turn, so several
+  // follows can project one turn. The first to reach it tells it; the rest
+  // tell only its end, because each sentence told per ask was said per ask.
+  const tellerOfTurn = new Map<string, string>();
   const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
 
   function emit(event: LiveBrainRunEvent): void {
@@ -196,7 +208,9 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * ends as failed, since nothing of it can be told again, and so does a
    * turn whose journal the store cannot read: its sentences are in that
    * journal, so telling the turn's end without them would be a reply the
-   * voice says nothing of, and reading again finds the same rows.
+   * voice says nothing of, and reading again finds the same rows. A turn
+   * another ask was folded into is told by whichever follow reached it
+   * first; this ask then hears only the end, so its exchange still settles.
    */
   const look = Effect.fnUntraced(function* (askId: string, told: FollowTold) {
     const standing = yield* askStanding(reads, options.userId, askId);
@@ -220,15 +234,17 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       return true;
     }
     const message = journal.value[0]?.message;
+    const teller = tellerOfTurn.get(turn.id) ?? askId;
+    tellerOfTurn.set(turn.id, teller);
     // The activity goes ahead of the events, so a call answered in the turn's last step is told before its end.
-    const action = pendingActionOf(message);
+    const action = teller === askId ? pendingActionOf(message) : undefined;
     if (action !== told.action) {
       told.action = action;
       emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: askId, action });
     }
     const events = projectTurnEvents(turn, message);
     for (const event of events.slice(told.seq)) {
-      emit(runEventOf(event, askId));
+      if (teller === askId || event.kind === TURN_EVENT_KIND.ENDED) emit(runEventOf(event, askId));
       told.seq = event.seq;
     }
     return events.at(-1)?.kind === TURN_EVENT_KIND.ENDED;
