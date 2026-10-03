@@ -56,6 +56,69 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.turnGroups, answer.groups)
     }
 
+    private func history(
+        _ groups: [ConversationReadTurnGroup], older: String, hasOlder: Bool, next: String
+    ) -> ConversationHistoryAnswer {
+        ConversationHistoryAnswer(conversations: mainOnly, groups: groups, older: older, hasOlder: hasOlder, next: next)
+    }
+
+    func testTheTailPageOpensTheThreadAtTheHeadWithHistoryStandingBehindIt() {
+        var thread = ConversationThread()
+        XCTAssertFalse(thread.hasOlder)
+        thread.apply(history([group(turnId: "t9", turn: nil, messages: [row("m9", seq: 9, at: 900)])], older: "h9", hasOlder: true, next: "c9"))
+        XCTAssertTrue(thread.opened)
+        XCTAssertEqual(thread.messagesCursor, "c9")
+        XCTAssertEqual(thread.historyCursor, "h9")
+        XCTAssertTrue(thread.hasOlder)
+        XCTAssertEqual(thread.turnGroups.map(\.turnId), ["t9"])
+    }
+
+    func testAnOlderPageLandsBeforeTheTailAndMovesTheForwardCursorNowhere() {
+        var thread = ConversationThread()
+        thread.apply(history([group(turnId: "t9", turn: nil, messages: [row("m9", seq: 9, at: 900)])], older: "h9", hasOlder: true, next: "c9"))
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly,
+                groups: [group(turnId: "t10", turn: nil, messages: [row("m10", seq: 10, at: 1000)])],
+                next: "c10",
+                hasMore: false
+            )
+        )
+        thread.apply(history([group(turnId: "t8", turn: nil, messages: [row("m8", seq: 8, at: 800)])], older: "h8", hasOlder: false, next: "c11"))
+        XCTAssertEqual(thread.turnGroups.map(\.turnId), ["t8", "t9", "t10"])
+        XCTAssertEqual(thread.messagesCursor, "c10")
+        XCTAssertEqual(thread.historyCursor, "h8")
+        XCTAssertFalse(thread.hasOlder)
+    }
+
+    func testAClearEndsHistory() {
+        var thread = ConversationThread()
+        thread.apply(history([group(turnId: "t9", turn: nil, messages: [row("m9", seq: 9, at: 900)])], older: "h9", hasOlder: true, next: "c9"))
+        let fresh = "3c000000-0000-4000-8000-000000000003"
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: [ConversationReadConversation(id: fresh, source: .main)],
+                groups: [],
+                next: "c10",
+                hasMore: false
+            )
+        )
+        XCTAssertTrue(thread.turnGroups.isEmpty)
+        XCTAssertFalse(thread.hasOlder)
+    }
+
+    func testTheBoundLetsTheOldestTurnsGoAndEndsHistoryBehindThem() {
+        var thread = ConversationThread()
+        let groups = (0 ..< ConversationThread.maximumGroups + 2).map { index in
+            group(turnId: "t\(index)", turn: nil, messages: [row("m\(index)", seq: index + 1, at: TimeInterval(index))])
+        }
+        thread.apply(history(groups, older: "h0", hasOlder: true, next: "c1"))
+        let held = thread.turnGroups
+        XCTAssertEqual(held.count, ConversationThread.maximumGroups)
+        XCTAssertEqual(held.first?.turnId, "t2")
+        XCTAssertFalse(thread.hasOlder)
+    }
+
     func testAnUnfinishedRowIsReplacedBySequenceRatherThanAppended() {
         var thread = ConversationThread()
         let running = turn("t1", status: .running, queuedAt: 100)

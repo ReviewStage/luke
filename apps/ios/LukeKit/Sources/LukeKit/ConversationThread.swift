@@ -14,16 +14,36 @@ import Foundation
 /// service folded onto each message — an announcement's unspoken mark, the
 /// developer's latest rating — are amended by the newer events read since,
 /// a second rating being a second event and never an edit, and a withdrawal
-/// a third that leaves the message unrated. The three
-/// cursors are the strings the service minted, echoed back on the next read
-/// and never composed here. Every device that reads to the end holds the same
-/// rows in the same order, because the order is the view's own: a group's
-/// earliest message, then its turn's queue instant, then its id.
+/// a third that leaves the message unrated. The cursors are the strings the
+/// service minted, echoed back on the next read and never composed here.
+/// Every device that reads to the end holds the same rows in the same order,
+/// because the order is the view's own: a group's earliest message, then its
+/// turn's queue instant, then its id.
+///
+/// The first messages read a thread makes is of the tail: one history page
+/// from the newest rows back, whose answer also carries the messages cursor
+/// standing at the head, so the forward reads carry on from there and a long
+/// Conversation is never walked from its beginning to be drawn. Older turns
+/// are read back one page at a time from the position the last history
+/// answer named, only while it says older turns stand. The thread keeps at
+/// most `maximumGroups` turns, letting the oldest go past that bound; the
+/// groups let go of stood between the ones kept and the position a history
+/// read would carry on from, so the bound is also where history ends. A
+/// Clear, which reaches a device as a main conversation the answer no longer
+/// lists, ends history too: nothing before the new main's opening is read
+/// again.
 public struct ConversationThread: Equatable, Sendable {
     public private(set) var conversations: [ConversationReadConversation] = []
     public private(set) var messagesCursor: String?
     public private(set) var eventsCursor: String?
     public private(set) var turnsCursor: String?
+    /// Where the next history page back begins: absent until a history answer has landed.
+    public private(set) var historyCursor: String?
+    /// Whether older turns stand behind `historyCursor` for a device to read.
+    public private(set) var hasOlder = false
+
+    /// `CONVERSATION_VIEW_BOUNDS.MAX_GROUPS`: the most turns one device holds.
+    public static let maximumGroups = 400
 
     private var groups: [String: Group] = [:]
     /// Where each message held stands, by its id: the one place a message has in this thread.
@@ -80,10 +100,31 @@ public struct ConversationThread: Equatable, Sendable {
     public var opened: Bool { messagesCursor != nil }
 
     public mutating func apply(_ answer: ConversationMessagesAnswer) {
-        conversations = answer.conversations
-        let standing = Set(answer.conversations.map(\.id))
+        merge(conversations: answer.conversations, groups: answer.groups)
+        messagesCursor = answer.next
+        bound()
+    }
+
+    /// Takes one history page: the tail where no messages cursor is held,
+    /// whose `next` seeds the forward read at the head, or a page of older
+    /// turns, which moves the forward read nowhere. A page that named a
+    /// position the bound has since passed is folded all the same; the
+    /// bound then lets the oldest go again.
+    public mutating func apply(_ answer: ConversationHistoryAnswer) {
+        merge(conversations: answer.conversations, groups: answer.groups)
+        if messagesCursor == nil { messagesCursor = answer.next }
+        historyCursor = answer.older
+        hasOlder = answer.hasOlder
+        bound()
+    }
+
+    private mutating func merge(conversations answered: [ConversationReadConversation], groups arrived: [ConversationReadTurnGroup]) {
+        let heldMain = Set(conversations.filter { $0.source == .main }.map(\.id))
+        let standing = Set(answered.map(\.id))
+        if !heldMain.isSubset(of: standing) { hasOlder = false }
+        conversations = answered
         groups = groups.filter { standing.contains($0.value.conversationId) }
-        for group in answer.groups {
+        for group in arrived {
             var merged = groups[group.turnId]
                 ?? Group(
                     turnId: group.turnId,
@@ -106,7 +147,23 @@ public struct ConversationThread: Equatable, Sendable {
         places = places.filter { held.contains($0.key) }
         latestSpeech = latestSpeech.filter { held.contains($0.key) }
         latestRating = latestRating.filter { held.contains($0.key) }
-        messagesCursor = answer.next
+    }
+
+    /// Lets the oldest turns go past `maximumGroups`, a turn's age being where
+    /// its first row stands in the view's order, and closes history behind
+    /// them: a page read from the held position would land past a hole.
+    private mutating func bound() {
+        let excess = groups.count - Self.maximumGroups
+        guard excess > 0 else { return }
+        for group in turnGroups.prefix(excess) {
+            groups.removeValue(forKey: group.turnId)
+            for message in group.messages {
+                places.removeValue(forKey: message.message.id)
+                latestSpeech.removeValue(forKey: message.message.id)
+                latestRating.removeValue(forKey: message.message.id)
+            }
+        }
+        hasOlder = false
     }
 
     /// A message arriving somewhere other than where it is held leaves the
