@@ -51,7 +51,7 @@
     "eve": "0.53.1",
     "marked": "18.0.9",
     "pg": "8.23.0",
-    "posthog-js": "1.418.3",
+    "posthog-js": "1.434.10",
     "react": "catalog:",
     "react-dom": "catalog:",
     "recharts": "3.8.0",
