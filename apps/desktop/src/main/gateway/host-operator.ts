@@ -13,15 +13,25 @@ import {
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   gatewayEventReader,
-  type LiveTransportState,
   type NotebookReadResult,
   notebookReadResultSchema,
   type VoiceCreateLiveSessionResult,
   type VoiceLiveSessionChanged,
+  type VoiceReportLiveTransportParams,
   voiceCreateLiveSessionResultSchema,
   voiceLiveSessionChangedSchema,
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
+import type { PlanCreateRequest } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_CALL_FAILURE,
+  type PlanningRepositoriesAnswer,
+  type PlanningStartAnswer,
+  type PlanningView,
+  planningRepositoriesAnswerSchema,
+  planningStartAnswerSchema,
+  planningViewSchema,
+} from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
   type ConversationViewSnapshot,
@@ -169,10 +179,16 @@ export interface HostOperator {
   workspaceProjects(): Effect.Effect<readonly ObservedWorkspaceProject[]>;
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
-  /** The peer's SDP offer, answered with the session the host created; a host that creates none answers nothing. */
-  createLiveSession(sdp: string): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
+  /**
+   * The peer's SDP offer, and the plan a planning call is about, answered with
+   * the session the host created; a host that creates none answers nothing.
+   */
+  createLiveSession(
+    sdp: string,
+    planId: string | undefined,
+  ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
   endLiveSession(): Effect.Effect<void>;
-  reportLiveTransport(state: LiveTransportState): Effect.Effect<void>;
+  reportLiveTransport(report: VoiceReportLiveTransportParams): Effect.Effect<void>;
   /** The peer's own idle decision, from its local signals alone; the host decides the close. */
   reportLiveActivity(idle: boolean): Effect.Effect<void>;
   /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
@@ -199,6 +215,19 @@ export interface HostOperator {
     messageId: string,
     rating: RatingWord,
   ): Effect.Effect<ConversationRateMessageResult>;
+  /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
+  planningRefresh(): Effect.Effect<void>;
+  /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
+  /** One plan made the active one, replacing whichever was; answers whether the host took it. */
+  planningOpen(planId: string): Effect.Effect<boolean>;
+  /** The developer left the open plan: its call ends and no plan is active. */
+  planningClose(): Effect.Effect<void>;
+  /** A named plan started on a repository and made the active one, or why none started. */
+  planningStart(request: PlanCreateRequest): Effect.Effect<PlanningStartAnswer>;
+  /** The repositories the account's GitHub connection can read, or why it could not be read. */
+  planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+  /** Opens the Connect GitHub page in the browser; whether it opened, which it does only for a signed-in account. */
+  planningConnectGitHub(): Effect.Effect<boolean>;
   onboardingState(): Effect.Effect<
     | {
         calendarOnboardingOwed: boolean;
@@ -235,6 +264,7 @@ export interface HostOperator {
   onConductorKeyOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
+  onPlanningChanged(listener: (view: PlanningView) => void): () => void;
 }
 
 interface HostOperatorOptions {
@@ -480,19 +510,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
         Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
       ),
-    createLiveSession: (sdp) =>
-      Effect.map(client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }), (answer) =>
-        answer.ok
-          ? Result.getSuccess(
-              readEither(voiceCreateLiveSessionResultSchema, { excess: EXCESS_KEYS.DROP })(
-                answer.result,
-              ),
-            )
-          : Option.none(),
+    createLiveSession: (sdp, planId) =>
+      Effect.map(
+        client.call(
+          GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION,
+          planId === undefined ? { sdp } : { sdp, planId },
+        ),
+        (answer) =>
+          answer.ok
+            ? Result.getSuccess(
+                readEither(voiceCreateLiveSessionResultSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : Option.none(),
       ),
     endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
-    reportLiveTransport: (state) =>
-      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, { state })),
+    reportLiveTransport: (report) =>
+      fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, report)),
     reportLiveActivity: (idle) =>
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
     stopSpeaking: () =>
@@ -553,6 +588,43 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 ),
               )
             : undefined) ?? { status: CONVERSATION_RATE_STATUS.UNAVAILABLE },
+      ),
+    planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
+    planningOpen: (planId) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_OPEN, { planId }),
+        (answer) => record(answer)?.opened === true,
+      ),
+    planningClose: () => fire(client.call(GATEWAY_METHOD.PLANNING_CLOSE)),
+    planningStart: (request) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_START, {
+          name: request.name,
+          repository: { owner: request.repository.owner, name: request.repository.name },
+        }),
+        (answer): PlanningStartAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningStartAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningRepositories: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_REPOSITORIES),
+        (answer): PlanningRepositoriesAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningConnectGitHub: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB),
+        (answer) => record(answer)?.opened === true,
       ),
     onboardingState: () =>
       Effect.map(client.call(GATEWAY_METHOD.ONBOARDING_STATE), (result) => {
@@ -689,6 +761,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           Result.getOrUndefined(
             readEither(voiceLiveSessionChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    onPlanningChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.PLANNING_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(planningViewSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),

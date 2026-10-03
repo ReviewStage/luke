@@ -38,6 +38,8 @@ import type { BrainTurnTrigger } from "./turn.js";
 export const BRAIN_RUN_EVENT = {
   /** The run began a step slow enough to be worth telling the developer about; fired once per run. */
   SLOW_STEP: "slow_step",
+  /** A planning run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
+  QUESTION_QUEUED: "question_queued",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the answer, in order, after every write the run took has settled. */
@@ -62,10 +64,11 @@ export const BRAIN_RUN_EVENT = {
   TURN_ENDED: "turn_ended",
 } as const;
 
-/** The kinds of step that count as slow: a whole transcript read, or a write the provider carries. */
+/** The kinds of step that count as slow: a whole transcript read, a write the provider carries, or a planning call's look into its repository. */
 export const SLOW_STEP_KIND = {
   TRANSCRIPT_READ: "transcript_read",
   PROVIDER_WRITE: "provider_write",
+  REPOSITORY_READ: "repository_read",
 } as const;
 
 export type SlowStepKind = (typeof SLOW_STEP_KIND)[keyof typeof SLOW_STEP_KIND];
@@ -168,6 +171,12 @@ export type BrainRunEventBody =
       readonly kind: typeof BRAIN_RUN_EVENT.SLOW_STEP;
       readonly runId: string;
       readonly step: SlowStepKind;
+    }
+  | {
+      readonly kind: typeof BRAIN_RUN_EVENT.QUESTION_QUEUED;
+      readonly runId: string;
+      readonly question: string;
+      readonly recommendation: string;
     }
   | { readonly kind: typeof BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {

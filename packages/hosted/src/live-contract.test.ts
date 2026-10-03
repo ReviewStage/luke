@@ -227,8 +227,8 @@ test("a session.spoken frame is the kind alone, any kind spoken, and ignores a k
   );
 });
 
-test("the frame types are eight distinct members", () => {
-  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 8);
+test("the frame types are ten distinct members", () => {
+  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 10);
 });
 
 test("the voice service origin is the service's own origin in socket form", () => {

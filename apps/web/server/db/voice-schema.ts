@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
@@ -59,14 +60,35 @@ export const voiceSessions = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     /** The `devices` row's id for the installation that opened the session; null once that row has gone. */
     deviceId: text("device_id"),
+    /**
+     * The plan a planning call was opened about, or null for every other
+     * session. A plain column like the device's rather than a reference:
+     * a session is bound to its plan for its whole life, so a re-attach
+     * after the plan was deleted must still read the binding and find no
+     * plan to land in, rather than read a null and land in the account's
+     * main.
+     */
+    planId: uuid("plan_id"),
     liveSessionId: text("live_session_id").notNull().unique(),
     delegationMode: text("delegation_mode").$type<VoiceDelegationMode>().notNull(),
     startedAt: instant("started_at").notNull().defaultNow(),
     closedAt: instant("closed_at"),
     closeReason: text("close_reason").$type<VoiceCloseReason>(),
     usage: jsonb("usage").$type<VoiceSessionUsage>(),
+    /**
+     * When the device's socket last went without a hang-up, leaving the
+     * WebRTC session standing for a re-attach; null while a connection holds
+     * the session, and cleared by the re-attach. An open row stamped longer
+     * ago than the grace is an orphan the scheduled tick closes.
+     */
+    detachedAt: instant("detached_at"),
   },
-  (table) => [index("voice_sessions_by_owner").on(table.userId, table.liveSessionId)],
+  (table) => [
+    index("voice_sessions_by_owner").on(table.userId, table.liveSessionId),
+    index("voice_sessions_detached")
+      .on(table.detachedAt)
+      .where(sql`${table.closedAt} is null and ${table.detachedAt} is not null`),
+  ],
 );
 
 /**

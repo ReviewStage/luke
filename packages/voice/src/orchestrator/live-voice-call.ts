@@ -18,6 +18,8 @@ import type { Effect } from "effect";
  */
 export interface LiveVoiceCallOpening {
   byPress: boolean;
+  /** The plan a planning call is about, which the host creates the session about; absent for every other call. */
+  planId?: string;
 }
 
 export interface LiveVoiceCall {

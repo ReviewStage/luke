@@ -1,4 +1,5 @@
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
+import { AUTH_SECRET_ENVIRONMENT } from "../auth-deployment.js";
 import { text } from "../core.js";
 import { APNS_ENVIRONMENT, type ApnsCredentials, apnsCredentialsFromEnvironment } from "./apns.js";
 import { VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
@@ -33,6 +34,13 @@ export interface HostedEnvironmentValues {
   readonly cronSecret: Redacted.Redacted | undefined;
   /** The deployment's Apple push credential; absent means no notification is ever sent. */
   readonly apnsCredentials: ApnsCredentials | undefined;
+  /**
+   * The auth service's own session secret, which Better Auth seals every
+   * stored OAuth token under; the account's GitHub connection is opened with
+   * it. Absent means the auth service refuses everything and no connection
+   * can be read.
+   */
+  readonly authSecret: Redacted.Redacted | undefined;
 }
 
 export class HostedEnvironment extends Context.Service<
@@ -100,6 +108,7 @@ export const hostedEnvironment = Layer.effect(
       apnsKeyId: Config.option(Config.String(APNS_ENVIRONMENT.KEY_ID)),
       apnsPrivateKey: Config.option(Config.String(APNS_ENVIRONMENT.PRIVATE_KEY)),
       apnsBundleId: Config.option(Config.String(APNS_ENVIRONMENT.BUNDLE_ID)),
+      authSecret: Config.option(Config.Redacted(AUTH_SECRET_ENVIRONMENT.SESSION_SECRET)),
     }),
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
@@ -111,6 +120,7 @@ export const hostedEnvironment = Layer.effect(
       posthogIngestHost: present(read.posthogIngestHost),
       cronSecret: presentRedacted(read.cronSecret),
       apnsCredentials: apnsCredentialsFromEnvironment(apnsRecord(read)),
+      authSecret: presentRedacted(read.authSecret),
     }),
   ).pipe(
     Effect.provideServiceEffect(

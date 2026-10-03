@@ -307,6 +307,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     hasCredentials: () => operator.voiceAvailable() && !introductionPlaying(),
     host: {
       voiceHost: () => voiceWindow.current(),
+      // The plan open in the panel owns the talk key until it is left, whether
+      // or not the panel still shows it; with no plan open the key is the desk's.
+      talkPlanId: () => state.snapshot().planning.activePlanId,
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
         const talk = rank === HOTKEY_RANK.TALK ? hotkeys.talk : current.talk;

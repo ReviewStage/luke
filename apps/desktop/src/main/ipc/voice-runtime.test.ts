@@ -85,7 +85,7 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
         Effect.sync(() => {
           liveCalls.push("end");
         }),
-      reportLiveTransport: (state: string) =>
+      reportLiveTransport: ({ state }: { state: string }) =>
         Effect.sync(() => {
           liveCalls.push(`transport:${state}`);
         }),

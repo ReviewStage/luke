@@ -106,12 +106,18 @@ export class FakeLiveSocket implements HeldSocket {
   readonly sent: string[] = [];
   /** Every frame and close the far side delivered, in order, so a test can wait on a scripted answer's delivery. */
   readonly received: SocketArrival[] = [];
+  /** How many protocol pings reached the far side, which hears a ping and nothing in it. */
+  pings = 0;
   closedByClient = false;
   readonly #sentListeners = new Set<(data: string) => void>();
   readonly #hold: SocketHold = holdSocket({
     send: (data) => {
       this.sent.push(data);
       for (const listener of [...this.#sentListeners]) listener(data);
+      announceChange();
+    },
+    ping: () => {
+      this.pings += 1;
       announceChange();
     },
     close: () => {
@@ -130,6 +136,10 @@ export class FakeLiveSocket implements HeldSocket {
     return () => {
       this.#sentListeners.delete(listener);
     };
+  }
+
+  ping(): void {
+    this.#hold.socket.ping();
   }
 
   close(): void {

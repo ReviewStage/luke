@@ -57,6 +57,8 @@ capture_evidence() {
         "$@"
 }
 
+# The panel opens on Plans, the Sessions and Conversation tabs being hidden
+# for now: the fixture's synthetic plan list, with no plan open.
 capture_evidence expanded --expanded --capture-evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 capture_evidence compact --compact --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
 capture_evidence peek --compact --peek --capture-evidence "$SIDECAR_PEEK_EVIDENCE_PATH"
@@ -75,6 +77,10 @@ capture_evidence muted --profile muted --compact --peek --capture-evidence "$SID
 # face on the left wing and the developer's meter in the marks' place on the
 # right, both drawn from the profile's staged levels.
 capture_evidence duplex --profile duplex --compact --peek --capture-evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH"
+# The panel's Plans tab over the fixture's synthetic plan: the open plan's
+# saved document with its assumption checklist, scrolled inside the panel's
+# own ceiling, and the idle microphone row under it.
+capture_evidence planning --profile planning --expanded --capture-evidence "$SIDECAR_PLANNING_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -125,6 +131,8 @@ validate_evidence "$SIDECAR_SLOT_EVIDENCE_PATH" 700 560
 validate_evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH" 700 294
 validate_evidence "$SIDECAR_MUTED_EVIDENCE_PATH" 700 294
 validate_evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH" 700 294
+# The Plans tab is drawn in the expanded window, like every other tab.
+validate_evidence "$SIDECAR_PLANNING_EVIDENCE_PATH" 700 560
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
 printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"
@@ -133,3 +141,4 @@ printf 'Key slot visual evidence: %s\n' "$SIDECAR_SLOT_EVIDENCE_PATH"
 printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 printf 'Muted visual evidence: %s\n' "$SIDECAR_MUTED_EVIDENCE_PATH"
 printf 'Duplex visual evidence: %s\n' "$SIDECAR_DUPLEX_EVIDENCE_PATH"
+printf 'Planning visual evidence: %s\n' "$SIDECAR_PLANNING_EVIDENCE_PATH"

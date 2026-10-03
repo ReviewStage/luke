@@ -189,11 +189,17 @@ export const BRIDGE = {
     args: noArgs,
     result: result<string>(isWireString),
   }),
+  /**
+   * The talk key going down, carrying the panel's open plan while one is open
+   * and nothing otherwise.
+   */
   onVoiceHotkeyPress: entry({
     kind: "subscribe",
     channel: "app:voice-hotkey-press",
     args: noArgs,
-    result: result<void>((v) => v === undefined),
+    result: result<{ planId: string } | undefined>(
+      (value) => value === undefined || (isRecord(value) && isWireString(value.planId)),
+    ),
   }),
   onVoiceHotkeyRelease: entry({
     kind: "subscribe",
@@ -233,6 +239,17 @@ export const BRIDGE = {
     channel: "app:voice-level-changed",
     args: noArgs,
     result: result<VoiceLevels>(isVoiceLevels),
+  }),
+  /**
+   * The Plans tab's microphone press, forwarded by the main process to the
+   * voice window alone, carrying the plan the panel had open when it was
+   * pressed and nothing else.
+   */
+  onPlanningTalk: entry({
+    kind: "subscribe",
+    channel: "app:planning-talk-forwarded",
+    args: noArgs,
+    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
   }),
   /**
    * A panel's validated command, forwarded by the main process to the voice

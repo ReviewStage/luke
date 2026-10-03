@@ -27,7 +27,9 @@ import { ConductorKeyGate, type ConductorKeyGateControl } from "./conductor-key-
 import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationClearButton, ConversationPanel } from "./conversation-panel";
 import { CONVERSATION_SEARCH_SUBJECT, ConversationSearchButton } from "./conversation-search";
-import { PANEL_TAB, type PanelTab, TabBar } from "./panel-tabs";
+import { PANEL_TAB, type PanelTab, type ShownPanelTab, TabBar } from "./panel-tabs";
+import { PlansPanel } from "./planning/plans-panel";
+import type { PlansControl } from "./planning/use-plans-tab";
 import {
   type ArrangedSessions,
   type SessionArrangement,
@@ -278,12 +280,14 @@ interface PanelBodyProps {
   /** The field's own way out — Escape on an empty query. */
   onConversationSearchClose: () => void;
   tab: PanelTab;
-  onTabChange: (tab: PanelTab) => void;
+  onTabChange: (tab: ShownPanelTab) => void;
   /**
    * The settings tab's controls, grouped the way a credential's is. Forwarded
    * untouched: this body chooses which tab is showing, not what a row writes.
    */
   settings: SettingsPanelProps;
+  /** The Plans tab's page and presses, decided by the panel and drawn here as they stand. */
+  plans: PlansControl;
 }
 
 /** Full-width rows that unfold out of the capsule, one session per line. */
@@ -336,6 +340,7 @@ export function PanelBody({
   tab,
   onTabChange,
   settings,
+  plans,
 }: PanelBodyProps): React.JSX.Element {
   const sessionListRef = useSessionReorderMotion();
   const rows = useRoster(list.sessions, sessionListRef);
@@ -480,6 +485,8 @@ export function PanelBody({
       </div>
       {tab === PANEL_TAB.SETTINGS ? (
         <SettingsPanel {...settings} />
+      ) : tab === PANEL_TAB.PLANS ? (
+        <PlansPanel control={plans} />
       ) : agentsPage ? (
         <AgentsPanel
           subagents={subagents}

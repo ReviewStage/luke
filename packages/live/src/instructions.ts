@@ -5,6 +5,8 @@ export const LIVE_SCENE = {
   DESKTOP: "desktop",
   /** The first launch's introduction: no account, no backend, nothing to act on. */
   INTRODUCTION: "introduction",
+  /** The Plans tab's call about one saved plan, with the planning model as its backend. */
+  PLANNING: "planning",
 } as const;
 
 export type LiveScene = (typeof LIVE_SCENE)[keyof typeof LIVE_SCENE];
@@ -26,7 +28,7 @@ Backend tools:
 - Read the desk: list_sessions, read_transcript, sessions_list, sessions_history.
 - Act on a chat: send_session_message, run_session_control, open_session.
 - Workspaces and names: create_workspace, add_workspace_agent, rename_workspace, rename_session.
-- The app itself: change_app_setting, show_panel, open_feedback_composer, run_update_action.
+- The app itself: change_app_setting, open_feedback_composer, run_update_action.
 - Memory: read_workspace_file, write_workspace_file, append_daily_note, list_daily_notes, memory_search, memory_get.
 - Hand off work: sessions_spawn, subagents.
 - Speak and load guidance: announce, load_skill.
@@ -62,6 +64,34 @@ Do not delegate to the backend when:
   need their agents or an action, say what you will do for them once they sign in.`;
 
 /**
+ * A planning call's backend is the planning model, which holds the saved
+ * document and reads the plan's repository; a notetaker beside the call
+ * writes the plan, so there is no save to delegate. The policy is
+ * the template's own conditions with the planning model's tools named, as
+ * the desktop's names the brain's. Note that the backend keeps the question
+ * queue, so every answer is a reason to delegate: it is what keeps the queue
+ * the voice asks from current.
+ */
+const PLANNING_DELEGATION_POLICY = `Delegation policy:
+Backend tools:
+- The repository: run_in_repository, which runs shell commands in a clone of the plan's repository.
+- Research: search_web and read_web_page, which can search the Internet.
+
+Delegate to the backend when:
+- The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
+- The request needs a backend capability or careful reasoning.
+- A correction changes the work already requested.
+- The developer answers a question: pass the answer to the backend so it can queue what the answer unblocked.
+- You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
+
+Do not delegate to the backend when:
+- You can answer from the conversation or a still-current result.
+- You need a brief clarification to understand the request.
+
+Delegate before giving an answer that depends on backend work.
+Do not guess the result while waiting.`;
+
+/**
  * The Live prompting guide's starter template, cut to who is speaking and
  * how, the two policies about holding a conversation, and the delegation
  * policy that says when the backend is asked. The guide's instruction for a migration
@@ -74,10 +104,24 @@ Do not delegate to the backend when:
  * words: one keeps the model from talking over the developer, the other
  * keeps it listening when they cut in. The one departure from the words the
  * guide prints is "engineering manager" where the template reads "voice
- * assistant".
+ * assistant", and a planning call's role line is its own.
  */
-const instructionsFor = (delegationPolicy: string): string =>
-  `You are Luke, an engineering manager for the developer's coding agents.
+const MANAGER_ROLE = "You are Luke, an engineering manager for the developer's coding agents.";
+const PLANNING_ROLE = `You are Luke, a calm, friendly voice assistant planning out the implementation of a new engineering task with the user (a developer).
+Lead the conversation until the backend says the plan is complete.
+A notetaker writes the plan live as you talk; you never write it yourself.`;
+
+/**
+ * A planning call's one policy beyond the template, added because listening
+ * showed both behaviors: several questions read out at once, and a pause
+ * after every answer while the voice waited on the backend.
+ */
+const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. The backend queues its questions to you as it thinks of them: ask them in the order they were queued, and drop one the backend says is moot. When the developer answers, carry on with the next queued question while the backend thinks and reads the repository in the background.
+
+`;
+
+const instructionsFor = (delegationPolicy: string, role = MANAGER_ROLE, scenePolicy = ""): string =>
+  `${role}
 Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
 If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
 
@@ -85,11 +129,16 @@ Backchannel policy: Use frequent, eager backchannels. Acknowledge naturally with
 
 Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
 
-${delegationPolicy}`;
+${scenePolicy}${delegationPolicy}`;
 
 const SCENE_INSTRUCTIONS = {
   [LIVE_SCENE.DESKTOP]: instructionsFor(DELEGATION_POLICY),
   [LIVE_SCENE.INTRODUCTION]: instructionsFor(INTRODUCTION_DELEGATION_POLICY),
+  [LIVE_SCENE.PLANNING]: instructionsFor(
+    PLANNING_DELEGATION_POLICY,
+    PLANNING_ROLE,
+    PLANNING_CONVERSATION_POLICY,
+  ),
 } satisfies Record<LiveScene, string>;
 
 /** The `instructions` a session of this scene is created with. */

@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "question": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "One decision to put to the developer, as Luke would ask it aloud, such as \"Should a withdrawn invite tell the invitee who withdrew it?\""
+    },
+    "recommendation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "The answer you recommend, and why in a few words, such as \"No: just say the invite is no longer valid, so nobody learns who removed them.\""
+    }
+  },
+  "required": [
+    "question",
+    "recommendation"
+  ],
+  "additionalProperties": false
+}

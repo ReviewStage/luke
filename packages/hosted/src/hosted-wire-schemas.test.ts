@@ -12,9 +12,11 @@ import * as askWire from "./ask-wire.js";
 import * as conversationClearWire from "./conversation-clear-wire.js";
 import * as conversationWire from "./conversation-wire.js";
 import * as deviceWire from "./device-wire.js";
+import * as githubWire from "./github-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as notebookWire from "./notebook-wire.js";
 import * as observeWire from "./observe-wire.js";
+import * as planWire from "./plan-wire.js";
 import * as projectsWire from "./projects-wire.js";
 import * as ratingWire from "./rating-wire.js";
 import * as readsWire from "./reads-wire.js";
@@ -69,6 +71,8 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionBeatFrameSchema: liveContract.sessionBeatFrameSchema,
     sessionReportFrameSchema: liveContract.sessionReportFrameSchema,
     sessionSpokenFrameSchema: liveContract.sessionSpokenFrameSchema,
+    planDraftFrameSchema: liveContract.planDraftFrameSchema,
+    planActivityFrameSchema: liveContract.planActivityFrameSchema,
     sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
     sessionAudioCreatedFrameSchema: liveContract.sessionAudioCreatedFrameSchema,
@@ -80,6 +84,22 @@ const EFFECT_MODULE_SCHEMAS = {
   "observe-wire": {
     observeAnswerSchema: observeWire.observeAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof observeWire>,
+  "github-wire": {
+    githubFailureAnswerSchema: githubWire.githubFailureAnswerSchema,
+    githubRepositorySchema: githubWire.githubRepositorySchema,
+    githubRepositoryListAnswerSchema: githubWire.githubRepositoryListAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof githubWire>,
+  "plan-wire": {
+    planAssumptionSchema: planWire.planAssumptionSchema,
+    planDocumentSchema: planWire.planDocumentSchema,
+    planRepositorySchema: planWire.planRepositorySchema,
+    planCreateRequestSchema: planWire.planCreateRequestSchema,
+    planSummarySchema: planWire.planSummarySchema,
+    planSchema: planWire.planSchema,
+    planListAnswerSchema: planWire.planListAnswerSchema,
+    planAnswerSchema: planWire.planAnswerSchema,
+    planDeleteAnswerSchema: planWire.planDeleteAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof planWire>,
   "projects-wire": {
     hostedProjectsAnswerSchema: projectsWire.hostedProjectsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof projectsWire>,

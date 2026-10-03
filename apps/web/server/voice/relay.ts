@@ -4,6 +4,7 @@ import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js"
 import {
   closeEvent,
   decodeLivePayload,
+  LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
   type LiveServerEvent,
@@ -15,6 +16,7 @@ import {
   FRAME_DECISION,
   frameType,
   upstreamFrameDecision,
+  VOICE_ROUTE,
   type VoiceRoute,
 } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
@@ -47,10 +49,15 @@ import {
  * that with; a caller who has hung up is sent none of it, whichever side of
  * the start they went. It ends the way the docs say a
  * session ends: `session.closed` is the finalization, reported once with the
- * seconds it named; a device that goes first has `session.close` sent on
- * its behalf and the sideband held open for the final event under a
- * timeout; a sideband that goes first leaves the usage unconfirmed and takes
- * the device socket with it.
+ * seconds it named; a device that goes first after asking for the close, or
+ * once its socket was closed on a refused frame, or on a route whose session
+ * cannot outlive this connection, has `session.close` sent on its behalf and
+ * the sideband held open for the final event under a timeout; a sessions-route
+ * device whose socket simply went, the platform cutting a function at its
+ * limit or the network dropping, leaves the WebRTC session standing for the
+ * device's own re-attach and settles detached, closing only the sideband; a
+ * sideband that goes first leaves the usage unconfirmed and takes the device
+ * socket with it.
  *
  * A side going is its stream ending, so the two endings are read where every
  * other frame is; the two waits are `Effect.sleep` forked into the same scope,
@@ -145,6 +152,10 @@ export function relaySession<R = never>(
     let startedSeen = false;
     /** Whether the caller has gone: an opening command is for someone still listening. */
     let hungUp = false;
+    /** Whether the device forwarded its own `session.close`: its going after that is a hang-up, not a drop. */
+    let deviceAskedClose = false;
+    /** Whether the device's socket was closed here on a refused frame: the session ends with it. */
+    let refusedByPolicy = false;
     let closed: LiveSessionClosed | undefined;
     /** The `event_id` the opening command was sent with, until its acknowledgment settles it. */
     let openingEventId: string | undefined;
@@ -304,6 +315,7 @@ export function relaySession<R = never>(
      */
     const refuse = Effect.fnUntraced(function* (type: string | undefined) {
       counts.refusedUnpermitted += 1;
+      refusedByPolicy = true;
       options.onFrameRefused?.(type);
       if (yield* device.isOpen) {
         yield* device.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, UNPERMITTED_FRAME_REASON);
@@ -334,6 +346,7 @@ export function relaySession<R = never>(
         counts.droppedUnpermitted += 1;
         return;
       }
+      if (type === LIVE_CLIENT_EVENT.CLOSE) deviceAskedClose = true;
       if (!(yield* upstream.isOpen)) return;
       yield* upstream.send(frame);
       counts.framesToUpstream += 1;
@@ -341,19 +354,29 @@ export function relaySession<R = never>(
     });
 
     /**
-     * The device went first. The docs' graceful close on its behalf: the
-     * sideband's own stream is already read, `session.close` goes up, and the
-     * sideband is held for the final event so the seconds are recorded, under
-     * the timeout after which finalization is reported incomplete.
+     * The device went first. On the sessions route a socket that went with
+     * no hang-up and no refusal is a detach: the WebRTC session is the
+     * device's and still stands, so nothing goes up and the relay settles at
+     * once, leaving the device to attach a fresh sideband and the connection
+     * that reads `session.closed` to record the seconds. Every other going is
+     * the docs' graceful close on the device's behalf: `session.close` goes
+     * up and the sideband is held for the final event so the seconds are
+     * recorded, under the timeout after which finalization is reported
+     * incomplete.
      */
     const onDeviceGone = Effect.gen(function* () {
       hungUp = true;
       if (closedSeen || (yield* Deferred.isDone(settled))) return;
+      const detached = route === VOICE_ROUTE.SESSIONS && !deviceAskedClose && !refusedByPolicy;
       // The caller has hung up, so the opening command will never be answered
       // to any purpose: it is settled as unanswered here rather than left
       // armed, where an acknowledgment arriving during the graceful close
       // would cue a session already on its way out.
       yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
+      if (detached) {
+        yield* settle(FINALIZATION.DETACHED);
+        return;
+      }
       if (!(yield* upstream.isOpen)) {
         yield* settle(FINALIZATION.UNCONFIRMED);
         return;

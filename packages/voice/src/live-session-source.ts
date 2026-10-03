@@ -7,6 +7,10 @@ import {
   hostedQuotaSchema,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
+  type PlanActivityFrame,
+  type PlanDraftFrame,
+  planActivityFrameFromWire,
+  planDraftFrameFromWire,
   type SessionActivityFrame,
   type SessionAttachFrame,
   type SessionBeatFrame,
@@ -91,6 +95,8 @@ export interface LiveSessionCreateInput {
   sdpOffer: string;
   /** The startup history, already bounded by `conversationSeedItems`. */
   input: readonly InitialItem[];
+  /** The plan a planning call is about; absent for every other session. */
+  planId?: string;
 }
 
 /**
@@ -146,6 +152,17 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * `reportActivity`.
    */
   onSpoken?(listener: (kind: ProactiveSpeechKind) => void): void;
+  /**
+   * Tells the listener each draft of a planning call's plan the service's
+   * notetaker sends as it writes, on the same socket and the same terms as
+   * `onSpoken`; the sideband never sees that frame either.
+   */
+  onPlanDraft?(listener: (draft: PlanDraftFrame) => void): void;
+  /**
+   * Tells the listener each time the service says what each part of Luke is
+   * doing on a planning call, on the same terms as `onPlanDraft`.
+   */
+  onPlanActivity?(listener: (activity: PlanActivityFrame) => void): void;
 }
 
 /**
@@ -273,6 +290,7 @@ const HOSTED_ERROR_OUTCOME: ReadonlyMap<HostedApiError, LiveSessionOutcome> = ne
 function watchingClose(socket: LiveSocket, closed: () => void): LiveSocket {
   return {
     send: (data) => socket.send(data),
+    ping: () => socket.ping(),
     close: () => socket.close(),
     arrivals: Stream.tap(socket.arrivals, (arrival) =>
       Effect.sync(() => {
@@ -407,6 +425,7 @@ class ServiceLiveSessionSource {
         sdp: input.sdpOffer,
         voice: this.#voice,
         input: [...input.input],
+        ...(input.planId === undefined ? undefined : { planId: input.planId }),
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       const created = answer === undefined ? undefined : this.#readCreated(answer);
@@ -615,6 +634,35 @@ export const HOSTED_REATTACH_DELAYS_MS: readonly number[] = [0, 3_000, 7_000];
 /** The close code of a connection that ended because the session did, after which nothing is tried again. */
 const NORMAL_CLOSE_CODE = 1000;
 
+/**
+ * How often the hosted connection is pinged. The Mac sends nothing on that
+ * socket in an ordinary call, and the platform in front of the voice service
+ * closes a WebSocket its client has been silent on for about five minutes, so
+ * a protocol ping every thirty seconds keeps the socket from ever being idle
+ * by that measure. The far side's `ws` answers each one on its own.
+ */
+const HOSTED_PING_INTERVAL_MS = 30_000;
+
+/** What follows a connection's end, as its close line names it. */
+const CONNECTION_NEXT = {
+  REATTACH: "reattach",
+  END: "end",
+} as const;
+
+type ConnectionNext = (typeof CONNECTION_NEXT)[keyof typeof CONNECTION_NEXT];
+
+/**
+ * The run panel's line for one connection's end: its close code and reason as
+ * the transport handed them up, how long it stood, and whether a re-attach
+ * follows. Nothing the session said and no credential is in it.
+ */
+function connectionClosedLine(close: SocketClose, ageMs: number, next: ConnectionNext): string {
+  const code = close.code ?? "none";
+  const reason = close.reason ?? "none";
+  const age = Math.round(ageMs / 1000);
+  return `voice socket closed: code=${code} reason=${reason} age=${age}s next=${next}`;
+}
+
 /** The transport did not carry the attempt to an answer; the schedule's own `while` is what decides whether another try may. */
 class ReattachFailed extends Data.TaggedError("ReattachFailed") {}
 
@@ -667,6 +715,10 @@ function reattachRetrySchedule(
  * fiber the same way, so a source whose composition has gone leaves nothing
  * trying. What the consumer reads is the hold's own stream, so nothing said
  * between this socket's making and the sideband over it is lost either.
+ *
+ * A second fiber of the same scope pings the connection standing every
+ * `HOSTED_PING_INTERVAL_MS`, and pings nothing during a gap or after the
+ * end; each connection's end is logged with its close and its age.
  */
 function reattachingSocket(options: {
   socket: LiveSocket;
@@ -689,10 +741,20 @@ function reattachingSocket(options: {
 }): Effect.Effect<LiveSocket, never, Scope.Scope> {
   return Effect.gen(function* () {
     let inner = options.socket;
+    /** When the connection now standing stood, for the line its end is logged with. */
+    let innerSince = yield* Clock.currentTimeMillis;
     /** Sends made while no connection stands, sent on the next one. */
     let heldSends: string[] | undefined;
     let closedByClient = false;
+    /** Whether the last connection has ended and nothing will stand after it. */
+    let ended = false;
     const hungUp = yield* Deferred.make<void>();
+    // Note that a ping is never held for the next connection, because a ping
+    // stands for the connection it rides on and a fresh one is not idle.
+    const ping = () => {
+      if (heldSends !== undefined || closedByClient || ended) return;
+      inner.ping();
+    };
     const hold = holdSocket({
       send: (data) => {
         if (heldSends !== undefined) {
@@ -701,6 +763,7 @@ function reattachingSocket(options: {
         }
         inner.send(data);
       },
+      ping,
       close: () => {
         if (closedByClient) return;
         closedByClient = true;
@@ -760,10 +823,21 @@ function reattachingSocket(options: {
             Effect.as(Deferred.await(hungUp), undefined),
           );
 
+    /** Logs the end of the connection that stood, and says whether one is tried after it. */
+    const connectionEnded = (close: SocketClose) =>
+      Effect.gen(function* () {
+        const last = closedByClient || close.code === NORMAL_CLOSE_CODE || schedule === undefined;
+        const now = yield* Clock.currentTimeMillis;
+        const next = last ? CONNECTION_NEXT.END : CONNECTION_NEXT.REATTACH;
+        yield* Effect.logInfo(connectionClosedLine(close, now - innerSince, next));
+        return last;
+      });
+
     const serve = Effect.gen(function* () {
       for (;;) {
         const close = yield* readConnection(inner);
-        if (closedByClient || close.code === NORMAL_CLOSE_CODE) {
+        if (yield* connectionEnded(close)) {
+          ended = true;
           hold.hear({ close });
           return;
         }
@@ -773,12 +847,14 @@ function reattachingSocket(options: {
         // reach: the close it ran found the dying connection standing, so the one just stood up is
         // this step's to close, in the same step it would otherwise have been adopted in.
         if (recovered === undefined || closedByClient) {
+          ended = true;
           heldSends = undefined;
           recovered?.close();
           hold.hear({ close });
           return;
         }
         inner = recovered;
+        innerSince = yield* Clock.currentTimeMillis;
         const standing = options.standing;
         const pending = (heldSends ?? []).filter((data) => !standing?.matches(data));
         heldSends = undefined;
@@ -788,6 +864,11 @@ function reattachingSocket(options: {
     });
 
     yield* Effect.forkScoped(serve);
+    // `Effect.schedule` and not `Effect.repeat`, so the first ping is one interval in; the scope's
+    // close interrupts the cadence with everything else this socket stood up.
+    yield* Effect.forkScoped(
+      Effect.schedule(Effect.sync(ping), Schedule.spaced(Duration.millis(HOSTED_PING_INTERVAL_MS))),
+    );
     return hold.socket;
   });
 }
@@ -851,13 +932,23 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           matches: (data) => sessionActivityFrameFromWire(decodeLivePayload(data)) !== undefined,
         },
       });
-      // The service's own word on a spoken turn rides the same socket as the
-      // session's events and is taken off it here, before the sideband's Live
-      // grammar would read it as nothing.
+      // The service's own words, a spoken turn and a plan's draft and its activity,
+      // ride the same socket as the session's events and are taken off it here,
+      // before the sideband's Live grammar would read them as nothing.
       const spokenListeners = new Set<(kind: ProactiveSpeechKind) => void>();
+      const draftListeners = new Set<(draft: PlanDraftFrame) => void>();
+      const activityListeners = new Set<(activity: PlanActivityFrame) => void>();
       const sideband = this.holdSideband(
-        withoutSpokenFrames(socket, (kind) => {
-          for (const listener of [...spokenListeners]) listener(kind);
+        withoutServiceFrames(socket, {
+          onSpoken: (kind) => {
+            for (const listener of [...spokenListeners]) listener(kind);
+          },
+          onPlanDraft: (draft) => {
+            for (const listener of [...draftListeners]) listener(draft);
+          },
+          onPlanActivity: (activity) => {
+            for (const listener of [...activityListeners]) listener(activity);
+          },
         }),
       );
       return {
@@ -893,32 +984,57 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onSpoken: (listener) => {
           spokenListeners.add(listener);
         },
+        onPlanDraft: (listener) => {
+          draftListeners.add(listener);
+        },
+        onPlanActivity: (listener) => {
+          activityListeners.add(listener);
+        },
       };
     });
   }
 }
 
 /**
- * The socket with the service's `session.spoken` frames taken off its
- * arrivals and told to the listener, so the sideband over it reads only what
- * the session said. Every frame is checked by the frame's own schema; the
- * substring test ahead of it is only what keeps a transcript delta from being
- * decoded twice.
+ * The socket with the service's own frames, `session.spoken`, `plan.draft`,
+ * and `plan.activity`, taken off its arrivals and told to their listeners, so the
+ * sideband over it reads only what the session said. Every frame is checked
+ * by the frame's own schema; the substring test ahead of it is only what
+ * keeps a transcript delta from being decoded twice.
  */
-function withoutSpokenFrames(
+function withoutServiceFrames(
   socket: LiveSocket,
-  onSpoken: (kind: ProactiveSpeechKind) => void,
+  listeners: {
+    readonly onSpoken: (kind: ProactiveSpeechKind) => void;
+    readonly onPlanDraft: (draft: PlanDraftFrame) => void;
+    readonly onPlanActivity: (activity: PlanActivityFrame) => void;
+  },
 ): LiveSocket {
   return {
     send: (data) => socket.send(data),
+    ping: () => socket.ping(),
     close: () => socket.close(),
     arrivals: Stream.filter(socket.arrivals, (arrival) => {
       if ("close" in arrival) return true;
-      if (!arrival.frame.includes(VOICE_SERVICE_FRAME.SESSION_SPOKEN)) return true;
-      const spoken = sessionSpokenFrameFromWire(decodeLivePayload(arrival.frame));
-      if (spoken === undefined) return true;
-      onSpoken(spoken.kind);
-      return false;
+      if (arrival.frame.includes(VOICE_SERVICE_FRAME.SESSION_SPOKEN)) {
+        const spoken = sessionSpokenFrameFromWire(decodeLivePayload(arrival.frame));
+        if (spoken === undefined) return true;
+        listeners.onSpoken(spoken.kind);
+        return false;
+      }
+      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_DRAFT)) {
+        const draft = planDraftFrameFromWire(decodeLivePayload(arrival.frame));
+        if (draft === undefined) return true;
+        listeners.onPlanDraft(draft);
+        return false;
+      }
+      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_ACTIVITY)) {
+        const activity = planActivityFrameFromWire(decodeLivePayload(arrival.frame));
+        if (activity === undefined) return true;
+        listeners.onPlanActivity(activity);
+        return false;
+      }
+      return true;
     }),
   };
 }

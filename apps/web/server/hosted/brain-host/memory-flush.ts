@@ -70,6 +70,7 @@ const MEMORY_FLUSH = {
 /** Why a flush did not run, or ran and stored nothing, in words a reader of the outcome can use. */
 export const MEMORY_FLUSH_REFUSAL = {
   NOT_AN_ASK: "not flushed: only a developer's own ask flushes before its context folds",
+  PLAN: "not flushed: a plan conversation's words are the plan's, not the notebook's",
   ALREADY_FLUSHED: "not flushed: this compaction cycle has run its flush",
   NO_TOOL: "not flushed: the catalog declares no append_daily_note",
   TIMED_OUT: "not finished: the housekeeping turn ran past its bound",

@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "plan.activity"
+      ]
+    },
+    "planId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "voice": {
+      "type": "string",
+      "enum": [
+        "handing_off",
+        "about_to_answer"
+      ]
+    },
+    "planner": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "maxLength": 120
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "notes": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "type",
+    "planId",
+    "notes"
+  ],
+  "additionalProperties": false
+}

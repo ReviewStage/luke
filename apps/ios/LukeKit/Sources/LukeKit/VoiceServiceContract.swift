@@ -17,7 +17,9 @@ import Foundation
 /// `sessionStop`; the watch the same but `sessionAttach`, since a primary
 /// socket has no attach to offer; both read `sessionCreated`,
 /// `sessionAttached`, and `sessionSpoken`. `sessionBeat` is the desktop's
-/// alone and is transcribed so the set stays whole, never sent.
+/// alone and is transcribed so the set stays whole, never sent, and so are
+/// `planDraft` and `planActivity`, which the service sends on a planning call,
+/// and a planning call is the Mac's alone.
 public enum VoiceServiceFrame: String, CaseIterable, Sendable {
     case sessionCreate = "session.create"
     case sessionCreated = "session.created"
@@ -27,6 +29,8 @@ public enum VoiceServiceFrame: String, CaseIterable, Sendable {
     case sessionStop = "session.stop"
     case sessionBeat = "session.beat"
     case sessionSpoken = "session.spoken"
+    case planDraft = "plan.draft"
+    case planActivity = "plan.activity"
 }
 
 /// `LIVE_CLIENT_EVENT` in `packages/live/src/events.ts`, whole: every Live
@@ -360,6 +364,9 @@ enum VoiceServiceIncomingFrame: Equatable, Sendable {
             self = .spoken(kind)
         case .sessionCreate, .sessionAttach, .sessionActivity, .sessionStop, .sessionBeat:
             // The device's own frames, echoed back by nothing: not an event of the session.
+            self = .unreadable
+        case .planDraft, .planActivity:
+            // A planning call's draft and activity, the Mac's alone: nothing a phone's session says.
             self = .unreadable
         case nil:
             self = .liveEvent(LiveServerEventFrame(type: type, payload: value))

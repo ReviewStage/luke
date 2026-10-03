@@ -1,0 +1,596 @@
+{
+  "type": "object",
+  "properties": {
+    "purpose": {
+      "type": "object",
+      "properties": {
+        "problem": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The current problem. Null while unanswered."
+        },
+        "users": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The people or callers affected. Null while unanswered."
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The observable improvement. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "included": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The capabilities included. Null while unanswered."
+        },
+        "excluded": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What is explicitly excluded. Null while unanswered."
+        },
+        "constraints": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Material limits on this change. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "currentBehavior": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What happens today. Null while unanswered."
+        },
+        "relevantCode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Paths inspected at the plan's commit, or other cited evidence, with facts kept apart from hypotheses and proposed changes. Null while unanswered."
+        },
+        "terminology": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Terms whose meaning matters. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "behavior": {
+      "type": "object",
+      "properties": {
+        "rules": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The behavioral rules. Null while unanswered."
+        },
+        "invariants": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What must stay true across every scenario, including failure, cancellation, and retry paths, and any preserved data, permission, or interface guarantee. Null while unanswered."
+        },
+        "scenarios": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "actor": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Who acts: a person, an API caller, or a background process. Null while unanswered."
+                  },
+                  "startingState": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "What stands before the trigger. Null while unanswered."
+                  },
+                  "trigger": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "What starts the scenario. Null while unanswered."
+                  },
+                  "steps": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200000
+                        },
+                        "minItems": 1,
+                        "maxItems": 200
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The ordered steps, each nonblank. Null while unanswered."
+                  },
+                  "expectedOutcome": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "What the actor observes at the end. Null while unanswered."
+                  },
+                  "alternativesAndFailures": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "What happens on the alternative, failure, cancellation, and retry paths that apply. Null while unanswered."
+                  }
+                },
+                "required": [
+                  "name",
+                  "actor",
+                  "startingState",
+                  "trigger",
+                  "steps",
+                  "expectedOutcome",
+                  "alternativesAndFailures"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 200
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Concrete rehearsals, each exactly its name, actor, starting state, trigger, steps, expected outcome, and alternatives and failures. Null until one is identified."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "dataAndInterfaces": {
+      "type": "object",
+      "properties": {
+        "dataRules": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Data ownership, validation, and lifecycle changes. Null while unanswered."
+        },
+        "interfaces": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Affected internal or external contracts and their failure behavior. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "quality": {
+      "type": "object",
+      "properties": {
+        "permissionsAndPrivacy": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Applicable permission and privacy expectations. Null while unanswered."
+        },
+        "usabilityAndAccessibility": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Applicable usability and accessibility expectations. Null while unanswered."
+        },
+        "performanceAndReliability": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Applicable performance and reliability bounds, cited or agreed, never invented. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "approach": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The overall design. Null while unanswered."
+        },
+        "decisions": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Each consequential choice: the decision, its rationale, a relevant alternative, and its accepted cost. Null while unanswered."
+        },
+        "stepsAndDependencies": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The ordered implementation sequence, each step's prerequisites, and the observable result that lets dependent work proceed. Null while unanswered."
+        },
+        "risksAndMitigations": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Material uncertainties, how they are investigated or bounded, and the risk accepted. Null while unanswered."
+        },
+        "compatibilityAndMigration": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Compatibility and migration needs. Null while unanswered."
+        },
+        "rolloutAndRecovery": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the change is delivered and recovered from. Null while unanswered."
+        },
+        "delegatedChoices": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The precise freedom left to the implementing agent. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "acceptance": {
+      "type": "object",
+      "properties": {
+        "examples": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "given": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The starting situation. Null while unanswered."
+                  },
+                  "when": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The action. Null while unanswered."
+                  },
+                  "then": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The observable result. Null while unanswered."
+                  }
+                },
+                "required": [
+                  "given",
+                  "when",
+                  "then"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 200
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Concrete acceptance examples, each exactly given, when, and then. Null until one is identified."
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The checks that establish the important rules and invariants, and what each proves. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "openQuestions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+      },
+      "maxItems": 200,
+      "description": "Unresolved questions, contradictions, or facts no source could settle; empty when none."
+    },
+    "handoffPrompt": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The self-contained Markdown prompt for a coding agent, written only after the spoken review. Null until prepared."
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200,
+      "description": "Every assumption the plan holds, in order, each its text. Sent whole when any changes."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

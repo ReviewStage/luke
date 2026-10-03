@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { TRACE_DIRECTION } from "@sidecar/devtrace/vocabulary";
-import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
+import {
+  LIVE_PEER_END_REASON,
+  LIVE_TRANSPORT_STATE,
+  type LivePeerEndReason,
+  type LiveTransportState,
+} from "@sidecar/gateway";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_IDLE_WINDOW_MS,
@@ -198,6 +203,8 @@ function build(
   const errors: (string | undefined)[] = [];
   const offers: string[] = [];
   const transports: LiveTransportState[] = [];
+  /** The reason each end of the peer was reported under, in order. */
+  const endReasons: LivePeerEndReason[] = [];
   const activity: boolean[] = [];
   let ends = 0;
   const remote: (MediaStream | undefined)[] = [];
@@ -228,7 +235,10 @@ function build(
       endSession: () => {
         ends += 1;
       },
-      reportTransport: (state) => transports.push(state),
+      reportTransport: ({ state, reason }) => {
+        transports.push(state);
+        if (reason !== undefined) endReasons.push(reason);
+      },
       reportActivity: (idle) => activity.push(idle),
     },
     createPeerConnection: () => peer,
@@ -297,6 +307,7 @@ function build(
     errors,
     offers,
     transports,
+    endReasons,
     activity,
     ends: () => ends,
     remote,
@@ -924,6 +935,7 @@ it.effect(
         LIVE_TRANSPORT_STATE.FAILED,
         LIVE_TRANSPORT_STATE.CLOSED,
       ]);
+      assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.TRANSPORT_FAILED]);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.FAILED);
       assert.equal(f.call.standing, false);
     }),
@@ -1004,6 +1016,9 @@ it.effect(
       // peer gave up is one it ends rather than one left standing.
       assert.equal(g.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
       assert.equal(f.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
+      // Each end names itself: the answered hang-up, and the one that gave up.
+      assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.HUNG_UP]);
+      assert.deepEqual(g.endReasons, [LIVE_PEER_END_REASON.CLOSE_TIMED_OUT]);
     }),
 );
 
@@ -1022,6 +1037,7 @@ it.effect(
       assert.equal(f.call.standing, false);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.IDLE);
       assert.equal(f.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
+      assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.CHANNEL_CLOSED]);
       const g = yield* fixture();
       const opened = yield* Effect.forkChild(g.call.open({ byPress: true }));
       yield* settle;

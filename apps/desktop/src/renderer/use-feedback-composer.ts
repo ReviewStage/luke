@@ -18,7 +18,7 @@ import {
 } from "./feedback-entry";
 import { encodeFeedbackImage } from "./feedback-images";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { PANEL_TAB, type ShownPanelTab } from "./panel-tabs";
 import { PANEL_STAND_DOWN, type SettingsView, standDownReturnPage } from "./settings-views";
 import { appStateNow } from "./use-app-state";
 import { type PanelEntrySurface, panelEntryOpen, usePanelEntry } from "./use-panel-entry";
@@ -44,7 +44,7 @@ export interface UseFeedbackComposerOptions {
    * over the Conversation and left to the tab a key entry last remembered
    * would land a Cancel on Settings, where nothing was being done.
    */
-  standDownTab: RefObject<PanelTab>;
+  standDownTab: RefObject<ShownPanelTab>;
 }
 
 export interface FeedbackComposer {
@@ -62,7 +62,12 @@ export interface FeedbackComposer {
    * default. Reports whether the draft was placed, so the spoken path can
    * say what it found.
    */
-  begin: (kind: FeedbackKind, fromPanel: boolean, draft?: string, returnTo?: PanelTab) => boolean;
+  begin: (
+    kind: FeedbackKind,
+    fromPanel: boolean,
+    draft?: string,
+    returnTo?: ShownPanelTab,
+  ) => boolean;
 }
 
 /**
@@ -204,7 +209,7 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
       kind: FeedbackKind,
       fromPanel: boolean,
       draft?: string,
-      returnTo: PanelTab = PANEL_TAB.SETTINGS,
+      returnTo: ShownPanelTab = PANEL_TAB.SETTINGS,
     ): boolean => {
       setNotice(undefined);
       // Leaving the composer — or the thank-you the send lands in — comes back

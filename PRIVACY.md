@@ -99,6 +99,26 @@ calls they made from here; this version makes no such call, seeds nothing
 there, and reads nothing from it. Files an earlier version left are yours to
 keep or delete, and nothing on your Mac reads or writes them.
 
+**Feature plans.** When you start a named plan, our service stores it under
+your account: its name, the GitHub repository it plans against (owner and
+name), that repository's default branch and the commit it stood at when the
+plan started, and the plan's one document, a Markdown body and a list of
+assumptions each marked confirmed or not, written by Luke's planning model as
+you talk. It is stored as written, bound to your account and readable by our
+own operators, the same way the conversation described below is. A save
+replaces the document and no earlier version is kept; deleting a plan removes
+it at once, and deleting your account removes every plan.
+
+**How the planning model reads your repository.** During a planning call,
+Luke's planning model reads the plan's repository from a shallow copy of the
+one commit the plan started at. The copy is fetched from GitHub with your
+account's GitHub connection into an isolated Vercel Sandbox, our service's
+own, whose network is shut once the copy lands, so nothing run there can send
+your source anywhere; your GitHub token is added to that one fetch outside the
+sandbox and is never written into it. The copy is kept with the plan's
+planning conversation, and Vercel keeps the sandbox's saved filesystem while
+the conversation stands; deleting the plan does not yet delete the copy.
+
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
 written summary of his own when it grows long — and it is kept where his
@@ -207,6 +227,19 @@ reads any of them. Asking Luke to forget removes the line you name from his
 `USER.md` on our service; a thing he never wrote down he says so about rather
 than claiming it erased. Forgetting does not delete the conversation itself;
 Clear is still the separate action above.
+
+**How the plan is written during a planning call.** While you talk a plan
+through with Luke on a planning call, a notetaker on our service writes the
+plan document; Luke's own judgment no longer does. Once you have been quiet
+for about a second, it makes one call to OpenAI (`gpt-5.6-luna`) on our key,
+carrying the plan as it is saved, both sides of what was said since its last
+note with a few lines before them, and the words of Luke's own replies, and
+saves the fields that call answers into that one plan. It runs only during a
+planning call you started and only for that call's plan, each run counts
+against the same daily allowance as Luke's turns, and a run the allowance
+refuses, or that fails, writes nothing. Nothing it reads or answers is kept
+beyond the saved plan, said aloud, or shown anywhere but the plan itself, and
+OpenAI keeps the request and its reply under its own retention policy.
 
 **Seeing what he saved.** The Mac app's Settings has a Memory page that reads
 the notebook back to you: `MEMORY.md`, `USER.md`, and the newest of the dated
@@ -550,7 +583,8 @@ Send.
   calls' billing prefix instead of paying for it again. It identifies nothing
   — no session id or title can be read out of a hash — and our service passes
   it upstream and keeps it no longer than the request. The same allowance
-  meters a request to count a call's tokens or to fold Luke's working memory.
+  meters a request to count a call's tokens or to fold Luke's working memory,
+  and each note the planning notetaker writes.
   A
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no
@@ -607,6 +641,9 @@ Send.
   the SDK does not capture native crashes there.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
+- GitHub and Vercel, for a planning call's copy of your repository: GitHub
+  serves the fetch under your GitHub connection, and Vercel Sandbox holds the
+  copy, as described under "How the planning model reads your repository".
 
 We do not sell your information or use it for advertising. If you connect
 nothing, Luke sends nothing to any provider.

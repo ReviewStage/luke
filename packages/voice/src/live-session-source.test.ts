@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import {
   HOSTED_API_ERROR,
+  type PlanActivityFrame,
+  type PlanDraftFrame,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
@@ -16,7 +18,7 @@ import {
   PROACTIVE_SPEECH_KIND,
 } from "@sidecar/live";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, Logger, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
@@ -119,6 +121,25 @@ it.live(
       assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
       assert.deepEqual(report.quota, QUOTA);
     }),
+);
+
+it.live("a planning call's create frame names its plan and seeds nothing of the desk", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame())]);
+    const source = hosted(script, { voice: LIVE_VOICE.MARIN });
+    const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [], planId });
+
+    assert.equal(opened?.sessionId, SESSION_ID);
+    assert.deepEqual(JSON.parse(script.sockets[0]?.sent[0] ?? ""), {
+      type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+      sdp: SDP_OFFER,
+      voice: LIVE_VOICE.MARIN,
+      input: [],
+      planId,
+    });
+  }),
 );
 
 it.live(
@@ -699,6 +720,86 @@ it.live(
     }),
 );
 
+it.live(
+  "a plan's draft from the service's notetaker is taken off the socket for its listener and never reaches the sideband",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened?.onPlanDraft);
+      const drafts: PlanDraftFrame[] = [];
+      opened.onPlanDraft((draft) => drafts.push(draft));
+      const reading = yield* readSideband(yield* opened.attach());
+      const [first] = script.sockets;
+      assert.ok(first);
+      const draft: PlanDraftFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        planId: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
+        document: { body: "# Teammate invitations\n", assumptions: [] },
+      };
+      first.receive(draft);
+      first.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "e1",
+        session: { id: SESSION_ID },
+      });
+      yield* settled(
+        () => drafts.length === 1 && reading.events.length === 1,
+        "the draft and the session's event to land",
+      );
+      assert.deepEqual(drafts, [draft]);
+      assert.deepEqual(
+        reading.events.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED],
+      );
+    }),
+);
+
+it.live(
+  "the service's word of what a planning call's parts are doing is taken off the socket for its listener and never reaches the sideband",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened?.onPlanActivity);
+      const told: PlanActivityFrame[] = [];
+      opened.onPlanActivity((activity) => told.push(activity));
+      const reading = yield* readSideband(yield* opened.attach());
+      const [first] = script.sockets;
+      assert.ok(first);
+      const planId = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
+      const busy: PlanActivityFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
+        planId,
+        planner: { action: "ls src" },
+        notes: true,
+      };
+      const idle: PlanActivityFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
+        planId,
+        notes: false,
+      };
+      first.receive(busy);
+      first.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "e1",
+        session: { id: SESSION_ID },
+      });
+      first.receive(idle);
+      yield* settled(
+        () => told.length === 2 && reading.events.length === 1,
+        "both activity frames and the session's event to land",
+      );
+      assert.deepEqual(told, [busy, idle]);
+      assert.deepEqual(
+        reading.events.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED],
+      );
+    }),
+);
+
 it.live("re-attaching tries as many times as it has delays and then reports the loss", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
@@ -777,6 +878,128 @@ it.effect("closing while a reattach wait stands interrupts it, opening no furthe
     yield* pause;
     assert.equal(script.sockets.length, 2);
   }),
+);
+
+it.effect("the hosted connection is pinged every thirty seconds, the first one interval in", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame())]);
+    const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+    assert.ok(opened);
+    const [socket] = script.sockets;
+    assert.ok(socket);
+
+    yield* TestClock.adjust("29 seconds");
+    assert.equal(socket.pings, 0);
+    yield* TestClock.adjust("1 second");
+    yield* settled(() => socket.pings >= 1, "the first ping");
+    assert.equal(socket.pings, 1);
+    yield* TestClock.adjust("30 seconds");
+    yield* settled(() => socket.pings >= 2, "the second ping");
+    assert.equal(socket.pings, 2);
+  }),
+);
+
+it.effect("closing the session's scope ends the pings", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame())]);
+    const socket = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+        assert.ok(opened);
+        const [first] = script.sockets;
+        assert.ok(first);
+        yield* TestClock.adjust("30 seconds");
+        yield* settled(() => first.pings >= 1, "the ping while the scope stands");
+        return first;
+      }),
+    );
+
+    yield* TestClock.adjust("5 minutes");
+    assert.equal(socket.pings, 1);
+  }),
+);
+
+it.effect(
+  "no ping is sent during a re-attach gap, and the pings after it reach the fresh connection",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([
+        answering(createdFrame()),
+        closingOnSend(1011),
+        answering(attachedFrame()),
+      ]);
+      const source = reattaching(script, { reattachDelaysMs: [0, 45_000] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      yield* readSideband(yield* opened.attach());
+
+      // The first try fails at once, so the gap stands across the ping due at thirty seconds.
+      script.sockets[0]?.closeFromServer({ code: 1006 });
+      yield* openedSockets(script, 2);
+      yield* TestClock.adjust("45 seconds");
+      yield* openedSockets(script, 3);
+      const fresh = script.sockets[2];
+      assert.ok(fresh);
+      yield* settled(() => fresh.received.length >= 1, "the attach answer on the fresh connection");
+      yield* TestClock.adjust("14 seconds");
+      assert.deepEqual(
+        script.sockets.map((socket) => socket.pings),
+        [0, 0, 0],
+      );
+
+      yield* TestClock.adjust("1 second");
+      yield* settled(() => fresh.pings >= 1, "the ping on the fresh connection");
+      assert.deepEqual(
+        script.sockets.map((socket) => socket.pings),
+        [0, 0, 1],
+      );
+    }),
+);
+
+/** Every line logged while `body` ran, read off a logger standing in for the host's reporter. */
+function loggedLines<A>(
+  body: (lines: readonly string[]) => Effect.Effect<A, never, Scope.Scope>,
+): Effect.Effect<A, never, Scope.Scope> {
+  const lines: string[] = [];
+  return Effect.provide(
+    body(lines),
+    Logger.layer([
+      Logger.make((options) => {
+        lines.push(String(options.message));
+      }),
+    ]),
+  );
+}
+
+it.effect(
+  "each connection's end is logged with its close, how long it stood, and whether a re-attach follows",
+  () =>
+    loggedLines((lines) =>
+      Effect.gen(function* () {
+        const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+        const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+        assert.ok(opened);
+        const read = yield* readSideband(yield* opened.attach());
+
+        yield* TestClock.adjust("12 seconds");
+        script.sockets[0]?.closeFromServer({ code: 1006, reason: "function recycled" });
+        yield* openedSockets(script, 2);
+        const fresh = script.sockets[1];
+        assert.ok(fresh);
+        yield* settled(() => fresh.received.length >= 1, "the attach answer");
+        yield* TestClock.adjust("5 seconds");
+        fresh.closeFromServer({ code: 1000 });
+        yield* closesReported(read.closes);
+
+        assert.deepEqual(
+          lines.filter((line) => line.startsWith("voice socket closed:")),
+          [
+            "voice socket closed: code=1006 reason=function recycled age=12s next=reattach",
+            "voice socket closed: code=1000 reason=none age=5s next=end",
+          ],
+        );
+      }),
+    ),
 );
 
 it.live("a service that refuses the attachment ends the tries at once", () =>

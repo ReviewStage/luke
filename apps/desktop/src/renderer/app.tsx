@@ -10,6 +10,7 @@ import {
   CREDENTIAL_SOURCE,
 } from "@sidecar/credentials/vocabulary";
 import { FEEDBACK_KIND } from "@sidecar/feedback";
+import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
@@ -25,6 +26,7 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { DisplayDiagnostic } from "#shared/messages/session";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
@@ -48,7 +50,9 @@ import {
   PANEL_PRESENTATION,
   type PanelPresentation,
 } from "./panel-state";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { PANEL_TAB, type PanelTab, type ShownPanelTab } from "./panel-tabs";
+import { planningCallHoldsPanel } from "./planning/planning-model";
+import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import { focusSearchField } from "./session-search";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
@@ -150,8 +154,14 @@ export function App(): React.JSX.Element {
   const conductorKeyOnboardingOwed = state?.onboarding.conductorKeyOwed === true;
   const outputAudio = state?.audio.outputAudio;
   const display = state?.window.display;
-  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
+  // Held as any tab the body can draw, so the hidden tabs' branches below
+  // still read as they will once the tabs return; only `changeTab` writes it,
+  // and that takes a shown tab alone, so a hidden one is never the value.
+  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+  // Whether the Plans tab is on its new-plan form; an open plan is the host's
+  // and outlasts the tab, but a half-filled form is this panel's alone.
+  const [plansComposing, setPlansComposing] = useState(false);
   const { conversationPage, transcriptOpen, changeConversationPage, openTranscript } =
     useConversationPage(tell);
   /** The thread's reader reaching the top of what this Mac holds: one page of older turns, asked of the host. */
@@ -211,7 +221,6 @@ export function App(): React.JSX.Element {
       cancelHover();
       void changeMode(false);
     },
-    showSessionsTab: () => changeTab(PANEL_TAB.SESSIONS),
   });
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
@@ -249,10 +258,12 @@ export function App(): React.JSX.Element {
    * that has to stay stable.
    */
   const standDownPage = useRef<SettingsView>(SETTINGS_VIEW.ROOT);
-  const standDownTab = useRef<PanelTab>(PANEL_TAB.SETTINGS);
+  const standDownTab = useRef<ShownPanelTab>(PANEL_TAB.SETTINGS);
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
+  /** Whether a planning call is in progress, mirrored from the voice view below. */
+  const planningHeld = useRef(false);
 
   /**
    * Recording follows the account: a sign-out ends it rather than leaving it
@@ -268,7 +279,7 @@ export function App(): React.JSX.Element {
     applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
   const changeTab = useCallback(
-    (next: PanelTab) => {
+    (next: ShownPanelTab) => {
       setTab(next);
       // The sheet belongs to the session list, and it is drawn over the list it
       // belongs to, so leaving for Settings has to take it along.
@@ -280,8 +291,9 @@ export function App(): React.JSX.Element {
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
       changeConversationPage(CONVERSATION_PAGE.THREAD);
-      // `PanelTab` and the counted tab are the same union: the vocabulary
-      // derives its set from the guide's, which is what `PANEL_TAB` aliases.
+      setPlansComposing(false);
+      // `ShownPanelTab` and the counted tab are the same union: both are the
+      // guide's own set, which `ShownPanelTab` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
         panel_tab: next,
       });
@@ -329,6 +341,7 @@ export function App(): React.JSX.Element {
     // panel open for one that is not drawn would leave the pointer unable to
     // close a panel showing nothing but sessions.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
+    planningHeld: () => planningHeld.current,
     composerHeld: () =>
       credentialHeld.current || feedbackHeld.current || consentConnectHeld.current,
     onNotPanel: () => {
@@ -350,7 +363,7 @@ export function App(): React.JSX.Element {
       // while Settings shows.
       sessions.resetSort();
     },
-    onCapsuleTab: () => changeTab(PANEL_TAB.SESSIONS),
+    onCapsuleTab: () => changeTab(PANEL_TAB.PLANS),
   });
 
   const leavingPanel = useLeavingPanel(presentation);
@@ -425,16 +438,16 @@ export function App(): React.JSX.Element {
   });
 
   /**
-   * The composer a thumbs down offers, opened only at the offer's own press:
-   * the panel asking from the Conversation tab, so leaving — Cancel, Escape,
-   * or the thank-you a send lands in — returns to the Conversation rather
-   * than to the Settings page the section's own buttons stand on, on a draft
-   * of words the thread already drew, which lands only in a note with nothing
-   * written yet.
+   * The composer a thumbs down offers, opened only at the offer's own press,
+   * on a draft of words the thread already drew, which lands only in a note
+   * with nothing written yet. The thread's Conversation tab is hidden for
+   * now, so leaving — Cancel, Escape, or the thank-you a send lands in —
+   * returns to the Settings page the section's own buttons stand on rather
+   * than to a tab nothing may bring forward.
    */
   const offerRatingFeedback = useCallback(
     (draft: string) => {
-      feedback.begin(FEEDBACK_KIND.FEEDBACK, true, draft, PANEL_TAB.CONVERSATION);
+      feedback.begin(FEEDBACK_KIND.FEEDBACK, true, draft);
     },
     [feedback.begin],
   );
@@ -531,6 +544,16 @@ export function App(): React.JSX.Element {
     liveConversationEntries,
   } = useVoiceView();
   const { voiceError, voiceNotice, talkOpening, spokenAskPending } = voiceView;
+  const planningCallHeld = planningCallHoldsPanel(voiceView);
+  planningHeld.current = planningCallHeld;
+  // A call ending while the pointer is already away releases its hold the
+  // way letting go of the ask field does: the pointer cannot leave twice.
+  const wasPlanningCallHeld = useRef(false);
+  useEffect(() => {
+    const released = wasPlanningCallHeld.current && !planningCallHeld;
+    wasPlanningCallHeld.current = planningCallHeld;
+    if (released && !pointerIsInside()) onHitRegionLeave();
+  }, [planningCallHeld, pointerIsInside, onHitRegionLeave]);
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
@@ -547,6 +570,21 @@ export function App(): React.JSX.Element {
     (outputSilent(outputAudio) &&
       lukeCaptions !== undefined &&
       !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+  // The Plans tab, drawn from the same voice report the strip reads, so a
+  // planning call's words and levels are the shape's as any call's are.
+  const plans = usePlansTab({
+    acts: { act, tell },
+    planning: state?.planning ?? IDLE_PLANNING_VIEW,
+    run: state?.run ?? { fixtureMode: false, profile: RUN_PROFILE.IDLE },
+    signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
+    voiceAvailable: state?.settings?.status.voiceAvailable === true,
+    microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
+    shown: presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS,
+    composing: plansComposing,
+    onComposingChange: setPlansComposing,
+    voice: { view: voiceView, listening, requestMicrophoneAccess },
+  });
+
   const caption = useCaptionPresentation({
     lukeCaptions,
     developerCaptions,
@@ -750,7 +788,8 @@ export function App(): React.JSX.Element {
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: the options sheet, then the search field, then a settings page
-      // back to the front page, then the settings tab, then the panel itself.
+      // back to the front page, then the settings tab back to Plans, then an
+      // open plan back to the list, then the panel itself.
       // The search field answers its own Escapes while the caret is in it —
       // clearing before closing — so the press that lands here is one made
       // from elsewhere in the panel, and it closes the field outright.
@@ -761,7 +800,7 @@ export function App(): React.JSX.Element {
       else if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
-      } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
+      } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.PLANS);
       // The page's search field is the nearer layer than the page itself, on the thread and on a transcript alike.
       else if (tab === PANEL_TAB.CONVERSATION && conversationSearchOpen) closeConversationSearch();
       // A transcript unwinds to the list it was opened from, and the list to the thread.
@@ -772,8 +811,11 @@ export function App(): React.JSX.Element {
         changeConversationPage(CONVERSATION_PAGE.AGENTS);
       } else if (tab === PANEL_TAB.CONVERSATION && conversationPage !== CONVERSATION_PAGE.THREAD) {
         changeConversationPage(CONVERSATION_PAGE.THREAD);
-      } else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.SESSIONS);
-      else void changeMode(false);
+      } else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.PLANS);
+      // An open plan unwinds to the list, which leaves it and ends its call,
+      // and the form to the list too. The list is the home tab while Sessions
+      // is hidden, so the press past it closes the panel.
+      else if (tab !== PANEL_TAB.PLANS || !plans.back()) void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -804,6 +846,7 @@ export function App(): React.JSX.Element {
     connections.consentWaiting,
     connections.signInWaitNow,
     listening,
+    plans.back,
     speaking,
     stopSpeaking,
     tab,
@@ -894,7 +937,7 @@ export function App(): React.JSX.Element {
         connecting: connections.credentialEntry !== undefined,
         onConnect: providerConnect.onConnect,
         onSkip: () => {
-          changeTab(PANEL_TAB.SESSIONS);
+          changeTab(PANEL_TAB.PLANS);
           tell(ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY);
         },
       }
@@ -923,13 +966,13 @@ export function App(): React.JSX.Element {
           // Connections page for its slot to come back to, and the gate masks
           // that while it stands — so answering the step also brings the tab
           // home, or onboarding would end on Integrations instead of the
-          // roster the arrival beat is about to call all set.
+          // Plans tab the arrival beat is about to call all set.
           onSkip: () => {
-            changeTab(PANEL_TAB.SESSIONS);
+            changeTab(PANEL_TAB.PLANS);
             tell(ACT_KIND.ONBOARDING_SKIP_CALENDAR);
           },
           onDone: () => {
-            changeTab(PANEL_TAB.SESSIONS);
+            changeTab(PANEL_TAB.PLANS);
             tell(ACT_KIND.ONBOARDING_COMPLETE_CALENDAR);
           },
         }
@@ -1039,6 +1082,7 @@ export function App(): React.JSX.Element {
             onConversationSearchClose={closeConversationSearch}
             tab={tab}
             onTabChange={changeTab}
+            plans={plans}
             settings={{
               account: state.account,
               onSignOut: async () => {

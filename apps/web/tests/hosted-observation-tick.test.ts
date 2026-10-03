@@ -18,6 +18,7 @@ import {
 } from "../server/hosted/observation-tick";
 import { SPEECH_PUSH, type SpeechPushOutcome } from "../server/hosted/speech-push";
 import type { SpeechSweepOutcome } from "../server/hosted/store";
+import type { VoiceOrphanSweepOutcome } from "../server/voice/orphan-sweep";
 import { noDatabase, runWithoutDatabase } from "./support/no-database";
 
 const CRON_SECRET = Redacted.make("cron-secret-1");
@@ -31,6 +32,8 @@ const PUSHED: SpeechPushOutcome = {
   unreadable: 0,
   waiting: 1,
 };
+/** What the sweep over the detached voice sessions answers unless a test says otherwise. */
+const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, failed: 0 };
 /** What one account's completion sweep answers unless a test says otherwise; the tick sums one per account reached. */
 const COMPLETED: ChildCompletionSweepOutcome = { delivered: 1, undelivered: 0, withheld: 2 };
 const completedFor = (accounts: number): ChildCompletionSweepOutcome => ({
@@ -71,6 +74,7 @@ interface Recorded {
   abandoned: number[];
   swept: number[];
   pushed: number[];
+  voiced: number[];
   listed: Array<{ limit: number; seenAfter: number }>;
   observed: string[];
   /** Each account's pass and opening in the order the tick ran them, as one list, so the order between them is what a test reads. */
@@ -90,6 +94,7 @@ function tickOptions(
     abandoned: [],
     swept: [],
     pushed: [],
+    voiced: [],
     listed: [],
     observed: [],
     ran: [],
@@ -126,6 +131,11 @@ function tickOptions(
       Effect.sync(() => {
         recorded.pushed.push(now);
         return PUSHED;
+      }),
+    sweepVoice: (now) =>
+      Effect.sync(() => {
+        recorded.voiced.push(now);
+        return VOICED;
       }),
     observe: (userId) =>
       Effect.gen(function* () {
@@ -207,6 +217,7 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     abandoned: 1,
     speech: SWEPT,
     push: PUSHED,
+    voice: VOICED,
     children: completedFor(3),
     turns: NOTHING_OPENED,
   });
@@ -216,6 +227,7 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
   assert.deepEqual(recorded.abandoned, [TICK_TIME]);
   assert.deepEqual(recorded.swept, [TICK_TIME]);
   assert.deepEqual(recorded.pushed, [TICK_TIME]);
+  assert.deepEqual(recorded.voiced, [TICK_TIME]);
   assert.deepEqual(recorded.listed, [{ limit: OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter }]);
   assert.deepEqual(recorded.observed, ["user-a", "user-b", "user-c"]);
 });
@@ -239,6 +251,7 @@ test("a pass that throws is counted as failed and does not end the tick", async 
     abandoned: 1,
     speech: SWEPT,
     push: PUSHED,
+    voice: VOICED,
     children: completedFor(2),
     turns: NOTHING_OPENED,
   });
@@ -354,6 +367,7 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
       abandoned: 1,
       speech: SWEPT,
       push: PUSHED,
+      voice: VOICED,
       children: completedFor(1),
       turns: { observation: 0, failed: 1 },
     });
@@ -392,6 +406,7 @@ test("each account's opening runs after its own pass, inside the same share of t
     abandoned: 1,
     speech: SWEPT,
     push: PUSHED,
+    voice: VOICED,
     children: completedFor(2),
     turns: { observation: 2, failed: 1 },
   });
@@ -428,6 +443,7 @@ test("an opening that throws is one failed opening and nothing else of the tick 
     abandoned: 1,
     speech: SWEPT,
     push: PUSHED,
+    voice: VOICED,
     children: completedFor(2),
     turns: { observation: 1, failed: 1 },
   });

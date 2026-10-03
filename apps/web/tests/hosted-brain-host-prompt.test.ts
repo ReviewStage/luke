@@ -23,6 +23,7 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, promptHashOf, storeWriter } from "../server/hosted/store";
 import { toolSetHashOf } from "../server/hosted/store/content-addressed";
 import { stampedEveEvent } from "./support/eve-events";
+import { noGitHubConnections } from "./support/github-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { noNetwork } from "./support/no-network";
 import { insertConversation, readTurnById, readTurnsByConversation } from "./support/store-rows";
@@ -76,6 +77,8 @@ const seams: BrainHostSeams = {
   vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
   providerKey: unreached("providerKey"),
   executeAction: unreached("executeAction"),
+  githubAccess: noGitHubConnections,
+  bash: unreached("bash"),
   now: () => NOW,
 };
 
@@ -306,11 +309,14 @@ test("two turns of one session record the session's prompt hash and one tool set
     [prompt.hash, prompt.hash],
   );
   const offered = await database.run(
-    host.toolDeclarations(target, {
-      kind: BRAIN_HOST_TURN.TYPED,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
-      turnId: firstTurn,
-    }),
+    host.toolDeclarations(
+      { target, kind: CONVERSATION_KIND.MAIN },
+      {
+        kind: BRAIN_HOST_TURN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        turnId: firstTurn,
+      },
+    ),
   );
   const expected = toolSetHashOf(offered);
   assert.deepEqual(
@@ -338,11 +344,14 @@ test("an observation turn is offered another tool set and records another hash, 
     observationRow.toolSetHash,
     toolSetHashOf(
       await database.run(
-        host.toolDeclarations(observedTarget, {
-          kind: BRAIN_HOST_TURN.OBSERVATION,
-          trigger: BRAIN_TURN_TRIGGER.ROSTER,
-          turnId: observationTurn,
-        }),
+        host.toolDeclarations(
+          { target: observedTarget, kind: CONVERSATION_KIND.OBSERVED },
+          {
+            kind: BRAIN_HOST_TURN.OBSERVATION,
+            trigger: BRAIN_TURN_TRIGGER.ROSTER,
+            turnId: observationTurn,
+          },
+        ),
       ),
     ),
   );
@@ -359,7 +368,10 @@ test("while a device of the account reports quiet ahead, an observation turn is 
   await reportQuiet(target.userId, NOW + 30 * 60_000);
   const quietTurn = await relayTurn(host, session, "turn_0", 0, {});
   const quietOffered = await database.run(
-    host.toolDeclarations(target, { ...turn, turnId: quietTurn }),
+    host.toolDeclarations(
+      { target, kind: CONVERSATION_KIND.OBSERVED },
+      { ...turn, turnId: quietTurn },
+    ),
   );
   assert.equal(
     quietOffered.some((declared) => declared.name === BRAIN_TOOL.ANNOUNCE),
@@ -373,7 +385,10 @@ test("while a device of the account reports quiet ahead, an observation turn is 
   await reportQuiet(target.userId, null);
   const loudTurn = await relayTurn(host, session, "turn_1", 1, {});
   const loudOffered = await database.run(
-    host.toolDeclarations(target, { ...turn, turnId: loudTurn }),
+    host.toolDeclarations(
+      { target, kind: CONVERSATION_KIND.OBSERVED },
+      { ...turn, turnId: loudTurn },
+    ),
   );
   assert.equal(
     loudOffered.some((declared) => declared.name === BRAIN_TOOL.ANNOUNCE),

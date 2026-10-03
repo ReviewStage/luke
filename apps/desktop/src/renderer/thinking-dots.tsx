@@ -1,9 +1,8 @@
 /**
- * The three dots that rise beside Luke's face while a run of his is still
- * going: one drawing of the wait, shared by the
- * Conversation bubble and the notch strip so the two cannot grow separate
- * visual languages. Decorative on every surface — the bubble carries the
- * reader's status line beside it, and the strip is already aria-hidden.
+ * The three dots that rise while a run of Luke's is still going: one drawing
+ * of the wait, shared by the Conversation bubble and the Plans tab's status
+ * row so the two cannot grow separate visual languages. Decorative on every
+ * surface: each carries the reader's status line beside it.
  */
 export function ThinkingDots(): React.JSX.Element {
   return (

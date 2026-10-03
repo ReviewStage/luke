@@ -424,7 +424,7 @@ function IntroductionFlight({
       acts: {
         createSession: (sdp) => act(ACT_KIND.INTRODUCTION_CREATE_SESSION, { sdp, titles: [] }),
         endSession: () => tell(ACT_KIND.INTRODUCTION_END_SESSION),
-        reportTransport: (transport) => {
+        reportTransport: ({ state: transport }) => {
           if (
             transport === LIVE_TRANSPORT_STATE.CLOSED ||
             transport === LIVE_TRANSPORT_STATE.FAILED

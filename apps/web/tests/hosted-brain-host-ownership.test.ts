@@ -28,6 +28,7 @@ import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
+import { noGitHubConnections } from "./support/github-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { noNetwork } from "./support/no-network";
 import {
@@ -111,6 +112,8 @@ function hostOverTestDatabase(): TestHost {
     vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
     providerKey: unreached("providerKey"),
     executeAction: unreached("executeAction"),
+    githubAccess: noGitHubConnections,
+    bash: unreached("bash"),
     now: () => NOW,
   };
   return { host: Effect.runSync(brainHost(seams)), storeReads: () => storeReads };

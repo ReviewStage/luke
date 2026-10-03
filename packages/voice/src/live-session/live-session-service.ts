@@ -1,4 +1,5 @@
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
+import { VOICE_PHASE, type VoicePhase } from "@sidecar/hosted/planning-view";
 import {
   chunkForAppend,
   commentaryAppend,
@@ -101,8 +102,19 @@ export const RUN_END_NOTE = {
 const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
   ["transcript_read", "Luke is reading a session's transcript; this takes a moment."],
   ["provider_write", "Luke is carrying out the action; this takes a moment."],
+  ["repository_read", "Luke is reading the repository; this takes a moment."],
 ]);
 const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
+
+/**
+ * A question the planning model queued, as the voice is handed it: spoken
+ * commentary, as the delegation guide has a result the voice should say,
+ * framed so the voice puts one question at a time and holds the rest until
+ * the developer has answered what it already asked.
+ */
+function queuedQuestionNote(question: string, recommendation: string): string {
+  return `Ask the developer this next, one question at a time, once they have answered anything you have already asked: ${question} Recommended answer: ${recommendation}`;
+}
 
 /**
  * How long after a fragment lands its row's write is put off, so a burst of
@@ -156,6 +168,21 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
    * settles it.
    */
   onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
+  /** What the standing session's voice and brain are doing, told whole on a change alone. */
+  onStatus?: (status: LiveSessionStatus) => void;
+}
+
+/**
+ * What the standing session is doing beside its live status. The voice is in
+ * one of its two waits: handing off from the delegation until the brain takes
+ * the ask or refuses it, and about to answer from words queued for Luke until
+ * his next spoken fragment. The planner stands while an exchange of the
+ * session is open, with the command or tool of the call it has pending. Both
+ * are absent once the session ends.
+ */
+export interface LiveSessionStatus {
+  readonly voice: VoicePhase | undefined;
+  readonly planner: { readonly action: string | undefined } | undefined;
 }
 
 /**
@@ -211,6 +238,8 @@ interface StandingSession {
    * by its own attach, whichever comes first, and never by the next delegation.
    */
   readonly openAsks: Map<string, OpenAsk>;
+  /** The voice's wait, where it is in one; see `LiveSessionStatus`. */
+  voicePhase: VoicePhase | undefined;
   /**
    * The session's last word, settled by its own reader: the `session.closed`
    * it read, or the close that ended the arrivals before one came. The
@@ -254,6 +283,8 @@ interface Exchange {
   buffered: string[];
   spokenChunks: number;
   slowStepTold: boolean;
+  /** What the brain last said its run is doing, cleared when a run ends. */
+  action: string | undefined;
   finalize: SessionDelay | undefined;
   end: LiveBrainRunEnd | undefined;
 }
@@ -269,6 +300,7 @@ function newExchange(runId: string, delegationIds: string[], sessionId: string):
     buffered: [],
     spokenChunks: 0,
     slowStepTold: false,
+    action: undefined,
     finalize: undefined,
     end: undefined,
   };
@@ -338,6 +370,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /** The door a synchronous edge starts a task through: the queue forks it into the set. */
   readonly #tasks: SerialQueue;
   #stopped = false;
+  /** What `onStatus` was last told, so it hears a change and never a repeat. */
+  #status: LiveSessionStatus = { voice: undefined, planner: undefined };
   /**
    * The release still running for the session last declared over. A
    * tear-down clears `#standing` where it is decided and releases a turn
@@ -638,6 +672,27 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     });
   }
 
+  /**
+   * The detach: `stop`'s bookkeeping with nothing said to the session. The
+   * run events and the queue are given up and the standing session is torn
+   * down here, its rows written and its transport released, but no
+   * `session.close` goes up, because the session is not this service's to
+   * end: its peer still holds it and will attach to it again elsewhere. Run
+   * once, and a `stop` after it closes nothing either.
+   */
+  release(): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#stopped) return;
+      this.#stopped = true;
+      this.#stopRunEvents();
+      this.#queue.clear();
+      const session = this.#standing;
+      const releasing = this.#releasing;
+      if (session !== undefined) yield* this.#over(session);
+      else if (releasing !== undefined) yield* Deferred.await(releasing);
+    });
+  }
+
   /** The standing session, once started and not yet ended: the only one an append can reach. */
   #speakable(): StandingSession | undefined {
     const session = this.#standing;
@@ -714,6 +769,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
         openAsks: new Map(),
+        voicePhase: undefined,
         retained: [],
         pendingRows: new Map(),
         idleReported: false,
@@ -819,6 +875,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           event.end_ms,
         );
         session.channel.outputReached(event.end_ms);
+        if (session.voicePhase === VOICE_PHASE.ABOUT_TO_ANSWER) this.#voiceIn(session, undefined);
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
         if (isClientDelegation(event))
@@ -955,6 +1012,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #delegation(session: StandingSession, id: string, offsetMs: number): void {
     if (session.claimedDelegations.has(id)) return;
     session.claimedDelegations.add(id);
+    this.#voiceIn(session, VOICE_PHASE.HANDING_OFF);
     // The words said so far are on record before the ask is composed on them.
     this.#flushRows(session);
     if (!session.ledger.askContext(session.lastDelegationOffsetMs).ask) {
@@ -1068,6 +1126,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */
   #registerExchange(session: StandingSession, runId: string, delegationId: string): Exchange {
+    // The brain has the ask, so the hand-off is over; words already queued for Luke are still owed.
+    if (session.voicePhase === VOICE_PHASE.HANDING_OFF) session.voicePhase = undefined;
     const open = [...this.#exchanges.values()].find(
       (exchange) => exchange.sessionId === session.sessionId && exchange.end === undefined,
     );
@@ -1075,11 +1135,44 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       open.delegationIds.push(delegationId);
       open.runIds.add(runId);
       this.#exchanges.set(runId, open);
+      this.#reportStatus();
       return open;
     }
     const exchange = newExchange(runId, [delegationId], session.sessionId);
     this.#exchanges.set(runId, exchange);
+    this.#reportStatus();
     return exchange;
+  }
+
+  #voiceIn(session: StandingSession, phase: VoicePhase | undefined): void {
+    session.voicePhase = phase;
+    this.#reportStatus();
+  }
+
+  /**
+   * Tells `onStatus` what the standing session is doing. Note that we derive
+   * the planner from `#exchanges` rather than counting opens and closes,
+   * because an exchange of a session already over is still held until its
+   * runs end, and it must not stand as the next session's planner.
+   */
+  #reportStatus(): void {
+    const session = this.#standing?.ended === false ? this.#standing : undefined;
+    const exchange =
+      session && [...this.#exchanges.values()].find((held) => held.sessionId === session.sessionId);
+    const status: LiveSessionStatus = {
+      voice: session?.voicePhase,
+      planner: exchange === undefined ? undefined : { action: exchange.action },
+    };
+    const last = this.#status;
+    if (
+      status.voice === last.voice &&
+      (status.planner === undefined) === (last.planner === undefined) &&
+      status.planner?.action === last.planner?.action
+    ) {
+      return;
+    }
+    this.#status = status;
+    this.#options.onStatus?.(status);
   }
 
   #onRunEvent(event: LiveBrainRunEvent): void {
@@ -1105,6 +1198,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         );
         return;
       }
+      // A queued question is no action's result, so it is spoken without waiting on the settle.
+      case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED:
+        this.#speakSentence(exchange, queuedQuestionNote(event.question, event.recommendation));
+        return;
       // The brain tells the settle as soon as no write of the run is still
       // out, which for a read-only run is at its first words, so the gate
       // below releases the reply earlier without meaning anything weaker.
@@ -1116,7 +1213,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         if (exchange.settled) this.#speakSentence(exchange, event.sentence);
         else exchange.buffered.push(event.sentence);
         return;
+      case LIVE_BRAIN_RUN_EVENT.ACTIVITY:
+        exchange.action = event.action;
+        this.#reportStatus();
+        return;
       case LIVE_BRAIN_RUN_EVENT.ENDED:
+        exchange.action = undefined;
+        this.#reportStatus();
         exchange.runIds.delete(event.runId);
         // A stopped or failed rider marks the exchange; a completed one only fills an empty mark.
         if (exchange.end === undefined || event.end !== LIVE_BRAIN_RUN_END.COMPLETED) {
@@ -1143,10 +1246,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (held === exchange) this.#exchanges.delete(runId);
     }
     const unspoken = exchange.spokenChunks === 0 && exchange.buffered.length === 0;
-    if (!unspoken || exchange.end === undefined || exchange.end === LIVE_BRAIN_RUN_END.COMPLETED) {
-      return;
+    if (unspoken && exchange.end !== undefined && exchange.end !== LIVE_BRAIN_RUN_END.COMPLETED) {
+      this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
     }
-    this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
+    // Told after the note is queued, so the planner gives way to Luke about to say it in one change.
+    this.#reportStatus();
   }
 
   /** One sentence of an exchange's reply, into its session under its delegation; a session since closed hears nothing of it. */
@@ -1162,6 +1266,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     delegationId: LiveDelegationId,
     sentence: string,
   ): void {
+    this.#voiceIn(session, VOICE_PHASE.ABOUT_TO_ANSWER);
     for (const chunk of chunkForAppend(sentence)) {
       session.channel.enqueue(
         Effect.gen({ self: this }, function* () {
@@ -1175,6 +1280,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   #speakInto(session: StandingSession, delegationId: LiveDelegationId, text: string): void {
+    this.#voiceIn(session, VOICE_PHASE.ABOUT_TO_ANSWER);
     for (const chunk of chunkForAppend(text)) {
       session.channel.enqueue(
         Effect.suspend(() =>
@@ -1318,6 +1424,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.channel.close();
     session.retained = [];
     if (this.#standing === session) this.#standing = undefined;
+    this.#reportStatus();
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);
     return Deferred.await(session.released);

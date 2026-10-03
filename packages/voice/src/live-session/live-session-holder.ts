@@ -1,10 +1,17 @@
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
+  type LivePeerEndReason,
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
-import type { LiveSessionCreated, SessionBeatFrame } from "@sidecar/hosted";
+import {
+  type LiveSessionCreated,
+  type PlanActivityFrame,
+  type PlanDraftFrame,
+  type SessionBeatFrame,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/hosted";
 import {
   conversationSeedItems,
   type InitialItem,
@@ -87,10 +94,66 @@ export interface LiveSessionHolderOptions {
    * record of what was spoken and the counts that follow it are the caller's.
    */
   onSpoken?: (kind: ProactiveSpeechKind) => void;
+  /**
+   * The service's notetaker sent a draft of the plan the standing planning
+   * call is about: a draft for any other plan, or from a session already
+   * ended, never reaches it. What the draft is shown as is the caller's.
+   */
+  onPlanDraft?: (draft: PlanDraftFrame) => void;
+  /**
+   * The service said what each part of Luke is doing on the standing
+   * planning call, on the same terms as `onPlanDraft`. A planning call's end
+   * is told as a snapshot with nothing doing, so none outlives the call.
+   */
+  onPlanActivity?: (activity: PlanActivityFrame) => void;
+}
+
+/**
+ * Which hand ended a held session, named in the line the holder logs when a
+ * session ends, so a call that dropped says why without anyone reading the
+ * code for every path that could have closed it.
+ */
+export const LIVE_SESSION_END_CAUSE = {
+  /** The panel opened another plan than the one the call is about. */
+  PLAN_SWITCHED: "plan_switched",
+  /** The panel left the plan, or the account signed out. */
+  PLAN_LEFT: "plan_left",
+  /** The peer asked the host to hang up. */
+  HANG_UP: "hang_up",
+  /** The stored voice changed, which a standing session cannot follow. */
+  VOICE_CHANGED: "voice_changed",
+  /** The quit's drain. */
+  DRAIN: "drain",
+  /** The peer offered a new session while one stood. */
+  REPLACED: "replaced",
+  /** The peer reported its transport closed. */
+  PEER_CLOSED: "peer_closed",
+  /** The peer reported its transport failed. */
+  PEER_FAILED: "peer_failed",
+  /** The service's `session.closed` arrived unasked. */
+  SERVICE_CLOSED: "service_closed",
+  /** The sideband socket ended unasked. */
+  SIDEBAND_LOST: "sideband_lost",
+} as const;
+
+export type LiveSessionEndCause =
+  (typeof LIVE_SESSION_END_CAUSE)[keyof typeof LIVE_SESSION_END_CAUSE];
+
+/** A creation under way: the plan it is about, and the end a switch asked for meanwhile. */
+interface Creating {
+  readonly planId: string | undefined;
+  endedBy: LiveSessionEndCause | undefined;
 }
 
 interface HeldSession {
   readonly sessionId: string;
+  /** When the session came to stand, for the seconds its end reports. */
+  readonly stoodAt: number;
+  /** The hand that first decided the end, and the peer's own reason where it reported one. */
+  endCause: LiveSessionEndCause | undefined;
+  peerReason: LivePeerEndReason | undefined;
+  /** The plan a planning call is about, which the session is bound to for its life; none for every other session. */
+  readonly planId: string | undefined;
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
   /** The scope this one session stands in, closed by the fiber that reads it once the end is decided. */
@@ -119,9 +182,36 @@ export const WANTED_WORD = {
   STANDS_MS: 30_000,
 } as const;
 
+/** What a line names of a session: its id and whether it is a planning call, never its words. */
+function sessionFields(session: HeldSession | undefined): string {
+  if (session === undefined) return "session=none";
+  return `session=${session.sessionId} planning=${session.planId !== undefined}`;
+}
+
+function transportLine(
+  state: LiveTransportState,
+  peerReason: LivePeerEndReason | undefined,
+  session: HeldSession | undefined,
+): string {
+  const reason = peerReason === undefined ? "" : ` peer_reason=${peerReason}`;
+  return `voice transport: state=${state}${reason} ${sessionFields(session)}`;
+}
+
+function endedLine(session: HeldSession, reason: string, seconds: number): string {
+  const peer = session.peerReason === undefined ? "" : ` peer_reason=${session.peerReason}`;
+  return `voice call ended: cause=${session.endCause}${peer} close_reason=${reason} ${sessionFields(session)} seconds=${seconds}`;
+}
+
 export class LiveSessionHolder {
   readonly #options: LiveSessionHolderOptions;
   #held: HeldSession | undefined;
+  /**
+   * The session being created and not yet held: the plan it is about, and
+   * whether a switch has meanwhile asked for a call about that plan to end,
+   * so the session is ended the moment it stands rather than left standing
+   * about a plan no longer on screen.
+   */
+  #creating: Creating | undefined;
   /** The release still running for the session last declared over, so an end asked for meanwhile waits for it. */
   #releasing: Deferred.Deferred<void> | undefined;
   /**
@@ -191,33 +281,77 @@ export class LiveSessionHolder {
   }
 
   /**
+   * Ends the standing session where it is a planning call about any plan but
+   * `keep`: the panel opened another plan, or left it, and only one
+   * plan is ever the spoken conversation. A desk session, and the call about
+   * `keep` itself, are left standing.
+   */
+  endPlanCall(keep: string | undefined): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const cause =
+        keep === undefined
+          ? LIVE_SESSION_END_CAUSE.PLAN_LEFT
+          : LIVE_SESSION_END_CAUSE.PLAN_SWITCHED;
+      const creating = this.#creating;
+      if (creating?.planId !== undefined && creating.planId !== keep) creating.endedBy ??= cause;
+      const session = this.#held;
+      if (session === undefined || session.planId === undefined || session.planId === keep) {
+        return Effect.void;
+      }
+      return this.#end(session, cause);
+    });
+  }
+
+  /**
    * Creates the one session for the peer's offer, seeded with the bounded
    * roster summary and the recent conversation, and attaches the sideband
    * before the answer is returned, so no transcript precedes attachment. A
+   * planning call is created about its plan and seeded with nothing of the
+   * desk: what it knows is the plan's, and the service holds that. A
    * session already standing is closed gracefully first: there is one. The
    * scope the session stands in is opened before anything is created into it
    * and closed again unless a session came to stand there.
    */
-  createSession(sdpOffer: string): Effect.Effect<LiveSessionCreated | undefined> {
+  createSession(sdpOffer: string, planId?: string): Effect.Effect<LiveSessionCreated | undefined> {
+    // The creation is named from its first step to its last, so a switch landing
+    // anywhere in it (the prior session's end, the create, the attach) is heard.
+    const creating: Creating = { planId, endedBy: undefined };
+    return Effect.ensuring(
+      Effect.suspend(() => {
+        this.#creating = creating;
+        return this.#create(sdpOffer, creating);
+      }),
+      Effect.sync(() => {
+        if (this.#creating === creating) this.#creating = undefined;
+      }),
+    );
+  }
+
+  #create(sdpOffer: string, creating: Creating): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
-      if (this.#held) yield* this.endSession();
+      if (this.#held) yield* this.endSession(LIVE_SESSION_END_CAUSE.REPLACED);
       // The peer has answered the word, with this offer; whatever comes of it, the word is spent.
       this.#wantedAt = undefined;
       const source = this.#options.source();
-      if (!source) {
+      if (!source || creating.endedBy !== undefined) {
         this.#beats.clear();
         return undefined;
       }
-      const seeded = rosterSeed(
-        this.#options.roster?.() ?? [],
-        this.#clock.currentTimeMillisUnsafe(),
-      );
       const scope = yield* Scope.fork(this.#sessions, "sequential");
-      const created = yield* Effect.onExit(this.#stand(source, sdpOffer, seeded, scope), (exit) =>
-        Exit.isSuccess(exit) && exit.value !== undefined
-          ? Effect.void
-          : Scope.close(scope, Exit.void),
+      const created = yield* Effect.onExit(
+        this.#stand(source, sdpOffer, creating.planId, scope),
+        (exit) =>
+          Exit.isSuccess(exit) && exit.value !== undefined
+            ? Effect.void
+            : Scope.close(scope, Exit.void),
       );
+      // A switch that landed while the call was being created ends it now that
+      // it stands, so the peer is told to hang up and nothing is said into it.
+      const held = this.#held;
+      if (created !== undefined && creating.endedBy !== undefined && held !== undefined) {
+        yield* this.#end(held, creating.endedBy);
+        return undefined;
+      }
       // A session that could not be stood leaves no beat waiting for it: the
       // caller decides again at its next reason, and asks then stand rather
       // than being refused for a kind still waiting on a session that never came.
@@ -229,12 +363,18 @@ export class LiveSessionHolder {
   #stand(
     source: LiveSessionSource,
     sdpOffer: string,
-    seeded: RosterSummary | undefined,
+    planId: string | undefined,
     scope: Scope.Closeable,
   ): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
+      const input =
+        planId === undefined
+          ? this.#seedInput(
+              rosterSeed(this.#options.roster?.() ?? [], this.#clock.currentTimeMillisUnsafe()),
+            )
+          : [];
       const opened = yield* Scope.provide(
-        source.create({ sdpOffer, input: this.#seedInput(seeded) }),
+        source.create({ sdpOffer, input, ...(planId === undefined ? undefined : { planId }) }),
         scope,
       );
       if (!opened) return undefined;
@@ -242,6 +382,10 @@ export class LiveSessionHolder {
       const sideband = yield* Scope.provide(opened.attach(), scope);
       const session: HeldSession = {
         sessionId: opened.sessionId,
+        stoodAt: this.#clock.currentTimeMillisUnsafe(),
+        endCause: undefined,
+        peerReason: undefined,
+        planId,
         sideband,
         opened,
         scope,
@@ -258,6 +402,8 @@ export class LiveSessionHolder {
       // lost or torn down with the holder's own scope closes it here.
       yield* Scope.addFinalizer(scope, sideband.close);
       opened.onSpoken?.((kind) => this.#spoken(session, kind));
+      opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
+      opened.onPlanActivity?.((activity) => this.#activity(session, activity));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -296,7 +442,11 @@ export class LiveSessionHolder {
         );
         return session.ended || session.closing
           ? Effect.void
-          : this.#lost(session, LIVE_CLOSE_REASON.CONNECTION_LOST);
+          : this.#lost(
+              session,
+              LIVE_CLOSE_REASON.CONNECTION_LOST,
+              LIVE_SESSION_END_CAUSE.SIDEBAND_LOST,
+            );
       }
       if (arrival.event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
         Deferred.doneUnsafe(
@@ -330,22 +480,24 @@ export class LiveSessionHolder {
    * The renderer's hang-up, the peer's closed transport, and the drain all
    * end the session the same way: whichever stands when the ask is run, or,
    * where one was declared over a turn ago and is still being released, that
-   * release, so the drain answers with the socket closed.
+   * release, so the drain answers with the socket closed. `cause` is the
+   * hand asking, named in the line the end is logged under.
    */
-  endSession(): Effect.Effect<void> {
+  endSession(cause: LiveSessionEndCause): Effect.Effect<void> {
     return Effect.suspend(() => {
       const session = this.#held;
-      if (session !== undefined) return this.#end(session);
+      if (session !== undefined) return this.#end(session, cause);
       const releasing = this.#releasing;
       return releasing === undefined ? Effect.void : Deferred.await(releasing);
     });
   }
 
-  #end(session: HeldSession): Effect.Effect<void> {
+  #end(session: HeldSession, cause: LiveSessionEndCause): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (session.ended) return yield* Deferred.await(session.released);
       const standing = session.closing;
       if (standing !== undefined) return yield* Deferred.await(standing);
+      session.endCause ??= cause;
       const closing = yield* Deferred.make<void>();
       session.closing = closing;
       yield* Effect.onExit(this.#close(session), (exit) => Deferred.done(closing, exit));
@@ -362,11 +514,13 @@ export class LiveSessionHolder {
       if (result.outcome === SIDEBAND_CLOSE_OUTCOME.CLOSED) {
         return yield* this.#onClosed(session, result.closed);
       }
+      // Note that the cause stands already: it is the hand that asked for this close.
       yield* this.#lost(
         session,
         result.outcome === SIDEBAND_CLOSE_OUTCOME.TIMED_OUT
           ? "close timed out"
           : LIVE_CLOSE_REASON.CONNECTION_LOST,
+        LIVE_SESSION_END_CAUSE.SIDEBAND_LOST,
       );
     });
   }
@@ -376,16 +530,22 @@ export class LiveSessionHolder {
    * transport is: a failed transport is a lost connection whatever the
    * sideband still shows, and a peer closed without a hang-up asked of the
    * host ends the session gracefully from here. Neither is told to the
-   * service; both reach it as the close they cause.
+   * service; both reach it as the close they cause. Every report is logged,
+   * with the peer's reason where it gave one, since the peer's own view of
+   * its connection is what a dropped call is read back from.
    */
-  reportTransport(state: LiveTransportState): void {
+  reportTransport(state: LiveTransportState, peerReason?: LivePeerEndReason): void {
     const session = this.#held;
+    this.#start(Effect.logInfo(transportLine(state, peerReason, session)));
     if (!session || session.ended) return;
+    session.peerReason ??= peerReason;
     if (state === LIVE_TRANSPORT_STATE.FAILED) {
-      this.#start(this.#lost(session, "peer transport failed"));
+      this.#start(this.#lost(session, "peer transport failed", LIVE_SESSION_END_CAUSE.PEER_FAILED));
       return;
     }
-    if (state === LIVE_TRANSPORT_STATE.CLOSED && !session.closing) this.#start(this.#end(session));
+    if (state === LIVE_TRANSPORT_STATE.CLOSED && !session.closing) {
+      this.#start(this.#end(session, LIVE_SESSION_END_CAUSE.PEER_CLOSED));
+    }
   }
 
   /**
@@ -490,11 +650,16 @@ export class LiveSessionHolder {
 
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
   stop(): Effect.Effect<void> {
-    return this.endSession();
+    return this.endSession(LIVE_SESSION_END_CAUSE.DRAIN);
   }
 
-  /** Every beat still waiting goes to the service now, or nowhere on a session with no door. */
+  /**
+   * Every beat still waiting goes to the service now, or nowhere on a
+   * session with no door. A planning call speaks nothing of the desk, so a
+   * beat waits through it and ends with it, for the caller to ask again.
+   */
   #sendBeats(session: HeldSession): void {
+    if (session.planId !== undefined) return;
     const speak = session.opened.speakBeat;
     for (const [kind, standing] of [...this.#beats]) {
       if (standing.sent) continue;
@@ -512,6 +677,18 @@ export class LiveSessionHolder {
     if (session.ended) return;
     if (kind !== PROACTIVE_SPEECH_KIND.BRIEFING) this.#beats.delete(kind);
     this.#options.onSpoken?.(kind);
+  }
+
+  /** A draft of the plan the session is bound to, passed on while the session stands. */
+  #drafted(session: HeldSession, draft: PlanDraftFrame): void {
+    if (session.ended || draft.planId !== session.planId) return;
+    this.#options.onPlanDraft?.(draft);
+  }
+
+  /** The service's activity about the plan the session is bound to, passed on while the session stands. */
+  #activity(session: HeldSession, activity: PlanActivityFrame): void {
+    if (session.ended || activity.planId !== session.planId) return;
+    this.#options.onPlanActivity?.(activity);
   }
 
   /**
@@ -536,30 +713,45 @@ export class LiveSessionHolder {
   #onClosed(session: HeldSession, closed: LiveSessionClosed): Effect.Effect<void> {
     if (session.ended) return Deferred.await(session.released);
     session.usageSeconds = closed.usage.seconds;
-    return this.#tearDown(session, closed.reason);
+    return this.#tearDown(session, closed.reason, LIVE_SESSION_END_CAUSE.SERVICE_CLOSED);
   }
 
   /** The session ended without `session.closed`: the latest usage stands unconfirmed. */
-  #lost(session: HeldSession, reason: string): Effect.Effect<void> {
+  #lost(session: HeldSession, reason: string, cause: LiveSessionEndCause): Effect.Effect<void> {
     if (session.ended) return Deferred.await(session.released);
-    return this.#tearDown(session, reason);
+    return this.#tearDown(session, reason, cause);
   }
 
   /**
    * The session is over the instant this is called: `#held` and the phase
    * are settled here, on the hand that decided it. The release is the
    * reader's own to run, so what is handed back is that release to wait for.
+   * `cause` stands where no hand asked for the end before it was decided.
    */
-  #tearDown(session: HeldSession, reason: string): Effect.Effect<void> {
+  #tearDown(session: HeldSession, reason: string, cause: LiveSessionEndCause): Effect.Effect<void> {
     session.ended = true;
+    session.endCause ??= cause;
     if (this.#held === session) this.#held = undefined;
     // A beat the session ended on, sent or waiting, is not carried to the
     // next: the caller decides again at its next reason to, and a beat that
     // was spoken settled itself before this.
     this.#beats.clear();
+    // Note that we say a planning call's end as nothing doing, because the
+    // service's own last word may never arrive once the socket is gone.
+    if (session.planId !== undefined) {
+      this.#options.onPlanActivity?.({
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
+        planId: session.planId,
+        notes: false,
+      });
+    }
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
+    // Note that the line is the holder's own task, because the hand that tore
+    // the session down may be its reader, interrupted the moment `torn` settles.
+    const seconds = Math.round((this.#clock.currentTimeMillisUnsafe() - session.stoodAt) / 1000);
+    this.#start(Effect.logInfo(endedLine(session, reason, seconds)));
     return Deferred.await(session.released);
   }
 }

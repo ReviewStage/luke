@@ -12,13 +12,22 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
-import { type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import {
+  type PlanActivityFrame,
+  type PlanDraftFrame,
+  type SessionBeatFrame,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { SESSION_STATUS } from "@sidecar/session";
 import { APP_SETTING_SCHEMA, voiceHotkeyCandidates, voiceHotkeyLabel } from "@sidecar/settings";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
-import { type BeatKind, LiveSessionHolder } from "@sidecar/voice/live-session";
+import {
+  type BeatKind,
+  LIVE_SESSION_END_CAUSE,
+  LiveSessionHolder,
+} from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
 import { Duration, Effect, Result, type Scope } from "effect";
 import {
@@ -75,6 +84,12 @@ export interface LiveDependencies {
   account: AccountComposer;
   observation: ObservationComposer;
   calendars: CalendarsComposer;
+  /** The plan the panel has open, the one plan a planning call may be created about; nothing while it has none. */
+  activePlanId: () => string | undefined;
+  /** Where a draft of the open plan goes as the service's notetaker writes it during a planning call. */
+  showPlanDraft: (draft: PlanDraftFrame) => void;
+  /** Where the service's word of what each part of Luke is doing on a planning call goes, and the call's end clearing it. */
+  showPlanActivity: (activity: PlanActivityFrame) => void;
 }
 
 /** The three beats this side decides, each withdrawn together at a sign-out. */
@@ -161,6 +176,10 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         session_source: PRODUCT_VOICE_SESSION_SOURCE.HOSTED,
       });
     },
+    // The plan a planning call is writing, as the service's notetaker drafts it.
+    onPlanDraft: (draft) => dependencies.showPlanDraft(draft),
+    // What each part of Luke is doing on the call, as the service says it.
+    onPlanActivity: (activity) => dependencies.showPlanActivity(activity),
     // The service's word that a turn was spoken to its end, by kind: the
     // counts and the arrival's moment are this side's record, kept here as
     // they were when the queue that spoke them stood on this Mac.
@@ -401,14 +420,23 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
           readEither(voiceCreateLiveSessionParamsSchema)(params),
         );
         if (!request) return yield* invalid("sdp must be the peer's offer");
-        const created = yield* service.createSession(request.sdp);
+        // An offer about a plan the window no longer has open (another was
+        // opened, or the window closed, while the offer was out) is refused, so
+        // no call about one plan is created while another is on screen.
+        if (request.planId !== undefined && request.planId !== dependencies.activePlanId()) {
+          return yield* Effect.fail(
+            new RefusedRefusal({ message: "the plan is not the one the panel has open" }),
+          );
+        }
+        const created = yield* service.createSession(request.sdp, request.planId);
         if (!created)
           return yield* Effect.fail(
             new RefusedRefusal({ message: "no live session could be created" }),
           );
         return carried(created);
       }),
-    [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () => Effect.as(service.endSession(), {}),
+    [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () =>
+      Effect.as(service.endSession(LIVE_SESSION_END_CAUSE.HANG_UP), {}),
     // The peer's transport is acted on here, where the transport is: a
     // failure is the session lost, a close is the graceful end.
     [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
@@ -416,7 +444,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
         readEither(voiceReportLiveTransportParamsSchema)(params),
       );
       if (!report) return invalid("state is not one the peer connection reports");
-      service.reportTransport(report.state);
+      service.reportTransport(report.state, report.reason);
       return Effect.succeed({});
     },
     // The peer's idle is carried to the service, whose exchange alone knows

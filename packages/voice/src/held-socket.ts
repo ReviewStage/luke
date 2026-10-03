@@ -165,6 +165,7 @@ export function holdSocket(verbs: SocketVerbs): SocketHold {
   return {
     socket: {
       send: (data) => verbs.send(data),
+      ping: () => verbs.ping(),
       close: () => verbs.close(),
       arrivals,
       takeFirst: Effect.callback<SocketArrival>((resume) => {

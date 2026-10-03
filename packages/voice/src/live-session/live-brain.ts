@@ -14,9 +14,17 @@ import type { Effect } from "effect";
 /** The run seams the service consumes, named one by one; a newer brain may fire kinds this build does not read. */
 export const LIVE_BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
+  QUESTION_QUEUED: "question_queued",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
   ENDED: "ended",
+  /**
+   * What the run is doing now, told each time it changes: the command or the
+   * tool of the call still pending, or nothing once none is. It is the live
+   * brain's own and no seam of the turn-event stream, since it is shown on
+   * the developer's own Mac and spoken by nobody.
+   */
+  ACTIVITY: "activity",
 } as const;
 
 /** How a run ended, as the service tells a reply from a refusal. */
@@ -38,6 +46,13 @@ export type LiveBrainRunEvent =
       /** Which kind of slow step began, in the brain's own vocabulary; the service words it. */
       readonly step: string;
     }
+  | {
+      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED;
+      readonly runId: string;
+      /** A question the planning model queued for the developer, and the answer it recommends. */
+      readonly question: string;
+      readonly recommendation: string;
+    }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE;
@@ -48,6 +63,12 @@ export type LiveBrainRunEvent =
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ENDED;
       readonly runId: string;
       readonly end: LiveBrainRunEnd;
+    }
+  | {
+      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIVITY;
+      readonly runId: string;
+      /** The pending call's command, or its tool's name where it runs none; absent while no call is pending. */
+      readonly action: string | undefined;
     };
 
 export interface LiveBrainAsk {
