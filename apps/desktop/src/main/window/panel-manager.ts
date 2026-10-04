@@ -1,10 +1,8 @@
 import type { RunMode } from "@sidecar/host";
 import {
   DEFAULT_PANEL_FORM_FACTOR,
-  MOTION_DURATION_MS,
   type NativeNotchGeometry,
   type PanelFormFactor,
-  positionNotchWindow,
   resolveNotchGeometry,
 } from "@sidecar/surface";
 import type { UnparsedWireValue } from "@sidecar/wire";
@@ -13,8 +11,8 @@ import {
   BrowserWindow,
   type BrowserWindowConstructorOptions,
   type Display,
+  type Rectangle,
   screen,
-  systemPreferences,
   type WebContents,
 } from "electron";
 import { channels } from "#shared/bridge";
@@ -37,7 +35,6 @@ interface PanelManagerOptions {
   preloadPath: string;
   rendererHtmlPath: string;
   rendererUrl: string;
-  argv?: readonly string[];
   /**
    * The last panel window went down on its own. All panels closed is how
    * this process decides it is done, and `window-all-closed` can no longer
@@ -63,26 +60,56 @@ interface PanelManagerOptions {
 }
 
 /**
- * `--duration-exit` plus `--duration-shape` in the shared motion tokens: the
- * content leaves, then the surface closes on the spring, and only then may the
- * window follow.
+ * Checklist: scripts/evidence.sh validates every capture at WIDTH by HEIGHT.
+ *
+ * The window Luke opens in: large enough to read a plan beside its questions,
+ * and never past the display's work area less a margin, so a small display
+ * still shows the whole window with the Dock and the menu bar clear of it.
  */
-const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
+const DESKTOP_WINDOW = {
+  WIDTH: 1280,
+  HEIGHT: 840,
+  MIN_WIDTH: 760,
+  MIN_HEIGHT: 520,
+  // Small enough that a 13-inch display's work area still fits the full size.
+  MARGIN: 24,
+  BACKGROUND: "#0b0b0d",
+} as const;
 
-/** The mode every window is born in; only the dev and capture flags change it. */
-function initialWindowMode(runMode: RunMode, argv: readonly string[]): WindowMode {
-  if (!runMode.takesFocus) {
-    return argv.includes("--compact") ? "compact" : "expanded";
-  }
-  return argv.includes("--expanded") ? "expanded" : "compact";
+/** The first frame of the window, centred in the display's work area. */
+function desktopBounds(display: Display): Rectangle {
+  const area = display.workArea;
+  const width = Math.min(DESKTOP_WINDOW.WIDTH, area.width - DESKTOP_WINDOW.MARGIN * 2);
+  const height = Math.min(DESKTOP_WINDOW.HEIGHT, area.height - DESKTOP_WINDOW.MARGIN * 2);
+  return {
+    x: Math.round(area.x + (area.width - width) / 2),
+    y: Math.round(area.y + (area.height - height) / 2),
+    width,
+    height,
+  };
 }
 
 /**
- * One panel window per display Luke stands on, each with its own mode, collapse
- * timer, and exchange report. Reconcile, rebind, and the sequenced resize live
- * here so a display arriving or leaving cannot drop a conversation, and so
- * every caller — the panel, the tray, the talk key — gets the same ordering
- * when a window grows or shrinks.
+ * Puts the window back to an ordinary app window after a takeover dressed it
+ * at a level of its own: a normal level, the current Space only, in Mission
+ * Control, with its traffic lights. Changing the level is also what puts
+ * AppKit's managed collection behavior back over the stationary flag.
+ */
+function undressMacWindow(window: BrowserWindow): void {
+  window.setAlwaysOnTop(false);
+  if (process.platform !== "darwin") return;
+  window.setVisibleOnAllWorkspaces(false);
+  window.setHiddenInMissionControl(false);
+  window.setWindowButtonVisibility(true);
+}
+
+/**
+ * Luke's one window: an ordinary, resizable app window on the main display,
+ * always showing the panel. It is kept under the panel's old name and shape
+ * because every caller — the IPC handlers, the tray, the talk key, the
+ * introduction — addresses a panel by display, and the window answers for
+ * the display it was opened against. Closing it hides it; the app keeps
+ * listening, and the Dock tile or a second launch brings it back.
  */
 export class PanelManager {
   readonly #runMode: RunMode;
@@ -93,33 +120,21 @@ export class PanelManager {
   readonly #onAllClosed: (() => void) | undefined;
   readonly #onWindowFactsChanged: (() => void) | undefined;
   readonly #onTakeoverGone: ((reason: string) => void) | undefined;
-  readonly initialMode: WindowMode;
-  /**
-   * One panel window per display Luke stands on, keyed by the display's id, each
-   * with its own mode: a panel opened on one monitor must not resize the capsule
-   * on another. The collapse timers ride the same key, because a collapse is a
-   * single window's affair.
-   */
+  /** Always expanded: the window has no compact shape to fall back to. */
+  readonly initialMode: WindowMode = "expanded";
+  /** The window, keyed by the display it was opened against. */
   readonly #windows = new Map<number, BrowserWindow>();
-  readonly #modes = new Map<number, WindowMode>();
-  readonly #collapseTimers = new Map<number, NodeJS.Timeout>();
-  /**
-   * Whether Luke stands on every display, mirroring the settings file the way
-   * the minter mirrors the chosen voice: read once before any panel exists,
-   * updated by the same handler that stores a new choice, so every layout
-   * decision stays synchronous. Off means the system's main display alone.
-   */
-  #showOnAllDisplays = false;
-  /** The chosen form for displays without a housing, mirrored the same way. */
   #panelFormFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR;
   #nativeScreens = new Map<number, NativeNotchGeometry>();
   /**
-   * The display a fullscreen mode of the panel currently covers, absent when
-   * none does. It is the whole standing of a takeover here: the mode changes,
-   * the layout, and the reconciler all read it, so a takeover cannot be
-   * half-held.
+   * The display the introduction's takeover covers, absent when none does,
+   * and the frame the window held before it, so leaving puts the window back
+   * where the developer left it.
    */
   #takeover: number | undefined;
+  #boundsBeforeTakeover: Rectangle | undefined;
+  /** Set once a quit begins, so closing the window then destroys it rather than hiding it. */
+  #quitting = false;
 
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
@@ -130,103 +145,42 @@ export class PanelManager {
     this.#onAllClosed = options.onAllClosed;
     this.#onWindowFactsChanged = options.onWindowFactsChanged;
     this.#onTakeoverGone = options.onTakeoverGone;
-    this.initialMode = initialWindowMode(options.runMode, options.argv ?? process.argv);
+    app.on("before-quit", () => {
+      this.#quitting = true;
+    });
   }
 
   /**
-   * Makes the windows match the chosen displays: one raised on every chosen
-   * display that is connected, none anywhere else. A window whose display went
-   * away is moved to a display that needs one rather than destroyed beside a
-   * fresh create — a swap of the main display must carry the conversation and
-   * the panel's state across, not drop them on the floor. Raising before razing
-   * is load-bearing for what remains — a swap must never pass through zero
-   * windows, because all windows closed is how this process decides it is done.
-   * Everything that changes what the set should be lands here: a switch
-   * pressed, a display plugged or unplugged, the stored choice read at launch.
+   * Makes sure the one window stands, keyed by the main display. A window
+   * whose display went away is re-keyed rather than recreated, so the
+   * conversation and the panel's state survive a swap of the main display;
+   * macOS itself moves the frame onto a display that is still there.
    */
   reconcile(): void {
-    const wanted = this.#effectiveDisplayIds();
-    const wantedSet = new Set(wanted);
-    const missing = wanted.filter((displayId) => !this.#windows.has(displayId));
-    const excess = [...this.#windows.keys()].filter((displayId) => !wantedSet.has(displayId));
-    // Pair each display that needs a window with a window that lost its display.
-    while (missing.length > 0 && excess.length > 0) {
-      const toDisplayId = missing.shift();
-      const fromDisplayId = excess.shift();
-      if (toDisplayId === undefined || fromDisplayId === undefined) break;
-      this.#rebind(fromDisplayId, toDisplayId);
-    }
-    for (const displayId of missing) this.#create(displayId);
-    for (const displayId of excess) {
-      const window = this.#windows.get(displayId);
-      this.#windows.delete(displayId);
-      this.#modes.delete(displayId);
-      this.#clearCollapseTimer(displayId);
-      window?.destroy();
-    }
-    this.positionAll();
+    const wanted = this.#effectiveDisplayId();
+    const [held] = [...this.#windows.keys()];
+    if (held === undefined) this.#create(wanted);
+    else if (held !== wanted) this.#rebind(held, wanted);
   }
 
   /**
-   * The two directions are sequenced differently, and the ordering lives here so
-   * every caller gets it — the panel, the tray, and the motion recorder alike.
-   * Growing needs the window first, or the panel has nowhere to unfold into.
-   * Shrinking needs the capsule drawn first, or the window clips the panel out
-   * from under its own collapse. One display's window at a time: a panel opened
-   * on one monitor is no reason to resize the capsule on another.
+   * The window has one mode. A request for the capsule — Escape, a pointer
+   * leaving, a row press standing the panel down — is answered with the mode
+   * the window holds, so the renderer keeps drawing the panel; a request to
+   * expand with focus brings the window forward.
    */
   setMode(displayId: number, mode: WindowMode, requestFocus: boolean): WindowMode {
-    // A takeover is the whole of its display for as long as it holds it, and
-    // every way a mode is asked for — the talk key, the tray, a second launch
-    // — arrives here, so the refusal belongs here and nowhere else.
-    if (this.#takeover === displayId) return this.modeFor(displayId);
-    this.#modes.set(displayId, mode);
     const window = this.#windows.get(displayId);
-    if (!window || window.isDestroyed()) return mode;
-
-    const expanded = mode === "expanded";
-    window.setFocusable(expanded && this.#runMode.takesFocus);
-    this.#clearCollapseTimer(displayId);
-    if (expanded) {
-      this.#position(displayId);
-      window.webContents.send(channels.onLifecycle, `mode:${mode}`);
-    } else {
-      window.webContents.send(channels.onLifecycle, `mode:${mode}`);
-      const delay = this.#collapseDelay();
-      if (delay === 0) this.#position(displayId);
-      else {
-        this.#collapseTimers.set(
-          displayId,
-          setTimeout(() => {
-            this.#collapseTimers.delete(displayId);
-            if (this.modeFor(displayId) === "compact") this.#position(displayId);
-          }, delay),
-        );
-      }
-    }
-
-    if (expanded && requestFocus && this.#runMode.takesFocus) {
+    if (!window || window.isDestroyed()) return "expanded";
+    window.webContents.send(channels.onLifecycle, "mode:expanded");
+    if (mode === "expanded" && requestFocus && this.#takeover !== displayId) {
       this.#focusWindow(window);
-    } else {
-      window.showInactive();
     }
-    this.#onWindowFactsChanged?.();
-    return mode;
+    return "expanded";
   }
 
-  /**
-   * Every expanded panel back to its capsule, the way a row press stands its
-   * own down: a chat is coming forward, and Luke floats above every window on
-   * every display it might land on. Through `setMode`, so a takeover keeps
-   * its display and each renderer is told the mode main decided; a panel
-   * already at its capsule is left alone, since its collapse is done or on
-   * its own clock.
-   */
-  standDown(): void {
-    for (const displayId of this.#windows.keys()) {
-      if (this.modeFor(displayId) === "expanded") this.setMode(displayId, "compact", false);
-    }
-  }
+  /** Nothing to stand down: an ordinary window does not cover the chat a row press opens. */
+  standDown(): void {}
 
   /**
    * Hands a payload to every living window, optionally skipping the one that
@@ -241,16 +195,8 @@ export class PanelManager {
     }
   }
 
-  /**
-   * The one panel an action aimed at the panel itself lands on — a settings
-   * change the brain asks for, the panel expanded from a second launch: the
-   * main display's window when Luke stands there, else the first window
-   * standing anywhere, so an action about the app has one drawn surface to
-   * answer from rather than one per display.
-   */
+  /** The window an action aimed at the app lands on. */
   primaryPanel(): BrowserWindow | undefined {
-    const primary = this.#windows.get(screen.getPrimaryDisplay().id);
-    if (primary && !primary.isDestroyed()) return primary;
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed()) return window;
     }
@@ -274,8 +220,8 @@ export class PanelManager {
     return undefined;
   }
 
-  modeFor(displayId: number): WindowMode {
-    return this.#modes.get(displayId) ?? this.initialMode;
+  modeFor(_displayId: number): WindowMode {
+    return "expanded";
   }
 
   display(displayId: number): Display | undefined {
@@ -297,63 +243,32 @@ export class PanelManager {
     };
   }
 
-  /**
-   * The expanded panel owed the keyboard: the one that asked, when the asker is
-   * known and still expanded, else whichever panel stands expanded. With two
-   * panels open, focus must return to the one the user was typing in rather
-   * than to whichever the map happens to list first.
-   */
-  focusExpanded(preferredDisplayId?: number): void {
-    if (preferredDisplayId !== undefined && this.modeFor(preferredDisplayId) === "expanded") {
-      const preferred = this.#windows.get(preferredDisplayId);
-      if (preferred && !preferred.isDestroyed()) {
-        this.#focusWindow(preferred);
-        return;
-      }
-    }
-    for (const [displayId, window] of this.#windows) {
-      if (this.modeFor(displayId) !== "expanded") continue;
-      this.#focusWindow(window);
-      return;
-    }
+  /** Brings the window forward, shown again if it was closed. */
+  focusExpanded(_preferredDisplayId?: number): void {
+    this.#focusWindow(this.primaryPanel());
   }
 
-  /**
-   * Brings the named panel forward when it is the expanded one holding a field.
-   * A compact window has nothing to type into.
-   */
   focusIfExpanded(displayId: number): void {
-    if (this.modeFor(displayId) !== "expanded") return;
     this.#focusWindow(this.#windows.get(displayId));
   }
 
-  positionAll(): void {
-    for (const displayId of this.#windows.keys()) this.#position(displayId);
-  }
+  /** The developer owns the frame; only the takeover ever sets it. */
+  positionAll(): void {}
 
-  setShowOnAllDisplays(show: boolean): void {
-    this.#showOnAllDisplays = show;
-  }
+  /** One window on the main display, whatever the stored choice says. */
+  setShowOnAllDisplays(_show: boolean): void {}
 
   setFormFactor(formFactor: PanelFormFactor): void {
     this.#panelFormFactor = formFactor;
   }
 
   /**
-   * Puts one panel window over the whole of its display for as long as a
-   * fullscreen mode runs in it. The window is the panel's own, so a takeover
-   * cannot strand the user: quitting, reconciling, and the display watch all
-   * still answer, and a renderer that dies, hangs, or never loads hands the
-   * display back through `onTakeoverGone`.
-   *
-   * Idempotent, and re-taking is how a takeover follows the screen: it reads
-   * the primary panel and its display afresh, so a window rebound to another
-   * display, or one whose display changed resolution, covers what is there
-   * now. Only the fit is re-applied — a re-take is a display change, and one
-   * that reclaimed the pointer or the keyboard would take back what a landed
-   * takeover has already handed to the developer. Answers the display id it
-   * took, or `undefined` when no panel stands anywhere — the caller then
-   * skips the takeover entirely rather than creating a window for it.
+   * Puts the window over the whole of its display for the introduction. The
+   * frame it held is kept and put back by `leaveTakeover`. A renderer that
+   * dies, hangs, or never loads hands the display back through
+   * `onTakeoverGone`. Idempotent: a re-take after a display change covers
+   * what is there now without reclaiming the pointer or the keyboard.
+   * Answers the display id it took, or `undefined` when no window stands.
    */
   enterTakeover(): number | undefined {
     const window = this.primaryPanel();
@@ -364,35 +279,20 @@ export class PanelManager {
     if (!display) return undefined;
     const taking = this.#takeover === undefined;
     this.#takeover = displayId;
-    // The display's own bounds rather than AppKit's fullscreen: this window is
-    // frameless, transparent and declared unfullscreenable, and a Space of its
-    // own would animate the transition and hand back a frame nothing here
-    // chose. Resizing in place covers the menu bar's strip, which is where a
-    // flight that lands on the housing has to draw.
+    if (taking) this.#boundsBeforeTakeover = window.getBounds();
     window.setBounds(display.bounds);
     if (taking) {
       dressMacWindow(window, WINDOW_LEVEL.TAKEOVER);
-      // The takeover is the whole surface, so it starts by intercepting
-      // everything; what it hands back once it has landed is its own to say,
-      // through the same pointer interception every panel keeps.
       window.setIgnoreMouseEvents(false);
-      window.setFocusable(this.#runMode.takesFocus);
       this.#raiseTakeover(window, displayId);
     }
-    // One document-wide standing cannot be drawn twice, so the panel set
-    // collapses to the display the takeover covers: this takes down any panel
-    // the stored choice raised on another display, and `leaveTakeover`
-    // honours that choice again.
-    this.reconcile();
     return displayId;
   }
 
   /**
-   * Brings the takeover forward, once it has something to show. A window born
-   * `show: false` has not painted yet, and a transparent surface put over the
-   * whole display before its first frame is a blank sheet swallowing every
-   * click — so the raise waits for the paint, exactly as the takeover's own
-   * window used to.
+   * Brings the takeover forward once it has painted: a window born
+   * `show: false` put over the whole display before its first frame is a
+   * blank sheet swallowing every click.
    */
   #raiseTakeover(window: BrowserWindow, displayId: number): void {
     if (window.isVisible()) {
@@ -406,30 +306,30 @@ export class PanelManager {
   }
 
   /**
-   * Returns the takeover's window to the mode it held — its bounds among
-   * them, laid out by the same reconcile every other caller goes through, so
-   * the stored choice of displays stands again. Idempotent, and safe to call
-   * for a window that has since gone.
+   * Returns the window to an ordinary app window at the frame it held before
+   * the takeover. Idempotent, and safe to call for a window that has since gone.
    */
   leaveTakeover(): void {
     const displayId = this.#takeover;
     if (displayId === undefined) return;
     this.#takeover = undefined;
     const window = this.#windows.get(displayId);
+    const display = this.display(displayId);
     if (window && !window.isDestroyed()) {
-      dressMacWindow(window, WINDOW_LEVEL.PANEL);
-      window.setIgnoreMouseEvents(true, { forward: true });
-      window.setFocusable(this.modeFor(displayId) === "expanded" && this.#runMode.takesFocus);
+      undressMacWindow(window);
+      // The takeover hands the pointer back as it lands; an app window takes it whole.
+      window.setIgnoreMouseEvents(false);
+      const restored = this.#boundsBeforeTakeover ?? (display ? desktopBounds(display) : undefined);
+      if (restored) window.setBounds(restored);
+      this.#focusWindow(window);
     }
-    this.reconcile();
-    this.showInactiveAll();
+    this.#boundsBeforeTakeover = undefined;
+    this.#onWindowFactsChanged?.();
   }
 
   /**
    * Whether a spoken exchange is live, as the main process derives it from the
-   * voice window's report. One answer for every display: the exchange lives
-   * in no panel, so no panel's coming or going can change it, and the media
-   * duck follows it directly.
+   * voice window's report. The media duck follows it directly.
    */
   setVoiceExchange(active: boolean): void {
     this.#mediaDuck.setExchangeActive(active);
@@ -442,7 +342,7 @@ export class PanelManager {
     return count;
   }
 
-  /** Whether some panel window's renderer is asking, whichever display it is on. */
+  /** Whether the panel window's renderer is asking. */
   owns(webContents: WebContents): boolean {
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed() && window.webContents === webContents) return true;
@@ -453,8 +353,7 @@ export class PanelManager {
   async refreshGeometry(): Promise<void> {
     this.#nativeScreens = await readMacScreenGeometry();
     // A capture run pins a fixture housing on the main display, where the
-    // evidence is taken; an interactive fixture still stands on the real
-    // screen, because it is a person looking, not a camera.
+    // evidence is taken; the introduction's flight still lands on it.
     if (!this.#runMode.takesFocus) {
       const display = screen.getPrimaryDisplay();
       this.#nativeScreens.set(display.id, {
@@ -468,112 +367,38 @@ export class PanelManager {
     }
   }
 
+  /** Shows the window without taking focus, as a second launch or a wake asks. */
   showInactiveAll(): void {
     for (const window of this.#windows.values()) {
       if (!window.isDestroyed()) window.showInactive();
     }
   }
 
-  clearCollapseTimers(): void {
-    for (const displayId of [...this.#collapseTimers.keys()]) this.#clearCollapseTimer(displayId);
-  }
+  /** No collapse runs on a clock any more; kept for the teardown that calls it. */
+  clearCollapseTimers(): void {}
 
-  /**
-   * Where Luke stands right now: every connected display when asked to stand on
-   * all of them, the system's main display alone otherwise. A capture run stays
-   * on the main display regardless, where its fixture housing is pinned.
-   */
-  #effectiveDisplayIds(): number[] {
-    // A takeover covers the display it took, and a second panel standing on
-    // another monitor for the duration of a one-time fullscreen mode is a
-    // surface nobody asked for. The stored choice is honoured again by the
-    // reconcile inside `leaveTakeover`. A takeover whose display has gone
-    // pins nothing: the ordinary answer is what moves its window somewhere it
-    // can stand, and the takeover travels with it.
+  /** The main display, or the takeover's while one stands. */
+  #effectiveDisplayId(): number {
     if (this.#takeover !== undefined && this.display(this.#takeover) !== undefined) {
-      return [this.#takeover];
+      return this.#takeover;
     }
-    if (this.#runMode.takesFocus && this.#showOnAllDisplays) {
-      return screen.getAllDisplays().map((display) => display.id);
-    }
-    return [screen.getPrimaryDisplay().id];
+    return screen.getPrimaryDisplay().id;
   }
 
-  #layoutFor(display: Display, mode: WindowMode) {
-    return positionNotchWindow(
-      display,
-      mode,
-      this.#nativeScreens.get(display.id),
-      this.#panelFormFactor,
-    );
-  }
-
-  /**
-   * Resizes without AppKit's frame animation. An animated setBounds re-lays out
-   * the renderer at a new viewport width on every frame — and its duration scales
-   * with the distance moved, so a 482px growth ran far longer than the panel's
-   * own motion. The window instead snaps to the size the mode needs and the renderer
-   * animates the capsule into the panel inside it, where the viewport is constant
-   * and the work stays on the compositor.
-   */
-  #position(displayId: number): void {
-    const window = this.#windows.get(displayId);
-    if (!window || window.isDestroyed()) return;
-    // A takeover's bounds are the display's, and nothing that lays out a
-    // capsule may resize it out from under itself.
-    if (this.#takeover === displayId) return;
-    const display = this.display(displayId);
-    // A window whose display has gone is the reconciler's to take down, not
-    // this function's to guess a home for.
-    if (!display) return;
-    const layout = this.#layoutFor(display, this.modeFor(displayId));
-    window.setBounds({
-      x: layout.x,
-      y: layout.y,
-      width: layout.width,
-      height: layout.height,
-    });
-    this.#onWindowFactsChanged?.();
-  }
-
-  /**
-   * Moves a living window to another display, state and all: its mode, its
-   * collapse-in-flight, its exchange report, and the renderer behind it — which
-   * learns its new ground from the snapshot the repositioning has it handed,
-   * exactly as it would for a geometry change in place.
-   */
+  /** Re-keys the living window under another display, takeover and all. */
   #rebind(fromDisplayId: number, toDisplayId: number): void {
     const window = this.#windows.get(fromDisplayId);
     if (!window) return;
     this.#windows.delete(fromDisplayId);
     this.#windows.set(toDisplayId, window);
-    this.#modes.set(toDisplayId, this.modeFor(fromDisplayId));
-    this.#modes.delete(fromDisplayId);
-    // A takeover names a display and this window has just changed which one
-    // it stands on, so the takeover travels with it rather than being
-    // released and taken afresh — which would reclaim the pointer and the
-    // keyboard a landed takeover has already handed back.
     if (this.#takeover === fromDisplayId) this.#takeover = toDisplayId;
-    // The timer's closure names the old display; the reposition below redraws
-    // whatever a cancelled collapse would have.
-    this.#clearCollapseTimer(fromDisplayId);
-  }
-
-  #clearCollapseTimer(displayId: number): void {
-    const timer = this.#collapseTimers.get(displayId);
-    if (!timer) return;
-    clearTimeout(timer);
-    this.#collapseTimers.delete(displayId);
-  }
-
-  #configure(window: BrowserWindow): void {
-    dressMacWindow(window, WINDOW_LEVEL.PANEL);
+    this.#onWindowFactsChanged?.();
   }
 
   /**
-   * Brings one panel forward as the key window. An accessory app has no Dock
-   * presence, so the app itself has to come forward before one of its windows can
-   * take keyboard focus.
+   * Brings the window forward as the key window, showing it again if it was
+   * closed. The app has to come forward before one of its windows can take
+   * keyboard focus.
    */
   #focusWindow(window: BrowserWindow | undefined): void {
     if (!window || window.isDestroyed() || !this.#runMode.takesFocus) return;
@@ -582,63 +407,37 @@ export class PanelManager {
     window.focus();
   }
 
-  #collapseDelay(): number {
-    if (!this.#runMode.animates) return 0;
-    return systemPreferences.getAnimationSettings().prefersReducedMotion
-      ? 0
-      : COLLAPSE_ANIMATION_MS;
-  }
-
   #create(displayId: number): void {
     const display = this.display(displayId);
     if (!display) return;
-    this.#modes.set(displayId, this.initialMode);
-    const layout = this.#layoutFor(display, this.initialMode);
+    const bounds = desktopBounds(display);
 
     const windowOptions: BrowserWindowConstructorOptions = {
-      x: layout.x,
-      y: layout.y,
-      width: layout.width,
-      height: layout.height,
+      ...bounds,
+      minWidth: DESKTOP_WINDOW.MIN_WIDTH,
+      minHeight: DESKTOP_WINDOW.MIN_HEIGHT,
       title: "Luke",
       show: false,
-      frame: false,
-      transparent: true,
-      backgroundColor: "#00000000",
-      hasShadow: false,
-      roundedCorners: false,
-      resizable: false,
-      movable: false,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      alwaysOnTop: true,
-      focusable: this.initialMode === "expanded" && this.#runMode.takesFocus,
-      acceptFirstMouse: true,
+      backgroundColor: DESKTOP_WINDOW.BACKGROUND,
+      // The renderer draws its own title bar under the traffic lights, so the
+      // window keeps its frame, its shadow, and its buttons, and nothing else.
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 18, y: 18 },
       webPreferences: hardenedWebPreferences({
         preloadPath: this.#preloadPath,
         runMode: this.#runMode,
       }),
     };
-    if (process.platform === "darwin") windowOptions.type = "panel";
     const window = new BrowserWindow(windowOptions);
     this.#windows.set(displayId, window);
 
-    this.#configure(window);
-    window.setIgnoreMouseEvents(true, { forward: true });
     refuseForeignNavigation(window, this.#rendererUrl);
     // Electron leaves the window standing when its renderer goes, so nothing
-    // below fires for a dead takeover; the `closed` handler answers only a
-    // window that actually went away. Answered for the takeover alone,
-    // because it is the only panel whose blank window covers the screen.
+    // below fires for a dead takeover. Answered for the takeover alone,
+    // because it is the only time a blank window covers the screen.
     const takeoverGone = (reason: string) => {
       if (this.#takeover === undefined || this.#windows.get(this.#takeover) !== window) return;
       this.#onTakeoverGone?.(reason);
-      // Handing the display back leaves the window standing with a dead
-      // renderer behind it, and a panel nobody can draw in is no way back:
-      // the same window is loaded again, which is what raising a fresh panel
-      // did before the takeover shared the panel's own.
       if (!window.isDestroyed()) window.webContents.reload();
     };
     window.webContents.on("render-process-gone", (_event, details) => {
@@ -651,21 +450,26 @@ export class PanelManager {
       takeoverGone(`it failed to load: ${description}`);
     });
     window.once("ready-to-show", () => {
-      if (this.#runMode.takesFocus && !window.isDestroyed()) window.showInactive();
+      if (window.isDestroyed()) return;
+      // A capture run is a camera, not a person: it shows the window without
+      // taking the keyboard from whatever else is running.
+      if (this.#runMode.takesFocus) this.#focusWindow(window);
+      else window.showInactive();
     });
-    // The reconciler deletes before it destroys, so this answers only a window
-    // that went down some other way — and it must not leave a ghost in the map,
-    // nor a phantom exchange holding the duck down. Found by the window rather
-    // than the id it was born under, because a rebind may have moved it.
+    // Closing is hiding, as for any Mac app that keeps working in the
+    // background: the voice and the briefings go on, and the Dock tile brings
+    // the window back. Only a quit lets it go.
+    window.on("close", (event) => {
+      if (this.#quitting) return;
+      event.preventDefault();
+      window.hide();
+    });
+    // Found by the window rather than the id it was born under, because a
+    // rebind may have moved it.
     window.on("closed", () => {
       for (const [id, candidate] of [...this.#windows]) {
         if (candidate !== window) continue;
         this.#windows.delete(id);
-        this.#modes.delete(id);
-        this.#clearCollapseTimer(id);
-        // A takeover is its window's, so a window that went down some other
-        // way takes the takeover with it: a display left pinned with nothing
-        // standing on it would have the reconciler raise the takeover again.
         if (this.#takeover === id) this.#takeover = undefined;
       }
       if (this.#windows.size === 0) this.#onAllClosed?.();

@@ -19,9 +19,6 @@ export const PANEL_PRESENTATION = {
 
 export type PanelPresentation = (typeof PANEL_PRESENTATION)[keyof typeof PANEL_PRESENTATION];
 
-/** How an element says which region it is, for whoever is asking. */
-export const HIT_REGION_ATTRIBUTE = "data-hit-region";
-
 /** What takes the pointer, named so the test can tell one from another. */
 export const HIT_REGION = {
   /** The black shape itself, whatever size it is drawn at. */
@@ -32,8 +29,6 @@ export const HIT_REGION = {
   FEEDBACK: "feedback",
 } as const;
 
-/** Long enough that sweeping the pointer past the notch does not wake it. */
-export const PEEK_ENTER_DELAY_MS = 60;
 /**
  * Short, and the same whichever state is being left: a panel that lingered
  * after the pointer had gone felt like a different object from a peek that
