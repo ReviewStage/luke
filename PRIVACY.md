@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 15 September 2026
+Last updated: 4 October 2026
 
 Luke is a macOS app that watches your coding agent sessions, with companion
 iOS and Apple Watch apps for the cloud sessions your account can see. This
@@ -253,7 +253,15 @@ session recording described under "What we collect", the way the
 Conversation tab is.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
-address, and which of the two you used. We also keep the records that keep you
+address, and which of the two you used. Signing in with GitHub also grants
+your account's GitHub connection, the access a planning call reads your
+repository with: GitHub's `repo` permission, which covers every repository you
+can reach, private ones included, and allows writing as well as reading.
+Luke only reads: the list of your repositories when you start a plan, and
+the repository the plan names. If you sign in with
+Google, you grant the same permission separately, from the Plans tab, the
+first time you start a plan. You can revoke it at any time in GitHub's
+settings under Applications. We also keep the records that keep you
 signed in, and a daily count of how much voice and review you have used.
 Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily

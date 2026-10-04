@@ -9,6 +9,7 @@ import { authDeployment, authSecrets, type SocialClient } from "./auth-deploymen
 import {
   ACCOUNT_TOKEN_STORAGE,
   denyOAuthClientPrivileges,
+  GITHUB_SIGN_IN_SCOPES,
   JWT_KEY_STORAGE,
 } from "./auth-policy.js";
 import { authProxy } from "./auth-proxy.js";
@@ -70,7 +71,7 @@ export const auth = betterAuth({
   disabledPaths: ["/token"],
   socialProviders: {
     google: socialProvider(secrets.google, ["email", "profile"]),
-    github: socialProvider(secrets.github, ["read:user", "user:email"]),
+    github: socialProvider(secrets.github, GITHUB_SIGN_IN_SCOPES),
   },
   plugins: [
     // Ahead of the social sign-in it rewrites, and of the provider plugin whose
