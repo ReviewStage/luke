@@ -18,9 +18,10 @@ import "./styles.css";
 /**
  * connect-github.tsx -- the Connect GitHub page the Mac's Plans tab opens: link GitHub to the Luke account signed in here, with the scope that reads private repositories.
  *
- * Sign-in asks GitHub for `read:user` and `user:email` alone; this page is
- * the one place Luke asks for `repo`, through Better Auth's own account link
- * on the existing OAuth App, and says plainly what that scope grants. The
+ * A GitHub sign-in already asks for `repo` (`GITHUB_SIGN_IN_SCOPES`), so
+ * this page is for an account signed in with Google, or a GitHub row from
+ * before sign-in asked for it. It links GitHub through Better Auth's own
+ * account link on the same OAuth App, and says plainly what that scope grants. The
  * token GitHub answers is stored on the account, sealed, by Better Auth, and
  * never reaches this page.
  */

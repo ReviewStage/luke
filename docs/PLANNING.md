@@ -128,9 +128,10 @@ A page of ordinary setup fields and buttons under a `‹ New plan` header, and
 nothing spoken:
 
 1. **Connect GitHub**, shown only while the account has no repository
-   connection. It is the account-bound GitHub connection LUKE-338 adds, and it
-   is separate from GitHub sign-in, which asks for `read:user` and
-   `user:email` alone.
+   connection. A GitHub sign-in asks for `repo` and so is the connection
+   already; the step is for an account signed in with Google, or a GitHub
+   sign-in from before sign-in asked for `repo` (signing in with GitHub again
+   also mends that).
 2. **Plan name**, a single-line field whose placeholder, "e.g. Dark mode
    toggle", reads as an example to replace rather than a filled value.
 3. **Repository**, a filterable list of the existing repositories the
@@ -638,13 +639,12 @@ changes when a check is run, not when one is planned.
 
 ### Known limitations
 
-- **GitHub's `repo` scope is broader than Luke's use.** The Connect GitHub
-  step (`/connect-github.html`, opened by the new-plan page) links GitHub to the
-  Luke account under the existing OAuth App with the classic `repo` scope,
+- **GitHub's `repo` scope is broader than Luke's use.** GitHub sign-in and the
+  Connect GitHub step (`/connect-github.html`, opened by the new-plan page)
+  both ask under the existing OAuth App for the classic `repo` scope,
   which grants read and write to every repository the developer can reach.
   Luke only reads, through GitHub's read-only MCP endpoint, but the token
-  itself could write. Its `PRIVACY.md` disclosures are waiting on a product
-  decision.
+  itself could write. `PRIVACY.md` discloses it under "Your account".
 - **Connecting on a Preview.** A Preview's link goes through production's
   registered callback on the OAuth proxy, as sign-in does, and lands on the
   Preview's signed-in user (`apps/web/server/README.md`, the OAuth proxy);
