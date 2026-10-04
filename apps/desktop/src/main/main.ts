@@ -85,10 +85,13 @@ if (app.requestSingleInstanceLock()) {
 
 async function main(): Promise<void> {
   await app.whenReady();
-  // A window created under the default activation policy flashes a Dock tile,
-  // so both are settled before anything opens one.
-  if (process.platform === "darwin") app.setActivationPolicy("accessory");
-  Menu.setApplicationMenu(null);
+  // Luke is an ordinary app with a window of its own: a Dock tile, a place
+  // in Command-Tab, and the menus that give its fields Copy and Paste and
+  // its window Close, Minimize, and Quit.
+  if (process.platform === "darwin") app.setActivationPolicy("regular");
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }]),
+  );
 
   const runtime = ManagedRuntime.make(composeDesktop(config, quit));
   quit.closesThrough(() => Effect.runPromise(closeRuntime(runtime)));

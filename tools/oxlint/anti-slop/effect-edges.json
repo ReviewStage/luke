@@ -47,7 +47,6 @@
     "apps/desktop/src/main/native/native-helper.ts",
     "apps/desktop/src/main/services/window-service.ts",
     "apps/desktop/src/main/window/dock-presence.ts",
-    "apps/desktop/src/main/window/panel-manager.ts",
     "apps/desktop/src/main/window/voice-window.ts",
     "apps/desktop/src/renderer/app.tsx",
     "apps/desktop/src/renderer/conversation-copy.tsx",

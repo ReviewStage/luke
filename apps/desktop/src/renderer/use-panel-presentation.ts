@@ -1,123 +1,14 @@
-import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { WindowMode } from "#shared/messages/session";
 import { useAct } from "./act";
 import {
-  HIT_REGION,
-  HIT_REGION_ATTRIBUTE,
   LEAVE_DELAY_MS,
   PANEL_PRESENTATION,
   type PanelPresentation,
-  PEEK_ENTER_DELAY_MS,
   presentationForMode,
   SETTLE_DELAY_MS,
 } from "./panel-state";
-
-/**
- * How long a marked recede is still travelling: exit plus shape, the same
- * clock the collapse spends. Until it has passed, the vacated footprint still
- * answers hit tests — the surface and the panel's clip spring down behind the
- * content — so what the pointer is confirmed over inside this window may be
- * ground the shape is about to leave.
- */
-const RECEDE_SETTLE_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
-
-function usePointerPassthrough(
-  onHitRegionEnter: () => void,
-  onHitRegionLeave: (travelled: boolean) => void,
-  onPointerOverPanel: () => void,
-  presentation: PanelPresentation,
-): void {
-  const lastValue = useRef<boolean | undefined>(undefined);
-  const lastPoint = useRef<{ x: number; y: number } | undefined>(undefined);
-  /** Where the pointer stood when the shape last took it, for the leave to
-   * measure against: macOS synthesizes moves when a window appears, grows, or
-   * closes under a resting cursor, and an enter-then-leave at one unmoved
-   * point is the shape's journey, not the pointer's. */
-  const enterPoint = useRef<{ x: number; y: number } | undefined>(undefined);
-
-  const update = useCallback(
-    (interceptsPointer: boolean) => {
-      if (lastValue.current === interceptsPointer) return;
-      lastValue.current = interceptsPointer;
-      window.sidecar.setPointerInterception(interceptsPointer);
-      if (interceptsPointer) {
-        enterPoint.current = lastPoint.current;
-        onHitRegionEnter();
-      } else {
-        const from = enterPoint.current;
-        const at = lastPoint.current;
-        // A pointer gone from the window entirely has travelled by
-        // definition; only one still standing where the enter read it has not.
-        onHitRegionLeave(
-          from === undefined || at === undefined || from.x !== at.x || from.y !== at.y,
-        );
-      }
-    },
-    [onHitRegionEnter, onHitRegionLeave],
-  );
-
-  const testLastPoint = useCallback(
-    (drawn: PanelPresentation) => {
-      const point = lastPoint.current;
-      if (!point) return;
-      // `elementFromPoint` answers null for a point outside the viewport, which a
-      // forwarded move can carry. Comparing that against null read as "still
-      // inside", so leaving by the edge left the panel open until some other
-      // event closed it.
-      const region = document
-        .elementFromPoint(point.x, point.y)
-        ?.closest(`[${HIT_REGION_ATTRIBUTE}]`);
-      const kind = region?.getAttribute(HIT_REGION_ATTRIBUTE);
-      const overPanel = kind === HIT_REGION.PANEL && drawn === PANEL_PRESENTATION.PANEL;
-      // Reported on every move rather than on the transition, because it is
-      // what releases a recede mark: a pointer resting on the panel as it now
-      // stands is not one the shape left behind.
-      if (overPanel) onPointerOverPanel();
-      // The shape takes the pointer wherever it is drawn, which is the whole
-      // rule: the capsule strip and the panel's body are what sit on top of it
-      // and answer first. The surface is what answers in between — the panel's
-      // body is not a target for the first `--expand-delay` of an opening, and
-      // by then the strip has already narrowed from the peek's width back to
-      // the capsule's, so a press out where the marks unfold would otherwise
-      // land on nothing and read as the pointer leaving.
-      update(
-        kind === HIT_REGION.SURFACE ||
-          kind === HIT_REGION.CAPSULE ||
-          overPanel ||
-          (kind === HIT_REGION.SLOT && drawn === PANEL_PRESENTATION.SLOT) ||
-          (kind === HIT_REGION.FEEDBACK && drawn === PANEL_PRESENTATION.FEEDBACK),
-      );
-    },
-    [onPointerOverPanel, update],
-  );
-
-  useEffect(() => {
-    const handleMove = (event: MouseEvent) => {
-      lastPoint.current = { x: event.clientX, y: event.clientY };
-      testLastPoint(presentation);
-    };
-    const handleLeave = () => {
-      lastPoint.current = undefined;
-      update(false);
-    };
-    window.addEventListener("mousemove", handleMove, { passive: true });
-    document.documentElement.addEventListener("mouseleave", handleLeave);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      document.documentElement.removeEventListener("mouseleave", handleLeave);
-    };
-  }, [presentation, testLastPoint, update]);
-
-  // The shape can change under a pointer that never moves — Escape closes the
-  // panel, and a spoken ask opens it — and what the pointer is over changes with it.
-  // Without this the window keeps intercepting clicks for a shape that is no
-  // longer drawn, and the window is always larger than the shape.
-  useEffect(() => {
-    testLastPoint(presentation);
-  }, [presentation, testLastPoint]);
-}
 
 export interface PanelPresentationOptions {
   /**
@@ -155,19 +46,22 @@ export interface PanelPresentationApi {
 }
 
 /**
- * The surface's shape, and the pointer's hold on it. Hovering peeks, leaving
- * closes, and a field someone is part-way through holds the panel the way a
- * hand on the shape does.
+ * The surface's shape: the panel, or the panel stood down to one field — a
+ * key, a consent wait, a note. Main answers every mode request with the
+ * panel, so a close asked of the window leaves it open.
  */
 export function usePanelPresentation(options: PanelPresentationOptions): PanelPresentationApi {
   const { act } = useAct();
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
-  const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.CAPSULE);
+  // The window opens on the panel, so the first frame draws it.
+  const [presentation, setPresentation] = useState<PanelPresentation>(PANEL_PRESENTATION.PANEL);
+  const presentationRef = useRef<PanelPresentation>(PANEL_PRESENTATION.PANEL);
   const hoverTimer = useRef<number | undefined>(undefined);
-  const pointerInside = useRef(false);
+  // The window is an ordinary app window that takes the pointer whole, so
+  // the pointer is always on the panel: nothing the pointer does closes it.
+  const pointerInside = useRef(true);
   const modeGeneration = useRef(0);
   const askEngaged = useRef(false);
   /**
@@ -261,25 +155,6 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     [applyPresentation],
   );
 
-  const onHitRegionEnter = useCallback(() => {
-    cancelHover();
-    pointerInside.current = true;
-    // A pointer arriving from outside ends whatever story a mark was telling:
-    // it is back on the shape, so its next leave is its own action. The arrival
-    // cannot land between a recede and the leave it explains — the surface
-    // covers the pointer for that whole stretch, so no enter fires there.
-    recededAt.current = undefined;
-    // Hovering the capsule peeks; any other shape is already answering the
-    // pointer.
-    if (presentationRef.current !== PANEL_PRESENTATION.CAPSULE) return;
-    hoverTimer.current = window.setTimeout(() => {
-      hoverTimer.current = undefined;
-      if (presentationRef.current === PANEL_PRESENTATION.CAPSULE) {
-        applyPresentation(PANEL_PRESENTATION.PEEK);
-      }
-    }, PEEK_ENTER_DELAY_MS);
-  }, [applyPresentation, cancelHover]);
-
   const onHitRegionLeave = useCallback(
     (travelled = true) => {
       cancelHover();
@@ -356,21 +231,8 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     recededAt.current = performance.now();
   }, []);
 
-  // A pointer confirmed over the panel's content releases the mark, but only
-  // once the recede has settled: while the spring is still travelling, the
-  // vacated footprint itself answers as content, so a twitch during the
-  // shrink would spend the protection one frame before the leave it exists
-  // for.
-  const onPointerOverPanel = useCallback(() => {
-    const marked = recededAt.current;
-    if (marked === undefined) return;
-    if (performance.now() - marked >= RECEDE_SETTLE_MS) recededAt.current = undefined;
-  }, []);
-
   const presentationOf = useCallback(() => presentationRef.current, []);
   const pointerIsInside = useCallback(() => pointerInside.current, []);
-
-  usePointerPassthrough(onHitRegionEnter, onHitRegionLeave, onPointerOverPanel, presentation);
 
   useEffect(() => () => cancelHover(), [cancelHover]);
 

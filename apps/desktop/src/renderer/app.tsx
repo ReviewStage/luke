@@ -1,18 +1,12 @@
-import {
-  PRODUCT_PANEL_SOURCE,
-  PRODUCT_SEARCH_SURFACE,
-  PRODUCT_SURFACE_EVENT,
-} from "@sidecar/analytics";
+import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import {
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_SOURCE,
 } from "@sidecar/credentials/vocabulary";
-import { FEEDBACK_KIND } from "@sidecar/feedback";
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
-import { WingFace as LukeFace } from "@sidecar/panel";
-import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
+import { FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
@@ -40,10 +34,9 @@ import type { CalendarGateControl } from "./calendar-gate";
 import type { ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
 import { CONVERSATION_SEARCH_INPUT_ID } from "./conversation-search";
+import { DesktopShell } from "./desktop/desktop-shell";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
-import { NotchWings } from "./notch-wings";
-import { PanelBody } from "./panel-body";
 import {
   collapseMarkAfter,
   HIT_REGION,
@@ -94,12 +87,10 @@ function notchStyle(display: DisplayDiagnostic): CSSProperties {
 }
 
 function surfaceHeightStyle(
-  panelHeight: number | undefined,
   slotHeight: number | undefined,
   feedbackHeight: number | undefined,
 ): CSSProperties {
   const properties: Partial<Record<SurfaceProperty, string>> = {};
-  if (panelHeight !== undefined) properties[SURFACE_PROPERTY.PANEL_HEIGHT] = `${panelHeight}px`;
   if (slotHeight !== undefined) properties[SURFACE_PROPERTY.SLOT_HEIGHT] = `${slotHeight}px`;
   if (feedbackHeight !== undefined) {
     properties[SURFACE_PROPERTY.FEEDBACK_HEIGHT] = `${feedbackHeight}px`;
@@ -162,10 +153,7 @@ export function App(): React.JSX.Element {
   // Whether the Plans tab is on its new-plan form; an open plan is the host's
   // and outlasts the tab, but a half-filled form is this panel's alone.
   const [plansComposing, setPlansComposing] = useState(false);
-  const { conversationPage, transcriptOpen, changeConversationPage, openTranscript } =
-    useConversationPage(tell);
-  /** The thread's reader reaching the top of what this Mac holds: one page of older turns, asked of the host. */
-  const loadOlderConversation = useCallback(() => act(ACT_KIND.CONVERSATION_LOAD_OLDER), [act]);
+  const { conversationPage, transcriptOpen, changeConversationPage } = useConversationPage(tell);
   // The host closes an open transcript its list no longer names, stamped by
   // a Clear on any Mac or fallen past the list's bound; the page follows it
   // back to the list rather than standing over a transcript nothing fills.
@@ -225,7 +213,6 @@ export function App(): React.JSX.Element {
   // Counts for nothing except having changed: each tick re-renders the rows so
   // their "how long ago" labels stay honest while they are on screen.
   const [, setClock] = useState(0);
-  const [panelElement, panelHeight] = useMeasuredHeight();
   const [slotElement, slotHeight] = useMeasuredHeight();
   const [signInSlotElement, signInSlotHeight] = useMeasuredHeight();
   const [connectElement, connectHeight] = useMeasuredHeight();
@@ -330,7 +317,6 @@ export function App(): React.JSX.Element {
     changeMode,
     cancelHover,
     onHitRegionLeave,
-    panelReceded,
     changeAskEngagement,
     settle,
     leave,
@@ -367,22 +353,6 @@ export function App(): React.JSX.Element {
   });
 
   const leavingPanel = useLeavingPanel(presentation);
-
-  /**
-   * The panel following its content down is the one move that can take the
-   * shape out from under a resting pointer — a settings page opening shorter
-   * than the page it replaces. The mark lands here, on the measure that
-   * retargets the surface, so it is standing before the spring can pass the
-   * pointer and manufacture a leave nobody performed.
-   */
-  const previousPanelHeight = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    const previous = previousPanelHeight.current;
-    previousPanelHeight.current = panelHeight;
-    if (previous !== undefined && panelHeight !== undefined && panelHeight < previous) {
-      panelReceded();
-    }
-  }, [panelHeight, panelReceded]);
 
   /**
    * Brings the panel back around the line the entry belongs to, and leaves it
@@ -436,21 +406,6 @@ export function App(): React.JSX.Element {
     standDownPage,
     standDownTab,
   });
-
-  /**
-   * The composer a thumbs down offers, opened only at the offer's own press,
-   * on a draft of words the thread already drew, which lands only in a note
-   * with nothing written yet. The thread's Conversation tab is hidden for
-   * now, so leaving — Cancel, Escape, or the thank-you a send lands in —
-   * returns to the Settings page the section's own buttons stand on rather
-   * than to a tab nothing may bring forward.
-   */
-  const offerRatingFeedback = useCallback(
-    (draft: string) => {
-      feedback.begin(FEEDBACK_KIND.FEEDBACK, true, draft);
-    },
-    [feedback.begin],
-  );
 
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
@@ -540,10 +495,8 @@ export function App(): React.JSX.Element {
     voiceActive,
     stopSpeaking,
     requestMicrophoneAccess,
-    clearConversationLines,
-    liveConversationEntries,
   } = useVoiceView();
-  const { voiceError, voiceNotice, talkOpening, spokenAskPending } = voiceView;
+  const { voiceError, voiceNotice, talkOpening } = voiceView;
   const planningCallHeld = planningCallHoldsPanel(voiceView);
   planningHeld.current = planningCallHeld;
   // A call ending while the pointer is already away releases its hold the
@@ -595,26 +548,6 @@ export function App(): React.JSX.Element {
     volumeHint,
     leavingPanel,
   });
-
-  /** The capsule is a button: pressing it opens the panel, or closes it again. */
-  const handleCapsulePress = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      // A press is a gesture, not a focus change, so the pointer hands focus
-      // back. `detail` is 0 when the keyboard activated the button, and there
-      // the focus is the point and stays where the keyboard put it.
-      if (event.detail > 0) event.currentTarget.blur();
-      cancelHover();
-      const opening = presentationOf() !== PANEL_PRESENTATION.PANEL;
-      // The press closes as often as it opens, and a close is not an open.
-      if (opening) {
-        window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_OPEN, {
-          panel_source: PRODUCT_PANEL_SOURCE.CAPSULE,
-        });
-      }
-      void changeMode(opening);
-    },
-    [cancelHover, changeMode, presentationOf],
-  );
 
   // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
   // wrong: the panel takes focus programmatically when it opens, which the
@@ -870,10 +803,6 @@ export function App(): React.JSX.Element {
   // runtime that could not answer for the settings every row reads.
   if (!state || !settings || !display) return <div />;
 
-  // Which clock the rows' ages are honest against. Fixture observations are
-  // measured back from the fixture's own epoch precisely so that no capture
-  // run reads them against the time it happened to run at.
-  const now = state.run.fixtureMode ? FIXTURE_EPOCH_MS : Date.now();
   const shownStopHotkey = state.hotkeys.stop;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
@@ -996,17 +925,21 @@ export function App(): React.JSX.Element {
       // Whether the shape is still on its way down from the panel, so the
       // surface waits for the content it is carrying instead of leading it.
       data-leaving-panel={String(leavingPanel)}
-      data-notch={String(display.notch.hasNotch)}
+      // No housing to blend into: the slot and the composer draw as
+      // free-standing cards, the way they do on a display without a notch.
+      data-notch="false"
       // Whether sign-in still stands between Luke and anything to watch, so the
       // stylesheet knows the strip holds nothing while a popup is drawn.
       data-gated={String(accountGated)}
       data-capture={String(state.run.captureMode)}
+      // The panel is drawn as an ordinary app window's content rather than a
+      // shape at the notch; desktop.css lays it out.
+      data-surface="desktop"
       style={{
         ...notchStyle(display),
         // One slot shape, three possible occupants: the surface follows the
         // height of whichever is actually drawn.
         ...surfaceHeightStyle(
-          panelHeight,
           connections.signInWait !== undefined
             ? signInSlotHeight
             : slotOccupant.current === PANEL_STAND_DOWN.CONSENT
@@ -1017,113 +950,78 @@ export function App(): React.JSX.Element {
         ...caption.style,
       }}
     >
-      {/* Capsule, peek, slot and panel are all this one shape at different
-          sizes, so the surface is never cross-faded — it is only ever resized. */}
       <span className="panel-surface" data-hit-region={HIT_REGION.SURFACE} aria-hidden="true" />
 
-      {/* Inert while hidden: the panel keeps its full layout box behind
-          `opacity: 0`, so its buttons stay focusable and the browser will scroll
-          them into view, pushing the compact capsule off screen. */}
-      <div className="expanded-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
-        <section className="expanded-panel" ref={panelElement} data-hit-region={HIT_REGION.PANEL}>
-          <PanelBody
-            accountRequired={state.run.accountRequired}
-            account={state.account}
-            onBeginSignIn={connections.beginSignIn}
-            {...(connections.signInFailure
-              ? { signInFailure: connections.signInFailure }
-              : undefined)}
-            {...(calendarGate ? { calendarGate } : undefined)}
-            {...(conductorKeyGate ? { conductorKeyGate } : undefined)}
-            providerConnect={providerConnect}
-            list={sessions.list}
-            sessionsSettled={sessionsSettled}
-            view={sessions.view}
-            onViewChange={sessions.onViewChange}
-            onFiltersChange={sessions.onFiltersChange}
-            now={now}
-            onOpenSession={sessions.onOpenSession}
-            onOpenSessionApplication={sessions.onOpenSessionApplication}
-            writes={sessions.writes}
-            conversation={state.conversation}
-            roster={sessions.roster}
-            onOpenChat={sessions.onOpenChat}
-            onOfferRatingFeedback={offerRatingFeedback}
-            liveConversationEntries={liveConversationEntries}
-            spokenAskPending={spokenAskPending}
-            onClearConversationConversation={clearConversationLines}
-            onLoadOlderConversation={loadOlderConversation}
-            conversationPage={conversationPage}
-            onConversationPageChange={changeConversationPage}
-            subagents={state.children}
-            agents={state.agents}
-            onOpenTranscript={openTranscript}
-            transcriptOpen={transcriptOpen}
-            childTranscript={state.childTranscript}
-            onFieldEngaged={changeAskEngagement}
-            offerOptions={sessions.offerOptions}
-            optionsOpen={sessions.optionsOpen}
-            onOptionsToggle={sessions.toggleOptions}
-            offerSearch={sessions.offerSearch}
-            searchOpen={sessions.searchOpen}
-            onSearchToggle={() =>
-              sessions.searchOpen ? sessions.closeSearch() : sessions.openSearch()
-            }
-            onSearchClose={sessions.closeSearch}
-            settingsSearchOpen={settingsSearchOpen}
-            onSettingsSearchToggle={() =>
-              settingsSearchOpen ? closeSettingsSearch() : openSettingsSearch()
-            }
-            offerConversationSearch={offerConversationSearch}
-            conversationSearchOpen={conversationSearchOpen}
-            onConversationSearchToggle={() =>
-              conversationSearchOpen ? closeConversationSearch() : openConversationSearch()
-            }
-            onConversationSearchClose={closeConversationSearch}
-            tab={tab}
-            onTabChange={changeTab}
-            plans={plans}
-            settings={{
-              account: state.account,
-              onSignOut: async () => {
-                await act(ACT_KIND.ACCOUNT_SIGN_OUT);
-              },
-              // The delete happens at the service before anything local moves,
-              // so a failure resolves to why and the account is still standing.
-              onDeleteAccount: async () => {
-                try {
-                  await act(ACT_KIND.ACCOUNT_DELETE);
-                  return { status: ACTION_RESULT_STATUS.ACCEPTED };
-                } catch {
-                  return {
-                    status: ACTION_RESULT_STATUS.REJECTED,
-                    reason:
-                      "Luke's service could not delete the account, so it still stands. Try again in a moment.",
-                  };
-                }
-              },
-              view: settingsView,
-              onViewChange: setSettingsView,
-              microphone,
-              updates,
-              settings,
-              credentials: connections.credentials,
-              feedback: feedback.control,
-              panelOpen,
-              workspaceProviders: sessions.workspaceProviders,
-              calendar: connections.calendar,
-              appleCalendar: connections.appleCalendar,
-              onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
-              shortcuts,
-              searchOpen: settingsSearchOpen,
-              onSearchClose: closeSettingsSearch,
-              // The same hold the ask field and the session search report
-              // through: one caret anywhere in the panel is hands being here.
-              onSearchEngaged: changeAskEngagement,
-            }}
-          />
-        </section>
+      {/* The window's content. Inert while the panel stands down to a field,
+          a consent wait, or a note, which are drawn as a sheet over it. */}
+      <div className="desktop-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
+        <DesktopShell
+          gates={{
+            accountRequired: state.run.accountRequired,
+            signInFailure: connections.signInFailure,
+            onBeginSignIn: connections.beginSignIn,
+            conductorKeyGate,
+            calendarGate,
+            signInFace,
+          }}
+          identity={{
+            tally: sessions.tally,
+            levels: voiceLevels,
+            speakers,
+            voiceActive,
+            fixtureSpeaking,
+            voiceOpening: talkOpening,
+            announcementsHeld,
+            sessionsSettled,
+          }}
+          tab={tab}
+          onTabChange={changeTab}
+          plans={plans}
+          settingsSearchOpen={settingsSearchOpen}
+          onSettingsSearchToggle={() =>
+            settingsSearchOpen ? closeSettingsSearch() : openSettingsSearch()
+          }
+          settings={{
+            account: state.account,
+            onSignOut: async () => {
+              await act(ACT_KIND.ACCOUNT_SIGN_OUT);
+            },
+            // The delete happens at the service before anything local moves,
+            // so a failure resolves to why and the account is still standing.
+            onDeleteAccount: async () => {
+              try {
+                await act(ACT_KIND.ACCOUNT_DELETE);
+                return { status: ACTION_RESULT_STATUS.ACCEPTED };
+              } catch {
+                return {
+                  status: ACTION_RESULT_STATUS.REJECTED,
+                  reason:
+                    "Luke's service could not delete the account, so it still stands. Try again in a moment.",
+                };
+              }
+            },
+            view: settingsView,
+            onViewChange: setSettingsView,
+            microphone,
+            updates,
+            settings,
+            credentials: connections.credentials,
+            feedback: feedback.control,
+            panelOpen,
+            workspaceProviders: sessions.workspaceProviders,
+            calendar: connections.calendar,
+            appleCalendar: connections.appleCalendar,
+            onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
+            shortcuts,
+            searchOpen: settingsSearchOpen,
+            onSearchClose: closeSettingsSearch,
+            // The same hold the ask field and the session search report
+            // through: one caret anywhere in the panel is hands being here.
+            onSearchEngaged: changeAskEngagement,
+          }}
+        />
       </div>
+      <span className="desktop-scrim" aria-hidden="true" />
 
       {/* The panel stood down to its field. It shares the expanded window, so
           standing down to it costs no more than the peek does. */}
@@ -1170,34 +1068,6 @@ export function App(): React.JSX.Element {
         confirming={feedback.confirming}
         still={stillMotion}
       />
-      <NotchWings
-        tally={sessions.tally}
-        levels={voiceLevels}
-        speakers={speakers}
-        voiceActive={voiceActive}
-        fixtureSpeaking={fixtureSpeaking}
-        voiceOpening={talkOpening}
-        announcementsHeld={announcementsHeld}
-        sessionsSettled={sessionsSettled}
-        presentation={presentation}
-        housingWidth={display.notch.housingWidth}
-        accountGated={accountGated}
-      />
-
-      {/* The one signed-out Luke. Like the caption, he is a single element in
-          every state so the morph carries him instead of trading two copies:
-          over the gate's reserved box while the panel is up, and down to the
-          peek's strip — the wing spot the authed face holds — when it closes.
-          Keyed on the play so each gesture of the introduction cycle is a
-          fresh drawing, exactly as the wing remounts its own. */}
-      {accountGated ? (
-        <span className="sign-in-luke" aria-hidden="true">
-          <LukeFace
-            key={signInFace.play}
-            {...(signInFace.motion ? { motion: signInFace.motion } : undefined)}
-          />
-        </span>
-      ) : null}
 
       {/* Luke's words while he says them: one element in every state, under
           the housing while the shape is compact and carried to the panel's
@@ -1259,22 +1129,6 @@ export function App(): React.JSX.Element {
           Got it
         </button>
       </span>
-
-      <div className="compact-stage">
-        {/* A button, not a hover target: hovering only peeks, pressing commits.
-            It stays live over an open panel so pressing it closes again. */}
-        <button
-          type="button"
-          className="compact-hover-target"
-          data-hit-region={HIT_REGION.CAPSULE}
-          aria-expanded={panelOpen}
-          aria-label={panelOpen ? "Close the panel" : "Open the panel"}
-          // Keeps the press from moving focus here at all, so nothing is drawn
-          // around the notch strip and a focused settings field keeps the caret.
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={handleCapsulePress}
-        />
-      </div>
     </div>
   );
 }

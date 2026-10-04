@@ -23,3 +23,6 @@
 /* Generated from design/generate-brand-assets.mjs; base.css holds the wiring it
    assumes. Last, so a hand-written rule can still win. */
 @import "./generated/face-motion.css";
+/* After everything: the window's own layout restages the notch surface's
+   elements, and its overrides have to win. */
+@import "./desktop.css";

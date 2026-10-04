@@ -399,8 +399,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         return;
       }
       panels.reconcile();
-      panels.showInactiveAll();
+      panels.focusExpanded();
     });
+  };
+  // The Dock tile pressed: the window comes back, whether it was closed or
+  // only behind another app.
+  const handleActivate = (): void => {
+    if (!introductionPlaying()) panels.focusExpanded();
   };
   // Named one at a time because Electron's `on` is typed per event name.
   const wake = (eventName: "resume" | "unlock-screen" | "user-did-become-active") => () => {
@@ -537,6 +542,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       configurePermissions();
 
       app.on("second-instance", handleSecondInstance);
+      app.on("activate", handleActivate);
       screen.on("display-added", handleDisplayChange);
       screen.on("display-removed", handleDisplayChange);
       screen.on("display-metrics-changed", handleDisplayChange);
@@ -546,6 +552,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
     stop: async () => {
       app.removeListener("second-instance", handleSecondInstance);
+      app.removeListener("activate", handleActivate);
       screen.removeListener("display-added", handleDisplayChange);
       screen.removeListener("display-removed", handleDisplayChange);
       screen.removeListener("display-metrics-changed", handleDisplayChange);
