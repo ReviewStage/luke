@@ -13,53 +13,33 @@ import { EMPTY_PLAN_UPDATE, type FullPlanUpdate } from "@sidecar/hosted/plan-tem
 
 /**
  * The headings every plan's body carries after its title, in order: the
- * fixed template's sections and fields, which no answer may add to.
+ * fixed template's core sections and fields, which no answer may add to.
  */
 export const TEMPLATE_HEADINGS = [
-  "## Purpose and users",
+  "## Goal",
   "### Problem",
-  "### Users",
   "### Outcome",
   "## Scope",
   "### Included",
   "### Excluded",
   "### Constraints",
-  "## Existing system",
-  "### Current behavior",
-  "### Relevant code",
-  "### Terminology",
-  "## Behavior",
-  "### Rules",
-  "### Invariants",
-  "### Scenarios",
-  "## Data and interfaces",
-  "### Data rules",
-  "### Interfaces",
-  "## Quality requirements",
-  "### Permissions and privacy",
-  "### Usability and accessibility",
-  "### Performance and reliability",
-  "## Implementation guidance",
-  "### Approach",
-  "### Decisions",
-  "### Steps and dependencies",
-  "### Risks and mitigations",
-  "### Compatibility and migration",
-  "### Rollout and recovery",
-  "### Delegated choices",
-  "## Acceptance",
-  "### Examples",
-  "### Verification",
+  "## Rules",
+  "## Implementation",
+  "### Change map",
+  "### Contracts",
+  "### Patterns to follow",
+  "## Decisions",
+  "## Verification",
+  "## Left to the agent",
   "## Open questions",
-  "## Handoff prompt",
 ] as const;
 
-/** How many ordinary answers and collections the template holds; each reads "Unanswered" while null. */
-export const TEMPLATE_UNANSWERED_FIELDS = 26;
+/** How many core answers the template holds, the rules among them; each reads "Unanswered" while null. */
+export const TEMPLATE_UNANSWERED_FIELDS = 12;
 
-/** The section and field headings a body carries, in order, leaving out its title and any scenario or example heading. */
+/** The section and field headings a body carries, in order, leaving out its title and each rule's heading. */
 export function templateHeadingsOf(body: string): readonly string[] {
-  return body.split("\n").filter((line) => /^#{2,3} /u.test(line));
+  return body.split("\n").filter((line) => /^#{2,3} (?!Rule \d)/u.test(line));
 }
 
 /** Every line of a body that Markdown reads as a heading at the start of a line. */
@@ -68,43 +48,29 @@ export function headingLinesOf(body: string): readonly string[] {
 }
 
 /**
- * Teammate invitations, mid-conversation: the purpose and one rule settled,
- * a scenario whose steps are not yet known, an example with no outcome yet,
- * and everything else unanswered.
+ * Teammate invitations, mid-conversation: the problem and one rule settled,
+ * an example with no outcome yet, and everything else unanswered.
  */
 export const INVITATIONS_DRAFT: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
-  purpose: {
+  goal: {
     problem: "A workspace member cannot bring a teammate in without an admin creating the account.",
-    users: "Workspace members, and the teammates they invite.",
     outcome: null,
   },
-  behavior: {
-    rules: "Any member may invite by email.",
-    invariants: null,
-    scenarios: [
-      {
-        name: "A teammate accepts an invite",
-        actor: "The invited teammate",
-        startingState: "The teammate holds an unopened invite link.",
-        trigger: "The teammate opens the link.",
-        steps: null,
-        expectedOutcome: null,
-        alternativesAndFailures: null,
-      },
-    ],
-  },
-  acceptance: {
-    examples: [
-      {
-        given: "A member sends an invite",
-        when: "the teammate opens it",
-        // biome-ignore lint/suspicious/noThenProperty: `then` is the acceptance example's key in the fixed template's contract, and an example is data that is never awaited.
-        then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-      },
-    ],
-    verification: null,
-  },
+  rules: [
+    {
+      statement: "Any member may invite by email.",
+      examples: [
+        {
+          given: "A member sends an invite",
+          when: "the teammate opens it",
+          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+          then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+        },
+      ],
+    },
+    { statement: "A withdrawn invite's link never grants access.", examples: null },
+  ],
   openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
   assumptions: [
     { text: "Invites reuse `memberships` with a `pending` state." },
@@ -113,14 +79,15 @@ export const INVITATIONS_DRAFT: FullPlanUpdate = {
 };
 
 /**
- * A small feature, settled: the inapplicable fields answer why in a sentence,
- * and the four fields a small change could leave empty say so explicitly
- * rather than inventing a risk or an alternative to fill them.
+ * A small feature, settled: every core field answered, the inapplicable ones
+ * saying why in a sentence rather than inventing a contract or a decision to
+ * fill them, and no optional field.
  */
 export const SMALL_FEATURE: FullPlanUpdate = {
-  purpose: {
-    problem: "The empty plan list says nothing about how to start.",
-    users: "Developers opening the Plans tab for the first time.",
+  ...EMPTY_PLAN_UPDATE,
+  goal: {
+    problem:
+      "Developers opening the Plans tab for the first time see an empty list that says nothing about how to start.",
     outcome: 'The empty list reads "No plans yet. Start one with New plan."',
   },
   scope: {
@@ -128,147 +95,98 @@ export const SMALL_FEATURE: FullPlanUpdate = {
     excluded: "Any other copy in the panel.",
     constraints: "Not applicable: a copy change has no material limits beyond the line itself.",
   },
-  context: {
-    currentBehavior: 'Fact: the empty list reads "No plans yet."',
-    relevantCode:
-      "Inspected at the plan's commit: `src/renderer/planning/planning-parts.tsx` draws the line.",
-    terminology: "Not applicable: no term here is ambiguous.",
+  rules: [
+    {
+      statement: "The line shows only while the account holds no plan.",
+      examples: [
+        {
+          given: "An account with no plans",
+          when: "the developer opens the Plans tab",
+          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+          then: 'the tab reads "No plans yet. Start one with New plan."', // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+        },
+      ],
+    },
+  ],
+  implementation: {
+    changeMap: "- `src/renderer/planning/planning-parts.tsx`: the new line.",
+    contracts: "Not applicable: no type, schema, or signature changes.",
+    patterns: "Follow the other empty-state lines in `src/renderer/planning/planning-parts.tsx`.",
+    order: null,
   },
-  behavior: {
-    rules: "The line shows only while the account holds no plan.",
-    invariants: "No additional invariant beyond the stated rule: the change is one string.",
-    scenarios: [
-      {
-        name: "First visit",
-        actor: "A developer with no plans",
-        startingState: "The account holds no plan.",
-        trigger: "The developer opens the Plans tab.",
-        steps: ["The tab reads the plan list.", "The list comes back empty."],
-        expectedOutcome: "The new line shows under New plan.",
-        alternativesAndFailures: "A failed read shows the existing failure note instead.",
-      },
-    ],
-  },
-  dataAndInterfaces: {
-    dataRules: "Not applicable: no data changes; the feature only reads the list.",
-    interfaces: "Not applicable: no contract changes.",
-  },
-  quality: {
-    permissionsAndPrivacy: "Not applicable: the line names nothing of the account.",
-    usabilityAndAccessibility: "The line stays plain text a screen reader reads in place.",
-    performanceAndReliability: "Not applicable: no new work is done.",
-  },
-  delivery: {
-    approach: "Change the one string.",
-    decisions: "No consequential decision: the wording was agreed as stated.",
-    stepsAndDependencies: "One step, with no prerequisite: change the string and its test.",
-    risksAndMitigations: "No material risk identified: the change is one string.",
-    compatibilityAndMigration: "Not applicable: nothing is stored.",
-    rolloutAndRecovery: "Ships with the next release; reverting the commit restores the old line.",
-    delegatedChoices: "The implementing agent may choose the test's name.",
-  },
-  acceptance: {
-    examples: [
-      {
-        given: "An account with no plans",
-        when: "the developer opens the Plans tab",
-        // biome-ignore lint/suspicious/noThenProperty: `then` is the acceptance example's key in the fixed template's contract, and an example is data that is never awaited.
-        then: 'the tab reads "No plans yet. Start one with New plan."', // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-      },
-    ],
-    verification: "The panel's existing layout test proves the line shows only for an empty list.",
-  },
-  openQuestions: [],
-  handoffPrompt: null,
+  decisions: "No consequential decision: the wording was agreed as stated.",
+  verification: "The panel's existing layout test proves the line shows only for an empty list.",
+  leftToAgent: "The test's name.",
   assumptions: [
     { text: "Constraints do not apply to a one-line copy change." },
-    { text: "No risk is worth recording for this change." },
+    { text: "No decision is worth recording for this change." },
   ],
 };
 
-/** What the bulk import's plan agrees, carried again, unchanged, into its handoff prompt. */
+/** What the bulk import's plan agrees. */
 export const BULK_IMPORT_AGREED = {
-  INVARIANT:
-    "An import writes every row or none: a file with any invalid row leaves the contacts table exactly as it was.",
+  RULE: "An import writes every row or none: a file with any invalid row leaves the contacts table exactly as it was.",
   DECISION:
-    "Decision: validate every row, then write them in one transaction. Rationale: a half-imported file " +
-    "leaves the developer unable to tell which rows landed. Alternative: import the valid rows and " +
-    "report the rest. Accepted cost: one bad row blocks the whole file until it is fixed.",
-  PREREQUISITE:
-    "1. Establish that `ContactStore.insertMany` can run inside one transaction; nothing else starts " +
-    "until a test shows a failed insert rolls every row back.\n2. Add the validation pass.\n" +
-    "3. Wire the import screen to show the first invalid row.",
-  RISK:
-    "Hypothesis, unverified: a 50,000-row file fits in one transaction. Mitigation: a bounded " +
-    "investigation loads a synthetic 50,000-row file before step 3; if it does not fit, the file size " +
-    "limit is lowered and the developer decides again. Accepted: large files may be refused.",
+    "Validate every row, then write them in one transaction. Why: a half-imported file leaves " +
+    "the developer unable to tell which rows landed. Rejected: importing the valid rows and " +
+    "reporting the rest.",
+  CONTRACT:
+    "```ts\nexport function importContacts(file: ContactFile): Effect<ImportResult, InvalidRow>;\n```",
+  ORDER:
+    "1. Show that `ContactStore.insertMany` rolls every row back on a failed insert; nothing " +
+    "else starts until a test proves it.\n2. Add the validation pass.\n3. Wire the import " +
+    "screen to show the first invalid row.",
   VERIFICATION:
     "A store test imports a file whose last row is invalid and asserts the contacts table is " +
-    "unchanged, which proves the all-or-nothing invariant.",
-  EVIDENCE:
-    "Fact, inspected at the plan's commit: `src/contacts/store.ts` writes rows one at a time. " +
-    "Hypothesis: the database driver supports nested transactions.",
+    "unchanged, which proves the all-or-nothing rule.",
+  DATA: "No column changes; the import writes existing `contacts` rows.",
 } as const;
 
-/** A bulk import that meets an invalid row: the agreed invariant, its decision, prerequisite, risk, and check, and the handoff that carries them. */
+/** A bulk import that meets an invalid row: its rule, contract, decision, order, and check, with its optional sections filled. */
 export const BULK_IMPORT: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
-  purpose: {
-    problem: "Contacts are entered one at a time.",
-    users: "Workspace admins moving contacts from another tool.",
+  goal: {
+    problem: "Workspace admins moving from another tool enter contacts one at a time.",
     outcome: "An admin imports a CSV of contacts in one step.",
   },
-  context: {
-    currentBehavior: "Each contact is created through the single-contact form.",
-    relevantCode: BULK_IMPORT_AGREED.EVIDENCE,
-    terminology: "A row is one line of the CSV after its header.",
+  scope: {
+    included: "CSV import of contacts from the contacts screen.",
+    excluded: "Other file formats, and updating contacts that already exist.",
+    constraints: "Files up to 50,000 rows.",
   },
-  behavior: {
-    rules: "Every row must carry a name and a valid email address.",
-    invariants: BULK_IMPORT_AGREED.INVARIANT,
-    scenarios: [
-      {
-        name: "A file with one invalid row",
-        actor: "A workspace admin",
-        startingState: "The contacts table holds the workspace's existing contacts.",
-        trigger: "The admin uploads a CSV whose row 12 has no email address.",
-        steps: ["The service validates every row.", "Row 12 fails validation."],
-        expectedOutcome: "Nothing is imported, and the screen names row 12 and its missing email.",
-        alternativesAndFailures:
-          "Cancelling during validation imports nothing; retrying the fixed file imports every row once.",
-      },
-    ],
+  rules: [
+    {
+      statement: BULK_IMPORT_AGREED.RULE,
+      examples: [
+        {
+          given: "A CSV whose row 12 has no email address",
+          when: "the admin imports it",
+          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+          then: "no contact is added and the screen names row 12", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+        },
+        {
+          given: "A valid CSV of 3 rows",
+          when: "the admin imports it",
+          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+          then: "the 3 contacts are added", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+        },
+      ],
+    },
+  ],
+  implementation: {
+    changeMap:
+      "- `src/contacts/import.ts`: new, the validation pass and the import.\n" +
+      "- `src/contacts/store.ts`: `insertMany` runs in one transaction.",
+    contracts: BULK_IMPORT_AGREED.CONTRACT,
+    patterns: "Follow `src/contacts/export.ts` for reading a file in rows.",
+    order: BULK_IMPORT_AGREED.ORDER,
   },
-  delivery: {
-    ...EMPTY_PLAN_UPDATE.delivery,
-    approach: "Validate the whole file first, then write it in one transaction.",
-    decisions: BULK_IMPORT_AGREED.DECISION,
-    stepsAndDependencies: BULK_IMPORT_AGREED.PREREQUISITE,
-    risksAndMitigations: BULK_IMPORT_AGREED.RISK,
-  },
-  acceptance: {
-    examples: [
-      {
-        given: "A CSV whose row 12 has no email address",
-        when: "the admin imports it",
-        // biome-ignore lint/suspicious/noThenProperty: `then` is the acceptance example's key in the fixed template's contract, and an example is data that is never awaited.
-        then: "no contact is added and the screen names row 12", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-      },
-    ],
-    verification: BULK_IMPORT_AGREED.VERIFICATION,
-  },
-  handoffPrompt: [
-    "**Objective:** let a workspace admin import a CSV of contacts in one step.",
-    `**Invariant:** ${BULK_IMPORT_AGREED.INVARIANT}`,
-    `**Why:** ${BULK_IMPORT_AGREED.DECISION}`,
-    `**Steps:**\n\n${BULK_IMPORT_AGREED.PREREQUISITE}`,
-    `**Accepted risk:** ${BULK_IMPORT_AGREED.RISK}`,
-    `**Verification:** ${BULK_IMPORT_AGREED.VERIFICATION}`,
-    `**Source:** ${BULK_IMPORT_AGREED.EVIDENCE}`,
-    "If anything here conflicts with the agreed behavior, surface the conflict before overriding it.",
-  ].join("\n\n"),
+  decisions: BULK_IMPORT_AGREED.DECISION,
+  verification: BULK_IMPORT_AGREED.VERIFICATION,
+  leftToAgent: "The wording of the invalid-row message, and internal helper names.",
+  dataAndMigration: BULK_IMPORT_AGREED.DATA,
   assumptions: [
-    { text: BULK_IMPORT_AGREED.INVARIANT },
+    { text: BULK_IMPORT_AGREED.RULE },
     { text: "One invalid row blocks the whole file." },
     { text: "A 50,000-row file fits in one transaction." },
   ],

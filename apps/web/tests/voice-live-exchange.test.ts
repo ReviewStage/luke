@@ -510,7 +510,7 @@ it.live(
           planning: true,
           scribe: {
             planId: plan.id,
-            model: scriptedScribeModel([{ purpose: { problem } }]).model,
+            model: scriptedScribeModel([{ goal: { problem } }]).model,
             onDraft: (draft) => drafts.push(draft),
           },
         }),

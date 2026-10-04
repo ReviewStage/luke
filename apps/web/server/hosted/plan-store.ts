@@ -93,12 +93,22 @@ const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.Stri
 
 const PlanIdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The row's document, as the window and the model read it. */
+/**
+ * The row's document, as the window and the model read it. Note that a plan
+ * whose body is still empty, never saved or reset, reads as the untouched
+ * template formatted here rather than stored, so it is always the current
+ * template's.
+ */
 function storedPlanOf(row: PlanRow): StoredPlan {
+  const summary = summaryOf(row);
+  const body =
+    row.body === ""
+      ? planBody({ name: summary.name, repository: summary.repository }, EMPTY_PLAN_FIELDS)
+      : row.body;
   return {
     plan: {
-      ...summaryOf(row),
-      document: { body: row.body, assumptions: row.assumptions },
+      ...summary,
+      document: { body, assumptions: row.assumptions },
     },
     fields: row.fields ?? EMPTY_PLAN_FIELDS,
     conversationId: row.conversationId ?? undefined,
@@ -147,18 +157,6 @@ const insertPlan = SqlSchema.findOne({
         repositoryName: write.repositoryName,
         repositoryBranch: write.branch,
         repositoryCommit: write.commit,
-        body: planBody(
-          {
-            name: write.name,
-            repository: {
-              owner: write.owner,
-              name: write.repositoryName,
-              branch: write.branch,
-              commit: write.commit,
-            },
-          },
-          EMPTY_PLAN_FIELDS,
-        ),
         assumptions: [],
         createdAt: write.now,
         updatedAt: write.now,

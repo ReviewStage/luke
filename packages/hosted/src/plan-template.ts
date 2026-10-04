@@ -8,11 +8,17 @@ import { PLAN_BOUNDS, type PlanRepository, planDocumentSchema } from "./plan-wir
  * Every plan has the same sections in the same order (`docs/PLANNING.md`,
  * "The fixed template"). The service keeps the plan's fields as they stand,
  * and an `update_plan` call names only what it changes: a key left out keeps
- * its value, `null` clears it back to "Unanswered", and a list sent is the
- * whole list. The merged fields are formatted here into the document's
- * Markdown `body`, and the document the window and the model read stays
- * `{ body, assumptions }` (`plan-wire.ts`). No code reads the body back into
- * fields.
+ * its value, `null` clears it, and a list sent is the whole list. A core
+ * field reads "Unanswered" while null; an optional field is left out of the
+ * body until it holds something. The merged fields are formatted here into
+ * the document's Markdown `body`, and the document the window and the model
+ * read stays `{ body, assumptions }` (`plan-wire.ts`). No code reads the body
+ * back into fields.
+ *
+ * The template holds what a coding agent cannot read from the repository:
+ * what was decided, the rules and their examples, and the contracts the
+ * change must meet. The agent explores the code itself, so the plan carries
+ * pointers into it rather than a description of it.
  *
  * The formatter owns every heading and its order. Field text is Markdown the
  * model wrote, contained where it stands: a line that would open a heading or
@@ -26,63 +32,40 @@ import { PLAN_BOUNDS, type PlanRepository, planDocumentSchema } from "./plan-wir
 const PLAN_TEMPLATE_BOUNDS = {
   /** One answer may be at most the whole body; the formatted total is what is held to the body bound. */
   MAX_ANSWER_CHARS: PLAN_BOUNDS.MAX_BODY_CHARS,
-  /** A scenario's name is a heading, so it is a short line. */
-  MAX_SCENARIO_NAME_CHARS: 200,
-  /** The most scenarios, acceptance examples, steps of one scenario, or open questions. */
+  /** A rule's statement is its heading, so it is one sentence. */
+  MAX_RULE_CHARS: 500,
+  /** One part of an example is a clause drawn on one line. */
+  MAX_EXAMPLE_PART_CHARS: 1_000,
+  /** The most rules, examples of one rule, or open questions. */
   MAX_ITEMS: 200,
 } as const;
 
 /** Every heading the formatter writes, section and field alike, in the words the developer reads. */
 export const PLAN_HEADING = {
-  PURPOSE: "Purpose and users",
+  GOAL: "Goal",
   PROBLEM: "Problem",
-  USERS: "Users",
   OUTCOME: "Outcome",
   SCOPE: "Scope",
   INCLUDED: "Included",
   EXCLUDED: "Excluded",
   CONSTRAINTS: "Constraints",
-  CONTEXT: "Existing system",
-  CURRENT_BEHAVIOR: "Current behavior",
-  RELEVANT_CODE: "Relevant code",
-  TERMINOLOGY: "Terminology",
-  BEHAVIOR: "Behavior",
   RULES: "Rules",
-  INVARIANTS: "Invariants",
-  SCENARIOS: "Scenarios",
-  DATA_AND_INTERFACES: "Data and interfaces",
-  DATA_RULES: "Data rules",
-  INTERFACES: "Interfaces",
-  QUALITY: "Quality requirements",
-  PERMISSIONS_AND_PRIVACY: "Permissions and privacy",
-  USABILITY_AND_ACCESSIBILITY: "Usability and accessibility",
-  PERFORMANCE_AND_RELIABILITY: "Performance and reliability",
-  DELIVERY: "Implementation guidance",
-  APPROACH: "Approach",
+  IMPLEMENTATION: "Implementation",
+  CHANGE_MAP: "Change map",
+  CONTRACTS: "Contracts",
+  PATTERNS: "Patterns to follow",
+  ORDER: "Order",
   DECISIONS: "Decisions",
-  STEPS_AND_DEPENDENCIES: "Steps and dependencies",
-  RISKS_AND_MITIGATIONS: "Risks and mitigations",
-  COMPATIBILITY_AND_MIGRATION: "Compatibility and migration",
-  ROLLOUT_AND_RECOVERY: "Rollout and recovery",
-  DELEGATED_CHOICES: "Delegated choices",
-  ACCEPTANCE: "Acceptance",
-  EXAMPLES: "Examples",
   VERIFICATION: "Verification",
+  LEFT_TO_AGENT: "Left to the agent",
   OPEN_QUESTIONS: "Open questions",
-  HANDOFF_PROMPT: "Handoff prompt",
+  DATA_AND_MIGRATION: "Data and migration",
   ASSUMPTIONS: "Assumptions",
 } as const;
 
-/** The labels inside one scenario or acceptance example. */
+/** The labels inside one rule. */
 const PLAN_LABEL = {
-  SCENARIO: "Scenario",
-  ACTOR: "Actor",
-  STARTING_STATE: "Starting state",
-  TRIGGER: "Trigger",
-  STEPS: "Steps",
-  EXPECTED_OUTCOME: "Expected outcome",
-  ALTERNATIVES_AND_FAILURES: "Alternatives and failures",
-  EXAMPLE: "Example",
+  RULE: "Rule",
   GIVEN: "Given",
   WHEN: "When",
   THEN: "Then",
@@ -91,8 +74,8 @@ const PLAN_LABEL = {
 /** What stands in a field's place while it holds nothing; each is the only rendering of its empty state. */
 export const PLAN_EMPTY_TEXT = {
   UNANSWERED: "_Unanswered_",
+  NO_EXAMPLES: "_No examples yet_",
   NO_QUESTIONS: "_No additional questions recorded_",
-  NOT_PREPARED: "_Not prepared_",
   NO_ASSUMPTIONS: "_None recorded_",
 } as const;
 
@@ -117,107 +100,82 @@ function answer(description: string) {
   return describeWire(ANSWER, `${description} Null while unanswered.`);
 }
 
-const scenarioSchema = EffectSchema.Struct({
-  name: trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_SCENARIO_NAME_CHARS),
-  actor: answer("Who acts: a person, an API caller, or a background process."),
-  startingState: answer("What stands before the trigger."),
-  trigger: answer("What starts the scenario."),
-  steps: describeWire(
-    EffectSchema.NullOr(nonEmptyList(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS))),
-    "The ordered steps, each nonblank. Null while unanswered.",
-  ),
-  expectedOutcome: answer("What the actor observes at the end."),
-  alternativesAndFailures: answer(
-    "What happens on the alternative, failure, cancellation, and retry paths that apply.",
-  ),
+/** One clause of an example, null while unknown. */
+function examplePart(description: string) {
+  return describeWire(
+    EffectSchema.NullOr(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_EXAMPLE_PART_CHARS)),
+    `${description} One line. Null while unknown.`,
+  );
+}
+
+const exampleSchema = EffectSchema.Struct({
+  given: examplePart("The starting situation."),
+  when: examplePart("The action."),
+  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+  then: examplePart("The observable result."), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
 });
 
-const acceptanceExampleSchema = EffectSchema.Struct({
-  given: answer("The starting situation."),
-  when: answer("The action."),
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the acceptance example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: answer("The observable result."), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+const ruleSchema = EffectSchema.Struct({
+  statement: describeWire(
+    trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_RULE_CHARS),
+    "The rule as one sentence that holds in every case, failure, cancellation, and retry included.",
+  ),
+  examples: describeWire(
+    EffectSchema.NullOr(nonEmptyList(exampleSchema)),
+    "Concrete examples that pin the rule, each exactly given, when, and then; more of them " +
+      "where the rule is ambiguous or two implementations could read it differently. Null " +
+      "until one is agreed.",
+  ),
 });
 
 /** Every section and field of the template, in its order: what the service keeps for a plan. */
 export const planFieldsSchema = EffectSchema.Struct({
-  purpose: EffectSchema.Struct({
-    problem: answer("The current problem."),
-    users: answer("The people or callers affected."),
-    outcome: answer("The observable improvement."),
+  goal: EffectSchema.Struct({
+    problem: answer("The current problem, and who it affects."),
+    outcome: answer("The observable improvement once the change ships."),
   }),
   scope: EffectSchema.Struct({
-    included: answer("The capabilities included."),
-    excluded: answer("What is explicitly excluded."),
-    constraints: answer("Material limits on this change."),
-  }),
-  context: EffectSchema.Struct({
-    currentBehavior: answer("What happens today."),
-    relevantCode: answer(
-      "Paths inspected at the plan's commit, or other cited evidence, with facts kept apart " +
-        "from hypotheses and proposed changes.",
-    ),
-    terminology: answer("Terms whose meaning matters."),
-  }),
-  behavior: EffectSchema.Struct({
-    rules: answer("The behavioral rules."),
-    invariants: answer(
-      "What must stay true across every scenario, including failure, cancellation, and retry " +
-        "paths, and any preserved data, permission, or interface guarantee.",
-    ),
-    scenarios: describeWire(
-      EffectSchema.NullOr(nonEmptyList(scenarioSchema)),
-      "Concrete rehearsals, each exactly its name, actor, starting state, trigger, steps, " +
-        "expected outcome, and alternatives and failures. Null until one is identified.",
+    included: answer("What the change includes."),
+    excluded: answer("What is explicitly out of scope."),
+    constraints: answer(
+      "Limits the change must respect: permissions, privacy, performance, compatibility. " +
+        "Only those that apply, cited or agreed, never invented.",
     ),
   }),
-  dataAndInterfaces: EffectSchema.Struct({
-    dataRules: answer("Data ownership, validation, and lifecycle changes."),
-    interfaces: answer("Affected internal or external contracts and their failure behavior."),
-  }),
-  quality: EffectSchema.Struct({
-    permissionsAndPrivacy: answer("Applicable permission and privacy expectations."),
-    usabilityAndAccessibility: answer("Applicable usability and accessibility expectations."),
-    performanceAndReliability: answer(
-      "Applicable performance and reliability bounds, cited or agreed, never invented.",
+  rules: describeWire(
+    EffectSchema.NullOr(nonEmptyList(ruleSchema)),
+    "The behavioral rules, each with the examples that pin it. Null until one is agreed.",
+  ),
+  implementation: EffectSchema.Struct({
+    changeMap: answer(
+      "Each repository-relative path the change touches or adds, and what it gets there.",
+    ),
+    contracts: answer(
+      "New or changed types, schema, and signatures at module boundaries, written as code in " +
+        "fenced blocks against the plan's commit. Signatures only, never function bodies.",
+    ),
+    patterns: answer("Existing code to follow, by path, and what to copy from it."),
+    order: answer(
+      "Only where one step must land before another: the steps in order and why. Left out of " +
+        "the document while null.",
     ),
   }),
-  delivery: EffectSchema.Struct({
-    approach: answer("The overall design."),
-    decisions: answer(
-      "Each consequential choice: the decision, its rationale, a relevant alternative, and its " +
-        "accepted cost.",
-    ),
-    stepsAndDependencies: answer(
-      "The ordered implementation sequence, each step's prerequisites, and the observable " +
-        "result that lets dependent work proceed.",
-    ),
-    risksAndMitigations: answer(
-      "Material uncertainties, how they are investigated or bounded, and the risk accepted.",
-    ),
-    compatibilityAndMigration: answer("Compatibility and migration needs."),
-    rolloutAndRecovery: answer("How the change is delivered and recovered from."),
-    delegatedChoices: answer("The precise freedom left to the implementing agent."),
-  }),
-  acceptance: EffectSchema.Struct({
-    examples: describeWire(
-      EffectSchema.NullOr(nonEmptyList(acceptanceExampleSchema)),
-      "Concrete acceptance examples, each exactly given, when, and then. Null until one is identified.",
-    ),
-    verification: answer(
-      "The checks that establish the important rules and invariants, and what each proves.",
-    ),
-  }),
+  decisions: answer("Each consequential choice: the decision, why, and the alternative rejected."),
+  verification: answer(
+    "The end-to-end check that proves the change works, beyond the examples passing.",
+  ),
+  leftToAgent: answer(
+    "Exactly which choices the implementing agent may make itself; everything else is fixed.",
+  ),
   openQuestions: describeWire(
     EffectSchema.Array(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS)).check(
       EffectSchema.isMaxLength(PLAN_TEMPLATE_BOUNDS.MAX_ITEMS),
     ),
     "Unresolved questions, contradictions, or facts no source could settle; empty when none.",
   ),
-  handoffPrompt: describeWire(
-    EffectSchema.NullOr(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS)),
-    "The self-contained Markdown prompt for a coding agent, written only after the spoken " +
-      "review. Null until prepared.",
+  dataAndMigration: answer(
+    "Only when stored data changes: what is stored, how existing data moves, and how the " +
+      "change is undone. Left out of the document while null.",
   ),
 });
 
@@ -234,16 +192,15 @@ function partialSection<Fields extends EffectSchema.Struct.Fields>(
  * not name is refused at every level.
  */
 export const planUpdateSchema = EffectSchema.Struct({
-  purpose: partialSection(planFieldsSchema.fields.purpose),
+  goal: partialSection(planFieldsSchema.fields.goal),
   scope: partialSection(planFieldsSchema.fields.scope),
-  context: partialSection(planFieldsSchema.fields.context),
-  behavior: partialSection(planFieldsSchema.fields.behavior),
-  dataAndInterfaces: partialSection(planFieldsSchema.fields.dataAndInterfaces),
-  quality: partialSection(planFieldsSchema.fields.quality),
-  delivery: partialSection(planFieldsSchema.fields.delivery),
-  acceptance: partialSection(planFieldsSchema.fields.acceptance),
+  rules: EffectSchema.optionalKey(planFieldsSchema.fields.rules),
+  implementation: partialSection(planFieldsSchema.fields.implementation),
+  decisions: EffectSchema.optionalKey(planFieldsSchema.fields.decisions),
+  verification: EffectSchema.optionalKey(planFieldsSchema.fields.verification),
+  leftToAgent: EffectSchema.optionalKey(planFieldsSchema.fields.leftToAgent),
   openQuestions: EffectSchema.optionalKey(planFieldsSchema.fields.openQuestions),
-  handoffPrompt: EffectSchema.optionalKey(planFieldsSchema.fields.handoffPrompt),
+  dataAndMigration: EffectSchema.optionalKey(planFieldsSchema.fields.dataAndMigration),
   assumptions: EffectSchema.optionalKey(
     describeWire(
       planDocumentSchema.fields.assumptions,
@@ -254,8 +211,8 @@ export const planUpdateSchema = EffectSchema.Struct({
 
 export type PlanFields = typeof planFieldsSchema.Type;
 export type PlanUpdate = typeof planUpdateSchema.Type;
-type Scenario = typeof scenarioSchema.Type;
-type AcceptanceExample = typeof acceptanceExampleSchema.Type;
+type Rule = typeof ruleSchema.Type;
+type Example = typeof exampleSchema.Type;
 
 /** What the document's header names: the plan and the source it was read at, the service's and never the model's. */
 export interface PlanHeader {
@@ -263,30 +220,17 @@ export interface PlanHeader {
   readonly repository: PlanRepository;
 }
 
-/** A new plan's fields: every answer unanswered, no questions, no handoff. */
+/** A new plan's fields: every answer unanswered and no questions. */
 export const EMPTY_PLAN_FIELDS: PlanFields = {
-  purpose: { problem: null, users: null, outcome: null },
+  goal: { problem: null, outcome: null },
   scope: { included: null, excluded: null, constraints: null },
-  context: { currentBehavior: null, relevantCode: null, terminology: null },
-  behavior: { rules: null, invariants: null, scenarios: null },
-  dataAndInterfaces: { dataRules: null, interfaces: null },
-  quality: {
-    permissionsAndPrivacy: null,
-    usabilityAndAccessibility: null,
-    performanceAndReliability: null,
-  },
-  delivery: {
-    approach: null,
-    decisions: null,
-    stepsAndDependencies: null,
-    risksAndMitigations: null,
-    compatibilityAndMigration: null,
-    rolloutAndRecovery: null,
-    delegatedChoices: null,
-  },
-  acceptance: { examples: null, verification: null },
+  rules: null,
+  implementation: { changeMap: null, contracts: null, patterns: null, order: null },
+  decisions: null,
+  verification: null,
+  leftToAgent: null,
   openQuestions: [],
-  handoffPrompt: null,
+  dataAndMigration: null,
 };
 
 /** An update that names every field and the assumptions: the whole template at once. */
@@ -297,21 +241,16 @@ export const EMPTY_PLAN_UPDATE: FullPlanUpdate = { ...EMPTY_PLAN_FIELDS, assumpt
 
 /**
  * The fields an update leaves standing: each section's fields merged over
- * what stood, and a list or the handoff prompt replaced where it was sent.
+ * what stood, and a top-level field or list replaced where it was sent.
  */
 export function mergePlanFields(stored: PlanFields, update: PlanUpdate): PlanFields {
+  const { goal, scope, implementation, assumptions: _assumptions, ...whole } = update;
   return {
-    purpose: { ...stored.purpose, ...update.purpose },
-    scope: { ...stored.scope, ...update.scope },
-    context: { ...stored.context, ...update.context },
-    behavior: { ...stored.behavior, ...update.behavior },
-    dataAndInterfaces: { ...stored.dataAndInterfaces, ...update.dataAndInterfaces },
-    quality: { ...stored.quality, ...update.quality },
-    delivery: { ...stored.delivery, ...update.delivery },
-    acceptance: { ...stored.acceptance, ...update.acceptance },
-    openQuestions: update.openQuestions ?? stored.openQuestions,
-    // Note that null clears the prompt, so only a key left out keeps it.
-    handoffPrompt: update.handoffPrompt === undefined ? stored.handoffPrompt : update.handoffPrompt,
+    ...stored,
+    ...whole,
+    goal: { ...stored.goal, ...goal },
+    scope: { ...stored.scope, ...scope },
+    implementation: { ...stored.implementation, ...implementation },
   };
 }
 
@@ -404,10 +343,6 @@ function section(heading: string, blocks: readonly string[]): string {
   return [`## ${heading}`, ...blocks].join("\n\n");
 }
 
-function labelled(label: string, block: string): string {
-  return `**${label}**\n\n${block}`;
-}
-
 /** One list item, its later lines indented under the marker so a multi-line entry stays one item. */
 function listItem(marker: string, text: string): string {
   const [first, ...rest] = contained(text).split("\n");
@@ -416,39 +351,34 @@ function listItem(marker: string, text: string): string {
   return [`${marker}${first ?? ""}`, ...continued].join("\n");
 }
 
-function orderedList(items: readonly string[]): string {
-  return items.map((item, index) => listItem(`${index + 1}. `, item)).join("\n");
+/** One clause of an example on its one line, or the unanswered mark. */
+function clause(value: string | null): string {
+  return value === null ? PLAN_EMPTY_TEXT.UNANSWERED : oneLine(value);
 }
 
-function scenarioBlock(scenario: Scenario, index: number): string {
+/**
+ * One example as one list item, its clauses on their own lines. Note that we
+ * draw each clause on one line, because a clause that broke onto a new line
+ * could open a fence or a heading behind the label.
+ */
+function exampleItem(example: Example): string {
   return [
-    `#### ${PLAN_LABEL.SCENARIO} ${index + 1}: ${oneLine(scenario.name)}`,
-    labelled(PLAN_LABEL.ACTOR, answerBlock(scenario.actor)),
-    labelled(PLAN_LABEL.STARTING_STATE, answerBlock(scenario.startingState)),
-    labelled(PLAN_LABEL.TRIGGER, answerBlock(scenario.trigger)),
-    labelled(
-      PLAN_LABEL.STEPS,
-      scenario.steps === null ? PLAN_EMPTY_TEXT.UNANSWERED : orderedList(scenario.steps),
-    ),
-    labelled(PLAN_LABEL.EXPECTED_OUTCOME, answerBlock(scenario.expectedOutcome)),
-    labelled(PLAN_LABEL.ALTERNATIVES_AND_FAILURES, answerBlock(scenario.alternativesAndFailures)),
-  ].join("\n\n");
+    `- **${PLAN_LABEL.GIVEN}** ${clause(example.given)}`,
+    `  **${PLAN_LABEL.WHEN}** ${clause(example.when)}`,
+    `  **${PLAN_LABEL.THEN}** ${clause(example.then)}`,
+  ].join("\n");
 }
 
-function exampleBlock(example: AcceptanceExample, index: number): string {
-  return [
-    `#### ${PLAN_LABEL.EXAMPLE} ${index + 1}`,
-    labelled(PLAN_LABEL.GIVEN, answerBlock(example.given)),
-    labelled(PLAN_LABEL.WHEN, answerBlock(example.when)),
-    labelled(PLAN_LABEL.THEN, answerBlock(example.then)),
-  ].join("\n\n");
+function ruleBlock(rule: Rule, index: number): string {
+  const examples =
+    rule.examples === null
+      ? PLAN_EMPTY_TEXT.NO_EXAMPLES
+      : rule.examples.map(exampleItem).join("\n");
+  return [`### ${PLAN_LABEL.RULE} ${index + 1}: ${oneLine(rule.statement)}`, examples].join("\n\n");
 }
 
-function collection<Item>(
-  items: readonly Item[] | null,
-  block: (item: Item, index: number) => string,
-): string {
-  return items === null ? PLAN_EMPTY_TEXT.UNANSWERED : items.map(block).join("\n\n");
+function rulesBlocks(rules: readonly Rule[] | null): readonly string[] {
+  return rules === null ? [PLAN_EMPTY_TEXT.UNANSWERED] : rules.map(ruleBlock);
 }
 
 function headerBlock(header: PlanHeader): string {
@@ -459,6 +389,16 @@ function headerBlock(header: PlanHeader): string {
   ].join("\n\n");
 }
 
+/** An optional field: its heading and answer once it holds something, nothing while null. */
+function optionalField(heading: string, value: string | null): readonly string[] {
+  return value === null ? [] : [field(heading, contained(value))];
+}
+
+/** An optional section, on the same terms as an optional field. */
+function optionalSection(heading: string, value: string | null): readonly string[] {
+  return value === null ? [] : [section(heading, [contained(value)])];
+}
+
 /**
  * The canonical Markdown body of a plan: the header the service supplies,
  * then every section and field in the template's order, whatever order the
@@ -466,69 +406,34 @@ function headerBlock(header: PlanHeader): string {
  * are the document's own list, drawn after it as the template's last section.
  */
 export function planBody(header: PlanHeader, fields: PlanFields): string {
-  const { purpose, scope, context, behavior, dataAndInterfaces, quality, delivery } = fields;
-  const { acceptance, openQuestions, handoffPrompt } = fields;
+  const { goal, scope, rules, implementation, openQuestions } = fields;
   const blocks = [
     headerBlock(header),
-    section(PLAN_HEADING.PURPOSE, [
-      field(PLAN_HEADING.PROBLEM, answerBlock(purpose.problem)),
-      field(PLAN_HEADING.USERS, answerBlock(purpose.users)),
-      field(PLAN_HEADING.OUTCOME, answerBlock(purpose.outcome)),
+    section(PLAN_HEADING.GOAL, [
+      field(PLAN_HEADING.PROBLEM, answerBlock(goal.problem)),
+      field(PLAN_HEADING.OUTCOME, answerBlock(goal.outcome)),
     ]),
     section(PLAN_HEADING.SCOPE, [
       field(PLAN_HEADING.INCLUDED, answerBlock(scope.included)),
       field(PLAN_HEADING.EXCLUDED, answerBlock(scope.excluded)),
       field(PLAN_HEADING.CONSTRAINTS, answerBlock(scope.constraints)),
     ]),
-    section(PLAN_HEADING.CONTEXT, [
-      field(PLAN_HEADING.CURRENT_BEHAVIOR, answerBlock(context.currentBehavior)),
-      field(PLAN_HEADING.RELEVANT_CODE, answerBlock(context.relevantCode)),
-      field(PLAN_HEADING.TERMINOLOGY, answerBlock(context.terminology)),
+    section(PLAN_HEADING.RULES, rulesBlocks(rules)),
+    section(PLAN_HEADING.IMPLEMENTATION, [
+      field(PLAN_HEADING.CHANGE_MAP, answerBlock(implementation.changeMap)),
+      field(PLAN_HEADING.CONTRACTS, answerBlock(implementation.contracts)),
+      field(PLAN_HEADING.PATTERNS, answerBlock(implementation.patterns)),
+      ...optionalField(PLAN_HEADING.ORDER, implementation.order),
     ]),
-    section(PLAN_HEADING.BEHAVIOR, [
-      field(PLAN_HEADING.RULES, answerBlock(behavior.rules)),
-      field(PLAN_HEADING.INVARIANTS, answerBlock(behavior.invariants)),
-      field(PLAN_HEADING.SCENARIOS, collection(behavior.scenarios, scenarioBlock)),
-    ]),
-    section(PLAN_HEADING.DATA_AND_INTERFACES, [
-      field(PLAN_HEADING.DATA_RULES, answerBlock(dataAndInterfaces.dataRules)),
-      field(PLAN_HEADING.INTERFACES, answerBlock(dataAndInterfaces.interfaces)),
-    ]),
-    section(PLAN_HEADING.QUALITY, [
-      field(PLAN_HEADING.PERMISSIONS_AND_PRIVACY, answerBlock(quality.permissionsAndPrivacy)),
-      field(
-        PLAN_HEADING.USABILITY_AND_ACCESSIBILITY,
-        answerBlock(quality.usabilityAndAccessibility),
-      ),
-      field(
-        PLAN_HEADING.PERFORMANCE_AND_RELIABILITY,
-        answerBlock(quality.performanceAndReliability),
-      ),
-    ]),
-    section(PLAN_HEADING.DELIVERY, [
-      field(PLAN_HEADING.APPROACH, answerBlock(delivery.approach)),
-      field(PLAN_HEADING.DECISIONS, answerBlock(delivery.decisions)),
-      field(PLAN_HEADING.STEPS_AND_DEPENDENCIES, answerBlock(delivery.stepsAndDependencies)),
-      field(PLAN_HEADING.RISKS_AND_MITIGATIONS, answerBlock(delivery.risksAndMitigations)),
-      field(
-        PLAN_HEADING.COMPATIBILITY_AND_MIGRATION,
-        answerBlock(delivery.compatibilityAndMigration),
-      ),
-      field(PLAN_HEADING.ROLLOUT_AND_RECOVERY, answerBlock(delivery.rolloutAndRecovery)),
-      field(PLAN_HEADING.DELEGATED_CHOICES, answerBlock(delivery.delegatedChoices)),
-    ]),
-    section(PLAN_HEADING.ACCEPTANCE, [
-      field(PLAN_HEADING.EXAMPLES, collection(acceptance.examples, exampleBlock)),
-      field(PLAN_HEADING.VERIFICATION, answerBlock(acceptance.verification)),
-    ]),
+    section(PLAN_HEADING.DECISIONS, [answerBlock(fields.decisions)]),
+    section(PLAN_HEADING.VERIFICATION, [answerBlock(fields.verification)]),
+    section(PLAN_HEADING.LEFT_TO_AGENT, [answerBlock(fields.leftToAgent)]),
     section(PLAN_HEADING.OPEN_QUESTIONS, [
       openQuestions.length === 0
         ? PLAN_EMPTY_TEXT.NO_QUESTIONS
         : openQuestions.map((question) => listItem("- ", question)).join("\n"),
     ]),
-    section(PLAN_HEADING.HANDOFF_PROMPT, [
-      handoffPrompt === null ? PLAN_EMPTY_TEXT.NOT_PREPARED : contained(handoffPrompt),
-    ]),
+    ...optionalSection(PLAN_HEADING.DATA_AND_MIGRATION, fields.dataAndMigration),
   ];
   return `${blocks.join("\n\n")}\n`;
 }

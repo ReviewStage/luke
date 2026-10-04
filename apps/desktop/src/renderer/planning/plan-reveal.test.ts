@@ -27,10 +27,10 @@ const PROBLEM = 2;
 /** A frame at sixty a second. */
 const FRAME_MS = 16;
 
-function body(problem: string | null, users: string | null = null): string {
+function body(problem: string | null, outcome: string | null = null): string {
   return planBody(HEADER, {
     ...EMPTY_PLAN_UPDATE,
-    purpose: { ...EMPTY_PLAN_UPDATE.purpose, problem, users },
+    goal: { problem, outcome },
   });
 }
 
@@ -65,7 +65,7 @@ test("the body is cut before each section and field heading, and joined back it 
   const words = body("Only an admin can add a member.");
   const units = planUnits(words);
   assert.equal(units[0]?.startsWith("# Teammate invitations"), true);
-  assert.equal(units[1], "## Purpose and users");
+  assert.equal(units[1], "## Goal");
   assert.equal(units[PROBLEM], "### Problem\n\nOnly an admin can add a member.");
   assert.equal(units.join("\n\n"), words.trimEnd());
 });
@@ -190,11 +190,11 @@ test("one caret works through the document in order, and only one unit is writte
     assert.ok(views.filter((view) => view.writing).length <= 1);
     assert.ok(views.filter((view) => view.edit?.caret !== undefined).length <= 1);
   }
-  const usersFirst = frames.findIndex((views) => visible(views[PROBLEM + 1]).includes("Members"));
+  const outcomeFirst = frames.findIndex((views) => visible(views[PROBLEM + 1]).includes("Members"));
   const problemDone = frames.findIndex((views) =>
     visible(views[PROBLEM]).endsWith("Only an admin."),
   );
-  assert.ok(problemDone !== -1 && problemDone < usersFirst);
+  assert.ok(problemDone !== -1 && problemDone < outcomeFirst);
   assert.deepEqual(drawn(end), planUnits(body("Only an admin.", "Members.")));
 });
 
@@ -255,8 +255,8 @@ test("once the work catches up on a live call, the caret waits where the last ed
     waiting.map((view) => view.resting),
     waiting.map((_, index) => index === PROBLEM + 1),
   );
-  const users = waiting[PROBLEM + 1];
-  assert.equal(users?.edit?.caret, users?.words.length);
+  const outcome = waiting[PROBLEM + 1];
+  assert.equal(outcome?.edit?.caret, outcome?.words.length);
   // Off the call, or before anything has been edited, no caret waits anywhere.
   assert.ok(chaseView(caught, false).every((view) => view.edit === undefined));
   assert.ok(chaseView(chaseOpened(body("Only an admin.")), true).every((view) => !view.resting));
