@@ -22,7 +22,7 @@ import {
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Duration, Effect, Fiber, Layer, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber, FileSystem, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composePlanning, type PlanFolders, type PlanningClient } from "./compose-planning.js";
 import type { JsonStateFile } from "./json-state-file.js";
@@ -631,6 +631,65 @@ it.effect("the open plan's command runs in its folder on this Mac and its output
       assert.equal(settled?.result.stderr.trim(), "invites");
     }),
   ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+/** The one command `command` run in a fresh plan folder on this Mac, and what it settled. */
+function runInFolder(
+  command: string,
+  prepare: (folder: string) => Effect.Effect<void> = () => Effect.void,
+) {
+  return Effect.gen(function* () {
+    const folder = yield* temporaryDirectoryScoped("luke-plan-folder-");
+    yield* prepare(folder);
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call, planning } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+    yield* call(GATEWAY_METHOD.PLANNING_SET_FOLDER, { planId: INVITES, folderPath: folder });
+    service.commands.push({ id: "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f", command });
+    yield* planning.lifetime;
+    yield* Deferred.await(service.firstSettle);
+    const [settled] = service.settled;
+    assert.ok(settled, "the command settled");
+    return { folder, result: settled.result };
+  });
+}
+
+const nodeFiles = Layer.merge(NodeFileSystem.layer, NodePath.layer);
+
+it.effect("a command sees none of Luke's own environment", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      assert.equal(process.env.VITEST, "true");
+      const { result } = yield* runInFolder('echo "${VITEST-none}"');
+      assert.equal(result.stdout.trim(), "none");
+    }),
+  ).pipe(Effect.provide(nodeFiles)),
+);
+
+it.effect.runIf(process.platform === "darwin")(
+  "on macOS a command can neither write, nor read outside the folder or a .env inside it",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const outside = yield* temporaryDirectoryScoped("luke-plan-outside-");
+        const fs = yield* FileSystem.FileSystem;
+        yield* Effect.orDie(fs.writeFileString(`${outside}/secret`, "hunter2"));
+        const { folder, result } = yield* runInFolder(
+          `cat ${outside}/secret .env.local; echo x > made; echo x > ${outside}/made; ls`,
+          (inside) =>
+            Effect.orDie(
+              Effect.all([
+                fs.writeFileString(`${inside}/notes.md`, "invites"),
+                fs.writeFileString(`${inside}/.env.local`, "STRIPE_KEY=sk_live_x"),
+              ]),
+            ),
+        );
+        assert.equal(result.stdout.trim(), "notes.md");
+        assert.doesNotMatch(result.stdout, /hunter2|sk_live_x/u);
+        assert.equal(yield* Effect.orDie(fs.exists(`${folder}/made`)), false);
+        assert.equal(yield* Effect.orDie(fs.exists(`${outside}/made`)), false);
+      }),
+    ).pipe(Effect.provide(nodeFiles)),
 );
 
 it.effect("with no plan open, no command is claimed", () =>
