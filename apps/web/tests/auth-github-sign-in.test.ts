@@ -8,11 +8,8 @@ import type { WireValue } from "../server/core";
 
 /**
  * A GitHub sign-in, configured as `auth.ts` configures it, over an in-memory
- * database with GitHub a fake behind `fetch`. What these hold is that a
- * GitHub sign-in alone leaves the account a GitHub row that reads source,
- * so a developer who signed in with GitHub is never sent to the Connect
- * GitHub step, and that a row from before sign-in asked for `repo` gains it
- * the next time the developer signs in.
+ * database with GitHub a fake behind `fetch`. What it holds is that a GitHub
+ * sign-in asks for the developer's profile and email and nothing more.
  *
  * Synthetic accounts, secrets, and tokens throughout.
  */
@@ -22,11 +19,8 @@ const GITHUB_ACCOUNT_ID = "4242";
 const GITHUB_EMAIL = "octo@github.test";
 const NOW = new Date("2026-10-04T12:00:00.000Z");
 
-/** The scopes GitHub reports granting, before sign-in asked for `repo` and since. */
-const GRANTED = {
-  PROFILE_ONLY: "read:user,user:email",
-  WITH_REPOSITORIES: "repo,read:user,user:email",
-} as const;
+/** The scopes GitHub reports granting a sign-in. */
+const GRANTED_PROFILE = "read:user,user:email";
 
 const decodeStarted = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String }));
 
@@ -112,15 +106,6 @@ async function signIn(auth: Auth) {
   return cookiesFrom(landed);
 }
 
-/** The account's GitHub token and scope, opened as a planning read opens them. */
-async function githubConnection(auth: Auth, cookie: string) {
-  const opened = await auth.api.getAccessToken({
-    body: { providerId: "github" },
-    headers: new Headers({ cookie }),
-  });
-  return { token: opened.accessToken, scopes: opened.scopes };
-}
-
 const grant: Grant = { token: "", scope: "" };
 
 beforeEach(() => {
@@ -134,28 +119,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test("a GitHub sign-in asks for repositories and leaves a connection that reads them", async () => {
+test("a GitHub sign-in asks for the profile and email, and nothing of the developer's repositories", async () => {
   const auth = authService();
   const { authorize } = await startSignIn(auth);
-  assert.equal(authorize.searchParams.get("scope")?.split(" ").includes("repo"), true);
 
-  Object.assign(grant, { token: "gho_signed-in", scope: GRANTED.WITH_REPOSITORIES });
-  const cookie = await signIn(auth);
-
-  const connection = await githubConnection(auth, cookie);
-  assert.equal(connection.token, "gho_signed-in");
-  assert.equal(connection.scopes.includes("repo"), true);
-});
-
-test("signing in again with GitHub replaces a profile-only token with one that reads repositories", async () => {
-  const auth = authService();
-  Object.assign(grant, { token: "gho_profile-only", scope: GRANTED.PROFILE_ONLY });
+  Object.assign(grant, { token: "gho_signed-in", scope: GRANTED_PROFILE });
   await signIn(auth);
 
-  Object.assign(grant, { token: "gho_with-repositories", scope: GRANTED.WITH_REPOSITORIES });
-  const cookie = await signIn(auth);
-
-  const connection = await githubConnection(auth, cookie);
-  assert.equal(connection.token, "gho_with-repositories");
-  assert.equal(connection.scopes.includes("repo"), true);
+  // Better Auth puts its own defaults beside the configured scopes, so the request is read as a set.
+  assert.deepEqual([...new Set(authorize.searchParams.get("scope")?.split(" "))].sort(), [
+    "read:user",
+    "user:email",
+  ]);
 });

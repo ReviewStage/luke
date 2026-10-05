@@ -253,12 +253,11 @@ session recording described under "What we collect", the way the
 Conversation tab is.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
-address, and which of the two you used. Signing in with GitHub also grants
-your account a GitHub connection with GitHub's `repo` permission, which
-covers every repository you can reach, private ones included, and allows
-writing as well as reading. Luke does not use it: plans read a folder on your
-Mac instead. You can revoke it at any time in GitHub's settings under
-Applications. We also keep the records that keep you
+address, and which of the two you used. Signing in with GitHub grants no
+access to your repositories: plans read a folder on your Mac instead. An
+account that signed in with GitHub before this may still hold GitHub's `repo`
+permission, which Luke no longer uses; you can revoke it at any time in
+GitHub's settings under Applications. We also keep the records that keep you
 signed in, and a daily count of how much voice and review you have used.
 Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily
