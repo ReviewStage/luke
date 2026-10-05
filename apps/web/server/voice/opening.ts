@@ -187,9 +187,8 @@ function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
 const PLAN_SEED_MARKER = "[plan]";
 
 /**
- * The plan a planning call is about, as one developer message: its name, its
- * folder, and the saved document as the developer sees it. Note that a
- * call is seeded with the plan and nothing else, because the voice otherwise
+ * The plan a planning call is about, as one developer message: its name and
+ * the saved document as the developer sees it. Note that a call is seeded with the plan and nothing else, because the voice otherwise
  * opens knowing no plan at all and reads its role as a new task; what was
  * said on an earlier call is the planning model's, which the voice asks.
  */
@@ -198,7 +197,6 @@ function planSeedText(plan: Plan): string {
   return [
     `${PLAN_SEED_MARKER} This call continues the saved plan below. It is not a new plan.`,
     `Name: ${plan.name}`,
-    `Folder: ${plan.folder.path}`,
     "",
     plan.document.body,
     ...(assumptions.length === 0 ? [] : ["", "Assumptions:", ...assumptions]),

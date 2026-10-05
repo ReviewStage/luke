@@ -122,9 +122,18 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
     );
   }
   const { plan } = region;
+  const folderPath = plans.folders[plan.id];
   return (
     <>
-      <Toolbar title={plan.name} subtitle={folderLine(plan.folder)}>
+      <Toolbar
+        title={plan.name}
+        subtitle={folderPath === undefined ? undefined : folderLine(folderPath)}
+      >
+        {folderPath === undefined ? (
+          <button type="button" className="toolbar-button" onClick={plans.onChooseFolder}>
+            Choose folder…
+          </button>
+        ) : null}
         <CopyButton copy={plans.copy} />
         {closeButton}
       </Toolbar>

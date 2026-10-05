@@ -100,8 +100,7 @@ there, and reads nothing from it. Files an earlier version left are yours to
 keep or delete, and nothing on your Mac reads or writes them.
 
 **Feature plans.** When you start a named plan, our service stores it under
-your account: its name, the path of the folder on your Mac it plans against,
-and the plan's one document, a Markdown body and a list of
+your account: its name and the plan's one document, a Markdown body and a list of
 assumptions each marked confirmed or not, written by Luke's planning model as
 you talk. It is stored as written, bound to your account and readable by our
 own operators, the same way the conversation described below is. A save
@@ -115,7 +114,8 @@ folder. Luke on your Mac runs each command as you, with the folder as its
 working directory and with your own permissions, and sends the command's exit
 code and up to 20,000 characters each of its output and error text back to
 our service, which hands them to the planning model. No copy of the folder is
-made. Each command and its output are stored with the plan, and with the
+made, and the folder's path stays on your Mac: our service never stores it.
+Each command and its output are stored with the plan, and with the
 plan's planning conversation, under the terms described for each; deleting
 the plan deletes its commands.
 

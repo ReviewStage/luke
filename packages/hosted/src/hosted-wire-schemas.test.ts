@@ -92,7 +92,6 @@ const EFFECT_MODULE_SCHEMAS = {
   "plan-wire": {
     planAssumptionSchema: planWire.planAssumptionSchema,
     planDocumentSchema: planWire.planDocumentSchema,
-    planFolderSchema: planWire.planFolderSchema,
     planCreateRequestSchema: planWire.planCreateRequestSchema,
     planSummarySchema: planWire.planSummarySchema,
     planSchema: planWire.planSchema,

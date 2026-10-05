@@ -53,7 +53,6 @@ test("a draft of the fixed template copies every section in order, its unanswere
   const body = planBody(
     {
       name: "Teammate invitations",
-      folder: { path: "/Users/dev/relay" },
     },
     {
       ...EMPTY_PLAN_UPDATE,

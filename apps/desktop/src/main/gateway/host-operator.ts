@@ -22,11 +22,12 @@ import {
   voiceLiveSessionChangedSchema,
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
-import type { PlanCreateRequest } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   type PlanningRepositoriesAnswer,
+  type PlanningSetFolderParams,
   type PlanningStartAnswer,
+  type PlanningStartRequest,
   type PlanningView,
   planningRepositoriesAnswerSchema,
   planningStartAnswerSchema,
@@ -222,8 +223,10 @@ export interface HostOperator {
   planningOpen(planId: string): Effect.Effect<boolean>;
   /** The developer left the open plan: its call ends and no plan is active. */
   planningClose(): Effect.Effect<void>;
-  /** A named plan started on a repository and made the active one, or why none started. */
-  planningStart(request: PlanCreateRequest): Effect.Effect<PlanningStartAnswer>;
+  /** A named plan started on a folder of this Mac and made the active one, or why none started. */
+  planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
+  /** The folder of this Mac a plan reads, chosen again. */
+  planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
   /** The repositories the account's GitHub connection can read, or why it could not be read. */
   planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
   /** Opens the Connect GitHub page in the browser; whether it opened, which it does only for a signed-in account. */
@@ -596,11 +599,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (answer) => record(answer)?.opened === true,
       ),
     planningClose: () => fire(client.call(GATEWAY_METHOD.PLANNING_CLOSE)),
+    planningSetFolder: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.PLANNING_SET_FOLDER, {
+          planId: params.planId,
+          folderPath: params.folderPath,
+        }),
+      ),
     planningStart: (request) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_START, {
           name: request.name,
-          folder: { path: request.folder.path },
+          folderPath: request.folderPath,
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok

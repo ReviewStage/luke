@@ -28,18 +28,17 @@ import { testSqlClient } from "./support/sql-client";
  * Synthetic accounts, folders, and output throughout.
  */
 
-const FOLDER = { path: "/Users/dev/relay" } as const;
 const LISTING = { exitCode: 0, stdout: "README.md\nsrc\n", stderr: "" } as const;
 
-/** An account holding one plan on `FOLDER`, and the binding a planning call runs under. */
+/** An account holding one plan, and the binding a planning call runs under. */
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const started = yield* createPlan(userId, { name: "Teammate invitations", folder: FOLDER });
+  const started = yield* createPlan(userId, { name: "Teammate invitations" });
   const binding = {
     userId,
     planId: started.id,
-    header: { name: started.name, folder: started.folder },
+    header: { name: started.name },
   };
   return { userId, planId: started.id, binding };
 });
@@ -54,7 +53,7 @@ const openStranger = Effect.gen(function* () {
 /** The plan's commands as stored, oldest first. */
 const commandsOf = (planId: string) =>
   db
-    .select({ id: planCommand.id, command: planCommand.command, cwd: planCommand.cwd })
+    .select({ id: planCommand.id, command: planCommand.command })
     .from(planCommand)
     .where(eq(planCommand.planId, planId));
 
@@ -93,7 +92,7 @@ it.layer(testSqlClient)("run_in_repository on the Mac", (it) => {
       const settled = yield* settlePlanCommand(userId, planId, queued.id, LISTING);
       const answered = yield* driven(tool, PLAN_COMMAND_WAIT.RESULT_POLL);
 
-      assert.deepEqual(claimed, { id: queued.id, command: "ls", cwd: FOLDER.path });
+      assert.deepEqual(claimed, { id: queued.id, command: "ls" });
       assert.equal(settled, true);
       assert.deepEqual(answered, { status: REPOSITORY_SHELL_STATUS.RAN, ...LISTING });
     }),

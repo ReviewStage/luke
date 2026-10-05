@@ -4,8 +4,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 /**
  * plan-wire.ts -- a named feature plan and its one saved document, as the Plans tab and the service read them.
  *
- * A plan is its owner's name for it, the folder on the developer's Mac it
- * plans against, and one current document: a Markdown `body` and an `assumptions` list, each assumption its
+ * A plan is its owner's name for it and one current document: a Markdown `body` and an `assumptions` list, each assumption its
  * text (`docs/PLANNING.md`). The
  * document is the whole of what the planning model writes, through
  * `update_plan`, whose typed fields the service formats into the body as the
@@ -23,8 +22,6 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 export const PLAN_BOUNDS = {
   /** The most characters a plan's name may spell. */
   MAX_NAME_CHARS: 200,
-  /** macOS's own path bound. */
-  MAX_FOLDER_PATH_CHARS: 1_024,
   /** A document body past this is not a plan a coding agent can take in one prompt. */
   MAX_BODY_CHARS: 200_000,
   MAX_ASSUMPTIONS: 200,
@@ -54,20 +51,12 @@ export const planDocumentSchema = EffectSchema.Struct({
 
 export type PlanDocument = typeof planDocumentSchema.Type;
 
-/** The folder on the developer's Mac a plan reads, as the absolute path the folder picker answered. */
-export const planFolderSchema = EffectSchema.Struct({
-  path: trimmedText(PLAN_BOUNDS.MAX_FOLDER_PATH_CHARS),
-});
-
-export type PlanFolder = typeof planFolderSchema.Type;
-
 /**
- * Starting a plan (POST): its name and the folder it plans against; the
- * document starts as the untouched template.
+ * Starting a plan (POST): its name; the document starts as the untouched
+ * template. The folder it reads stays on the developer's Mac.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
-  folder: planFolderSchema,
 });
 
 export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
@@ -75,7 +64,6 @@ export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
 const planSummaryFields = {
   id: wireUuidSchema,
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
-  folder: planFolderSchema,
   /** Epoch milliseconds the plan was started. */
   createdAt: countedNumber,
   /** Epoch milliseconds the document was last saved; the start, before any save. */
@@ -111,11 +99,10 @@ export const planDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchem
 /** The most characters of stdout or stderr one command's result carries. */
 export const PLAN_COMMAND_OUTPUT_MAX_CHARS = 20_000;
 
-/** One command the planning model asked to run in the plan's folder, as the Mac claims it. */
+/** One command the planning model asked to run in the plan's folder, as the Mac claims it; the Mac knows the folder. */
 export const planCommandSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   command: EffectSchema.String,
-  cwd: EffectSchema.String,
 });
 
 export type PlanCommand = typeof planCommandSchema.Type;

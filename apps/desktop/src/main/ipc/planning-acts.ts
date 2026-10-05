@@ -1,7 +1,8 @@
-import type { PlanCreateRequest } from "@sidecar/hosted/plan-wire";
 import type {
   PlanningRepositoriesAnswer,
+  PlanningSetFolderParams,
   PlanningStartAnswer,
+  PlanningStartRequest,
 } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
@@ -21,7 +22,8 @@ export interface PlanningActsDependencies {
     planningRefresh(): Effect.Effect<void>;
     planningOpen(planId: string): Effect.Effect<boolean>;
     planningClose(): Effect.Effect<void>;
-    planningStart(request: PlanCreateRequest): Effect.Effect<PlanningStartAnswer>;
+    planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
+    planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
     planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
     /** Opens the Connect GitHub page in the browser; whether it opened. */
     planningConnectGitHub(): Effect.Effect<boolean>;
@@ -44,6 +46,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_REPOSITORIES
   | typeof ACT_KIND.PLANNING_CONNECT_GITHUB
   | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
+  | typeof ACT_KIND.PLANNING_SET_FOLDER
   | typeof ACT_KIND.PLANNING_TALK;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
@@ -100,6 +103,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_CHOOSE_FOLDER]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_CHOOSE_FOLDER, sender);
       return dependencies.chooseFolder();
+    },
+    [ACT_KIND.PLANNING_SET_FOLDER]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_SET_FOLDER, sender);
+      return host.planningSetFolder(params);
     },
     // The press names no plan: the plan is the one the host has open, read
     // here, so the panel cannot open a call about a plan it is not showing.

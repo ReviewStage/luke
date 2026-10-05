@@ -68,7 +68,7 @@ export function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element 
         <div className="plan-form-folder">
           <span>Folder</span>
           {props.folder !== undefined ? (
-            <p className="plan-form-note">{folderLine({ path: props.folder })}</p>
+            <p className="plan-form-note">{folderLine(props.folder)}</p>
           ) : null}
           <button type="button" className="plan-button" onClick={props.onChooseFolder}>
             {props.folder === undefined ? "Choose folder…" : "Change folder…"}
@@ -125,7 +125,7 @@ export function NewPlanForm({
     if (folder === undefined) return;
     setStarting(true);
     setNote(undefined);
-    act(ACT_KIND.PLANNING_START, { name, folder: { path: folder } })
+    act(ACT_KIND.PLANNING_START, { name, folderPath: folder })
       .then(
         (answer) => {
           if ("failure" in answer) setNote(githubFailureNote(answer.failure));

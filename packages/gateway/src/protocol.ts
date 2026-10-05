@@ -33,8 +33,10 @@ export const GATEWAY_METHOD = {
   PLANNING_OPEN: "planning.open",
   /** The developer left the open plan: its call ends and no plan is active. */
   PLANNING_CLOSE: "planning.close",
-  /** A named plan started on a repository the account's GitHub connection reads, and made the active one. */
+  /** A named plan started on a folder of this Mac, and made the active one. */
   PLANNING_START: "planning.start",
+  /** The folder of this Mac a plan reads, chosen again for a plan this Mac holds none for. */
+  PLANNING_SET_FOLDER: "planning.setFolder",
   /** The repositories the account's GitHub connection can read, for a new plan's picker. */
   PLANNING_REPOSITORIES: "planning.repositories",
   /** The Connect GitHub page opened in the browser, for the account this Mac is signed in as. */

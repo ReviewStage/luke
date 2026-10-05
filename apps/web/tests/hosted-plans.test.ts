@@ -58,12 +58,10 @@ import { testSqlClient } from "./support/sql-client";
 
 const RELAY_PLAN: NewPlan = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 };
 
 const LEDGER_PLAN: NewPlan = {
   name: "Billing export",
-  folder: { path: "/Users/dev/ledger" },
 };
 
 const UNANSWERED = "_Unanswered_";
@@ -162,8 +160,7 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
         const { body, assumptions } = started.document;
 
         assert.equal(started.name, RELAY_PLAN.name);
-        assert.deepEqual(started.folder, RELAY_PLAN.folder);
-        assert.ok(body.startsWith("# Teammate invitations\n\nFolder: /Users/dev/relay\n"));
+        assert.ok(body.startsWith("# Teammate invitations\n"));
         assert.deepEqual(templateHeadingsOf(body), TEMPLATE_HEADINGS);
         assert.equal(countOf(body, UNANSWERED), TEMPLATE_UNANSWERED_FIELDS);
         assert.ok(body.endsWith("## Open questions\n\n_No additional questions recorded_\n"));
@@ -186,7 +183,6 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
       assert.ok(relayBody.startsWith("# Teammate invitations\n"));
       assert.ok(relayBody.includes(INVITATIONS_DRAFT.goal.problem ?? "?"));
       assert.ok(ledgerBody.startsWith("# Billing export\n"));
-      assert.ok(ledgerBody.includes("Folder: /Users/dev/ledger\n"));
       assert.ok(ledgerBody.includes(SMALL_FEATURE.goal.problem ?? "?"));
       assert.ok(!ledgerBody.includes(INVITATIONS_DRAFT.goal.problem ?? "?"));
     }),

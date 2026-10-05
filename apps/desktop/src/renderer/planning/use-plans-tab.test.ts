@@ -20,7 +20,6 @@ import { type PlansControl, usePlansTab } from "./use-plans-tab";
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
   createdAt: 1,
   updatedAt: 2,
   openedAt: 3,
@@ -32,6 +31,7 @@ const OPEN: PlanningView = {
   listStatus: PLANNING_READ.READY,
   activePlanId: PLAN.id,
   document: { status: PLANNING_READ.READY, plan: PLAN },
+  folders: {},
 };
 
 interface Standing {

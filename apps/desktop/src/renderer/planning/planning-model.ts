@@ -1,5 +1,5 @@
 import { GITHUB_FAILURE, type GitHubRepository } from "@sidecar/hosted/github-wire";
-import type { Plan, PlanDocument, PlanFolder } from "@sidecar/hosted/plan-wire";
+import type { Plan, PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
   type GitHubCallFailure,
   PLAN_CALL_FAILURE,
@@ -87,8 +87,8 @@ export function documentRegion(view: PlanningView): DocumentRegion {
 }
 
 /** The header's folder line: the folder's path, with the home folder as `~`. */
-export function folderLine(folder: PlanFolder): string {
-  return folder.path.replace(HOME_PREFIX, "~");
+export function folderLine(folderPath: string): string {
+  return folderPath.replace(HOME_PREFIX, "~");
 }
 
 /** What the Copy button shows: its resting glyph, the check mark, or the failure beside it. */

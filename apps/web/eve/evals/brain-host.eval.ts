@@ -62,7 +62,6 @@ const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 /** The plan the planning scenario runs against, and the words its two sessions open with. */
 const PLAN = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 } as const;
 const PLAN_SAVED = {
   body: "# Teammate invitations\n\n## Open questions\n- Who may invite?\n",

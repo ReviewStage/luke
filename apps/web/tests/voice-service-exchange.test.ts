@@ -1069,7 +1069,6 @@ it.effect(
 /** A plan the account starts, as the Plans tab's new-plan form saves one. */
 const PLAN = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 } as const;
 
 /** The conversation the plan resumes in, as the plan's row names it now. */
@@ -1333,7 +1332,6 @@ it.effect(
       const text = String(seed?.text);
       for (const expected of [
         PLAN.name,
-        PLAN.folder.path,
         "Owners invite teammates by email.",
         "Invitations expire after seven days.",
       ]) {

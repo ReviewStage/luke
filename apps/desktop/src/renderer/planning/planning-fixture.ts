@@ -18,8 +18,6 @@ import type { VoiceView } from "#shared/messages/voice-view";
  * invented; nothing is read from an account.
  */
 
-const FIXTURE_FOLDER = { path: "/Users/dev/code/relay" } as const;
-
 /**
  * The reference journey's plan partway through its conversation: the goal,
  * two rules with their examples, the change map, and a decision settled, an
@@ -73,12 +71,11 @@ const FIXTURE_UPDATE: FullPlanUpdate = {
 const FIXTURE_PLAN: Plan = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
   name: "Teammate invitations",
-  folder: FIXTURE_FOLDER,
   createdAt: 1,
   updatedAt: 2,
   openedAt: 3,
   document: {
-    body: planBody({ name: "Teammate invitations", folder: FIXTURE_FOLDER }, FIXTURE_UPDATE),
+    body: planBody({ name: "Teammate invitations" }, FIXTURE_UPDATE),
     assumptions: [
       { text: "Invites reuse memberships with a pending state." },
       { text: "Members and admins can both invite." },
@@ -91,7 +88,6 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
   {
     id: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
     name: "Billing export",
-    folder: { path: "/Users/dev/code/ledger" },
     createdAt: 1,
     updatedAt: 1,
     openedAt: 2,
@@ -103,7 +99,6 @@ const FIXTURE_PLAN_LIST: PlanningView = {
     {
       id: FIXTURE_PLAN.id,
       name: FIXTURE_PLAN.name,
-      folder: FIXTURE_PLAN.folder,
       createdAt: FIXTURE_PLAN.createdAt,
       updatedAt: FIXTURE_PLAN.updatedAt,
       openedAt: FIXTURE_PLAN.openedAt,
@@ -112,6 +107,10 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   ],
   listStatus: PLANNING_READ.READY,
   document: { status: PLANNING_READ.IDLE },
+  folders: {
+    [FIXTURE_PLAN.id]: "/Users/dev/code/relay",
+    "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71": "/Users/dev/code/ledger",
+  },
 };
 
 /**

@@ -8,7 +8,6 @@ import {
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
 import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
-import { planCreateRequestSchema } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
@@ -17,14 +16,17 @@ import {
   type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
   type PlanningView,
+  planningSetFolderParamsSchema,
+  planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result, Schema, type Scope, Semaphore } from "effect";
+import { Effect, Option, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
 import { servePlanningCommands } from "./planning-commands.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -44,6 +46,30 @@ import type { RunMode } from "./run-mode.js";
 /** Opening a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
 
+/** The folder of this Mac each plan reads, by plan id, as this Mac alone records it. */
+export type PlanFolders = Readonly<Record<string, string>>;
+
+const PLAN_FOLDERS_FILE = "plan-folders.json";
+
+const planFoldersRecordSchema = Schema.Struct({
+  folders: Schema.Record(Schema.String, Schema.String),
+});
+
+/** The record of each plan's folder, kept in the state root beside this Mac's other records. */
+export function planFoldersFile(
+  directory: () => string,
+  report?: (message: string) => void,
+): JsonStateFile<PlanFolders> {
+  const decode = Schema.decodeUnknownOption(planFoldersRecordSchema);
+  return jsonStateFile<PlanFolders>({
+    directory,
+    fileName: PLAN_FOLDERS_FILE,
+    read: (record) => Option.getOrUndefined(Option.map(decode(record), (read) => read.folders)),
+    write: (folders) => ({ folders }),
+    ...(report !== undefined ? { report } : undefined),
+  });
+}
+
 /** The service's side of the plans, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
@@ -54,6 +80,8 @@ export interface PlanningDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: PlanningClient;
+  /** The folder of this Mac each plan reads (`planFoldersFile`); the service never holds one. */
+  folders: JsonStateFile<PlanFolders>;
   /**
    * Ends the planning call standing about any plan but `keep`, and waits for
    * it to end; a desk session and the call about `keep` are left standing.
@@ -109,7 +137,14 @@ export interface PlanningComposer extends Composer {
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client, endPlanCall, connectGitHub } = dependencies;
+  const { kernel, account, client, folders, endPlanCall, connectGitHub } = dependencies;
+  const idleView = (): PlanningView => ({ ...IDLE_PLANNING_VIEW, folders: folders.read() ?? {} });
+
+  /** Records `folderPath` as the plan's folder on this Mac, and draws it. */
+  function recordFolder(planId: string, folderPath: string): void {
+    const recorded = folders.update((current) => ({ ...current, [planId]: folderPath }));
+    write({ folders: recorded });
+  }
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
   /**
@@ -120,7 +155,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    */
   const serial = (yield* Semaphore.make(1)).withPermits(1);
 
-  let view: PlanningView = IDLE_PLANNING_VIEW;
+  let view: PlanningView = idleView();
   let published: PlanningView = view;
 
   function publish(): void {
@@ -259,7 +294,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       }),
     [GATEWAY_METHOD.PLANNING_START]: (params) =>
       Effect.gen(function* () {
-        const read = readEither(planCreateRequestSchema)(unparsedWire(params));
+        const read = readEither(planningStartRequestSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
           return yield* invalid("starting a plan names it and its folder");
         }
@@ -267,9 +302,13 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         const request = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const started = yield* Effect.provide(client.create(request), FetchHttpClient.layer);
+            const started = yield* Effect.provide(
+              client.create({ name: request.name }),
+              FetchHttpClient.layer,
+            );
             if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
             const plan = started.answer;
+            recordFolder(plan.id, request.folderPath);
             // Active before the old call's end is waited on, as for opening.
             view = {
               ...withoutActivity(view),
@@ -282,6 +321,14 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             return carried<PlanningStartAnswer>({ planId: plan.id });
           }),
         );
+      }),
+    [GATEWAY_METHOD.PLANNING_SET_FOLDER]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningSetFolderParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("choosing a folder names a plan and a folder");
+        recordFolder(read.success.planId, read.success.folderPath);
+        return {};
       }),
     [GATEWAY_METHOD.PLANNING_REPOSITORIES]: () =>
       Effect.gen(function* () {
@@ -316,7 +363,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       yield* endPlanCall(undefined);
       yield* serial(
         Effect.sync(() => {
-          view = IDLE_PLANNING_VIEW;
+          view = idleView();
           publish();
         }),
       );
@@ -324,7 +371,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     // The open plan's folder commands; every read of the plans is an ask's.
     lifetime: servePlanningCommands({
       client,
-      openPlanId: () => (gate() ? view.activePlanId : undefined),
+      openPlan: () => {
+        const planId = view.activePlanId;
+        if (!gate() || planId === undefined) return undefined;
+        return { planId, folder: view.folders[planId] };
+      },
     }),
   };
 });

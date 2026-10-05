@@ -431,7 +431,6 @@ test("a transcript page's magnifier wears the transcript's words, and its field 
 const PLAN = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
   createdAt: 1,
   updatedAt: 2,
   openedAt: 3,
@@ -444,6 +443,7 @@ test("the tab bar offers Plans and Settings alone, and the Plans tab opens on th
     bodyProps(PANEL_TAB.PLANS, CONVERSATION_PAGE.THREAD, () => {}, {
       plans: plansControl({
         plans: [PLAN],
+        folders: { [PLAN.id]: "/Users/dev/relay" },
         onNewPlan: () => opened.push("new"),
         onSelect: (planId) => opened.push(planId),
       }),

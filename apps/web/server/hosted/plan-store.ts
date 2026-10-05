@@ -7,7 +7,6 @@ import {
 import {
   type Plan,
   type PlanDocument,
-  type PlanFolder,
   type PlanSummary,
   planAssumptionSchema,
 } from "@sidecar/hosted/plan-wire";
@@ -48,17 +47,15 @@ export interface StoredPlan {
   readonly conversationId: string | undefined;
 }
 
-/** A plan to start: its name and the folder on the developer's Mac it reads. */
+/** A plan to start: its name. The folder it reads stays on the developer's Mac. */
 export interface NewPlan {
   readonly name: string;
-  readonly folder: PlanFolder;
 }
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const PLAN_COLUMNS = {
   id: plan.id,
   name: plan.name,
-  folderPath: plan.folderPath,
   body: plan.body,
   assumptions: plan.assumptions,
   fields: plan.fields,
@@ -71,7 +68,6 @@ const PLAN_COLUMNS = {
 const PlanRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
-  folderPath: Schema.String,
   body: Schema.String,
   assumptions: Schema.Array(planAssumptionSchema),
   fields: Schema.NullOr(planFieldsSchema),
@@ -95,10 +91,7 @@ const PlanIdRowSchema = Schema.Struct({ id: Schema.String });
  */
 function storedPlanOf(row: PlanRow): StoredPlan {
   const summary = summaryOf(row);
-  const body =
-    row.body === ""
-      ? planBody({ name: summary.name, folder: summary.folder }, EMPTY_PLAN_FIELDS)
-      : row.body;
+  const body = row.body === "" ? planBody({ name: summary.name }, EMPTY_PLAN_FIELDS) : row.body;
   return {
     plan: {
       ...summary,
@@ -113,7 +106,6 @@ function summaryOf(row: PlanRow): PlanSummary {
   return {
     id: row.id,
     name: row.name,
-    folder: { path: row.folderPath },
     createdAt: row.createdAt.getTime(),
     updatedAt: row.updatedAt.getTime(),
     openedAt: row.openedAt.getTime(),
@@ -129,7 +121,6 @@ const insertPlan = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     name: Schema.String,
-    folderPath: Schema.String,
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
@@ -139,7 +130,6 @@ const insertPlan = SqlSchema.findOne({
       .values({
         userId: write.userId,
         name: write.name,
-        folderPath: write.folderPath,
         assumptions: [],
         createdAt: write.now,
         updatedAt: write.now,
@@ -309,7 +299,6 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
     const row = yield* insertPlan({
       userId,
       name: started.name,
-      folderPath: started.folder.path,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.

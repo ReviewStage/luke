@@ -31,12 +31,26 @@ const PLANNING_COMMANDS = {
   RETRY: Duration.seconds(2),
 } as const;
 
+/** The plan open now, and the folder of this Mac it reads, if one is recorded. */
+interface OpenPlanFolder {
+  readonly planId: string;
+  readonly folder: string | undefined;
+}
+
 /** What the loop needs: the service's command calls, and the plan open now. */
 export interface PlanningCommandsDependencies {
   readonly client: Pick<HostedPlanClient, "claimCommand" | "settleCommand">;
   /** The open plan, when commands may be claimed for it now. */
-  readonly openPlanId: () => string | undefined;
+  readonly openPlan: () => OpenPlanFolder | undefined;
 }
+
+/** What a command answers on a Mac that holds no folder for its plan, so the model can say what to do. */
+const NO_FOLDER_RESULT: PlanCommandResult = {
+  exitCode: 1,
+  stdout: "",
+  stderr:
+    "Not run: no folder is chosen for this plan on this Mac. The developer has to choose one.",
+};
 
 /** An output cut to what one result may carry. */
 function bounded(output: string): string {
@@ -61,16 +75,17 @@ function resultOf(
   return { exitCode, stdout: bounded(stdout), stderr: bounded(diagnostics) };
 }
 
-/** One command run with bash in its folder; every outcome is a result, and an interrupted run is killed. */
+/** One command run with bash in `cwd`; every outcome is a result, and an interrupted run is killed. */
 function runPlanCommand(
-  command: Pick<PlanCommand, "command" | "cwd">,
+  command: Pick<PlanCommand, "command">,
+  cwd: string,
 ): Effect.Effect<PlanCommandResult> {
   return Effect.callback<PlanCommandResult>((resume) => {
     const child = execFile(
       "/bin/bash",
       ["-lc", command.command],
       {
-        cwd: command.cwd,
+        cwd,
         encoding: "utf8",
         timeout: PLANNING_COMMANDS.TIMEOUT_MS,
         maxBuffer: PLANNING_COMMANDS.MAX_BUFFER_BYTES,
@@ -84,12 +99,13 @@ function runPlanCommand(
 /** One turn of the loop: claim for the open plan, run what was handed, settle it. */
 function serveOnce(dependencies: PlanningCommandsDependencies): Effect.Effect<void> {
   return Effect.gen(function* () {
-    const planId = dependencies.openPlanId();
-    if (planId === undefined) return yield* Effect.sleep(PLANNING_COMMANDS.IDLE);
+    const open = dependencies.openPlan();
+    if (open === undefined) return yield* Effect.sleep(PLANNING_COMMANDS.IDLE);
+    const { planId, folder } = open;
     const claimed = yield* dependencies.client.claimCommand(planId);
     if (claimed === undefined) return yield* Effect.sleep(PLANNING_COMMANDS.RETRY);
     if (claimed === null) return;
-    const result = yield* runPlanCommand(claimed);
+    const result = folder === undefined ? NO_FOLDER_RESULT : yield* runPlanCommand(claimed, folder);
     yield* dependencies.client.settleCommand(planId, claimed.id, result);
   }).pipe(Effect.provide(FetchHttpClient.layer));
 }

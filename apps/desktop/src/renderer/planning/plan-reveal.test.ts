@@ -16,7 +16,6 @@ import {
 
 const HEADER = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 } as const;
 
 const NO_ASSUMPTIONS = { before: [], after: [] } as const;

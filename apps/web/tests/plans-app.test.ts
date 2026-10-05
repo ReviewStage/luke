@@ -38,7 +38,6 @@ const COMMAND = "/api/plans/commands/command";
 
 const RELAY = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 } as const;
 
 interface Answer {
@@ -124,7 +123,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
       const saved = yield* runUpdatePlan(
-        { userId: owner, planId, header: { name: RELAY.name, folder: RELAY.folder } },
+        { userId: owner, planId, header: { name: RELAY.name } },
         unparsedWire(INVITATIONS_DRAFT),
       );
       assert.equal(saved.status, UPDATE_PLAN_STATUS.SAVED);
@@ -136,9 +135,8 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map((plan) => [
           plan.id,
           plan.name,
-          plan.folder,
         ]),
-        [[planId, RELAY.name, RELAY.folder]],
+        [[planId, RELAY.name]],
       );
       assert.deepEqual(
         readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.document,
@@ -215,7 +213,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
       const [queued] = yield* db
         .insert(planCommand)
-        .values({ planId, command: "ls", cwd: RELAY.folder.path })
+        .values({ planId, command: "ls" })
         .returning({ id: planCommand.id });
       assert.ok(queued);
       const result = { exitCode: 0, stdout: "README.md\n", stderr: "" };
@@ -237,7 +235,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       assert.deepEqual(strangerSettle, { status: HOSTED_HTTP_STATUS.OK, body: { settled: false } });
       assert.deepEqual(claimed, {
         status: HOSTED_HTTP_STATUS.OK,
-        body: { command: { id: queued.id, command: "ls", cwd: RELAY.folder.path } },
+        body: { command: { id: queued.id, command: "ls" } },
       });
       assert.deepEqual(settled, { status: HOSTED_HTTP_STATUS.OK, body: { settled: true } });
       assert.deepEqual(again, { status: HOSTED_HTTP_STATUS.OK, body: { settled: false } });

@@ -64,7 +64,6 @@ const NOW = 1_800_000_000_000;
 /** A plan the account starts, as the Plans tab's new-plan form saves one. */
 const PLAN = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 } as const;
 /**
  * The follow's bounds narrowed so a poll is milliseconds, with the bound left

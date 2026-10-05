@@ -495,7 +495,6 @@ it.live(
         database.run(
           createPlan(target.userId, {
             name: "Teammate invitations",
-            folder: { path: "/Users/dev/relay" },
           }),
         ),
       );

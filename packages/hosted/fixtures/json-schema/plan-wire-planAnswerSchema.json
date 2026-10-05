@@ -14,20 +14,6 @@
           "minLength": 1,
           "maxLength": 200
         },
-        "folder": {
-          "type": "object",
-          "properties": {
-            "path": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1024
-            }
-          },
-          "required": [
-            "path"
-          ],
-          "additionalProperties": false
-        },
         "createdAt": {
           "type": "number",
           "minimum": 0
@@ -76,7 +62,6 @@
       "required": [
         "id",
         "name",
-        "folder",
         "createdAt",
         "updatedAt",
         "openedAt",

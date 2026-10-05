@@ -8,15 +8,11 @@
     },
     "command": {
       "type": "string"
-    },
-    "cwd": {
-      "type": "string"
     }
   },
   "required": [
     "id",
-    "command",
-    "cwd"
+    "command"
   ],
   "additionalProperties": false
 }

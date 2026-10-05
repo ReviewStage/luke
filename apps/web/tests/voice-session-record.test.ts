@@ -29,7 +29,6 @@ const record = voiceSessionRecord(() => NOW);
 
 const PLAN = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 } as const;
 
 const openUser = Effect.gen(function* () {

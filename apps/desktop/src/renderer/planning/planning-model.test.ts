@@ -38,7 +38,6 @@ const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const PLAN: Plan = {
   id: INVITES,
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
   createdAt: 1,
   updatedAt: 2,
   openedAt: 3,
@@ -50,6 +49,7 @@ function view(patch: Partial<PlanningView>): PlanningView {
     plans: [],
     listStatus: PLANNING_READ.READY,
     document: { status: PLANNING_READ.IDLE },
+    folders: {},
     ...patch,
   };
 }
@@ -84,9 +84,9 @@ test("the document region draws only a document read for the active plan", () =>
 });
 
 test("the header names the plan's folder, with the home folder as ~", () => {
-  assert.equal(folderLine(PLAN.folder), "~/relay");
-  assert.equal(folderLine({ path: "/Users/dev" }), "~");
-  assert.equal(folderLine({ path: "/Volumes/work/relay" }), "/Volumes/work/relay");
+  assert.equal(folderLine("/Users/dev/relay"), "~/relay");
+  assert.equal(folderLine("/Users/dev"), "~");
+  assert.equal(folderLine("/Volumes/work/relay"), "/Volumes/work/relay");
 });
 
 test("an account with no usable GitHub connection is offered Connect GitHub, anything else Try again", () => {

@@ -79,7 +79,6 @@ const NOW = 1_800_000_000_000;
 
 const RELAY_PLAN = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 } as const;
 
 const SAVED: PlanDocument = {

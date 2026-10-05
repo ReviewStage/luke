@@ -79,7 +79,7 @@ export const RUN_IN_REPOSITORY_TOOL = {
 } as const;
 
 const insertCommand = SqlSchema.findOne({
-  Request: Schema.Struct({ planId: Schema.String, command: Schema.String, cwd: Schema.String }),
+  Request: Schema.Struct({ planId: Schema.String, command: Schema.String }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (write) => db.insert(planCommand).values(write).returning({ id: planCommand.id }),
 });
@@ -101,7 +101,7 @@ function ownedPlanIds(userId: string, planId: string) {
 
 const claimOldest = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String, now: Schema.Date }),
-  Result: Schema.Struct({ id: Schema.String, command: Schema.String, cwd: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, command: Schema.String }),
   execute: ({ userId, planId, now }) => {
     const oldest = db
       .select({ id: planCommand.id })
@@ -119,7 +119,7 @@ const claimOldest = SqlSchema.findOneOption({
       .update(planCommand)
       .set({ claimedAt: now })
       .where(and(inArray(planCommand.id, oldest), isNull(planCommand.claimedAt)))
-      .returning({ id: planCommand.id, command: planCommand.command, cwd: planCommand.cwd });
+      .returning({ id: planCommand.id, command: planCommand.command });
   },
 });
 
@@ -197,7 +197,6 @@ export function runInRepository(
     const queued = yield* insertCommand({
       planId: binding.planId,
       command: read.success.command,
-      cwd: binding.header.folder.path,
     }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
     const answered = yield* findResult(queued.id).pipe(
       Effect.map((row) => Option.flatMap(row, ({ result }) => Option.fromNullishOr(result))),

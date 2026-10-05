@@ -21,7 +21,6 @@ import { testSqlClient } from "./support/sql-client";
 
 const RELAY_PLAN: NewPlan = {
   name: "Teammate invitations",
-  folder: { path: "/Users/dev/relay" },
 };
 
 const PROBLEM = "Only an admin can add someone to a workspace.";

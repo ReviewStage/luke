@@ -16,7 +16,7 @@ const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 const INTRODUCTION: ActSender = { ...PANEL, introduction: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const REQUEST = { name: "Teammate invitations", folder: { path: "/Users/dev/relay" } };
+const REQUEST = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
@@ -55,9 +55,11 @@ function fixture() {
         }),
       planningStart: (request) =>
         Effect.sync(() => {
-          asked.push(`start:${request.folder.path}`);
+          asked.push(`start:${request.folderPath}`);
           return start.answer;
         }),
+      planningSetFolder: (params) =>
+        Effect.sync(() => void asked.push(`folder:${params.planId}:${params.folderPath}`)),
       planningRepositories: () =>
         Effect.sync(() => {
           asked.push("repositories");

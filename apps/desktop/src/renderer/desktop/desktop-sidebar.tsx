@@ -85,7 +85,11 @@ export function DesktopSidebar({
                 onClick={() => openPlan(plan.id)}
               >
                 <span className="sidebar-plan-name">{plan.name}</span>
-                <span className="sidebar-plan-repository">{folderLine(plan.folder)}</span>
+                {plans.folders[plan.id] !== undefined ? (
+                  <span className="sidebar-plan-repository">
+                    {folderLine(plans.folders[plan.id] ?? "")}
+                  </span>
+                ) : null}
               </button>
             </li>
           ))}

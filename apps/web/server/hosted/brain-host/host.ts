@@ -528,7 +528,7 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
                     plan: {
                       userId: target.userId,
                       planId: plan.plan.id,
-                      header: { name: plan.plan.name, folder: plan.plan.folder },
+                      header: { name: plan.plan.name },
                     },
                     research: {
                       turnId: binding.turn.turnId,

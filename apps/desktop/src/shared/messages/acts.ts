@@ -21,12 +21,13 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
-import { planCreateRequestSchema } from "@sidecar/hosted/plan-wire";
 import {
   type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
   planningRepositoriesAnswerSchema,
+  planningSetFolderParamsSchema,
   planningStartAnswerSchema,
+  planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
 import { INTRODUCTION_SEED_BOUNDS, type LiveDiagnostics } from "@sidecar/live";
 import {
@@ -167,6 +168,8 @@ export const ACT_KIND = {
   PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
   /** The new-plan form's Choose folder press: the folder picker, answering the chosen path or null. */
   PLANNING_CHOOSE_FOLDER: "planning.chooseFolder",
+  /** A plan's folder on this Mac, chosen again for a plan this Mac holds none for. */
+  PLANNING_SET_FOLDER: "planning.setFolder",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   VOICE_COMMAND: "voice.command",
@@ -619,7 +622,7 @@ export const ACT = {
   },
   [ACT_KIND.PLANNING_CLOSE]: press("Could not leave that plan on this system."),
   [ACT_KIND.PLANNING_START]: {
-    payload: actSchema(planCreateRequestSchema),
+    payload: actSchema(planningStartRequestSchema),
     result: wireResult<PlanningStartAnswer>(isReadable(planningStartAnswerSchema)),
     refusal: "Could not start that plan on this system.",
   },
@@ -635,6 +638,11 @@ export const ACT = {
       (value): value is string | null => value === null || isWireString(value),
     ),
     refusal: "Could not open the folder picker on this system.",
+  },
+  [ACT_KIND.PLANNING_SET_FOLDER]: {
+    payload: actSchema(planningSetFolderParamsSchema),
+    result: answersNothing,
+    refusal: "Could not keep that folder on this system.",
   },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.VOICE_COMMAND]: {

@@ -1,6 +1,6 @@
 import { describeWire } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Struct } from "effect";
-import { PLAN_BOUNDS, type PlanFolder, planDocumentSchema } from "./plan-wire.js";
+import { PLAN_BOUNDS, planDocumentSchema } from "./plan-wire.js";
 
 /**
  * plan-template.ts -- the one fixed template every feature plan is written in: the typed update the planning model sends, and the canonical Markdown body it becomes.
@@ -214,10 +214,9 @@ export type PlanUpdate = typeof planUpdateSchema.Type;
 type Rule = typeof ruleSchema.Type;
 type Example = typeof exampleSchema.Type;
 
-/** What the document's header names: the plan and the source it was read at, the service's and never the model's. */
+/** What the document's header names: the plan, the service's and never the model's. */
 export interface PlanHeader {
   readonly name: string;
-  readonly folder: PlanFolder;
 }
 
 /** A new plan's fields: every answer unanswered and no questions. */
@@ -382,7 +381,7 @@ function rulesBlocks(rules: readonly Rule[] | null): readonly string[] {
 }
 
 function headerBlock(header: PlanHeader): string {
-  return [`# ${oneLine(header.name)}`, `Folder: ${oneLine(header.folder.path)}`].join("\n\n");
+  return `# ${oneLine(header.name)}`;
 }
 
 /** An optional field: its heading and answer once it holds something, nothing while null. */
