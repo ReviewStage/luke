@@ -7,7 +7,7 @@ import {
 import {
   type Plan,
   type PlanDocument,
-  type PlanRepository,
+  type PlanFolder,
   type PlanSummary,
   planAssumptionSchema,
 } from "@sidecar/hosted/plan-wire";
@@ -48,20 +48,17 @@ export interface StoredPlan {
   readonly conversationId: string | undefined;
 }
 
-/** A plan to start: its name and its repository, already resolved to one commit through GitHub. */
+/** A plan to start: its name and the folder on the developer's Mac it reads. */
 export interface NewPlan {
   readonly name: string;
-  readonly repository: PlanRepository;
+  readonly folder: PlanFolder;
 }
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const PLAN_COLUMNS = {
   id: plan.id,
   name: plan.name,
-  repositoryOwner: plan.repositoryOwner,
-  repositoryName: plan.repositoryName,
-  repositoryBranch: plan.repositoryBranch,
-  repositoryCommit: plan.repositoryCommit,
+  folderPath: plan.folderPath,
   body: plan.body,
   assumptions: plan.assumptions,
   fields: plan.fields,
@@ -74,10 +71,7 @@ const PLAN_COLUMNS = {
 const PlanRowSchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
-  repositoryOwner: Schema.String,
-  repositoryName: Schema.String,
-  repositoryBranch: Schema.String,
-  repositoryCommit: Schema.String,
+  folderPath: Schema.String,
   body: Schema.String,
   assumptions: Schema.Array(planAssumptionSchema),
   fields: Schema.NullOr(planFieldsSchema),
@@ -103,7 +97,7 @@ function storedPlanOf(row: PlanRow): StoredPlan {
   const summary = summaryOf(row);
   const body =
     row.body === ""
-      ? planBody({ name: summary.name, repository: summary.repository }, EMPTY_PLAN_FIELDS)
+      ? planBody({ name: summary.name, folder: summary.folder }, EMPTY_PLAN_FIELDS)
       : row.body;
   return {
     plan: {
@@ -119,12 +113,7 @@ function summaryOf(row: PlanRow): PlanSummary {
   return {
     id: row.id,
     name: row.name,
-    repository: {
-      owner: row.repositoryOwner,
-      name: row.repositoryName,
-      branch: row.repositoryBranch,
-      commit: row.repositoryCommit,
-    },
+    folder: { path: row.folderPath },
     createdAt: row.createdAt.getTime(),
     updatedAt: row.updatedAt.getTime(),
     openedAt: row.openedAt.getTime(),
@@ -140,10 +129,7 @@ const insertPlan = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     name: Schema.String,
-    owner: Schema.String,
-    repositoryName: Schema.String,
-    branch: Schema.String,
-    commit: Schema.String,
+    folderPath: Schema.String,
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
@@ -153,10 +139,7 @@ const insertPlan = SqlSchema.findOne({
       .values({
         userId: write.userId,
         name: write.name,
-        repositoryOwner: write.owner,
-        repositoryName: write.repositoryName,
-        repositoryBranch: write.branch,
-        repositoryCommit: write.commit,
+        folderPath: write.folderPath,
         assumptions: [],
         createdAt: write.now,
         updatedAt: write.now,
@@ -326,10 +309,7 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
     const row = yield* insertPlan({
       userId,
       name: started.name,
-      owner: started.repository.owner,
-      repositoryName: started.repository.name,
-      branch: started.repository.branch,
-      commit: started.repository.commit,
+      folderPath: started.folder.path,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -459,7 +439,7 @@ export function openPlanConversation(
  * The plan a conversation of the account belongs to, with its saved document;
  * nothing for a conversation no plan of the account names. This is how a
  * planning turn, admitted for a conversation, finds the document it is handed
- * and the plan its repository read is bound to.
+ * and the plan its folder read is bound to.
  */
 export function readPlanOfConversation(
   userId: string,

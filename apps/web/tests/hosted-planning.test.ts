@@ -43,7 +43,6 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
-import type { GitHubAccessShape } from "../server/hosted/github-source";
 import {
   createPlan,
   deletePlan,
@@ -57,7 +56,6 @@ import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { hostedStore, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
-import { noGitHubConnections } from "./support/github-fake";
 import { noNetwork } from "./support/no-network";
 import { testSqlClient } from "./support/sql-client";
 
@@ -81,12 +79,7 @@ const NOW = 1_800_000_000_000;
 
 const RELAY_PLAN = {
   name: "Teammate invitations",
-  repository: {
-    owner: "acme",
-    name: "relay",
-    branch: "main",
-    commit: "4f2c9e1a7b3d5f60718293a4b5c6d7e8f9012345",
-  },
+  folder: { path: "/Users/dev/relay" },
 } as const;
 
 const SAVED: PlanDocument = {
@@ -153,7 +146,6 @@ function unreached(name: string): () => never {
 
 /** The host over the test database, with the writer holding rows to the hosted tool set as production's does. */
 const planningHost = (
-  githubAccess: GitHubAccessShape = noGitHubConnections,
   openAi: BrainHostSeams["openAi"] = () => undefined,
   spend: BrainHostSeams["spend"] = unreached("spend"),
 ) =>
@@ -178,8 +170,6 @@ const planningHost = (
       vaultSecret: unreached("vaultSecret"),
       providerKey: unreached("providerKey"),
       executeAction: unreached("executeAction"),
-      githubAccess,
-      bash: unreached("bash"),
       now: () => NOW,
     };
     return yield* brainHost(seams);
@@ -192,11 +182,11 @@ const openUser = Effect.gen(function* () {
 });
 
 /** A plan with a saved document and its conversation opened, as the Plans tab would leave it. */
-const savedPlanWithConversation = (githubAccess?: GitHubAccessShape) =>
+const savedPlanWithConversation = () =>
   Effect.gen(function* () {
     const userId = yield* openUser;
     const started = yield* createPlan(userId, RELAY_PLAN);
-    const host = yield* planningHost(githubAccess);
+    const host = yield* planningHost();
     const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
     return { host, userId, planId: started.id, conversationId };
   });
@@ -578,7 +568,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const host = yield* planningHost(noGitHubConnections, TEST_OPENAI, meter(true));
+        const host = yield* planningHost(TEST_OPENAI, meter(true));
         const asking = yield* createPlan(userId, RELAY_PLAN);
         const other = yield* createPlan(userId, { ...RELAY_PLAN, name: "Billing export" });
         const askingConversation = Option.getOrThrow(
@@ -621,7 +611,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   it.effect("a failed search reaches the model as nothing found, not as a fact", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const host = yield* planningHost(noGitHubConnections, TEST_OPENAI, meter(true));
+      const host = yield* planningHost(TEST_OPENAI, meter(true));
       const started = yield* createPlan(userId, RELAY_PLAN);
       const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
       const session = yield* startSession(host, userId, conversationId);
@@ -643,7 +633,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const host = yield* planningHost(noGitHubConnections, TEST_OPENAI, meter(false));
+        const host = yield* planningHost(TEST_OPENAI, meter(false));
         const started = yield* createPlan(userId, RELAY_PLAN);
         const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
         const session = yield* startSession(host, userId, conversationId);

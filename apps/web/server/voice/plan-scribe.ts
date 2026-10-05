@@ -186,7 +186,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       .filter((line) => line.endMs <= cursor.heardThrough)
       .slice(-PLAN_SCRIBE.CONTEXT_LINES);
     const { plan, fields } = stored.value;
-    const header = { name: plan.name, repository: plan.repository };
+    const header = { name: plan.name, folder: plan.folder };
     const drafted = { at: Number.NEGATIVE_INFINITY, landed: false };
 
     /** The document an update would save, formatted as the save formats it; nothing past the body's bound. */

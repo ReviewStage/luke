@@ -53,12 +53,7 @@ test("a draft of the fixed template copies every section in order, its unanswere
   const body = planBody(
     {
       name: "Teammate invitations",
-      repository: {
-        owner: "acme",
-        name: "relay",
-        branch: "main",
-        commit: "4f2c9e1a0b3d5c7e9f1a2b3c4d5e6f708192a3b4",
-      },
+      folder: { path: "/Users/dev/relay" },
     },
     {
       ...EMPTY_PLAN_UPDATE,

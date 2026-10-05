@@ -79,6 +79,7 @@ const DECLARED_TABLES = [
   "oauth_refresh_token",
   "observation_pass",
   "plan",
+  "plan_command",
   "provider_cursors",
   "provider_key",
   "roster_snapshot",

@@ -29,6 +29,14 @@
           "dest": "/api/turn-read.js?route=brain/turns/turn&id=$1"
         },
         {
+          "src": "/api/plans/([^/]+)/commands/claim",
+          "dest": "/api/default.js?route=plans/commands/claim&id=$1"
+        },
+        {
+          "src": "/api/plans/([^/]+)/commands/([^/]+)",
+          "dest": "/api/default.js?route=plans/commands/command&id=$1&command=$2"
+        },
+        {
           "src": "/api/plans/([^/]+)",
           "dest": "/api/default.js?route=plans/plan&id=$1"
         },

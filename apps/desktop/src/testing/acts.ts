@@ -96,10 +96,11 @@ export const ONE_ACT_OF_EACH_KIND = {
   },
   [ACT_KIND.PLANNING_START]: {
     kind: ACT_KIND.PLANNING_START,
-    payload: { name: "Teammate invitations", repository: { owner: "acme", name: "relay" } },
+    payload: { name: "Teammate invitations", folder: { path: "/Users/dev/relay" } },
   },
   [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
   [ACT_KIND.PLANNING_CONNECT_GITHUB]: { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
+  [ACT_KIND.PLANNING_CHOOSE_FOLDER]: { kind: ACT_KIND.PLANNING_CHOOSE_FOLDER },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,

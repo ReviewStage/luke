@@ -74,7 +74,7 @@ Do not delegate to the backend when:
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
-- The repository: run_in_repository, which runs shell commands in a clone of the plan's repository.
+- The repository: run_in_repository, which runs shell commands in the plan's folder on the developer's Mac.
 - Research: search_web and read_web_page, which can search the Internet.
 
 Delegate to the backend when:

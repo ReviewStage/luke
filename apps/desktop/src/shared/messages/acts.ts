@@ -165,6 +165,8 @@ export const ACT_KIND = {
   PLANNING_START: "planning.start",
   PLANNING_REPOSITORIES: "planning.repositories",
   PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
+  /** The new-plan form's Choose folder press: the folder picker, answering the chosen path or null. */
+  PLANNING_CHOOSE_FOLDER: "planning.chooseFolder",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   VOICE_COMMAND: "voice.command",
@@ -627,6 +629,13 @@ export const ACT = {
     refusal: "Could not read your GitHub repositories on this system.",
   },
   [ACT_KIND.PLANNING_CONNECT_GITHUB]: press("Could not connect GitHub on this system."),
+  [ACT_KIND.PLANNING_CHOOSE_FOLDER]: {
+    payload: noPayload,
+    result: wireResult<string | null>(
+      (value): value is string | null => value === null || isWireString(value),
+    ),
+    refusal: "Could not open the folder picker on this system.",
+  },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

@@ -1,5 +1,5 @@
 import type { PlanFields } from "@sidecar/hosted/plan-template";
-import type { PlanAssumption } from "@sidecar/hosted/plan-wire";
+import type { PlanAssumption, PlanCommandResult } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
@@ -10,9 +10,8 @@ import { conversations } from "./storage-schema.js";
  * plan-schema.ts -- a named feature plan and its one current document.
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
- * account that started it: its name, the GitHub repository it plans against
- * with the default branch and the commit that branch stood at when it started
- * (fixed for the plan's life, and not a version of the plan), and the one
+ * account that started it: its name, the folder on the developer's Mac it
+ * plans against (fixed for the plan's life), and the one
  * document the planning model saves, a Markdown body and the assumptions list
  * beside it, with the template's fields the body was formatted from. A save
  * replaces all three columns in one statement, so there is no
@@ -34,10 +33,8 @@ export const plan = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
-    repositoryOwner: text("repository_owner").notNull(),
-    repositoryName: text("repository_name").notNull(),
-    repositoryBranch: text("repository_branch").notNull(),
-    repositoryCommit: text("repository_commit").notNull(),
+    /** The absolute path of the folder on the developer's Mac. */
+    folderPath: text("folder_path").notNull(),
     /** The document's Markdown body; empty until the first save. */
     body: text("body").notNull().default(""),
     /** The document's assumptions, each its text. */
@@ -61,3 +58,22 @@ export const plan = pgTable(
     index("plan_user_opened").on(table.userId, table.openedAt),
   ],
 );
+
+/**
+ * One command the planning model asked to run in a plan's folder. The tool
+ * inserts it, the developer's Mac claims it (`claimed_at`) and runs it, and
+ * posts the `result` the tool is waiting on. Rows go with their plan.
+ */
+export const planCommand = pgTable("plan_command", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  planId: uuid("plan_id")
+    .notNull()
+    .references(() => plan.id, { onDelete: "cascade" }),
+  command: text("command").notNull(),
+  /** The folder the command runs in, the plan's own when it was asked. */
+  cwd: text("cwd").notNull(),
+  createdAt: instant("created_at").notNull().defaultNow(),
+  claimedAt: instant("claimed_at"),
+  /** What the Mac answered: the exit code, stdout, and stderr; null until it does. */
+  result: jsonb("result").$type<PlanCommandResult>(),
+});

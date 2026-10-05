@@ -19,6 +19,7 @@ import {
   copyShown,
   DOCUMENT_REGION,
   documentRegion,
+  folderLine,
   githubFailureNote,
   MICROPHONE_PRESS,
   microphoneButton,
@@ -29,7 +30,6 @@ import {
   planningCallHoldsPanel,
   plansPage,
   repositoriesMatching,
-  repositoryLine,
 } from "./planning-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -38,12 +38,7 @@ const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const PLAN: Plan = {
   id: INVITES,
   name: "Teammate invitations",
-  repository: {
-    owner: "acme",
-    name: "relay",
-    branch: "main",
-    commit: "4f2c9e1a0b3d5c7e9f1a2b3c4d5e6f708192a3b4",
-  },
+  folder: { path: "/Users/dev/relay" },
   createdAt: 1,
   updatedAt: 2,
   openedAt: 3,
@@ -88,8 +83,10 @@ test("the document region draws only a document read for the active plan", () =>
   );
 });
 
-test("the header names the repository, its branch, and the commit it was started at", () => {
-  assert.equal(repositoryLine(PLAN.repository), "acme/relay · main @ 4f2c9e1");
+test("the header names the plan's folder, with the home folder as ~", () => {
+  assert.equal(folderLine(PLAN.folder), "~/relay");
+  assert.equal(folderLine({ path: "/Users/dev" }), "~");
+  assert.equal(folderLine({ path: "/Volumes/work/relay" }), "/Volumes/work/relay");
 });
 
 test("an account with no usable GitHub connection is offered Connect GitHub, anything else Try again", () => {

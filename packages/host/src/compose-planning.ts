@@ -25,6 +25,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { servePlanningCommands } from "./planning-commands.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -33,16 +34,21 @@ import type { RunMode } from "./run-mode.js";
  * Nothing here writes a document: the plan's notetaker is the one writer, on
  * the service. What this concern owes the panel is to show that write as it
  * happens. Every write happens during a planning call, and the notetaker's
- * drafts arrive on that call's own socket and are drawn in place, so nothing
- * here polls: the list and the open plan are read when the Plans tab shows,
- * when a plan opens, and when one starts, and never on a clock.
+ * drafts arrive on that call's own socket and are drawn in place: the list
+ * and the open plan are read when the Plans tab shows, when a plan opens, and
+ * when one starts, and never on a clock. The one loop here is the open plan's
+ * folder commands (`planning-commands.ts`), which the planning model asks
+ * this Mac to run.
  */
 
 /** Opening a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
 
 /** The service's side of the plans, as this concern asks it. */
-export type PlanningClient = Pick<HostedPlanClient, "list" | "open" | "create" | "repositories">;
+export type PlanningClient = Pick<
+  HostedPlanClient,
+  "list" | "open" | "create" | "repositories" | "claimCommand" | "settleCommand"
+>;
 
 export interface PlanningDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
@@ -255,7 +261,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       Effect.gen(function* () {
         const read = readEither(planCreateRequestSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("starting a plan names it and its repository");
+          return yield* invalid("starting a plan names it and its folder");
         }
         if (!gate()) return carried<PlanningStartAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
         const request = read.success;
@@ -315,7 +321,10 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // Nothing here runs on its own: every read is an ask's.
-    lifetime: Effect.void,
+    // The open plan's folder commands; every read of the plans is an ask's.
+    lifetime: servePlanningCommands({
+      client,
+      openPlanId: () => (gate() ? view.activePlanId : undefined),
+    }),
   };
 });

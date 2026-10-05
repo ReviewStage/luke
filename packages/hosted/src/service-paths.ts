@@ -133,8 +133,8 @@ export const HOSTED_SERVICE_PATH = {
   CHANGES: "/api/changes",
   /**
    * The account's named feature plans: list them, most recently opened first
-   * (GET), or start one (POST) with its name and its repository, which the
-   * service resolves to one commit. `plan-wire.ts` declares both.
+   * (GET), or start one (POST) with its name and the folder on the Mac it
+   * reads. `plan-wire.ts` declares both.
    */
   PLANS: "/api/plans",
   /**
@@ -193,4 +193,14 @@ export function brainTurnEventsPath(turnId: string): string {
 /** One plan the caller owns: open it with its saved document (GET) or delete it (DELETE). */
 export function planPath(planId: string): string {
   return `${HOSTED_SERVICE_PATH.PLANS}/${encodeURIComponent(planId)}`;
+}
+
+/** The Mac claiming the plan's next command (POST), held open until one arrives or the hold runs out. */
+export function planCommandClaimPath(planId: string): string {
+  return `${planPath(planId)}/commands/claim`;
+}
+
+/** The Mac posting what one claimed command answered (POST). */
+export function planCommandPath(planId: string, commandId: string): string {
+  return `${planPath(planId)}/commands/${encodeURIComponent(commandId)}`;
 }

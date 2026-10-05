@@ -26,6 +26,8 @@ export interface PlanningActsDependencies {
     /** Opens the Connect GitHub page in the browser; whether it opened. */
     planningConnectGitHub(): Effect.Effect<boolean>;
   };
+  /** The folder picker; the chosen folder's absolute path, or null when the developer cancelled. */
+  chooseFolder: () => Effect.Effect<string | null>;
   /** The plan the panel has open, as main holds the host's view of it. */
   activePlanId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
@@ -41,6 +43,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_START
   | typeof ACT_KIND.PLANNING_REPOSITORIES
   | typeof ACT_KIND.PLANNING_CONNECT_GITHUB
+  | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
   | typeof ACT_KIND.PLANNING_TALK;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
@@ -93,6 +96,10 @@ export function planningActRows(
       return Effect.flatMap(host.planningConnectGitHub(), (opened) =>
         opened ? Effect.void : Effect.fail(new ActRefused({ message: GITHUB_CONNECT_SIGNED_OUT })),
       );
+    },
+    [ACT_KIND.PLANNING_CHOOSE_FOLDER]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_CHOOSE_FOLDER, sender);
+      return dependencies.chooseFolder();
     },
     // The press names no plan: the plan is the one the host has open, read
     // here, so the panel cannot open a call about a plan it is not showing.

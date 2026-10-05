@@ -53,9 +53,7 @@ const GITHUB_FAILURE_STATUS = {
 } as const satisfies Record<GitHubFailure, number>;
 
 /** Why a GitHub read under the account's connection answered nothing, as the response the window reads. */
-export function githubFailureResponse(
-  failure: GitHubUnavailable,
-): HttpServerResponse.HttpServerResponse {
+function githubFailureResponse(failure: GitHubUnavailable): HttpServerResponse.HttpServerResponse {
   const answer: GitHubFailureAnswer = { error: GITHUB_UNAVAILABLE_ERROR, reason: failure.reason };
   return hostedJsonResponse(GITHUB_FAILURE_STATUS[failure.reason], answer);
 }

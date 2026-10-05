@@ -6,30 +6,24 @@
       "minLength": 1,
       "maxLength": 200
     },
-    "repository": {
+    "folder": {
       "type": "object",
       "properties": {
-        "owner": {
+        "path": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 100
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 100
+          "maxLength": 1024
         }
       },
       "required": [
-        "owner",
-        "name"
+        "path"
       ],
       "additionalProperties": false
     }
   },
   "required": [
     "name",
-    "repository"
+    "folder"
   ],
   "additionalProperties": false
 }

@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "exitCode": {
+      "type": "integer"
+    },
+    "stdout": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "stderr": {
+      "type": "string",
+      "maxLength": 20000
+    }
+  },
+  "required": [
+    "exitCode",
+    "stdout",
+    "stderr"
+  ],
+  "additionalProperties": false
+}

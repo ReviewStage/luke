@@ -9,7 +9,7 @@ import {
   type CopyShown,
   DOCUMENT_REGION,
   type DocumentRegion,
-  repositoryLine,
+  folderLine,
 } from "./planning-model";
 
 /**
@@ -73,9 +73,7 @@ export function PlanList({
               onClick={() => onSelect(plan.id)}
             >
               <span className="plan-list-name">{plan.name}</span>
-              <span className="plan-list-repository">
-                {plan.repository.owner}/{plan.repository.name}
-              </span>
+              <span className="plan-list-repository">{folderLine(plan.folder)}</span>
             </button>
           </li>
         ))}
@@ -117,7 +115,7 @@ function CopyControl({
   );
 }
 
-/** The document page's header: the way back to the list, the plan's name and repository line, and Copy. */
+/** The document page's header: the way back to the list, the plan's name and folder line, and Copy. */
 function PlanHeader({
   title,
   repository,
@@ -208,7 +206,7 @@ export function PlanDocumentView({
         <section className="plan-document" aria-label={plan.name}>
           <PlanHeader
             title={plan.name}
-            repository={repositoryLine(plan.repository)}
+            repository={folderLine(plan.folder)}
             copy={copy}
             onBack={onBack}
           />

@@ -600,7 +600,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_START, {
           name: request.name,
-          repository: { owner: request.repository.owner, name: request.repository.name },
+          folder: { path: request.folder.path },
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok

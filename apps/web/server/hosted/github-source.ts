@@ -4,7 +4,6 @@ import {
   type GitHubRepository,
   type GitHubRepositoryListAnswer,
 } from "@sidecar/hosted/github-wire";
-import type { PlanRepository } from "@sidecar/hosted/plan-wire";
 import { HTTP_STATUS } from "@sidecar/wire";
 import { Context, Data, Duration, Effect, Option, Redacted, Schema } from "effect";
 import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
@@ -75,13 +74,7 @@ const RepositoryRowSchema = Schema.Struct({
   default_branch: Schema.String,
 });
 
-const BranchRowSchema = Schema.Struct({
-  commit: Schema.Struct({ sha: Schema.String }),
-});
-
-const readRepository = HttpClientResponse.schemaBodyJson(RepositoryRowSchema);
 const readRepositories = HttpClientResponse.schemaBodyJson(Schema.Array(RepositoryRowSchema));
-const readBranch = HttpClientResponse.schemaBodyJson(BranchRowSchema);
 
 /** A GitHub path from its segments, each one encoded, so a name can never name a different route. */
 function githubUrl(segments: readonly string[], query: Readonly<Record<string, string>> = {}) {
@@ -148,48 +141,6 @@ function hasNextPage(response: HttpClientResponse.HttpClientResponse): boolean {
   const link = Option.getOrUndefined(Headers.get(response.headers, "link"));
   return link?.includes('rel="next"') === true;
 }
-
-/**
- * The repository as GitHub names it, its default branch, and the commit
- * that branch stands at now. The owner and name are GitHub's own spelling,
- * whatever case the caller used. A repository with no commit on its default
- * branch answers `empty-repository`, since there is no source to plan against.
- */
-export const resolveRepository = /* @__PURE__ */ Effect.fn("web/githubResolveRepository")(
-  function* (token: Redacted.Redacted, owner: string, name: string) {
-    const { body: repository } = yield* githubGet(
-      token,
-      githubUrl(["repos", owner, name]),
-      readRepository,
-    );
-    const { body: branch } = yield* githubGet(
-      token,
-      githubUrl([
-        "repos",
-        repository.owner.login,
-        repository.name,
-        "branches",
-        repository.default_branch,
-      ]),
-      readBranch,
-    ).pipe(
-      // A default branch GitHub names but cannot find is a repository with no commit yet.
-      Effect.catch((failure) =>
-        Effect.fail(
-          failure.reason === GITHUB_FAILURE.NOT_FOUND
-            ? new GitHubUnavailable({ reason: GITHUB_FAILURE.EMPTY_REPOSITORY })
-            : failure,
-        ),
-      ),
-    );
-    return {
-      owner: repository.owner.login,
-      name: repository.name,
-      branch: repository.default_branch,
-      commit: branch.commit.sha,
-    } satisfies PlanRepository;
-  },
-);
 
 /**
  * The repositories the connection can read, most recently pushed first, up

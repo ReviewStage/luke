@@ -56,19 +56,14 @@ import { testSqlClient } from "./support/sql-client";
  * Synthetic accounts, repositories, and plans throughout.
  */
 
-const COMMIT = {
-  RELAY: "4f2c9e1a7b3d5f60718293a4b5c6d7e8f9012345",
-  LEDGER: "0123456789abcdef0123456789abcdef01234567",
-} as const;
-
 const RELAY_PLAN: NewPlan = {
   name: "Teammate invitations",
-  repository: { owner: "acme", name: "relay", branch: "main", commit: COMMIT.RELAY },
+  folder: { path: "/Users/dev/relay" },
 };
 
 const LEDGER_PLAN: NewPlan = {
   name: "Billing export",
-  repository: { owner: "acme", name: "ledger", branch: "trunk", commit: COMMIT.LEDGER },
+  folder: { path: "/Users/dev/ledger" },
 };
 
 const UNANSWERED = "_Unanswered_";
@@ -167,10 +162,8 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
         const { body, assumptions } = started.document;
 
         assert.equal(started.name, RELAY_PLAN.name);
-        assert.deepEqual(started.repository, RELAY_PLAN.repository);
-        assert.ok(
-          body.startsWith("# Teammate invitations\n\nRepository: acme/relay, branch main\n"),
-        );
+        assert.deepEqual(started.folder, RELAY_PLAN.folder);
+        assert.ok(body.startsWith("# Teammate invitations\n\nFolder: /Users/dev/relay\n"));
         assert.deepEqual(templateHeadingsOf(body), TEMPLATE_HEADINGS);
         assert.equal(countOf(body, UNANSWERED), TEMPLATE_UNANSWERED_FIELDS);
         assert.ok(body.endsWith("## Open questions\n\n_No additional questions recorded_\n"));
@@ -191,10 +184,9 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
       const relayBody = (yield* openedDocument(userId, relay.id)).body;
       const ledgerBody = (yield* openedDocument(userId, ledger.id)).body;
       assert.ok(relayBody.startsWith("# Teammate invitations\n"));
-      assert.ok(!relayBody.includes(COMMIT.RELAY));
       assert.ok(relayBody.includes(INVITATIONS_DRAFT.goal.problem ?? "?"));
       assert.ok(ledgerBody.startsWith("# Billing export\n"));
-      assert.ok(ledgerBody.includes("branch trunk\n"));
+      assert.ok(ledgerBody.includes("Folder: /Users/dev/ledger\n"));
       assert.ok(ledgerBody.includes(SMALL_FEATURE.goal.problem ?? "?"));
       assert.ok(!ledgerBody.includes(INVITATIONS_DRAFT.goal.problem ?? "?"));
     }),

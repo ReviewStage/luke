@@ -11,33 +11,17 @@
       "minLength": 1,
       "maxLength": 200
     },
-    "repository": {
+    "folder": {
       "type": "object",
       "properties": {
-        "owner": {
+        "path": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 100
-        },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 100
-        },
-        "branch": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 255
-        },
-        "commit": {
-          "type": "string"
+          "maxLength": 1024
         }
       },
       "required": [
-        "owner",
-        "name",
-        "branch",
-        "commit"
+        "path"
       ],
       "additionalProperties": false
     },
@@ -89,7 +73,7 @@
   "required": [
     "id",
     "name",
-    "repository",
+    "folder",
     "createdAt",
     "updatedAt",
     "openedAt",

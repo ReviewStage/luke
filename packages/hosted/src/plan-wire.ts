@@ -4,9 +4,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 /**
  * plan-wire.ts -- a named feature plan and its one saved document, as the Plans tab and the service read them.
  *
- * A plan is its owner's name for it, the GitHub repository it plans against
- * with the default branch and the commit it was started at, and one current
- * document: a Markdown `body` and an `assumptions` list, each assumption its
+ * A plan is its owner's name for it, the folder on the developer's Mac it
+ * plans against, and one current document: a Markdown `body` and an `assumptions` list, each assumption its
  * text (`docs/PLANNING.md`). The
  * document is the whole of what the planning model writes, through
  * `update_plan`, whose typed fields the service formats into the body as the
@@ -24,18 +23,13 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 export const PLAN_BOUNDS = {
   /** The most characters a plan's name may spell. */
   MAX_NAME_CHARS: 200,
-  /** GitHub's own bounds sit well inside these. */
-  MAX_REPOSITORY_OWNER_CHARS: 100,
-  MAX_REPOSITORY_NAME_CHARS: 100,
-  MAX_BRANCH_CHARS: 255,
+  /** macOS's own path bound. */
+  MAX_FOLDER_PATH_CHARS: 1_024,
   /** A document body past this is not a plan a coding agent can take in one prompt. */
   MAX_BODY_CHARS: 200_000,
   MAX_ASSUMPTIONS: 200,
   MAX_ASSUMPTION_CHARS: 2_000,
 } as const;
-
-/** A full hexadecimal commit id, the form GitHub resolves a branch to. */
-const COMMIT_PATTERN = /^[0-9a-f]{40}$/u;
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
@@ -60,28 +54,20 @@ export const planDocumentSchema = EffectSchema.Struct({
 
 export type PlanDocument = typeof planDocumentSchema.Type;
 
-/** The repository a plan reads, fixed at the commit its default branch stood at when the plan started. */
-export const planRepositorySchema = EffectSchema.Struct({
-  owner: trimmedText(PLAN_BOUNDS.MAX_REPOSITORY_OWNER_CHARS),
-  name: trimmedText(PLAN_BOUNDS.MAX_REPOSITORY_NAME_CHARS),
-  branch: trimmedText(PLAN_BOUNDS.MAX_BRANCH_CHARS),
-  commit: EffectSchema.Trim.check(EffectSchema.isPattern(COMMIT_PATTERN)),
+/** The folder on the developer's Mac a plan reads, as the absolute path the folder picker answered. */
+export const planFolderSchema = EffectSchema.Struct({
+  path: trimmedText(PLAN_BOUNDS.MAX_FOLDER_PATH_CHARS),
 });
 
-export type PlanRepository = typeof planRepositorySchema.Type;
+export type PlanFolder = typeof planFolderSchema.Type;
 
 /**
- * Starting a plan (POST): its name and the repository it plans against; the
- * document starts as the untouched template. The service resolves the default branch and its
- * commit itself, through the account's GitHub connection, so a request
- * naming either is refused rather than trusted.
+ * Starting a plan (POST): its name and the folder it plans against; the
+ * document starts as the untouched template.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
-  repository: EffectSchema.Struct({
-    owner: planRepositorySchema.fields.owner,
-    name: planRepositorySchema.fields.name,
-  }),
+  folder: planFolderSchema,
 });
 
 export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
@@ -89,7 +75,7 @@ export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
 const planSummaryFields = {
   id: wireUuidSchema,
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
-  repository: planRepositorySchema,
+  folder: planFolderSchema,
   /** Epoch milliseconds the plan was started. */
   createdAt: countedNumber,
   /** Epoch milliseconds the document was last saved; the start, before any save. */
@@ -121,3 +107,34 @@ export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
 
 /** A deleted plan (DELETE): its row, its document, and its association are gone. */
 export const planDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
+
+/** The most characters of stdout or stderr one command's result carries. */
+export const PLAN_COMMAND_OUTPUT_MAX_CHARS = 20_000;
+
+/** One command the planning model asked to run in the plan's folder, as the Mac claims it. */
+export const planCommandSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  command: EffectSchema.String,
+  cwd: EffectSchema.String,
+});
+
+export type PlanCommand = typeof planCommandSchema.Type;
+
+/** A claim (POST): the oldest command waiting for the plan, or null when none arrived in time. */
+export const planCommandClaimAnswerSchema = EffectSchema.Struct({
+  command: EffectSchema.NullOr(planCommandSchema),
+});
+
+/** What the Mac posts back once it ran a claimed command. */
+export const planCommandResultSchema = EffectSchema.Struct({
+  exitCode: EffectSchema.Int,
+  stdout: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_COMMAND_OUTPUT_MAX_CHARS)),
+  stderr: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_COMMAND_OUTPUT_MAX_CHARS)),
+});
+
+export type PlanCommandResult = typeof planCommandResultSchema.Type;
+
+/** A settled command (POST): whether the result landed on a command the account had claimed. */
+export const planCommandSettleAnswerSchema = EffectSchema.Struct({
+  settled: EffectSchema.Boolean,
+});
