@@ -1,4 +1,5 @@
 import { type ExecFileException, execFile } from "node:child_process";
+import { realpathSync } from "node:fs";
 import type { HostedPlanClient } from "@sidecar/hosted";
 import {
   PLAN_COMMAND_OUTPUT_MAX_CHARS,
@@ -15,8 +16,14 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
  * only this side can call the other. So while a plan is open in the Plans
  * panel, one loop holds a claim open on the service
  * (`apps/web/server/hosted/repository-shell.ts`), runs each command it is
- * handed with the folder as its working directory, and settles it. Nothing
- * here limits what a command may do: the folder is the developer's own.
+ * handed with the folder as its working directory, and settles it.
+ *
+ * Note that the command comes from the service, so the Mac does not trust it.
+ * On macOS each command runs inside a kernel sandbox (`sandbox-exec`) that
+ * refuses every network call and every write, and reads only the plan's
+ * folder and the system's own programs and libraries, so a command can
+ * explore the folder and nothing else. Every platform runs it with an
+ * environment of its own, so none of Luke's variables reach its output.
  */
 
 const PLANNING_COMMANDS = {
@@ -30,6 +37,63 @@ const PLANNING_COMMANDS = {
   IDLE: Duration.seconds(1),
   RETRY: Duration.seconds(2),
 } as const;
+
+/** The kernel sandbox a command runs in on macOS; it names its one folder as the `FOLDER` parameter. */
+const SANDBOX_EXEC = "/usr/bin/sandbox-exec";
+// Note that this follows the shape of Codex's read-only Seatbelt policy (deny by default, children inherit it), and
+// that a denied mach-lookup is what keeps a command from asking a system service, such as `open`, to act outside it.
+const SANDBOX_PROFILE = `(version 1)
+(deny default)
+(allow process-exec)
+(allow process-fork)
+(allow signal (target same-sandbox))
+(allow process-info* (target same-sandbox))
+(allow sysctl-read)
+(allow file-read-metadata)
+(allow file-read* (literal "/"))
+(allow file-read*
+  (subpath (param "FOLDER"))
+  (subpath "/usr") (subpath "/bin") (subpath "/sbin") (subpath "/System") (subpath "/Library/Apple")
+  (subpath "/Library/Developer") (subpath "/Applications/Xcode.app") (subpath "/opt/homebrew")
+  (subpath "/private/etc") (subpath "/private/var/db") (subpath "/private/var/select")
+  (subpath "/dev"))
+(allow file-map-executable
+  (subpath "/usr/lib") (subpath "/System") (subpath "/Library/Apple")
+  (subpath "/Library/Developer") (subpath "/Applications/Xcode.app") (subpath "/opt/homebrew"))
+(allow file-write-data (literal "/dev/null") (literal "/dev/zero") (subpath "/dev/fd"))
+(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo"))`;
+
+/** The whole environment a command sees: a search path, and git told to read no config but the folder's and to take no lock. */
+function commandEnvironment(folder: string): NodeJS.ProcessEnv {
+  return {
+    PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    HOME: folder,
+    LANG: "en_US.UTF-8",
+    PAGER: "cat",
+    GIT_PAGER: "cat",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_OPTIONAL_LOCKS: "0",
+  };
+}
+
+/** The program and arguments that run `command` in `folder`: in the sandbox on macOS, and bash alone where there is none. */
+function commandLine(command: string, folder: string): readonly [string, string[]] {
+  if (process.platform !== "darwin") return ["/bin/bash", ["-c", command]];
+  return [
+    SANDBOX_EXEC,
+    ["-D", `FOLDER=${folder}`, "-p", SANDBOX_PROFILE, "/bin/bash", "-c", command],
+  ];
+}
+
+/** The folder with every link resolved, since the sandbox matches a read against the real path; as given when it cannot be read. */
+function realFolder(folder: string): string {
+  try {
+    return realpathSync(folder);
+  } catch {
+    return folder;
+  }
+}
 
 /** The plan open now, and the folder of this Mac it reads, if one is recorded. */
 interface OpenPlanFolder {
@@ -75,17 +139,20 @@ function resultOf(
   return { exitCode, stdout: bounded(stdout), stderr: bounded(diagnostics) };
 }
 
-/** One command run with bash in `cwd`; every outcome is a result, and an interrupted run is killed. */
+/** One command run with bash in `folder`, sandboxed; every outcome is a result, and an interrupted run is killed. */
 function runPlanCommand(
   command: Pick<PlanCommand, "command">,
-  cwd: string,
+  folder: string,
 ): Effect.Effect<PlanCommandResult> {
   return Effect.callback<PlanCommandResult>((resume) => {
+    const cwd = realFolder(folder);
+    const [program, args] = commandLine(command.command, cwd);
     const child = execFile(
-      "/bin/bash",
-      ["-lc", command.command],
+      program,
+      args,
       {
         cwd,
+        env: commandEnvironment(cwd),
         encoding: "utf8",
         timeout: PLANNING_COMMANDS.TIMEOUT_MS,
         maxBuffer: PLANNING_COMMANDS.MAX_BUFFER_BYTES,

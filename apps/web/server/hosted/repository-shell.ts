@@ -74,6 +74,7 @@ export const RUN_IN_REPOSITORY_TOOL = {
   description:
     "Run one bash command in the plan's folder on the developer's Mac, from the folder root. " +
     "Use it to explore: ls, find, grep, cat, git log. " +
+    "The command can only read the folder: it cannot write, and it has no network. " +
     "Answers the exit code, stdout, and stderr, or `not-run` and why.",
   inputSchema: RUN_IN_REPOSITORY_INPUT,
 } as const;

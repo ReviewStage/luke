@@ -110,8 +110,11 @@ it at once, and deleting your account removes every plan.
 **How the planning model reads your folder.** While a plan is open in Luke
 on your Mac, Luke's planning model, which runs on our service, can ask your
 Mac to run a shell command (such as `ls`, `grep`, or `cat`) in the plan's
-folder. Luke on your Mac runs each command as you, with the folder as its
-working directory and with your own permissions, and sends the command's exit
+folder. Luke on your Mac runs each command with the folder as its working
+directory, inside a macOS sandbox that blocks all network access and all
+writes, and lets the command read only that folder and the system's own
+programs. None of Luke's own environment reaches the command. Luke sends the
+command's exit
 code and up to 20,000 characters each of its output and error text back to
 our service, which hands them to the planning model. No copy of the folder is
 made, and the folder's path stays on your Mac: our service never stores it.
