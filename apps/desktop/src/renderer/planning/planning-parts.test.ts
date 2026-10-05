@@ -227,14 +227,38 @@ test("a refused start keeps the form open with the reason", () => {
   assert.match(markup, />Start plan<\/button>/u);
 });
 
-function microphoneRowMarkup(status: CallStatus): string {
+function microphoneRowMarkup(
+  status: CallStatus,
+  call: { muted: boolean; stop: boolean } = { muted: false, stop: false },
+): string {
   return renderToStaticMarkup(
     createElement(MicrophoneRow, {
       status,
-      microphone: { label: "Mute the microphone", enabled: true, onPress: ignore },
+      microphone: {
+        label: call.muted ? "Unmute the microphone" : "Mute the microphone",
+        enabled: true,
+        muted: call.muted,
+        onPress: ignore,
+      },
+      stop: { shown: call.stop, onPress: ignore },
     }),
   );
 }
+
+const IDLE_BACKEND = { planner: undefined, notes: false };
+
+test("a muted call presses the microphone and offers a stop apart from it, and no call offers no stop", () => {
+  const muted = microphoneRowMarkup(
+    { voiceWord: "Muted", backend: IDLE_BACKEND },
+    { muted: true, stop: true },
+  );
+  assert.match(muted, /aria-label="Unmute the microphone"[^>]*aria-pressed="true"/u);
+  assert.match(muted, /<button[^>]*class="plan-stop"[^>]*aria-label="End the call"/u);
+
+  const heard = microphoneRowMarkup({ voiceWord: "Listening", backend: IDLE_BACKEND });
+  assert.match(heard, /aria-pressed="false"/u);
+  assert.doesNotMatch(heard, /plan-stop/u);
+});
 
 test("the microphone row's second line names the planning model's command and the notetaker, with the dots and a reader's status line", () => {
   const markup = microphoneRowMarkup({

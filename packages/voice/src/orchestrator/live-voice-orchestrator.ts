@@ -330,6 +330,28 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
+   * The panel's stop: the standing call ends now, whatever it is about. Where
+   * Luke is speaking the host tells the model to stop first, so his voice
+   * does not run on through the graceful close; then the microphone closes
+   * and the call is let go of at once, so the view reads no call before the
+   * close has finished behind it. Unlike the stop key, nothing stands after
+   * it: the next press opens a new call. A press over no call does nothing.
+   */
+  stopCall(): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      this.#pressHeld = false;
+      this.#resumeListening = false;
+      this.#lastListening = false;
+      const call = this.#call;
+      if (call?.standing && !this.#opening) {
+        if (call.status === LIVE_STATUS.SPEAKING) yield* this.#bridge.stopSpeaking();
+        yield* call.mute();
+      }
+      yield* this.#hangUp();
+    });
+  }
+
+  /**
    * What the document held when this window came up. A wanted the host
    * announced before the window subscribed would otherwise be a briefing left
    * queued until the next drain, so the standing phase is obeyed once at

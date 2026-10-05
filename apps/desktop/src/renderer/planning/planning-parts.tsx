@@ -1,5 +1,13 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { BackIcon, CheckIcon, CopyIcon, MicrophoneIcon, PlusIcon } from "@sidecar/panel";
+import {
+  BackIcon,
+  CheckIcon,
+  CopyIcon,
+  MicrophoneIcon,
+  MicrophoneOffIcon,
+  PlusIcon,
+  StopIcon,
+} from "@sidecar/panel";
 import { ThinkingDots } from "../thinking-dots";
 import { PlanBody } from "./plan-body";
 import {
@@ -30,6 +38,9 @@ const PLAN_WORKING_LABEL = "Luke is working on it";
 const PLANNER_NAME = "Planning model";
 const PLANNER_THINKING = "Thinking";
 const NOTETAKER_WRITING = "Notetaker · Writing notes";
+
+/** The stop's name for a reader and its hover. */
+const STOP_CALL_LABEL = "End the call";
 
 /** The list page: every plan the account owns, most recently opened first, under New plan. */
 export function PlanList({
@@ -248,7 +259,9 @@ export function PlanDocumentView({
 
 /**
  * The microphone row under the document: the button, and beside it the open
- * plan's call in two lines. The first is the voice's word. The second stands
+ * plan's call in two lines. The button is struck through and pressed while
+ * the call stands muted. While the call is in progress a stop ends it, apart
+ * from the microphone, so muting never hangs up and hanging up is one press. The first is the voice's word. The second stands
  * only while the backend works: the planning model with its pending command
  * set in monospace, or Thinking where it has none, and the notetaker while it
  * writes, each named so neither reads as the voice. The dots are decorative,
@@ -259,10 +272,12 @@ export function PlanDocumentView({
 export function MicrophoneRow({
   status,
   microphone,
+  stop,
 }: {
   /** The call's status, absent while no call about this plan stands. */
   status: CallStatus | undefined;
-  microphone: { label: string; enabled: boolean; onPress: () => void };
+  microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
+  stop: { shown: boolean; onPress: () => void };
 }): React.JSX.Element {
   const planner = status?.backend.planner;
   const notes = status?.backend.notes ?? false;
@@ -273,10 +288,12 @@ export function MicrophoneRow({
         className="plan-microphone"
         aria-label={microphone.label}
         title={microphone.label}
+        aria-pressed={microphone.muted}
+        data-muted={String(microphone.muted)}
         disabled={!microphone.enabled}
         onClick={microphone.onPress}
       >
-        <MicrophoneIcon />
+        {microphone.muted ? <MicrophoneOffIcon /> : <MicrophoneIcon />}
       </button>
       <span className="plan-voice-status">
         <span className="plan-voice-word">{status?.voiceWord ?? microphone.label}</span>
@@ -300,6 +317,17 @@ export function MicrophoneRow({
           </span>
         ) : null}
       </span>
+      {stop.shown ? (
+        <button
+          type="button"
+          className="plan-stop"
+          aria-label={STOP_CALL_LABEL}
+          title={STOP_CALL_LABEL}
+          onClick={stop.onPress}
+        >
+          <StopIcon />
+        </button>
+      ) : null}
     </footer>
   );
 }

@@ -156,6 +156,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
     talkAboutPlan: (planId: string) => orchestrator.talkAboutPlan(planId),
     endTalk: () => orchestrator.endTalk(),
     stopSpeaking: () => orchestrator.stopSpeaking(),
+    stopCall: () => orchestrator.stopCall(),
     stop: () => orchestrator.stop(),
     /** The host's word, started on its own fiber the way the window's subscription starts it. */
     obey: (change: VoiceLiveSessionChanged) =>
@@ -826,6 +827,41 @@ it.effect(
       yield* f.talkAboutPlan(INVITES_PLAN);
       assert.equal(call.status, LIVE_STATUS.LISTENING);
       assert.equal(f.calls.length, 1);
+    }),
+);
+
+it.effect(
+  "the stop ends a planning call at once, telling the host to stop Luke before it mutes, and the next press opens a new call",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.stopCall();
+      assert.deepEqual(f.stops, []);
+      const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      call.settle(LIVE_STATUS.SPEAKING);
+
+      yield* f.stopCall();
+      assert.deepEqual(f.stops, [0]);
+      assert.equal(call.mutes, 1);
+      assert.equal(call.status, LIVE_STATUS.IDLE);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.IDLE);
+      assert.equal(f.views.at(-1)?.callPlanId, undefined);
+
+      const again = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const next = f.latest();
+      assert.ok(next && next !== call);
+      next.started();
+      yield* Fiber.join(again);
+      assert.equal(next.status, LIVE_STATUS.LISTENING);
     }),
 );
 

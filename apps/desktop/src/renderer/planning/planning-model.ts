@@ -307,7 +307,16 @@ export interface MicrophoneButton {
   readonly press: MicrophonePress;
   /** The button's name for a reader and its hover. */
   readonly label: string;
+  /** Whether the open plan's call stands with the developer not heard, which the button draws struck through. */
+  readonly muted: boolean;
 }
+
+/** The statuses of a call that has a session, the ones whose microphone is either heard or muted. */
+const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
+  LIVE_STATUS.MUTED,
+  LIVE_STATUS.LISTENING,
+  LIVE_STATUS.SPEAKING,
+]);
 
 /**
  * The microphone button, from what voice can run on and which plan is open.
@@ -316,7 +325,9 @@ export interface MicrophoneButton {
  * always about the open plan. The press toggles: while the developer is
  * heard on this plan's own call it mutes, and otherwise it opens the plan's
  * call or hears it again, hanging up a desk call or another plan's first,
- * which is also how a call that failed or was lost is tried again.
+ * which is also how a call that failed or was lost is tried again. Muted is
+ * this plan's own call standing with the developer not heard, so the button
+ * says so rather than reading as a call not yet begun.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
@@ -325,22 +336,34 @@ export function microphoneButton(input: {
   listening: boolean;
   /** The plan the standing call is about, as the voice window reports it. */
   callPlanId: string | undefined;
+  voiceStatus: LiveStatus;
 }): MicrophoneButton {
-  if (!input.voiceAvailable) return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE };
+  if (!input.voiceAvailable) {
+    return { press: MICROPHONE_PRESS.NONE, label: VOICE_KEYLESS_NOTE, muted: false };
+  }
   const row = microphoneAccessRow({ voiceAvailable: true, status: input.microphoneStatus });
-  if (row.offerAccess) return { press: MICROPHONE_PRESS.ASK_ACCESS, label: "Allow the microphone" };
+  if (row.offerAccess) {
+    return { press: MICROPHONE_PRESS.ASK_ACCESS, label: "Allow the microphone", muted: false };
+  }
   if (input.microphoneStatus === MICROPHONE_STATUS.DENIED) {
     return {
       press: MICROPHONE_PRESS.OPEN_SETTINGS,
       label: "Allow the microphone in System Settings",
+      muted: false,
     };
   }
-  if (!row.ready) return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE };
+  if (!row.ready) {
+    return { press: MICROPHONE_PRESS.NONE, label: row.detail ?? VOICE_KEYLESS_NOTE, muted: false };
+  }
   if (input.activePlanId === undefined) {
-    return { press: MICROPHONE_PRESS.NONE, label: "Open a plan to talk about it" };
+    return { press: MICROPHONE_PRESS.NONE, label: "Open a plan to talk about it", muted: false };
   }
-  if (input.listening && input.callPlanId === input.activePlanId) {
-    return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone" };
+  const ownCall = input.callPlanId === input.activePlanId;
+  if (ownCall && input.listening) {
+    return { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false };
   }
-  return { press: MICROPHONE_PRESS.TALK, label: "Talk about this plan" };
+  if (ownCall && CALL_STANDING.has(input.voiceStatus)) {
+    return { press: MICROPHONE_PRESS.TALK, label: "Unmute the microphone", muted: true };
+  }
+  return { press: MICROPHONE_PRESS.TALK, label: "Talk about this plan", muted: false };
 }

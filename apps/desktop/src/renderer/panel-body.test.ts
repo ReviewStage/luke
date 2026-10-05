@@ -477,6 +477,7 @@ test("an open plan draws its document with Back, Copy, and the microphone row, a
         microphone: {
           label: "Mute the microphone",
           enabled: true,
+          muted: false,
           onPress: () => pressed.push("mic"),
         },
       }),

@@ -322,6 +322,27 @@
   opacity: 0.45;
 }
 
+/* A muted call reads as one: the struck-through microphone on the warning
+   tint, so it is never mistaken for a call not yet begun. */
+.plan-microphone[data-muted="true"] {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger-text);
+}
+
+/* The stop sits at the row's far end, apart from the microphone, so a
+   press meant to mute never lands on it. */
+.plan-stop {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+}
+
 /* The call in two lines: the voice's word, and under it the backend's line
    while the backend works. Each line is cut short on one line, so a long
    command never wraps the row and the dots are never cut. */

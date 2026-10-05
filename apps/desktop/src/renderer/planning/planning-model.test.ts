@@ -173,10 +173,12 @@ test("the microphone asks for the permission first, then for a plan, and then ta
     activePlanId: INVITES,
     listening: false,
     callPlanId: undefined,
+    voiceStatus: LIVE_STATUS.IDLE,
   };
   assert.deepEqual(microphoneButton({ ...input, voiceAvailable: false }), {
     press: MICROPHONE_PRESS.NONE,
     label: VOICE_KEYLESS_NOTE,
+    muted: false,
   });
   assert.equal(
     microphoneButton({ ...input, microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED }).press,
@@ -193,11 +195,38 @@ test("the microphone asks for the permission first, then for a plan, and then ta
   assert.deepEqual(microphoneButton(input), {
     press: MICROPHONE_PRESS.TALK,
     label: "Talk about this plan",
+    muted: false,
   });
-  assert.deepEqual(microphoneButton({ ...input, listening: true, callPlanId: INVITES }), {
-    press: MICROPHONE_PRESS.TALK,
-    label: "Mute the microphone",
-  });
+  assert.deepEqual(
+    microphoneButton({
+      ...input,
+      listening: true,
+      callPlanId: INVITES,
+      voiceStatus: LIVE_STATUS.LISTENING,
+    }),
+    { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
+  );
+  // The plan's own call standing unheard is muted, Luke speaking over it or not.
+  for (const voiceStatus of [LIVE_STATUS.MUTED, LIVE_STATUS.SPEAKING]) {
+    assert.deepEqual(microphoneButton({ ...input, callPlanId: INVITES, voiceStatus }), {
+      press: MICROPHONE_PRESS.TALK,
+      label: "Unmute the microphone",
+      muted: true,
+    });
+  }
+  // A call still connecting, or another plan's muted call, is not this plan muted.
+  assert.equal(
+    microphoneButton({ ...input, callPlanId: INVITES, voiceStatus: LIVE_STATUS.CONNECTING }).muted,
+    false,
+  );
+  assert.equal(
+    microphoneButton({
+      ...input,
+      callPlanId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+      voiceStatus: LIVE_STATUS.MUTED,
+    }).muted,
+    false,
+  );
   // A desk call or another plan's call heard is one the press hangs up, not one it mutes.
   for (const callPlanId of [undefined, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"]) {
     assert.equal(

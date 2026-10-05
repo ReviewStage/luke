@@ -83,6 +83,7 @@ export function isVoiceLevels(value: UnparsedWireValue): value is VoiceLevels & 
  */
 export const VOICE_COMMAND = {
   STOP_SPEAKING: "stop-speaking",
+  END_CALL: "end-call",
   REQUEST_MICROPHONE_ACCESS: "request-microphone-access",
   CLEAR_CONVERSATION: "clear-conversation",
 } as const;
