@@ -35,6 +35,8 @@ function wholeNumber(minimum: number) {
 export const TURN_EVENT_KIND = {
   /** The turn began a step slow enough to be worth telling the developer about; at most once per turn. */
   SLOW_STEP: "slow_step",
+  /** A planning turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
+  QUESTION_QUEUED: "question_queued",
   /** Every action the turn dispatched has its result on the record; the reply's sentences follow. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the reply, in order, after the actions settled. */
@@ -45,10 +47,11 @@ export const TURN_EVENT_KIND = {
 
 export type TurnEventKind = (typeof TURN_EVENT_KIND)[keyof typeof TURN_EVENT_KIND];
 
-/** Which kind of slow step began: a whole transcript read, or a write the provider carries. */
+/** Which kind of slow step began: a whole transcript read, a write the provider carries, or a planning call's look into its repository. */
 export const TURN_SLOW_STEP = {
   TRANSCRIPT_READ: "transcript_read",
   PROVIDER_WRITE: "provider_write",
+  REPOSITORY_READ: "repository_read",
 } as const;
 
 export type TurnSlowStep = (typeof TURN_SLOW_STEP)[keyof typeof TURN_SLOW_STEP];
@@ -77,6 +80,11 @@ interface TurnEventBase {
 
 export type TurnEventBody =
   | { readonly kind: typeof TURN_EVENT_KIND.SLOW_STEP; readonly step: TurnSlowStep }
+  | {
+      readonly kind: typeof TURN_EVENT_KIND.QUESTION_QUEUED;
+      readonly question: string;
+      readonly recommendation: string;
+    }
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };
@@ -93,6 +101,12 @@ export const turnEventSchema = EffectSchema.Union([
     ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.SLOW_STEP),
     step: EffectSchema.Literals(Object.values(TURN_SLOW_STEP)),
+  }),
+  EffectSchema.Struct({
+    ...eventBase,
+    kind: EffectSchema.Literal(TURN_EVENT_KIND.QUESTION_QUEUED),
+    question: writtenText,
+    recommendation: writtenText,
   }),
   EffectSchema.Struct({
     ...eventBase,

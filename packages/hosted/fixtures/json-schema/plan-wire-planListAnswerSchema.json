@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "properties": {
+    "plans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "createdAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "openedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "createdAt",
+          "updatedAt",
+          "openedAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "plans"
+  ],
+  "additionalProperties": false
+}

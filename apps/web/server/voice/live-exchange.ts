@@ -1,4 +1,5 @@
 import type { DevicePlatform, SessionBeatFrame } from "@sidecar/hosted";
+import type { PlanActivity } from "@sidecar/hosted/planning-view";
 import { PROACTIVE_SPEECH_KIND, type ProactiveSpeechKind } from "@sidecar/live";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
@@ -6,7 +7,9 @@ import {
   type AdoptableSession,
   type BeatTurn,
   LiveSessionService,
+  type LiveSessionStatus,
 } from "@sidecar/voice/live-session";
+import type { LanguageModel } from "ai";
 import { eq } from "drizzle-orm";
 import { Cause, Effect, Layer, Option, Result, Schema, type Scope } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -35,6 +38,7 @@ import {
 } from "./live-briefings.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
+import { type PlanDraft, planScribe } from "./plan-scribe.js";
 
 /**
  * The live session service composed for the hosted tier, for one account's
@@ -55,17 +59,39 @@ import { observedSideband } from "./live-sideband.js";
  * into that scope — the one that reports what the record made of each live
  * event, the brain's follow of each accepted ask, the briefing look on its
  * schedule, and the service's own — so closing the scope when the socket
- * detaches interrupts each of them. The session's graceful close and the wait on every record
- * write already started are finalizers of the same scope, added so their
- * reverse order is the order the old `stop` ran them.
+ * detaches interrupts each of them. The session's graceful close (or, where
+ * the device's socket went with no hang-up, its release with nothing said to
+ * it) and the wait on every record write already started are finalizers of
+ * the same scope, added so their reverse order is the order the old `stop`
+ * ran them.
  */
 
 export interface HostedLiveExchangeOptions {
   /** The account the session was opened for, resolved at the handshake; the deployment acts for it at eve's door. */
   readonly userId: string;
   readonly liveSessionId: string;
-  /** The account's standing main, which the spoken asks and the record land in. */
+  /** The conversation the spoken asks and the record land in: the account's standing main, or a planning call's plan conversation. */
   readonly conversationId: string;
+  /**
+   * Whether the session is a planning call. A planning call speaks none of
+   * the desk's proactive turns: a beat asked of it is dropped, and the
+   * caller starts no briefing look over it, so nothing of the desk enters the
+   * plan's conversation. It opens instead with the planning model's own
+   * first words, asked of it the moment a newly created call starts.
+   */
+  readonly planning?: boolean;
+  /**
+   * The notetaker a planning call writes its plan through: the plan the
+   * session is bound to and the model the scribe runs on. Absent for every
+   * other session, and for a planning call on a deployment with no model key,
+   * which then writes nothing.
+   */
+  readonly scribe?: {
+    readonly planId: string;
+    readonly model: LanguageModel;
+    /** Where each draft of the plan goes as the notetaker writes it; nowhere where the route sends nothing. */
+    readonly onDraft?: ((draft: PlanDraft) => void) | undefined;
+  };
   readonly context: HostedStoreContext;
   /** The store writer over the catalog, which the voice writer and the speech claim write through. */
   readonly writer: StoreWriter;
@@ -86,6 +112,8 @@ export interface HostedLiveExchangeOptions {
    * route tells it in the service's own frame.
    */
   readonly onProactiveSpoken?: (kind: ProactiveSpeechKind) => void;
+  /** What the voice, the brain, and the notetaker are doing, told whole on each change; a planning call's device is shown it. */
+  readonly onActivity?: (activity: PlanActivity) => void;
 }
 
 /** One signed-in session the sessions route created or re-attached, as an exchange is offered it. */
@@ -98,12 +126,18 @@ export interface AttachedSession {
   readonly deviceId: string | undefined;
   /** The platform that device row named, which is what a report about this session is counted by; none where no row was resolved. */
   readonly platform: DevicePlatform | undefined;
+  /** The plan a planning call is bound to, which its asks and its record land in; none for every other session. */
+  readonly planId: string | undefined;
   /** The socket the route attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
   /** Whether the session is already running: a fresh connection to a standing session finds it started, and hears no `session.started` again. */
   readonly started: boolean;
   /** The device's door for the service's word that a turn was spoken to its end; absent where the route sends it nothing of its own. */
   readonly onSpoken?: ((kind: ProactiveSpeechKind) => void) | undefined;
+  /** The device's door for a planning call's plan as its notetaker has it now; absent where the route sends it nothing of its own. */
+  readonly onPlanDraft?: ((draft: PlanDraft) => void) | undefined;
+  /** The device's door for what each part of Luke is doing on the call; absent where the route sends it nothing of its own. */
+  readonly onActivity?: ((activity: PlanActivity) => void) | undefined;
 }
 
 /**
@@ -135,8 +169,26 @@ export interface ExchangeReport {
   readonly platform: DevicePlatform | undefined;
 }
 
+/**
+ * How the exchange's scope lets go of the session it stands on: closing it,
+ * the docs' graceful close, which is every ending but one; or detaching from
+ * it, which says nothing to the session, because the device's socket went
+ * with no hang-up and the device will attach to the same session again.
+ */
+export const EXCHANGE_ENDING = {
+  CLOSE: "close",
+  DETACH: "detach",
+} as const;
+
+export type ExchangeEnding = (typeof EXCHANGE_ENDING)[keyof typeof EXCHANGE_ENDING];
+
 export interface HostedLiveExchange {
   readonly service: LiveSessionService<HostedBriefingDelivery>;
+  /**
+   * Names how the scope's close is to end the session, asked before that
+   * close; an exchange never told closes it.
+   */
+  endAs(ending: ExchangeEnding): void;
   readonly brain: HostedLiveBrain;
   readonly briefings: HostedBriefings;
   readonly store: HostedStore;
@@ -229,6 +281,46 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     report,
   });
 
+  /**
+   * What the service and the notetaker last said of themselves, merged into
+   * one snapshot the device is told whole each time either changes, so the
+   * device holds the frame as it stands and derives nothing from a sequence.
+   */
+  let status: LiveSessionStatus = { voice: undefined, planner: undefined };
+  let notes = false;
+  const tellActivity = () => {
+    const { voice: phase, planner } = status;
+    options.onActivity?.({
+      ...(phase === undefined ? undefined : { voice: phase }),
+      ...(planner === undefined
+        ? undefined
+        : { planner: planner.action === undefined ? {} : { action: planner.action } }),
+      notes,
+    });
+  };
+
+  const scribe =
+    options.scribe === undefined
+      ? undefined
+      : yield* planScribe({
+          userId,
+          planId: options.scribe.planId,
+          model: options.scribe.model,
+          ...(options.scribe.onDraft === undefined
+            ? undefined
+            : { onDraft: options.scribe.onDraft }),
+          onWriting: (writing) => {
+            notes = writing;
+            tellActivity();
+          },
+          createId: options.createId,
+          report,
+        });
+  if (scribe !== undefined) {
+    const unheard = brain.onRunEvent(scribe.observeRun);
+    yield* Effect.addFinalizer(() => Effect.sync(unheard));
+  }
+
   /** The device the session's row names now, read at each look so a row completed after creation is seen. */
   const deviceId = Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
     Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullishOr(found.deviceId))),
@@ -245,12 +337,13 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     report,
   });
 
-  /** The sideband with the record listening ahead of the service, on every session adopted. */
+  /** The sideband with the record, and a planning call's notetaker, listening ahead of the service, on every session adopted. */
   const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
     return () =>
       Effect.map(attach(), (sideband) =>
         observedSideband(sideband, (event) => {
           written.offerUnsafe(Effect.flatMap(writeReport(record.observe(event)), reported));
+          scribe?.observe(event);
         }),
       );
   };
@@ -264,14 +357,24 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       onBriefingAppend: (delivery, eventId) =>
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
       ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
+      onStatus: (told) => {
+        status = told;
+        tellActivity();
+      },
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );
 
-  yield* Effect.addFinalizer(() => service.stop());
+  let ending: ExchangeEnding = EXCHANGE_ENDING.CLOSE;
+  yield* Effect.addFinalizer(() =>
+    ending === EXCHANGE_ENDING.DETACH ? service.release() : service.stop(),
+  );
 
   return {
     service,
+    endAs: (next) => {
+      ending = next;
+    },
     brain,
     briefings,
     store,
@@ -282,6 +385,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
         started: opened.started,
       }),
     speakBeat: (beat) => {
+      if (options.planning === true) return;
       service.speakBeat(beatTurn(beat, options.now()));
     },
   };

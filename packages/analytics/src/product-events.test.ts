@@ -150,6 +150,35 @@ test("a value outside its own set discards the event", () => {
   assert.equal(productEventFromWire({ name: PRODUCT_EVENT.APP_LAUNCH, at: AT }), undefined);
 });
 
+test("a turn to the Plans tab is counted as the tab's name and nothing of a plan", () => {
+  const wire = {
+    name: PRODUCT_EVENT.PANEL_TAB_CHANGE,
+    at: AT,
+    properties: { [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: "plans" },
+  };
+  assert.deepEqual(productEventFromWire(wire), wire);
+  assert.equal(
+    productEventFromWire({
+      ...wire,
+      properties: { [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: "Teammate invitations" },
+    }),
+    undefined,
+  );
+});
+
+test("a turn to a tab hidden from the bar is not counted", () => {
+  for (const hidden of ["sessions", "conversation"]) {
+    assert.equal(
+      productEventFromWire({
+        name: PRODUCT_EVENT.PANEL_TAB_CHANGE,
+        at: AT,
+        properties: { [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: hidden },
+      }),
+      undefined,
+    );
+  }
+});
+
 test("a provider without a connection cannot pass as connection_id", () => {
   assert.equal(
     productEventFromWire({

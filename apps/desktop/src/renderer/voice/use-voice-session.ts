@@ -88,9 +88,13 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       const call = new LiveCall({
         events,
         acts: {
-          createSession: (sdp) => act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp }),
+          createSession: (sdp, planId) =>
+            act(
+              ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+              planId === undefined ? { sdp } : { sdp, planId },
+            ),
           endSession: () => tell(ACT_KIND.VOICE_END_LIVE_SESSION),
-          reportTransport: (state) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, { state }),
+          reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
         },
         createPeerConnection: () => new RTCPeerConnection(),
@@ -235,10 +239,19 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     () =>
       window.sidecar.onVoiceCommand(({ command }) => {
         if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
+        else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
         else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) {
           drive(orchestrator.requestMicrophoneAccess());
         }
       }),
+    [drive, orchestrator],
+  );
+
+  // The Plans tab's microphone, about the plan the panel had open: a call about
+  // that plan opened and heard, or its microphone toggled, as the main process
+  // forwards the press.
+  useEffect(
+    () => window.sidecar.onPlanningTalk(({ planId }) => drive(orchestrator.talkAboutPlan(planId))),
     [drive, orchestrator],
   );
 
@@ -267,9 +280,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   // it, so the device is open exactly while the key is down. A press during
   // a chord being recorded is held back in the main process, where the
   // recording is known; a release always lands, so a hold begun before the
-  // recording still ends.
+  // recording still ends. A press made while the panel has a plan open names
+  // that plan, and is heard on that plan's call.
   useEffect(
-    () => window.sidecar.onVoiceHotkeyPress(() => drive(orchestrator.beginTalk())),
+    () =>
+      window.sidecar.onVoiceHotkeyPress((press) => drive(orchestrator.beginTalk(press?.planId))),
     [drive, orchestrator],
   );
   useEffect(

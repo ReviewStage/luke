@@ -1,0 +1,262 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { it } from "@effect/vitest";
+import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
+import { Duration, Effect, Option } from "effect";
+import { TestClock } from "effect/testing";
+import { user } from "../server/db/auth-schema";
+import { db } from "../server/db/query";
+import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store";
+import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
+import { heard, said } from "./support/live-events";
+import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
+import { testSqlClient } from "./support/sql-client";
+
+/**
+ * The planning call's notetaker over a real plan row: a scripted model stands
+ * in for OpenAI and answers each run with the update the test names, and the
+ * live events are synthetic. What a test reads is what the Plans tab would:
+ * the plan's saved document.
+ */
+
+const RELAY_PLAN: NewPlan = {
+  name: "Teammate invitations",
+};
+
+const PROBLEM = "Only an admin can add someone to a workspace.";
+const OUTCOME = "A member invites a teammate by email.";
+
+const openPlan = Effect.gen(function* () {
+  const userId = `user-${randomUUID()}`;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
+  const plan = yield* createPlan(userId, RELAY_PLAN);
+  return { userId, planId: plan.id };
+});
+
+const savedBody = (userId: string, planId: string) =>
+  Effect.map(readPlan(userId, planId), (stored) =>
+    Option.match(stored, {
+      onNone: () => assert.fail("the plan did not read"),
+      onSome: (found) => found.plan.document.body,
+    }),
+  );
+
+/** Lets the scribe's fiber run to its next wait, the store's and the model's promises included. */
+const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Duration.zero)), {
+  times: 500,
+});
+
+/** The developer's quiet elapsing, and the run it starts left to finish. */
+const quiet = Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS)), settle);
+
+const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
+  Effect.gen(function* () {
+    const { model, asked } = scriptedScribeModel(answers);
+    const reports: string[] = [];
+    const drafts: PlanDraft[] = [];
+    const writing: boolean[] = [];
+    const scribe = yield* planScribe({
+      userId,
+      planId,
+      model,
+      onDraft: (draft) => drafts.push(draft),
+      onWriting: (value) => writing.push(value),
+      createId: randomUUID,
+      report: (message) => reports.push(message),
+    });
+    return { scribe, asked, reports, drafts, writing };
+  });
+
+it.layer(testSqlClient)("the plan's notetaker", (it) => {
+  it.effect(
+    "what the developer said is written into the plan once they have been quiet a beat",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe } = yield* scribeFor(userId, planId, [{ goal: { problem: PROBLEM } }]);
+
+          scribe.observe(said("What's the problem today?", 0, 1_200));
+          scribe.observe(heard("Only admins can add people.", 1_500, 3_000));
+          yield* settle;
+          assert.equal((yield* savedBody(userId, planId)).includes(PROBLEM), false);
+
+          yield* quiet;
+          assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+        }),
+      ),
+  );
+
+  it.effect("what Luke says is written into the plan without waiting on the developer", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const { scribe } = yield* scribeFor(userId, planId, [{ goal: { problem: PROBLEM } }]);
+
+        scribe.observe(said("So the problem is that only an admin can add someone.", 0, 2_000));
+        yield* quiet;
+
+        assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+      }),
+    ),
+  );
+
+  it.effect("the model is handed both speakers' lines and the brain's research notes", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const { scribe, asked } = yield* scribeFor(userId, planId, [{}]);
+
+        scribe.observeRun({
+          kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+          runId: "ask-1",
+          sentence: "Memberships live in src/db/schema/memberships.ts.",
+        });
+        scribe.observe(said("Invites could reuse memberships.", 0, 1_000));
+        scribe.observe(heard("Yes, reuse them.", 1_200, 2_000));
+        yield* quiet;
+
+        const handed = asked.join("\n");
+        assert.ok(handed.includes("Invites could reuse memberships."));
+        assert.ok(handed.includes("Yes, reuse them."));
+        assert.ok(handed.includes("src/db/schema/memberships.ts"));
+      }),
+    ),
+  );
+
+  it.effect("lines the developer adds while a run is out are written by the run after it", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const { scribe } = yield* scribeFor(userId, planId, [
+          { goal: { problem: PROBLEM } },
+          { goal: { outcome: OUTCOME } },
+        ]);
+
+        scribe.observe(heard("Only admins can add people.", 0, 1_000));
+        yield* quiet;
+        scribe.observe(heard("It's for workspace members.", 5_000, 6_000));
+        yield* quiet;
+
+        const body = yield* savedBody(userId, planId);
+        assert.ok(body.includes(PROBLEM));
+        assert.ok(body.includes(OUTCOME));
+      }),
+    ),
+  );
+
+  it.effect(
+    "a run whose call fails saves nothing, and the next run is handed those lines again",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe, asked, reports } = yield* scribeFor(userId, planId, [
+            new Error("the provider is unavailable"),
+            { goal: { problem: PROBLEM } },
+          ]);
+
+          scribe.observe(heard("Only admins can add people.", 0, 1_000));
+          yield* quiet;
+          assert.equal((yield* savedBody(userId, planId)).includes(PROBLEM), false);
+          assert.equal(reports.length, 1);
+
+          scribe.observe(heard("By hand, in settings.", 5_000, 6_000));
+          yield* quiet;
+          assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+          assert.ok(asked[1]?.includes("Only admins can add people."));
+        }),
+      ),
+  );
+
+  it.effect(
+    "the plan is drafted to the device as the model writes, and the last draft is the saved plan",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe, drafts } = yield* scribeFor(userId, planId, [
+            { goal: { problem: PROBLEM, outcome: OUTCOME } },
+          ]);
+
+          scribe.observe(heard("Only admins can add people, and it hits members.", 0, 1_000));
+          yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
+          // The model streams its answer across drafts spaced a beat apart.
+          for (let beat = 0; beat < 20; beat += 1) {
+            yield* Effect.andThen(
+              TestClock.adjust(Duration.millis(PLAN_SCRIBE.DRAFT_EVERY_MS)),
+              settle,
+            );
+          }
+
+          const last = drafts.at(-1);
+          assert.ok(last?.savedAt !== undefined);
+          assert.equal(last.document.body, yield* savedBody(userId, planId));
+          assert.ok(drafts.length >= 2);
+          assert.ok(drafts.slice(0, -1).every((draft) => draft.savedAt === undefined));
+        }),
+      ),
+  );
+
+  it.effect("a run that breaks off mid-answer drafts the stored plan back and saves nothing", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const before = yield* savedBody(userId, planId);
+        const { scribe, drafts } = yield* scribeFor(userId, planId, [
+          { brokenAfter: { goal: { problem: PROBLEM, outcome: OUTCOME } } },
+        ]);
+
+        scribe.observe(heard("Only admins can add people.", 0, 1_000));
+        yield* quiet;
+
+        assert.equal(yield* savedBody(userId, planId), before);
+        assert.equal(drafts.at(-1)?.document.body, before);
+        assert.equal(drafts.at(-1)?.savedAt, undefined);
+      }),
+    ),
+  );
+
+  it.effect("the notetaker is told as writing for its model call, and no longer once it ends", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const { scribe, writing } = yield* scribeFor(userId, planId, [
+          { goal: { problem: PROBLEM } },
+        ]);
+
+        scribe.observe(heard("Only admins can add people.", 0, 1_000));
+        yield* settle;
+        assert.deepEqual(writing, []);
+        yield* quiet;
+        // The model streams its answer across drafts spaced a beat apart.
+        for (let beat = 0; beat < 20; beat += 1) {
+          yield* Effect.andThen(
+            TestClock.adjust(Duration.millis(PLAN_SCRIBE.DRAFT_EVERY_MS)),
+            settle,
+          );
+        }
+
+        assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+        assert.deepEqual(writing, [true, false]);
+      }),
+    ),
+  );
+
+  it.effect("a model call that times out is told as writing until it is given up", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const { scribe, writing, reports } = yield* scribeFor(userId, planId, [{ stalls: true }]);
+
+        scribe.observe(heard("Only admins can add people.", 0, 1_000));
+        yield* quiet;
+        assert.deepEqual(writing, [true]);
+
+        yield* Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.TIMEOUT_MS)), settle);
+        assert.deepEqual(writing, [true, false]);
+        assert.equal(reports.length, 1);
+      }),
+    ),
+  );
+});

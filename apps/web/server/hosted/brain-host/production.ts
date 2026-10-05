@@ -11,7 +11,7 @@ import { providerKey } from "../../db/vault-schema.js";
 import type { WebStoreRun } from "../../runtime.js";
 import { executeSessionAction } from "../action-execute.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
-import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
+import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { payloadKeyRing } from "../encryption.js";
 import { HostedEnvironment } from "../environment.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http-effect.js";
@@ -125,7 +125,7 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
     const store = yield* Effect.cached(
       Effect.map(vaultSecret, (secret) => hostedStore({ keys: payloadKeyRing(secret) })),
     );
-    const writer = yield* Effect.cached(storeWriter({ tools: CATALOG_TOOL_SET }));
+    const writer = yield* Effect.cached(storeWriter({ tools: HOSTED_TOOL_SET }));
     const vaultRows = (userId: string): BrainHostEffect<readonly VaultKeyRow[]> =>
       findVaultRows(userId);
     return {

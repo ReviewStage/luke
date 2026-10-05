@@ -13,7 +13,9 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { hostedQuotaSchema } from "./service-wire.js";
+import { planDocumentSchema } from "./plan-wire.js";
+import { planActivitySchema } from "./planning-view.js";
+import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
  * A device's contract with the hosted voice service: the three Vercel
@@ -108,7 +110,7 @@ export function hostedVoiceServiceOrigin(options: {
  * connection, which the platform closes at the function's maximum duration.
  */
 export const VOICE_SERVICE_FRAME = {
-  /** The device's opening frame for a new session: the offer, the voice, and the seed; or, on the audio route, the voice and the format. */
+  /** The device's opening frame for a new session: the offer, the voice, the seed, and the plan a planning call is about; or, on the audio route, the voice and the format. */
   SESSION_CREATE: "session.create",
   /** The service's answer once OpenAI has created the session and the sideband stands, or once the service's own socket to it has started. */
   SESSION_CREATED: "session.created",
@@ -146,6 +148,20 @@ export const VOICE_SERVICE_FRAME = {
    * desktop is told rather than left to infer it from the transcript.
    */
   SESSION_SPOKEN: "session.spoken",
+  /**
+   * The service's other frame to the desktop after the handshake, on a
+   * planning call alone: the plan's document as its notetaker is writing it,
+   * sent again as the draft grows and once more as saved, so the Plans tab
+   * types the plan in while the call goes on rather than waiting for a read.
+   */
+  PLAN_DRAFT: "plan.draft",
+  /**
+   * The service's third frame to the desktop, on a planning call alone: what
+   * each part of Luke is doing now, the voice, the planning model, and the
+   * notetaker, sent whole each time any of them changes, so the Plans tab
+   * says each part's own state rather than one word for all of them.
+   */
+  PLAN_ACTIVITY: "plan.activity",
 } as const;
 
 /**
@@ -274,12 +290,22 @@ const liveInitialItemSchema = Schema.Union([
   seedMessage(SEED_ROLE.ASSISTANT, SEED_CONTENT_TYPE.OUTPUT_TEXT),
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
-/** The desktop's opening frame. */
+/**
+ * The desktop's opening frame: the offer, the voice, the seed, and, for a
+ * call about one saved plan, that plan's id. A plan-bound session is the
+ * Plans tab's: the service checks the plan is the account's, creates
+ * the session under the planning scene, lands its asks in the plan's
+ * conversation, and writes the binding on the session's row, so a later
+ * `session.attach` is bound to the same plan by that row and never by
+ * anything the attaching connection says. The id names the plan and
+ * nothing of its document; the introduction takes none.
+ */
 export const sessionCreateFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
   sdp: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
+  planId: Schema.optionalKey(wireUuidSchema),
 });
 
 export type SessionCreateFrame = typeof sessionCreateFrameSchema.Type;
@@ -384,6 +410,30 @@ export const sessionSpokenFrameSchema = Schema.Struct({
 
 export type SessionSpokenFrame = typeof sessionSpokenFrameSchema.Type;
 
+/**
+ * The plan's document as the notetaker has it now: a draft while its model is
+ * still writing, and the saved document with the instant it was saved once
+ * the save lands, or the document as it stood where the run saved nothing.
+ */
+export const planDraftFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_DRAFT),
+  planId: wireUuidSchema,
+  document: planDocumentSchema,
+  /** Epoch milliseconds of the save the document is; absent while it is a draft. */
+  savedAt: Schema.optionalKey(Schema.Number),
+});
+
+export type PlanDraftFrame = typeof planDraftFrameSchema.Type;
+
+/** The activity on the call about the plan named, as the service sends it to the desktop. */
+export const planActivityFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_ACTIVITY),
+  planId: wireUuidSchema,
+  ...planActivitySchema.fields,
+});
+
+export type PlanActivityFrame = typeof planActivityFrameSchema.Type;
+
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -465,6 +515,16 @@ export function sessionSpokenFrameFromWire(
   value: UnparsedWireValue,
 ): SessionSpokenFrame | undefined {
   return admittedAnswer(sessionSpokenFrameSchema, value);
+}
+
+/** The service's draft of the open plan, read the answering way like the spoken frame beside it. */
+export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame | undefined {
+  return admittedAnswer(planDraftFrameSchema, value);
+}
+
+/** What each part of Luke is doing on a planning call, read the same answering way. */
+export function planActivityFrameFromWire(value: UnparsedWireValue): PlanActivityFrame | undefined {
+  return admittedAnswer(planActivityFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

@@ -40,10 +40,17 @@ export const LOG_EVENT = {
   SESSION_FAILED: "session-failed",
 } as const;
 
-/** Whether `session.closed` was seen before the transports went, as the docs define finalization. */
+/**
+ * Whether `session.closed` was seen before the transports went, as the docs
+ * define finalization, or whether the session was never ended here at all:
+ * a sessions-route device socket that went without a hang-up leaves the
+ * WebRTC session standing for the device to attach to again, and the
+ * connection that later reads its `session.closed` is the one that confirms it.
+ */
 export const FINALIZATION = {
   CONFIRMED: "confirmed",
   UNCONFIRMED: "unconfirmed",
+  DETACHED: "detached",
 } as const;
 
 export type Finalization = (typeof FINALIZATION)[keyof typeof FINALIZATION];

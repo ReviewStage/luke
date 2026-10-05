@@ -4,11 +4,18 @@ import {
   type GatewayMethodTable,
   type GatewayShutdownSteps,
 } from "@sidecar/gateway";
-import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
+import {
+  HostedChangesClient,
+  HostedConversationClient,
+  HostedPlanClient,
+  type PlanActivityFrame,
+  type PlanDraftFrame,
+} from "@sidecar/hosted";
 import { observationSupervisor } from "@sidecar/runtime";
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
@@ -18,6 +25,7 @@ import { composeConversation } from "./compose-conversation.js";
 import { composeDevices } from "./compose-devices.js";
 import { composeLive } from "./compose-live.js";
 import { composeObservation } from "./compose-observation.js";
+import { composePlanning, planFoldersFile } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
@@ -35,7 +43,7 @@ import {
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
 
-/** The seven concerns, by the name each is built under. */
+/** The eight concerns, by the name each is built under. */
 export const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
@@ -44,6 +52,7 @@ export const HOST_CONCERN = {
   CALENDARS: "calendars",
   OBSERVATION: "observation",
   LIVE: "live",
+  PLANNING: "planning",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -61,6 +70,7 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.CALENDARS,
   HOST_CONCERN.OBSERVATION,
   HOST_CONCERN.LIVE,
+  HOST_CONCERN.PLANNING,
 ];
 
 /**
@@ -133,7 +143,44 @@ export const hostAssemblyLayer: Layer.Layer<
     // session speaks unprompted is what the hosted brain decided and put on
     // offer. The onboarding beats and the launch greeting are decided by the
     // live composer below and spoken by the service on its ask.
-    const live = yield* composeLive({ settings, account, observation, calendars });
+    // The planning composer is built after the live one and ends its calls, so
+    // the live composer reads the open plan, and hands it the plan's drafts
+    // and their activity, through these late bindings.
+    let activePlanId: () => string | undefined = () => undefined;
+    let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
+    let showPlanActivity: (activity: PlanActivityFrame) => void = () => undefined;
+    const live = yield* composeLive({
+      settings,
+      account,
+      observation,
+      calendars,
+      activePlanId: () => activePlanId(),
+      showPlanDraft: (draft) => showPlanDraft(draft),
+      showPlanActivity: (activity) => showPlanActivity(activity),
+    });
+    const planning = yield* composePlanning({
+      kernel,
+      account,
+      folders: planFoldersFile(() => kernel.stateRoot, report),
+      endPlanCall: (keep) => live.service.endPlanCall(keep),
+      client: new HostedPlanClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+      connectGitHub: {
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        accountId: () =>
+          Effect.map(Effect.orDie(settings.store.readAccount()), (stored) => stored?.id),
+        // A browser that would not open is reported the way every other open is.
+        openExternal: (url) =>
+          Effect.tryPromise(() => kernel.openExternalThroughNode(url)).pipe(
+            Effect.catch((failure) => Effect.sync(() => kernel.reportOpenFailure(failure))),
+          ),
+      },
+    });
+    activePlanId = planning.activePlanId;
+    showPlanDraft = planning.showDraft;
+    showPlanActivity = planning.showActivity;
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
     briefingsOffered = live.briefingsOffered;
@@ -190,6 +237,7 @@ export const hostAssemblyLayer: Layer.Layer<
       yield* capabilities.disarm;
       live.withdrawBeats();
       conversation.reset();
+      yield* planning.reset;
       observation.stopObservation();
       settings.forgetVaultKeys();
       yield* account.applyVoiceCredential;
@@ -205,7 +253,9 @@ export const hostAssemblyLayer: Layer.Layer<
       cloudKeyHeld: calendars.settleKeyGate,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
-      endLiveSession: Effect.suspend(() => live.service.endSession()),
+      endLiveSession: Effect.suspend(() =>
+        live.service.endSession(LIVE_SESSION_END_CAUSE.VOICE_CHANGED),
+      ),
       refreshAnnouncementHold: calendars.refreshAnnouncementHold,
       reportPresence: devices.reportPresence,
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
@@ -229,6 +279,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.CALENDARS]: calendars,
       [HOST_CONCERN.OBSERVATION]: observation,
       [HOST_CONCERN.LIVE]: live,
+      [HOST_CONCERN.PLANNING]: planning,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**

@@ -52,6 +52,8 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   liveConversationLines: readonly LiveCaptionRow[];
   /** Whether the developer is being heard and has not been transcribed yet. */
   spokenAskPending: boolean;
+  /** The plan the standing call is about, where the panel's open plan opened it; none for a desk call or no call. */
+  callPlanId: string | undefined;
 }
 
 /** Who opened the exchange the count is about: a press, or Luke's own speech into a session opened for it. */
@@ -94,6 +96,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.developerCaptions === right.developerCaptions &&
     left.liveConversationLines === right.liveConversationLines &&
     left.spokenAskPending === right.spokenAskPending &&
+    left.callPlanId === right.callPlanId &&
     left.listening === right.listening &&
     left.lukeSpeaking === right.lukeSpeaking
   );
@@ -152,6 +155,8 @@ export class LiveVoiceOrchestrator {
   #resumeListening = false;
   /** Whether the session standing was opened by a press rather than for Luke's own speech. */
   #openedByPress = false;
+  /** The plan the call standing or opening is about, where the panel's open plan opened it; none for every other call. */
+  #callPlan: string | undefined;
   /** The open still negotiating: a second ask reads its answer rather than building a second call. */
   #opening: Deferred.Deferred<LiveVoiceCall | undefined> | undefined;
   /** The standing call's whole life, in the scope it was acquired into; interrupting this is what `stop` releases it with. */
@@ -165,6 +170,13 @@ export class LiveVoiceOrchestrator {
    * unmuting one nobody wants heard.
    */
   #pressHeld = false;
+  /**
+   * Whether the talk key itself is down, apart from any press. It is what a
+   * press that first has to hang another call up reads once that call is
+   * gone, since the key may have come up during the wait, before the press
+   * had marked itself held.
+   */
+  #keyDown = false;
   #reported: LiveVoiceView | undefined;
   /** The call whose exchange has been counted, so a session pausing between Luke's sentences is not a second exchange. */
   #countedCall: LiveVoiceCall | undefined;
@@ -193,15 +205,66 @@ export class LiveVoiceOrchestrator {
    * against a standing session it unmutes. It never mutes: the key coming up
    * does that, so a hold is heard for exactly as long as it lasts, and a
    * hold that ended while the system's microphone dialog stood, or while the
-   * session was opening, unmutes nothing.
+   * session was opening, unmutes nothing. A press made while the planning
+   * window holds the keyboard names that window's open plan: it speaks into
+   * the call about that plan, opening one if none stands and hanging up a
+   * call about anything else first, as the window's own button does. A press
+   * naming no plan speaks into whatever call stands.
    */
-  beginTalk(): Effect.Effect<void> {
+  beginTalk(planId?: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
         return;
       }
+      this.#keyDown = true;
+      if (planId !== undefined && this.#call !== undefined && this.#callPlan !== planId) {
+        yield* this.#hangUp();
+        // Note that a key let go of while the old call closed opens nothing.
+        if (!this.#keyDown) return;
+      }
+      yield* this.#talk(planId);
+    });
+  }
+
+  /**
+   * The Plans tab's microphone button, about the plan the panel has
+   * open. It toggles rather than holds, because a planning conversation runs
+   * for minutes: against the call about that plan, a press while the
+   * developer is heard mutes, and a press while muted unmutes. Against no
+   * call it opens one about the plan and unmutes it; against a call about
+   * anything else, the desk or another plan, that call is hung up first,
+   * since only one plan is ever the spoken conversation and no other call
+   * may carry the plan's words or hear its answers.
+   */
+  talkAboutPlan(planId: string): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      if (this.#surroundings.voiceAvailable === false) {
+        const unavailable = yield* this.#bridge.hostedUnavailableNote();
+        if (unavailable) this.#strip.showNotice(unavailable);
+        return;
+      }
+      const call = this.#call;
+      if (call !== undefined && this.#callPlan === planId && this.#pressHeld) {
+        // A press while the call is still opening leaves it to open muted.
+        this.#pressHeld = false;
+        if (!this.#opening && call.standing) yield* call.mute();
+        this.#touch();
+        return;
+      }
+      if (call !== undefined && this.#callPlan !== planId) yield* this.#hangUp();
+      yield* this.#talk(planId);
+    });
+  }
+
+  /**
+   * The press's own work, for the talk key and the planning button alike:
+   * the microphone asked for where it is not granted, the session opened if
+   * none stands, and the developer heard for as long as the press stands.
+   */
+  #talk(planId: string | undefined): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
       this.#pressHeld = true;
       if (!this.#surroundings.microphoneGranted) {
         const granted = yield* this.#bridge.requestMicrophone();
@@ -211,7 +274,7 @@ export class LiveVoiceOrchestrator {
         }
         if (!this.#pressHeld) return;
       }
-      const call = yield* this.#ensureSession({ byPress: true });
+      const call = yield* this.#ensureSession({ byPress: true, planId });
       // A key let go of during the opening leaves the session muted, and the
       // mute is still sent: the press's device rode the offer, and only the
       // release takes it back.
@@ -231,6 +294,7 @@ export class LiveVoiceOrchestrator {
    */
   endTalk(): Effect.Effect<void> {
     return Effect.suspend(() => {
+      this.#keyDown = false;
       if (!this.#pressHeld) return Effect.void;
       this.#pressHeld = false;
       if (this.#opening) return Effect.void;
@@ -262,6 +326,28 @@ export class LiveVoiceOrchestrator {
       if (call.status === LIVE_STATUS.SPEAKING) yield* this.#bridge.stopSpeaking();
       yield* call.mute();
       return true;
+    });
+  }
+
+  /**
+   * The panel's stop: the standing call ends now, whatever it is about. Where
+   * Luke is speaking the host tells the model to stop first, so his voice
+   * does not run on through the graceful close; then the microphone closes
+   * and the call is let go of at once, so the view reads no call before the
+   * close has finished behind it. Unlike the stop key, nothing stands after
+   * it: the next press opens a new call. A press over no call does nothing.
+   */
+  stopCall(): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      this.#pressHeld = false;
+      this.#resumeListening = false;
+      this.#lastListening = false;
+      const call = this.#call;
+      if (call?.standing && !this.#opening) {
+        if (call.status === LIVE_STATUS.SPEAKING) yield* this.#bridge.stopSpeaking();
+        yield* call.mute();
+      }
+      yield* this.#hangUp();
     });
   }
 
@@ -311,11 +397,15 @@ export class LiveVoiceOrchestrator {
           // one, and it finishes its own hang-up behind. Whether the developer
           // was being heard is read from the last status the call reported,
           // since its own end may have landed before this event did.
+          // A planning call lost is not listened to again on the desk session a
+          // wanted opens next: the plan's words belong to the plan's call alone.
           this.#resumeListening =
+            this.#callPlan === undefined &&
             this.#lastListening &&
             (change.reason === LIVE_CLOSE_REASON.EXPIRED ||
               change.reason === LIVE_CLOSE_REASON.CONNECTION_LOST);
           this.#lastListening = false;
+          this.#releasePlanPress();
           if (this.#call) {
             this.#call = undefined;
             this.#status = LIVE_STATUS.IDLE;
@@ -361,6 +451,39 @@ export class LiveVoiceOrchestrator {
     });
   }
 
+  /**
+   * Hangs the standing call up and waits for it to be closed, whether it
+   * stands or is still opening, and lets go of it at once, so the call
+   * opened next is a new one and the old one's reports are no longer heard.
+   */
+  #hangUp(): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const fiber = this.#lifecycle;
+      this.#lifecycle = undefined;
+      this.#call = undefined;
+      this.#opening = undefined;
+      this.#ending = undefined;
+      this.#status = LIVE_STATUS.IDLE;
+      this.#speakers = SILENT;
+      this.#rows = [];
+      this.#openedByPress = false;
+      this.#talkOpening = false;
+      this.#recomposeCaptions();
+      this.#touch();
+      return fiber ? Effect.asVoid(Fiber.interrupt(fiber)) : Effect.void;
+    });
+  }
+
+  /**
+   * A planning call's press is a toggle that stands for minutes, so it ends
+   * with the call: nothing after it (a desk session opened for Luke's own
+   * speech, the talk key's release) reads it as the developer still wanting
+   * to be heard.
+   */
+  #releasePlanPress(): void {
+    if (this.#callPlan !== undefined) this.#pressHeld = false;
+  }
+
   /** Signals the standing call's lifecycle fiber to end, which releases it by closing it exactly once. */
   #endCall(): void {
     const ending = this.#ending;
@@ -373,7 +496,10 @@ export class LiveVoiceOrchestrator {
    * at a time: a second ask while the first is still negotiating waits for
    * it rather than offering the host a second peer.
    */
-  #ensureSession(input: { byPress: boolean }): Effect.Effect<LiveVoiceCall | undefined> {
+  #ensureSession(input: {
+    byPress: boolean;
+    planId?: string | undefined;
+  }): Effect.Effect<LiveVoiceCall | undefined> {
     return Effect.gen({ self: this }, function* () {
       if (this.#call?.standing) return this.#call;
       const negotiating = this.#opening;
@@ -381,6 +507,7 @@ export class LiveVoiceOrchestrator {
       const opened = Deferred.makeUnsafe<LiveVoiceCall | undefined>();
       this.#opening = opened;
       this.#openedByPress = input.byPress;
+      this.#callPlan = input.planId;
       this.#strip.clear();
       const call = this.#createCall({
         onStatus: (status, speakers) => this.#onStatus(call, status, speakers),
@@ -415,14 +542,16 @@ export class LiveVoiceOrchestrator {
    */
   #lifecycleEffect(
     call: LiveVoiceCall,
-    input: { byPress: boolean },
+    input: { byPress: boolean; planId?: string | undefined },
     opened: Deferred.Deferred<LiveVoiceCall | undefined>,
   ): Effect.Effect<void, never, Scope.Scope> {
     return Effect.gen({ self: this }, function* () {
-      const standing = yield* Effect.acquireRelease(call.open({ byPress: input.byPress }), () =>
-        call.close(),
-      );
-      this.#opening = undefined;
+      const opening =
+        input.planId === undefined
+          ? { byPress: input.byPress }
+          : { byPress: input.byPress, planId: input.planId };
+      const standing = yield* Effect.acquireRelease(call.open(opening), () => call.close());
+      if (this.#opening === opened) this.#opening = undefined;
       if (!standing) {
         this.#talkOpening = false;
         if (this.#call === call) this.#call = undefined;
@@ -458,6 +587,7 @@ export class LiveVoiceOrchestrator {
       this.#call = undefined;
       this.#rows = [];
       this.#openedByPress = false;
+      this.#releasePlanPress();
       this.#endCall();
     }
     this.#recomposeCaptions();
@@ -520,6 +650,7 @@ export class LiveVoiceOrchestrator {
       developerCaptions: this.#developerCaptions,
       liveConversationLines: this.#liveLines,
       spokenAskPending: this.#status === LIVE_STATUS.LISTENING && !this.#askBeingSaid,
+      callPlanId: this.#call === undefined ? undefined : this.#callPlan,
     };
   }
 

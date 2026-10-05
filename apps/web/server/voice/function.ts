@@ -99,6 +99,7 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
       encryptionSecret: () => configured(VAULT_ENCRYPTION_ENVIRONMENT.SECRET),
       deploymentSecret: () => configured(OBSERVATION_ENVIRONMENT.CRON_SECRET),
       eveOrigin: deploymentEveOrigin,
+      openAiKey: () => configured(VOICE_FUNCTION_ENVIRONMENT.API_KEY),
       now: () => Date.now(),
       report: (reported) =>
         standardOutputLog({

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
+import { VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
@@ -34,6 +35,7 @@ import {
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
   LiveSessionService,
+  type LiveSessionStatus,
   ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
@@ -54,6 +56,7 @@ class FakeSideband implements LiveSideband {
   /** The hold a real socket has beneath its sideband, so what a test says before the session reads is held exactly as it would be. */
   readonly #hold: SocketHold = holdSocket({
     send: () => undefined,
+    ping: () => undefined,
     close: () => {
       this.closed = true;
     },
@@ -295,6 +298,8 @@ interface Fixture {
   /** Every sideband adopted so far, in order; the session adopted over the nth is `sess-n`. */
   sidebands: FakeSideband[];
   spoken: string[];
+  /** Every status `onStatus` was told, in order. */
+  statuses: LiveSessionStatus[];
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
@@ -308,6 +313,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const record = new FakeRecord();
     const sidebands: FakeSideband[] = [];
     const spoken: string[] = [];
+    const statuses: LiveSessionStatus[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
@@ -315,6 +321,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         report: () => undefined,
         onProactiveSpoken: (kind) => spoken.push(kind),
         onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
+        onStatus: (status) => statuses.push(status),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -324,6 +331,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       record,
       sidebands,
       spoken,
+      statuses,
       service,
       open: () =>
         Effect.gen(function* () {
@@ -657,6 +665,64 @@ it.effect("a retained delegation dies with its session", () =>
   }),
 );
 
+it.effect("a repository read's thinking append says the repository is being read", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("How do invites work today?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP, runId: "run-1", step: "repository_read" });
+    yield* settle();
+    const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+    assert.deepEqual(
+      thinking.map((event) => ("content" in event ? event.content : undefined)),
+      ["Luke is reading the repository; this takes a moment."],
+    );
+  }),
+);
+
+it.effect(
+  "every question the planning model queued is handed to the voice as its own commentary under the delegation, in order, without waiting on the settle",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Invites should expire.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      for (const { question, recommendation } of [
+        { question: "After how long?", recommendation: "Seven days." },
+        { question: "Can an admin re-send one?", recommendation: "Yes." },
+      ]) {
+        f.brain.fire({
+          kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+          runId: "run-1",
+          question,
+          recommendation,
+        });
+      }
+      yield* settle();
+      // Each commentary append waits on the last one's acknowledgment, as every append does.
+      sideband.acknowledge(
+        sideband.sent.findIndex((event) => event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND),
+        1000,
+        1100,
+      );
+      yield* settle();
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(
+        commentary.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
+        ["item_1", "item_1"],
+      );
+      const contents = commentary.map((event) => ("content" in event ? event.content : ""));
+      assert.ok(contents[0]?.includes("After how long?") && contents[0].includes("Seven days."));
+      assert.ok(contents[1]?.includes("Can an admin re-send one?"));
+    }),
+);
+
 it.effect(
   "a slow step earns the exchange's one thinking append, and the reply streams only after the actions settled, each chunk awaiting its ack",
   () =>
@@ -833,6 +899,105 @@ it.effect(
       });
       yield* advanceClock(1000);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+    }),
+);
+
+/** Nothing doing: the voice in no wait, and no exchange open. */
+const IDLE_STATUS = { voice: undefined, planner: undefined } as const;
+
+it.effect(
+  "an ask is told as handing off, then the planner and its pending command, then Luke about to answer, and nothing once he begins",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Where are invites sent?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: "run-1", action: "ls src" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: "run-1", action: undefined });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "In src.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      sideband.output("In src.", 2000, 2400);
+      yield* settle();
+      assert.deepEqual(f.statuses, [
+        { voice: VOICE_PHASE.HANDING_OFF, planner: undefined },
+        { voice: undefined, planner: { action: undefined } },
+        { voice: undefined, planner: { action: "ls src" } },
+        { voice: undefined, planner: { action: undefined } },
+        { voice: VOICE_PHASE.ABOUT_TO_ANSWER, planner: { action: undefined } },
+        { voice: VOICE_PHASE.ABOUT_TO_ANSWER, planner: undefined },
+        IDLE_STATUS,
+      ]);
+    }),
+);
+
+it.effect("a refused submission goes from handing off to about to answer its refusal", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.brain.refuse = "No brain stands.";
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Hello?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    assert.deepEqual(f.statuses, [
+      { voice: VOICE_PHASE.HANDING_OFF, planner: undefined },
+      { voice: VOICE_PHASE.ABOUT_TO_ANSWER, planner: undefined },
+    ]);
+  }),
+);
+
+it.effect("a run that completes with nothing said ends with nothing doing", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Stop that.", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+      runId: "run-1",
+      end: LIVE_BRAIN_RUN_END.COMPLETED,
+    });
+    yield* advanceClock(1000);
+    assert.deepEqual(f.statuses.at(-1), IDLE_STATUS);
+  }),
+);
+
+it.effect(
+  "a session that closes mid-run is told as nothing doing, and the run ending after it tells nothing more",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Read the repository.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 12);
+      yield* settle();
+      assert.deepEqual(f.statuses.at(-1), IDLE_STATUS);
+      const told = f.statuses.length;
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      assert.equal(f.statuses.length, told);
     }),
 );
 
@@ -1458,6 +1623,25 @@ it.effect("stop closes the session gracefully and takes nothing else with it", (
     yield* Fiber.join(stopping);
     assert.equal(f.service.sessionStands(), false);
   }),
+);
+
+it.effect(
+  "release lets the session go with nothing sent up, the words said so far on record, and a stop after it closes nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Ship it.", 0, 800);
+      yield* settle();
+      yield* f.service.release();
+      yield* f.service.stop();
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 0);
+      assert.equal(f.service.sessionStands(), false);
+      assert.equal(sideband.closed, true);
+      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 0, 800]]);
+    }),
 );
 
 it.effect(

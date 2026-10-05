@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
 import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
 import type { AppState } from "#shared/messages/app-state";
@@ -171,6 +172,7 @@ export function initialAppState(
     children: { settled: !runMode.sendsNetwork, children: [] },
     agents: { settled: !runMode.sendsNetwork, agents: [] },
     childTranscript: undefined,
+    planning: IDLE_PLANNING_VIEW,
     announcements: { held: false },
     onboarding: { calendarOwed: false, conductorKeyOwed: false },
     // Nothing plays until the launch's own gate says so; the window service

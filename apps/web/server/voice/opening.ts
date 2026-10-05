@@ -1,3 +1,4 @@
+import type { Plan } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -20,17 +21,22 @@ import {
 } from "../core.js";
 import {
   decodeLivePayload,
+  developerSeedItem,
+  ESTIMATED_CHARS_PER_TOKEN,
+  type InitialItem,
   LIVE_INPUT_BOUNDS,
   LIVE_SCENE,
   LIVE_SESSION_OUTCOME,
+  type LiveScene,
   livePrimarySessionConfig,
   liveSessionConfig,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   SEED_ROLE,
+  seedItemTokens,
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
-import { type SignedInRoute, VOICE_ROUTE } from "./frames.js";
+import { type SignedInRoute, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";
 import type { VoiceSessionRecord } from "./session-record.js";
@@ -94,6 +100,8 @@ type AdmittedAccount =
       deviceId: string | undefined;
       platform: DevicePlatform | undefined;
       quota: SessionCreatedFrame["quota"];
+      /** The plan a planning call is about, read as the account holds it; none for every other session. */
+      plan: Plan | undefined;
     }
   | Refusal;
 
@@ -117,6 +125,8 @@ type Opened =
       deviceId: string | undefined;
       /** The platform that device row named, which is what the log counts this caller by; none wherever no row was resolved. */
       platform: DevicePlatform | undefined;
+      /** The plan a planning call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row; none for every other session. */
+      planId: string | undefined;
       /**
        * Whether the session is already running: false for one just created
        * from a WebRTC offer, whose peer has yet to connect; true for one
@@ -171,6 +181,48 @@ function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
       item.content.every((part) => part.text.length <= SESSIONS_INPUT_BOUNDS.CHARS),
     )
   );
+}
+
+/** What the plan seed opens with, so the voice reads it as the service's note rather than the developer's words. */
+const PLAN_SEED_MARKER = "[plan]";
+
+/**
+ * The plan a planning call is about, as one developer message: its name and
+ * the saved document as the developer sees it. Note that a call is seeded with the plan and nothing else, because the voice otherwise
+ * opens knowing no plan at all and reads its role as a new task; what was
+ * said on an earlier call is the planning model's, which the voice asks.
+ */
+function planSeedText(plan: Plan): string {
+  const assumptions = plan.document.assumptions.map((assumption) => `- ${assumption.text}`);
+  return [
+    `${PLAN_SEED_MARKER} This call continues the saved plan below. It is not a new plan.`,
+    `Name: ${plan.name}`,
+    "",
+    plan.document.body,
+    ...(assumptions.length === 0 ? [] : ["", "Assumptions:", ...assumptions]),
+  ].join("\n");
+}
+
+/**
+ * The device's own input with the plan's seed ahead of it, the seed cut from
+ * its end to what the API's token bound leaves beside the device's items, so
+ * the name and the top of the document are what a long plan keeps. Nothing is
+ * added where there is no plan or no room.
+ */
+function withPlanSeed(
+  input: readonly InitialItem[],
+  plan: Plan | undefined,
+): readonly InitialItem[] {
+  if (plan === undefined || input.length >= LIVE_INPUT_BOUNDS.MESSAGES) return input;
+  const room = (LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input)) * ESTIMATED_CHARS_PER_TOKEN;
+  if (room <= PLAN_SEED_MARKER.length) return input;
+  return [developerSeedItem(planSeedText(plan).slice(0, room)), ...input];
+}
+
+/** The scene a WebRTC session is created under: the introduction's, a planning call's, or the desktop's. */
+function sceneOf(route: VoiceRoute, planId: string | undefined): LiveScene {
+  if (route === VOICE_ROUTE.INTRODUCTION) return LIVE_SCENE.INTRODUCTION;
+  return planId === undefined ? LIVE_SCENE.DESKTOP : LIVE_SCENE.PLANNING;
 }
 
 /**
@@ -252,6 +304,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    */
   const admitAccount = (
     admission: SignedInAdmission,
+    planId: string | undefined,
   ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> =>
     Effect.gen(function* () {
       const account = yield* accounts.resolveUserId(admission.bearer);
@@ -265,9 +318,16 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       }
       const platform = claimed?.platform;
+      // A planning call names a plan, and a plan the account does not hold is
+      // refused before the spend exactly as a device it does not hold is.
+      const plan =
+        planId === undefined ? undefined : yield* record.heldPlan({ userId: accountId, planId });
+      if (planId !== undefined && plan === undefined) {
+        return refused(HOSTED_API_ERROR.NOT_FOUND, platform);
+      }
       const spend = yield* accounts.spend(accountId);
       if (!spend.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED, platform);
-      return { accountId, deviceId: admission.deviceId, platform, quota: spend.quota };
+      return { accountId, deviceId: admission.deviceId, platform, quota: spend.quota, plan };
     });
 
   /**
@@ -300,20 +360,25 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       // The introduction holds no account and names no device, so every
       // refusal on it counts no platform, here and below.
       if (route === VOICE_ROUTE.INTRODUCTION) {
-        if (!introductionInputAdmitted(frame)) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
+        // An accountless caller holds no plan to talk about.
+        if (!introductionInputAdmitted(frame) || frame.planId !== undefined) {
+          return refused(HOSTED_API_ERROR.INVALID_REQUEST);
+        }
         const introduction = yield* accounts.spendIntroduction();
         if (!introduction.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED);
       } else if (!sessionsInputAdmitted(frame)) {
         return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       }
       const account =
-        admission.route === VOICE_ROUTE.INTRODUCTION ? undefined : yield* admitAccount(admission);
+        admission.route === VOICE_ROUTE.INTRODUCTION
+          ? undefined
+          : yield* admitAccount(admission, frame.planId);
       if (account && "refusal" in account) return account;
       const config = liveSessionConfig({
-        scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
+        scene: sceneOf(route, frame.planId),
         model: options.model,
         voice: frame.voice,
-        input: frame.input,
+        input: withPlanSeed(frame.input, account?.plan),
         clientEvents: RENDERER_CLIENT_EVENTS,
         serverEvents: RENDERER_SERVER_EVENTS,
       });
@@ -330,6 +395,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
             userId: account.accountId,
             sessionId,
             deviceId: account.deviceId,
+            ...(frame.planId === undefined ? undefined : { planId: frame.planId }),
           })
         : undefined;
       const sideband = yield* attach(upstream, sessionId);
@@ -348,6 +414,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         accountId: account?.accountId,
         deviceId: account?.deviceId,
         platform: account?.platform,
+        planId: account === undefined ? undefined : frame.planId,
         started: false,
         sideband,
         held: [],
@@ -372,7 +439,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
     frame: SessionAudioCreateFrame,
   ): SessionEffect<Opened> =>
     Effect.gen(function* () {
-      const account = yield* admitAccount(admission);
+      const account = yield* admitAccount(admission, undefined);
       if ("refusal" in account) return account;
       const opened = yield* upstream.openPrimary(
         livePrimarySessionConfig({
@@ -397,6 +464,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         accountId: account.accountId,
         deviceId: account.deviceId,
         platform: account.platform,
+        planId: undefined,
         started: true,
         sideband: socket,
         held,
@@ -413,6 +481,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * introduction never re-attaches. What is proven here is the session's
    * owner rather than a device, so no device row is read and nothing this
    * connection logs counts a platform, exactly as its `deviceId` names none.
+   * The plan a planning call is bound to is read off the same row, so the
+   * re-attached exchange lands in the plan the session was created about.
    */
   const openAttached = (
     upstream: LiveUpstream,
@@ -424,15 +494,17 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       }
       const account = yield* accounts.resolveUserId(admission.bearer);
-      if (
-        Option.isNone(account) ||
-        !(yield* record.owned({ userId: account.value, sessionId: frame.sessionId }))
-      ) {
+      const owned = Option.isNone(account)
+        ? undefined
+        : yield* record.owned({ userId: account.value, sessionId: frame.sessionId });
+      if (Option.isNone(account) || owned === undefined) {
         return refused(HOSTED_API_ERROR.INVALID_TOKEN);
       }
       const accountId = account.value;
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
+      // A connection holds the session again, so the tick's orphan sweep leaves it be.
+      yield* record.attached({ sessionId: frame.sessionId });
       const answer: SessionAttachedFrame = {
         type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
         sessionId: frame.sessionId,
@@ -442,6 +514,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         accountId,
         deviceId: undefined,
         platform: undefined,
+        planId: owned.planId,
         started: true,
         sideband,
         held: [],

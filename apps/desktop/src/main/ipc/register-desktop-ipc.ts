@@ -2,13 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { Effect, Option } from "effect";
-import { BrowserWindow, clipboard, ipcMain } from "electron";
+import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
+import { channels } from "#shared/bridge";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { ActRefused, type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
+import { planningActRows } from "./planning-acts";
 import { sessionActRows } from "./session-acts";
 import { settingsActRows } from "./settings-rows";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
@@ -97,6 +100,27 @@ export function registerDesktopIpc(services: DesktopServices): void {
       recordProductEvent,
     }),
     ...voiceRuntimeActRows(voiceRuntime),
+    ...planningActRows({
+      host: operator.host,
+      chooseFolder: () =>
+        Effect.map(
+          Effect.promise(() =>
+            dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] }),
+          ),
+          (chosen) => (chosen.canceled ? null : (chosen.filePaths[0] ?? null)),
+        ),
+      activePlanId: () => state.snapshot().planning.activePlanId,
+      talkAboutPlan: (planId) => {
+        voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
+      },
+      voiceReady: () => {
+        const snapshot = state.snapshot();
+        return (
+          snapshot.settings?.status.voiceAvailable === true &&
+          snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
+        );
+      },
+    }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),

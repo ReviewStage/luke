@@ -20,17 +20,27 @@ export const SOCKET_OPEN_FAULT = {
   NETWORK: "network",
 } as const;
 
-/** How a socket ended, as the transport reported it; the code is the close frame's where one arrived. */
+/**
+ * How a socket ended, as the transport reported it; the code and the reason
+ * are the close frame's where one arrived. The reason is the far side's own
+ * short text, bounded by the protocol, and never words of a session.
+ */
 export interface SocketClose {
   code?: number;
+  reason?: string;
 }
 
 /** What the far side of a socket handed up: one text frame, or the close that ended it. */
 export type SocketArrival = { readonly frame: string } | { readonly close: SocketClose };
 
-/** The two verbs the trusted side has on a socket; what the socket says is the hold's to hand up. */
+/**
+ * The verbs the trusted side has on a socket; what the socket says is the
+ * hold's to hand up. A ping is the protocol's own control frame, carrying no
+ * data, and a socket that is not open drops it rather than failing.
+ */
 export interface SocketVerbs {
   send(data: string): void;
+  ping(): void;
   close(): void;
 }
 

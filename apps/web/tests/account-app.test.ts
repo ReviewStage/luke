@@ -46,6 +46,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  authSecret: undefined,
   apnsCredentials: undefined,
 };
 

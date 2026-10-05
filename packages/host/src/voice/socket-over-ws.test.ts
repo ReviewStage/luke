@@ -114,6 +114,62 @@ it.effect(
     }),
 );
 
+/** An upgrade endpoint that counts the pings it hears and closes each socket with the given code and reason on its first text frame. */
+async function serverThatClosesOnFrame(close: { code: number; reason: string }) {
+  const httpServer = http.createServer();
+  const socketServer = new WebSocketServer({ server: httpServer });
+  let pings = 0;
+  socketServer.on("connection", (client) => {
+    client.on("ping", () => {
+      pings += 1;
+    });
+    client.on("message", () => client.close(close.code, close.reason));
+  });
+  httpServer.listen(0, "127.0.0.1");
+  await once(httpServer, "listening");
+  // SAFETY: a listening TCP server answers its bound address as AddressInfo, never a pipe path.
+  const { port } = httpServer.address() as AddressInfo;
+  return {
+    url: `ws://127.0.0.1:${port}/v1/live/sessions/sess_1/attach`,
+    pings: () => pings,
+    close: async () => {
+      socketServer.close();
+      httpServer.close();
+      await once(httpServer, "close");
+    },
+  };
+}
+
+it.effect("a ping reaches the far side, and a close hands up its code and its reason", () =>
+  Effect.gen(function* () {
+    const remote = yield* Effect.promise(() =>
+      serverThatClosesOnFrame({ code: 4000, reason: "function recycled" }),
+    );
+    try {
+      const opening = yield* openSocketOverWs(remote.url, {});
+      assert.ok(socketOpened(opening));
+      const closes: unknown[] = [];
+      yield* Effect.forkChild(
+        Stream.runForEach(opening.socket.arrivals, (arrival) =>
+          Effect.sync(() => {
+            if ("close" in arrival) closes.push(arrival.close);
+          }),
+        ),
+      );
+      opening.socket.ping();
+      yield* waitOnTheNetwork(() => remote.pings() === 1);
+      assert.equal(remote.pings(), 1);
+      opening.socket.send("hang up");
+      yield* waitOnTheNetwork(() => closes.length > 0);
+      assert.deepEqual(closes, [{ code: 4000, reason: "function recycled" }]);
+      // A ping on a socket that has closed is dropped rather than thrown.
+      opening.socket.ping();
+    } finally {
+      yield* Effect.promise(() => remote.close());
+    }
+  }),
+);
+
 /** Gives the event loop real turns until `condition` holds, for a condition only the network can settle. */
 function waitOnTheNetwork(condition: () => boolean, rounds = 400): Effect.Effect<void> {
   return Effect.gen(function* () {

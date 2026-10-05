@@ -1,6 +1,7 @@
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { LiveSessionPhase } from "@sidecar/gateway";
+import type { PlanningView } from "@sidecar/hosted/planning-view";
 import type {
   ConversationViewSnapshot,
   ObservedWorkspaceProject,
@@ -25,14 +26,17 @@ import type { VoiceView } from "./voice-view";
 /**
  * The launch profiles a window answers to. A capture run stages a
  * conversation it has no voice window for: Luke speaking, that with the
- * Mac's output off, and both speakers heard at once. Any other word — the
- * default included — stages nothing.
+ * Mac's output off, and both speakers heard at once; or, in any fixture run,
+ * the panel's Plans tab over a synthetic plan. Any other word — the default
+ * included — stages nothing.
  */
 export const RUN_PROFILE = {
   IDLE: "idle",
   SPEAKING: "speaking",
   MUTED: "muted",
   DUPLEX: "duplex",
+  /** The panel's Plans tab, opened at launch over a synthetic plan. */
+  PLANNING: "planning",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];
@@ -163,6 +167,13 @@ export interface AppState {
   agents: AgentsSnapshot;
   /** The one transcript the host holds open for this Mac, a child's or an observed session's; nothing while none is. Named `childTranscript` still, kept so the slice name stays put. */
   childTranscript: TranscriptSnapshot | undefined;
+  /**
+   * The Plans tab's named plans as the host's reads of the service
+   * hold them: the list, the one active plan, and its saved document. Only
+   * the panel's Plans tab draws it, and the active plan is the one a voice
+   * session and the talk key bind to.
+   */
+  planning: PlanningView;
   announcements: { held: boolean };
   /** The onboarding gates the host says stand: the key step ahead of the calendar's, both after the introduction. */
   onboarding: { calendarOwed: boolean; conductorKeyOwed: boolean };

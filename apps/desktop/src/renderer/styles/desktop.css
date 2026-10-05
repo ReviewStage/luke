@@ -1,0 +1,843 @@
+/* Luke's app window: a sidebar of places on the left, the chosen work on the
+   right, a call bar under an open plan, and the key, consent, and feedback
+   entries as sheets over a dimmed window. Last in index.css, so a rule here
+   wins over a panel rule of equal weight. */
+
+:root {
+  --desktop-ground: #0c0c0e;
+  --desktop-sidebar: #111114;
+  --desktop-well: #0f0f12;
+  --desktop-bar-height: 52px;
+  --sidebar-width: 264px;
+  /* The measure a document is read at: about seventy characters of body text. */
+  --reading-width: 720px;
+}
+
+html,
+body,
+#root {
+  background: var(--desktop-ground);
+}
+
+.app-stage[data-surface="desktop"] {
+  /* The entry sheets hang this far below the window's top edge. The bubble
+     rules spend `--shape-top` for that drop, and the strip they reserve above
+     their first row is nothing here. */
+  --shape-top: 96px;
+  --strip-height: 0px;
+  --voice-band-width: min(640px, calc(100vw - var(--sidebar-width) - 96px));
+  position: absolute;
+  inset: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.desktop-stage {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+}
+
+.desktop-drag-strip {
+  flex: 0 0 auto;
+  height: var(--desktop-bar-height);
+  -webkit-app-region: drag;
+}
+
+.desktop-shell {
+  /* What a pinned header paints behind itself is the window's ground here. */
+  --surface-fill: var(--desktop-ground);
+  display: grid;
+  height: 100%;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+}
+
+/* Sidebar ----------------------------------------------------------------- */
+
+.desktop-sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0 12px 12px;
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+
+.luke-identity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 2px 8px 18px;
+}
+
+.luke-identity-face {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--raised-strong);
+}
+
+.luke-identity-face .luke-face {
+  width: 24px;
+  height: 24px;
+}
+
+.luke-identity-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.luke-identity-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.luke-identity-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.luke-identity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--state-complete);
+}
+
+.luke-identity[data-turn="luke"] .luke-identity-status {
+  color: var(--voice-luke);
+}
+
+.luke-identity[data-turn="developer"] .luke-identity-status {
+  color: var(--voice-developer);
+}
+
+.luke-identity-meter {
+  margin-left: auto;
+  animation: none;
+}
+
+.luke-identity-meter .waveform {
+  opacity: 1;
+  transform: none;
+}
+
+.sidebar-new-plan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  margin: 0 0 20px;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: var(--raised-strong);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.sidebar-new-plan:hover:not(:disabled),
+.sidebar-new-plan[data-active="true"] {
+  background: var(--selected);
+}
+
+.sidebar-new-plan:disabled {
+  opacity: 0.45;
+}
+
+.sidebar-new-plan svg,
+.sidebar-item svg,
+.toolbar-button svg,
+.primary-button svg,
+.settings-pages-search svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.sidebar-section {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.sidebar-heading {
+  margin: 0 0 6px;
+  padding: 0 10px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sidebar-note {
+  margin: 4px 10px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.sidebar-plans {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sidebar-plan {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: none;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.sidebar-plan:hover {
+  background: var(--raised);
+}
+
+.sidebar-plan[aria-current="page"] {
+  background: var(--raised-strong);
+  box-shadow: inset 2px 0 0 var(--voice-luke);
+}
+
+.sidebar-plan-name,
+.sidebar-plan-repository,
+.sidebar-account-name,
+.sidebar-account-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-plan-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sidebar-plan-repository {
+  color: var(--text-secondary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.sidebar-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+.sidebar-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 560;
+  text-align: left;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.sidebar-item:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.sidebar-item[aria-current="page"] {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.sidebar-item .tab-note {
+  position: static;
+  margin-left: auto;
+}
+
+.sidebar-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 2px;
+}
+
+.sidebar-avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3a3f55, #262833);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sidebar-account-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-account-name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.sidebar-account-email {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+/* Work column ------------------------------------------------------------- */
+
+.desktop-main {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.desktop-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 16px;
+  min-height: var(--desktop-bar-height);
+  padding: 8px 20px 8px 32px;
+  border-bottom: 1px solid var(--hairline);
+  -webkit-app-region: drag;
+}
+
+.desktop-toolbar-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.desktop-toolbar-title {
+  margin: 0;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-toolbar-subtitle {
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.desktop-toolbar-note {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 12px;
+}
+
+.toolbar-button,
+.primary-button,
+.desktop-toolbar-actions,
+.sidebar-new-plan,
+.sidebar-plan,
+.sidebar-item {
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: var(--raised-strong);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.toolbar-button:hover {
+  background: var(--selected);
+}
+
+.toolbar-icon-button {
+  justify-content: center;
+  width: 30px;
+  padding: 0;
+  background: none;
+  color: var(--text-secondary);
+}
+
+.toolbar-icon-button:hover {
+  color: var(--text-primary);
+}
+
+.primary-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 9px;
+  background: var(--message-sent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.primary-button:hover {
+  filter: brightness(1.1);
+}
+
+/* Empty and waiting states ---------------------------------------------- */
+
+.desktop-empty {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.desktop-empty h1 {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.desktop-empty p {
+  max-width: 400px;
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.desktop-empty-mark {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.desktop-empty-mark svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* The document ------------------------------------------------------------- */
+
+.desktop-document {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.desktop-document .plan-document-scroll {
+  padding: 44px 48px 140px;
+  scrollbar-gutter: stable;
+}
+
+.desktop-document .plan-body,
+.desktop-document .plan-assumptions {
+  max-width: var(--reading-width);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.desktop-document .plan-body {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.desktop-document .plan-unit + .plan-unit {
+  margin-top: 1.5em;
+}
+
+.desktop-document .markdown-heading {
+  color: var(--text-primary);
+}
+
+.desktop-document .markdown-heading[data-level="1"] {
+  font-size: 1.9em;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.desktop-document .markdown-heading[data-level="2"] {
+  margin-top: 0.6em;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 1.3em;
+}
+
+.desktop-document .markdown-heading[data-level="3"] {
+  font-size: 1.05em;
+}
+
+.desktop-document .plan-assumptions {
+  margin-top: 44px;
+  padding: 20px 24px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--desktop-well);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.desktop-document .plan-assumptions-heading {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* The call bar ------------------------------------------------------------- */
+
+.desktop-call-bar {
+  flex: 0 0 auto;
+  padding: 14px 32px;
+  border-top: 1px solid var(--hairline);
+  background: var(--desktop-well);
+}
+
+.desktop-call-bar .plan-microphone-row {
+  max-width: var(--reading-width);
+  margin: 0 auto;
+  padding: 0;
+  gap: 14px;
+  border: 0;
+}
+
+.desktop-call-bar .plan-microphone {
+  width: 42px;
+  height: 42px;
+  background: var(--message-sent);
+  color: #fff;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--message-sent) 35%, transparent);
+}
+
+.desktop-call-bar .plan-microphone[data-muted="true"] {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger-text);
+  box-shadow: none;
+}
+
+.desktop-call-bar .plan-stop {
+  width: 42px;
+  height: 42px;
+}
+
+.desktop-call-bar .plan-microphone svg {
+  width: 18px;
+  height: 18px;
+}
+
+.desktop-call-bar .plan-voice-word {
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.desktop-call-bar .plan-backend {
+  font-size: 12px;
+}
+
+/* The new-plan form ----------------------------------------------------- */
+
+.desktop-form {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 36px 48px 60px;
+}
+
+.desktop-form .plan-new {
+  max-width: 560px;
+  margin: 0 auto;
+  zoom: 1.12;
+}
+
+/* The toolbar names the page and the form's Cancel is its way out. */
+.desktop-form .plan-new > .plan-header {
+  display: none;
+}
+
+/* Settings ------------------------------------------------------------------- */
+
+.desktop-settings {
+  display: contents;
+}
+
+.settings-pages {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0 12px 12px;
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+
+.settings-pages-back {
+  width: auto;
+  margin-bottom: 12px;
+}
+
+.settings-pages-title {
+  margin: 0 10px 14px;
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: -0.015em;
+}
+
+.settings-pages-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-bottom: 12px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.settings-pages-search[aria-pressed="true"] {
+  border-color: var(--selected-edge);
+  color: var(--text-primary);
+}
+
+.settings-pages ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-page {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.settings-page-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 40px 60px;
+}
+
+/* The page scrolls with the column rather than inside a scroller of its own. */
+.settings-page-scroll .settings {
+  max-width: 600px;
+  margin: 0 auto;
+  overflow: visible;
+  animation: none;
+  zoom: 1.15;
+}
+
+/* The list on the left is the way between pages, so the panel's own index
+   and back buttons are not drawn; a page's reset stays. */
+.settings-page-scroll .settings-index,
+.settings-page-scroll .settings-header > .icon-button,
+.settings-page-scroll .settings-header > strong {
+  display: none;
+}
+
+.settings-page-scroll .settings-header {
+  justify-content: flex-end;
+}
+
+/* Onboarding ----------------------------------------------------------------- */
+
+.desktop-onboarding {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  background: radial-gradient(ellipse at 50% 30%, #1a1b22 0%, var(--desktop-ground) 60%);
+}
+
+.desktop-onboarding-card {
+  display: flex;
+  width: 440px;
+  margin: auto;
+  flex-direction: column;
+  align-items: center;
+  padding: 36px 32px 28px;
+  border: 1px solid var(--hairline);
+  border-radius: 20px;
+  background: var(--desktop-sidebar);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  transform: translateY(-24px);
+}
+
+.desktop-onboarding-face {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  background: var(--raised-strong);
+}
+
+.desktop-onboarding-face .luke-face {
+  width: 44px;
+  height: 44px;
+}
+
+.desktop-onboarding-card > section {
+  width: 100%;
+  zoom: 1.1;
+}
+
+/* The face is drawn above the card's step, not in the box the panel kept for it. */
+.desktop-onboarding .sign-in-face {
+  display: none;
+}
+
+/* Entry sheets --------------------------------------------------------------- */
+
+/* The key, consent, and feedback entries stand the window down to one thing:
+   the window dims and the entry is a sheet over it. */
+.desktop-scrim {
+  position: absolute;
+  z-index: 7;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+.app-stage[data-surface="desktop"][data-presentation="slot"] .desktop-scrim,
+.app-stage[data-surface="desktop"][data-presentation="feedback"] .desktop-scrim {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-stage[data-surface="desktop"] .panel-surface {
+  z-index: 8;
+  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
+  background: var(--desktop-sidebar);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.app-stage[data-surface="desktop"][data-presentation="panel"] .panel-surface {
+  visibility: hidden;
+}
+
+.app-stage[data-surface="desktop"] .slot-stage,
+.app-stage[data-surface="desktop"] .feedback-stage {
+  z-index: 9;
+}
+
+/* Luke's words --------------------------------------------------------------- */
+
+/* A floating bar over the work column, above the call bar, rather than a band
+   riding the notch shape's edge. */
+.app-stage[data-surface="desktop"][data-presentation] .voice-caption {
+  z-index: 6;
+  top: auto;
+  bottom: calc(96px + var(--volume-hint-size));
+  left: calc(var(--sidebar-width) + (100% - var(--sidebar-width)) / 2);
+  height: auto;
+  max-height: var(--caption-max);
+  padding: 14px 18px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  background: rgba(22, 22, 27, 0.97);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  clip-path: none;
+  animation: none;
+  font-size: 13.5px;
+  line-height: 1.5;
+  transform: translateX(-50%);
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+.app-stage[data-surface="desktop"][data-caption="true"] .voice-caption {
+  opacity: 1;
+}
+
+.app-stage[data-surface="desktop"][data-presentation] .volume-hint {
+  z-index: 6;
+  top: auto;
+  bottom: 88px;
+  left: calc(var(--sidebar-width) + (100% - var(--sidebar-width)) / 2);
+  animation: none;
+  transform: translateX(-50%);
+}
+
+.app-stage[data-surface="desktop"][data-volume-hint="true"][data-caption="true"] .volume-hint {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-stage[data-surface="desktop"] .voice-caption-text {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+}

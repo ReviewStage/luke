@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 15 September 2026
+Last updated: 4 October 2026
 
 Luke is a macOS app that watches your coding agent sessions, with companion
 iOS and Apple Watch apps for the cloud sessions your account can see. This
@@ -98,6 +98,30 @@ under his application data (`agents/main/workspace`), and read them into the
 calls they made from here; this version makes no such call, seeds nothing
 there, and reads nothing from it. Files an earlier version left are yours to
 keep or delete, and nothing on your Mac reads or writes them.
+
+**Feature plans.** When you start a named plan, our service stores it under
+your account: its name and the plan's one document, a Markdown body and a list of
+assumptions each marked confirmed or not, written by Luke's planning model as
+you talk. It is stored as written, bound to your account and readable by our
+own operators, the same way the conversation described below is. A save
+replaces the document and no earlier version is kept; deleting a plan removes
+it at once, and deleting your account removes every plan.
+
+**How the planning model reads your folder.** While a plan is open in Luke
+on your Mac, Luke's planning model, which runs on our service, can ask your
+Mac to run a shell command (such as `ls`, `grep`, or `cat`) in the plan's
+folder. Luke on your Mac runs each command with the folder as its working
+directory, inside a macOS sandbox that blocks all network access and all
+writes, and lets the command read only that folder and the system's own
+programs. A file named `.env` or starting with `.env` is not read, even in
+the folder. None of Luke's own environment reaches the command. Luke sends the
+command's exit
+code and up to 20,000 characters each of its output and error text back to
+our service, which hands them to the planning model. No copy of the folder is
+made, and the folder's path stays on your Mac: our service never stores it.
+Each command and its output are stored with the plan, and with the
+plan's planning conversation, under the terms described for each; deleting
+the plan deletes its commands.
 
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
@@ -208,6 +232,19 @@ reads any of them. Asking Luke to forget removes the line you name from his
 than claiming it erased. Forgetting does not delete the conversation itself;
 Clear is still the separate action above.
 
+**How the plan is written during a planning call.** While you talk a plan
+through with Luke on a planning call, a notetaker on our service writes the
+plan document; Luke's own judgment no longer does. Once you have been quiet
+for about a second, it makes one call to OpenAI (`gpt-5.6-luna`) on our key,
+carrying the plan as it is saved, both sides of what was said since its last
+note with a few lines before them, and the words of Luke's own replies, and
+saves the fields that call answers into that one plan. It runs only during a
+planning call you started and only for that call's plan, each run counts
+against the same daily allowance as Luke's turns, and a run the allowance
+refuses, or that fails, writes nothing. Nothing it reads or answers is kept
+beyond the saved plan, said aloud, or shown anywhere but the plan itself, and
+OpenAI keeps the request and its reply under its own retention policy.
+
 **Seeing what he saved.** The Mac app's Settings has a Memory page that reads
 the notebook back to you: `MEMORY.md`, `USER.md`, and the newest of the dated
 notes under `memory/`, as they stand on our service, drawn as the Markdown they
@@ -220,7 +257,11 @@ session recording described under "What we collect", the way the
 Conversation tab is.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
-address, and which of the two you used. We also keep the records that keep you
+address, and which of the two you used. Signing in with GitHub grants no
+access to your repositories: plans read a folder on your Mac instead. An
+account that signed in with GitHub before this may still hold GitHub's `repo`
+permission, which Luke no longer uses; you can revoke it at any time in
+GitHub's settings under Applications. We also keep the records that keep you
 signed in, and a daily count of how much voice and review you have used.
 Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily
@@ -550,7 +591,8 @@ Send.
   calls' billing prefix instead of paying for it again. It identifies nothing
   — no session id or title can be read out of a hash — and our service passes
   it upstream and keeps it no longer than the request. The same allowance
-  meters a request to count a call's tokens or to fold Luke's working memory.
+  meters a request to count a call's tokens or to fold Luke's working memory,
+  and each note the planning notetaker writes.
   A
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no

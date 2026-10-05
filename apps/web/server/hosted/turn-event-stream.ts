@@ -9,7 +9,7 @@ import {
   isStoredToolPart,
   READ_QUERY,
   replySentences,
-  type SlowStepKind,
+  SLOW_STEP_KIND,
   type StoredUIMessage,
   slowStepOf,
   storedToolName,
@@ -32,7 +32,9 @@ import { hostedTurnPolicy } from "./brain-host/tools.js";
 import { CATALOG_TOOL_SET } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import type { UserIdResolver } from "./http-effect.js";
+import { QUEUE_QUESTION_TOOL, queuedQuestionOf } from "./queue-question.js";
 import { makeRateBrake } from "./rate-brake.js";
+import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
 /**
@@ -123,18 +125,36 @@ export type ProjectedTurn = Pick<StoredTurnRecord, "id" | "origin" | "status">;
 
 type JournalParts = StoredUIMessage["parts"];
 
-/** The first slow step the journal's calls began, in the order the calls were written; the desktop tells one per run and so does this. */
-function slowStepOfJournal(
-  parts: JournalParts,
-  trigger: BrainTurnTrigger,
-): SlowStepKind | undefined {
+/**
+ * What the journal's calls tell before the turn ends, in the order the calls
+ * were written: the first slow step, once, as the desktop tells one per run,
+ * and every question a planning call queued. Note that a planning call's
+ * repository command is named before the policy is asked, because it is a
+ * planning tool and no catalog policy offers it, so the brain's own
+ * `slowStepOf` would never count it. A queued question is told once its
+ * input is whole, never while it streams, so a question is never told twice.
+ */
+function midTurnEventsOf(parts: JournalParts, trigger: BrainTurnTrigger): TurnEventBody[] {
   const policy = hostedTurnPolicy(trigger);
+  const bodies: TurnEventBody[] = [];
+  let slowStepTold = false;
   for (const part of parts) {
     if (!isStoredToolPart(part)) continue;
-    const step = slowStepOf(policy, storedToolName(part));
-    if (step !== undefined) return step;
+    const name = storedToolName(part);
+    if (name === QUEUE_QUESTION_TOOL.name) {
+      const queued = queuedQuestionOf(part);
+      if (queued !== undefined) bodies.push({ kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued });
+      continue;
+    }
+    const step =
+      name === RUN_IN_REPOSITORY_TOOL.name
+        ? SLOW_STEP_KIND.REPOSITORY_READ
+        : slowStepOf(policy, name);
+    if (step === undefined || slowStepTold) continue;
+    slowStepTold = true;
+    bodies.push({ kind: TURN_EVENT_KIND.SLOW_STEP, step });
   }
-  return undefined;
+  return bodies;
 }
 
 /** The reply's text: every text part of the answer, in order; the words the voice speaks. */
@@ -144,7 +164,8 @@ function replyTextOf(parts: JournalParts): string {
 
 /**
  * The turn's events as the record now stands, numbered from one. A slow step
- * is told the moment a slow call is on the journal; the settled mark, the
+ * and a queued question are told the moment their call is on the journal,
+ * whose calls only grow, so the numbering only grows; the settled mark, the
  * reply's sentences, and the end follow the turn's own end, since the reply
  * is spoken only once everything the turn did is on record, exactly as the
  * desktop's own run stream orders them. A cancelled or failed turn ends
@@ -156,9 +177,7 @@ export function projectTurnEvents(
   journal: StoredUIMessage | undefined,
 ): readonly TurnEvent[] {
   const parts = journal?.parts ?? [];
-  const bodies: TurnEventBody[] = [];
-  const slowStep = slowStepOfJournal(parts, TRIGGER_OF_TURN_ORIGIN[turn.origin]);
-  if (slowStep !== undefined) bodies.push({ kind: TURN_EVENT_KIND.SLOW_STEP, step: slowStep });
+  const bodies = midTurnEventsOf(parts, TRIGGER_OF_TURN_ORIGIN[turn.origin]);
   const end = TURN_END_OF_STATUS[turn.status];
   if (end === TURN_END.COMPLETED) {
     bodies.push({ kind: TURN_EVENT_KIND.ACTIONS_SETTLED });

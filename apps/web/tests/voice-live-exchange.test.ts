@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
-import { Effect, Exit, Schema, Scope } from "effect";
+import type { LanguageModel } from "ai";
+import { Effect, Exit, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
@@ -23,6 +24,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
+import { createPlan, readPlan } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
@@ -34,10 +36,12 @@ import {
   type LiveServerEventType,
 } from "../server/live";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
+import type { PlanDraft } from "../server/voice/plan-scribe";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
-import { delegated, heard, sessionStarted } from "./support/live-events";
+import { delegated, heard, said, sessionStarted } from "./support/live-events";
+import { scriptedScribeModel } from "./support/scribe-model";
 import { settled } from "./support/settle";
 import {
   insertConversation,
@@ -181,7 +185,18 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
 const QUIET_MS = 30;
 
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
-async function stand(target: ConversationTarget, deviceId: string | undefined) {
+async function stand(
+  target: ConversationTarget,
+  deviceId: string | undefined,
+  options: {
+    readonly planning?: boolean;
+    readonly scribe?: {
+      readonly planId: string;
+      readonly model: LanguageModel;
+      readonly onDraft?: (draft: PlanDraft) => void;
+    };
+  } = {},
+) {
   const liveSessionId = `sess_${randomUUID()}`;
   await database.run(sessionRecord.register({ userId: target.userId, sessionId: liveSessionId }));
   if (deviceId !== undefined) {
@@ -227,6 +242,8 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
         now: () => NOW,
         createId: () => randomUUID(),
         report: (message) => reports.push(message),
+        ...(options.planning === true ? { planning: true } : undefined),
+        ...(options.scribe === undefined ? undefined : { scribe: options.scribe }),
       }),
       scope,
     ),
@@ -453,6 +470,61 @@ it.live(
       );
       assert.equal(refused.outcome, LIVE_BRAIN_SUBMISSION.REFUSED);
       assert.deepEqual(f.eve.opened, []);
+      yield* Effect.promise(() => f.exchange.stop());
+    }),
+);
+
+it.live("a call that is not a planning call is asked no opening", () =>
+  Effect.gen(function* () {
+    const target = yield* Effect.promise(() => account());
+    const f = yield* Effect.promise(() => stand(target, undefined));
+    yield* Effect.sleep(QUIET_MS);
+    assert.deepEqual(f.eve.opened, []);
+    assert.deepEqual(f.commentary(), []);
+    yield* Effect.promise(() => f.exchange.stop());
+  }),
+);
+
+it.live(
+  "a planning call's notetaker drafts what the developer said to the device and saves it into the plan",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const problem = "Only an admin can add someone to a workspace.";
+      const plan = yield* Effect.promise(() =>
+        database.run(
+          createPlan(target.userId, {
+            name: "Teammate invitations",
+          }),
+        ),
+      );
+      const drafts: PlanDraft[] = [];
+      const f = yield* Effect.promise(() =>
+        stand(target, undefined, {
+          planning: true,
+          scribe: {
+            planId: plan.id,
+            model: scriptedScribeModel([{ goal: { problem } }]).model,
+            onDraft: (draft) => drafts.push(draft),
+          },
+        }),
+      );
+      f.socket.receive(said("What's the problem today?", 0, 1_200));
+      f.socket.receive(heard("Only admins can add people.", 1_500, 3_000));
+      const body = () =>
+        database.run(
+          Effect.map(readPlan(target.userId, plan.id), (stored) =>
+            Option.match(stored, { onNone: () => "", onSome: (found) => found.plan.document.body }),
+          ),
+        );
+      yield* settled(
+        () => drafts.at(-1)?.savedAt !== undefined,
+        "the saved plan to be drafted to the device",
+        async () => `reports ${JSON.stringify(f.reports)}`,
+      );
+      const saved = yield* Effect.promise(body);
+      assert.ok(saved.includes(problem));
+      assert.equal(drafts.at(-1)?.document.body, saved);
       yield* Effect.promise(() => f.exchange.stop());
     }),
 );

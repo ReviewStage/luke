@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "What to look up, in public words, such as \"Stripe API idempotency key expiry\". One line of at most 200 characters. Never include code, file contents, private names from the repository, tokens, keys, or anything the developer said in confidence."
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "additionalProperties": false
+}

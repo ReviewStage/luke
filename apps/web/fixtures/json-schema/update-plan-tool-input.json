@@ -1,0 +1,318 @@
+{
+  "type": "object",
+  "properties": {
+    "goal": {
+      "type": "object",
+      "properties": {
+        "problem": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The current problem, and who it affects. Null while unanswered."
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The observable improvement once the change ships. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "included": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the change includes. Null while unanswered."
+        },
+        "excluded": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What is explicitly out of scope. Null while unanswered."
+        },
+        "constraints": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Limits the change must respect: permissions, privacy, performance, compatibility. Only those that apply, cited or agreed, never invented. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "rules": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "statement": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "The rule as one sentence that holds in every case, failure, cancellation, and retry included."
+              },
+              "examples": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "given": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "The starting situation. One line. Null while unknown."
+                        },
+                        "when": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "The action. One line. Null while unknown."
+                        },
+                        "then": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "The observable result. One line. Null while unknown."
+                        }
+                      },
+                      "required": [
+                        "given",
+                        "when",
+                        "then"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 200
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Concrete examples that pin the rule, each exactly given, when, and then; more of them where the rule is ambiguous or two implementations could read it differently. Null until one is agreed."
+              }
+            },
+            "required": [
+              "statement",
+              "examples"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The behavioral rules, each with the examples that pin it. Null until one is agreed."
+    },
+    "implementation": {
+      "type": "object",
+      "properties": {
+        "changeMap": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Each repository-relative path the change touches or adds, and what it gets there. Null while unanswered."
+        },
+        "contracts": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "New or changed types, schema, and signatures at module boundaries, written as code in fenced blocks against the plan's commit. Signatures only, never function bodies. Null while unanswered."
+        },
+        "patterns": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Existing code to follow, by path, and what to copy from it. Null while unanswered."
+        },
+        "order": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only where one step must land before another: the steps in order and why. Left out of the document while null. Null while unanswered."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "decisions": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Each consequential choice: the decision, why, and the alternative rejected. Null while unanswered."
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The end-to-end check that proves the change works, beyond the examples passing. Null while unanswered."
+    },
+    "leftToAgent": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Exactly which choices the implementing agent may make itself; everything else is fixed. Null while unanswered."
+    },
+    "openQuestions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+      },
+      "maxItems": 200,
+      "description": "Unresolved questions, contradictions, or facts no source could settle; empty when none."
+    },
+    "dataAndMigration": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Only when stored data changes: what is stored, how existing data moves, and how the change is undone. Left out of the document while null. Null while unanswered."
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 200,
+      "description": "Every assumption the plan holds, in order, each its text. Sent whole when any changes."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

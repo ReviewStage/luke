@@ -95,6 +95,10 @@ export {
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
+  type PlanActivityFrame,
+  type PlanDraftFrame,
+  planActivityFrameFromWire,
+  planDraftFrameFromWire,
   SESSION_CREATE_BOUNDS,
   type SessionActivityFrame,
   type SessionAttachedFrame,
@@ -146,6 +150,11 @@ export {
   type ObservedSessionControl,
   observeAnswerSchema,
 } from "./observe-wire.js";
+export {
+  HostedPlanClient,
+  type HostedPlanClientOptions,
+  type PlanCallResult,
+} from "./plan-client.js";
 export {
   type HostedProjectsAnswer,
   type HostedWorkspaceAgentModels,
@@ -221,6 +230,7 @@ export {
   brainTurnPath,
   conversationMessageRatingPath,
   HOSTED_SERVICE_PATH,
+  planPath,
   VOICE_SERVICE_PATH,
 } from "./service-paths.js";
 export {

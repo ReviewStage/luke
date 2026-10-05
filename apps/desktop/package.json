@@ -65,6 +65,7 @@
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
+    "diff": "9.0.0",
     "effect": "catalog:",
     "electron": "43.3.0",
     "electron-builder": "26.8.1",

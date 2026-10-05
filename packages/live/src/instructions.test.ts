@@ -47,3 +47,16 @@ test("the cue that follows it is one append's worth of commentary", () => {
   assert.equal(chunkForAppend(cue).length, 1);
   assert.equal(cue.includes("\n"), false);
 });
+
+test("a planning call is told the desktop's speaking policies over the planning model's reads, and no save to delegate", () => {
+  const desktop = blocksOf(LIVE_SCENE.DESKTOP);
+  const planning = blocksOf(LIVE_SCENE.PLANNING);
+  const policyAt = desktop.findIndex((block) => block.startsWith("Delegation policy:"));
+  const planningPolicy = planning.slice(policyAt).join("\n\n");
+
+  assert.deepEqual(planning.slice(1, policyAt), desktop.slice(1, policyAt));
+  // The notetaker writes the plan, so the voice never delegates to save it.
+  assert.equal(planningPolicy.includes("update_plan"), false);
+  assert.ok(planningPolicy.includes("run_in_repository"));
+  assert.equal(planningPolicy.includes("list_sessions"), false);
+});
