@@ -22,7 +22,8 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
  * On macOS each command runs inside a kernel sandbox (`sandbox-exec`) that
  * refuses every network call and every write, and reads only the plan's
  * folder and the system's own programs and libraries, so a command can
- * explore the folder and nothing else. Every platform runs it with an
+ * explore the folder and nothing else. A `.env` file, which is where a
+ * folder keeps its secrets, is not read even there. Every platform runs it with an
  * environment of its own, so none of Luke's variables reach its output.
  */
 
@@ -61,7 +62,8 @@ const SANDBOX_PROFILE = `(version 1)
   (subpath "/usr/lib") (subpath "/System") (subpath "/Library/Apple")
   (subpath "/Library/Developer") (subpath "/Applications/Xcode.app") (subpath "/opt/homebrew"))
 (allow file-write-data (literal "/dev/null") (literal "/dev/zero") (subpath "/dev/fd"))
-(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo"))`;
+(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo"))
+(deny file-read-data (regex #"/\\.env[^/]*$"))`;
 
 /** The whole environment a command sees: a search path, and git told to read no config but the folder's and to take no lock. */
 function commandEnvironment(folder: string): NodeJS.ProcessEnv {

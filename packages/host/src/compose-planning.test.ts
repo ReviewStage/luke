@@ -667,7 +667,7 @@ it.effect("a command sees none of Luke's own environment", () =>
 );
 
 it.effect.runIf(process.platform === "darwin")(
-  "on macOS a command can neither write, nor read outside the folder",
+  "on macOS a command can neither write, nor read outside the folder or a .env inside it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -675,11 +675,17 @@ it.effect.runIf(process.platform === "darwin")(
         const fs = yield* FileSystem.FileSystem;
         yield* Effect.orDie(fs.writeFileString(`${outside}/secret`, "hunter2"));
         const { folder, result } = yield* runInFolder(
-          `cat ${outside}/secret; echo x > made; echo x > ${outside}/made; ls`,
-          (inside) => Effect.orDie(fs.writeFileString(`${inside}/notes.md`, "invites")),
+          `cat ${outside}/secret .env.local; echo x > made; echo x > ${outside}/made; ls`,
+          (inside) =>
+            Effect.orDie(
+              Effect.all([
+                fs.writeFileString(`${inside}/notes.md`, "invites"),
+                fs.writeFileString(`${inside}/.env.local`, "STRIPE_KEY=sk_live_x"),
+              ]),
+            ),
         );
         assert.equal(result.stdout.trim(), "notes.md");
-        assert.doesNotMatch(result.stdout, /hunter2/u);
+        assert.doesNotMatch(result.stdout, /hunter2|sk_live_x/u);
         assert.equal(yield* Effect.orDie(fs.exists(`${folder}/made`)), false);
         assert.equal(yield* Effect.orDie(fs.exists(`${outside}/made`)), false);
       }),
