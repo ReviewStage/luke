@@ -79,7 +79,7 @@ The session is done when the queue is empty: every branch of the design tree vis
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
-- run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Each call is a round trip to the Mac, so join related commands with && in one call. Start exploring it immediately, and keep exploring as the task comes into focus.
+- run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet.
 
 ## Return the result

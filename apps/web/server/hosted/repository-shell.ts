@@ -73,8 +73,7 @@ export const RUN_IN_REPOSITORY_TOOL = {
   name: "run_in_repository",
   description:
     "Run one bash command in the plan's folder on the developer's Mac, from the folder root. " +
-    "Use it to explore: ls, find, grep, cat, git log. Each call is a round trip to the Mac, so " +
-    "join related commands with && in one call. " +
+    "Use it to explore: ls, find, grep, cat, git log. " +
     "Answers the exit code, stdout, and stderr, or `not-run` and why.",
   inputSchema: RUN_IN_REPOSITORY_INPUT,
 } as const;
