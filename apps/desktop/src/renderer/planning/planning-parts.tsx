@@ -85,7 +85,7 @@ export function PlanList({
 }
 
 /**
- * Copy, the one action on the document: always enabled, whether or not a handoff prompt is written yet. The check mark
+ * Copy, the one action on the document: always enabled, however much of the plan is written. The check mark
  * stands while the clipboard holds the document drawn, and a refused copy
  * says so beside the button.
  */

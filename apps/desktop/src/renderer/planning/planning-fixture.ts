@@ -26,63 +26,52 @@ const FIXTURE_REPOSITORY = {
 } as const;
 
 /**
- * The reference journey's plan partway through its conversation: the purpose,
- * the existing system, a rule and an invariant, and a scenario settled, an
- * acceptance example still without its outcome, and everything else
- * unanswered, as the fixed template shows a draft.
+ * The reference journey's plan partway through its conversation: the goal,
+ * two rules with their examples, the change map, and a decision settled, an
+ * example still without its outcome, and everything else unanswered, as the
+ * fixed template shows a draft.
  */
 const FIXTURE_UPDATE: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
-  purpose: {
-    problem: "Only an admin can add someone to a workspace, by creating their account by hand.",
-    users: "Workspace members, and the teammates they invite.",
+  goal: {
+    problem:
+      "Only an admin can add someone to a workspace, by creating their account by hand, so " +
+      "members wait on an admin to bring a teammate in.",
     outcome: "A member invites a teammate by email; the teammate joins by opening the link.",
   },
-  context: {
-    currentBehavior: "Fact: accounts are created by an admin in the settings page.",
-    relevantCode:
-      "Inspected at the plan's commit: `src/db/schema/memberships.ts` holds a `state` column. " +
-      "Hypothesis: nothing else writes to `memberships` outside `src/members/`.",
-    terminology: "An invite is a membership whose state is `pending`.",
+  rules: [
+    {
+      statement: "Any member may invite by email.",
+      examples: [
+        {
+          given: "A member invites dana@example.com",
+          when: "Dana opens the link",
+          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+          then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+        },
+      ],
+    },
+    {
+      statement: "A withdrawn or accepted invite link never grants access again.",
+      examples: [
+        {
+          given: "An invite Dana already accepted",
+          when: "anyone opens its link again",
+          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+          then: 'the page reads "This invite is no longer valid"', // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+        },
+      ],
+    },
+  ],
+  implementation: {
+    ...EMPTY_PLAN_UPDATE.implementation,
+    changeMap:
+      "- `src/db/schema/memberships.ts`: a `pending` state.\n" +
+      "- `src/members/invite.ts`: new, sending and accepting an invite.",
   },
-  behavior: {
-    rules:
-      "Any member may invite by email. Accepting moves the membership from `pending` to `active`.",
-    invariants: "A withdrawn or accepted invite link never grants access again.",
-    scenarios: [
-      {
-        name: "A teammate accepts an invite",
-        actor: "The invited teammate",
-        startingState: "A pending membership exists for the teammate's email address.",
-        trigger: "The teammate opens the invite link.",
-        steps: [
-          "The teammate signs in or signs up.",
-          "The service moves the membership to `active`.",
-        ],
-        expectedOutcome: "The teammate lands in the workspace.",
-        alternativesAndFailures:
-          'A withdrawn invite\'s link shows a generic "This invite is no longer valid" page.',
-      },
-    ],
-  },
-  delivery: {
-    ...EMPTY_PLAN_UPDATE.delivery,
-    decisions:
-      "Model an invite as a `memberships` row with `state = pending` rather than a separate " +
-      "invitations table, so removal covers invites and members alike. Alternative: an " +
-      "`invitations` table. Accepted cost: pending rows appear in membership queries.",
-  },
-  acceptance: {
-    examples: [
-      {
-        given: "A member invites dana@example.com",
-        when: "Dana opens the link",
-        // biome-ignore lint/suspicious/noThenProperty: `then` is the acceptance example's key in the fixed template's contract, and an example is data that is never awaited.
-        then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-      },
-    ],
-    verification: null,
-  },
+  decisions:
+    "Model an invite as a `memberships` row with `state = pending`. Why: removal covers " +
+    "invites and members alike. Rejected: a separate `invitations` table.",
   openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
 };
 

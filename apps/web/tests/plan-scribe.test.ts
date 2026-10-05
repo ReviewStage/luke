@@ -30,7 +30,7 @@ const RELAY_PLAN: NewPlan = {
 };
 
 const PROBLEM = "Only an admin can add someone to a workspace.";
-const USERS = "Workspace members, and the teammates they invite.";
+const OUTCOME = "A member invites a teammate by email.";
 
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
@@ -80,7 +80,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.scoped(
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
-          const { scribe } = yield* scribeFor(userId, planId, [{ purpose: { problem: PROBLEM } }]);
+          const { scribe } = yield* scribeFor(userId, planId, [{ goal: { problem: PROBLEM } }]);
 
           scribe.observe(said("What's the problem today?", 0, 1_200));
           scribe.observe(heard("Only admins can add people.", 1_500, 3_000));
@@ -97,7 +97,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
     Effect.scoped(
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
-        const { scribe } = yield* scribeFor(userId, planId, [{ purpose: { problem: PROBLEM } }]);
+        const { scribe } = yield* scribeFor(userId, planId, [{ goal: { problem: PROBLEM } }]);
 
         scribe.observe(said("So the problem is that only an admin can add someone.", 0, 2_000));
         yield* quiet;
@@ -135,8 +135,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const { scribe } = yield* scribeFor(userId, planId, [
-          { purpose: { problem: PROBLEM } },
-          { purpose: { users: USERS } },
+          { goal: { problem: PROBLEM } },
+          { goal: { outcome: OUTCOME } },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -146,7 +146,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
         const body = yield* savedBody(userId, planId);
         assert.ok(body.includes(PROBLEM));
-        assert.ok(body.includes(USERS));
+        assert.ok(body.includes(OUTCOME));
       }),
     ),
   );
@@ -159,7 +159,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const { userId, planId } = yield* openPlan;
           const { scribe, asked, reports } = yield* scribeFor(userId, planId, [
             new Error("the provider is unavailable"),
-            { purpose: { problem: PROBLEM } },
+            { goal: { problem: PROBLEM } },
           ]);
 
           scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -182,7 +182,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
           const { scribe, drafts } = yield* scribeFor(userId, planId, [
-            { purpose: { problem: PROBLEM, users: USERS } },
+            { goal: { problem: PROBLEM, outcome: OUTCOME } },
           ]);
 
           scribe.observe(heard("Only admins can add people, and it hits members.", 0, 1_000));
@@ -210,7 +210,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         const { userId, planId } = yield* openPlan;
         const before = yield* savedBody(userId, planId);
         const { scribe, drafts } = yield* scribeFor(userId, planId, [
-          { brokenAfter: { purpose: { problem: PROBLEM, users: USERS } } },
+          { brokenAfter: { goal: { problem: PROBLEM, outcome: OUTCOME } } },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -228,7 +228,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const { scribe, writing } = yield* scribeFor(userId, planId, [
-          { purpose: { problem: PROBLEM } },
+          { goal: { problem: PROBLEM } },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));

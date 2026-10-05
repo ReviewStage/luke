@@ -101,20 +101,17 @@ test("a new plan draws its whole template unanswered, and an assumptions section
   assert.deepEqual(
     sections.map((match) => match[1]),
     [
-      "Purpose and users",
+      "Goal",
       "Scope",
-      "Existing system",
-      "Behavior",
-      "Data and interfaces",
-      "Quality requirements",
-      "Implementation guidance",
-      "Acceptance",
+      "Rules",
+      "Implementation",
+      "Decisions",
+      "Verification",
+      "Left to the agent",
       "Open questions",
-      "Handoff prompt",
     ],
   );
   assert.match(markup, /<em>Unanswered<\/em>/u);
-  assert.match(markup, /<em>Not prepared<\/em>/u);
   assert.match(
     markup,
     new RegExp(

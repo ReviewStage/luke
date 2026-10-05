@@ -2,7 +2,7 @@
 
 This is the reference the Feature Planning MVP builds against (LUKE-331). It
 fixes what the developer sees and hears, in order, from picking a GitHub
-repository to copying a handoff prompt, and it names the existing piece of Luke
+repository to copying the finished plan, and it names the existing piece of Luke
 each part of the Plans tab is built from. It is a design, not an
 implementation: the issues that build it (LUKE-334 document store, LUKE-337 the
 first Mac surface, LUKE-347 its move into the panel, LUKE-338 GitHub source
@@ -62,7 +62,7 @@ every tab shares), one page at a time:
  │ ──────────────────────────────────────────────────────────── │
  │  # Teammate invitations                          (scrolls)   │
  │  Repository: acme/relay, branch main                         │
- │  ## Purpose and users                                        │
+ │  ## Goal                                                     │
  │  ### Problem                                                 │
  │  Only an admin can add someone to a workspace...             │
  │  ### Outcome                                                 │
@@ -70,8 +70,6 @@ every tab shares), one page at a time:
  │  ...  (every section of the template, in order)              │
  │  ## Open questions                                           │
  │  - Who can withdraw an invite...                             │
- │  ## Handoff prompt                                           │
- │  Not prepared                                                │
  │  ## Assumptions                                              │
  │  - Members and admins can both invite.                       │
  │  - An invite expires after 7 days.                           │
@@ -153,8 +151,8 @@ same commit, and nothing refreshes it. The header shows it as
 - `‹`, back to the list, which leaves the plan.
 - The plan's name.
 - The repository line, as `owner/repository · branch @ short commit`.
-- **Copy**, the one action on the document. It is always enabled, including
-  before the handoff exists. It copies the current document as described in
+- **Copy**, the one action on the document. It is always enabled, however
+  much of the plan is written. It copies the current document as described in
   "Copy". It never launches an agent and never asks the model anything.
 
 ### Document
@@ -181,8 +179,7 @@ speakers' words from the call's sideband and the planning model's replies as
 research notes. Once the developer has been quiet for about a second, it makes
 one `gpt-5.6-luna` call over the saved document and what was said since its
 last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves the
-answer through `update_plan`, the handoff prompt included when the developer
-asks for it. Its runs never overlap, so it is the plan's only writer, and a
+answer through `update_plan`. Its runs never overlap, so it is the plan's only writer, and a
 run that fails moves nothing forward.
 
 The notes type in while they are written. The call streams its answer, and
@@ -198,7 +195,7 @@ back, so no half-written draft is left standing.
 Every plan uses one fixed template (LUKE-352). There is no configurable
 template, no sections map, and no freeform body argument: `update_plan`
 names only the sections and fields below that change. A field left out keeps
-its stored value, `null` clears it, and a list (scenarios, steps, examples,
+its stored value, `null` clears it, and a list (rules with their examples,
 open questions, assumptions) is sent whole when any of it changes. A call
 naming a field the template does not, sending a freeform `body`, or carrying
 a blank answer is refused with the offending field's path and saves nothing.
@@ -211,26 +208,25 @@ next turn.
 
 | Section | Fields | What Luke establishes |
 | --- | --- | --- |
-| Purpose and users | `purpose.problem`, `users`, `outcome` | The current problem, who is affected, and the observable improvement. |
-| Scope | `scope.included`, `excluded`, `constraints` | What is in, what is explicitly out, and material limits. |
-| Existing system | `context.currentBehavior`, `relevantCode`, `terminology` | What happens today and the paths read at the plan's commit, facts kept apart from hypotheses and proposed changes. |
-| Behavior | `behavior.rules`, `invariants`, `scenarios` | Rules, what must stay true across success, failure, cancellation, and retry, and concrete rehearsals. |
-| Data and interfaces | `dataAndInterfaces.dataRules`, `interfaces` | Data ownership, validation, lifecycle, and affected contracts with their failure behavior. |
-| Quality requirements | `quality.permissionsAndPrivacy`, `usabilityAndAccessibility`, `performanceAndReliability` | Applicable expectations with cited or agreed bounds, never invented to fill a field. |
-| Implementation guidance | `delivery.approach`, `decisions`, `stepsAndDependencies`, `risksAndMitigations`, `compatibilityAndMigration`, `rolloutAndRecovery`, `delegatedChoices` | The approach, each consequential decision with its reason, alternative, and accepted cost, ordered steps with prerequisites, material risks with mitigations, and the freedom left to the implementing agent. |
-| Acceptance | `acceptance.examples`, `verification` | Concrete examples and the checks that establish the important rules and invariants, with what each proves. |
+| Goal | `goal.problem`, `outcome` | The current problem and who it affects, and the observable improvement. |
+| Scope | `scope.included`, `excluded`, `constraints` | What is in, what is explicitly out, and the limits that apply (permissions, privacy, performance, compatibility). |
+| Rules | `rules` | Each rule as one sentence, with the Given/When/Then examples that pin it, more of them where a rule is ambiguous. |
+| Implementation | `implementation.changeMap`, `contracts`, `patterns`, `order` | Each path the change touches and what it gets there; new or changed types, schema, and signatures written as code, never function bodies; existing code to follow; and, only where it matters, the order steps must land in. |
+| Decisions | `decisions` | Each consequential choice, why, and the alternative rejected. |
+| Verification | `verification` | The end-to-end check that proves the change works, beyond the examples passing. |
+| Left to the agent | `leftToAgent` | Exactly which choices the implementing agent may make itself. |
 | Open questions | `openQuestions` | What is still unresolved. |
-| Handoff prompt | `handoffPrompt` | The self-contained prompt, written only after the spoken review. |
+| Data and migration | `dataAndMigration` | Only when stored data changes: what is stored, how existing data moves, and how the change is undone. |
 | Assumptions | `assumptions` | The existing `{ text }` list. |
 
 - **Types.** An ordinary field is `null` or nonblank text, and `null` is the
-  only way to leave it unanswered; it renders as "Unanswered". A scenario is
-  exactly its name, actor, starting state, trigger, steps (null or a nonempty
-  ordered list), expected outcome, and alternatives and failures; an
-  acceptance example is exactly `given`, `when`, and `then`. Both lists are
-  null until one is identified. `openQuestions` is always a list, rendering
-  "No additional questions recorded" while empty, and `handoffPrompt` is null
-  until prepared, rendering "Not prepared".
+  only way to leave it unanswered; a core field renders it as "Unanswered".
+  `implementation.order` and `dataAndMigration` are optional: the body leaves
+  them out while null. A rule is exactly its one-sentence `statement` and its
+  `examples`, null until one is agreed and rendering "No examples yet"; an
+  example is exactly `given`, `when`, and `then`, each one line. `rules` is
+  null until one is agreed. `openQuestions` is always a list, rendering "No
+  additional questions recorded" while empty.
 - **Order and containment.** The formatter owns every heading and its order,
   so the body's order is the template's whatever order a call's keys arrive
   in. Field text is contained where it stands: a line that would open a
@@ -238,37 +234,47 @@ next turn.
   at the end of its field, so no answer can impersonate a section or swallow
   the ones after it.
 - **A new plan** is the template with every field unanswered, no open
-  question, no handoff, and no assumption; its `fields` column is null until
-  the first save.
+  question, and no assumption; its `fields` column is null and its `body`
+  empty until the first save, and the store formats an empty body as the
+  untouched template when it reads it. Migration 0053 reset every plan
+  written under the earlier template this way.
 - **Saving and resuming** go through the same save, so a plan written in the
   template resumes with its answers and its assumptions intact.
 - **Structure is the tool's; agreement is the model's.** The schema
   guarantees that every field is present and well formed, not that an answer
   is understood, true, or agreed. Resolving each field, or agreeing an
   explicit "Not applicable: <reason>" or a bounded delegation, is Luke's
-  work, and every proposal Luke adds (a default, an invariant, a decision, a
-  risk accepted, an exclusion, a non-applicable field, a delegated choice) is
+  work, and every proposal Luke adds (a default, a rule, a decision, a
+  contract, an exclusion, a non-applicable field, a delegated choice) is
   recorded as an assumption.
-  Purpose, behavior, and acceptance can never be set aside as not applicable.
+  Goal, rules, and verification can never be set aside as not applicable.
   A populated template is not evidence that the developer agreed.
 
-The field selection is a Luke product decision informed by Microsoft ISE's
-[feature/story](https://microsoft.github.io/code-with-engineering-playbook/design/design-reviews/recipes/templates/feature-story-design-review/)
-and [task](https://microsoft.github.io/code-with-engineering-playbook/design/design-reviews/recipes/templates/template-task-design-review/)
-design-review templates, the design-doc practice in
-[Software Engineering at Google](https://abseil.io/resources/swe-book/html/ch10.html#design_docs)
-and the [React RFC template](https://github.com/reactjs/rfcs/blob/main/0000-template.md),
-the [TensorFlow](https://github.com/tensorflow/community/blob/master/rfcs/yyyymmdd-rfc-template.md)
-and [Fuchsia](https://fuchsia.googlesource.com/fuchsia/+/refs/heads/main/docs/contribute/governance/rfcs/TEMPLATE.md)
-RFC templates, AWS's [formal-methods experience report](https://lamport.azurewebsites.net/tla/formal-methods-amazon.pdf)
-(adapted to plain-language invariants), Microsoft's
-[trade-study template](https://microsoft.github.io/code-with-engineering-playbook/design/design-reviews/trade-studies/template/)
-and [arc42](https://arc42.org/overview/), NASA's
-[requirements checklist](https://www.nasa.gov/reference/appendix-c-how-to-write-a-good-requirement/),
-and [Cockburn's use cases](https://www.cs.otago.ac.nz/coursework/cosc461/weucx.pdf),
-[Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/), and
-[EARS](https://alistairmavin.com/ears/). None of them validates these exact
-fields or a voice model; comparative evaluations are outside this work.
+The template holds what a coding agent cannot read from the repository, since
+the agent explores the code itself: what was decided, the rules and their
+examples, and the contracts the change must meet, with pointers into the code
+rather than a description of it. Its aim is that two agents given the plan
+build the same behavior, structure, and contracts, differing only where
+`leftToAgent` allows; no plan makes two runs write identical code.
+
+The field selection is a Luke product decision informed by GitHub's
+[Spec Kit](https://github.com/github/spec-kit/blob/main/templates/spec-template.md)
+(requirements with acceptance scenarios, a data model only when the feature
+has data, contracts but no function bodies), OpenAI's
+[ExecPlans](https://developers.openai.com/cookbook/articles/codex_exec_plans)
+(exact interfaces and signatures, a decision log), Anthropic's
+[Claude Code best practices](https://code.claude.com/docs/en/best-practices)
+(name files and interfaces, state what is out of scope, end with an
+end-to-end check), Google's
+[agent program repair study](https://arxiv.org/pdf/2501.07531) (exact
+locations and a runnable check), the
+[SWE-Bench Pro](https://arxiv.org/html/2509.16941v1) interface block, and
+[Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/)
+(rules, each with its examples, and questions). Users, terminology, current
+behavior, quality, risks, rollout, and steps were cut: the agent reads the
+current system from the code, and no agent-facing source asks for the rest.
+None of these validates these exact fields or a voice model; comparative
+evaluations are outside this work.
 
 ### Microphone row and the panel's voice
 
@@ -347,15 +353,12 @@ of the template, most of them still null. The body it becomes reads, in part:
 
 Repository: acme/relay, branch main
 
-## Purpose and users
+## Goal
 
 ### Problem
 
-Only an admin can add someone to a workspace, by creating their account by hand.
-
-### Users
-
-Workspace members, and the teammates they invite.
+Only an admin can add someone to a workspace, by creating their account by
+hand, so members wait on an admin to bring a teammate in.
 
 ### Outcome
 
@@ -363,18 +366,18 @@ A member invites a teammate by email; the teammate joins by opening the link.
 
 ...
 
-## Implementation guidance
+## Implementation
 
-### Approach
+### Change map
 
-_Unanswered_
+- `src/db/schema/memberships.ts`: a `pending` state.
 
-### Decisions
+...
 
-Model an invite as a `memberships` row with `state = pending` rather than a
-separate invitations table (`src/db/schema/memberships.ts`), so removal covers
-invites and members alike. Alternative: an `invitations` table. Accepted cost:
-pending rows appear in membership queries.
+## Decisions
+
+Model an invite as a `memberships` row with `state = pending`. Why: removal
+covers invites and members alike. Rejected: a separate `invitations` table.
 
 ...
 
@@ -382,10 +385,6 @@ pending rows appear in membership queries.
 
 - Who may invite?
 - What does an invited person see after their invite is withdrawn?
-
-## Handoff prompt
-
-_Not prepared_
 ```
 
 ```json
@@ -407,10 +406,10 @@ whose prerequisites are already settled, each with his recommended answer:
 > removes it. She clicks the link. I'd show her a plain 'This invite is no
 > longer valid' page and not tell her who withdrew it. OK?"
 
-The developer agrees. The model fills `behavior.scenarios` with the
-rehearsal (its actor, starting state, trigger, the numbered steps, the
-expected outcome, and the withdrawn-invite failure), and states the invariant
-it implies: a withdrawn or accepted link never grants access again. It moves
+The developer agrees. The notetaker writes the rule it implies, "a withdrawn
+or accepted link never grants access again", with the rehearsal as its
+example: given an invite the admin withdrew, when Priya opens its link, then
+the page reads "This invite is no longer valid". It moves
 the withdrawal question out of `Open questions` and adds
 `{ text: "A withdrawn invite shows a generic invalid-invite page." }`.
 It also adds `{ text: "An invite expires after 7 days." }` as
@@ -459,7 +458,7 @@ spoken conversation.
 
 When the developer says "I think that's everything", Luke first checks every
 field of the template for an answer or an agreed reason it does not apply,
-then reviews the document aloud before any handoff. It covers:
+then reviews the document aloud before it is copied. It covers:
 
 - every field still "Unanswered";
 - every assumption, one at a time ("I assumed invites expire after 7 days.
@@ -471,39 +470,10 @@ then reviews the document aloud before any handoff. It covers:
 The developer keeps the expiry. They drop one open question as out of scope,
 and the model moves it into `scope.excluded`. The review is conversation, not
 a screen: the tab shows only the document changing as the model saves. Every
-assumption left in the list is carried into the handoff as a stated working
+assumption left in the list is copied with the plan as a stated working
 assumption.
 
-### 7. The model writes the handoff into the same document
-
-The developer asks: "OK, write the prompt." The model saves the template again
-with the prompt in its `handoffPrompt` field. Every other section stays as it
-was above it, and the assumption list is kept as it is:
-
-```markdown
-## Handoff prompt
-
-**Objective:** teammate invitations, because...
-
-**Scope, and what is out of it:** ...
-**Repository context:** `src/db/schema/memberships.ts`, `src/auth/signup.ts`...
-**Behavior and invariants:** step by step, including the withdrawn and expired
-invite cases; a withdrawn or accepted link never grants access again...
-**Steps, dependencies, and accepted risks:** ...
-**Acceptance and verification:** ...
-**Left to you:** routine internal choices such as naming, file layout, and the
-email template's markup...
-If anything here conflicts with the agreed behavior, surface the conflict
-before overriding it.
-```
-
-The prompt is self-contained. It makes sense to an agent that never heard the
-conversation, carries the agreed details and adds no new requirement, names
-repository-relative paths, and carries no credential or secret. Luke says it is written and that Copy takes the whole document. A
-later change that invalidates the prompt is Luke's to revise or clear; no
-version mechanism tracks it.
-
-### 8. Copy
+### 7. Copy
 
 The developer presses `Copy`, and the button shows the check mark. The
 clipboard holds the current document as readable Markdown: the body as saved,
@@ -522,7 +492,8 @@ reads `_None recorded_` while the list is empty:
 ```
 
 This is direct formatting of the saved document, not a second model step. It
-is the same whether or not the review or the handoff has happened. They paste
+is the same whether or not the review has happened. There is no separate
+handoff prompt: the plan is what the coding agent reads. They paste
 it into the coding agent of their choice. If they later ask Luke for one more
 change, the model updates the same document, and Copy copies the new one.
 
@@ -571,7 +542,7 @@ Two existing rules carry over unchanged:
   attributes, and no new way of drawing words.
 - **Secrets.** No credential or account secret enters the document, a caption,
   a counted event, or a trace. The GitHub token lives in connection handling,
-  and the model is told to keep secrets out of the plan and the prompt.
+  and the model is told to keep secrets out of the plan.
   Nothing scans for this, so each owning issue holds it by construction.
 
 ## Known limitations and validation
@@ -595,19 +566,17 @@ changes when a check is run, not when one is planned.
   - re-attaching and resuming on the same plan;
   - switching plans ends the old plan's call, and the new plan is active
     before that call has finished closing;
-  - the final review and the handoff written into the same document;
+  - the final review written into the same document;
   - Copy's Markdown, at the store's largest document;
   - the fixed template (LUKE-352), through the tool against a real store: a
     new plan's untouched template, an incomplete draft saving and resuming in
     its sections, the body's order independent of key order, field text
-    unable to open a section, each of the four added fields (invariants,
-    decisions, steps and dependencies, risks and mitigations) as a draft null,
-    an answer, and a non-applicability, refused omissions of each, a renamed
-    field, an extra key, a blank answer, a freeform body, and an oversized
+    unable to open a section, an optional field left out until it holds
+    something and again once cleared, a renamed field, an extra key, a blank answer, a freeform body, and an oversized
     formatted body each leaving the saved document, a scripted proposal,
     assent, correction, and agreed non-applicable field, and a handoff
-    carrying a bulk import's agreed invariant, decision, prerequisite, risk,
-    and check; these hold data flow, not model understanding;
+    prompt refused as a field the template does not name; these hold data
+    flow, not model understanding;
   - the talk key, pressed while a plan is open, speaking into the open
     plan's call.
 - The Plans tab (LUKE-347) is held by renderer tests: the tab bar's four

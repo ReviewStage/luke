@@ -211,7 +211,7 @@ test("the microphone asks for the permission first, then for a plan, and then ta
 });
 
 const REVIEWED = {
-  body: "# Teammate invitations\n\n## Handoff prompt\n\nYou are implementing invitations.",
+  body: "# Teammate invitations\n\n## Open questions\n\n- Who can withdraw an invite?",
   assumptions: [
     { text: "Members and admins can both invite." },
     { text: "An invite expires after 7 days." },

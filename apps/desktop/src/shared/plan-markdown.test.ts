@@ -11,9 +11,9 @@ const BODY = [
   "## Goal",
   "Invite a teammate by email.",
   "",
-  "## Handoff prompt",
+  "## Open questions",
   "",
-  "You are implementing teammate invitations in `acme/relay`.",
+  "- Who can withdraw an invite in `acme/relay`?",
 ].join("\n");
 
 test("the copy is the body as saved, then every assumption as a list item", () => {
@@ -62,10 +62,7 @@ test("a draft of the fixed template copies every section in order, its unanswere
     },
     {
       ...EMPTY_PLAN_UPDATE,
-      behavior: {
-        ...EMPTY_PLAN_UPDATE.behavior,
-        invariants: "An accepted invite is never reused.",
-      },
+      rules: [{ statement: "An accepted invite is never reused.", examples: null }],
     },
   );
 
@@ -83,21 +80,18 @@ test("a draft of the fixed template copies every section in order, its unanswere
   );
   const sections = copied.split("\n").filter((line) => line.startsWith("## "));
   assert.deepEqual(sections, [
-    "## Purpose and users",
+    "## Goal",
     "## Scope",
-    "## Existing system",
-    "## Behavior",
-    "## Data and interfaces",
-    "## Quality requirements",
-    "## Implementation guidance",
-    "## Acceptance",
+    "## Rules",
+    "## Implementation",
+    "## Decisions",
+    "## Verification",
+    "## Left to the agent",
     "## Open questions",
-    "## Handoff prompt",
     "## Assumptions",
   ]);
-  assert.ok(copied.includes("### Invariants\n\nAn accepted invite is never reused.\n"));
-  assert.ok(copied.includes("### Decisions\n\n_Unanswered_\n"));
-  assert.ok(copied.includes("## Handoff prompt\n\n_Not prepared_\n"));
+  assert.ok(copied.includes("### Rule 1: An accepted invite is never reused.\n"));
+  assert.ok(copied.includes("## Decisions\n\n_Unanswered_\n"));
 });
 
 test("an assumption spanning lines stays one list item", () => {

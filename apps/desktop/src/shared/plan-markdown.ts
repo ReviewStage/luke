@@ -9,8 +9,7 @@ import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
  * canonical order, then the template's last section, `## Assumptions`, drawn
  * from the saved list, one bullet per assumption, or "None recorded" while
  * the list is empty. A draft with every field unanswered copies the same way
- * as a finished plan, before or after the handoff prompt is written
- * (`docs/PLANNING.md`, "Copy").
+ * as a finished plan (`docs/PLANNING.md`, "Copy").
  */
 
 const ASSUMPTIONS_HEADING = `## ${PLAN_HEADING.ASSUMPTIONS}`;
