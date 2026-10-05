@@ -16,11 +16,16 @@ const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 const INTRODUCTION: ActSender = { ...PANEL, introduction: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const REQUEST = { name: "Teammate invitations", repository: { owner: "acme", name: "relay" } };
+const REQUEST = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
   activePlanId: string | undefined;
+}
+
+/** What the folder picker answers: the folder chosen, or null for a cancel. */
+interface FolderPicker {
+  chosen: string | null;
 }
 
 /** What the host answers a start with, and whether voice could open a call now. */
@@ -34,6 +39,7 @@ function fixture() {
   const talked: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
   const account = { signedIn: true };
+  const picker: FolderPicker = { chosen: "/Users/dev/relay" };
   const start: StartScript = {
     answer: { failure: GITHUB_FAILURE.NOT_CONNECTED },
     voiceReady: true,
@@ -49,9 +55,11 @@ function fixture() {
         }),
       planningStart: (request) =>
         Effect.sync(() => {
-          asked.push(`start:${request.repository.owner}/${request.repository.name}`);
+          asked.push(`start:${request.folderPath}`);
           return start.answer;
         }),
+      planningSetFolder: (params) =>
+        Effect.sync(() => void asked.push(`folder:${params.planId}:${params.folderPath}`)),
       planningRepositories: () =>
         Effect.sync(() => {
           asked.push("repositories");
@@ -66,6 +74,11 @@ function fixture() {
           return account.signedIn;
         }),
     },
+    chooseFolder: () =>
+      Effect.sync(() => {
+        asked.push("choose-folder");
+        return picker.chosen;
+      }),
     activePlanId: () => view.activePlanId,
     talkAboutPlan: (planId) => {
       talked.push(planId);
@@ -75,7 +88,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, view, account, start };
+  return { router, asked, talked, view, account, start, picker };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -109,10 +122,23 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
     assert.deepEqual(f.asked, [
       "refresh",
       `open:${PLAN_ID}`,
-      "start:acme/relay",
+      "start:/Users/dev/relay",
       "repositories",
       "close",
     ]);
+  }),
+);
+
+it.effect("Choose folder answers the folder picked, or null when the picker was cancelled", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+
+    const chosen = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CHOOSE_FOLDER }, PANEL);
+    f.picker.chosen = null;
+    const cancelled = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CHOOSE_FOLDER }, PANEL);
+
+    assert.deepEqual(chosen, { status: ACT_OUTCOME_STATUS.DONE, value: "/Users/dev/relay" });
+    assert.deepEqual(cancelled, { status: ACT_OUTCOME_STATUS.DONE, value: null });
   }),
 );
 

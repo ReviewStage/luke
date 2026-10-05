@@ -13,12 +13,10 @@ import { logStoreFailure } from "./store-failure.js";
  * github-connection.ts -- the account's GitHub connection: the token Better Auth keeps sealed on the account's GitHub row, opened when a GitHub read needs it.
  *
  * The connection is the account's GitHub row in Better Auth's own `account`
- * table. A GitHub sign-in writes it already holding `repo`
- * (`GITHUB_SIGN_IN_SCOPES`, `auth-policy.ts`); an account signed in with
- * Google writes it through the Connect GitHub step (`/connect-github.html`),
- * which links GitHub under the same OAuth App with the same scope. A row
- * from before sign-in asked for `repo` gains it at the next GitHub sign-in,
- * which refreshes the row (`updateAccountOnSignIn`), or by connecting. Better
+ * table. A GitHub sign-in writes it without `repo` (`GITHUB_SIGN_IN_SCOPES`,
+ * `auth-policy.ts`), since plans read a folder on the Mac; only the Connect
+ * GitHub step (`/connect-github.html`), which nothing in the window opens any
+ * more, links GitHub with `repo`. Better
  * Auth seals every token it stores under the auth service's own secret
  * (`encryptOAuthTokens`), so the row holds ciphertext.
  *

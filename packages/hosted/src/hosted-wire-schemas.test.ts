@@ -92,12 +92,15 @@ const EFFECT_MODULE_SCHEMAS = {
   "plan-wire": {
     planAssumptionSchema: planWire.planAssumptionSchema,
     planDocumentSchema: planWire.planDocumentSchema,
-    planRepositorySchema: planWire.planRepositorySchema,
     planCreateRequestSchema: planWire.planCreateRequestSchema,
     planSummarySchema: planWire.planSummarySchema,
     planSchema: planWire.planSchema,
     planListAnswerSchema: planWire.planListAnswerSchema,
     planAnswerSchema: planWire.planAnswerSchema,
+    planCommandSchema: planWire.planCommandSchema,
+    planCommandClaimAnswerSchema: planWire.planCommandClaimAnswerSchema,
+    planCommandResultSchema: planWire.planCommandResultSchema,
+    planCommandSettleAnswerSchema: planWire.planCommandSettleAnswerSchema,
     planDeleteAnswerSchema: planWire.planDeleteAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
   "projects-wire": {

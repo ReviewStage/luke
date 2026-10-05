@@ -25,7 +25,7 @@ import { composeConversation } from "./compose-conversation.js";
 import { composeDevices } from "./compose-devices.js";
 import { composeLive } from "./compose-live.js";
 import { composeObservation } from "./compose-observation.js";
-import { composePlanning } from "./compose-planning.js";
+import { composePlanning, planFoldersFile } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
@@ -161,6 +161,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const planning = yield* composePlanning({
       kernel,
       account,
+      folders: planFoldersFile(() => kernel.stateRoot, report),
       endPlanCall: (keep) => live.service.endPlanCall(keep),
       client: new HostedPlanClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,

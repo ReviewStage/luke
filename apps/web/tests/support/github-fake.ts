@@ -78,11 +78,6 @@ function lookUp(readable: Readable, owner: string, name: string): FakeRepository
   return readable.get(owner.toLowerCase())?.get(name.toLowerCase());
 }
 
-/** A GitHub access under which no account holds a connection, for a host offered none. */
-export const noGitHubConnections: GitHubAccessShape = {
-  token: () => Effect.fail(new GitHubUnavailable({ reason: GITHUB_FAILURE.NOT_CONNECTED })),
-};
-
 export function fakeGitHub(): FakeGitHub {
   const readableByToken = new Map<string, Readable>();
   const tokenByUser = new Map<string, string>();

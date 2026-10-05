@@ -62,12 +62,6 @@ const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 /** The plan the planning scenario runs against, and the words its two sessions open with. */
 const PLAN = {
   name: "Teammate invitations",
-  repository: {
-    owner: "acme",
-    name: "relay",
-    branch: "main",
-    commit: "4f2c9e1a7b3d5f60718293a4b5c6d7e8f9012345",
-  },
 } as const;
 const PLAN_SAVED = {
   body: "# Teammate invitations\n\n## Open questions\n- Who may invite?\n",

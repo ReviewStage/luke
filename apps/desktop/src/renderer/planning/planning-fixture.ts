@@ -14,16 +14,9 @@ import type { VoiceView } from "#shared/messages/voice-view";
  * the panel opens on Plans, and under the planning profile it also opens the
  * reference journey's plan from `docs/PLANNING.md`, a draft of the fixed
  * template partway through with Luke working on the call about it, which is
- * what the planning capture shows. Every name, repository, and commit here is
+ * what the planning capture shows. Every name and folder here is
  * invented; nothing is read from an account.
  */
-
-const FIXTURE_REPOSITORY = {
-  owner: "acme",
-  name: "relay",
-  branch: "main",
-  commit: "4f2c9e1a0b3d5c7e9f1a2b3c4d5e6f708192a3b4",
-} as const;
 
 /**
  * The reference journey's plan partway through its conversation: the goal,
@@ -78,15 +71,11 @@ const FIXTURE_UPDATE: FullPlanUpdate = {
 const FIXTURE_PLAN: Plan = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
   name: "Teammate invitations",
-  repository: FIXTURE_REPOSITORY,
   createdAt: 1,
   updatedAt: 2,
   openedAt: 3,
   document: {
-    body: planBody(
-      { name: "Teammate invitations", repository: FIXTURE_REPOSITORY },
-      FIXTURE_UPDATE,
-    ),
+    body: planBody({ name: "Teammate invitations" }, FIXTURE_UPDATE),
     assumptions: [
       { text: "Invites reuse memberships with a pending state." },
       { text: "Members and admins can both invite." },
@@ -99,7 +88,6 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
   {
     id: "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71",
     name: "Billing export",
-    repository: { ...FIXTURE_REPOSITORY, name: "ledger" },
     createdAt: 1,
     updatedAt: 1,
     openedAt: 2,
@@ -111,7 +99,6 @@ const FIXTURE_PLAN_LIST: PlanningView = {
     {
       id: FIXTURE_PLAN.id,
       name: FIXTURE_PLAN.name,
-      repository: FIXTURE_PLAN.repository,
       createdAt: FIXTURE_PLAN.createdAt,
       updatedAt: FIXTURE_PLAN.updatedAt,
       openedAt: FIXTURE_PLAN.openedAt,
@@ -120,10 +107,14 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   ],
   listStatus: PLANNING_READ.READY,
   document: { status: PLANNING_READ.IDLE },
+  folders: {
+    [FIXTURE_PLAN.id]: "/Users/dev/code/relay",
+    "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71": "/Users/dev/code/ledger",
+  },
 };
 
 /**
- * The open plan mid-call, the planning model running a repository command
+ * The open plan mid-call, the planning model running a folder command
  * while the notetaker writes, so the capture shows both of the status row's
  * lines.
  */

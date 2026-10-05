@@ -1,14 +1,18 @@
 {
   "type": "object",
   "properties": {
-    "name": {
+    "id": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 200
+      "maxLength": 36
+    },
+    "command": {
+      "type": "string"
     }
   },
   "required": [
-    "name"
+    "id",
+    "command"
   ],
   "additionalProperties": false
 }

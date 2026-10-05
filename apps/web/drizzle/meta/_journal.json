@@ -372,6 +372,20 @@
       "when": 1790450000000,
       "tag": "0053_plan_template_reset",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1790475000000,
+      "tag": "0054_plan_command",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1790500000000,
+      "tag": "0055_plan_folder_off_service",
+      "breakpoints": true
     }
   ]
 }

@@ -5,8 +5,8 @@ import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   DOCUMENT_REGION,
+  folderLine,
   PLANS_PAGE,
-  repositoryLine,
 } from "../planning/planning-model";
 import { MicrophoneRow } from "../planning/planning-parts";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -122,9 +122,18 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
     );
   }
   const { plan } = region;
+  const folderPath = plans.folders[plan.id];
   return (
     <>
-      <Toolbar title={plan.name} subtitle={repositoryLine(plan.repository)}>
+      <Toolbar
+        title={plan.name}
+        subtitle={folderPath === undefined ? undefined : folderLine(folderPath)}
+      >
+        {folderPath === undefined ? (
+          <button type="button" className="toolbar-button" onClick={plans.onChooseFolder}>
+            Choose folder…
+          </button>
+        ) : null}
         <CopyButton copy={plans.copy} />
         {closeButton}
       </Toolbar>

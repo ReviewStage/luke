@@ -16,7 +16,6 @@ import {
 
 const HEADER = {
   name: "Teammate invitations",
-  repository: { owner: "acme", name: "relay", branch: "main", commit: "4f2c9e1" },
 } as const;
 
 const NO_ASSUMPTIONS = { before: [], after: [] } as const;

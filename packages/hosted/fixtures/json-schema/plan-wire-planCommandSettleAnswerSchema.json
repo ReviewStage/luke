@@ -1,14 +1,12 @@
 {
   "type": "object",
   "properties": {
-    "name": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 200
+    "settled": {
+      "type": "boolean"
     }
   },
   "required": [
-    "name"
+    "settled"
   ],
   "additionalProperties": false
 }

@@ -41,6 +41,8 @@ export interface PlansControl {
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
   plans: PlanningView["plans"];
+  /** The folder of this Mac each plan reads, by plan id. */
+  folders: PlanningView["folders"];
   activePlanId: string | undefined;
   listFailed: boolean;
   region: DocumentRegion;
@@ -51,6 +53,8 @@ export interface PlansControl {
   /** Whether the open plan's call is in progress, so the plan is still being written. */
   live: boolean;
   onSelect: (planId: string) => void;
+  /** Chooses the open plan's folder on this Mac again, through the folder picker. */
+  onChooseFolder: () => void;
   onRetryList: () => void;
   onRetryDocument: () => void;
   onNewPlan: () => void;
@@ -144,6 +148,18 @@ export function usePlansTab(input: {
     if (microphone.press === MICROPHONE_PRESS.TALK) tell(ACT_KIND.PLANNING_TALK);
   };
 
+  // A cancelled picker keeps whatever folder the plan had.
+  const chooseFolder = () => {
+    const planId = planning.activePlanId;
+    if (planId === undefined) return;
+    act(ACT_KIND.PLANNING_CHOOSE_FOLDER).then(
+      (folderPath) => {
+        if (folderPath !== null) tell(ACT_KIND.PLANNING_SET_FOLDER, { planId, folderPath });
+      },
+      () => undefined,
+    );
+  };
+
   const back = useCallback((): boolean => {
     if (page === PLANS_PAGE.DOCUMENT) leavePlan();
     else if (page === PLANS_PAGE.NEW) onComposingChange(false);
@@ -155,6 +171,7 @@ export function usePlansTab(input: {
     page,
     signedIn,
     plans: planning.plans,
+    folders: planning.folders,
     activePlanId: planning.activePlanId,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
     region,
@@ -172,6 +189,7 @@ export function usePlansTab(input: {
     status: callStatus(fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL, planning),
     live: planningCallHoldsPanel(voice.view) && voice.view.callPlanId === planning.activePlanId,
     onSelect: select,
+    onChooseFolder: chooseFolder,
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),
     onRetryDocument: () => {
       if (planning.activePlanId !== undefined) select(planning.activePlanId);

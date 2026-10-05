@@ -1,17 +1,13 @@
 /**
- * What a GitHub sign-in asks for. Note that it asks for `repo` alongside the
- * profile and email, because the token sign-in stores is the account's
- * GitHub connection, and a planning call reads private source through it; a
- * developer who signed in with GitHub never meets the Connect GitHub step.
+ * What a GitHub sign-in asks for: the profile and email, and nothing of the
+ * developer's repositories, since a plan reads a folder on their Mac.
  */
-export const GITHUB_SIGN_IN_SCOPES = ["read:user", "user:email", "repo"] as const;
+export const GITHUB_SIGN_IN_SCOPES = ["read:user", "user:email"] as const;
 
 /**
  * How Better Auth keeps an account's provider rows. Every token is sealed
- * under the session secret. A sign-in refreshes the row it signs in through,
- * so an account whose GitHub row predates `repo` at sign-in gains it the
- * next time it signs in with GitHub, since sign-in and the Connect GitHub
- * step now ask for the same scopes. Linking stays explicit and
+ * under the session secret. A sign-in refreshes the row it signs in through.
+ * Linking stays explicit and
  * session-bound, and may name a GitHub account whose email is not the Luke
  * account's, so an account signed in with Google can connect GitHub.
  */

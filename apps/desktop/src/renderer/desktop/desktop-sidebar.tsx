@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { OptionsIcon, PlusIcon } from "@sidecar/panel";
 import { PANEL_TAB, type PanelTab, type ShownPanelTab } from "../panel-tabs";
-import { PLANS_PAGE } from "../planning/planning-model";
+import { folderLine, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 
@@ -85,9 +85,11 @@ export function DesktopSidebar({
                 onClick={() => openPlan(plan.id)}
               >
                 <span className="sidebar-plan-name">{plan.name}</span>
-                <span className="sidebar-plan-repository">
-                  {plan.repository.owner}/{plan.repository.name}
-                </span>
+                {plans.folders[plan.id] !== undefined ? (
+                  <span className="sidebar-plan-repository">
+                    {folderLine(plans.folders[plan.id] ?? "")}
+                  </span>
+                ) : null}
               </button>
             </li>
           ))}

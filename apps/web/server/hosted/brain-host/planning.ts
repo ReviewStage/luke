@@ -4,9 +4,7 @@ import type { ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
-import type { ToolContext } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
-import type { GitHubAccess } from "../github-source.js";
 import type { StoredPlan } from "../plan-store.js";
 import {
   READ_WEB_PAGE_TOOL,
@@ -16,7 +14,7 @@ import {
   SEARCH_WEB_TOOL,
 } from "../public-research.js";
 import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
-import { RUN_IN_REPOSITORY_TOOL, type RunBash, runInRepository } from "../repository-shell.js";
+import { RUN_IN_REPOSITORY_TOOL, runInRepository } from "../repository-shell.js";
 import type { PlanDocumentBinding } from "../update-plan-tool.js";
 import type { HostedToolDeclaration } from "./tools.js";
 
@@ -81,7 +79,7 @@ The session is done when the queue is empty: every branch of the design tree vis
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
-- run_in_repository runs a shell command (ls, find, grep, cat, git log) in a clone of the plan's repository at the plan's commit. Start exploring it immediately, and keep exploring as the task comes into focus.
+- run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet.
 
 ## Return the result
@@ -142,11 +140,9 @@ export function documentTextOf(standingContext: string): string | undefined {
   return at === -1 ? undefined : lines[at + 1];
 }
 
-/** What one planning call runs under: the plan the conversation belongs to, eve's context for the call and its `bash`, and the turn's research bounds. */
+/** What one planning call runs under: the plan the conversation belongs to and the turn's research bounds. */
 export interface PlanningCall {
   readonly plan: PlanDocumentBinding;
-  readonly tool: ToolContext;
-  readonly bash: RunBash;
   readonly research: ResearchCall;
 }
 
@@ -161,15 +157,15 @@ interface PlanningTool {
   ) => Effect.Effect<WireRecord, never, PlanningToolServices>;
 }
 
-/** What a planning call may reach: the store, the account's GitHub access for the repository read, and the network for public research. */
-type PlanningToolServices = SqlClient.SqlClient | GitHubAccess | HttpClient.HttpClient;
+/** What a planning call may reach: the store, which also carries the folder read to the Mac, and the network for public research. */
+type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient;
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.
  * None writes the plan, which is the notetaker's; `queue_question` hands the
  * voice a question mid-turn (`queue-question.ts`); `run_in_repository` runs a
- * command in a clone of the plan's repository at the plan's commit, under the
- * same binding; the public search and page read (`public-research.ts`)
+ * command in the plan's folder on the developer's Mac, under the same
+ * binding; the public search and page read (`public-research.ts`)
  * answer what the repository cannot. Every read's result goes back to the
  * model as data.
  */
@@ -181,7 +177,7 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...RUN_IN_REPOSITORY_TOOL,
     run: (call, input) =>
-      Effect.map(runInRepository(call.tool, call.bash, input), (result) => ({
+      Effect.map(runInRepository(call.plan, input), (result) => ({
         ...result,
       })),
   },

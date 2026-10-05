@@ -7,12 +7,10 @@ import { HostedPlanClient } from "./plan-client.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const COMMIT = "4f2c9e1a0b3d5c7e9f1a2b3c4d5e6f708192a3b4";
 
 const SUMMARY = {
   id: PLAN_ID,
   name: "Teammate invitations",
-  repository: { owner: "acme", name: "relay", branch: "main", commit: COMMIT },
   createdAt: 1_800_000_000_000,
   updatedAt: 1_800_000_100_000,
   openedAt: 1_800_000_200_000,
@@ -70,7 +68,7 @@ it.effect("a plan the service does not find reads as not found, not as unanswere
   }),
 );
 
-it.effect("starting a plan names the repository and nothing the service resolves itself", () =>
+it.effect("starting a plan names its folder", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({
       "POST /api/plans": { answer: () => ({ plan: PLAN }) },
@@ -79,7 +77,6 @@ it.effect("starting a plan names the repository and nothing the service resolves
     const started = yield* Effect.provide(
       client().create({
         name: "  Teammate invitations ",
-        repository: { owner: "acme", name: "relay" },
       }),
       api.layer,
     );
@@ -87,7 +84,6 @@ it.effect("starting a plan names the repository and nothing the service resolves
     assert.deepEqual(started, { ok: true, answer: PLAN });
     assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
       name: "Teammate invitations",
-      repository: { owner: "acme", name: "relay" },
     });
   }),
 );
@@ -96,10 +92,7 @@ it.effect("a plan with no name never travels", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({});
 
-    const started = yield* Effect.provide(
-      client().create({ name: "   ", repository: { owner: "acme", name: "relay" } }),
-      api.layer,
-    );
+    const started = yield* Effect.provide(client().create({ name: "   " }), api.layer);
 
     assert.deepEqual(started, { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED });
     assert.deepEqual(api.requests(), []);
@@ -117,10 +110,7 @@ it.effect("GitHub's refusal reaches the caller as the reason the service named",
       "GET /api/github/repositories": refusal(GITHUB_FAILURE.NOT_CONNECTED),
     });
 
-    const started = yield* Effect.provide(
-      client().create({ name: "Audit log", repository: { owner: "acme", name: "empty" } }),
-      api.layer,
-    );
+    const started = yield* Effect.provide(client().create({ name: "Audit log" }), api.layer);
     const listed = yield* Effect.provide(client().repositories(), api.layer);
 
     assert.deepEqual(started, { ok: false, failure: GITHUB_FAILURE.EMPTY_REPOSITORY });

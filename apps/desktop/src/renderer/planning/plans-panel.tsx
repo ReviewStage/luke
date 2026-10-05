@@ -36,6 +36,8 @@ export function PlansPanel({ control }: { control: PlansControl }): React.JSX.El
             onBack={control.onLeavePlan}
             copy={control.copy}
             live={control.live}
+            folders={control.folders}
+            onChooseFolder={control.onChooseFolder}
           />
           <MicrophoneRow status={control.status} microphone={control.microphone} />
         </section>
@@ -45,6 +47,7 @@ export function PlansPanel({ control }: { control: PlansControl }): React.JSX.El
         <section className="plans-view">
           <PlanList
             plans={control.plans}
+            folders={control.folders}
             activePlanId={control.activePlanId}
             failed={control.listFailed}
             onSelect={control.onSelect}

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -8,7 +9,7 @@ import {
 } from "@sidecar/gateway";
 import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
-import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   type GitHubCallFailure,
   PLAN_CALL_FAILURE,
@@ -18,13 +19,14 @@ import {
   type PlanningView,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
+import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Duration, Effect, Fiber, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { composePlanning, type PlanningClient } from "./compose-planning.js";
+import { composePlanning, type PlanFolders, type PlanningClient } from "./compose-planning.js";
+import type { JsonStateFile } from "./json-state-file.js";
 
-const COMMIT = "4f2c9e1a0b3d5c7e9f1a2b3c4d5e6f708192a3b4";
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -32,7 +34,6 @@ function plan(id: string, name: string, body: string, updatedAt: number): Plan {
   return {
     id,
     name,
-    repository: { owner: "acme", name: "relay", branch: "main", commit: COMMIT },
     createdAt: 1_000,
     updatedAt,
     openedAt: updatedAt,
@@ -60,6 +61,12 @@ interface FakeService extends PlanningClient {
   >;
   /** Every read the service answered, in order, so a test can see that nothing reads on a clock. */
   readonly reads: string[];
+  /** The commands waiting for this Mac to claim, oldest first. */
+  commands: PlanCommand[];
+  /** What this Mac posted back, in order. */
+  readonly settled: { planId: string; commandId: string; result: PlanCommandResult }[];
+  /** Done once the first result is posted back. */
+  readonly firstSettle: Deferred.Deferred<void>;
 }
 
 function fakeService(plans: Plan[]): FakeService {
@@ -70,6 +77,23 @@ function fakeService(plans: Plan[]): FakeService {
     createAnswer: { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED },
     repositoriesAnswer: { ok: true, answer: { repositories: [], truncated: false } },
     reads: [],
+    commands: [],
+    settled: [],
+    firstSettle: Deferred.makeUnsafe<void>(),
+    // An empty queue holds the claim open, as the service does, rather than answering at once.
+    claimCommand: () =>
+      Effect.suspend(() => {
+        const next = service.commands.shift();
+        return next === undefined
+          ? Effect.as(Effect.sleep(Duration.seconds(20)), null)
+          : Effect.succeed(next);
+      }),
+    settleCommand: (planId, commandId, result) =>
+      Effect.sync(() => {
+        service.settled.push({ planId, commandId, result });
+        Deferred.doneUnsafe(service.firstSettle, Effect.void);
+        return true;
+      }),
     list: () =>
       Effect.gen(function* () {
         service.reads.push("list");
@@ -95,6 +119,18 @@ function fakeService(plans: Plan[]): FakeService {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
+/** This Mac's record of each plan's folder, held in memory as the file holds it on disk. */
+function folderRecord(): JsonStateFile<PlanFolders> {
+  let stored: PlanFolders | undefined;
+  return {
+    read: () => stored,
+    update: (mutate) => {
+      stored = mutate(stored);
+      return stored;
+    },
+  };
+}
+
 /** The one voice call as the live composer holds it: about a plan, about the desk, or none. */
 interface StandingCall {
   about: { readonly planId: string | undefined } | undefined;
@@ -110,6 +146,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
     const told: PlanningView[] = [];
     const opened: string[] = [];
     const standing = options.call ?? { about: undefined };
+    const recordedFolders = folderRecord();
     const planning = yield* composePlanning({
       kernel: {
         runMode: { sendsNetwork: true },
@@ -122,6 +159,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
+      folders: recordedFolders,
       endPlanCall: (keep) =>
         Effect.gen(function* () {
           const planId = standing.about?.planId;
@@ -357,26 +395,29 @@ it.effect("opening a plan that is gone draws it missing", () =>
   }),
 );
 
-it.effect("starting a plan makes it the active one; a refusal starts nothing and says why", () =>
-  Effect.gen(function* () {
-    const started = plan(INVITES, "Teammate invitations", "", 10);
-    const service = fakeService([]);
-    const { call, last } = yield* subject(service);
-    const request = { name: "Teammate invitations", repository: { owner: "acme", name: "relay" } };
+it.effect(
+  "starting a plan makes it the active one and keeps its folder on this Mac; a refusal starts nothing and says why",
+  () =>
+    Effect.gen(function* () {
+      const started = plan(INVITES, "Teammate invitations", "", 10);
+      const service = fakeService([]);
+      const { call, last } = yield* subject(service);
+      const request = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
 
-    service.createAnswer = { ok: false, failure: GITHUB_FAILURE.EMPTY_REPOSITORY };
-    assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_START, request), {
-      failure: GITHUB_FAILURE.EMPTY_REPOSITORY,
-    });
-    assert.equal(last()?.activePlanId, undefined);
+      service.createAnswer = { ok: false, failure: GITHUB_FAILURE.EMPTY_REPOSITORY };
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_START, request), {
+        failure: GITHUB_FAILURE.EMPTY_REPOSITORY,
+      });
+      assert.equal(last()?.activePlanId, undefined);
 
-    service.createAnswer = { ok: true, answer: started };
-    service.plans = [started];
-    assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_START, request), { planId: INVITES });
-    assert.equal(last()?.activePlanId, INVITES);
-    assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: started });
-    assert.deepEqual(last()?.plans, [summary(started)]);
-  }),
+      service.createAnswer = { ok: true, answer: started };
+      service.plans = [started];
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_START, request), { planId: INVITES });
+      assert.equal(last()?.activePlanId, INVITES);
+      assert.deepEqual(last()?.folders, { [INVITES]: "/Users/dev/relay" });
+      assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: started });
+      assert.deepEqual(last()?.plans, [summary(started)]);
+    }),
 );
 
 it.effect("the repository picker hears the list, or why the connection could not be read", () =>
@@ -441,7 +482,7 @@ it.effect("behind a closed account gate nothing is read and nothing starts", () 
     yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
     const started = yield* call(GATEWAY_METHOD.PLANNING_START, {
       name: "Teammate invitations",
-      repository: { owner: "acme", name: "relay" },
+      folderPath: "/Users/dev/relay",
     });
 
     assert.deepEqual(started, { failure: PLAN_CALL_FAILURE.UNANSWERED });
@@ -463,6 +504,7 @@ it.effect("a sign-out drops the view the window drew", () =>
       plans: [],
       listStatus: PLANNING_READ.IDLE,
       document: { status: PLANNING_READ.IDLE },
+      folders: {},
     });
   }),
 );
@@ -485,7 +527,7 @@ it.effect("a list read that left before a plan started never marks the new plan 
     const starting = yield* Effect.forkChild(
       call(GATEWAY_METHOD.PLANNING_START, {
         name: "Teammate invitations",
-        repository: { owner: "acme", name: "relay" },
+        folderPath: "/Users/dev/relay",
       }),
     );
     for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
@@ -519,7 +561,7 @@ it.effect(
       service.createAnswer = { ok: true, answer: started };
       yield* ask(GATEWAY_METHOD.PLANNING_START, {
         name: "Teammate invitations",
-        repository: { owner: "acme", name: "relay" },
+        folderPath: "/Users/dev/relay",
       });
       assert.equal(call.about, undefined);
 
@@ -563,4 +605,67 @@ it.effect(
       assert.equal(standing.about, undefined);
       assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: billing });
     }),
+);
+
+it.effect("the open plan's command runs in its folder on this Mac and its output goes back", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const folder = yield* temporaryDirectoryScoped("luke-plan-folder-");
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* call(GATEWAY_METHOD.PLANNING_SET_FOLDER, { planId: INVITES, folderPath: folder });
+      service.commands.push({
+        id: "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f",
+        command: "pwd && echo invites >&2 && exit 3",
+      });
+
+      yield* planning.lifetime;
+      yield* Deferred.await(service.firstSettle);
+
+      const [settled] = service.settled;
+      assert.equal(settled?.planId, INVITES);
+      assert.equal(settled?.commandId, "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f");
+      assert.equal(settled?.result.exitCode, 3);
+      assert.equal(settled?.result.stdout.trim().endsWith(folder.split("/").at(-1) ?? "?"), true);
+      assert.equal(settled?.result.stderr.trim(), "invites");
+    }),
+  ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect("with no plan open, no command is claimed", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { planning } = yield* subject(service);
+      service.commands.push({
+        id: "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f",
+        command: "echo nothing",
+      });
+
+      yield* planning.lifetime;
+      yield* TestClock.adjust(Duration.minutes(1));
+
+      assert.equal(service.commands.length, 1);
+      assert.deepEqual(service.settled, []);
+    }),
+  ),
+);
+
+it.effect("a command for a plan this Mac holds no folder for runs nothing and says why", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      service.commands.push({ id: "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f", command: "touch x" });
+
+      yield* planning.lifetime;
+      yield* Deferred.await(service.firstSettle);
+
+      const [settled] = service.settled;
+      assert.equal(settled?.result.exitCode, 1);
+      assert.match(settled?.result.stderr ?? "", /no folder is chosen for this plan on this Mac/u);
+    }),
+  ),
 );

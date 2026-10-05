@@ -1,5 +1,4 @@
 import { Schema as EffectSchema } from "effect";
-import { PLAN_BOUNDS } from "./plan-wire.js";
 
 /**
  * github-wire.ts -- what the Plans tab reads of the account's GitHub connection: the repositories it can read, and why a GitHub read failed.
@@ -39,15 +38,21 @@ export const githubFailureAnswerSchema = EffectSchema.Struct({
 
 export type GitHubFailureAnswer = typeof githubFailureAnswerSchema.Type;
 
+/** GitHub's own bounds on an owner and a repository name sit well inside these. */
+const GITHUB_BOUNDS = {
+  MAX_OWNER_CHARS: 100,
+  MAX_NAME_CHARS: 100,
+} as const;
+
 /** One repository the connection can read. */
 export const githubRepositorySchema = EffectSchema.Struct({
   owner: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_REPOSITORY_OWNER_CHARS),
+    EffectSchema.isMaxLength(GITHUB_BOUNDS.MAX_OWNER_CHARS),
   ),
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
-    EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_REPOSITORY_NAME_CHARS),
+    EffectSchema.isMaxLength(GITHUB_BOUNDS.MAX_NAME_CHARS),
   ),
   private: EffectSchema.Boolean,
 });

@@ -1,5 +1,5 @@
 import { GITHUB_FAILURE, type GitHubRepository } from "@sidecar/hosted/github-wire";
-import type { Plan, PlanDocument, PlanRepository } from "@sidecar/hosted/plan-wire";
+import type { Plan, PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
   type GitHubCallFailure,
   PLAN_CALL_FAILURE,
@@ -18,22 +18,22 @@ import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
  * planning-model.ts -- what the panel's Plans tab draws, decided from the document and the voice view alone.
  *
  * Every decision the tab makes is here and pure, so the components only lay
- * it out: which page shows, which state the document region is in, how a
- * repository and its commit read in the header, what a GitHub refusal tells
+ * it out: which page shows, which state the document region is in, how the
+ * plan's folder reads in the header, what a refusal tells
  * the developer to do, what Copy shows, and the word beside the microphone.
  */
 
 /** What the assumptions' section says while the list is empty, the words Copy writes there. */
 export const NO_ASSUMPTIONS_LINE = "None recorded";
 
-/** How many characters of a commit the header shows, the length `git` abbreviates to. */
-const SHORT_COMMIT_CHARS = 7;
+/** A macOS home folder at the head of a path, which the header shows as `~`. */
+const HOME_PREFIX = /^\/Users\/[^/]+(?=\/|$)/u;
 
 /** Which of the Plans tab's pages shows. */
 export const PLANS_PAGE = {
   /** Every plan the account owns, and New plan. */
   LIST: "list",
-  /** The new plan's name, repository, and Connect GitHub. */
+  /** The new plan's name and folder. */
   NEW: "new",
   /** The open plan's saved document and its microphone. */
   DOCUMENT: "document",
@@ -86,10 +86,9 @@ export function documentRegion(view: PlanningView): DocumentRegion {
   return { kind: DOCUMENT_REGION.READING };
 }
 
-/** The header's repository line: `owner/name · branch @ short commit`. */
-export function repositoryLine(repository: PlanRepository): string {
-  const commit = repository.commit.slice(0, SHORT_COMMIT_CHARS);
-  return `${repository.owner}/${repository.name} · ${repository.branch} @ ${commit}`;
+/** The header's folder line: the folder's path, with the home folder as `~`. */
+export function folderLine(folderPath: string): string {
+  return folderPath.replace(HOME_PREFIX, "~");
 }
 
 /** What the Copy button shows: its resting glyph, the check mark, or the failure beside it. */

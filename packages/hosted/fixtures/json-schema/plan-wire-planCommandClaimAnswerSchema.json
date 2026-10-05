@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "command": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "command": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "command"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "command"
+  ],
+  "additionalProperties": false
+}

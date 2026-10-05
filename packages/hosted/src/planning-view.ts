@@ -4,7 +4,7 @@ import {
   type GitHubFailure,
   githubRepositoryListAnswerSchema,
 } from "./github-wire.js";
-import { planSchema, planSummarySchema } from "./plan-wire.js";
+import { planCreateRequestSchema, planSchema, planSummarySchema } from "./plan-wire.js";
 
 /**
  * planning-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
@@ -13,9 +13,17 @@ import { planSchema, planSummarySchema } from "./plan-wire.js";
  * whenever it moves; the desktop writes it into the document the planning
  * window draws from. Exactly one plan is ever active, the one the window has
  * open, and it is the plan a voice session binds to. The view carries plan
- * names, repositories, and documents and nothing of the account's GitHub
- * connection.
+ * names and documents from the service, and the folder each plan reads from
+ * this Mac's own record, which never leaves it.
  */
+
+/** macOS's own path bound. */
+const MAX_FOLDER_PATH_CHARS = 1_024;
+
+const folderPathSchema = EffectSchema.Trim.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(MAX_FOLDER_PATH_CHARS),
+);
 
 /** Where one read of the service stands, as the window draws it. */
 export const PLANNING_READ = {
@@ -90,6 +98,8 @@ export const planningViewSchema = EffectSchema.Struct({
   document: planningDocumentSchema,
   /** What each part of Luke is doing on the call about the active plan, as last told; absent with no plan open or no word yet. */
   activity: EffectSchema.optionalKey(planActivitySchema),
+  /** The folder of this Mac each plan reads, by plan id; a plan this Mac holds no folder for is absent. */
+  folders: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
 });
 
 export type PlanningView = typeof planningViewSchema.Type;
@@ -99,7 +109,24 @@ export const IDLE_PLANNING_VIEW: PlanningView = {
   plans: [],
   listStatus: PLANNING_READ.IDLE,
   document: { status: PLANNING_READ.IDLE },
+  folders: {},
 };
+
+/** Starting a plan, as the window asks it: the name the service keeps, and the folder this Mac keeps. */
+export const planningStartRequestSchema = EffectSchema.Struct({
+  ...planCreateRequestSchema.fields,
+  folderPath: folderPathSchema,
+});
+
+export type PlanningStartRequest = typeof planningStartRequestSchema.Type;
+
+/** Choosing a plan's folder again on this Mac. */
+export const planningSetFolderParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  folderPath: folderPathSchema,
+});
+
+export type PlanningSetFolderParams = typeof planningSetFolderParamsSchema.Type;
 
 /** Why a plan call answered nothing a window can draw. */
 export const PLAN_CALL_FAILURE = {

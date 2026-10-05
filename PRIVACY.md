@@ -100,24 +100,24 @@ there, and reads nothing from it. Files an earlier version left are yours to
 keep or delete, and nothing on your Mac reads or writes them.
 
 **Feature plans.** When you start a named plan, our service stores it under
-your account: its name, the GitHub repository it plans against (owner and
-name), that repository's default branch and the commit it stood at when the
-plan started, and the plan's one document, a Markdown body and a list of
+your account: its name and the plan's one document, a Markdown body and a list of
 assumptions each marked confirmed or not, written by Luke's planning model as
 you talk. It is stored as written, bound to your account and readable by our
 own operators, the same way the conversation described below is. A save
 replaces the document and no earlier version is kept; deleting a plan removes
 it at once, and deleting your account removes every plan.
 
-**How the planning model reads your repository.** During a planning call,
-Luke's planning model reads the plan's repository from a shallow copy of the
-one commit the plan started at. The copy is fetched from GitHub with your
-account's GitHub connection into an isolated Vercel Sandbox, our service's
-own, whose network is shut once the copy lands, so nothing run there can send
-your source anywhere; your GitHub token is added to that one fetch outside the
-sandbox and is never written into it. The copy is kept with the plan's
-planning conversation, and Vercel keeps the sandbox's saved filesystem while
-the conversation stands; deleting the plan does not yet delete the copy.
+**How the planning model reads your folder.** While a plan is open in Luke
+on your Mac, Luke's planning model, which runs on our service, can ask your
+Mac to run a shell command (such as `ls`, `grep`, or `cat`) in the plan's
+folder. Luke on your Mac runs each command as you, with the folder as its
+working directory and with your own permissions, and sends the command's exit
+code and up to 20,000 characters each of its output and error text back to
+our service, which hands them to the planning model. No copy of the folder is
+made, and the folder's path stays on your Mac: our service never stores it.
+Each command and its output are stored with the plan, and with the
+plan's planning conversation, under the terms described for each; deleting
+the plan deletes its commands.
 
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
@@ -253,15 +253,11 @@ session recording described under "What we collect", the way the
 Conversation tab is.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
-address, and which of the two you used. Signing in with GitHub also grants
-your account's GitHub connection, the access a planning call reads your
-repository with: GitHub's `repo` permission, which covers every repository you
-can reach, private ones included, and allows writing as well as reading.
-Luke only reads: the list of your repositories when you start a plan, and
-the repository the plan names. If you sign in with
-Google, you grant the same permission separately, from the Plans tab, the
-first time you start a plan. You can revoke it at any time in GitHub's
-settings under Applications. We also keep the records that keep you
+address, and which of the two you used. Signing in with GitHub grants no
+access to your repositories: plans read a folder on your Mac instead. An
+account that signed in with GitHub before this may still hold GitHub's `repo`
+permission, which Luke no longer uses; you can revoke it at any time in
+GitHub's settings under Applications. We also keep the records that keep you
 signed in, and a daily count of how much voice and review you have used.
 Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily
@@ -649,9 +645,6 @@ Send.
   the SDK does not capture native crashes there.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
-- GitHub and Vercel, for a planning call's copy of your repository: GitHub
-  serves the fetch under your GitHub connection, and Vercel Sandbox holds the
-  copy, as described under "How the planning model reads your repository".
 
 We do not sell your information or use it for advertising. If you connect
 nothing, Luke sends nothing to any provider.
