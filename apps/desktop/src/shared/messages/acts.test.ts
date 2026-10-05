@@ -133,7 +133,12 @@ test("the live session acts carry the peer's offer verbatim, a transport state t
 });
 
 test("a voice command is one of the three commands and carries nothing else", () => {
-  for (const command of ["stop-speaking", "request-microphone-access", "clear-conversation"]) {
+  for (const command of [
+    "stop-speaking",
+    "end-call",
+    "request-microphone-access",
+    "clear-conversation",
+  ]) {
     assert.ok(parsedAct({ kind: ACT_KIND.VOICE_COMMAND, payload: { command } }));
   }
   // Nothing typed is a command to the voice window: Luke is voice only.

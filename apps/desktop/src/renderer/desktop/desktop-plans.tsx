@@ -141,7 +141,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
         <PlanBody plan={plan} live={plans.live} />
       </section>
       <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>
-        <MicrophoneRow status={plans.status} microphone={plans.microphone} />
+        <MicrophoneRow status={plans.status} microphone={plans.microphone} stop={plans.stop} />
       </div>
     </>
   );

@@ -239,6 +239,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     () =>
       window.sidecar.onVoiceCommand(({ command }) => {
         if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
+        else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
         else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) {
           drive(orchestrator.requestMicrophoneAccess());
         }

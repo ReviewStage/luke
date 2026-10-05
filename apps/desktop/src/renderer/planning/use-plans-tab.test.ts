@@ -143,6 +143,8 @@ test("the microphone asks for the open plan's call, and the planning profile's f
   const live = mount({ shown: true, planning: OPEN });
   act(() => live.control().microphone.onPress());
   assert.equal(live.told.at(-1), ACT_KIND.PLANNING_TALK);
+  act(() => live.control().stop.onPress());
+  assert.equal(live.told.at(-1), ACT_KIND.VOICE_COMMAND);
 
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
   assert.equal(fixture.control().page, PLANS_PAGE.DOCUMENT);

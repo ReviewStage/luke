@@ -2,7 +2,7 @@ import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view"
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
-import type { VoiceView } from "#shared/messages/voice-view";
+import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
 import { FIXTURE_PLANNING_CALL, fixturePlanningView } from "./planning-fixture";
 import {
@@ -47,7 +47,9 @@ export interface PlansControl {
   listFailed: boolean;
   region: DocumentRegion;
   copy: { shown: CopyShown; onPress: () => void };
-  microphone: { label: string; enabled: boolean; onPress: () => void };
+  microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
+  /** Ends the open plan's call at once, offered only while that call is in progress. */
+  stop: { shown: boolean; onPress: () => void };
   /** The open plan's call status beside the microphone, absent while none stands. */
   status: CallStatus | undefined;
   /** Whether the open plan's call is in progress, so the plan is still being written. */
@@ -138,7 +140,10 @@ export function usePlansTab(input: {
     activePlanId: planning.activePlanId,
     listening: voice.listening,
     callPlanId: voice.view.callPlanId,
+    voiceStatus: voice.view.voiceStatus,
   });
+  const live =
+    planningCallHoldsPanel(voice.view) && voice.view.callPlanId === planning.activePlanId;
   // The press names no plan: main reads the one the host has open, and the
   // voice window, which owns the call, opens it about that plan or toggles it.
   const pressMicrophone = () => {
@@ -182,12 +187,19 @@ export function usePlansTab(input: {
     microphone: {
       label: microphone.label,
       enabled: microphone.press !== MICROPHONE_PRESS.NONE,
+      muted: microphone.muted,
       onPress: pressMicrophone,
+    },
+    // The stop is the voice window's to carry out, as every voice command is:
+    // it holds the call, and ends whichever one stands.
+    stop: {
+      shown: live,
+      onPress: () => tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.END_CALL }),
     },
     // A fixture's open plan is drawn on a call with Luke working, read from
     // the fixture's own call rather than a voice window that holds none.
     status: callStatus(fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL, planning),
-    live: planningCallHoldsPanel(voice.view) && voice.view.callPlanId === planning.activePlanId,
+    live,
     onSelect: select,
     onChooseFolder: chooseFolder,
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),

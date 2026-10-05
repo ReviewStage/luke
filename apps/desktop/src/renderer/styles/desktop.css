@@ -572,6 +572,17 @@ body,
   box-shadow: 0 6px 18px color-mix(in srgb, var(--message-sent) 35%, transparent);
 }
 
+.desktop-call-bar .plan-microphone[data-muted="true"] {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger-text);
+  box-shadow: none;
+}
+
+.desktop-call-bar .plan-stop {
+  width: 42px;
+  height: 42px;
+}
+
 .desktop-call-bar .plan-microphone svg {
   width: 18px;
   height: 18px;

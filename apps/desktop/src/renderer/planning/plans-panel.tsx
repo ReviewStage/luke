@@ -39,7 +39,11 @@ export function PlansPanel({ control }: { control: PlansControl }): React.JSX.El
             folders={control.folders}
             onChooseFolder={control.onChooseFolder}
           />
-          <MicrophoneRow status={control.status} microphone={control.microphone} />
+          <MicrophoneRow
+            status={control.status}
+            microphone={control.microphone}
+            stop={control.stop}
+          />
         </section>
       );
     case PLANS_PAGE.LIST:
