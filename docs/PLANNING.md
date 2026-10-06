@@ -194,8 +194,9 @@ back, so no half-written draft is left standing.
 
 Every plan uses one fixed template (LUKE-352). There is no configurable
 template, no sections map, and no freeform body argument: `update_plan`
-names only the sections and fields below that change. A field left out keeps
-its stored value, `null` clears it, and a list (rules with their examples,
+names only the sections and fields below that change. A field left out or
+sent `null` keeps its stored value, so nothing in a call erases an answer and
+a correction rewrites it, and a list (rules with their examples,
 open questions, assumptions) is sent whole when any of it changes. A call
 naming a field the template does not, sending a freeform `body`, or carrying
 a blank answer is refused with the offending field's path and saves nothing.
@@ -219,8 +220,9 @@ next turn.
 | Data and migration | `dataAndMigration` | Only when stored data changes: what is stored, how existing data moves, and how the change is undone. |
 | Assumptions | `assumptions` | The existing `{ text }` list. |
 
-- **Types.** An ordinary field is `null` or nonblank text, and `null` is the
-  only way to leave it unanswered; a core field renders it as "Unanswered".
+- **Types.** An ordinary field is `null` or nonblank text; it is `null` only
+  until it is first answered, since an update never clears it, and a core
+  field renders it as "Unanswered" until then.
   `implementation.order` and `dataAndMigration` are optional: the body leaves
   them out while null. A rule is exactly its one-sentence `statement` and its
   `examples`, null until one is agreed and rendering "No examples yet"; an

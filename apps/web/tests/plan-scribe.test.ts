@@ -146,6 +146,31 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
   );
 
   it.effect(
+    "a run that writes a section whole, null where it has no words, erases nothing the run before it wrote",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe } = yield* scribeFor(userId, planId, [
+            { goal: { problem: PROBLEM, outcome: null } },
+            { goal: { problem: null, outcome: OUTCOME }, rules: null },
+          ]);
+
+          scribe.observe(heard("Only admins can add people.", 0, 1_000));
+          yield* quiet;
+          assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+
+          scribe.observe(heard("Members should invite by email.", 5_000, 6_000));
+          yield* quiet;
+
+          const body = yield* savedBody(userId, planId);
+          assert.ok(body.includes(PROBLEM));
+          assert.ok(body.includes(OUTCOME));
+        }),
+      ),
+  );
+
+  it.effect(
     "a run whose call fails saves nothing, and the next run is handed those lines again",
     () =>
       Effect.scoped(

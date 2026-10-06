@@ -309,27 +309,24 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
   );
 
   it.effect(
-    "an optional field stays out of the document until it holds something, and leaves again when cleared",
+    "an optional field stays out of the document until it holds something, and stands through a call sending it null",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
         const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
 
+        const empty = yield* resumedDocument(userId, planId);
         const filled = savedDocument(yield* updatePlan(bound(userId, planId), BULK_IMPORT));
         yield* updatePlan(bound(userId, planId), {
           implementation: { order: null },
           dataAndMigration: null,
         });
-        const cleared = yield* resumedDocument(userId, planId);
+        const after = yield* resumedDocument(userId, planId);
 
+        assert.deepEqual(templateHeadingsOf(empty.body), TEMPLATE_HEADINGS);
         assert.equal(between(filled.body, "### Order", "## Decisions"), BULK_IMPORT_AGREED.ORDER);
         assert.ok(filled.body.endsWith(`## Data and migration\n\n${BULK_IMPORT_AGREED.DATA}\n`));
-        assert.deepEqual(templateHeadingsOf(cleared.body), TEMPLATE_HEADINGS);
-        assert.equal(
-          between(cleared.body, "### Patterns to follow", "## Decisions"),
-          BULK_IMPORT.implementation.patterns,
-        );
-        assert.equal(countOf(cleared.body, UNANSWERED), 0);
+        assert.equal(after.body, filled.body);
       }),
   );
 
@@ -393,7 +390,7 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
   );
 
   it.effect(
-    "a call naming only what changes keeps every field it leaves out, and null clears a field",
+    "a call naming only what changes keeps every field it leaves out, and a field sent null keeps what stood",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
@@ -401,14 +398,22 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
         yield* updatePlan(bound(userId, planId), BULK_IMPORT);
         const decision = "Rows are validated before any is written.";
 
+        // The notetaker's model writes a section whole, null where it has no
+        // words, so a null beside the one field that changed must erase nothing.
         const result = yield* updatePlan(bound(userId, planId), {
           implementation: { patterns: null },
+          rules: null,
           decisions: decision,
         });
 
         assert.equal(result.status, UPDATE_PLAN_STATUS.SAVED);
         const { body, assumptions } = yield* resumedDocument(userId, planId);
-        assert.equal(between(body, "### Patterns to follow", "### Order"), UNANSWERED);
+        assert.equal(
+          between(body, "### Patterns to follow", "### Order"),
+          BULK_IMPORT.implementation.patterns,
+        );
+        assert.ok(body.includes(`### Rule 1: ${BULK_IMPORT_AGREED.RULE}`));
+        assert.equal(countOf(body, UNANSWERED), 0);
         assert.equal(between(body, "## Decisions", "## Verification"), decision);
         assert.equal(
           between(body, "### Contracts", "### Patterns to follow"),

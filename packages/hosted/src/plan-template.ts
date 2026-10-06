@@ -7,13 +7,18 @@ import { PLAN_BOUNDS, planDocumentSchema } from "./plan-wire.js";
  *
  * Every plan has the same sections in the same order (`docs/PLANNING.md`,
  * "The fixed template"). The service keeps the plan's fields as they stand,
- * and an `update_plan` call names only what it changes: a key left out keeps
- * its value, `null` clears it, and a list sent is the whole list. A core
- * field reads "Unanswered" while null; an optional field is left out of the
- * body until it holds something. The merged fields are formatted here into
- * the document's Markdown `body`, and the document the window and the model
- * read stays `{ body, assumptions }` (`plan-wire.ts`). No code reads the body
- * back into fields.
+ * and an `update_plan` call names only what it changes: a key left out or
+ * sent `null` keeps its value, and a list sent is the whole list. Nothing in
+ * an update erases an answer; a correction rewrites it. Note that `null` is
+ * read as no change rather than as a clear, because the notetaker's model
+ * sends `null` for every field it has no words for whenever it writes a
+ * section whole, and a plan written that way lost each answer the moment
+ * the next one was written. A core field reads "Unanswered" while it has
+ * never been answered; an optional field is left out of the body until it
+ * holds something. The merged fields are formatted here into the document's
+ * Markdown `body`, and the document the window and the model read stays
+ * `{ body, assumptions }` (`plan-wire.ts`). No code reads the body back into
+ * fields.
  *
  * The template holds what a coding agent cannot read from the repository:
  * what was decided, the rules and their examples, and the contracts the
@@ -95,9 +100,9 @@ function nonEmptyList<S extends EffectSchema.Top>(item: S) {
 /** An ordinary answer: null while unanswered, otherwise nonblank text. */
 const ANSWER = EffectSchema.NullOr(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS));
 
-/** One field of the template, described to the model in the words of what it must establish. */
+/** One field of the template, described to the model in the words of what it must establish, and told to leave it out while it has nothing to write. */
 function answer(description: string) {
-  return describeWire(ANSWER, `${description} Null while unanswered.`);
+  return describeWire(ANSWER, `${description} Leave out unless the latest lines change it.`);
 }
 
 /** One clause of an example, null while unknown. */
@@ -238,18 +243,29 @@ export type FullPlanUpdate = PlanFields & Required<Pick<PlanUpdate, "assumptions
 /** The whole template as one update, every field unanswered and no assumptions. */
 export const EMPTY_PLAN_UPDATE: FullPlanUpdate = { ...EMPTY_PLAN_FIELDS, assumptions: [] };
 
+/** The fields of one section an update settles: those sent with something in them, since `null` and a key left out alike keep what stands. */
+function settledFields<Section extends object>(section: Section | undefined): Partial<Section> {
+  if (section === undefined) return {};
+  // SAFETY: dropping entries of a struct leaves a subset of its own keys and values.
+  return Object.fromEntries(
+    Object.entries(section).filter(([, value]) => value !== null),
+  ) as Partial<Section>;
+}
+
 /**
  * The fields an update leaves standing: each section's fields merged over
- * what stood, and a top-level field or list replaced where it was sent.
+ * what stood, and a top-level field or list replaced where it was sent with
+ * something in it. A field sent `null` is a field the update has nothing to
+ * say about, and keeps what stood.
  */
 export function mergePlanFields(stored: PlanFields, update: PlanUpdate): PlanFields {
   const { goal, scope, implementation, assumptions: _assumptions, ...whole } = update;
   return {
     ...stored,
-    ...whole,
-    goal: { ...stored.goal, ...goal },
-    scope: { ...stored.scope, ...scope },
-    implementation: { ...stored.implementation, ...implementation },
+    ...settledFields(whole),
+    goal: { ...stored.goal, ...settledFields(goal) },
+    scope: { ...stored.scope, ...settledFields(scope) },
+    implementation: { ...stored.implementation, ...settledFields(implementation) },
   };
 }
 
