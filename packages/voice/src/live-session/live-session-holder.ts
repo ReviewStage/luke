@@ -86,6 +86,12 @@ export interface LiveSessionHolderOptions {
   roster?: () => readonly RosterSeedSession[];
   emit: (change: VoiceLiveSessionChanged) => void;
   createId: () => string;
+  /**
+   * Whether Luke speaks outside a planning call: a desk session the talk key
+   * opens, and the muted one a beat or a briefing wants. Off, only a planning
+   * call is created, and a beat or a briefing asks for nothing. Absent is on.
+   */
+  deskVoice?: boolean;
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
   /**
@@ -270,6 +276,10 @@ export class LiveSessionHolder {
     });
   }
 
+  #deskVoice(): boolean {
+    return this.#options.deskVoice !== false;
+  }
+
   /** Begins what nothing waits for, on the holder's own fiber. */
   #start(effect: Effect.Effect<void>): void {
     this.#tasks.offerUnsafe(Effect.asVoid(FiberSet.run(this.#fibers, effect)));
@@ -333,7 +343,8 @@ export class LiveSessionHolder {
       // The peer has answered the word, with this offer; whatever comes of it, the word is spent.
       this.#wantedAt = undefined;
       const source = this.#options.source();
-      if (!source || creating.endedBy !== undefined) {
+      const refused = creating.planId === undefined && !this.#deskVoice();
+      if (!source || refused || creating.endedBy !== undefined) {
         this.#beats.clear();
         return undefined;
       }
@@ -587,7 +598,7 @@ export class LiveSessionHolder {
    * service that will never stand.
    */
   speakBeat(beat: SessionBeatFrame): boolean {
-    if (this.#beats.has(beat.kind)) return false;
+    if (!this.#deskVoice() || this.#beats.has(beat.kind)) return false;
     this.#beats.set(beat.kind, { beat, sent: false });
     const session = this.#held;
     if (session === undefined || session.ended) {
@@ -624,7 +635,7 @@ export class LiveSessionHolder {
    * for a beat is the same word. Answers whether the peer was told.
    */
   wantSession(): boolean {
-    if (this.sessionStands() || this.sessionWanted()) return false;
+    if (!this.#deskVoice() || this.sessionStands() || this.sessionWanted()) return false;
     this.#askWanted();
     return true;
   }

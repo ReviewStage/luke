@@ -170,6 +170,8 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     roster: () => voiceRoster(observation.rosterForClients()),
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
     createId: kernel.createId,
+    // Luke speaks only on a planning call for now: no desk call, beat, or briefing.
+    deskVoice: false,
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
         // Every session this Mac opens is the service's, on the account.

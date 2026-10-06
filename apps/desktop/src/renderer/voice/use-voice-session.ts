@@ -84,6 +84,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   orchestratorRef.current ??= new LiveVoiceOrchestrator({
     bridge,
     services: rendererServicesNow(),
+    // Luke speaks only on a planning call for now; the host refuses the rest.
+    deskCalls: false,
     createCall: (events) => {
       const call = new LiveCall({
         events,

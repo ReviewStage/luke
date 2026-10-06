@@ -63,6 +63,13 @@ const HOLD_REFRESH_INTERVAL_MS = 30_000;
  * the longest consent taken back keeps holding anything.
  */
 const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
+/**
+ * Whether onboarding stands at all: the spoken introduction, the Conductor
+ * key gate, and the calendar gate. Off for now, so no install is held behind
+ * them; the record still keeps its moments, so turning this back on finds
+ * every install where it would have stood.
+ */
+const ONBOARDING_ENABLED = false;
 
 export interface CalendarsComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
@@ -252,15 +259,17 @@ export const composeCalendars = /* @__PURE__ */ Effect.fn("host/composeCalendars
   let announcedKeyGateOwed: boolean | undefined;
 
   function calendarOnboardingGateOwed(): boolean {
-    return runMode.requiresAccount && calendarOnboardingOwed(onboardingState);
+    return ONBOARDING_ENABLED && runMode.requiresAccount && calendarOnboardingOwed(onboardingState);
   }
 
   function spokenIntroductionOwed(): boolean {
-    return runMode.requiresAccount && introductionOwed(onboardingState);
+    return ONBOARDING_ENABLED && runMode.requiresAccount && introductionOwed(onboardingState);
   }
 
   function conductorKeyGateOwed(): boolean {
-    return runMode.requiresAccount && conductorKeyOnboardingOwed(onboardingState);
+    return (
+      ONBOARDING_ENABLED && runMode.requiresAccount && conductorKeyOnboardingOwed(onboardingState)
+    );
   }
 
   /**

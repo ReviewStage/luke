@@ -77,6 +77,12 @@ interface LiveVoiceOrchestratorOptions {
   createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
   /** The services the notice strip's clocks are run under, since the strip is armed from synchronous callbacks that belong to no fiber. */
   services: Context.Context<never>;
+  /**
+   * Whether the talk key may open a call about no plan. Off, a press naming
+   * no plan speaks only into a planning call already standing and otherwise
+   * does nothing. Absent is on.
+   */
+  deskCalls?: boolean;
 }
 
 /** Nobody heard on either side, which is what a call that is gone carries. */
@@ -129,6 +135,7 @@ export class LiveVoiceOrchestrator {
   readonly #bridge: LiveVoiceBridge;
   readonly #createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
   readonly #services: Context.Context<never>;
+  readonly #deskCalls: boolean;
   readonly #strip = new NoticeStrip({
     onChanged: () => this.#touch(),
     fork: (effect) => Effect.runForkWith(this.#services)(effect),
@@ -188,6 +195,7 @@ export class LiveVoiceOrchestrator {
     this.#bridge = options.bridge;
     this.#createCall = options.createCall;
     this.#services = options.services;
+    this.#deskCalls = options.deskCalls !== false;
   }
 
   surround(surroundings: LiveVoiceSurroundings): void {
@@ -213,6 +221,10 @@ export class LiveVoiceOrchestrator {
    */
   beginTalk(planId?: string): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
+      // Note that a press about no plan opens nothing where desk calls are off.
+      const deskPress =
+        planId === undefined && (this.#call === undefined || this.#callPlan === undefined);
+      if (deskPress && !this.#deskCalls) return;
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
