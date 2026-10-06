@@ -13,8 +13,9 @@
 </p>
 
 <p align="center">
-  <strong>An engineering manager for your coding agents.</strong><br>
-  A macOS voice agent that keeps you in the loop with your agents.
+  <strong>Plan the feature before the agent writes it.</strong><br>
+  Talk through a feature with Luke before you give it to a coding agent.
+  He reads the code while you talk and writes the plan down.
 </p>
 
 <p align="center">
@@ -28,46 +29,75 @@
   <a href="mailto:founders@stagereview.app">Contact</a>
 </p>
 
-![Luke's panel expanded under the notch, listing local and cloud agent sessions with their status and workspace grouping.](docs/media/luke-panel.png)
+![Luke's window with the plan "Teammate invitations" open and being written during a voice call.](docs/media/luke-plan.png)
 
-## Features
+## Why
 
-### Talk to Luke
+A coding agent builds what you ask for. Usually what you ask for is one
+sentence, and the agent guesses the rest. Some of those guesses are wrong, and
+you find them in review.
 
-Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app; every ask is
-spoken, and there is nothing to type into. He can tell you about the status of
-your agents, kick fresh ones off for you, or message them on your behalf.
+Luke is for the talk before that. You describe the feature out loud, he reads
+the code, and he asks about the parts you left open. He'll say so when he
+thinks you're wrong. You're done when the plan is specific enough that the
+agent doesn't have to guess.
 
-The **Conversation** tab draws the conversation Luke's own service keeps for
-your account, the same thread on every Mac you sign in on, showing its 200
-most recent turns. Its two controls are Clear, which asks the service to mark
-that conversation deleted and open a fresh one, and Agents, which turns the
-tab to the agents Luke follows and the sub-agents he delegated to; nothing on
-this Mac holds a copy of the thread. When Luke thinks on the service he also silently
-keeps a small memory of useful preferences, personal context, goals, and
-recurring constraints; ask him what he remembers, correct something, or tell
-him to forget it.
+## How a plan goes
 
-![Luke's capsule under the notch, captioning a briefing about which sessions finished, which is still packaging, and which are waiting on you.](docs/media/luke-talking.png)
+Open Luke and press **New plan**. Give it a name and point it at the folder
+your project lives in.
 
-### Announcements
+Press the microphone and say what you want. Something like "members should be
+able to invite a teammate by email" is enough to start. Luke looks through the
+folder while you talk, so his first question is usually about your code
+rather than a checklist. He'll come back with an opinion: "You already have a
+`memberships` table. I'd add a pending state there instead of a new table.
+Does that work?" Say yes, or tell him why not.
 
-Luke speaks up when an agent is waiting for you, hits an error, or finishes. He
-goes by what an agent's provider reports about it, and for a Conductor agent he
-can also read the conversation itself when the status is not enough. Either way he judges whether it is
-worth interrupting you for, and says everything worth saying in one breath
-rather than a sentence per event.
+Nobody has to take notes. A second model listens to the call and writes the
+plan as you go, and you can watch it fill in. When you're done,
+press **Copy** and paste the plan into Claude Code, Codex, or whatever you
+use.
 
-### Compatible with every agent and platform
+## What's in a plan
 
-Luke works with any agent, both locally and in the cloud. See a full list
-of supported agents below.
+Every plan uses the same template:
 
-### Works around your schedule
+| Section | What goes there |
+| --- | --- |
+| Goal | The problem today and what should be true after |
+| Scope | What's in, what's out, and the constraints |
+| Rules | One sentence per rule, each with Given/When/Then examples |
+| Implementation | Files that change, new types and signatures, code to follow |
+| Decisions | What was chosen, why, and what was turned down |
+| Verification | How to check the whole thing works end to end |
+| Left to the agent | The calls the agent is allowed to make on its own |
+| Open questions | Anything still unresolved |
+| Assumptions | Every guess Luke made that you didn't spell out |
 
-Connect your calendar and Luke stays quiet until your meeting is over.
+Read the Assumptions list before you hand the plan off. When Luke suggests
+a default and you say "sure", it goes there, so you can find the things you
+agreed to without much thought.
 
-## Supported agents and platforms
+The fields borrow from GitHub's
+[Spec Kit](https://github.com/github/spec-kit), OpenAI's
+[ExecPlans](https://developers.openai.com/cookbook/articles/codex_exec_plans),
+and [Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/).
+
+## How Luke reads your code
+
+Luke doesn't upload your repository. When the planning model wants to see a
+file, your Mac runs a read-only command such as `ls`, `grep`, or `cat` in the
+plan's folder. The command runs in a macOS sandbox with no network and no
+write access, and it can't read `.env` files. Only the command's output goes
+to Luke's service. [PRIVACY.md](PRIVACY.md) has the details.
+
+## Watching agent sessions
+
+Luke started out as a voice that kept an eye on your running agents and
+spoke up when one needed you. That part is switched off in the current build
+while we work on planning. The code is still here, and it supports these
+agents:
 
 <!-- provider-agents:start -->
 | Agent | Local | Cloud |
@@ -80,18 +110,15 @@ Connect your calendar and Luke stays quiet until your meeting is over.
 
 ## Install
 
-Luke runs on Apple Silicon Macs with macOS 14 or newer.
+Luke runs on Apple silicon Macs with macOS 14 or newer.
 
 1. [Download Luke](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
 2. Open the DMG and drag **Luke** into **Applications**.
 3. Launch Luke and sign in with Google or GitHub.
+4. Press **New plan**.
 
-Optional: open **Settings** in Luke to:
-
-- Connect supported cloud agents with their API keys.
-- Connect Apple or Google Calendar.
-- Customize Luke's voice, keyboard shortcuts, appearance, and workspace
-  defaults.
+Luke asks for the microphone the first time you start a call. Voice,
+keyboard shortcuts, and appearance are in **Settings**.
 
 ## Privacy
 

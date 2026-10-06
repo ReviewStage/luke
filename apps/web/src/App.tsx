@@ -1,6 +1,6 @@
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
-import { NotchMock } from "./NotchMock";
 import { DMG_URL, GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
+import { WindowMock } from "./WindowMock";
 
 export function App(): React.JSX.Element {
   return (
@@ -9,7 +9,7 @@ export function App(): React.JSX.Element {
 
       <main className="shell">
         {/* The copy runs left, the way a page of prose does. The mock does not:
-            a notch belongs at the horizontal center of a display, so the art
+            the window sits at the center of its display, so the art
             centers itself inside the column the copy is aligned against. */}
         {/* The footer's hairline draws itself a space-5 above the footer's own
             box, inside this section's bottom padding, so the padding must keep
@@ -19,10 +19,11 @@ export function App(): React.JSX.Element {
               needs about 490px, so it steps before the column can squeeze it
               rather than at the column's own padding breakpoint. */}
           <h1 className="m-0 text-[2.25rem] leading-[1.1] font-semibold tracking-[-0.02em] text-pretty max-[576px]:text-[1.75rem]">
-            Your AI Engineering Manager.
+            Plan the feature before the agent writes it.
           </h1>
           <p className="mt-6 mb-0 max-w-[34rem] text-lg text-pretty text-muted-foreground">
-            Luke watches your coding agent sessions and notifies you when they need your attention.
+            Talk through a feature with Luke. He reads the code while you talk and writes a plan you
+            can paste into Claude Code or Codex.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -48,7 +49,7 @@ export function App(): React.JSX.Element {
             macOS 14+ · Apple silicon
           </p>
 
-          <NotchMock />
+          <WindowMock />
         </section>
       </main>
 

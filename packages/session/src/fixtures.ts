@@ -104,7 +104,7 @@ export const FIXTURE_SPEAKING_CAPTIONS: readonly string[] = [
  * clock — measured against the real clock, the labels would grow with every
  * capture run and the PNGs would stop being reproducible.
  */
-export const FIXTURE_EPOCH_MS = 1_735_689_600_000;
+const FIXTURE_EPOCH_MS = 1_735_689_600_000;
 
 function minutesBeforeEpoch(minutes: number): number {
   return FIXTURE_EPOCH_MS - minutes * 60_000;

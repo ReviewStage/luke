@@ -22,7 +22,7 @@
 
 @import "tailwindcss";
 @import "@sidecar/surface/motion-tokens.css";
-@import "./notch-mock.css";
+@import "./window-mock.css";
 
 /* The three faces the page loads, declared beside the stack that names them
    rather than at each of the four HTML entry points. */
@@ -122,14 +122,12 @@
   --space-8: 64px;
   --space-9: 96px;
 
-  /* The mock renders at true product geometry and scales as a unit. Stepped
-     rather than fluid so the interior never lands on a half pixel. The height
-     is the 520px expanded panel plus the product's own SURFACE_MARGIN for the
-     spring's overshoot and the shadow's tail, and both the mock and its
-     wrapper derive from this one value so the painted art and the space
-     reserved for it cannot drift apart. */
+  /* The mock renders at one fixed geometry and scales as a unit. Stepped
+     rather than fluid so the interior never lands on a half pixel. Both the
+     mock and its wrapper derive from this one height so the painted art and
+     the space reserved for it cannot drift apart. */
   --mock-scale: 1;
-  --mock-height: 560px;
+  --mock-height: 600px;
 
   font-optical-sizing: auto;
   font-synthesis: none;
@@ -385,10 +383,10 @@
     --mock-scale: 0.75;
   }
 
-  /* The 700px box exists for the desktop shadow's room, and a phone spends
-     that room on nothing but feeding the frame's own corners to the pin's
-     clip. 660 still holds the 620px panel with margin for its shadow, and is
-     what lets every scale step below actually fit its screen. */
+  /* A phone spends the 700px box's margin on nothing but feeding the
+     frame's own corners to the stage's clip. 660 still holds the window with
+     room for its shadow, and is what lets every scale step below actually
+     fit its screen. */
   .mock {
     width: 660px;
   }
@@ -399,7 +397,7 @@
    step chosen to merely clear its floor puts the frame's corners flush
    against the screen edge — and past it, once the arithmetic slips by half a
    pixel — where the stage's clip squares them off and the display reads as
-   overflowing the phone. Twentieths, because they land the 660×560 box on
+   overflowing the phone. Twentieths, because they land the 660×600 box on
    whole pixels. */
 @media (width < 520px) {
   :root {
@@ -426,33 +424,13 @@
 }
 
 /* Reduced motion
-   Answered at the mock's tokens, the way the renderer answers it: zeroing the
-   vocabulary reaches every rule derived from it, and hover still changes the
-   illustration's state — it just lands there at once. The spinner holds too;
-   a working row still says Working in words.
+   Answered at the mock's one token: every loop it draws plays on
+   `--loop-motion`, so pausing it holds the waveform, the dots, and the caret
+   still. The typing itself is the component's to skip.
    ------------------------------------------------------------------------- */
 
 @media (prefers-reduced-motion: reduce) {
   .mock {
-    --duration-shape: 1ms;
-    --duration-exit: 1ms;
-    --duration-quick: 1ms;
-    --duration-fast: 1ms;
-    --expand-delay: 0ms;
-    --peek-delay: 0ms;
-    --row-stagger: 0ms;
-    --row-fan: 0px;
     --loop-motion: paused;
-  }
-
-  .mock .panel-surface,
-  .mock .expanded-stage,
-  .mock .wing-mark,
-  .mock .tab-thumb,
-  .mock .session-row,
-  .mock .panel-header,
-  .mock .ask-luke-row {
-    transition-duration: 1ms;
-    transition-delay: 0ms;
   }
 }

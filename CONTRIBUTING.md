@@ -1,6 +1,9 @@
 # Contributing to Luke
 
-Luke is a macOS-first Electron sidecar that observes coding-agent sessions.
+Luke is a macOS Electron app for planning features out loud with a voice agent
+that reads your code. It started as a sidecar that observes coding-agent
+sessions, and that code is still here.
+
 This page covers setup and points at the documents that own the rest.
 
 ## Before you write code

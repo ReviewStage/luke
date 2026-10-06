@@ -1,0 +1,548 @@
+/* Window mock
+   Ported from apps/desktop/src/renderer/styles/desktop.css and
+   styles/planning.css. The class names are the renderer's own so the sheets
+   stay diffable; the `.mock` scope, the display it sits on, and the traffic
+   lights are the only page-side inventions. Sizes are the product's scaled
+   down a step, so a whole plan reads inside the page's column.
+   ------------------------------------------------------------------------- */
+
+.mock-stage {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-7);
+  /* The stage is wider than the shell's content box, whose padding belongs to
+     the prose. Give the display the viewport width at every breakpoint so the
+     clip keeps its rounded corners instead of shaving them to the measure. */
+  margin-inline: calc(50% - 50vw);
+  /* `transform: scale()` leaves the layout box at full size, so the stage
+     tracks the scale itself or a phone reserves 600px for a 300px visual.
+     `clip` keeps the untransformed art width from opening a horizontal
+     scrollbar without making a scroll container of the stage. */
+  height: calc(var(--mock-height) * var(--mock-scale));
+  overflow: clip;
+}
+
+.mock {
+  /* The renderer's tokens, verbatim. The page's own palette stays out of the
+     mock: the art has to read as the product, not as the page, and inherited
+     from the light page the window's text would vanish. */
+  --state-working: #5cd5ff;
+  --voice-luke: var(--state-working);
+  --message-sent: #0071e3;
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.56);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --hairline: rgba(255, 255, 255, 0.08);
+  --raised: rgba(255, 255, 255, 0.05);
+  --raised-strong: rgba(255, 255, 255, 0.09);
+  --desktop-ground: #0c0c0e;
+  --desktop-sidebar: #111114;
+  --desktop-well: #0f0f12;
+  --frame-top: #14171c;
+  --frame-bottom: #101318;
+  --loop-motion: running;
+  --display-radius: 18px;
+
+  position: relative;
+  width: 700px;
+  height: var(--mock-height);
+  flex: none;
+  transform: scale(var(--mock-scale));
+  transform-origin: top center;
+  font-family: var(--font-product);
+  /* The page reads at 1.6; the product does not. */
+  line-height: normal;
+  /* An illustration, not page copy: dragging across a recreated interface
+     should not fill someone's clipboard with an invented plan. */
+  user-select: none;
+  border-radius: var(--display-radius);
+  overflow: clip;
+}
+
+/* The display the window sits on. The frame's gradient stays underneath as
+   the display for a machine whose WebGL never mounts. */
+.mock-frame,
+.mock-backdrop {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: var(--display-radius);
+}
+
+.mock-frame {
+  background: linear-gradient(180deg, var(--frame-top) 0%, var(--frame-bottom) 100%);
+}
+
+.mock-window {
+  position: absolute;
+  z-index: 1;
+  inset: 28px 24px;
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: var(--desktop-ground);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.5),
+    0 4px 14px rgba(0, 0, 0, 0.3);
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.mock svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+/* Sidebar ----------------------------------------------------------------- */
+
+.mock .desktop-sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0 9px 10px;
+  border-right: 1px solid var(--hairline);
+  background: var(--desktop-sidebar);
+}
+
+.mock .traffic-lights {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding-left: 5px;
+}
+
+.mock .traffic-lights i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+
+.mock .traffic-lights i:nth-child(2) {
+  background: #febc2e;
+}
+
+.mock .traffic-lights i:nth-child(3) {
+  background: #28c840;
+}
+
+.mock .luke-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 5px 14px;
+}
+
+.mock .luke-identity-face {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--raised-strong);
+}
+
+.mock .luke-face {
+  width: 19px;
+  height: 19px;
+  overflow: visible;
+  color: var(--text-primary);
+}
+
+.mock .luke-identity-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mock .luke-identity-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mock .luke-identity-status {
+  color: var(--voice-luke);
+  font-size: 11px;
+}
+
+.mock .sidebar-new-plan {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 16px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--raised-strong);
+  font-weight: 600;
+}
+
+.mock .sidebar-heading {
+  margin: 0 0 5px;
+  padding: 0 8px;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mock .sidebar-plans {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mock .sidebar-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+
+.mock .sidebar-plan[data-current="true"] {
+  background: var(--raised-strong);
+  box-shadow: inset 2px 0 0 var(--voice-luke);
+}
+
+.mock .sidebar-plan-name {
+  font-weight: 600;
+}
+
+.mock .sidebar-plan-repository,
+.mock .desktop-toolbar-subtitle {
+  color: var(--text-secondary);
+  font-family: ui-monospace, "SF Mono", sfmono-regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.mock .sidebar-item {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-top: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-weight: 560;
+}
+
+/* Work column ------------------------------------------------------------- */
+
+.mock .desktop-main {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.mock .desktop-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 12px 6px 22px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.mock .desktop-toolbar-heading {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mock .desktop-toolbar-title {
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.mock .toolbar-button {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: var(--raised-strong);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.mock .toolbar-icon-button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  color: var(--text-secondary);
+}
+
+/* The document reads behind a fade at its foot, where the caption floats. */
+.mock .plan-document-scroll {
+  min-height: 0;
+  flex: 1;
+  padding: 18px 28px 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  line-height: 1.55;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent 100%);
+}
+
+.mock .plan-unit + .plan-unit {
+  margin-top: 1.1em;
+}
+
+.mock .plan-unit p {
+  margin: 0;
+}
+
+.mock .plan-section {
+  margin: 0 0 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.mock .plan-field-heading {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.mock .plan-unit .plan-example {
+  margin-top: 4px;
+  padding-left: 10px;
+  border-left: 2px solid var(--hairline);
+  color: var(--text-secondary);
+}
+
+/* The field being written wears the product's accent dot after its heading,
+   breathing while the caret types. */
+.mock .plan-unit[data-writing="true"] .plan-section::after {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--voice-luke);
+  vertical-align: 0.2em;
+  animation: plan-pulse 1500ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+  content: "";
+}
+
+/* Solid while it types, blinking like an editor's idle cursor once the
+   field is written and the call goes on. */
+.mock .plan-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 1px;
+  vertical-align: -0.2em;
+  border-radius: 1px;
+  background: var(--voice-luke);
+}
+
+.mock .plan-unit[data-writing="false"] .plan-caret {
+  animation: plan-caret-blink 1060ms steps(1, end) infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.mock .plan-assumptions {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: var(--desktop-well);
+}
+
+.mock .plan-assumptions-heading {
+  margin: 0 0 4px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 680;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mock .plan-assumptions ul {
+  margin: 0;
+  padding-left: 16px;
+  list-style: disc;
+}
+
+/* Luke's words: a floating card over the work column, above the call bar. */
+.mock .voice-caption {
+  position: absolute;
+  right: 22px;
+  bottom: 70px;
+  left: 22px;
+  margin: 0;
+  padding: 10px 13px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: rgba(22, 22, 27, 0.97);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.mock .desktop-call-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 22px;
+  border-top: 1px solid var(--hairline);
+  background: var(--desktop-well);
+}
+
+.mock .plan-microphone {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--message-sent);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--message-sent) 35%, transparent);
+  color: #fff;
+}
+
+.mock .plan-voice-status {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.mock .plan-voice-word {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mock .plan-backend {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+}
+
+/* Loops ------------------------------------------------------------------- */
+
+.mock .thinking-dots {
+  display: inline-flex;
+  height: 10px;
+  align-items: center;
+  gap: 3px;
+}
+
+.mock .thinking-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  animation: thinking-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation-play-state: var(--loop-motion);
+  opacity: 0.35;
+}
+
+.mock .thinking-dots i:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.mock .thinking-dots i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+/* Luke's meter, after base.css's `.waveform`. The product drives the bars
+   from the relayed level; here they loop, each a beat apart. */
+.mock .waveform {
+  display: flex;
+  height: 20px;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.mock .waveform-bar {
+  width: 2px;
+  height: var(--bar-height, 17px);
+  border-radius: 999px;
+  background: var(--voice-luke);
+  animation: waveform-talk 900ms ease-in-out infinite alternate;
+  animation-play-state: var(--loop-motion);
+  transform: scaleY(0.3);
+}
+
+.mock .waveform-bar:nth-child(1),
+.mock .waveform-bar:nth-child(5) {
+  --bar-height: 8px;
+}
+
+.mock .waveform-bar:nth-child(2),
+.mock .waveform-bar:nth-child(4) {
+  --bar-height: 13px;
+  animation-delay: 180ms;
+}
+
+.mock .waveform-bar:nth-child(3) {
+  --bar-height: 19px;
+  animation-delay: 360ms;
+}
+
+@keyframes plan-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes plan-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes thinking-dot {
+  0%,
+  45%,
+  65%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+
+  55% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes waveform-talk {
+  to {
+    transform: scaleY(1);
+  }
+}
