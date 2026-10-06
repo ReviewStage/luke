@@ -63,10 +63,14 @@ interface Citation {
 }
 
 /** A Responses answer as OpenAI shapes one: a search call, then a message whose text cites its sources. */
-function responsesAnswer(text: string, citations: readonly Citation[]): JsonValue {
+function responsesAnswer(
+  text: string,
+  citations: readonly Citation[],
+  status = "completed",
+): JsonValue {
   return {
     id: "resp_test",
-    status: "completed",
+    status,
     output: [
       { type: "web_search_call", id: "ws_test", status: "completed" },
       {
@@ -214,11 +218,11 @@ it.effect(
 
       const body = sentBody(recordedRequest(http.requests));
       assert.deepEqual(Object.keys(body).sort(), [
-        "include",
         "input",
         "instructions",
         "max_output_tokens",
         "model",
+        "reasoning",
         "store",
         "tool_choice",
         "tools",
@@ -229,9 +233,9 @@ it.effect(
           model: MODEL_ID,
           instructions: undefined,
           input: "RFC 9110 status 308 semantics",
-          tools: [{ type: "web_search" }],
+          tools: [{ type: "web_search", search_context_size: "low" }],
           tool_choice: "required",
-          include: ["web_search_call.action.sources"],
+          reasoning: { effort: "low" },
           max_output_tokens: PUBLIC_RESEARCH_BOUNDS.MAX_SEARCH_OUTPUT_TOKENS,
           store: false,
         },
@@ -269,6 +273,46 @@ it.effect("an answer that cites no source is no-results, and its words go no fur
       query: "Stripe idempotency key expiry",
     });
     assert.ok(!JSON.stringify(result).includes(unsourced));
+  }),
+);
+
+it.effect("an answer cut short before it cited anything is not-searched, not no-results", () =>
+  Effect.gen(function* () {
+    const { search } = searchWith(() =>
+      jsonResponse({
+        id: "resp_test",
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+        output: [
+          { type: "reasoning", id: "rs_test", summary: [] },
+          { type: "web_search_call", id: "ws_test", status: "completed" },
+        ],
+      }),
+    );
+
+    const result = yield* search({ query: "Stripe idempotency key expiry" });
+
+    assert.deepEqual(result, {
+      status: SEARCH_WEB_STATUS.NOT_SEARCHED,
+      reason: SEARCH_WEB_REFUSAL.INCOMPLETE,
+      query: "Stripe idempotency key expiry",
+    });
+  }),
+);
+
+it.effect("an answer cut short after it cited a source still hands that source over", () =>
+  Effect.gen(function* () {
+    const cut = "Stripe keeps idempotency keys for at least 24 hours. (stripe.com) Keys are";
+    const { search } = searchWith(() =>
+      jsonResponse(responsesAnswer(cut, [{ url: IDEMPOTENCY_URL, start: 53 }], "incomplete")),
+    );
+
+    const result = found(yield* search({ query: "Stripe idempotency key expiry" }));
+
+    assert.deepEqual(
+      result.findings.map((finding) => finding.url),
+      [IDEMPOTENCY_URL],
+    );
   }),
 );
 

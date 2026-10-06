@@ -40,10 +40,13 @@ import { HOSTED_OPENAI_DEFAULTS } from "./openai.js";
  * naming a private thing in plain words is indistinguishable from one that
  * does not.
  *
- * A search answers `found` only with at least one cited public URL, each
- * with the words of the answer that cited it; an answer citing nothing is
+ * A search runs at low reasoning effort and low search context, because the
+ * planning turn waits on it and all it needs back is a short cited answer.
+ * It answers `found` only with at least one cited public URL, each with the
+ * words of the answer that cited it; a finished answer citing nothing is
  * `no-results` and its words go no further, so an unsourced answer is never
- * handed over shaped like a finding. Every failure is `not-searched` or
+ * handed over shaped like a finding, and an answer that stopped before it
+ * finished cannot say nothing was there. Every failure is `not-searched` or
  * `not-read` with words that say nothing was found and why.
  *
  * A page read reaches only the public internet: HTTPS on the default port,
@@ -121,6 +124,9 @@ export const SEARCH_WEB_REFUSAL = {
     "Not searched: the account's daily hosted allowance is spent, so nothing was sent and " +
     "nothing was found. Keep the question open.",
   RATE_LIMITED: "Not searched: the search service is rate limiting. Nothing was found.",
+  INCOMPLETE:
+    "Not searched: the search stopped before it finished an answer, so nothing was found. " +
+    "The call may be made again, with a narrower query.",
   FAILED:
     "Not searched: the search failed, timed out, or answered in a shape the service does not " +
     "read. Nothing was found; the call may be made again.",
@@ -285,6 +291,21 @@ const SEARCH_INSTRUCTIONS =
 
 const RESPONSES_PATH = "/responses";
 
+/**
+ * How hard the search model works: low reasoning effort and low search
+ * context. Note that the defaults let a reasoning model search, open pages,
+ * and think again for most of `SEARCH_TIMEOUT` while the planning turn waits,
+ * and its reasoning spends the same `MAX_SEARCH_OUTPUT_TOKENS` the answer
+ * needs, for a query that wants one short cited answer.
+ */
+const SEARCH_EFFORT = {
+  REASONING: "low",
+  CONTEXT_SIZE: "low",
+} as const;
+
+/** The Responses status of an answer the model finished; anything else stopped short. */
+const RESPONSE_COMPLETED = "completed";
+
 /** Credential shapes a query must not carry: known token prefixes and private key blocks. */
 const CREDENTIAL_PATTERN =
   /-----BEGIN|\b(?:sk-[\w-]{16,}|gh[pousr]_\w{20,}|github_pat_\w{20,}|xox[abprs]-[\w-]{10,}|AKIA[0-9A-Z]{16}|AIza[\w-]{30,}|eyJ[\w-]{10,}\.[\w-]{10,})/u;
@@ -346,7 +367,10 @@ const MessageItem = Schema.Struct({
   content: Schema.Array(Schema.Unknown),
 });
 
-const ResponsesAnswer = Schema.Struct({ output: Schema.Array(Schema.Unknown) });
+const ResponsesAnswer = Schema.Struct({
+  status: Schema.optionalKey(Schema.String),
+  output: Schema.Array(Schema.Unknown),
+});
 
 const decodeCitation = Schema.decodeUnknownOption(UrlCitation);
 const decodeOutputText = Schema.decodeUnknownOption(OutputText);
@@ -409,9 +433,9 @@ function searchRequest(openAi: ResearchOpenAi, query: string) {
       model: openAi.modelId,
       instructions: SEARCH_INSTRUCTIONS,
       input: query,
-      tools: [{ type: "web_search" }],
+      tools: [{ type: "web_search", search_context_size: SEARCH_EFFORT.CONTEXT_SIZE }],
       tool_choice: "required",
-      include: ["web_search_call.action.sources"],
+      reasoning: { effort: SEARCH_EFFORT.REASONING },
       max_output_tokens: PUBLIC_RESEARCH_BOUNDS.MAX_SEARCH_OUTPUT_TOKENS,
       store: false,
     }),
@@ -420,9 +444,16 @@ function searchRequest(openAi: ResearchOpenAi, query: string) {
 
 const HTTP_TOO_MANY_REQUESTS = 429;
 
-/** A search's answer as the model is shown it: `found` only where a public source was cited. */
-function searchResult(query: string, output: readonly unknown[]): SearchWebResult {
-  const { text, findings } = readAnswer(output);
+/**
+ * A search's answer as the model is shown it: `found` only where a public
+ * source was cited, and `no-results` only where the answer finished, since one
+ * cut short by the token bound may have stopped before it wrote anything.
+ */
+function searchResult(query: string, answer: typeof ResponsesAnswer.Type): SearchWebResult {
+  const { text, findings } = readAnswer(answer.output);
+  if (findings.length === 0 && answer.status !== RESPONSE_COMPLETED) {
+    return { status: SEARCH_WEB_STATUS.NOT_SEARCHED, reason: SEARCH_WEB_REFUSAL.INCOMPLETE, query };
+  }
   if (findings.length === 0) {
     return { status: SEARCH_WEB_STATUS.NO_RESULTS, reason: SEARCH_WEB_REFUSAL.NO_RESULTS, query };
   }
@@ -454,7 +485,7 @@ const searchPublicWeb = /* @__PURE__ */ Effect.fnUntraced(function* (
         return Effect.succeed(failed(SEARCH_WEB_REFUSAL.FAILED));
       }
       return Effect.map(HttpClientResponse.schemaBodyJson(ResponsesAnswer)(response), (body) =>
-        searchResult(query, body.output),
+        searchResult(query, body),
       );
     }),
     Effect.scoped,

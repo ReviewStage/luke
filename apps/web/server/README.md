@@ -653,7 +653,8 @@ instructions' alone: no code reads the document for meaning.
 
 The research reads (`server/hosted/public-research.ts`) are `search_web`,
 one query sent to OpenAI's Responses API with its own `web_search` tool on
-Luke's key and the brain's model, asked to store nothing, and
+Luke's key and the brain's model at low reasoning effort and low search
+context, since the planning turn waits on it, asked to store nothing, and
 `read_web_page`, one public HTTPS page fetched and reduced to its text.
 Neither knows the account or the plan: what leaves is the query and fixed
 instructions, or a GET for one URL with no credential of the account's, and
@@ -661,8 +662,9 @@ the result goes back only to the call that asked. A query is one line of at
 most 200 characters with nothing shaped like a credential; keeping private
 repository text out of it is the planning instructions' rule, since plain
 words cannot be told apart by code. A search is `found` only with a cited
-public URL, each with the answer's words that cited it; an uncited answer is
-`no-results` and its words go no further, and every failure is `not-searched`
+public URL, each with the answer's words that cited it; a finished uncited
+answer is `no-results` and its words go no further, one the token bound cut
+short before it cited anything is `not-searched`, and every failure is `not-searched`
 or `not-read` in words that say nothing was found. A page read refuses any
 host whose address, resolved before each request and again on every redirect
 hop it follows by hand, is private, loopback, link-local, CGNAT, unique-local,
