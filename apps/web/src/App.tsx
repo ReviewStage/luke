@@ -18,7 +18,7 @@ export function App(): React.JSX.Element {
               needs about 490px, so it steps before the column can squeeze it
               rather than at the column's own padding breakpoint. */}
           <h1 className="m-0 text-[2.25rem] leading-[1.1] font-semibold tracking-[-0.02em] text-pretty max-[576px]:text-[1.75rem]">
-            Plan the feature before the agent writes it.
+            A better way to plan with agents.
           </h1>
           <p className="mt-6 mb-0 max-w-[34rem] text-lg text-pretty text-muted-foreground">
             Talk through a feature with Luke. He reads the code while you talk and writes a plan you
