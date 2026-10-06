@@ -7,6 +7,7 @@ import {
   PLANNING_READ,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -137,6 +138,17 @@ test("stepping back leaves an open plan, closes the form to the list, and has no
     assert.equal(tab.control().back(), false);
   });
   assert.equal(tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length, 1);
+});
+
+test("deleting asks for the open plan's delete and answers a refusal, and a fixture's plan is deleted nowhere", async () => {
+  const live = mount({ shown: true, planning: OPEN });
+  const refused = await live.control().onDeletePlan();
+  assert.equal(live.told.at(-1), ACT_KIND.PLANNING_DELETE);
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
+  await fixture.control().onDeletePlan();
+  assert.deepEqual(fixture.told, []);
 });
 
 test("the microphone asks for the open plan's call, and the planning profile's fixture reads and leaves nothing", () => {

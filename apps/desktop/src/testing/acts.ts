@@ -98,6 +98,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_START,
     payload: { name: "Teammate invitations", folderPath: "/Users/dev/relay" },
   },
+  [ACT_KIND.PLANNING_DELETE]: {
+    kind: ACT_KIND.PLANNING_DELETE,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  },
   [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
   [ACT_KIND.PLANNING_CONNECT_GITHUB]: { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
   [ACT_KIND.PLANNING_CHOOSE_FOLDER]: { kind: ACT_KIND.PLANNING_CHOOSE_FOLDER },

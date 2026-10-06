@@ -22,6 +22,7 @@ export interface PlanningActsDependencies {
     planningRefresh(): Effect.Effect<void>;
     planningOpen(planId: string): Effect.Effect<boolean>;
     planningClose(): Effect.Effect<void>;
+    planningDelete(planId: string): Effect.Effect<boolean>;
     planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
     planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
     planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
@@ -43,6 +44,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_SELECT
   | typeof ACT_KIND.PLANNING_CLOSE
   | typeof ACT_KIND.PLANNING_START
+  | typeof ACT_KIND.PLANNING_DELETE
   | typeof ACT_KIND.PLANNING_REPOSITORIES
   | typeof ACT_KIND.PLANNING_CONNECT_GITHUB
   | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
@@ -86,6 +88,10 @@ export function planningActRows(
           }
         }),
       );
+    },
+    [ACT_KIND.PLANNING_DELETE]: ({ planId }, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_DELETE, sender);
+      return host.planningDelete(planId);
     },
     [ACT_KIND.PLANNING_REPOSITORIES]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REPOSITORIES, sender);

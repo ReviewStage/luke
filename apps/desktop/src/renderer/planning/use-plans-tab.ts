@@ -1,4 +1,5 @@
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
@@ -64,9 +65,17 @@ export interface PlansControl {
   onCancelNew: () => void;
   /** Leaves the open plan for the list, which ends its call. */
   onLeavePlan: () => void;
+  /** Deletes the open plan, which ends its call and returns to the list; answers whether it was deleted. */
+  onDeletePlan: () => Promise<ActionResult>;
   /** Steps back one page, answering whether there was a page to step back from. */
   back: () => boolean;
 }
+
+/** What a delete the service did not carry answers, so the plan stays and says why. */
+const DELETE_REFUSED: ActionResult = {
+  status: ACTION_RESULT_STATUS.REJECTED,
+  reason: "The plan could not be deleted. Try again.",
+};
 
 export function usePlansTab(input: {
   acts: Pick<ActHandle, "act" | "tell">;
@@ -122,6 +131,14 @@ export function usePlansTab(input: {
   const leavePlan = useCallback(() => {
     if (fixture === undefined) tell(ACT_KIND.PLANNING_CLOSE);
   }, [fixture, tell]);
+
+  // A fixture's plans are deleted nowhere, as they are read from nowhere.
+  const deletePlan = async (): Promise<ActionResult> => {
+    const planId = planning.activePlanId;
+    if (planId === undefined || fixture !== undefined) return DELETE_REFUSED;
+    const deleted = await act(ACT_KIND.PLANNING_DELETE, { planId }).catch(() => false);
+    return deleted ? { status: ACTION_RESULT_STATUS.ACCEPTED } : DELETE_REFUSED;
+  };
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
@@ -209,6 +226,7 @@ export function usePlansTab(input: {
     onNewPlan: () => onComposingChange(true),
     onCancelNew: () => onComposingChange(false),
     onLeavePlan: leavePlan,
+    onDeletePlan: deletePlan,
     back,
   };
 }

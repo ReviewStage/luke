@@ -135,6 +135,14 @@
   gap: 10px;
 }
 
+.plan-delete {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.plan-delete-failed,
 .plan-copy-failed {
   margin: 0;
   color: var(--error-text);

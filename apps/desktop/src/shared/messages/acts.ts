@@ -155,7 +155,7 @@ export const ACT_KIND = {
   /**
    * The panel's Plans tab asking the host: the plan list and the active
    * document read as the tab shows, one plan made the active one, the open
-   * plan left, a plan started on a repository, the repositories the
+   * plan left, a plan started on a repository, a plan deleted, the repositories the
    * account's GitHub connection reads, and the connection itself. The view
    * arrives on the document rather than as an answer; nothing here writes a
    * plan's document, which the plan's notetaker alone saves.
@@ -164,6 +164,7 @@ export const ACT_KIND = {
   PLANNING_SELECT: "planning.select",
   PLANNING_CLOSE: "planning.close",
   PLANNING_START: "planning.start",
+  PLANNING_DELETE: "planning.delete",
   PLANNING_REPOSITORIES: "planning.repositories",
   PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
   /** The new-plan form's Choose folder press: the folder picker, answering the chosen path or null. */
@@ -625,6 +626,11 @@ export const ACT = {
     payload: actSchema(planningStartRequestSchema),
     result: wireResult<PlanningStartAnswer>(isReadable(planningStartAnswerSchema)),
     refusal: "Could not start that plan on this system.",
+  },
+  [ACT_KIND.PLANNING_DELETE]: {
+    payload: record({ planId: exactId }),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not delete that plan on this system.",
   },
   [ACT_KIND.PLANNING_REPOSITORIES]: {
     payload: noPayload,
