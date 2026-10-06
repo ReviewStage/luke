@@ -90,7 +90,7 @@ The plan is done when the saved document is enough for a separate agent to build
 - nothing in Open questions would change what gets built;
 - every remaining choice the user does not mind either way is listed under Left to the agent or stated as an assumption.
 
-Once it is, queue nothing more: any question Luke still holds is moot. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing and do the same, also naming what is still unanswered or open.
+Once it is, queue nothing more: any question Luke still holds is moot. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
 
 ### Available tools
 

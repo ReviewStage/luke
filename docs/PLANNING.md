@@ -467,7 +467,10 @@ either way is left to the agent or stated as an assumption. The planning
 model queues only decisions that change what is built or how it is checked,
 and states the rest as working assumptions Luke says aloud. Once the plan is
 done it queues nothing more and tells Luke the plan is complete, and Luke
-drops whatever questions he still holds.
+drops whatever questions he still holds. A developer who stops before then
+is never told the plan is complete: the model says it is not complete yet and
+names what is still unanswered, and Luke asks whether to settle it now or
+leave it open.
 
 That, or the developer saying "I think that's everything", starts the review:
 Luke reviews the document aloud before it is copied. It covers:
