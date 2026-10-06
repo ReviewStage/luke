@@ -281,8 +281,11 @@ evaluations are outside this work.
 ### Microphone row and the panel's voice
 
 - **Microphone button.** One press starts talking to Luke about the open plan.
-  The call opens if none stands, and the microphone opens. A second press
-  mutes it. The microphone stays open between the two presses rather than
+  The call opens if none stands, and the microphone opens. A call just
+  opened is Luke's to begin: the voice service tells it to speak first
+  (`planningOpeningInstruction`), asking what to build on an untouched plan
+  and the plan's next question on one under way, while a call re-attached
+  after a dropped socket opens nothing again. A second press mutes it. The microphone stays open between the two presses rather than
   only while a key is held, because a planning conversation runs for minutes.
   The existing talk key keeps its hold-to-talk meaning, and speaks into the
   open plan's call.
@@ -328,10 +331,12 @@ The developer opens the panel's Plans tab. They press
 `New plan`, connect GitHub once, name the plan "Teammate invitations", pick
 `acme/relay`, and press `Start plan`. The header reads
 `acme/relay · main @ 4f2c9e1`, and the document shows the untouched template,
-every field "Unanswered". Luke greets them first.
+every field "Unanswered".
 
-They press the microphone and speak: "I want people to be able to invite a
-teammate into their workspace by email."
+They press the microphone. The call opens and Luke speaks first, without
+waiting for them: a few words of greeting and what they want to build. They
+answer: "I want people to be able to invite a teammate into their workspace by
+email."
 
 The model browses `acme/relay` at `4f2c9e1` through GitHub's hosted
 `get_file_contents` tool. The thinking dots show while it reads, and Luke says

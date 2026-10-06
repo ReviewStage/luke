@@ -43,6 +43,7 @@ import {
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
   type LiveClientEvent,
+  planningOpeningInstruction,
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
@@ -1109,6 +1110,13 @@ async function hangUpConnection(
   );
 }
 
+/** A planning call's own opening, the first thing the service sends up once the call starts. */
+async function readOpening(upstream: SocketReader): Promise<void> {
+  const opening = clientEvent(await upstream.next(5_000));
+  assert.ok(opening.type === LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+  assert.equal(opening.content, planningOpeningInstruction());
+}
+
 it.effect(
   "a planning call is created under the planning scene, its spoken ask reaches eve in its plan's conversation and never the account's main, and a re-attach is bound to the same plan by the session's row",
   () =>
@@ -1123,6 +1131,7 @@ it.effect(
 
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, sessionId);
+      await readOpening(session.upstream);
       await until(
         () => context.eve.opened.length === 1,
         () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
@@ -1378,6 +1387,7 @@ it.effect(
 
       const firstCall = await openSession(context, first.id);
       await speak(firstCall.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
+      await readOpening(firstCall.upstream);
       await until(
         () => context.eve.opened.length === 1,
         () => "the first plan's ask to reach eve",
@@ -1386,6 +1396,7 @@ it.effect(
 
       const secondCall = await openSession(context, second.id);
       await speak(secondCall.attach.socket, context.openAi.attaches[1]?.sessionId ?? "");
+      await readOpening(secondCall.upstream);
       await until(
         () => context.eve.opened.length === 2,
         () => "the second plan's ask to reach eve",
@@ -1459,6 +1470,8 @@ it.effect(
         attach.socket,
         JSON.stringify(sessionStarted(context.openAi.attaches[0]?.sessionId ?? "")),
       );
+      // The call's own opening goes up as it starts; nothing of the desk follows it.
+      await readOpening(upstream);
       const standing = {
         sessionId: `wrun_${randomUUID()}`,
         target: context.target,

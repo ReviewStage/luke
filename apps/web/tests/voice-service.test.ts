@@ -11,6 +11,7 @@ import {
   VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
+import type { Plan } from "@sidecar/hosted/plan-wire";
 import { LIVE_AUDIO_FORMAT, LIVE_DEFAULT_AUDIO_FORMAT, PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import {
@@ -41,6 +42,7 @@ import {
   LIVE_TRANSPORT_TYPE,
   LIVE_VOICE,
   livePrimarySessionConfig,
+  planningOpeningInstruction,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
   SEED_CONTENT_TYPE,
@@ -854,6 +856,72 @@ test("a caller who hangs up before the acknowledgment is cued nothing when it la
     { event: LOG_EVENT.GREETING_SENT, route: VOICE_ROUTE.INTRODUCTION },
     { event: LOG_EVENT.GREETING_UNACKNOWLEDGED, route: VOICE_ROUTE.INTRODUCTION },
   ]);
+});
+
+/** A plan the account holds, untouched since it was started. */
+const PLAN: Plan = {
+  id: "7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d",
+  name: "Teammate invitations",
+  createdAt: 1_000,
+  updatedAt: 1_000,
+  openedAt: 1_000,
+  document: { body: "# Teammate invitations", assumptions: [] },
+};
+
+/** A started session, as OpenAI tells the sideband. */
+function sessionStarted(sessionId: string): string {
+  return JSON.stringify({
+    type: LIVE_SERVER_EVENT.SESSION_STARTED,
+    event_id: "started-1",
+    session: { id: sessionId },
+  });
+}
+
+test("a planning call just created speaks first, cued once its opening is acknowledged, and a re-attach to it opens nothing", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.record.plans.push({ userId: FAKE_USER_ID, plan: PLAN });
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, { ...createFrame([]), planId: PLAN.id });
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  const created = sessionCreatedFrameFromWire(record(await opened.reader.next()));
+  assert.ok(created);
+
+  await sendText(upstream.socket, sessionStarted(created.sessionId));
+  const opening = record(await upstream.next());
+  assert.equal(opening.type, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+  assert.equal(opening.delegation_id, null);
+  assert.equal(opening.content, planningOpeningInstruction());
+  assert.ok(isWireString(opening.event_id));
+  await sendText(upstream.socket, appended(opening.event_id));
+  const cue = record(await upstream.next());
+  assert.equal(cue.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  assert.equal(cue.delegation_id, null);
+  assert.equal(cue.content, greetingCue());
+  assert.deepEqual(greetingLog(context), [
+    { event: LOG_EVENT.GREETING_SENT, route: VOICE_ROUTE.SESSIONS },
+    { event: LOG_EVENT.GREETING_ACKNOWLEDGED, route: VOICE_ROUTE.SESSIONS },
+    { event: LOG_EVENT.GREETING_CUED, route: VOICE_ROUTE.SESSIONS },
+  ]);
+
+  // The call already opened on its first connection, so a fresh one says nothing of its own.
+  const again = await reattach(context, created.sessionId);
+  await sendText(again.upstream.socket, sessionStarted(created.sessionId));
+  assert.equal(await again.desktop.next(), sessionStarted(created.sessionId));
+  assert.equal(await again.upstream.arrives(), false);
+});
+
+test("a desk call waits to be spoken to: nothing of the service's own goes up when it starts", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { desktop, upstream, created } = await openSession(context);
+
+  await sendText(upstream.socket, sessionStarted(created.sessionId));
+  assert.equal(await desktop.next(), sessionStarted(created.sessionId));
+  assert.equal(await upstream.arrives(), false);
+  assert.deepEqual(greetingLog(context), []);
 });
 
 test("a caller gone before the session starts is not greeted at all", async () => {

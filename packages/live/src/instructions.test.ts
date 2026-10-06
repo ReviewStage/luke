@@ -5,6 +5,7 @@ import {
   greetingCue,
   greetingInstruction,
   LIVE_SCENE,
+  planningOpeningInstruction,
   sessionInstructions,
 } from "./instructions.js";
 import { estimatedTokens } from "./tokens.js";
@@ -46,6 +47,14 @@ test("the cue that follows it is one append's worth of commentary", () => {
   assert.ok(estimatedTokens(cue) <= APPEND_TOKEN_BOUND);
   assert.equal(chunkForAppend(cue).length, 1);
   assert.equal(cue.includes("\n"), false);
+});
+
+test("a planning call's opening is one append's worth of instruction", () => {
+  const opening = planningOpeningInstruction();
+
+  assert.ok(estimatedTokens(opening) <= APPEND_TOKEN_BOUND);
+  assert.equal(chunkForAppend(opening).length, 1);
+  assert.equal(opening.includes("\n"), false);
 });
 
 test("a planning call is told the desktop's speaking policies over the planning model's reads, and no save to delegate", () => {

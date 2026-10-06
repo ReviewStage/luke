@@ -76,8 +76,8 @@ export interface HostedLiveExchangeOptions {
    * Whether the session is a planning call. A planning call speaks none of
    * the desk's proactive turns: a beat asked of it is dropped, and the
    * caller starts no briefing look over it, so nothing of the desk enters the
-   * plan's conversation. It opens instead with the planning model's own
-   * first words, asked of it the moment a newly created call starts.
+   * plan's conversation. What opens a newly created call is the voice
+   * service's own instruction on its start, and nothing here.
    */
   readonly planning?: boolean;
   /**
