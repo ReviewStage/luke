@@ -458,9 +458,22 @@ spoken conversation.
 
 ### 6. The spoken final review
 
-When the developer says "I think that's everything", Luke first checks every
-field of the template for an answer or an agreed reason it does not apply,
-then reviews the document aloud before it is copied. It covers:
+The plan is done when the document is enough for a separate agent to build
+the change without coming back with a question, not when every branch of the
+design tree has been asked about: every core field holds an answer or an
+agreed reason it does not apply, every rule has an example, nothing open
+would change what gets built, and every choice the developer does not mind
+either way is left to the agent or stated as an assumption. The planning
+model queues only decisions that change what is built or how it is checked,
+and states the rest as working assumptions Luke says aloud. Once the plan is
+done it queues nothing more and tells Luke the plan is complete, and Luke
+drops whatever questions he still holds. A developer who stops before then
+is never told the plan is complete: the model says it is not complete yet and
+names what is still unanswered, and Luke asks whether to settle it now or
+leave it open.
+
+That, or the developer saying "I think that's everything", starts the review:
+Luke reviews the document aloud before it is copied. It covers:
 
 - every field still "Unanswered";
 - every assumption, one at a time ("I assumed invites expire after 7 days.
