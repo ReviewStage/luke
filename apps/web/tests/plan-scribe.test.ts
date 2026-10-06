@@ -205,7 +205,11 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           scribe.observe(heard("By hand, in settings.", 5_000, 6_000));
           yield* quiet;
-          assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+          assert.ok(
+            (yield* savedBodyOnce(userId, planId, (body) => body.includes(PROBLEM))).includes(
+              PROBLEM,
+            ),
+          );
           assert.ok(asked[1]?.includes("Only admins can add people."));
         }),
       ),
