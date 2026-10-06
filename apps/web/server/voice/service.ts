@@ -27,6 +27,7 @@ import {
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_AUDIO_APPEND,
   type LiveClientEvent,
+  planningOpeningInstruction,
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
@@ -76,7 +77,8 @@ import { replayHeldFrames, SOCKET_CLOSE_CODE, voiceSocket } from "./socket.js";
  * alone: once the session starts it
  * sends the greeting, waits for the acknowledgment that says the model took
  * it, cues the model to begin, and shows the caller only captions and
- * status.
+ * status. A planning call newly created on `/api/voice/sessions` is opened
+ * the same way, so Luke speaks first there too.
  *
  * `/api/voice/audio` takes a signed-in device under the same handshake as
  * `/api/voice/sessions`, for a device with no WebRTC of its own. The service
@@ -171,6 +173,22 @@ function byteBudgetFor(route: VoiceRoute): number {
     case VOICE_ROUTE.AUDIO:
       return SOCKET_BYTE_BUDGET.AUDIO;
   }
+}
+
+/**
+ * What the service tells a session to say first, once it starts: the
+ * introduction's greeting, and a planning call's opening, since the planning
+ * role is to lead and a Live session otherwise waits for the developer's
+ * first words. Only a call just created opens; one re-attached opened on
+ * its first connection. Every other session waits to be spoken to.
+ */
+function openingInstruction(
+  route: VoiceRoute,
+  session: { planId: string | undefined; started: boolean },
+): string | undefined {
+  if (route === VOICE_ROUTE.INTRODUCTION) return greetingInstruction();
+  if (session.planId === undefined || session.started) return undefined;
+  return planningOpeningInstruction();
 }
 
 /** What a server hands a service that stands on it, which is what `ws` upgrades on. */
@@ -657,6 +675,7 @@ export class VoiceService {
       const pipe = yield* voiceSocket(sideband, { held });
       // Both consumers listen now: what the session spoke since the attach is read here, by both.
       yield* Effect.sync(() => sideband.resume());
+      const opening = openingInstruction(route, opened);
       const summary = yield* relaySession<SqlClient.SqlClient>({
         route,
         device,
@@ -664,20 +683,18 @@ export class VoiceService {
         closeTimeoutMs: this.#options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS,
         openingTimeoutMs: this.#options.greetingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS,
         onSessionStarted:
-          route === VOICE_ROUTE.INTRODUCTION
-            ? () => {
+          opening === undefined
+            ? undefined
+            : () => {
                 this.#log({ event: LOG_EVENT.GREETING_SENT, route });
                 return instructionsAppend({
                   eventId: randomUUID(),
                   delegationId: null,
-                  content: greetingInstruction(),
+                  content: opening,
                 });
-              }
-            : undefined,
+              },
         onOpeningSettled:
-          route === VOICE_ROUTE.INTRODUCTION
-            ? (settled) => this.#greetingSettled(route, settled)
-            : undefined,
+          opening === undefined ? undefined : (settled) => this.#greetingSettled(route, settled),
         onUsageUpdated:
           accountId === undefined
             ? undefined

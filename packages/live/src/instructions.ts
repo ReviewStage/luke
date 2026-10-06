@@ -201,6 +201,32 @@ export function launchGreetingInstruction(firstName: string | undefined): string
 }
 
 /**
+ * A planning call's opening, the same guide form as the introduction's and
+ * sent the same way, by the voice service once a newly created planning
+ * call starts, because a Live session waits for the caller's first words
+ * until it is told to speak and the planning role is to lead. The plan the
+ * call is about is already the session's seed, whose first line says
+ * whether the plan is new or under way, so the instruction picks the
+ * opening from that line: a new plan opens on what to build, and a plan
+ * under way picks up where it stands. It asks the question in the same
+ * turn, because a voice that opened by handing the backend a look at the
+ * repository said "give me a second" and then waited on a backend with
+ * nothing yet to go on. Like the launch greeting's, it says that it shapes
+ * the opening alone, since an instructions append is standing text.
+ */
+export function planningOpeningInstruction(): string {
+  return [
+    "Open the call now, in English, without waiting for the developer to speak.",
+    "If the plan above is new, greet the developer in a few words and ask what they want to build",
+    "and what problem it solves. If it is under way, say in one sentence where it stands and ask",
+    "the one question it most needs answered next. Ask that question in this same turn: do not",
+    "say you are looking anything up, do not ask the developer to wait, and do not wait for the",
+    "backend first. Then stop and listen. This shapes the opening alone: once it is said, carry",
+    "on as your other instructions say.",
+  ].join(" ");
+}
+
+/**
  * The cue that follows the greeting's acknowledgment, sent as one
  * `session.commentary.append` with a null delegation. It is the guide's own
  * sentence for a greeting that has to follow application instructions, kept

@@ -43,6 +43,7 @@ import {
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
   type LiveClientEvent,
+  planningOpeningInstruction,
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
@@ -1109,6 +1110,13 @@ async function hangUpConnection(
   );
 }
 
+/** A planning call's own opening, the first thing the service sends up once the call starts. */
+async function readOpening(upstream: SocketReader): Promise<void> {
+  const opening = clientEvent(await upstream.next(5_000));
+  assert.ok(opening.type === LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+  assert.equal(opening.content, planningOpeningInstruction());
+}
+
 it.effect(
   "a planning call is created under the planning scene, its spoken ask reaches eve in its plan's conversation and never the account's main, and a re-attach is bound to the same plan by the session's row",
   () =>
@@ -1123,6 +1131,7 @@ it.effect(
 
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, sessionId);
+      await readOpening(session.upstream);
       await until(
         () => context.eve.opened.length === 1,
         () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
@@ -1365,6 +1374,37 @@ it.effect(
 );
 
 it.effect(
+  "a plan just started is seeded as new and a plan under way as the one the call continues, so a new plan opens on no progress",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const fresh = await database.run(createPlan(context.target.userId, PLAN));
+      const freshCall = await openSession(context, fresh.id);
+      const [freshSeed] = seededTexts(context, 0);
+      await hangUpConnection(freshCall.desktop, freshCall.attach, freshCall.upstream);
+
+      const saved = await database.run(createPlan(context.target.userId, PLAN));
+      await database.run(
+        savePlanDocument(context.target.userId, saved.id, {
+          body: "# Teammate invitations\n\n## Goal\nOwners invite teammates by email.\n",
+          assumptions: [],
+        }),
+      );
+      const savedCall = await openSession(context, saved.id);
+      const [savedSeed] = seededTexts(context, 1);
+      await hangUpConnection(savedCall.desktop, savedCall.attach, savedCall.upstream);
+
+      const firstLine = (seed: { text: unknown } | undefined) => String(seed?.text).split("\n")[0];
+      assert.notEqual(firstLine(freshSeed), firstLine(savedSeed));
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+        () => `both calls to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
   "a call about another plan lands in that plan's conversation alone, and a plan the account does not hold is refused as not found before any session is created",
   () =>
     Effect.promise(async () => {
@@ -1378,6 +1418,7 @@ it.effect(
 
       const firstCall = await openSession(context, first.id);
       await speak(firstCall.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
+      await readOpening(firstCall.upstream);
       await until(
         () => context.eve.opened.length === 1,
         () => "the first plan's ask to reach eve",
@@ -1386,6 +1427,7 @@ it.effect(
 
       const secondCall = await openSession(context, second.id);
       await speak(secondCall.attach.socket, context.openAi.attaches[1]?.sessionId ?? "");
+      await readOpening(secondCall.upstream);
       await until(
         () => context.eve.opened.length === 2,
         () => "the second plan's ask to reach eve",
@@ -1459,6 +1501,8 @@ it.effect(
         attach.socket,
         JSON.stringify(sessionStarted(context.openAi.attaches[0]?.sessionId ?? "")),
       );
+      // The call's own opening goes up as it starts; nothing of the desk follows it.
+      await readOpening(upstream);
       const standing = {
         sessionId: `wrun_${randomUUID()}`,
         target: context.target,

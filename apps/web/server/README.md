@@ -684,7 +684,13 @@ session. The Plans tab's call is a `/api/voice/sessions` session whose
 account holds before anything is spent. It is created under the Live
 planning scene (`LIVE_SCENE.PLANNING` in `@sidecar/live`), whose delegation
 policy hands the developer's planning words to the backend and says back the
-finding and its one next question. The exchange lands every spoken ask and
+finding and its one next question. A call just created speaks first: on
+`session.started` the service sends `planningOpeningInstruction()` and, once
+it is acknowledged, the same cue the introduction's greeting gets, so Luke
+opens the conversation rather than waiting for the developer, and a
+re-attach opens nothing again. The plan seed's first line says whether the
+plan is new (the untouched template and no assumption) or under way, which
+is what the opening picks its first question from. The exchange lands every spoken ask and
 the session's record in the plan's conversation (`openPlanConversation`)
 rather than the account's standing main, so the delegation reaches the
 planning model with its document, its tools, and the conversation so far.
