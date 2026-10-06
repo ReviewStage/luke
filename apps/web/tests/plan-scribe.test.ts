@@ -49,6 +49,22 @@ const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Du
 /** The developer's quiet elapsing, and the run it starts left to finish. */
 const quiet = Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS)), settle);
 
+/**
+ * The saved body once it reads as `expected`, settling again between reads
+ * within a bound, since how many turns of the loop a run's store work takes
+ * is the machine's; what it last read either way, so a failed assertion shows
+ * the body.
+ */
+const savedBodyOnce = (userId: string, planId: string, expected: (body: string) => boolean) =>
+  Effect.gen(function* () {
+    let body = yield* savedBody(userId, planId);
+    for (let attempt = 0; attempt < 50 && !expected(body); attempt += 1) {
+      yield* settle;
+      body = yield* savedBody(userId, planId);
+    }
+    return body;
+  });
+
 const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
     const { model, asked } = scriptedScribeModel(answers);
@@ -143,6 +159,32 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         assert.ok(body.includes(OUTCOME));
       }),
     ),
+  );
+
+  it.effect(
+    "a run that writes a section whole, null where it has no words, erases nothing the run before it wrote",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe } = yield* scribeFor(userId, planId, [
+            { goal: { problem: PROBLEM, outcome: null } },
+            { goal: { problem: null, outcome: OUTCOME }, rules: null },
+          ]);
+
+          scribe.observe(heard("Only admins can add people.", 0, 1_000));
+          yield* quiet;
+          const first = yield* savedBodyOnce(userId, planId, (body) => body.includes(PROBLEM));
+          assert.ok(first.includes(PROBLEM));
+
+          scribe.observe(heard("Members should invite by email.", 5_000, 6_000));
+          yield* quiet;
+
+          const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
+          assert.ok(body.includes(OUTCOME));
+          assert.ok(body.includes(PROBLEM));
+        }),
+      ),
   );
 
   it.effect(

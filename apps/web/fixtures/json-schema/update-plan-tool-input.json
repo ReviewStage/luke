@@ -15,7 +15,7 @@
               "type": "null"
             }
           ],
-          "description": "The current problem, and who it affects. Null while unanswered."
+          "description": "The current problem, and who it affects. Leave out unless the latest lines change it."
         },
         "outcome": {
           "anyOf": [
@@ -28,7 +28,7 @@
               "type": "null"
             }
           ],
-          "description": "The observable improvement once the change ships. Null while unanswered."
+          "description": "The observable improvement once the change ships. Leave out unless the latest lines change it."
         }
       },
       "required": [],
@@ -48,7 +48,7 @@
               "type": "null"
             }
           ],
-          "description": "What the change includes. Null while unanswered."
+          "description": "What the change includes. Leave out unless the latest lines change it."
         },
         "excluded": {
           "anyOf": [
@@ -61,7 +61,7 @@
               "type": "null"
             }
           ],
-          "description": "What is explicitly out of scope. Null while unanswered."
+          "description": "What is explicitly out of scope. Leave out unless the latest lines change it."
         },
         "constraints": {
           "anyOf": [
@@ -74,7 +74,7 @@
               "type": "null"
             }
           ],
-          "description": "Limits the change must respect: permissions, privacy, performance, compatibility. Only those that apply, cited or agreed, never invented. Null while unanswered."
+          "description": "Limits the change must respect: permissions, privacy, performance, compatibility. Only those that apply, cited or agreed, never invented. Leave out unless the latest lines change it."
         }
       },
       "required": [],
@@ -186,7 +186,7 @@
               "type": "null"
             }
           ],
-          "description": "Each repository-relative path the change touches or adds, and what it gets there. Null while unanswered."
+          "description": "Each repository-relative path the change touches or adds, and what it gets there. Leave out unless the latest lines change it."
         },
         "contracts": {
           "anyOf": [
@@ -199,7 +199,7 @@
               "type": "null"
             }
           ],
-          "description": "New or changed types, schema, and signatures at module boundaries, written as code in fenced blocks against the plan's commit. Signatures only, never function bodies. Null while unanswered."
+          "description": "New or changed types, schema, and signatures at module boundaries, written as code in fenced blocks against the plan's commit. Signatures only, never function bodies. Leave out unless the latest lines change it."
         },
         "patterns": {
           "anyOf": [
@@ -212,7 +212,7 @@
               "type": "null"
             }
           ],
-          "description": "Existing code to follow, by path, and what to copy from it. Null while unanswered."
+          "description": "Existing code to follow, by path, and what to copy from it. Leave out unless the latest lines change it."
         },
         "order": {
           "anyOf": [
@@ -225,7 +225,7 @@
               "type": "null"
             }
           ],
-          "description": "Only where one step must land before another: the steps in order and why. Left out of the document while null. Null while unanswered."
+          "description": "Only where one step must land before another: the steps in order and why. Left out of the document while null. Leave out unless the latest lines change it."
         }
       },
       "required": [],
@@ -242,7 +242,7 @@
           "type": "null"
         }
       ],
-      "description": "Each consequential choice: the decision, why, and the alternative rejected. Null while unanswered."
+      "description": "Each consequential choice: the decision, why, and the alternative rejected. Leave out unless the latest lines change it."
     },
     "verification": {
       "anyOf": [
@@ -255,7 +255,7 @@
           "type": "null"
         }
       ],
-      "description": "The end-to-end check that proves the change works, beyond the examples passing. Null while unanswered."
+      "description": "The end-to-end check that proves the change works, beyond the examples passing. Leave out unless the latest lines change it."
     },
     "leftToAgent": {
       "anyOf": [
@@ -268,7 +268,7 @@
           "type": "null"
         }
       ],
-      "description": "Exactly which choices the implementing agent may make itself; everything else is fixed. Null while unanswered."
+      "description": "Exactly which choices the implementing agent may make itself; everything else is fixed. Leave out unless the latest lines change it."
     },
     "openQuestions": {
       "type": "array",
@@ -291,7 +291,7 @@
           "type": "null"
         }
       ],
-      "description": "Only when stored data changes: what is stored, how existing data moves, and how the change is undone. Left out of the document while null. Null while unanswered."
+      "description": "Only when stored data changes: what is stored, how existing data moves, and how the change is undone. Left out of the document while null. Leave out unless the latest lines change it."
     },
     "assumptions": {
       "type": "array",

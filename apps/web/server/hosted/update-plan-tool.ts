@@ -20,7 +20,8 @@ import { logStoreFailure } from "./store-failure.js";
  * whose model answers with an update in this tool's input schema. The
  * update is the fields of the plan's fixed template it changes
  * (`@sidecar/hosted/plan-template`), and the assumptions list where it
- * changes. They are merged over the fields the plan holds, the merged fields
+ * changes; a field sent `null` is one the update has nothing to say about,
+ * and keeps what stood. They are merged over the fields the plan holds, the merged fields
  * are formatted into the canonical Markdown body under the header the service
  * supplies from the plan it loaded, and the body, the list, and the fields
  * are saved together; a body past its bound once formatted is refused like a
@@ -129,9 +130,10 @@ export const UPDATE_PLAN_TOOL = {
   name: "update_plan",
   description:
     "Save changes to the plan: send only the fields of the fixed template that change. A " +
-    "field left out keeps its saved value; null clears it back to unanswered. A list " +
-    "(scenarios, steps, examples, open questions, assumptions) is sent whole when any of " +
-    "it changes. Answers the document as saved, or why nothing was saved.",
+    "field left out or sent null keeps its saved value; nothing erases an answer, and a " +
+    "correction rewrites it. A list (rules with their examples, open questions, " +
+    "assumptions) is sent whole when any of it changes. Answers the document as saved, " +
+    "or why nothing was saved.",
   inputSchema: planUpdateSchema,
 } as const;
 
