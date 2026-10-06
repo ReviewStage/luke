@@ -136,7 +136,9 @@ interface Fixture {
   open(): Effect.Effect<FakeSideband>;
 }
 
-function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
+function fixture(
+  options: { deskVoice?: boolean } = {},
+): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
     const sidebands: FakeSideband[] = [];
     const seeds: (readonly InitialItem[])[] = [];
@@ -202,6 +204,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       roster: () => roster,
       emit: (change) => changes.push(change),
       createId: () => `id-${++ids}`,
+      ...options,
       onSpoken: (kind) => {
         spoken.push(kind);
       },
@@ -975,4 +978,20 @@ it.effect(
         );
       }),
     ),
+);
+
+it.effect(
+  "without the desk voice only a planning call is created, and no beat or briefing asks for a session",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture({ deskVoice: false });
+      assert.equal(yield* f.holder.createSession("offer"), undefined);
+      assert.equal(f.holder.speakBeat(ARRIVAL), false);
+      assert.equal(f.holder.wantSession(), false);
+      assert.deepEqual(f.changes, []);
+      assert.equal(f.created, 0);
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      assert.ok(created);
+      assert.deepEqual(f.plans, [INVITES_PLAN]);
+    }),
 );

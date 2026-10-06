@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { ACTION_REFUSAL } from "@sidecar/actions";
 import { GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
@@ -8,6 +10,8 @@ import { Effect, Layer, Result } from "effect";
 import { hostAssemblyLayer } from "./compose-host.js";
 import { type Composer, DuplicateGatewayMethod, foldMethods } from "./composer.js";
 import { HostTag, hostStandingLayer } from "./effect/host.js";
+import { ONBOARDING_STATE_FILE } from "./onboarding-state.js";
+import { runModeFor } from "./run-mode.js";
 import { testKernelLayer } from "./testing/test-kernel.js";
 
 function stubComposer(methods: readonly GatewayMethod[]): Composer {
@@ -69,6 +73,43 @@ it.effect(
         fixtureHostLayer(stateRoot),
       );
     }),
+);
+
+it.effect("onboarding stands down even where the record owes every step", (t) =>
+  Effect.gen(function* () {
+    const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
+    const at = "2026-10-05T12:00:00.000Z";
+    yield* Effect.promise(() =>
+      writeFile(
+        join(stateRoot, ONBOARDING_STATE_FILE),
+        JSON.stringify({
+          introductionRequiredAt: at,
+          conductorKeyOnboardingRequiredAt: at,
+          calendarOnboardingRequiredAt: at,
+        }),
+      ),
+    );
+    yield* Effect.provide(
+      Effect.gen(function* () {
+        const host = yield* HostTag;
+        const response = yield* host.gateway.call(GATEWAY_METHOD.ONBOARDING_STATE);
+        assert.ok(response.ok);
+        assert.deepEqual(response.result, {
+          calendarOnboardingOwed: false,
+          introductionOwed: false,
+          conductorKeyOnboardingOwed: false,
+        });
+        yield* host.drain({ deadlineMs: 0 });
+      }),
+      Layer.provide(
+        Layer.provide(hostStandingLayer, hostAssemblyLayer),
+        testKernelLayer({
+          stateRoot,
+          runMode: { ...runModeFor({ capture: false, fixture: true }), requiresAccount: true },
+        }),
+      ),
+    );
+  }),
 );
 
 it.effect("a cloud provider's key is refused signed out, and the store never held it", (t) =>

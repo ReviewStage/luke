@@ -116,7 +116,10 @@ const SURROUNDINGS: LiveVoiceSurroundings = {
   microphoneGranted: true,
 };
 
-function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
+function fixture(
+  surroundings: Partial<LiveVoiceSurroundings> = {},
+  options: { deskCalls?: boolean } = {},
+) {
   const calls: FakeCall[] = [];
   const views: LiveVoiceView[] = [];
   const openings: (LiveVoiceExchangeOpening | undefined)[] = [];
@@ -125,6 +128,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   let microphoneAsk: (() => Effect.Effect<boolean>) | undefined;
   const stops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
+    ...options,
     services: Context.empty(),
     bridge: {
       reportView: (view, exchange) => {
@@ -996,5 +1000,31 @@ it.effect(
       yield* Fiber.join(wanted);
       assert.deepEqual(deskCall.openings, [{ byPress: false }]);
       assert.equal(deskCall.status, LIVE_STATUS.MUTED);
+    }),
+);
+
+it.effect(
+  "without desk calls the talk key opens nothing about no plan, and still speaks into a plan's call",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture({}, { deskCalls: false });
+      yield* f.beginTalk();
+      assert.equal(f.calls.length, 0);
+      assert.equal(f.microphoneAsks(), 0);
+      yield* f.endTalk();
+
+      const opened = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const planCall = f.latest();
+      assert.ok(planCall);
+      planCall.started();
+      yield* Fiber.join(opened);
+      yield* f.talkAboutPlan(INVITES_PLAN);
+      assert.equal(planCall.status, LIVE_STATUS.MUTED);
+
+      yield* f.beginTalk();
+      assert.equal(f.calls.length, 1);
+      assert.equal(planCall.status, LIVE_STATUS.LISTENING);
     }),
 );
