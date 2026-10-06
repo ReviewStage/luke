@@ -36,6 +36,44 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.7.0 — 2026-10-06
+
+### Plan a feature with Luke
+
+The Plans tab holds named feature plans, each on a fixed template written for
+a coding agent to pick up. Start a planning call and Luke asks one question at
+a time while a notetaker writes the plan as you talk, streaming each draft to
+your Mac. Point a plan at a folder on your Mac and Luke reads the code there to
+answer his own questions instead of asking you; each command runs in a sandbox
+with no network, no writes, and no `.env` files. He can also search the web and
+read public pages, and with GitHub connected he reads your repositories.
+
+### Luke opens as a Mac app
+
+Luke opens in an ordinary window with a Dock tile instead of the notch panel,
+on two tabs: Plans and Settings. For now Luke speaks only on a planning call,
+so briefings, the launch greeting, and the talk key outside a plan are off,
+onboarding is skipped after sign-in, and the Sessions and Conversation tabs
+are hidden.
+
+### Improvements
+
+- Luke runs on GPT-6.1 Sol
+- A planning call survives a dropped connection instead of ending
+
+### Fixes
+
+- Fixed a planning call's plan losing sections it had already written, leaving
+  them Unanswered
+- Fixed the settings search drawing under a nested page's header
+
+### Misc
+
+- Updated session replay to mask every word, so a recording carries layout and
+  no text
+- Updated PRIVACY.md for feature plans, the planning call's notetaker, the
+  folder Luke reads on your Mac, and the sub-agents Luke opens for himself
+
 ## 0.6.0 — 2026-09-15
 
 ### One brain, running on Luke's service
