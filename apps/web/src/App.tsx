@@ -1,6 +1,6 @@
 import { captureSiteEvent, SITE_EVENT } from "./analytics";
+import { DemoVideo } from "./DemoVideo";
 import { DMG_URL, GitHubMark, REPOSITORY_URL, SiteFooter, SiteHeader } from "./SiteChrome";
-import { WindowMock } from "./WindowMock";
 
 export function App(): React.JSX.Element {
   return (
@@ -8,12 +8,11 @@ export function App(): React.JSX.Element {
       <SiteHeader />
 
       <main className="shell">
-        {/* The copy runs left, the way a page of prose does. The mock does not:
-            the window sits at the center of its display, so the art
-            centers itself inside the column the copy is aligned against. */}
+        {/* The copy runs left, the way a page of prose does. The demo is wider
+            than the column and centers itself on the page. */}
         {/* The footer's hairline draws itself a space-5 above the footer's own
             box, inside this section's bottom padding, so the padding must keep
-            at least that much clearance or the rule lands across the mock. */}
+            at least that much clearance or the rule lands across the demo. */}
         <section className="pt-12 pb-16 max-[520px]:pt-8 max-[520px]:pb-10">
           {/* Fixed rather than fluid, with one step down: at 2.25rem the line
               needs about 490px, so it steps before the column can squeeze it
@@ -49,7 +48,7 @@ export function App(): React.JSX.Element {
             macOS 14+ · Apple silicon
           </p>
 
-          <WindowMock />
+          <DemoVideo />
         </section>
       </main>
 
