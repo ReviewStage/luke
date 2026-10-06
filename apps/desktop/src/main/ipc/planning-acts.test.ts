@@ -53,6 +53,11 @@ function fixture() {
           asked.push(`open:${planId}`);
           return true;
         }),
+      planningDelete: (planId) =>
+        Effect.sync(() => {
+          asked.push(`delete:${planId}`);
+          return true;
+        }),
       planningStart: (request) =>
         Effect.sync(() => {
           asked.push(`start:${request.folderPath}`);
@@ -109,7 +114,12 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       PANEL,
     );
     yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CLOSE }, PANEL);
+    const deleted = yield* f.router.performAct(
+      { kind: ACT_KIND.PLANNING_DELETE, payload: { planId: PLAN_ID } },
+      PANEL,
+    );
 
+    assert.deepEqual(deleted, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(selected, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(started, {
       status: ACT_OUTCOME_STATUS.DONE,
@@ -125,6 +135,7 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       "start:/Users/dev/relay",
       "repositories",
       "close",
+      `delete:${PLAN_ID}`,
     ]);
   }),
 );

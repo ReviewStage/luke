@@ -35,6 +35,8 @@ export const GATEWAY_METHOD = {
   PLANNING_CLOSE: "planning.close",
   /** A named plan started on a folder of this Mac, and made the active one. */
   PLANNING_START: "planning.start",
+  /** One plan deleted on the service, with this Mac's folder record of it; deleting the open plan ends its call and leaves no plan active. */
+  PLANNING_DELETE: "planning.delete",
   /** The folder of this Mac a plan reads, chosen again for a plan this Mac holds none for. */
   PLANNING_SET_FOLDER: "planning.setFolder",
   /** The repositories the account's GitHub connection can read, for a new plan's picker. */

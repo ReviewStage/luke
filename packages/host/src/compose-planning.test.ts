@@ -52,6 +52,8 @@ function summary({ document: _document, ...rest }: Plan): PlanSummary {
 interface FakeService extends PlanningClient {
   plans: Plan[];
   listFails: boolean;
+  /** Whether a delete is refused, as a service that did not answer refuses it. */
+  deleteFails: boolean;
   /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
   listGate: Effect.Effect<void>;
   createAnswer: PlanCallResult<Plan, GitHubCallFailure>;
@@ -73,6 +75,7 @@ function fakeService(plans: Plan[]): FakeService {
   const service: FakeService = {
     plans,
     listFails: false,
+    deleteFails: false,
     listGate: Effect.void,
     createAnswer: { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED },
     repositoriesAnswer: { ok: true, answer: { repositories: [], truncated: false } },
@@ -112,6 +115,12 @@ function fakeService(plans: Plan[]): FakeService {
           : { ok: true, answer: found };
       }),
     create: () => Effect.sync(() => service.createAnswer),
+    delete: (planId) =>
+      Effect.sync(() => {
+        if (service.deleteFails) return false;
+        service.plans = service.plans.filter((candidate) => candidate.id !== planId);
+        return true;
+      }),
     repositories: () => Effect.sync(() => service.repositoriesAnswer),
   };
   return service;
@@ -364,6 +373,70 @@ it.effect("a plan deleted elsewhere is drawn as missing, never as its last copy"
     yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
     assert.deepEqual(last()?.document, { status: PLANNING_READ.MISSING });
+  }),
+);
+
+it.effect(
+  "deleting the open plan ends its call, drops it and its folder, and leaves no plan active",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const standing: StandingCall = { about: { planId: INVITES } };
+      const { call, last, planning } = yield* subject(service, { call: standing });
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* call(GATEWAY_METHOD.PLANNING_SET_FOLDER, {
+        planId: INVITES,
+        folderPath: "/Users/dev/relay",
+      });
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_DELETE, { planId: INVITES }), {
+        deleted: true,
+      });
+
+      assert.equal(standing.about, undefined);
+      assert.equal(planning.activePlanId(), undefined);
+      assert.deepEqual(last()?.plans, [summary(billing)]);
+      assert.deepEqual(last()?.folders, {});
+      assert.deepEqual(last()?.document, { status: PLANNING_READ.IDLE });
+    }),
+);
+
+it.effect("a delete the service refused keeps the plan open and listed", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const service = fakeService([invites]);
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    service.deleteFails = true;
+
+    assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_DELETE, { planId: INVITES }), {
+      deleted: false,
+    });
+    assert.equal(last()?.activePlanId, INVITES);
+    assert.deepEqual(last()?.plans, [summary(invites)]);
+    assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });
+  }),
+);
+
+it.effect("deleting a plan that is not open leaves the open plan and its call standing", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+    const standing: StandingCall = { about: { planId: INVITES } };
+    const { call, last } = yield* subject(fakeService([billing, invites]), { call: standing });
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    yield* call(GATEWAY_METHOD.PLANNING_DELETE, { planId: BILLING });
+
+    assert.deepEqual(standing.about, { planId: INVITES });
+    assert.equal(last()?.activePlanId, INVITES);
+    assert.deepEqual(last()?.plans, [summary(invites)]);
   }),
 );
 

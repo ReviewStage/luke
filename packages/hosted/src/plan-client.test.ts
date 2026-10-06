@@ -68,6 +68,23 @@ it.effect("a plan the service does not find reads as not found, not as unanswere
   }),
 );
 
+it.effect("deleting a plan answers whether the service deleted it", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      [`DELETE /api/plans/${PLAN_ID}`]: { answer: () => ({ deleted: true }) },
+    });
+    const gone = fakeCloudApi({
+      [`DELETE /api/plans/${PLAN_ID}`]: {
+        answer: () => ({ error: "not-found" }),
+        status: HTTP_STATUS.NOT_FOUND,
+      },
+    });
+
+    assert.equal(yield* Effect.provide(client().delete(PLAN_ID), api.layer), true);
+    assert.equal(yield* Effect.provide(client().delete(PLAN_ID), gone.layer), false);
+  }),
+);
+
 it.effect("starting a plan names its folder", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({

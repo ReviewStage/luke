@@ -1,3 +1,4 @@
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import type { PlansControl } from "../renderer/planning/use-plans-tab";
 
@@ -25,6 +26,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onNewPlan: ignore,
     onCancelNew: ignore,
     onLeavePlan: ignore,
+    onDeletePlan: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     back: () => false,
     ...overrides,
   };

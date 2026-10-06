@@ -38,6 +38,7 @@ export function PlansPanel({ control }: { control: PlansControl }): React.JSX.El
             live={control.live}
             folders={control.folders}
             onChooseFolder={control.onChooseFolder}
+            onDelete={control.onDeletePlan}
           />
           <MicrophoneRow
             status={control.status}

@@ -43,7 +43,7 @@ import type { RunMode } from "./run-mode.js";
  * this Mac to run.
  */
 
-/** Opening a plan names it and nothing else. */
+/** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
 
 /** The folder of this Mac each plan reads, by plan id, as this Mac alone records it. */
@@ -73,7 +73,7 @@ export function planFoldersFile(
 /** The service's side of the plans, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
-  "list" | "open" | "create" | "repositories" | "claimCommand" | "settleCommand"
+  "list" | "open" | "create" | "delete" | "repositories" | "claimCommand" | "settleCommand"
 >;
 
 export interface PlanningDependencies {
@@ -319,6 +319,31 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             yield* endPlanCall(plan.id);
             yield* readList;
             return carried<PlanningStartAnswer>({ planId: plan.id });
+          }),
+        );
+      }),
+    // Note that the open plan's call ends before the plan is deleted, because
+    // a call still standing would go on writing a document that is gone.
+    [GATEWAY_METHOD.PLANNING_DELETE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningOpenParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("deleting a plan names one plan");
+        if (!gate()) return { deleted: false };
+        const { planId } = read.success;
+        if (view.activePlanId === planId) yield* endPlanCall(undefined);
+        return yield* serial(
+          Effect.gen(function* () {
+            const deleted = yield* Effect.provide(client.delete(planId), FetchHttpClient.layer);
+            if (!deleted) return { deleted: false };
+            const kept = folders.update(({ [planId]: _deleted, ...rest } = {}) => rest);
+            const plans = view.plans.filter((plan) => plan.id !== planId);
+            if (view.activePlanId === planId) {
+              const { activePlanId: _deleted, ...rest } = withoutActivity(view);
+              view = { ...rest, document: { status: PLANNING_READ.IDLE } };
+            }
+            write({ plans, folders: kept });
+            yield* readList;
+            return { deleted: true };
           }),
         );
       }),

@@ -8,7 +8,7 @@ import {
   folderLine,
   PLANS_PAGE,
 } from "../planning/planning-model";
-import { MicrophoneRow } from "../planning/planning-parts";
+import { DeletePlanButton, MicrophoneRow } from "../planning/planning-parts";
 import type { PlansControl } from "../planning/use-plans-tab";
 
 /**
@@ -135,6 +135,11 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           </button>
         ) : null}
         <CopyButton copy={plans.copy} />
+        <DeletePlanButton
+          key={plan.id}
+          className="toolbar-button toolbar-icon-button"
+          onDelete={plans.onDeletePlan}
+        />
         {closeButton}
       </Toolbar>
       <section className="desktop-document" aria-label={plan.name}>

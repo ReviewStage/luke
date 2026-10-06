@@ -225,6 +225,8 @@ export interface HostOperator {
   planningClose(): Effect.Effect<void>;
   /** A named plan started on a folder of this Mac and made the active one, or why none started. */
   planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
+  /** One plan deleted; answers whether the service deleted it. */
+  planningDelete(planId: string): Effect.Effect<boolean>;
   /** The folder of this Mac a plan reads, chosen again. */
   planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
   /** The repositories the account's GitHub connection can read, or why it could not be read. */
@@ -599,6 +601,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (answer) => record(answer)?.opened === true,
       ),
     planningClose: () => fire(client.call(GATEWAY_METHOD.PLANNING_CLOSE)),
+    planningDelete: (planId) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_DELETE, { planId }),
+        (answer) => record(answer)?.deleted === true,
+      ),
     planningSetFolder: (params) =>
       fire(
         client.call(GATEWAY_METHOD.PLANNING_SET_FOLDER, {

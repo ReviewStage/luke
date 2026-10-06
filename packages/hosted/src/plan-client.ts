@@ -24,6 +24,7 @@ import {
   planCommandClaimAnswerSchema,
   planCommandSettleAnswerSchema,
   planCreateRequestSchema,
+  planDeleteAnswerSchema,
   planListAnswerSchema,
 } from "./plan-wire.js";
 import {
@@ -162,6 +163,17 @@ export class HostedPlanClient {
         ? { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND }
         : UNANSWERED;
     });
+  }
+
+  /** Deletes one plan with its document and its conversation; whether the service deleted it. */
+  delete(planId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.DELETE, path: planPath(planId) },
+        planDeleteAnswerSchema,
+      ),
+      (answer) => answer?.deleted === true,
+    );
   }
 
   /**
