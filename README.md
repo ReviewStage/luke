@@ -12,62 +12,61 @@
   <img src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20silicon-black" alt="macOS 14 or newer, Apple silicon">
 </p>
 
-<p align="center">
-  <strong>An engineering manager for your coding agents.</strong><br>
-  A macOS voice agent that keeps you in the loop with your agents.
-</p>
+Luke is a macOS app for planning a feature by voice before you hand it to a
+coding agent. You describe the feature, Luke reads your code and asks about
+what you left open, and a second model writes the plan during the call. You
+copy the finished plan into Claude Code, Codex, or any other agent.
 
-<p align="center">
-  <a href="https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg"><picture><source media="(prefers-color-scheme: dark)" srcset="design/brand/button/luke-cta-download-dark.svg"><img src="design/brand/button/luke-cta-download-light.svg" alt="Download for macOS"></picture></a>
-</p>
+![Luke's window with the plan "Teammate invitations" open and being written during a voice call.](docs/media/luke-plan.png)
 
-<p align="center">
-  <a href="https://tryluke.dev">Website</a> ·
-  <a href="PRIVACY.md">Privacy</a> ·
-  <a href="CHANGELOG.md">Changelog</a> ·
-  <a href="mailto:founders@stagereview.app">Contact</a>
-</p>
+## Install
 
-![Luke's panel expanded under the notch, listing local and cloud agent sessions with their status and workspace grouping.](docs/media/luke-panel.png)
+Requires an Apple silicon Mac on macOS 14 or newer.
 
-## Features
+1. Download [Luke.dmg](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
+2. Open the DMG and drag **Luke** into **Applications**.
+3. Open Luke and sign in with Google or GitHub.
 
-### Talk to Luke
+Luke asks for microphone access the first time you start a call.
 
-Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app; every ask is
-spoken, and there is nothing to type into. He can tell you about the status of
-your agents, kick fresh ones off for you, or message them on your behalf.
+## Usage
 
-The **Conversation** tab draws the conversation Luke's own service keeps for
-your account, the same thread on every Mac you sign in on, showing its 200
-most recent turns. Its two controls are Clear, which asks the service to mark
-that conversation deleted and open a fresh one, and Agents, which turns the
-tab to the agents Luke follows and the sub-agents he delegated to; nothing on
-this Mac holds a copy of the thread. When Luke thinks on the service he also silently
-keeps a small memory of useful preferences, personal context, goals, and
-recurring constraints; ask him what he remembers, correct something, or tell
-him to forget it.
+1. Press **New plan**, name it, and choose your project's folder.
+2. Press the microphone and describe the feature.
+3. Answer Luke's questions until the plan is complete.
+4. Press **Copy** and paste the plan into your coding agent.
 
-![Luke's capsule under the notch, captioning a briefing about which sessions finished, which is still packaging, and which are waiting on you.](docs/media/luke-talking.png)
+## Plan format
 
-### Announcements
+| Section | Contents |
+| --- | --- |
+| Goal | The current problem and the result you want |
+| Scope | What's in, what's out, and the constraints |
+| Rules | One sentence per rule, with Given/When/Then examples |
+| Implementation | Files that change, new types and signatures, code to follow |
+| Decisions | What was chosen, why, and the alternatives turned down |
+| Verification | How to check the result end to end |
+| Left to the agent | Choices the agent may make on its own |
+| Open questions | Anything not yet decided |
+| Assumptions | Defaults Luke chose that you didn't state |
 
-Luke speaks up when an agent is waiting for you, hits an error, or finishes. He
-goes by what an agent's provider reports about it, and for a Conductor agent he
-can also read the conversation itself when the status is not enough. Either way he judges whether it is
-worth interrupting you for, and says everything worth saying in one breath
-rather than a sentence per event.
+The format draws on GitHub's [Spec Kit](https://github.com/github/spec-kit),
+OpenAI's [ExecPlans](https://developers.openai.com/cookbook/articles/codex_exec_plans),
+and [Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/).
 
-### Compatible with every agent and platform
+## Code access
 
-Luke works with any agent, both locally and in the cloud. See a full list
-of supported agents below.
+Luke doesn't upload your repository. When the planning model needs a file,
+your Mac runs a read-only command such as `ls`, `grep`, or `cat` in the plan's
+folder. The command runs in a macOS sandbox with no network access, no write
+access, and no access to `.env` files. Only the command's output goes to
+Luke's service. See [PRIVACY.md](PRIVACY.md) for details.
 
-### Works around your schedule
+## Agent session monitoring
 
-Connect your calendar and Luke stays quiet until your meeting is over.
-
-## Supported agents and platforms
+The repository also contains code that watches running agent sessions and
+tells you by voice when one needs you. It is turned off in the current build.
+It supports these agents:
 
 <!-- provider-agents:start -->
 | Agent | Local | Cloud |
@@ -78,35 +77,11 @@ Connect your calendar and Luke stays quiet until your meeting is over.
 | OMP | ✅ |  |
 <!-- provider-agents:end -->
 
-## Install
-
-Luke runs on Apple Silicon Macs with macOS 14 or newer.
-
-1. [Download Luke](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
-2. Open the DMG and drag **Luke** into **Applications**.
-3. Launch Luke and sign in with Google or GitHub.
-
-Optional: open **Settings** in Luke to:
-
-- Connect supported cloud agents with their API keys.
-- Connect Apple or Google Calendar.
-- Customize Luke's voice, keyboard shortcuts, appearance, and workspace
-  defaults.
-
-## Privacy
-
-See [PRIVACY.md](PRIVACY.md).
-
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
-to get set up, and [SECURITY.md](SECURITY.md) for reporting a vulnerability.
-
-## Built by
-
-[Charles Pan](https://x.com/ceefryingpan) and
-[Dean Stratakos](https://x.com/DeanStratakos).
+See [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, see
+[SECURITY.md](SECURITY.md).
 
 ## License
 
-Luke is licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE)

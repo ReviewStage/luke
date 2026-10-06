@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 4 October 2026
+Last updated: 6 October 2026
 
 Luke is a macOS app that watches your coding agent sessions, with companion
 iOS and Apple Watch apps for the cloud sessions your account can see. This
@@ -101,9 +101,9 @@ keep or delete, and nothing on your Mac reads or writes them.
 
 **Feature plans.** When you start a named plan, our service stores it under
 your account: its name and the plan's one document, a Markdown body and a list of
-assumptions each marked confirmed or not, written by Luke's planning model as
-you talk. It is stored as written, bound to your account and readable by our
-own operators, the same way the conversation described below is. A save
+assumptions, written by the planning call's notetaker as you talk. It is
+stored as written, bound to your account and readable by our own operators,
+the same way the conversation described below is. A save
 replaces the document and no earlier version is kept; deleting a plan removes
 it at once, and deleting your account removes every plan.
 

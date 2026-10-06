@@ -63,7 +63,6 @@
     "apps/desktop/src/renderer/use-session-list.ts",
     "apps/desktop/src/renderer/use-voice-view.ts",
     "apps/web/server/hosted/apns.ts",
-    "apps/web/src/NotchMock.tsx",
     "apps/web/src/admin/use-admin-read.ts",
     "apps/web/tests/support/voice-fakes.ts"
   ]
