@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * The hero: a recording of a real planning call, cut in Screen Studio. It
- * plays muted on a loop, as a browser only lets a page start a video, and
- * the sound button turns Luke's voice on. Under reduced motion it waits on
- * its first frame with the player's own controls.
+ * starts muted, as a browser only lets a page start a video that way, and
+ * the player's own controls pause it, scrub it, and turn the sound on.
+ * Under reduced motion it waits on its first frame for a press of play.
  */
 
 const DEMO = {
@@ -21,8 +21,6 @@ const DEMO_LABEL =
 
 export function DemoVideo(): React.JSX.Element {
   const video = useRef<HTMLVideoElement>(null);
-  const [muted, setMuted] = useState(true);
-  const [reduced, setReduced] = useState(false);
 
   // Note that the prerender has no window to ask about motion, so playback
   // starts after mount. `muted` is set on the element rather than as a prop,
@@ -30,25 +28,13 @@ export function DemoVideo(): React.JSX.Element {
   // the attribute when it decides whether autoplay is allowed.
   useEffect(() => {
     const element = video.current;
-    if (!element) return;
+    if (!element || window.matchMedia(REDUCED_MOTION_QUERY).matches) return;
     element.muted = true;
-    if (window.matchMedia(REDUCED_MOTION_QUERY).matches) {
-      setReduced(true);
-      return;
-    }
-    element.play().catch(() => setReduced(true));
+    element.play().catch(() => undefined);
   }, []);
 
-  const toggleSound = () => {
-    const element = video.current;
-    if (!element) return;
-    element.muted = !element.muted;
-    setMuted(element.muted);
-    if (!element.muted && element.paused) element.play().catch(() => undefined);
-  };
-
   return (
-    <div className="relative mx-[calc(50%-min(480px,50vw-16px))] mt-12">
+    <div className="mx-[calc(50%-min(480px,50vw-16px))] mt-12">
       {/* biome-ignore lint/a11y/useMediaCaption: Luke's side of the call is captioned in the recording itself; a track for the developer's side waits on a transcript. */}
       <video
         ref={video}
@@ -58,20 +44,11 @@ export function DemoVideo(): React.JSX.Element {
         width={DEMO.WIDTH}
         height={DEMO.HEIGHT}
         aria-label={DEMO_LABEL}
-        controls={reduced}
+        controls
         loop
         playsInline
         preload="auto"
       />
-      {reduced ? null : (
-        <button
-          type="button"
-          className="absolute right-3 bottom-3 rounded-md bg-black/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition-colors duration-150 hover:bg-black/85 motion-reduce:transition-none"
-          onClick={toggleSound}
-        >
-          {muted ? "Turn sound on" : "Mute"}
-        </button>
-      )}
     </div>
   );
 }
