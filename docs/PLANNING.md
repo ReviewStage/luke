@@ -284,9 +284,13 @@ evaluations are outside this work.
   The call opens if none stands, and the microphone opens. A call just
   opened is Luke's to begin: the voice service tells it to speak first
   (`planningOpeningInstruction`), asking what to build on an untouched plan
-  and the plan's next question on one under way, while a call re-attached
-  after a dropped socket opens nothing again. A second press mutes it. The microphone stays open between the two presses rather than
-  only while a key is held, because a planning conversation runs for minutes.
+  and the plan's next question on one under way, in its first turn and
+  without waiting on the backend, while a call re-attached after a dropped
+  socket opens nothing again. The call's seed says which the plan is: an
+  untouched plan is seeded as a new plan with nothing answered, and any
+  other as the saved plan the call continues. A second press mutes it. The
+  microphone stays open between the two presses rather than only while a
+  key is held, because a planning conversation runs for minutes.
   The existing talk key keeps its hold-to-talk meaning, and speaks into the
   open plan's call.
 - **Status**, beside the button, in two lines, each part of Luke saying only

@@ -1,3 +1,4 @@
+import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
@@ -187,15 +188,32 @@ function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
 const PLAN_SEED_MARKER = "[plan]";
 
 /**
+ * Whether a plan is still as it was started: the untouched template, which
+ * is what the store reads a never-saved body as, and no assumption.
+ */
+function planUntouched(plan: Plan): boolean {
+  return (
+    plan.document.assumptions.length === 0 &&
+    plan.document.body === planBody({ name: plan.name }, EMPTY_PLAN_FIELDS)
+  );
+}
+
+/**
  * The plan a planning call is about, as one developer message: its name and
  * the saved document as the developer sees it. Note that a call is seeded with the plan and nothing else, because the voice otherwise
  * opens knowing no plan at all and reads its role as a new task; what was
  * said on an earlier call is the planning model's, which the voice asks.
+ * The first line says whether the plan has just been started or is under
+ * way, because a voice told every plan continues one opened a brand-new
+ * plan by looking for the progress it was told stood.
  */
 function planSeedText(plan: Plan): string {
   const assumptions = plan.document.assumptions.map((assumption) => `- ${assumption.text}`);
+  const standing = planUntouched(plan)
+    ? "This call starts the new plan below. Nothing in it is answered yet."
+    : "This call continues the saved plan below. It is not a new plan.";
   return [
-    `${PLAN_SEED_MARKER} This call continues the saved plan below. It is not a new plan.`,
+    `${PLAN_SEED_MARKER} ${standing}`,
     `Name: ${plan.name}`,
     "",
     plan.document.body,
