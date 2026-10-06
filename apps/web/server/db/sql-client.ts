@@ -38,8 +38,17 @@ export const webSqlClient = Layer.unwrap(
  * end-to-end eval each open one against the same database Drizzle's
  * statements run on, so the effects and the Drizzle statements beside them
  * land on the same connection limit and the same rows.
+ *
+ * Note that the connect timeout is off, because it runs on the caller's
+ * `Clock`: a store test that moves its `TestClock` past five seconds while
+ * the pool is opening its connection would otherwise fail that connection
+ * though the database answered.
  */
 export const sqlClientOverUrl = (
   connectionString: string,
 ): Layer.Layer<SqlClient.SqlClient, SqlError> =>
-  PgClient.layer({ url: Redacted.make(connectionString), maxConnections: 1 });
+  PgClient.layer({
+    url: Redacted.make(connectionString),
+    maxConnections: 1,
+    connectTimeout: Duration.infinity,
+  });
