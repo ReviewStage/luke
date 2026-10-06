@@ -36,6 +36,26 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.7.1 — 2026-10-07
+
+### Improvements
+
+- Luke speaks first when a planning call opens, starting from what to build
+  or from where the plan stands
+- Luke stops asking once the plan is enough for an agent to build from, and
+  says the plan is complete
+- Web search answers faster during a planning call
+- Luke fills your pauses with fewer "mhm"s and "okay"s
+- You can delete an open plan from its header, after Luke asks you to confirm
+
+### Fixes
+
+- Fixed a web search cut short reading as one that found nothing
+
+### Misc
+
+- Updated the README and tryluke.dev to lead with feature planning
+
 ## 0.7.0 — 2026-10-06
 
 ### Plan a feature with Luke
