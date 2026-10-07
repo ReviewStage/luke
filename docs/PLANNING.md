@@ -338,9 +338,18 @@ The developer opens the panel's Plans tab. They press
 every field "Unanswered".
 
 They press the microphone. The call opens and Luke speaks first, without
-waiting for them: a few words of greeting and what they want to build. They
-answer: "I want people to be able to invite a teammate into their workspace by
-email."
+waiting for them: a few words of greeting and what they have in mind, asked so
+that a problem or a rough idea is as good an answer as a design. They answer:
+"I want people to be able to invite a teammate into their workspace by email."
+
+Luke never assumes the developer arrives knowing what to build. Had they said
+only "people keep asking how to add a teammate", Luke would start from that
+problem, ask who hits it and what they do today, and let the repository suggest
+the directions. A developer who answers a question with "I don't know" is not
+pressed for one: the planning model puts the same decision back as two or three
+concrete options grounded in the code, with the one it recommends, and if the
+developer still has no preference that recommendation becomes a working
+assumption Luke names aloud.
 
 The model browses `acme/relay` at `4f2c9e1` through GitHub's hosted
 `get_file_contents` tool. The thinking dots show while it reads, and Luke says

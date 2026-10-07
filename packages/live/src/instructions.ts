@@ -81,7 +81,7 @@ Delegate to the backend when:
 - The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
-- The developer answers a question: pass the answer to the backend so it can queue what the answer unblocked.
+- The developer answers a question, or says they are unsure: pass the answer to the backend so it can queue what the answer unblocked.
 - You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
 
 Do not delegate to the backend when:
@@ -114,10 +114,11 @@ A notetaker writes the plan live as you talk; you never write it yourself.`;
 /**
  * A planning call's one policy beyond the template, added because listening
  * showed each behavior: several questions read out at once, a pause after
- * every answer while the voice waited on the backend, and one more question
- * after the plan was already enough to build from.
+ * every answer while the voice waited on the backend, one more question
+ * after the plan was already enough to build from, and a developer with only
+ * a rough idea pressed for decisions they had no basis to make.
  */
-const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. The backend queues its questions to you as it thinks of them: ask them in the order they were queued, and drop one the backend says is moot. When the developer answers, carry on with the next queued question while the backend thinks and reads the repository in the background. Once the backend says the plan is complete, ask no more queued questions: tell the developer the plan is ready, read back the assumptions and the choices left to the agent one at a time, and ask whether anything is missing. If the backend says the plan is not complete yet, say what is still missing and ask whether to settle it now or leave it open.
+const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. The backend queues its questions to you as it thinks of them: ask them in the order they were queued, and drop one the backend says is moot. When the developer answers, carry on with the next queued question while the backend thinks and reads the repository in the background. Do not assume the developer already knows what they want: when they are unsure, do not press them, say it is fine not to know yet, and pass that to the backend, which answers with concrete options to choose from. Once the backend says the plan is complete, ask no more queued questions: tell the developer the plan is ready, read back the assumptions and the choices left to the agent one at a time, and ask whether anything is missing. If the backend says the plan is not complete yet, say what is still missing and ask whether to settle it now or leave it open.
 
 `;
 
@@ -207,8 +208,9 @@ export function launchGreetingInstruction(firstName: string | undefined): string
  * until it is told to speak and the planning role is to lead. The plan the
  * call is about is already the session's seed, whose first line says
  * whether the plan is new or under way, so the instruction picks the
- * opening from that line: a new plan opens on what to build, and a plan
- * under way picks up where it stands. It asks the question in the same
+ * opening from that line: a new plan opens on what the developer has in
+ * mind, asked so a problem or a rough idea is as good an answer as a
+ * design, and a plan under way picks up where it stands. It asks the question in the same
  * turn, because a voice that opened by handing the backend a look at the
  * repository said "give me a second" and then waited on a backend with
  * nothing yet to go on. Like the launch greeting's, it says that it shapes
@@ -217,12 +219,12 @@ export function launchGreetingInstruction(firstName: string | undefined): string
 export function planningOpeningInstruction(): string {
   return [
     "Open the call now, in English, without waiting for the developer to speak.",
-    "If the plan above is new, greet the developer in a few words and ask what they want to build",
-    "and what problem it solves. If it is under way, say in one sentence where it stands and ask",
-    "the one question it most needs answered next. Ask that question in this same turn: do not",
-    "say you are looking anything up, do not ask the developer to wait, and do not wait for the",
-    "backend first. Then stop and listen. This shapes the opening alone: once it is said, carry",
-    "on as your other instructions say.",
+    "If the plan above is new, greet the developer in a few words and ask what they have in mind,",
+    "making it easy to answer with only a problem or a rough idea rather than a finished design.",
+    "If it is under way, say in one sentence where it stands and ask the one question it most",
+    "needs answered next. Ask that question in this same turn: do not say you are looking anything",
+    "up, do not ask the developer to wait, and do not wait for the backend first. Then stop and",
+    "listen. This shapes the opening alone: once it is said, carry on as your other instructions say.",
   ].join(" ");
 }
 
