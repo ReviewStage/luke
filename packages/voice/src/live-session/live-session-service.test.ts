@@ -40,6 +40,7 @@ import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record
 import {
   LiveSessionService,
   type LiveSessionStatus,
+  PROGRESS_NOTE_BOUNDS,
   ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
@@ -2428,5 +2429,182 @@ it.effect(
         ]),
         [["The plan for the API.", "item_d"]],
       );
+    }),
+);
+
+/** Fires that `settled` of run-1's steps have settled, the latest a repository read. */
+function stepSettled(f: Fixture, settled: number) {
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+    runId: "run-1",
+    step: "repository_read",
+    settled,
+  });
+}
+
+it.effect(
+  "a running ask's settled steps reach the voice as quiet progress under its delegation, no sooner than the gap apart and no more than the bound, and none once the run has ended",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("How do invites work today?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      stepSettled(f, 1);
+      // A step settled inside the gap is not told on its own, but counted in the next note.
+      stepSettled(f, 2);
+      yield* settle();
+      assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), [
+        "Luke finished a read of the repository; 1 step of this ask done so far.",
+      ]);
+      assert.deepEqual(
+        appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
+          "delegation_id" in event ? event.delegation_id : undefined,
+        ),
+        ["item_1"],
+      );
+      yield* advanceClock(PROGRESS_NOTE_BOUNDS.GAP_MS);
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+        runId: "run-1",
+        step: undefined,
+        settled: 3,
+      });
+      yield* settle();
+      assert.equal(
+        contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).at(-1),
+        "Luke finished a step; 3 steps of this ask done so far.",
+      );
+      for (let settled = 4; settled < 20; settled += 1) {
+        yield* advanceClock(PROGRESS_NOTE_BOUNDS.GAP_MS);
+        stepSettled(f, settled);
+      }
+      yield* settle();
+      assert.equal(
+        appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length,
+        PROGRESS_NOTE_BOUNDS.PER_EXCHANGE,
+      );
+      // Nothing the voice is to say came of any of it.
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+    }),
+);
+
+it.effect("a settled step tells nothing once its run has ended or a newer ask silenced it", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("How do invites work today?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+      runId: "run-1",
+      end: LIVE_BRAIN_RUN_END.FAILED,
+    });
+    stepSettled(f, 1);
+    sideband.input("And who can send them?", 1000, 1800);
+    sideband.delegation("item_2", 1900);
+    yield* settle();
+    yield* advanceClock(PROGRESS_NOTE_BOUNDS.GAP_MS);
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+      runId: "run-1",
+      step: "repository_read",
+      settled: 2,
+    });
+    yield* settle();
+    assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), []);
+  }),
+);
+
+/** Answers run-1's reply with one sentence, its actions settled. */
+function replyWith(f: Fixture, sentence: string) {
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence });
+}
+
+/** Refuses the append sent at the given index with an error naming it. */
+function refuseAt(sideband: FakeSideband, index: number) {
+  const sent = sideband.sent[index];
+  assert.ok(sent, `append ${index} was sent`);
+  sideband.receive({
+    type: LIVE_SERVER_EVENT.ERROR,
+    event_id: `err-${index}`,
+    error: { code: null, client_event_id: sent.event_id },
+  });
+}
+
+it.effect(
+  "a reply chunk the session refused is sent once more under a fresh id, and the reply is said rather than lost",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Is the fix in?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      replyWith(f, "It landed.");
+      yield* settle();
+      refuseAt(sideband, sideband.sent.length - 1);
+      yield* settle();
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), [
+        "It landed.",
+        "It landed.",
+      ]);
+      assert.notEqual(commentary[0]?.event_id, commentary[1]?.event_id);
+      assert.deepEqual(
+        commentary.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
+        ["item_1", "item_1"],
+      );
+      sideband.acknowledge(sideband.sent.length - 1, 1000, 1100);
+      yield* settle();
+      assert.deepEqual(
+        f.reports.filter((report) => report.includes("commentary")),
+        [],
+      );
+    }),
+);
+
+it.effect("a reply chunk refused on its retry too is reported and not sent a third time", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Is the fix in?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    replyWith(f, "It landed.");
+    yield* settle();
+    refuseAt(sideband, sideband.sent.length - 1);
+    yield* settle();
+    refuseAt(sideband, sideband.sent.length - 1);
+    yield* settle();
+    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
+    assert.deepEqual(
+      f.reports.filter((report) => report.includes("commentary")),
+      ["A reply's commentary was refused twice and is not said"],
+    );
+  }),
+);
+
+it.effect(
+  "a reply chunk left unanswered is reported and never sent again, since it may still reach the timeline",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Is the fix in?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      replyWith(f, "It landed.");
+      yield* advanceClock(60_000);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      assert.ok(f.reports.includes("A reply's commentary went unanswered and is not sent again"));
     }),
 );

@@ -182,10 +182,14 @@ interface Stand {
   readonly events: LiveBrainRunEvent[];
   /** What the listener heard of the run's activity, apart from the seams. */
   readonly activities: LiveBrainRunEvent[];
+  /** What the listener heard of the run's settled steps, apart from the seams. */
+  readonly steps: LiveBrainRunEvent[];
   /** Settles once at least `count` seams have reached the listener, on the events themselves. */
   readonly arrived: (count: number) => Effect.Effect<void>;
   /** Settles once at least `count` activities have reached the listener. */
   readonly active: (count: number) => Effect.Effect<void>;
+  /** Settles once at least `count` settled-step events have reached the listener. */
+  readonly stepped: (count: number) => Effect.Effect<void>;
   readonly reports: string[];
   /** The socket's own scope as the attachment opens one; closing it interrupts every follow under way. */
   readonly stop: () => Promise<void>;
@@ -201,6 +205,7 @@ async function stand(
   const eve = fakeEve();
   const events: LiveBrainRunEvent[] = [];
   const activities: LiveBrainRunEvent[] = [];
+  const steps: LiveBrainRunEvent[] = [];
   const reports: string[] = [];
   const scope = await database.run(Scope.make());
   const brain = await database.run(
@@ -217,9 +222,11 @@ async function stand(
       scope,
     ),
   );
-  brain.onRunEvent((event) =>
-    (event.kind === LIVE_BRAIN_RUN_EVENT.ACTIVITY ? activities : events).push(event),
-  );
+  brain.onRunEvent((event) => {
+    if (event.kind === LIVE_BRAIN_RUN_EVENT.ACTIVITY) activities.push(event);
+    else if (event.kind === LIVE_BRAIN_RUN_EVENT.STEP_SETTLED) steps.push(event);
+    else events.push(event);
+  });
   const arrived = (count: number) =>
     arrival(
       (notify) => brain.onRunEvent(notify),
@@ -232,14 +239,22 @@ async function stand(
       () => activities.length >= count,
       `${count} activities`,
     );
+  const stepped = (count: number) =>
+    arrival(
+      (notify) => brain.onRunEvent(notify),
+      () => steps.length >= count,
+      `${count} settled steps`,
+    );
   return {
     eve,
     brain,
     events,
     activities,
+    steps,
     reports,
     arrived,
     active,
+    stepped,
     stop: () => database.run(Scope.close(scope, Exit.void)),
   };
 }
@@ -527,10 +542,10 @@ it.live("stop ends every follow: a turn that completes after it reaches no liste
 );
 
 it.live(
-  "the stream's vocabulary and the service's are one set of words on each side, but for the live brain's own activity",
+  "the stream's vocabulary and the service's are one set of words on each side, but for the live brain's own activity and settled steps",
   () =>
     Effect.sync(() => {
-      const { ACTIVITY: _ownActivity, ...streamed } = LIVE_BRAIN_RUN_EVENT;
+      const { ACTIVITY: _ownActivity, STEP_SETTLED: _ownSteps, ...streamed } = LIVE_BRAIN_RUN_EVENT;
       assert.deepEqual(Object.values(TURN_EVENT_KIND).sort(), Object.values(streamed).sort());
       assert.deepEqual(Object.values(TURN_END).sort(), Object.values(LIVE_BRAIN_RUN_END).sort());
     }),
@@ -887,6 +902,53 @@ it.live(
         runId: accepted.runId,
         action: undefined,
       });
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a planning turn's repository command, once answered, is told as one settled repository read that carries neither the command nor its output",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const planConversation = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* createPlan(target.userId, PLAN);
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+          }),
+        ),
+      );
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target: { userId: target.userId, conversationId: planConversation },
+        kind: CONVERSATION_KIND.PLAN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const events = planningTurn(FIRST_EVE_TURN, NOW, {
+        toolName: RUN_IN_REPOSITORY_TOOL.name,
+        input: { command: "cat .env" },
+        output: { status: REPOSITORY_SHELL_STATUS.NOT_RUN, reason: "No sandbox." },
+      });
+      const answered = events.findIndex((event) => event.type === "action.result") + 1;
+      yield* Effect.promise(() => play(events.slice(0, answered), standing));
+      yield* f.stepped(1);
+      // The journal standing still is read again and again, and tells no step twice.
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      assert.deepEqual(f.steps, [
+        {
+          kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+          runId: accepted.runId,
+          step: TURN_SLOW_STEP.REPOSITORY_READ,
+          settled: 1,
+        },
+      ]);
       yield* Effect.promise(() => f.stop());
     }),
 );

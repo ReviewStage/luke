@@ -41,7 +41,7 @@ import { LiveBrainTag } from "../effect/live-brain.js";
 import { LiveRecordTag } from "../effect/live-record.js";
 import type { LiveSessionOpened } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
-import { AppendChannel } from "./append-channel.js";
+import { APPEND_OUTCOME, AppendChannel } from "./append-channel.js";
 import {
   closeGracefully,
   SIDEBAND_CLOSE_OUTCOME,
@@ -120,6 +120,32 @@ const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
   ["repository_read", "Luke is reading the repository; this takes a moment."],
 ]);
 const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
+
+/** What a settled step is told as, worded by the build and never by the call; an unknown step gets the general line. */
+const SETTLED_STEP_NOTE: ReadonlyMap<string | undefined, string> = new Map([
+  ["transcript_read", "Luke finished reading a session's transcript"],
+  ["provider_write", "Luke finished carrying out an action"],
+  ["repository_read", "Luke finished a read of the repository"],
+]);
+const SETTLED_STEP_GENERAL_NOTE = "Luke finished a step";
+
+/**
+ * How often a running ask's settled steps reach the voice as quiet progress:
+ * no sooner than `GAP_MS` after the exchange's last thinking note, and at most
+ * `PER_EXCHANGE` times, so a planning call that reads the repository for ten
+ * minutes leaves the voice a handful of facts rather than one per command.
+ * A step settled inside the gap is counted in the next note the run earns.
+ */
+export const PROGRESS_NOTE_BOUNDS = {
+  GAP_MS: 15_000,
+  PER_EXCHANGE: 6,
+} as const;
+
+/** The quiet progress one settled step earns: what kind it was, and how many of the ask's steps are done. */
+function progressNote(step: string | undefined, settled: number): string {
+  const done = SETTLED_STEP_NOTE.get(step) ?? SETTLED_STEP_GENERAL_NOTE;
+  return `${done}; ${settled} ${settled === 1 ? "step" : "steps"} of this ask done so far.`;
+}
 
 /**
  * A question the planning model queued, as the voice is handed it: spoken
@@ -313,6 +339,9 @@ interface Exchange {
   buffered: string[];
   spokenChunks: number;
   slowStepTold: boolean;
+  /** How many progress notes the exchange has written, and when it last wrote any thinking note. */
+  progressNotes: number;
+  lastNoteAt: number | undefined;
   /** What the brain last said its run is doing, cleared when a run ends. */
   action: string | undefined;
   finalize: SessionDelay | undefined;
@@ -338,6 +367,8 @@ function newExchange(
     buffered: [],
     spokenChunks: 0,
     slowStepTold: false,
+    progressNotes: 0,
+    lastNoteAt: undefined,
     action: undefined,
     finalize: undefined,
     end: undefined,
@@ -1199,10 +1230,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       // acceptance itself is told nothing of: a note saying the ask is with
       // Luke is what the model reads as license to narrate waiting, and the
       // only thinking appends this exchange earns are the factual ones a slow
-      // step actually begun writes. An attach that lands nothing (a follow-up
-      // with no row of its own, a repeat, or a store failure, which `#attachAsk`
-      // reports) changes nothing here: the ask is with the brain either way,
-      // and the developer is told nothing of the record.
+      // step actually begun, or a step actually settled, writes. An attach
+      // that lands nothing (a follow-up with no row of its own, a repeat, or a
+      // store failure, which `#attachAsk` reports) changes nothing here: the
+      // ask is with the brain either way, and the developer is told nothing of
+      // the record.
       const exchange = this.#registerExchange(session, submission.runId, delegationId, asked);
       if (rowIds.length > 0) {
         exchange.pendingRecord = true;
@@ -1345,18 +1377,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       case LIVE_BRAIN_RUN_EVENT.SLOW_STEP: {
         if (exchange.slowStepTold || exchange.silenced) return;
         exchange.slowStepTold = true;
-        const session = this.#sessionOf(exchange);
-        if (!session) return;
-        const note = SLOW_STEP_NOTE.get(event.step) ?? SLOW_STEP_GENERAL_NOTE;
-        session.channel.enqueue(
-          Effect.suspend(() =>
-            Effect.asVoid(
-              session.channel.send(thinkingAppend(this.#input(this.#delegationOf(exchange), note))),
-            ),
-          ),
-        );
+        this.#think(exchange, SLOW_STEP_NOTE.get(event.step) ?? SLOW_STEP_GENERAL_NOTE);
         return;
       }
+      case LIVE_BRAIN_RUN_EVENT.STEP_SETTLED:
+        if (!this.#progressDue(exchange)) return;
+        exchange.progressNotes += 1;
+        this.#think(exchange, progressNote(event.step, event.settled));
+        return;
       // A queued question is no action's result, so it is spoken without waiting on the settle,
       // and it is the plan's next question rather than the reply, so a silenced run still hands it on.
       case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED:
@@ -1388,6 +1416,28 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       default:
         return;
     }
+  }
+
+  /** Whether a settled step may be told now, by `PROGRESS_NOTE_BOUNDS`; a silenced or ended exchange tells none. */
+  #progressDue(exchange: Exchange): boolean {
+    if (exchange.silenced || exchange.end !== undefined) return false;
+    if (exchange.progressNotes >= PROGRESS_NOTE_BOUNDS.PER_EXCHANGE) return false;
+    const last = exchange.lastNoteAt;
+    return last === undefined || this.#now() - last >= PROGRESS_NOTE_BOUNDS.GAP_MS;
+  }
+
+  /** A fact of the exchange's run, appended as quiet context under its delegation and never as words to say. */
+  #think(exchange: Exchange, note: string): void {
+    const session = this.#sessionOf(exchange);
+    if (!session) return;
+    exchange.lastNoteAt = this.#now();
+    session.channel.enqueue(
+      Effect.suspend(() =>
+        Effect.asVoid(
+          session.channel.send(thinkingAppend(this.#input(this.#delegationOf(exchange), note))),
+        ),
+      ),
+    );
   }
 
   /**
@@ -1427,10 +1477,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     for (const chunk of chunkForAppend(sentence)) {
       session.channel.enqueue(
         Effect.gen({ self: this }, function* () {
-          if (silenced()) return;
-          const taken = yield* session.channel.send(
-            commentaryAppend(this.#input(delegationId, chunk)),
-          );
+          const taken = yield* this.#sayChunk(session, delegationId, chunk, silenced);
           if (taken) exchange.spokenChunks += 1;
         }),
       );
@@ -1440,12 +1487,38 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #speakInto(session: StandingSession, delegationId: LiveDelegationId, text: string): void {
     this.#voiceIn(session, VOICE_PHASE.ABOUT_TO_ANSWER);
     for (const chunk of chunkForAppend(text)) {
-      session.channel.enqueue(
-        Effect.suspend(() =>
-          Effect.asVoid(session.channel.send(commentaryAppend(this.#input(delegationId, chunk)))),
-        ),
-      );
+      session.channel.enqueue(Effect.asVoid(this.#sayChunk(session, delegationId, chunk)));
     }
+  }
+
+  /**
+   * One chunk of words for the voice to say under a delegation, answering
+   * whether the session took it. A chunk the session refused is sent once
+   * more under a fresh id, so one refused append does not leave a reply
+   * silent; refused again, it is reported and given up. A chunk left
+   * unanswered is reported and never sent again, because the conversations
+   * guide has a pending append still reach the timeline once it moves, and a
+   * second copy would be said twice. Note that the report names no words.
+   */
+  #sayChunk(
+    session: StandingSession,
+    delegationId: LiveDelegationId,
+    chunk: string,
+    silenced: () => boolean = () => false,
+  ): Effect.Effect<boolean> {
+    return Effect.gen({ self: this }, function* () {
+      if (silenced()) return false;
+      const say = () => session.channel.deliver(commentaryAppend(this.#input(delegationId, chunk)));
+      const first = yield* say();
+      const retried = first === APPEND_OUTCOME.REFUSED && !silenced();
+      const outcome = retried ? yield* say() : first;
+      if (retried && outcome === APPEND_OUTCOME.REFUSED) {
+        this.#options.report("A reply's commentary was refused twice and is not said");
+      } else if (outcome === APPEND_OUTCOME.UNANSWERED) {
+        this.#options.report("A reply's commentary went unanswered and is not sent again");
+      }
+      return outcome === APPEND_OUTCOME.TAKEN;
+    });
   }
 
   /** The session an exchange's delegation ids belong to, if it still stands; a closed one leaves them dead. */
