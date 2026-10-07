@@ -278,6 +278,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       eve: options.eve,
     },
     store,
+    writer,
     report,
   });
 

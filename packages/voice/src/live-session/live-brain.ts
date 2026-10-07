@@ -91,14 +91,33 @@ export type LiveBrainSubmission =
       refusal: string;
     };
 
+/** What asking the brain to cancel a run came to: cancelled, nothing left to cancel, or a cancel the backend did not take. */
+export const LIVE_BRAIN_CANCEL = {
+  /** The backend took the cancel: the run stops, or will never start its work. */
+  CANCELLED: "cancelled",
+  /** The run had already ended, or the brain holds nothing under its id. */
+  NOT_RUNNING: "not_running",
+  /** The backend could not be reached or refused the cancel; the run may still be under way. */
+  FAILED: "failed",
+} as const;
+
+export type LiveBrainCancel = (typeof LIVE_BRAIN_CANCEL)[keyof typeof LIVE_BRAIN_CANCEL];
+
 export interface LiveBrain {
   /**
    * Submits a spoken ask under the spoken origin. An ask that arrives while
-   * a run is under way is the brain's to steer into it or queue behind it;
-   * either way the answer names the run the record was accepted into, and
-   * the run seams below say which run's reply carries the words.
+   * a run is under way is the brain's to queue behind it or fold with
+   * others waiting; the answer names a run of the ask's own, and where asks
+   * share one backend turn, the newest of them is the run that carries the
+   * turn's words, since the service speaks the newest request's reply alone.
    */
   submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission>;
+  /**
+   * Asks the backend to cancel one run, answering only once the backend has
+   * said whether it took the cancel, so nothing is told of a cancel that did
+   * not happen. The run still ends through its own seam.
+   */
+  cancelRun(runId: string): Effect.Effect<LiveBrainCancel>;
   /** Hears the run seams for every run the brain holds; the service reads the kinds it knows by name. */
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void;
 }

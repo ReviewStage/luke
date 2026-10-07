@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { LIVE_BRAIN_SUBMISSION, type LiveBrain } from "../live-session/live-brain.js";
+import {
+  LIVE_BRAIN_CANCEL,
+  LIVE_BRAIN_SUBMISSION,
+  type LiveBrain,
+} from "../live-session/live-brain.js";
 import { LiveBrainTag, liveBrainLayer } from "./live-brain.js";
 
 const fakeBrain: LiveBrain = {
   submitAsk: () => Effect.succeed({ outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: "run-1" }),
+  cancelRun: () => Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING),
   onRunEvent: () => () => undefined,
 };
 
