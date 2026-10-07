@@ -1,4 +1,5 @@
 import { CheckIcon, CloseIcon, CopyIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
+import { CodePane } from "../planning/code-pane";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import {
@@ -144,6 +145,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
       </Toolbar>
       <section className="desktop-document" aria-label={plan.name}>
         <PlanBody plan={plan} live={plans.live} />
+        {plans.codePane === undefined ? null : <CodePane control={plans.codePane} />}
       </section>
       <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>
         <MicrophoneRow status={plans.status} microphone={plans.microphone} stop={plans.stop} />

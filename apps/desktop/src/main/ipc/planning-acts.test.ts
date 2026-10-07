@@ -65,6 +65,8 @@ function fixture() {
         }),
       planningSetFolder: (params) =>
         Effect.sync(() => void asked.push(`folder:${params.planId}:${params.folderPath}`)),
+      planningShowCode: (ref) => Effect.sync(() => void asked.push(`code:${ref.path}`)),
+      planningListFiles: () => Effect.sync(() => ["src/invites.ts"]),
       planningRepositories: () =>
         Effect.sync(() => {
           asked.push("repositories");

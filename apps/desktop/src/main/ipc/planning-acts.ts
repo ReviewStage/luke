@@ -1,3 +1,4 @@
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type {
   PlanningRepositoriesAnswer,
   PlanningSetFolderParams,
@@ -28,6 +29,8 @@ export interface PlanningActsDependencies {
     planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
     /** Opens the Connect GitHub page in the browser; whether it opened. */
     planningConnectGitHub(): Effect.Effect<boolean>;
+    planningShowCode(ref: CodeRef): Effect.Effect<void>;
+    planningListFiles(): Effect.Effect<readonly string[]>;
   };
   /** The folder picker; the chosen folder's absolute path, or null when the developer cancelled. */
   chooseFolder: () => Effect.Effect<string | null>;
@@ -49,7 +52,9 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_CONNECT_GITHUB
   | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
   | typeof ACT_KIND.PLANNING_SET_FOLDER
-  | typeof ACT_KIND.PLANNING_TALK;
+  | typeof ACT_KIND.PLANNING_TALK
+  | typeof ACT_KIND.PLANNING_SHOW_CODE
+  | typeof ACT_KIND.PLANNING_LIST_FILES;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
@@ -123,6 +128,14 @@ export function planningActRows(
         throw new ActRefused({ message: ACT[ACT_KIND.PLANNING_TALK].refusal });
       }
       dependencies.talkAboutPlan(planId);
+    },
+    [ACT_KIND.PLANNING_SHOW_CODE]: ({ ref }, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_SHOW_CODE, sender);
+      return host.planningShowCode(ref);
+    },
+    [ACT_KIND.PLANNING_LIST_FILES]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_LIST_FILES, sender);
+      return host.planningListFiles();
     },
   };
 }

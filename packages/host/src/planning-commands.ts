@@ -1,11 +1,7 @@
 import { type ExecFileException, execFile } from "node:child_process";
 import { realpathSync } from "node:fs";
 import type { HostedPlanClient } from "@sidecar/hosted";
-import {
-  PLAN_COMMAND_OUTPUT_MAX_CHARS,
-  type PlanCommand,
-  type PlanCommandResult,
-} from "@sidecar/hosted/plan-wire";
+import { PLAN_COMMAND_OUTPUT_MAX_CHARS, type PlanCommandResult } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect, Schema, type Scope } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
@@ -119,8 +115,8 @@ const NO_FOLDER_RESULT: PlanCommandResult = {
 };
 
 /** An output cut to what one result may carry. */
-function bounded(output: string): string {
-  return output.slice(0, PLAN_COMMAND_OUTPUT_MAX_CHARS);
+function bounded(output: string, maxChars: number): string {
+  return output.slice(0, maxChars);
 }
 
 const isExitCode = Schema.is(Schema.Int);
@@ -134,21 +130,28 @@ function resultOf(
   error: ExecFileException | null,
   stdout: string,
   stderr: string,
+  maxChars: number,
 ): PlanCommandResult {
-  if (error === null) return { exitCode: 0, stdout: bounded(stdout), stderr: bounded(stderr) };
+  if (error === null) {
+    return { exitCode: 0, stdout: bounded(stdout, maxChars), stderr: bounded(stderr, maxChars) };
+  }
   const exitCode = isExitCode(error.code) ? error.code : PLANNING_COMMANDS.SPAWN_FAILED_EXIT_CODE;
   const diagnostics = stderr === "" ? error.message : stderr;
-  return { exitCode, stdout: bounded(stdout), stderr: bounded(diagnostics) };
+  return { exitCode, stdout: bounded(stdout, maxChars), stderr: bounded(diagnostics, maxChars) };
 }
 
-/** One command run with bash in `folder`, sandboxed; every outcome is a result, and an interrupted run is killed. */
-function runPlanCommand(
-  command: Pick<PlanCommand, "command">,
+/**
+ * One command run with bash in `folder`, sandboxed; every outcome is a
+ * result, cut to `maxChars` of each output, and an interrupted run is killed.
+ */
+export function runInPlanFolder(
+  command: string,
   folder: string,
+  maxChars: number = PLAN_COMMAND_OUTPUT_MAX_CHARS,
 ): Effect.Effect<PlanCommandResult> {
   return Effect.callback<PlanCommandResult>((resume) => {
     const cwd = realFolder(folder);
-    const [program, args] = commandLine(command.command, cwd);
+    const [program, args] = commandLine(command, cwd);
     const child = execFile(
       program,
       args,
@@ -159,7 +162,7 @@ function runPlanCommand(
         timeout: PLANNING_COMMANDS.TIMEOUT_MS,
         maxBuffer: PLANNING_COMMANDS.MAX_BUFFER_BYTES,
       },
-      (error, stdout, stderr) => resume(Effect.succeed(resultOf(error, stdout, stderr))),
+      (error, stdout, stderr) => resume(Effect.succeed(resultOf(error, stdout, stderr, maxChars))),
     );
     return Effect.sync(() => void child.kill());
   });
@@ -174,7 +177,8 @@ function serveOnce(dependencies: PlanningCommandsDependencies): Effect.Effect<vo
     const claimed = yield* dependencies.client.claimCommand(planId);
     if (claimed === undefined) return yield* Effect.sleep(PLANNING_COMMANDS.RETRY);
     if (claimed === null) return;
-    const result = folder === undefined ? NO_FOLDER_RESULT : yield* runPlanCommand(claimed, folder);
+    const result =
+      folder === undefined ? NO_FOLDER_RESULT : yield* runInPlanFolder(claimed.command, folder);
     yield* dependencies.client.settleCommand(planId, claimed.id, result);
   }).pipe(Effect.provide(FetchHttpClient.layer));
 }

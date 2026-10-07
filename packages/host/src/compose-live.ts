@@ -90,6 +90,8 @@ export interface LiveDependencies {
   showPlanDraft: (draft: PlanDraftFrame) => void;
   /** Where the service's word of what each part of Luke is doing on a planning call goes, and the call's end clearing it. */
   showPlanActivity: (activity: PlanActivityFrame) => void;
+  /** Where a planning call's end goes, so the code it put on screen is cleared with it. */
+  planCallEnded: (planId: string) => void;
 }
 
 /** The three beats this side decides, each withdrawn together at a sign-out. */
@@ -182,6 +184,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     onPlanDraft: (draft) => dependencies.showPlanDraft(draft),
     // What each part of Luke is doing on the call, as the service says it.
     onPlanActivity: (activity) => dependencies.showPlanActivity(activity),
+    onPlanCallEnded: (planId) => dependencies.planCallEnded(planId),
     // The service's word that a turn was spoken to its end, by kind: the
     // counts and the arrival's moment are this side's record, kept here as
     // they were when the queue that spoke them stood on this Mac.

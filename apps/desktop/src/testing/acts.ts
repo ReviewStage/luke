@@ -110,6 +110,11 @@ export const ONE_ACT_OF_EACH_KIND = {
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", folderPath: "/Users/dev/relay" },
   },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
+  [ACT_KIND.PLANNING_SHOW_CODE]: {
+    kind: ACT_KIND.PLANNING_SHOW_CODE,
+    payload: { ref: { path: "src/invites.ts", startLine: 40, endLine: 58 } },
+  },
+  [ACT_KIND.PLANNING_LIST_FILES]: { kind: ACT_KIND.PLANNING_LIST_FILES },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "clear-conversation" },

@@ -39,6 +39,10 @@ export const GATEWAY_METHOD = {
   PLANNING_DELETE: "planning.delete",
   /** The folder of this Mac a plan reads, chosen again for a plan this Mac holds none for. */
   PLANNING_SET_FOLDER: "planning.setFolder",
+  /** Code of the open plan's folder put on screen by the developer: a file opened, or lines of it selected. */
+  PLANNING_SHOW_CODE: "planning.showCode",
+  /** The files of the open plan's folder, named relative to it, for the code pane's quick open. */
+  PLANNING_LIST_FILES: "planning.listFiles",
   /** The repositories the account's GitHub connection can read, for a new plan's picker. */
   PLANNING_REPOSITORIES: "planning.repositories",
   /** The Connect GitHub page opened in the browser, for the account this Mac is signed in as. */

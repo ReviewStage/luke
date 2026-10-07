@@ -21,6 +21,7 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
+import { codeRefSchema } from "@sidecar/hosted/plan-wire";
 import {
   type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
@@ -173,6 +174,10 @@ export const ACT_KIND = {
   PLANNING_SET_FOLDER: "planning.setFolder",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
+  /** The developer put code of the open plan's folder on screen during its call: a file opened, or lines selected. */
+  PLANNING_SHOW_CODE: "planning.showCode",
+  /** The files of the open plan's folder, for the code pane's quick open. */
+  PLANNING_LIST_FILES: "planning.listFiles",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -651,6 +656,18 @@ export const ACT = {
     refusal: "Could not keep that folder on this system.",
   },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
+  [ACT_KIND.PLANNING_SHOW_CODE]: {
+    payload: record({ ref: codeRefSchema }),
+    result: answersNothing,
+    refusal: "Could not show that code on this system.",
+  },
+  [ACT_KIND.PLANNING_LIST_FILES]: {
+    payload: noPayload,
+    result: wireResult<readonly string[]>(
+      (value): value is readonly string[] => Array.isArray(value) && value.every(isWireString),
+    ),
+    refusal: "Could not list the plan's files on this system.",
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
       command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),

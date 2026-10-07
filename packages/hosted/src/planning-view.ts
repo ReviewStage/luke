@@ -4,7 +4,12 @@ import {
   type GitHubFailure,
   githubRepositoryListAnswerSchema,
 } from "./github-wire.js";
-import { planCreateRequestSchema, planSchema, planSummarySchema } from "./plan-wire.js";
+import {
+  codeRefSchema,
+  planCreateRequestSchema,
+  planSchema,
+  planSummarySchema,
+} from "./plan-wire.js";
 
 /**
  * planning-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
@@ -89,6 +94,56 @@ export const planActivitySchema = EffectSchema.Struct({
 
 export type PlanActivity = typeof planActivitySchema.Type;
 
+/** Which side of the call put the code on screen. */
+export const CODE_SOURCE = {
+  LUKE: "luke",
+  DEVELOPER: "developer",
+} as const;
+
+export type CodeSource = (typeof CODE_SOURCE)[keyof typeof CODE_SOURCE];
+
+/** Why a file named for the screen drew no lines. */
+export const CODE_UNREADABLE = {
+  /** The plan has no folder on this Mac to read it from. */
+  NO_FOLDER: "no-folder",
+  /** No such file in the plan's folder. */
+  MISSING: "missing",
+  /** The path leaves the folder, or names a file kept secret, such as a `.env`. */
+  REFUSED: "refused",
+  /** The file is larger than the screen draws, or is not text. */
+  TOO_LARGE: "too-large",
+} as const;
+
+export type CodeUnreadable = (typeof CODE_UNREADABLE)[keyof typeof CODE_UNREADABLE];
+
+/** One run of a line in one colour, as the host's highlighter split it. */
+const codeTokenSchema = EffectSchema.Struct({
+  text: EffectSchema.String,
+  /** A `#rrggbb` colour; absent for the theme's own foreground. */
+  color: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type CodeToken = typeof codeTokenSchema.Type;
+
+/**
+ * The code on screen during the call about the active plan: what was named,
+ * by whom, and the file's lines as this Mac read and coloured them, line one
+ * first, or why it drew none. It stands for the call alone: nothing of it
+ * enters the plan.
+ */
+export const planCodeSchema = EffectSchema.Struct({
+  source: EffectSchema.Literals(Object.values(CODE_SOURCE)),
+  ref: codeRefSchema,
+  /** The file's line the first drawn line is; the screen holds a window of a long file around the lines pointed at. */
+  firstLine: EffectSchema.optionalKey(EffectSchema.Int),
+  /** How many lines the whole file has. */
+  lineCount: EffectSchema.optionalKey(EffectSchema.Int),
+  lines: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.Array(codeTokenSchema))),
+  unreadable: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODE_UNREADABLE))),
+});
+
+export type PlanCode = typeof planCodeSchema.Type;
+
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, most recently opened first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
@@ -98,6 +153,8 @@ export const planningViewSchema = EffectSchema.Struct({
   document: planningDocumentSchema,
   /** What each part of Luke is doing on the call about the active plan, as last told; absent with no plan open or no word yet. */
   activity: EffectSchema.optionalKey(planActivitySchema),
+  /** The code on screen during the call about the active plan; absent with none, and cleared with the activity. */
+  code: EffectSchema.optionalKey(planCodeSchema),
   /** The folder of this Mac each plan reads, by plan id; a plan this Mac holds no folder for is absent. */
   folders: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
 });
@@ -111,6 +168,11 @@ export const IDLE_PLANNING_VIEW: PlanningView = {
   document: { status: PLANNING_READ.IDLE },
   folders: {},
 };
+
+/** The files of the open plan's folder, relative to it, as the code pane's quick open lists them. */
+export const planningFilesAnswerSchema = EffectSchema.Struct({
+  files: EffectSchema.Array(EffectSchema.String),
+});
 
 /** Starting a plan, as the window asks it: the name the service keeps, and the folder this Mac keeps. */
 export const planningStartRequestSchema = EffectSchema.Struct({

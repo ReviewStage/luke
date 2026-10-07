@@ -11,6 +11,7 @@ import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
+  CODE_SOURCE,
   type GitHubCallFailure,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -154,6 +155,10 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
   return Effect.gen(function* () {
     const told: PlanningView[] = [];
     const opened: string[] = [];
+    const waiters: {
+      wanted: (view: PlanningView) => boolean;
+      seen: Deferred.Deferred<PlanningView>;
+    }[] = [];
     const standing = options.call ?? { about: undefined };
     const recordedFolders = folderRecord();
     const planning = yield* composePlanning({
@@ -164,6 +169,10 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           const read = readEither(planningViewSchema)(payload);
           assert.ok(Result.isSuccess(read), "the planning event carries a view");
           told.push(read.success);
+          for (const waiter of waiters) {
+            if (waiter.wanted(read.success))
+              Deferred.doneUnsafe(waiter.seen, Effect.succeed(read.success));
+          }
         },
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
@@ -188,7 +197,14 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       return Effect.orDie(handler(params, context));
     };
     const last = () => told.at(-1);
-    return { planning, call, told, last, opened };
+    /** The first view told, from now on, that `wanted` holds of. */
+    const viewWhere = (wanted: (view: PlanningView) => boolean) =>
+      Effect.gen(function* () {
+        const seen = yield* Deferred.make<PlanningView>();
+        waiters.push({ wanted, seen });
+        return yield* Deferred.await(seen);
+      });
+    return { planning, call, told, last, opened, viewWhere };
   });
 }
 
@@ -800,4 +816,100 @@ it.effect("a command for a plan this Mac holds no folder for runs nothing and sa
       assert.match(settled?.result.stderr ?? "", /no folder is chosen for this plan on this Mac/u);
     }),
   ),
+);
+
+const INVITE_SOURCE = "export function acceptInvite(token: string) {\n  return token;\n}\n";
+
+/** The open plan on a folder holding one source file, with its code loop running. */
+function planOnFolder(service: FakeService) {
+  return Effect.gen(function* () {
+    const folder = yield* temporaryDirectoryScoped("luke-plan-code-");
+    const fs = yield* FileSystem.FileSystem;
+    yield* Effect.orDie(fs.writeFileString(`${folder}/invite.ts`, INVITE_SOURCE));
+    const opened = yield* subject(service);
+    yield* opened.call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+    yield* opened.call(GATEWAY_METHOD.PLANNING_SET_FOLDER, { planId: INVITES, folderPath: folder });
+    yield* opened.planning.lifetime;
+    return opened;
+  });
+}
+
+it.effect("code Luke names on the open plan's call is read from its folder and drawn", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { planning, viewWhere } = yield* planOnFolder(service);
+      const drawn = viewWhere((view) => view.code !== undefined);
+
+      planning.showCode(INVITES, { path: "invite.ts", startLine: 1, endLine: 2 }, CODE_SOURCE.LUKE);
+
+      const { code } = yield* drawn;
+      assert.equal(code?.source, CODE_SOURCE.LUKE);
+      assert.deepEqual(code?.ref, { path: "invite.ts", startLine: 1, endLine: 2 });
+      assert.equal(
+        code?.lines?.[0]?.map((token) => token.text).join(""),
+        "export function acceptInvite(token: string) {",
+      );
+    }),
+  ).pipe(Effect.provide(nodeFiles)),
+);
+
+it.effect("the developer pointing at lines puts them on screen as theirs", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, viewWhere } = yield* planOnFolder(service);
+      const drawn = viewWhere((view) => view.code !== undefined);
+
+      yield* call(GATEWAY_METHOD.PLANNING_SHOW_CODE, {
+        ref: { path: "invite.ts", startLine: 2, endLine: 2 },
+      });
+
+      const { code } = yield* drawn;
+      assert.equal(code?.source, CODE_SOURCE.DEVELOPER);
+      assert.deepEqual(code?.ref, { path: "invite.ts", startLine: 2, endLine: 2 });
+    }),
+  ).pipe(Effect.provide(nodeFiles)),
+);
+
+it.effect("the call's end clears the code it put on screen, and so does leaving the plan", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning, viewWhere, last } = yield* planOnFolder(service);
+      const ref = { path: "invite.ts" };
+
+      const first = viewWhere((view) => view.code !== undefined);
+      planning.showCode(INVITES, ref, CODE_SOURCE.LUKE);
+      yield* first;
+      planning.callEnded(INVITES);
+      assert.equal(last()?.code, undefined);
+
+      const second = viewWhere((view) => view.code !== undefined);
+      planning.showCode(INVITES, ref, CODE_SOURCE.LUKE);
+      yield* second;
+      yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
+      assert.equal(last()?.code, undefined);
+    }),
+  ).pipe(Effect.provide(nodeFiles)),
+);
+
+it.effect("code named about a plan that is not open is not drawn", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { planning, told, viewWhere } = yield* planOnFolder(service);
+
+      planning.showCode(BILLING, { path: "invite.ts" }, CODE_SOURCE.LUKE);
+      // Note that the plan's own code, named after, is drawn, so the other was dropped rather than still out.
+      const drawn = viewWhere((view) => view.code !== undefined);
+      planning.showCode(INVITES, { path: "invite.ts", startLine: 3, endLine: 3 }, CODE_SOURCE.LUKE);
+      yield* drawn;
+
+      assert.deepEqual(
+        told.flatMap((view) => (view.code === undefined ? [] : [view.code.ref])),
+        [{ path: "invite.ts", startLine: 3, endLine: 3 }],
+      );
+    }),
+  ).pipe(Effect.provide(nodeFiles)),
 );

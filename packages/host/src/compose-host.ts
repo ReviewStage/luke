@@ -149,6 +149,7 @@ export const hostAssemblyLayer: Layer.Layer<
     let activePlanId: () => string | undefined = () => undefined;
     let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
     let showPlanActivity: (activity: PlanActivityFrame) => void = () => undefined;
+    let planCallEnded: (planId: string) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
@@ -157,6 +158,7 @@ export const hostAssemblyLayer: Layer.Layer<
       activePlanId: () => activePlanId(),
       showPlanDraft: (draft) => showPlanDraft(draft),
       showPlanActivity: (activity) => showPlanActivity(activity),
+      planCallEnded: (planId) => planCallEnded(planId),
     });
     const planning = yield* composePlanning({
       kernel,
@@ -181,6 +183,7 @@ export const hostAssemblyLayer: Layer.Layer<
     activePlanId = planning.activePlanId;
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
+    planCallEnded = planning.callEnded;
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
     briefingsOffered = live.briefingsOffered;

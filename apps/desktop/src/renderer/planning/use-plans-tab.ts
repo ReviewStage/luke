@@ -1,3 +1,4 @@
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -5,6 +6,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
+import type { CodePaneControl } from "./code-pane";
 import { FIXTURE_PLANNING_CALL, fixturePlanningView } from "./planning-fixture";
 import {
   type CallStatus,
@@ -55,6 +57,8 @@ export interface PlansControl {
   status: CallStatus | undefined;
   /** Whether the open plan's call is in progress, so the plan is still being written. */
   live: boolean;
+  /** The call's code pane, standing only while the open plan's call is in progress. */
+  codePane: CodePaneControl | undefined;
   onSelect: (planId: string) => void;
   /** Chooses the open plan's folder on this Mac again, through the folder picker. */
   onChooseFolder: () => void;
@@ -170,6 +174,17 @@ export function usePlansTab(input: {
     if (microphone.press === MICROPHONE_PRESS.TALK) tell(ACT_KIND.PLANNING_TALK);
   };
 
+  // The code pane stands for the call alone; a fixture's stands for its
+  // drawn call, and points at nothing since no host reads its folder.
+  const listFiles = useCallback(() => act(ACT_KIND.PLANNING_LIST_FILES), [act]);
+  const showCode = useCallback(
+    (ref: CodeRef) => {
+      if (fixture === undefined) tell(ACT_KIND.PLANNING_SHOW_CODE, { ref });
+    },
+    [fixture, tell],
+  );
+  const codeShown = live || (fixture !== undefined && planning.code !== undefined);
+
   // A cancelled picker keeps whatever folder the plan had.
   const chooseFolder = () => {
     const planId = planning.activePlanId;
@@ -217,6 +232,7 @@ export function usePlansTab(input: {
     // the fixture's own call rather than a voice window that holds none.
     status: callStatus(fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL, planning),
     live,
+    codePane: codeShown ? { code: planning.code, onShowCode: showCode, listFiles } : undefined,
     onSelect: select,
     onChooseFolder: chooseFolder,
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),

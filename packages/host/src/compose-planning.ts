@@ -8,7 +8,10 @@ import {
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
 import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
+import { type CodeRef, codeRefSchema } from "@sidecar/hosted/plan-wire";
 import {
+  CODE_SOURCE,
+  type CodeSource,
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -21,12 +24,13 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, Result, Schema, type Scope, Semaphore } from "effect";
+import { Effect, Option, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
+import { planCode, planFiles } from "./plan-code.js";
 import { servePlanningCommands } from "./planning-commands.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -38,13 +42,24 @@ import type { RunMode } from "./run-mode.js";
  * happens. Every write happens during a planning call, and the notetaker's
  * drafts arrive on that call's own socket and are drawn in place: the list
  * and the open plan are read when the Plans tab shows, when a plan opens, and
- * when one starts, and never on a clock. The one loop here is the open plan's
+ * when one starts, and never on a clock. The loops here are the open plan's
  * folder commands (`planning-commands.ts`), which the planning model asks
- * this Mac to run.
+ * this Mac to run, and the code on screen during a call (`plan-code.ts`),
+ * read from the plan's folder whichever side of the call named it.
  */
 
 /** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
+
+/** The developer's code on screen names the place, and the plan is the open one. */
+const planningShowCodeParamsSchema = Schema.Struct({ ref: codeRefSchema });
+
+/** One ask to put code on screen, for the plan it was named about. */
+interface CodeAsk {
+  readonly planId: string;
+  readonly ref: CodeRef;
+  readonly source: CodeSource;
+}
 
 /** The folder of this Mac each plan reads, by plan id, as this Mac alone records it. */
 export type PlanFolders = Readonly<Record<string, string>>;
@@ -121,6 +136,14 @@ export interface PlanningComposer extends Composer {
    * doing.
    */
   showActivity: (activity: PlanActivityFrame) => void;
+  /**
+   * Puts code of the open plan's folder on screen, as either side of its
+   * call named it: read and coloured here, the newest ask replacing any
+   * still being read. An ask about any other plan is dropped.
+   */
+  showCode: (planId: string, ref: CodeRef, source: CodeSource) => void;
+  /** The call about `planId` ended: the code it put on screen goes with it. */
+  callEnded: (planId: string) => void;
 }
 
 /**
@@ -169,8 +192,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
   }
 
-  /** The view with no activity, as a plan left behind leaves it. */
-  function withoutActivity({ activity: _activity, ...rest }: PlanningView): PlanningView {
+  /**
+   * Bumped whenever the code on screen is cleared, so a read still out when
+   * the call ended or the plan was left lands on nothing.
+   */
+  let codeGeneration = 0;
+
+  /** The view with no activity and no code, as a plan left behind leaves it. */
+  function withoutActivity({
+    activity: _activity,
+    code: _code,
+    ...rest
+  }: PlanningView): PlanningView {
+    codeGeneration += 1;
     return rest;
   }
 
@@ -237,6 +271,34 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     if (view.activePlanId !== planId) return;
     write({ activity });
   }
+
+  // Note that only the newest ask is kept, because code named while an older
+  // file is still being read is what the call is looking at now.
+  const codeAsks = yield* Queue.sliding<CodeAsk>(1);
+
+  function showCode(planId: string, ref: CodeRef, source: CodeSource): void {
+    if (view.activePlanId !== planId) return;
+    Queue.offerUnsafe(codeAsks, { planId, ref, source });
+  }
+
+  function callEnded(planId: string): void {
+    if (view.activePlanId !== planId || view.code === undefined) return;
+    codeGeneration += 1;
+    const { code: _code, ...rest } = view;
+    view = rest;
+    publish();
+  }
+
+  /** Reads each ask's code from the plan's folder and draws it, unless the call moved on meanwhile. */
+  const serveCode = Effect.forever(
+    Effect.gen(function* () {
+      const ask = yield* Queue.take(codeAsks);
+      const generation = codeGeneration;
+      const code = yield* planCode(view.folders[ask.planId], ask.ref, ask.source);
+      if (view.activePlanId !== ask.planId || codeGeneration !== generation) return;
+      write({ code });
+    }),
+  );
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
@@ -355,6 +417,22 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         recordFolder(read.success.planId, read.success.folderPath);
         return {};
       }),
+    // The developer pointing at code on the open plan's call: a file opened,
+    // or lines selected in the one on screen.
+    [GATEWAY_METHOD.PLANNING_SHOW_CODE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningShowCodeParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("showing code names a file of the plan");
+        const planId = view.activePlanId;
+        if (planId !== undefined) showCode(planId, read.success.ref, CODE_SOURCE.DEVELOPER);
+        return {};
+      }),
+    [GATEWAY_METHOD.PLANNING_LIST_FILES]: () =>
+      Effect.gen(function* () {
+        const planId = view.activePlanId;
+        const files = yield* planFiles(planId === undefined ? undefined : view.folders[planId]);
+        return { files: [...files] };
+      }),
     [GATEWAY_METHOD.PLANNING_REPOSITORIES]: () =>
       Effect.gen(function* () {
         if (!gate()) {
@@ -384,6 +462,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     activePlanId: () => view.activePlanId,
     showDraft,
     showActivity,
+    showCode,
+    callEnded,
     reset: Effect.gen(function* () {
       yield* endPlanCall(undefined);
       yield* serial(
@@ -393,14 +473,18 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The open plan's folder commands; every read of the plans is an ask's.
-    lifetime: servePlanningCommands({
-      client,
-      openPlan: () => {
-        const planId = view.activePlanId;
-        if (!gate() || planId === undefined) return undefined;
-        return { planId, folder: view.folders[planId] };
-      },
+    // The open plan's folder commands and its code on screen; every read of
+    // the plans is an ask's.
+    lifetime: Effect.gen(function* () {
+      yield* Effect.forkScoped(serveCode);
+      yield* servePlanningCommands({
+        client,
+        openPlan: () => {
+          const planId = view.activePlanId;
+          if (!gate() || planId === undefined) return undefined;
+          return { planId, folder: view.folders[planId] };
+        },
+      });
     }),
   };
 });

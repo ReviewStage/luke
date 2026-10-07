@@ -22,6 +22,7 @@ import {
   voiceLiveSessionChangedSchema,
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   type PlanningRepositoriesAnswer,
@@ -29,6 +30,7 @@ import {
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningView,
+  planningFilesAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningStartAnswerSchema,
   planningViewSchema,
@@ -231,6 +233,10 @@ export interface HostOperator {
   planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
   /** The repositories the account's GitHub connection can read, or why it could not be read. */
   planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+  /** Code of the open plan's folder put on screen by the developer. */
+  planningShowCode(ref: CodeRef): Effect.Effect<void>;
+  /** The files of the open plan's folder, relative to it; none where the host answered none. */
+  planningListFiles(): Effect.Effect<readonly string[]>;
   /** Opens the Connect GitHub page in the browser; whether it opened, which it does only for a signed-in account. */
   planningConnectGitHub(): Effect.Effect<boolean>;
   onboardingState(): Effect.Effect<
@@ -625,6 +631,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(planningStartAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningShowCode: (ref) => fire(client.call(GATEWAY_METHOD.PLANNING_SHOW_CODE, { ref })),
+    planningListFiles: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_LIST_FILES),
+        (answer) =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningFilesAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )?.files
+            : undefined) ?? [],
       ),
     planningRepositories: () =>
       Effect.map(

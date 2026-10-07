@@ -19,6 +19,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     stop: { shown: false, onPress: ignore },
     status: undefined,
     live: false,
+    codePane: undefined,
     onSelect: ignore,
     onChooseFolder: ignore,
     onRetryList: ignore,

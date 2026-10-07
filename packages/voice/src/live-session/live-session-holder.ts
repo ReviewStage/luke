@@ -112,6 +112,8 @@ export interface LiveSessionHolderOptions {
    * is told as a snapshot with nothing doing, so none outlives the call.
    */
   onPlanActivity?: (activity: PlanActivityFrame) => void;
+  /** The planning call about the plan named ended, so what it put on screen goes with it. */
+  onPlanCallEnded?: (planId: string) => void;
 }
 
 /**
@@ -755,6 +757,7 @@ export class LiveSessionHolder {
         planId: session.planId,
         notes: false,
       });
+      this.#options.onPlanCallEnded?.(session.planId);
     }
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);

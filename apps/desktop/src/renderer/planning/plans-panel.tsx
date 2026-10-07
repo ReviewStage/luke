@@ -1,3 +1,4 @@
+import { CodePane } from "./code-pane";
 import { NewPlanForm } from "./new-plan-form";
 import { PLANS_PAGE } from "./planning-model";
 import { MicrophoneRow, PlanDocumentView, PlanList } from "./planning-parts";
@@ -40,6 +41,7 @@ export function PlansPanel({ control }: { control: PlansControl }): React.JSX.El
             onChooseFolder={control.onChooseFolder}
             onDelete={control.onDeletePlan}
           />
+          {control.codePane === undefined ? null : <CodePane control={control.codePane} />}
           <MicrophoneRow
             status={control.status}
             microphone={control.microphone}
