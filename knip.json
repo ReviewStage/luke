@@ -15,7 +15,6 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/generate-provider-readme.ts",
         "scripts/fixtures/discarded-effect/*.ts",
         "design/check-design-contract.mjs",
         "design/generate-brand-assets.mjs",
