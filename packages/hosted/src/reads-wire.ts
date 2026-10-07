@@ -30,8 +30,8 @@ import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.
  * once and a turn's place in the order of change is a total one. A cursor is
  * an opaque string the service minted and a device hands back unchanged; its
  * shape is declared here so the service can read it and a test can pin it,
- * and a device never composes one. The Swift mirror reads these answers
- * against the fixtures under `packages/hosted/fixtures/reads/`.
+ * and a device never composes one. The fixtures under
+ * `packages/hosted/fixtures/reads/` pin these answers.
  *
  * Every declaration below is composed directly as an Effect `Schema` and
  * exported under its own name; `conversation-client.ts`, `changes-client.ts`,

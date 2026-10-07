@@ -13,11 +13,6 @@ two streams below reach the project without passing it. So the guarantee is
 "nothing observed can travel in a counted event" — never "nothing observed reaches
 the project." Do not let this file's promise be read as covering them.
 
-The iOS and watchOS apps emit through a hand-kept Swift transcription of this
-vocabulary. **This file stays the source of truth**: the service reads every batch
-against this allowlist whoever posted it, so a transcription that drifts shows up
-as a refused batch, never as a value that traveled.
-
 A value set another package already declares is imported where the graph allows
 it, so there is no second list to drift. Where the edge would close a loop, a total
 `Record` bridge in the package that reads this one closes the gap, so a new member

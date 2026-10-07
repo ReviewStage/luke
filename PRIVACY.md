@@ -1,9 +1,8 @@
 # Privacy
 
-Last updated: 6 October 2026
+Last updated: 7 October 2026
 
-Luke is a macOS app that watches your coding agent sessions, with companion
-iOS and Apple Watch apps for the cloud sessions your account can see. This
+Luke is a macOS app that watches your coding agent sessions. This
 policy explains what we collect, who we send it to, and how to turn it off.
 
 ## What we collect
@@ -180,8 +179,7 @@ than silently dropped, so what he knew and since when is on the page for you
 to read. Nothing on your Mac saves or reads one: an earlier version kept them
 as lines of a `USER.md` in the workspace it held here, and a `USER.md` that
 version left is neither read nor written by this one; a version between kept
-them as database rows of their own, and this one keeps no such rows. The iOS
-app keeps no such memory of its own. You can ask Luke what he remembers,
+them as database rows of their own, and this one keeps no such rows. You can ask Luke what he remembers,
 correct something, or tell him to forget it. The file travels with the rest of
 Luke's working memory when he thinks on our service, so he can personalize
 replies, on the same terms as the rest of that call — one model call per
@@ -268,8 +266,7 @@ sign-in you used, when you joined, when you were last active, and your daily
 counts — on an admin page of our site that only an account we have marked as an
 administrator can open; nothing you type, say, or run in a session appears on
 it. The service also keeps your account's conversation with Luke, as the
-record the Conversation tab draws on every Mac you sign in on and the iOS and
-Apple Watch apps read. When Luke runs a turn for you on our service, that
+record the Conversation tab draws on every Mac you sign in on. When Luke runs a turn for you on our service, that
 turn writes rows to our database: your ask as it was given; Luke's reply, the
 summaries of his reasoning, and each tool he called with its input and its
 result, the briefing he offered you among them; the words an observation
@@ -290,10 +287,9 @@ the conversation, which marks it deleted so that every device stops drawing
 it at its next read and the service removes it thirty days later, or until
 you delete your account, which removes it at once.
 
-**Usage data.** We count how Luke's features are used, on the Mac, in the
-iOS app, and in the Apple Watch app, and attach your name and email to that
-record. The counts are event names and values from a fixed list, and each one
-says which of the three apps it came from. A voice session's start is counted
+**Usage data.** We count how Luke's features are used on the Mac, and attach
+your name and email to that record. The counts are event names and values from
+a fixed list. A voice session's start is counted
 with which of two sources opened it — our voice service on your account, or
 the accountless introduction — and never with a session id. A count made
 before you sign in is not sent. A thumbs up or down you give one of Luke's
@@ -333,31 +329,6 @@ identity, and does not enable PII collection, tracing, Sentry Replay,
 screenshots, profiling, or manual reports of handled errors. Fixture and
 evidence runs send no crash reports.
 
-The iOS app records on the same terms: its own screens as screenshots, never
-anything else on your device, from the moment it opens, and shows the same
-things its screens show — session titles, branches, error text, and
-your name and email. A Conductor session's conversation, fetched onto that
-session's screen, and your Conversation with Luke on its own screen are each
-masked out of recordings the way the desktop's Conversation tab is blocked, so
-those messages reach your phone and nothing else. Text you type into a field
-is masked, a message you sent stays masked when it is drawn back as a chat
-bubble, and taps are not separately reported with their text — only the
-recording itself shows what was pressed. Separately, in ordinary runs the iOS
-app sends Sentry anonymous exception and process-session reports and native
-crash reports on the next launch, with the same posture as the Mac app: no
-Luke account or other identity, no PII collection, no tracing, no Sentry
-Replay, no screenshots, no profiling, and no manual reports of handled
-errors. Signing in attaches the running recording to your account, and signing
-out starts a fresh anonymous one.
-
-The Apple Watch app records nothing. It counts its use through the same fixed
-list as the other two apps, and in ordinary runs it also sends Sentry's
-anonymous process-session status. Sentry's watchOS support does not capture
-native crashes there, so no watch crash report is filed.
-The Conversation it shows is read from the same stored messages the phone
-reads, under your account, and the watch only reads them: a rating you gave a
-message is shown there and cannot be given from the wrist.
-
 **Provider API keys (server-side vault).** The Conductor key you enter into
 Luke is held by our service, not by your Mac. Saving it sends it, in the same
 press, to our vault under your signed-in account, and nothing of it is written
@@ -384,8 +355,8 @@ opens, without being read.
 
 **Scheduled observation of your Conductor sessions.** While you hold a synced
 Conductor key and have signed in within the last 7 days, our service reads
-your Conductor sessions on its own schedule, about once a minute, the same
-read-only pass the iOS app used to ask for on demand: your open workspaces,
+your Conductor sessions on its own schedule, about once a minute, in a
+read-only pass: your open workspaces,
 their chats, each chat's status, the agent kind running it, and the error
 line it stopped on. It never reads a chat's messages. Beside that pass, and
 only for the chats it listed, our service works out which of those chats
@@ -399,7 +370,7 @@ synced key, and hands them to Luke as one line per message under the speaker's
 name, alongside the chat's title, workspace, and provider from the stored
 roster. A chat that gained only tool activity wakes nothing. We keep the latest
 roster the pass read, encrypted at rest with the same server-only secret as
-your keys, so the Mac app, the phone, and the watch can show your sessions
+your keys, so the Mac app can show your sessions
 without asking Conductor again (the Mac app reads this stored roster from our
 service on your account about once a minute, and draws its rows from nothing
 else); beside it we keep one instant per account, the point up to which Luke
@@ -502,14 +473,11 @@ Send.
 ## Who we send it to
 
 - OpenAI, for voice and for Luke's own judgment. A voice session is one
-  continuous conversation, on the Mac, the iPhone, and the Apple Watch alike:
-  while you hold the talk key on your Mac, or the talk control on your phone
-  or your watch, everything the microphone hears streams to OpenAI, and the
-  moment you let go nothing does. The microphone is closed on the Mac and the
-  watch, and muted on the phone, where a quick tap on the control instead
-  leaves it open until the next tap; Luke can still
-  speak into a session whose microphone is closed. There is no way to type to
-  Luke on any device; every ask is spoken. A Mac's session opens with a
+  continuous conversation: while you hold the talk key on your Mac,
+  everything the microphone hears streams to OpenAI, and the moment you let
+  go nothing does, the microphone closing; Luke can still speak into a
+  session whose microphone is closed. There is no way to type to Luke; every
+  ask is spoken. A Mac's session opens with a
   bounded summary of your coding agents — at most ten of them,
   each as its title, which provider it belongs to, whether it is working,
   waiting on you, finished, or failed, the tool it is holding for your
@@ -517,44 +485,29 @@ Send.
   and nothing else about it: no branch, repository, error line, model,
   address, or conversation. That summary is what the session opens with; a
   change to your desk while the session is open is not sent to the voice, and
-  what Luke says about it he reads for himself when you ask. A phone's or a
-  watch's session opens with nothing at all: neither sends a summary of your
-  sessions, a list of your projects, a line of your conversation, or any
-  instruction of its own, and neither holds a conversation of its own, in
-  memory or on disk. On every device, what you say and what Luke says in a
+  what Luke says about it he reads for himself when you ask. What you say and what Luke says in a
   call is written to your account's Conversation by our service, as
-  described under "Your account" above, and kept nowhere on the device. Every turn sends the
-  session fields listed above — on the Mac app, iOS, and Apple Watch alike,
-  drawn from the
+  described under "Your account" above, and kept nowhere on your Mac. Every
+  turn sends the session fields listed above, drawn from the
   same cloud observation your vault keys already
   allow (titles, status, repository, and branch of your cloud sessions, as
   described under Provider API keys above). When you use voice through your
-  Luke account, your Mac or your phone reaches OpenAI through our own voice
+  Luke account, your Mac reaches OpenAI through our own voice
   service, which
   creates the session on our key, relays the control and transcript events
   between your device and OpenAI, reads them on our side to keep the record and
   to hand each spoken ask to Luke's judgment (no device of yours answers a
   spoken ask itself), drops the audio OpenAI
-  reflects back so on a Mac's or a phone's call neither your voice nor Luke's
-  transits our service, keeps of the
+  reflects back so neither your voice nor Luke's transits our service, keeps of the
   exchange only the lines described under "Your account" above, logs only
   status codes and byte counts, and records the
   billed seconds of each session once, beside which of your registered
   devices opened it (each device names its own device row on the handshake,
   and the service accepts that name only for a row your account holds), so a
-  briefing that device claims is spoken into that session and no other. The
-  watch has no WebRTC, so its call takes the one route on which the audio
-  does transit our service, in both directions: the watch streams what its
-  microphone hears to our service, our service holds the session's own
-  connection to OpenAI on our key and passes your voice up and Luke's down,
-  each as PCM16 audio at 16 kHz, and the same exchange, record, and device
-  row stand behind the call as behind a Mac's or a phone's. A watch call ends
-  when the service's function does, after at most 800 seconds, and the next
-  press opens a new one; on the way through, our service keeps none of the
-  audio.
+  briefing that device claims is spoken into that session and no other.
   Every voice session is opened this way, through our service on your
-  account: nothing on the Mac, the phone, or the watch holds or is handed a
-  credential for OpenAI, and no device of yours reaches OpenAI on a key of
+  account: nothing on your Mac holds or is handed a credential for OpenAI,
+  and your Mac never reaches OpenAI on a key of
   your own. One such
   session opens on its own at every signed-in launch, after the first
   sign-in's arrival beat has played, so Luke can greet you: your Mac decides
@@ -579,8 +532,8 @@ Send.
   memory — the bounded transcript excerpts described above, the session
   fields, the conversation so far, and his workspace files, the things he
   remembers about you among them — on our key. No such call is made from your
-  Mac, your phone, or your watch: none of the three apps composes
-  instructions, offers tools, or holds a record the reply joins; the record is
+  Mac: it composes no instructions, offers no tools, and holds no record the
+  reply joins; the record is
   the conversation our service keeps, described under "Your account" above.
   OpenAI stores the request and its reply under its own
   retention policy, and our service performs one model call per request and
@@ -619,14 +572,8 @@ Send.
   only when you ask it to, such as a message you wrote.
   With a Conductor key in the vault, our service also reads your Conductor sessions
   about once a minute on the schedule described above, under that key.
-  If you open a Conductor session's screen in the iOS app, our service also
-  reads that session's conversation from Conductor — your own messages and the
-  agent's replies, not its tool activity — using the key you synced, and
-  passes it to your phone while the screen is open. We store none of it: each
-  refresh is a new read, and nothing about the conversation stays on our
-  servers after the response is sent. The observation turn our service runs
-  when a chat's status changes reads what that chat gained the same way,
-  under the same synced key, as described under "Scheduled observation of
+  The observation turn our service runs when a chat's status changes reads
+  what that chat gained from Conductor, under the synced key, as described under "Scheduled observation of
   your Conductor sessions"; nothing on your Mac reads a Conductor chat's
   messages. A message or a workspace Luke sends to a Conductor session at
   your ask travels the same way, admitted by our service against the
@@ -634,9 +581,8 @@ Send.
 - Google, if you connect Google Calendar. We request your calendar list and your
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
-- PostHog, for usage data and screen recordings, from the Mac, iOS, and
-  Apple Watch apps. The counts go through our own service; the recordings go
-  from Luke to PostHog directly, and the watch app sends PostHog nothing
+- PostHog, for usage data and screen recordings, from the Mac app. The
+  counts go through our own service; the recordings go from Luke to PostHog
   directly.
 - Apple, for briefing notifications. When no device of yours is placed to
   say a briefing, our service hands Luke's words to Apple's push notification
@@ -645,8 +591,7 @@ Send.
   unlocking. The notification carries those words and the briefing's own
   opaque message id, and nothing else about you or your sessions.
 - Sentry, for the anonymous exception, process-session, and native crash reports
-  described above; on watchOS this is limited to process-session status because
-  the SDK does not capture native crashes there.
+  described above.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 
@@ -705,19 +650,13 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   opens to speak to you opens no
   microphone at all. If Luke's key helper cannot start, the key reports
   presses alone, so one press opens the microphone and the next closes it,
-  and the Keyboard shortcuts page says so. On the phone, the microphone is
-  unmuted only while you hold the talk control, or, after a quick tap, until
-  the next tap; on the watch, it is open only while you hold the talk
-  control, and what the watch sends between presses is silence of its own
-  making, not what it hears.
+  and the Keyboard shortcuts page says so.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, any provider API keys
   you synced to the hosted service, your device rows, the conversation our
   service kept with its workspace files, and the stored
   roster of your sessions, and asks PostHog to erase your usage data
-  and recordings, including the iOS app's. The Apple Watch app sends no
-  direct PostHog data, and its counted events are erased with your Luke
-  account. It does not reach a recording that was never attached to your
+  and recordings. It does not reach a recording that was never attached to your
   account, as described above. Luke stops recording for the rest of the
   session, and starts again the next time you open it or sign in. Sentry
   reporting continues after deletion, and prior anonymous crash reports cannot

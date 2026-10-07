@@ -17,11 +17,6 @@ vocabulary.
 **A request frame refuses a key it did not name; an answer ignores one a newer
 service added.** Every wire module here keeps that rule.
 
-A renamed wire field keeps its old name on the wire for one iOS release. The
-desktop and service ship together, but an installed phone reads whatever the
-service sends until its owner updates it, so the service writes both names and
-every reader accepts either.
-
 ## One call stands behind all of them
 
 `account-call.ts` is the request every caller to Luke's own service makes. It owns
