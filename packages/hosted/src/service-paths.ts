@@ -6,25 +6,6 @@
  */
 
 export const HOSTED_SERVICE_PATH = {
-  /** Send a message to a cloud session (POST). */
-  ACTION_MESSAGE: "/api/actions/message",
-  /** Create a workspace in a cloud project (POST). */
-  ACTION_WORKSPACE: "/api/actions/workspace",
-  /** Run a control the session's latest observation advertised (POST). */
-  ACTION_CONTROL: "/api/actions/control",
-  /** Start another agent in the workspace an observed session runs in (POST). */
-  ACTION_AGENT: "/api/actions/agent",
-  /** Rename an observed session itself — the chat (POST). */
-  ACTION_RENAME_SESSION: "/api/actions/rename-session",
-  /** Rename the workspace an observed session runs in (POST). */
-  ACTION_RENAME_WORKSPACE: "/api/actions/rename-workspace",
-  /**
-   * List the projects a new workspace can be created in (GET): each entry is
-   * one a provider reported on the same stored snapshot a creation is
-   * admitted against, so a creation ask can only ever name a project this
-   * answer offered. Read like observe, from the snapshot.
-   */
-  PROJECTS: "/api/projects",
   ACCOUNT_DELETE: "/api/account/delete",
   EVENTS: "/api/events",
   /**
@@ -32,163 +13,24 @@ export const HOSTED_SERVICE_PATH = {
    * `@sidecar/settings` as cross-device preferences belong here.
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
-  /** Store or replace a provider key (POST) or delete one (DELETE). */
-  VAULT_KEY: "/api/vault/key",
-  /** List stored provider keys — ids and timestamps, never keys. */
-  VAULT_KEYS: "/api/vault/keys",
-  /**
-   * The signed-in installation's device row: register it (POST), move its
-   * last-seen instant and carry a presence or push token change (PUT), or
-   * forget it at sign-out (DELETE). One row per installation on every
-   * platform, keyed by the id the client minted, and it moves to whichever
-   * account the device last signed in under.
-   */
-  DEVICES: "/api/devices",
-  /**
-   * The signed-in user's cloud sessions (GET): the bounded roster the
-   * service's own scheduled pass last stored for them, run every minute for
-   * accounts seen within the week, or a live pass where no snapshot stands
-   * yet. `OBSERVE_QUERY.FRESH` asks the provider again right now, under the
-   * endpoint's per-user rate brake.
-   */
-  OBSERVE: "/api/observe",
-  /**
-   * Read one observed session's conversation on demand (GET): a fresh
-   * observation pass validates the session, the provider's own documented
-   * transcript read answers in bounded attributed pages, and the server
-   * stores nothing after serving the response. Only a caller's own opened
-   * conversation screen asks; no observation pass ever issues this read.
-   */
-  SESSION_MESSAGES: "/api/sessions/messages",
-  /**
-   * The Conversation's messages behind a device's own cursor (GET): the view
-   * over the account's main and observed conversations, selected on the
-   * service and grouped by turn. `after` is the cursor the previous answer
-   * handed back, `limit` the page bound.
-   */
-  CONVERSATION_MESSAGES: "/api/conversation/messages",
-  /**
-   * The Conversation's history behind a device's own cursor (GET): the same
-   * view, read newest first across the standing conversations from the
-   * position `before` names, or from the tail where none is named, so a
-   * device draws the newest turns first and reads back a page at a time as
-   * its reader looks; `limit` the page bound. The answer also carries the
-   * messages read's cursor standing at the head, where forward reads begin.
-   */
-  CONVERSATION_HISTORY: "/api/conversation/history",
-  /** The events about the Conversation's messages behind a device's own cursor (GET). */
-  CONVERSATION_EVENTS: "/api/conversation/events",
-  /**
-   * The account's children (GET): the conversations a delegation opened,
-   * newest first and bounded, each where its latest turn leaves it. No
-   * cursor, since a child's status changes in place; the change signal's
-   * `children` head says when to read it again.
-   */
-  CONVERSATION_CHILDREN: "/api/conversation/children",
-  /**
-   * One child's or observed conversation's messages behind a device's own
-   * cursor (GET): the same projection the Conversation's read makes, over the
-   * one conversation `CHILD_MESSAGES_QUERY.CHILD` names, grouped by turn;
-   * `after` and `limit` as on the Conversation's read.
-   */
-  CONVERSATION_CHILD_MESSAGES: "/api/conversation/children/messages",
-  /**
-   * The account's agents (GET): the observed conversations holding a turn,
-   * one per coding-agent session Luke follows, the one that changed last
-   * first and bounded, each where its latest turn leaves it. No cursor, on
-   * the children read's terms; the change signal's `agents` head says when
-   * to read again.
-   */
-  CONVERSATION_AGENTS: "/api/conversation/agents",
-  /** The account's turns in the order they last changed, behind a device's own cursor (GET). */
-  BRAIN_TURNS: "/api/brain/turns",
-  /**
-   * Luke's notebook as the workspace rows hold it (GET): `MEMORY.md`,
-   * `USER.md`, and the newest dated notes under `memory/`, read whole and
-   * bounded, for its owner to look at. A read and nothing else: the service
-   * stores nothing for it and no model runs in it. `notebook-wire.ts`
-   * declares the answer.
-   */
-  BRAIN_NOTEBOOK: "/api/brain/notebook",
-  /**
-   * A developer's question to Luke's judgment (POST): admitted against the
-   * conversation it names before eve is reached, dispatched into that
-   * conversation's one eve session, and answered with the id its turn is
-   * read and stopped by. The client id is the idempotency key.
-   */
-  BRAIN_ASK: "/api/brain/ask",
-  /**
-   * Clear (POST): the soft delete of the account's standing main conversation.
-   * Nothing is erased: the main and its descendants are stamped deleted and a
-   * new main opened in the same transaction, the reads above stop listing
-   * the stamped rows from the next call, and the purge removes them thirty
-   * days on. Every Mac on the account sees the same empty main on its next poll.
-   */
-  CONVERSATION_CLEAR: "/api/conversation/clear",
-  /**
-   * The change signal (POST): where every resource's read stands now, so a
-   * device reads only what moved. The same call moves the device row's
-   * last-seen instant and carries its presence and quiet instants.
-   */
-  CHANGES: "/api/changes",
   /**
    * The account's named feature plans: list them, most recently opened first
    * (GET), or start one (POST) with its name and the folder on the Mac it
    * reads. `plan-wire.ts` declares both.
    */
   PLANS: "/api/plans",
-  /**
-   * The repositories the account's GitHub connection can read (GET), the
-   * list a new plan picks its repository from. `github-wire.ts` declares it.
-   */
-  GITHUB_REPOSITORIES: "/api/github/repositories",
 } as const;
 
 /**
- * Where the hosted voice service answers: three Vercel Functions of the same
+ * Where the hosted voice service answers: a Vercel Function of the same
  * service, reached at `HOSTED_VOICE_SERVICE_ORIGIN`, the socket form of the
- * service's own origin. Each path is a WebSocket upgrade; one connection
- * carries one session, or, on the sessions path alone, one attachment to a
- * session that stands.
+ * service's own origin. The path is a WebSocket upgrade; one connection
+ * carries one session, or one attachment to a session that stands.
  */
 export const VOICE_SERVICE_PATH = {
-  /** A signed-in device's WebRTC voice session, a Mac's or a phone's; the account bearer travels on the handshake. */
+  /** A signed-in Mac's WebRTC voice session; the account bearer travels on the handshake. */
   SESSIONS: "/api/voice/sessions",
-  /** The accountless introduction session, metered by the function itself; no bearer. */
-  INTRODUCTION: "/api/voice/introduction",
-  /**
-   * A signed-in device with no WebRTC of its own, streaming its audio through
-   * the service and hearing Luke's back over the same socket; the same
-   * handshake as the sessions path, and a call that ends when the function
-   * does, since the service's own socket to OpenAI is the session and nothing
-   * re-attaches to one.
-   */
-  AUDIO: "/api/voice/audio",
 } as const;
-
-/** Where one turn stands (GET), by the id its ask answered or the turn's own; `wait` holds the read for a bounded settlement. */
-export function brainTurnPath(id: string): string {
-  return `/api/brain/turns/${encodeURIComponent(id)}`;
-}
-
-/** Stop one turn (POST): eve's cancel of the running turn, or the stamp a queued ask's turn is cancelled by when it starts. */
-export function brainTurnCancelPath(id: string): string {
-  return `${brainTurnPath(id)}/cancel`;
-}
-
-/** Rate one of Luke's stored messages (PUT): a hosted path with a row's id inside it rather than in a body. */
-export function conversationMessageRatingPath(messageId: string): string {
-  return `/api/conversation/messages/${encodeURIComponent(messageId)}/rating`;
-}
-
-/**
- * One turn's event stream (GET, Server-Sent Events): the run seams of a turn
- * the caller owns as they happen, numbered inside the turn, ending with the
- * turn's end. `turn-events-wire.ts` declares the events and the cursor.
- */
-export function brainTurnEventsPath(turnId: string): string {
-  return `${HOSTED_SERVICE_PATH.BRAIN_TURNS}/${encodeURIComponent(turnId)}/events`;
-}
 
 /** One plan the caller owns: open it with its saved document (GET) or delete it (DELETE). */
 export function planPath(planId: string): string {

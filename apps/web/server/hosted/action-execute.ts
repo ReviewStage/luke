@@ -1,6 +1,5 @@
-import { Effect, Layer, type Redacted } from "effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { Effect, type Layer, type Redacted } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -14,10 +13,6 @@ import {
   type CloudAgentProviderId,
   dispatchAction,
   dispatchByKind,
-  dispatchConversation,
-  type HostedConversationAnswer,
-  type HostedConversationMessage,
-  HTTP_STATUS,
   normalizeSession,
   type PluginActionKind,
   type PluginActionRequests,
@@ -166,74 +161,6 @@ export function actionRosterFor(
     unauthorized,
     unreachable: !unauthorized && standing.failure !== undefined,
   };
-}
-
-/**
- * One plugin observed once for one conversation read: the same
- * re-observe-before-read discipline the desktop keeps in its observation
- * registry, here as a fresh pass on a request-scoped instance. The pass
- * swallows credential and network failures into an empty roster, so the pass
- * watches its own client to tell "the provider refused the key" and "the
- * provider could not be reached" apart from "the session is gone" when the
- * read's target is missing.
- */
-interface ObservedActionPass {
-  plugin: SessionProviderPlugin;
-  observations: readonly ProviderSessionObservation[];
-  unauthorized: boolean;
-  unreachable: boolean;
-}
-
-/**
- * The same client the pass would have used, reporting to `pass` what it saw:
- * a refused status is the provider refusing the key, and a failed request is
- * the provider not being reachable. It only watches — every answer and every
- * failure is handed on exactly as it came.
- */
-function watchingHttpClient(
-  base: Layer.Layer<HttpClient.HttpClient>,
-  pass: { unauthorized: boolean; unreachable: boolean },
-): Layer.Layer<HttpClient.HttpClient> {
-  return Layer.provide(
-    Layer.effect(
-      HttpClient.HttpClient,
-      Effect.map(HttpClient.HttpClient, (client) =>
-        HttpClient.tapError(
-          HttpClient.tap(client, (response) =>
-            Effect.sync(() => {
-              if (
-                response.status === HTTP_STATUS.UNAUTHORIZED ||
-                response.status === HTTP_STATUS.FORBIDDEN
-              ) {
-                pass.unauthorized = true;
-              }
-            }),
-          ),
-          () =>
-            Effect.sync(() => {
-              pass.unreachable = true;
-            }),
-        ),
-      ),
-    ),
-    base,
-  );
-}
-
-function observeForAction(
-  providerId: CloudAgentProviderId,
-  apiKey: Redacted.Redacted,
-  seams: ActionExecuteSeams,
-): Effect.Effect<ObservedActionPass> {
-  return Effect.suspend(() => {
-    const pass = { unauthorized: false, unreachable: false };
-    const plugin = cloudSessionPluginFor(providerId, {
-      readApiKey: () => Effect.succeed(apiKey),
-      httpClient: watchingHttpClient(seams.httpClient ?? FetchHttpClient.layer, pass),
-      ...(seams.now ? { now: seams.now } : undefined),
-    });
-    return Effect.map(plugin.observe(), (observations) => ({ plugin, observations, ...pass }));
-  });
 }
 
 /**
@@ -417,85 +344,3 @@ export function executeSessionAction(options: {
     );
   });
 }
-
-/**
- * The providers whose adapters carry the documented conversation read,
- * mirroring exactly the `readConversation` seam each desktop adapter
- * implements — the adapter seam is the authority here as it is for actions, so
- * nothing may advertise a read the adapter does not already make under the
- * provider's documented endpoint. Conductor documents
- * `GET /v0/sessions/{id}/messages`; no other vaulted provider documents a
- * transcript read this build carries.
- */
-const CONVERSATION_READ_PROVIDERS: ReadonlySet<CloudAgentProviderId> = new Set([
-  CLOUD_AGENT_PROVIDER_ID.CONDUCTOR,
-]);
-
-/** Whether the messages endpoint can read this provider's conversations. */
-export function providerReadsConversation(providerId: CloudAgentProviderId): boolean {
-  return CONVERSATION_READ_PROVIDERS.has(providerId);
-}
-
-/** A conversation read that could not answer, with the reason it refused. */
-export interface ConversationReadRefusal {
-  refused: string;
-}
-
-/**
- * Reads one observed session's conversation for the caller who just opened
- * its screen: the same fresh-pass discipline every action keeps — the session
- * must stand behind the pass the same request ran — followed by the
- * adapter's own bounded read of the provider's documented transcript
- * endpoint. The answer is assembled and returned; nothing is stored.
- */
-export const executeConversationRead = /* @__PURE__ */ Effect.fn("web/executeConversationRead")(
-  function* (options: {
-    providerId: CloudAgentProviderId;
-    providerSessionId: string;
-    afterMessageId?: string;
-    beforeOffset?: number;
-    apiKey: Redacted.Redacted;
-    seams?: ActionExecuteSeams;
-  }): Effect.fn.Return<HostedConversationAnswer | ConversationReadRefusal> {
-    const { providerId, providerSessionId, afterMessageId, beforeOffset, apiKey } = options;
-    if (!providerReadsConversation(providerId)) {
-      const displayName = PROVIDER_IDENTITY_BY_ID[providerId].displayName;
-      return {
-        refused: `${displayName} does not document reading a session's conversation through its API, so Luke does not offer it.`,
-      };
-    }
-
-    const pass = yield* observeForAction(providerId, apiKey, options.seams ?? {});
-    const observation = pass.observations.find(
-      (candidate) => candidate.providerSessionId === providerSessionId,
-    );
-    if (!observation) {
-      return { refused: missingTargetReason(providerId, pass, "Session not found.") };
-    }
-
-    const result = yield* dispatchConversation(pass.plugin, {
-      providerSessionId,
-      ...(afterMessageId ? { afterMessageId } : undefined),
-      ...(beforeOffset !== undefined ? { beforeOffset } : undefined),
-    });
-    if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-      return { refused: result.reason };
-    }
-    // Copied field by field although the shapes are structurally identical
-    // today: this map is the allowlist of what crosses onto the wire, so a
-    // field the adapter's type grows later stays behind unless named here.
-    const messages: HostedConversationMessage[] = result.messages.map((message) => ({
-      id: message.id,
-      author: message.author,
-      text: message.text,
-      ...(message.receivedAt !== undefined ? { receivedAt: message.receivedAt } : undefined),
-    }));
-    return {
-      messages,
-      ...(result.lastMessageId ? { lastMessageId: result.lastMessageId } : undefined),
-      hasMore: result.hasMore,
-      ...(result.firstOffset !== undefined ? { firstOffset: result.firstOffset } : undefined),
-      ...(result.hasOlder !== undefined ? { hasOlder: result.hasOlder } : undefined),
-    };
-  },
-);

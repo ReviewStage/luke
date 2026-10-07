@@ -13,11 +13,8 @@
         "request-too-large",
         "prompt-too-large",
         "unknown-tool",
-        "unreadable-row",
         "method-not-allowed",
-        "not-found",
-        "not-rateable",
-        "not-running"
+        "not-found"
       ]
     }
   },

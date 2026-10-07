@@ -9,9 +9,9 @@ import type { HeldSocket } from "./held-socket.js";
 
 /**
  * The socket seam a live session source opens its trusted connections
- * through: Luke's voice service, for the account's sessions and the
- * introduction's alike. The seam is injected so this package never reaches `ws`;
- * the host implements it over `ws`, and a test hands in a scripted socket.
+ * through: Luke's voice service, for the account's sessions. The seam is
+ * injected so this package never reaches `ws`; the host implements it over
+ * `ws`, and a test hands in a scripted socket.
  */
 
 /** Why a socket never opened: the server answered the upgrade with a status, or nothing answered. */

@@ -12,14 +12,7 @@ import {
   liveErrorCommand,
   parseLiveServerEvent,
 } from "../live.js";
-import {
-  deviceFrameDecision,
-  FRAME_DECISION,
-  frameType,
-  upstreamFrameDecision,
-  VOICE_ROUTE,
-  type VoiceRoute,
-} from "./frames.js";
+import { deviceFrameDecision, FRAME_DECISION, frameType, upstreamFrameDecision } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
 import {
   frameBytes,
@@ -30,19 +23,14 @@ import {
 } from "./socket.js";
 
 /**
- * The pipe between one device socket and one OpenAI socket, once both stand:
- * the sideband the service attached to a WebRTC session, or, on the audio
- * route, the primary socket that is the session itself. Each side's frames
- * are a `Stream` read by a fiber of the session's own scope, and they cross as
- * the bytes they arrived as; the service reads each frame's `type` and
- * nothing else of it, drops reflected audio by that type on the sessions and
- * introduction routes and the echo of the device's own audio on the audio
- * route, on the introduction route admits only what a renderer's own data
- * channel would carry, on the sessions route admits from the device only the
- * hang-up, read as an ask for the close, its idle report, and its stop, and
- * on the audio route the hang-up, the idle, and the stop with the device's
- * own audio beside them, closing the socket on anything else. The two
- * reports are the frames read past their type: they are the service's own vocabulary, handed to the exchange that holds the
+ * The pipe between one device socket and the sideband the service attached
+ * to its WebRTC session, once both stand. Each side's frames are a `Stream`
+ * read by a fiber of the session's own scope, and they cross as the bytes
+ * they arrived as; the service reads each frame's `type` and nothing else of
+ * it, drops reflected audio by that type, and admits from the device only
+ * the hang-up, read as an ask for the close, its idle report, and its stop,
+ * closing the socket on anything else. The two reports are the frames read
+ * past their type: they are the service's own vocabulary, handed to the exchange that holds the
  * idle decision and the one instruction the stop appends, never to OpenAI. An opening command the service
  * sends of its own once `session.started` arrives follows the docs' order:
  * the command, then its acknowledgment or refusal matched by the id it was
@@ -51,14 +39,13 @@ import {
  * the start they went. It ends the way the docs say a
  * session ends: `session.closed` is the finalization, reported once with the
  * seconds it named; a device that goes first after asking for the close, or
- * once its socket was closed on a refused frame, or on a route whose session
- * cannot outlive this connection, has `session.close` sent on its behalf and
- * the sideband held open for the final event under a timeout. On the sessions
- * route that close is the exchange's, as is the one a device's hang-up asks
- * for: the server-controls guide asks one owner per action, so the relay
- * forwards no device's close and sends none of its own where an exchange
- * stands, and asks the exchange instead; a sessions-route
- * device whose socket simply went, the platform cutting a function at its
+ * once its socket was closed on a refused frame, has `session.close` sent on
+ * its behalf and the sideband held open for the final event under a timeout.
+ * That close is the exchange's where one stands, as is the one a device's
+ * hang-up asks for: the server-controls guide asks one owner per action, so
+ * the relay forwards no device's close and sends none of its own where an
+ * exchange stands, and asks the exchange instead; a device whose socket
+ * simply went, the platform cutting a function at its
  * limit or the network dropping, leaves the WebRTC session standing for the
  * device's own re-attach and settles detached, closing only the sideband; a
  * sideband that goes first leaves the usage unconfirmed and takes the device
@@ -105,11 +92,10 @@ export type OpeningSettled =
 /** The reason a device socket is closed with when OpenAI's side ended before `session.closed`. */
 export const UPSTREAM_CLOSED_REASON = "upstream-closed";
 
-/** The reason a device socket is closed with when it sent a frame the route does not admit. */
+/** The reason a device socket is closed with when it sent a frame the service does not admit. */
 export const UNPERMITTED_FRAME_REASON = "unpermitted-frame";
 
 export interface RelayOptions<R = never> {
-  route: VoiceRoute;
   device: VoiceSocket;
   upstream: VoiceSocket;
   /** Runs once, on the first `session.closed`; the relay waits for it before settling. */
@@ -145,7 +131,7 @@ export interface RelaySummary extends RelayCounts {
 export function relaySession<R = never>(
   options: RelayOptions<R>,
 ): Effect.Effect<RelaySummary, never, R | Scope.Scope> {
-  const { route, device, upstream } = options;
+  const { device, upstream } = options;
   const closeTimeoutMs = options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS;
   const openingTimeoutMs = options.openingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS;
 
@@ -156,7 +142,6 @@ export function relaySession<R = never>(
       framesToDevice: 0,
       bytesToDevice: 0,
       droppedAudio: 0,
-      droppedUnpermitted: 0,
       reportsRead: 0,
       refusedUnpermitted: 0,
     };
@@ -276,11 +261,8 @@ export function relaySession<R = never>(
     const onUpstreamFrame = Effect.fnUntraced(function* (frame: VoiceFrame) {
       const text = frameText(frame);
       const type = frameType(text);
-      const decision = upstreamFrameDecision(type, route);
-      if (decision === FRAME_DECISION.DROP_AUDIO) {
+      if (upstreamFrameDecision(type) === FRAME_DECISION.DROP_AUDIO) {
         counts.droppedAudio += 1;
-      } else if (decision === FRAME_DECISION.DROP_UNPERMITTED) {
-        counts.droppedUnpermitted += 1;
       } else if (yield* device.isOpen) {
         yield* device.send(frame);
         counts.framesToDevice += 1;
@@ -332,7 +314,7 @@ export function relaySession<R = never>(
     );
 
     /**
-     * A device frame the route does not admit closes the device's socket
+     * A device frame the service does not admit closes the device's socket
      * with a policy violation rather than dropping the frame: an older
      * build's append, dropped silently, would leave the developer hearing
      * nothing and seeing nothing, and the close is what surfaces it. The
@@ -352,19 +334,24 @@ export function relaySession<R = never>(
     const onDeviceFrame = Effect.fnUntraced(function* (frame: VoiceFrame) {
       const text = frameText(frame);
       const type = frameType(text);
-      const decision = deviceFrameDecision(type, route);
+      const decision = deviceFrameDecision(type);
       if (decision === FRAME_DECISION.REFUSE) {
         yield* refuse(type);
         return;
       }
       if (decision === FRAME_DECISION.HANG_UP) {
+        // The caller has hung up here rather than when its socket goes: no
+        // opening is sent to it from now, and one awaiting its answer is
+        // settled as unanswered, whichever reaches the relay first.
+        hungUp = true;
         deviceAskedClose = true;
+        yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
         yield* askClose;
         return;
       }
       if (decision === FRAME_DECISION.REPORT) {
         // The one frame read past its type: a report in the service's own
-        // vocabulary that is not one is a frame the route does not admit.
+        // vocabulary that is not one is a frame the service does not admit.
         const report = sessionReportFrameFromWire(decodeLivePayload(text));
         if (report === undefined) {
           yield* refuse(type);
@@ -374,11 +361,6 @@ export function relaySession<R = never>(
         options.onDeviceReport?.(report);
         return;
       }
-      if (decision !== FRAME_DECISION.FORWARD) {
-        counts.droppedUnpermitted += 1;
-        return;
-      }
-      if (type === LIVE_CLIENT_EVENT.CLOSE) deviceAskedClose = true;
       if (!(yield* upstream.isOpen)) return;
       yield* upstream.send(frame);
       counts.framesToUpstream += 1;
@@ -386,7 +368,7 @@ export function relaySession<R = never>(
     });
 
     /**
-     * The device went first. On the sessions route a socket that went with
+     * The device went first. A socket that went with
      * no hang-up and no refusal is a detach: the WebRTC session is the
      * device's and still stands, so nothing goes up and the relay settles at
      * once, leaving the device to attach a fresh sideband and the connection
@@ -400,7 +382,7 @@ export function relaySession<R = never>(
     const onDeviceGone = Effect.gen(function* () {
       hungUp = true;
       if (closedSeen || (yield* Deferred.isDone(settled))) return;
-      const detached = route === VOICE_ROUTE.SESSIONS && !deviceAskedClose && !refusedByPolicy;
+      const detached = !deviceAskedClose && !refusedByPolicy;
       // The caller has hung up, so the opening command will never be answered
       // to any purpose: it is settled as unanswered here rather than left
       // armed, where an acknowledgment arriving during the graceful close

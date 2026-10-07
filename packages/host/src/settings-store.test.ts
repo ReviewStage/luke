@@ -6,7 +6,6 @@ import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
-import { PROVIDER_ID } from "@sidecar/session";
 import {
   type AccountPreferenceField,
   type AccountPreferences,
@@ -296,9 +295,6 @@ const SAMPLE_VALUE = {
   stopHotkey: "Control+Alt+P",
   duckOtherMedia: false,
   preferBuiltInMicrophone: false,
-  defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
-  workspaceAgentDefaults: { [PROVIDER_ID.CONDUCTOR]: { agent: "claude", model: "sonnet" } },
-  workspaceProjectDefaults: { [PROVIDER_ID.CONDUCTOR]: "project-one" },
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
@@ -636,28 +632,14 @@ test("applies account preferences to disk and restores them from a new store", a
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
-  await store.set(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, {
-    [PROVIDER_ID.CONDUCTOR]: "project-local",
-  });
 
-  const result = await store.applyAccountPreferences({
-    voice: LIVE_VOICE.MARIN,
-    workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol" } },
-  });
+  const result = await store.applyAccountPreferences({ voice: LIVE_VOICE.MARIN });
 
-  assert.deepEqual(result.changed, [
-    APP_SETTING_SCHEMA.voice.field,
-    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-    APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-  ]);
+  assert.deepEqual(result.changed, [APP_SETTING_SCHEMA.voice.field]);
   const reopened = storeIn(directory);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), VOICE_HOTKEY_NONE);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.MARIN);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field), undefined);
-  assert.deepEqual(await reopened.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field), {
-    [PROVIDER_ID.CONDUCTOR]: { agent: "codex", model: "gpt-5.6-sol" },
-  });
 });
 
 test("merges hosted account preferences around concurrent local preference edits", async (t) => {
@@ -668,31 +650,14 @@ test("merges hosted account preferences around concurrent local preference edits
   const expected = await store.accountPreferences();
 
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.ECHO);
-  await store.set(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, {
-    [PROVIDER_ID.CONDUCTOR]: "local-project",
-  });
   const result = await store.applyAccountPreferences(
-    {
-      voice: LIVE_VOICE.MARIN,
-      defaultWorkspaceProvider: PROVIDER_ID.CODEX,
-      workspaceProjectDefaults: { [PROVIDER_ID.CODEX]: "remote-project" },
-    },
+    { voice: LIVE_VOICE.MARIN },
     { accountEmail: TEST_ACCOUNT.email, preferences: expected },
   );
 
-  assert.deepEqual(result.changed, [
-    APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-    APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-  ]);
+  // The local edit since the baseline stands over the remote value.
+  assert.deepEqual(result.changed, []);
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.ECHO);
-  assert.equal(
-    await store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    PROVIDER_ID.CODEX,
-  );
-  assert.deepEqual(await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field), {
-    [PROVIDER_ID.CONDUCTOR]: "local-project",
-    [PROVIDER_ID.CODEX]: "remote-project",
-  });
 });
 
 test("keeps local account preference edits across a failed hosted write and restart", async (t) => {
@@ -710,16 +675,12 @@ test("keeps local account preference edits across a failed hosted write and rest
   const baseline = await reopened.accountPreferencesSyncBaseline(TEST_ACCOUNT.email);
   assert.deepEqual(baseline, { voice: LIVE_VOICE.SAGE });
   const result = await reopened.applyAccountPreferences(
-    { voice: LIVE_VOICE.SAGE, defaultWorkspaceProvider: PROVIDER_ID.CODEX },
+    { voice: LIVE_VOICE.MARIN },
     { accountEmail: TEST_ACCOUNT.email, preferences: baseline ?? {} },
   );
 
-  assert.deepEqual(result.changed, [APP_SETTING_SCHEMA.defaultWorkspaceProvider.field]);
+  assert.deepEqual(result.changed, []);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.ECHO);
-  assert.equal(
-    await reopened.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    PROVIDER_ID.CODEX,
-  );
 });
 
 test("skips a guarded account preference apply after account sign-out", async (t) => {
@@ -727,9 +688,6 @@ test("skips a guarded account preference apply after account sign-out", async (t
   const store = storeIn(directory);
   await store.setAccount(TEST_ACCOUNT);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
-  await store.set(APP_SETTING_SCHEMA.workspaceProjectDefaults.field, {
-    [PROVIDER_ID.CONDUCTOR]: "local-project",
-  });
   const expected = await store.accountPreferences();
 
   await store.clearAccount();
@@ -740,7 +698,6 @@ test("skips a guarded account preference apply after account sign-out", async (t
 
   assert.deepEqual(result.changed, []);
   assert.equal(await store.get(APP_SETTING_SCHEMA.voice.field), undefined);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field), undefined);
   assert.equal(await store.accountPreferencesSyncBaseline(TEST_ACCOUNT.email), undefined);
 });
 
@@ -789,62 +746,6 @@ test("the two Luke keys survive each other's writes", async (t) => {
   const reopened = storeIn(directory);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), "Control+Alt+Space");
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.stopHotkey.field), "Control+Alt+X");
-});
-
-test("ignores a stored default provider this build does not know", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, defaultWorkspaceProvider: "someone-else" }),
-  );
-
-  assert.equal(
-    await storeIn(directory).get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field),
-    undefined,
-  );
-  assert.equal(
-    appSettingsView(await storeIn(directory).snapshot()).defaultWorkspaceProvider,
-    undefined,
-  );
-});
-
-test("ignores stored default projects this store cannot hold", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await writeSettingsFile(directory, {
-    version: 2,
-    workspaceProjectDefaults: {
-      // A provider this build does not know, a value that is not an id at
-      // all, an empty one, and one too long to be an id: each names nowhere
-      // a creation ask could be steered.
-      "someone-else": "proj-1",
-      conductor: 7,
-      cursor: "   ",
-      codex: "x".repeat(501),
-    },
-  });
-
-  const store = storeIn(directory);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).workspaceProjectDefaults, undefined);
-});
-
-test("ignores a stored pairing this build's table does not list", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await writeSettingsFile(directory, {
-    version: 2,
-    workspaceAgentDefaults: {
-      // A listed model under an effort its agent does not document, a
-      // provider the table documents nothing for, and a provider this build
-      // does not know: each names a request no endpoint takes.
-      conductor: { agent: "claude", model: "sonnet", effort: "sideways" },
-      cursor: { agent: "cursor", model: "composer-2.5" },
-      "someone-else": { agent: "claude", model: "sonnet" },
-    },
-  });
-
-  const store = storeIn(directory);
-  assert.equal(await store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field), undefined);
-  assert.equal(appSettingsView(await store.snapshot()).workspaceAgentDefaults, undefined);
 });
 
 test("recovers from a corrupt settings file", async (t) => {

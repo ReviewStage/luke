@@ -202,7 +202,8 @@
         "type",
         "sdp",
         "voice",
-        "input"
+        "input",
+        "planId"
       ],
       "additionalProperties": false
     },

@@ -1,6 +1,5 @@
 import type { ProductSettingValue } from "@sidecar/analytics";
 import type { AppGuideSetting, AppSettingId } from "@sidecar/guide";
-import type { WorkspaceAgentDefaults, WorkspaceProviderId } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeStatus } from "./status.js";
 
@@ -59,20 +58,12 @@ export const SETTING_ROWS = {
   SCHEMA: "schema",
   /** A named component draws it, because its control is not a switch or a pop-up. */
   BESPOKE: "bespoke",
-  /** Nothing draws it: it is stored view state, not a setting. */
-  NONE: "none",
 } as const;
 
 type SettingRows = (typeof SETTING_ROWS)[keyof typeof SETTING_ROWS];
 
 /** The concrete runtime families a stored setting may use after its schema guard. */
-export type StoredSettingValue =
-  | string
-  | number
-  | boolean
-  | WorkspaceAgentDefaults
-  | Readonly<Partial<Record<WorkspaceProviderId, string>>>
-  | undefined;
+export type StoredSettingValue = string | number | boolean | undefined;
 
 /** How a guide builder reads the settings as they stand, field by field. */
 export type AppSettingGuideSettings = (field: string) => StoredSettingValue;

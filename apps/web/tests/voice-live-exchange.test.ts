@@ -7,7 +7,7 @@ import type { LanguageModel } from "ai";
 import { Deferred, Effect, Exit, Fiber, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
-import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
+import { MESSAGE_ROLE } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
@@ -24,7 +24,12 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
-import { createPlan, readPlan } from "../server/hosted/plan-store";
+import {
+  createPlan,
+  deletePlan,
+  openPlanConversation,
+  readPlan,
+} from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
@@ -39,19 +44,15 @@ import { EXCHANGE_ENDING, hostedLiveExchange } from "../server/voice/live-exchan
 import type { PlanDraft } from "../server/voice/plan-scribe";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { stampedEveEvent } from "./support/eve-events";
-import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
+import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted } from "./support/live-events";
 import { scriptedScribeModel } from "./support/scribe-model";
 import { settled } from "./support/settle";
 import {
-  insertConversation,
-  insertDevice,
-  readEventsByMessage,
   readMessagesByConversationTyped,
   readVoiceSessionByLiveSessionId,
   readVoiceTranscriptSegmentsBySession,
-  setVoiceSessionDeviceId,
 } from "./support/store-rows";
 
 /**
@@ -60,10 +61,9 @@ import {
  * the real relay for eve's stream. What these tests hold to is the lift's
  * acceptance in the parts this build can run: a spoken ask runs a turn
  * through the ask door and is spoken from the service's own appends, its
- * words and Luke's landing as segments and one user message; a briefing on
- * offer is claimed as the session's device before it is appended and marked
- * spoken by the session's own voice after; and a session with no device
- * speaks no briefing. Every row is an account's this test created.
+ * words and Luke's landing as segments and one user message; an ask once the
+ * plan is gone reaches nobody; and the plan's notetaker saves what was said.
+ * Every row is an account's this test created.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -172,22 +172,18 @@ function fakeEve(): FakeEve {
   return eve;
 }
 
-async function account(): Promise<ConversationTarget> {
-  const userId = await database.createUser();
-  const conversationId = await insertConversation(database.run, { userId });
-  return { userId, conversationId };
+/** An account holding one plan, and the plan's conversation every call about it lands in. */
+interface PlanTarget extends ConversationTarget {
+  readonly planId: string;
 }
 
-async function device(userId: string): Promise<string> {
-  const id = randomUUID();
-  await insertDevice(database.run, {
-    id,
-    userId,
-    installationId: `install-${id}`,
-    platform: DEVICE_PLATFORM.IOS,
-    lastSeenAt: new Date(NOW),
-  });
-  return id;
+async function account(): Promise<PlanTarget> {
+  const userId = await database.createUser();
+  const plan = await database.run(createPlan(userId, { name: "Teammate invitations" }));
+  const conversationId = Option.getOrThrow(
+    await database.run(openPlanConversation(userId, plan.id)),
+  );
+  return { userId, conversationId, planId: plan.id };
 }
 
 async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
@@ -197,17 +193,15 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
 /**
  * The exchange keeps time on the store runtime's clock, which is the real
  * one, so this suite runs under `it.live`: a wait for a row is a poll on a
- * `Schedule` (`settled`), and a wait after an offer the exchange must leave
+ * `Schedule` (`settled`), and a wait on a call the exchange must leave
  * alone is the suite's one plain sleep, asserting that nothing is appended.
  */
 const QUIET_MS = 30;
 
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
 async function stand(
-  target: ConversationTarget,
-  deviceId: string | undefined,
+  target: PlanTarget,
   options: {
-    readonly planning?: boolean;
     readonly scribe?: {
       readonly planId: string;
       readonly model: LanguageModel;
@@ -219,10 +213,13 @@ async function stand(
 ) {
   const liveSessionId = options.reattach ?? `sess_${randomUUID()}`;
   if (options.reattach === undefined) {
-    await database.run(sessionRecord.register({ userId: target.userId, sessionId: liveSessionId }));
-  }
-  if (deviceId !== undefined) {
-    await setVoiceSessionDeviceId(database.run, liveSessionId, deviceId);
+    await database.run(
+      sessionRecord.register({
+        userId: target.userId,
+        sessionId: liveSessionId,
+        planId: target.planId,
+      }),
+    );
   }
   const socket = new FakeLiveSocket();
   // The session's side of every send, as OpenAI would answer it: each append acknowledged
@@ -261,10 +258,8 @@ async function stand(
         context: { keys: KEYS },
         writer,
         eve,
-        now: () => NOW,
         createId: () => randomUUID(),
         report: (message) => reports.push(message),
-        ...(options.planning === true ? { planning: true } : undefined),
         ...(options.scribe === undefined ? undefined : { scribe: options.scribe }),
       }),
       scope,
@@ -297,17 +292,12 @@ function socketSent(f: { socket: FakeLiveSocket }): string {
   return JSON.stringify(types);
 }
 
-async function speechEventsOf(messageId: string) {
-  const rows = await readEventsByMessage(database.run, messageId);
-  return rows.map((row) => row.kind);
-}
-
 it.live(
   "a spoken ask runs a turn through the ask door and is spoken from the service's own appends, its words one user message and both speakers' words segments",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() => stand(target, undefined));
+      const f = yield* Effect.promise(() => stand(target));
       f.socket.receive(heard("What needs me?", 1000, 2400));
       f.socket.receive(delegated("dl_1", 2500));
       yield* settled(
@@ -327,7 +317,7 @@ it.live(
         play(spokenTurn(FIRST_EVE_TURN, NOW), {
           sessionId: recorded,
           target,
-          kind: CONVERSATION_KIND.MAIN,
+          kind: CONVERSATION_KIND.PLAN,
           turn: BRAIN_HOST_TURN.SPOKEN,
           model: "scripted-model",
           state: memoryRelayState(),
@@ -381,106 +371,15 @@ it.live(
 );
 
 it.live(
-  "a briefing on offer is claimed as the session's device before it is appended, and the session's own voice past the append marks it spoken",
+  "once the plan is deleted, a spoken ask is refused at the door and eve is not reached: the ask lands in the plan's conversation or nowhere",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const deviceId = yield* Effect.promise(() => device(target.userId));
-      const f = yield* Effect.promise(() => stand(target, deviceId));
-      const standing: RelayStanding = {
-        sessionId: mintEveSession(),
-        target,
-        kind: CONVERSATION_KIND.MAIN,
-        turn: BRAIN_HOST_TURN.OBSERVATION,
-        model: "scripted-model",
-        state: memoryRelayState(),
-      };
-      yield* Effect.promise(() =>
-        play(announceTurn(FIRST_EVE_TURN, "One agent finished.", NOW), standing),
+      const f = yield* Effect.promise(() => stand(target));
+      assert.equal(
+        yield* Effect.promise(() => database.run(deletePlan(target.userId, target.planId))),
+        true,
       );
-      const [offer] = yield* Effect.promise(() =>
-        database.run(database.store.speech.open(target.userId)),
-      );
-      assert.ok(offer);
-
-      yield* Effect.promise(() => database.run(f.exchange.briefings.look));
-      yield* settled(
-        () => f.commentary().length === 1,
-        "the briefing to be appended",
-        async () => `reports ${JSON.stringify(f.reports)}`,
-      );
-      assert.deepEqual(
-        f.commentary().map((event) => [event.delegation_id, event.content]),
-        [[null, "One agent finished."]],
-      );
-      assert.deepEqual(yield* Effect.promise(() => speechEventsOf(offer.messageId)), [
-        CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-        CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-      ]);
-
-      f.socket.receive({
-        type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
-        event_id: "out-1",
-        delta: "One agent finished.",
-        start_ms: 4000,
-        end_ms: 5200,
-      });
-      yield* settled(
-        async () => (await speechEventsOf(offer.messageId)).length === 3,
-        "the spoken mark",
-      );
-      assert.deepEqual(yield* Effect.promise(() => speechEventsOf(offer.messageId)), [
-        CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-        CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-        CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
-      ]);
-      assert.deepEqual(f.reports, []);
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
-);
-
-it.live(
-  "a session whose row names no device appends no briefing: the offer stands unclaimed for the push or the sweep",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() => stand(target, undefined));
-      yield* Effect.promise(() =>
-        play(announceTurn(FIRST_EVE_TURN, "Not for this session.", NOW), {
-          sessionId: mintEveSession(),
-          target,
-          kind: CONVERSATION_KIND.MAIN,
-          turn: BRAIN_HOST_TURN.OBSERVATION,
-          model: "scripted-model",
-          state: memoryRelayState(),
-        }),
-      );
-      const [offer] = yield* Effect.promise(() =>
-        database.run(database.store.speech.open(target.userId)),
-      );
-      assert.ok(offer);
-      yield* Effect.promise(() => database.run(f.exchange.briefings.look));
-      yield* Effect.sleep(QUIET_MS);
-      assert.deepEqual(f.commentary(), []);
-      assert.deepEqual(yield* Effect.promise(() => speechEventsOf(offer.messageId)), [
-        CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-      ]);
-      assert.equal(f.reports.length, 1);
-      yield* Effect.promise(() => f.exchange.stop());
-    }),
-);
-
-it.live(
-  "after a Clear, a spoken ask is refused at the door and eve is not reached: the record and the ask name one conversation, never the record's old main and eve's new one",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const deviceId = yield* Effect.promise(() => device(target.userId));
-      const f = yield* Effect.promise(() => stand(target, deviceId));
-      const cleared = yield* Effect.promise(() =>
-        database.run(database.store.main.clear(target.userId, new Date(NOW))),
-      );
-      assert.deepEqual(cleared.cleared, [target.conversationId]);
 
       const refused = yield* Effect.promise(() =>
         database.run(
@@ -498,36 +397,30 @@ it.live(
     }),
 );
 
-it.live("a call that is not a planning call is asked no opening", () =>
-  Effect.gen(function* () {
-    const target = yield* Effect.promise(() => account());
-    const f = yield* Effect.promise(() => stand(target, undefined));
-    yield* Effect.sleep(QUIET_MS);
-    assert.deepEqual(f.eve.opened, []);
-    assert.deepEqual(f.commentary(), []);
-    yield* Effect.promise(() => f.exchange.stop());
-  }),
+it.live(
+  "a call nobody has spoken on reaches no brain and appends nothing of the exchange's own",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      yield* Effect.sleep(QUIET_MS);
+      assert.deepEqual(f.eve.opened, []);
+      assert.deepEqual(f.commentary(), []);
+      yield* Effect.promise(() => f.exchange.stop());
+    }),
 );
 
 it.live(
-  "a planning call's notetaker drafts what the developer said to the device and saves it into the plan",
+  "a call's notetaker drafts what the developer said to the device and saves it into the plan",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
       const problem = "Only an admin can add someone to a workspace.";
-      const plan = yield* Effect.promise(() =>
-        database.run(
-          createPlan(target.userId, {
-            name: "Teammate invitations",
-          }),
-        ),
-      );
       const drafts: PlanDraft[] = [];
       const f = yield* Effect.promise(() =>
-        stand(target, undefined, {
-          planning: true,
+        stand(target, {
           scribe: {
-            planId: plan.id,
+            planId: target.planId,
             model: scriptedScribeModel([{ goal: { problem } }]).model,
             onDraft: (draft) => drafts.push(draft),
           },
@@ -537,7 +430,7 @@ it.live(
       f.socket.receive(heard("Only admins can add people.", 1_500, 3_000));
       const body = () =>
         database.run(
-          Effect.map(readPlan(target.userId, plan.id), (stored) =>
+          Effect.map(readPlan(target.userId, target.planId), (stored) =>
             Option.match(stored, { onNone: () => "", onSome: (found) => found.plan.document.body }),
           ),
         );
@@ -558,7 +451,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const lost = yield* Effect.promise(() => stand(target, undefined, { planning: true }));
+      const lost = yield* Effect.promise(() => stand(target));
       lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
       lost.socket.receive(delegated("dl_1", 2500));
       // The ask's dispatch is written in a transaction that ends after eve answers, so the detach
@@ -585,7 +478,7 @@ it.live(
       );
 
       const back = yield* Effect.promise(() =>
-        stand(target, undefined, { planning: true, reattach: lost.liveSessionId }),
+        stand(target, { reattach: lost.liveSessionId }),
       );
       yield* settled(
         () => back.commentary().length >= 2,
@@ -604,7 +497,7 @@ it.live(
       yield* Effect.promise(() => detach(back));
 
       const again = yield* Effect.promise(() =>
-        stand(target, undefined, { planning: true, reattach: lost.liveSessionId }),
+        stand(target, { reattach: lost.liveSessionId }),
       );
       yield* Effect.sleep(QUIET_MS * 4);
       assert.deepEqual(again.commentary(), []);
@@ -618,7 +511,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const lost = yield* Effect.promise(() => stand(target, undefined, { planning: true }));
+      const lost = yield* Effect.promise(() => stand(target));
       lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
       lost.socket.receive(delegated("dl_1", 2500));
       yield* settled(
@@ -658,7 +551,7 @@ it.live(
       yield* Effect.promise(() => play(events.slice(answer), standing));
 
       const back = yield* Effect.promise(() =>
-        stand(target, undefined, { planning: true, reattach: lost.liveSessionId }),
+        stand(target, { reattach: lost.liveSessionId }),
       );
       yield* settled(
         () => back.commentary().length >= 1,
@@ -684,7 +577,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const lost = yield* Effect.promise(() => stand(target, undefined, { planning: true }));
+      const lost = yield* Effect.promise(() => stand(target));
       const answer = yield* Deferred.make<void>();
       lost.eve.answerWhen = answer;
       lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
@@ -697,7 +590,7 @@ it.live(
       yield* Deferred.succeed(answer, undefined);
       yield* Fiber.join(detaching);
       const back = yield* Effect.promise(() =>
-        stand(target, undefined, { planning: true, reattach: lost.liveSessionId }),
+        stand(target, { reattach: lost.liveSessionId }),
       );
       const [opened] = lost.eve.sessions;
       assert.ok(opened);

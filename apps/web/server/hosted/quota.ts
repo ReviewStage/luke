@@ -5,7 +5,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { DAY_MS, type HostedQuota } from "../core.js";
 import { user } from "../db/auth-schema.js";
 import { db } from "../db/query.js";
-import { hostedUsage, introductionUsage, voiceSessionUsage } from "../db/usage-schema.js";
+import { hostedUsage, voiceSessionUsage } from "../db/usage-schema.js";
 
 /**
  * The free tier's daily ceiling, spent by every hosted operation alike — a
@@ -91,54 +91,6 @@ export function spendHostedMeter(input: {
       allowed: row.calls <= HOSTED_DAILY_LIMIT,
       quota: { used: row.calls, limit: HOSTED_DAILY_LIMIT, resetsAt: utcDayEnd(day) },
     })),
-  );
-}
-
-/** The one row every introduction request shares, holding the global count. */
-const INTRODUCTION_USAGE_KEY = "global";
-
-/**
- * Whether an introduction mint fit inside the day. Unlike a metered spend it
- * carries no quota: the introduction is not an allowance anyone tracks, and a
- * refusal that reported the shared counter's standing would tell an anonymous
- * caller how busy the endpoint is for no one's benefit.
- */
-export interface IntroductionSpend {
-  allowed: boolean;
-}
-
-const IntroductionUsageWriteSchema = Schema.Struct({ caller: Schema.String, day: Schema.String });
-const IntroductionUsageMintsRowSchema = Schema.Struct({ mints: Schema.Number });
-
-/** The shared day's mints as the conflicting row already has it, counted up; the same fragment as the metered spend's. */
-const ONE_MORE_MINT = sql`${introductionUsage.mints} + 1`;
-
-const spendIntroductionUsage = SqlSchema.findOneOption({
-  Request: IntroductionUsageWriteSchema,
-  Result: IntroductionUsageMintsRowSchema,
-  execute: (write) =>
-    db
-      .insert(introductionUsage)
-      .values({ caller: write.caller, day: write.day, mints: 1 })
-      .onConflictDoUpdate({
-        target: [introductionUsage.caller, introductionUsage.day],
-        set: { mints: ONE_MORE_MINT },
-      })
-      .returning({ mints: introductionUsage.mints }),
-});
-
-/**
- * Spends one introduction mint and answers whether it fit inside the shared
- * ceiling. Like the metered spend, the increment is a single atomic upsert
- * taken before the upstream call, and a refused attempt still counts.
- */
-export function spendIntroductionMeter(input: {
-  readonly now: number;
-}): Effect.Effect<IntroductionSpend, QuotaFailure, SqlClient.SqlClient> {
-  const day = utcDayKey(input.now);
-  return spendIntroductionUsage({ caller: INTRODUCTION_USAGE_KEY, day }).pipe(
-    Effect.flatMap((row) => required(row, "The introduction usage upsert returned no row.")),
-    Effect.map((row) => ({ allowed: row.mints <= HOSTED_DAILY_LIMIT })),
   );
 }
 

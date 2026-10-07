@@ -1,11 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  LIVE_AUDIO_ENCODING,
-  LIVE_AUDIO_FORMAT,
-  LIVE_VOICE,
-  OBSERVED_VALUE_LENGTH,
-  PROACTIVE_SPEECH_KIND,
-} from "@sidecar/live";
+import { LIVE_VOICE } from "@sidecar/live";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import {
@@ -15,12 +9,9 @@ import {
   isHostedVoiceServiceAddress,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
-  sessionAudioCreatedFrameFromWire,
-  sessionAudioCreateFrameFromWire,
   sessionCreatedFrameFromWire,
   sessionOpeningFrameFromWire,
   sessionReportFrameFromWire,
-  sessionSpokenFrameFromWire,
   VOICE_SERVICE_FRAME,
   webSocketOrigin,
 } from "./live-contract.js";
@@ -36,6 +27,8 @@ const developer = {
 };
 const part = { type: "input_text", text: "What needs me?" };
 const user = { type: "message", role: "user", content: [part] };
+const PLAN_ID = "1a000000-0000-4000-8000-000000000001";
+
 const assistant = {
   type: "message",
   role: "assistant",
@@ -48,6 +41,7 @@ function createFrame(overrides: { [field: string]: UnparsedWireValue } = {}) {
     sdp: SDP,
     voice: LIVE_VOICE.MARIN,
     input: [developer, user, assistant],
+    planId: PLAN_ID,
     ...overrides,
   };
 }
@@ -66,56 +60,6 @@ test("a session.created frame round-trips, with or without a quota, ignoring wha
   assert.equal("quota" in misquoted, false);
 });
 
-test("an audio session.create frame is the voice and one of the four formats, with no offer and no seed", () => {
-  const audio = {
-    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-    voice: LIVE_VOICE.MARIN,
-    format: LIVE_AUDIO_FORMAT.PCM16_16K,
-  };
-  assert.deepEqual(sessionAudioCreateFrameFromWire(audio), audio);
-  for (const format of Object.values(LIVE_AUDIO_FORMAT)) {
-    assert.deepEqual(sessionAudioCreateFrameFromWire({ ...audio, format })?.format, format);
-  }
-  assert.equal(sessionAudioCreateFrameFromWire({ ...audio, sdp: SDP }), undefined);
-  assert.equal(sessionAudioCreateFrameFromWire({ ...audio, input: [] }), undefined);
-  assert.equal(
-    sessionAudioCreateFrameFromWire({
-      type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-      voice: LIVE_VOICE.MARIN,
-    }),
-    undefined,
-  );
-  assert.equal(
-    sessionAudioCreateFrameFromWire({
-      ...audio,
-      format: { type: LIVE_AUDIO_ENCODING.PCM16, rate: 8_000 },
-    }),
-    undefined,
-  );
-  assert.equal(sessionAudioCreateFrameFromWire({ ...audio, voice: "hal" }), undefined);
-  assert.equal(sessionAudioCreateFrameFromWire({ ...audio, model: "gpt-live-1" }), undefined);
-  // The two create frames share a type and admit each other's shape on neither side.
-  assert.equal(sessionAudioCreateFrameFromWire(createFrame()), undefined);
-  assert.equal(sessionOpeningFrameFromWire(audio), undefined);
-});
-
-test("an audio session.created frame is the id and the quota, with no SDP answer, ignoring what a newer service adds", () => {
-  const created = { type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "live_123" };
-  assert.deepEqual(sessionAudioCreatedFrameFromWire({ ...created, later: true }), created);
-  const quota = { used: 2, limit: 30, resetsAt: 1_800_000_000_000 };
-  assert.deepEqual(sessionAudioCreatedFrameFromWire({ ...created, quota }), { ...created, quota });
-  const misquoted = sessionAudioCreatedFrameFromWire({ ...created, quota: { used: -1 } });
-  assert.ok(misquoted);
-  assert.equal("quota" in misquoted, false);
-  assert.equal(
-    sessionAudioCreatedFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_CREATED }),
-    undefined,
-  );
-  assert.equal(sessionAudioCreatedFrameFromWire({ ...created, sessionId: "  " }), undefined);
-  // The WebRTC reader still wants its answer, so a Mac cannot mistake the audio route's for its own.
-  assert.equal(sessionCreatedFrameFromWire(created), undefined);
-});
-
 test("an opening frame is either a create or an attach, told apart by type", () => {
   const attach = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: "live_123" };
   assert.equal(
@@ -123,6 +67,10 @@ test("an opening frame is either a create or an attach, told apart by type", () 
     VOICE_SERVICE_FRAME.SESSION_CREATE,
   );
   assert.equal(sessionOpeningFrameFromWire(attach)?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
+  // Every call is about one plan: a create that names none, or names it in another shape, is refused.
+  const { planId: _named, ...planless } = createFrame();
+  assert.equal(sessionOpeningFrameFromWire(planless), undefined);
+  assert.equal(sessionOpeningFrameFromWire(createFrame({ planId: "plan-1" })), undefined);
   assert.equal(
     sessionOpeningFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "x" }),
     undefined,
@@ -164,71 +112,9 @@ test("a session.stop frame is the type alone, and a report frame is either it or
   assert.equal(sessionOpeningFrameFromWire(stop), undefined);
 });
 
-test("a session.beat frame names its kind and only the bounded values that kind's script may mention", () => {
-  const arrival = {
-    type: VOICE_SERVICE_FRAME.SESSION_BEAT,
-    kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
-    sessionTitle: "  Fix the flaky test  ",
-    talkKeyLabel: "Right Option",
-  };
-  assert.deepEqual(sessionReportFrameFromWire(arrival), {
-    ...arrival,
-    sessionTitle: "Fix the flaky test",
-  });
-  const bare = { type: VOICE_SERVICE_FRAME.SESSION_BEAT, kind: PROACTIVE_SPEECH_KIND.ARRIVAL };
-  assert.deepEqual(sessionReportFrameFromWire(bare), bare);
-  const calendar = {
-    type: VOICE_SERVICE_FRAME.SESSION_BEAT,
-    kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-  };
-  assert.deepEqual(sessionReportFrameFromWire(calendar), calendar);
-  const launch = {
-    type: VOICE_SERVICE_FRAME.SESSION_BEAT,
-    kind: PROACTIVE_SPEECH_KIND.LAUNCH,
-    firstName: "Ada",
-  };
-  assert.deepEqual(sessionReportFrameFromWire(launch), launch);
-  // A value the kind's script does not mention, a briefing (the brain's words are never the
-  // desktop's to send), a value past the bound, a blank one, and a sentence of the desktop's own.
-  assert.equal(sessionReportFrameFromWire({ ...calendar, sessionTitle: "x" }), undefined);
-  assert.equal(sessionReportFrameFromWire({ ...launch, sessionTitle: "x" }), undefined);
-  assert.equal(sessionReportFrameFromWire({ ...bare, firstName: "Ada" }), undefined);
-  assert.equal(
-    sessionReportFrameFromWire({ ...bare, kind: PROACTIVE_SPEECH_KIND.BRIEFING, briefing: "Hi" }),
-    undefined,
-  );
-  assert.equal(
-    sessionReportFrameFromWire({ ...launch, firstName: "a".repeat(OBSERVED_VALUE_LENGTH + 1) }),
-    undefined,
-  );
-  assert.equal(sessionReportFrameFromWire({ ...launch, firstName: "   " }), undefined);
-  assert.equal(sessionReportFrameFromWire({ ...bare, content: "Say hello." }), undefined);
-  assert.equal(sessionOpeningFrameFromWire(launch), undefined);
-});
-
-test("a session.spoken frame is the kind alone, any kind spoken, and ignores a key a newer service adds", () => {
-  for (const kind of Object.values(PROACTIVE_SPEECH_KIND)) {
-    const spoken = { type: VOICE_SERVICE_FRAME.SESSION_SPOKEN, kind };
-    assert.deepEqual(sessionSpokenFrameFromWire(spoken), spoken);
-    assert.deepEqual(sessionSpokenFrameFromWire({ ...spoken, later: 1 }), spoken);
-  }
-  assert.equal(
-    sessionSpokenFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_SPOKEN, kind: "greeting" }),
-    undefined,
-  );
-  assert.equal(sessionSpokenFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_SPOKEN }), undefined);
-  // It is the service's to send, never the desktop's: the report union refuses it.
-  assert.equal(
-    sessionReportFrameFromWire({
-      type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
-      kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
-    }),
-    undefined,
-  );
-});
-
-test("the frame types are eleven distinct members", () => {
-  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 11);
+test("the frame types are distinct members", () => {
+  const types = Object.values(VOICE_SERVICE_FRAME);
+  assert.equal(new Set(types).size, types.length);
 });
 
 test("the voice service origin is the service's own origin in socket form", () => {

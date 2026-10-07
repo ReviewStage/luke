@@ -78,7 +78,7 @@ it.effect(
       const returned = `live_${randomUUID()}`;
       const held = `live_${randomUUID()}`;
       for (const sessionId of [orphan, recent, returned, held]) {
-        await database.run(record.register({ userId, sessionId }));
+        await database.run(record.register({ userId, sessionId, planId: randomUUID() }));
       }
       clock.now = NOW - VOICE_DETACH_GRACE_MS - 60_000;
       await database.run(record.detach({ sessionId: orphan }));
@@ -153,7 +153,7 @@ it.effect(
       const { clock, record } = clockedRecord();
       const userId = await database.createUser();
       const gone = `live_${randomUUID()}`;
-      await database.run(record.register({ userId, sessionId: gone }));
+      await database.run(record.register({ userId, sessionId: gone, planId: randomUUID() }));
       await database.run(record.noteUsage({ sessionId: gone, seconds: 120 }));
       clock.now = NOW - VOICE_DETACH_GRACE_MS - 1_000;
       await database.run(record.detach({ sessionId: gone }));

@@ -1,31 +1,12 @@
 import { APP_SETTING_ID, isAppSettingId } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@sidecar/live";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { choiceSetting, hotkeySetting, optional, toggleSetting } from "./schema-builders.js";
 import {
-  isProviderId,
-  isWorkspaceProviderId,
-  type ProviderId,
-  parseWorkspaceAgentSelection,
-  type WorkspaceAgentDefaults,
-  type WorkspaceAgentSelection,
-  type WorkspaceProviderId,
-} from "@sidecar/session";
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Result } from "effect";
-import {
-  choiceSetting,
-  hotkeySetting,
-  optional,
-  settingGuardFromEither,
-  storedSetting,
-  toggleSetting,
-} from "./schema-builders.js";
-import {
-  SETTING_ROWS,
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
   SETTINGS_PAGE,
   SETTINGS_RESET_SCOPE,
-  type SettingGuardResult,
   type SettingsVisibility,
 } from "./schema-types.js";
 import { APPEARANCE_PAGE, VOICE_PAGE } from "./settings-paths.js";
@@ -59,47 +40,6 @@ function voiceOptionLabel(voice: LiveVoice): string {
 
 /** Voice available and the microphone granted: the whole of what a control needs. */
 const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
-
-function workspaceAgentDefaultsGuard(
-  value: UnparsedWireValue,
-): SettingGuardResult<WorkspaceAgentDefaults | undefined> {
-  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
-  if (!isRecord(value)) {
-    return settingGuardFromEither(Result.fail(undefined));
-  }
-  const defaults: Partial<Record<ProviderId, WorkspaceAgentSelection>> = {};
-  for (const [providerId, selection] of Object.entries(value)) {
-    const parsed = parseWorkspaceAgentSelection(providerId, selection);
-    if (!isProviderId(providerId) || !parsed) continue;
-    defaults[providerId] = parsed;
-  }
-  return settingGuardFromEither(
-    Result.succeed(Object.keys(defaults).length > 0 ? defaults : undefined),
-  );
-}
-
-const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
-
-function workspaceProjectDefaultsGuard(
-  value: UnparsedWireValue,
-): SettingGuardResult<Readonly<Partial<Record<WorkspaceProviderId, string>>> | undefined> {
-  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
-  if (!isRecord(value)) {
-    return settingGuardFromEither(Result.fail(undefined));
-  }
-  const defaults: Partial<Record<WorkspaceProviderId, string>> = {};
-  for (const [providerId, candidate] of Object.entries(value)) {
-    if (!isWorkspaceProviderId(providerId) || !isWireString(candidate)) continue;
-    const providerProjectId = candidate.trim();
-    if (!providerProjectId || providerProjectId.length > MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH) {
-      continue;
-    }
-    defaults[providerId] = providerProjectId;
-  }
-  return settingGuardFromEither(
-    Result.succeed(Object.keys(defaults).length > 0 ? defaults : undefined),
-  );
-}
 
 export const APP_SETTING_SCHEMA = {
   openAtLogin: toggleSetting({
@@ -210,49 +150,5 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     adjustable: true,
     visible: voiceControlDrawn,
-  }),
-  // The three below are account preferences the service still stores for the
-  // builds that drew a Connections page. This build draws no row for them and
-  // writes none of them; it carries what the account holds, and nothing more.
-  defaultWorkspaceProvider: storedSetting({
-    field: "defaultWorkspaceProvider",
-    default: undefined,
-    guard: (value: UnparsedWireValue) =>
-      optional(
-        value,
-        (candidate): candidate is WorkspaceProviderId =>
-          isWireString(candidate) && isWorkspaceProviderId(candidate),
-      ),
-    page: SETTINGS_PAGE.ROOT,
-    section: SETTING_SECTION.MAIN,
-    order: 190,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    rows: SETTING_ROWS.NONE,
-    ids: [],
-    guide: () => undefined,
-  }),
-  workspaceAgentDefaults: storedSetting({
-    field: "workspaceAgentDefaults",
-    default: undefined,
-    guard: workspaceAgentDefaultsGuard,
-    page: SETTINGS_PAGE.ROOT,
-    section: SETTING_SECTION.MAIN,
-    order: 200,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    rows: SETTING_ROWS.NONE,
-    ids: [],
-    guide: () => undefined,
-  }),
-  workspaceProjectDefaults: storedSetting({
-    field: "workspaceProjectDefaults",
-    default: undefined,
-    guard: workspaceProjectDefaultsGuard,
-    page: SETTINGS_PAGE.ROOT,
-    section: SETTING_SECTION.MAIN,
-    order: 210,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    rows: SETTING_ROWS.NONE,
-    ids: [],
-    guide: () => undefined,
   }),
 } as const;

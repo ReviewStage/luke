@@ -96,7 +96,10 @@ async function target(registered = true): Promise<VoiceTarget> {
   const userId = await database.createUser();
   const conversationId = await insertConversation(database.run, { userId });
   const liveSessionId = `sess_${randomUUID()}`;
-  if (registered) await database.run(sessionRecord.register({ userId, sessionId: liveSessionId }));
+  if (registered)
+    await database.run(
+      sessionRecord.register({ userId, sessionId: liveSessionId, planId: randomUUID() }),
+    );
   return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
 

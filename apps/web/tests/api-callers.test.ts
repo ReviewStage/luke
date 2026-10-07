@@ -25,11 +25,11 @@ const REPO_ROOT = join(WEB, "..", "..");
 const TABLE = [
   { src: "/api/auth/(.*)", dest: "/api/default.js?route=auth/[...all]&path=auth/$1" },
   {
-    src: "/api/brain/turns/([^/]+)/events",
-    dest: "/api/turn-events.js?route=brain/turns/events&id=$1",
+    src: "/api/plans/([^/]+)/commands/claim",
+    dest: "/api/default.js?route=plans/commands/claim&id=$1",
   },
-  { src: "/api/brain/turns/([^/]+)", dest: "/api/turn-read.js?route=brain/turns/turn&id=$1" },
-  { src: "/api/devices", dest: "/api/default.js?route=devices" },
+  { src: "/api/plans/([^/]+)", dest: "/api/default.js?route=plans/plan&id=$1" },
+  { src: "/api/events", dest: "/api/default.js?route=events" },
 ];
 const ALIASES = ["/api/feedback"];
 
@@ -55,7 +55,7 @@ test("a caller path the table does not serve is refused, whichever language spel
   const report = await scratchReport({
     "client.ts": [
       `const url = \`\${origin}/api/nowhere\`;`,
-      'fetch("https://luke.test/api/devices?since=1");',
+      'fetch("https://luke.test/api/events?since=1");',
       'const relative = new URL("api/elsewhere", base);',
     ].join("\n"),
     "probe.sh": 'curl "https://luke.test/api/absent"\n',
@@ -67,24 +67,24 @@ test("a caller path the table does not serve is refused, whichever language spel
   ]);
   assert.deepEqual(
     report.resolved.map((entry) => [entry.caller.display, entry.resolution, entry.route]),
-    [["/api/devices", RESOLUTION.REWRITE, "/api/devices"]],
+    [["/api/events", RESOLUTION.REWRITE, "/api/events"]],
   );
 });
 
 test("a template interpolating a whole segment is matched against the pattern that serves it", async () => {
   const report = await scratchReport({
     "client.ts": [
-      `const read = \`/api/brain/turns/\${encodeURIComponent(id)}\`;`,
-      `const events = \`\${origin}/api/brain/turns/\${id}/events\`;`,
+      `const read = \`/api/plans/\${encodeURIComponent(id)}\`;`,
+      `const claim = \`\${origin}/api/plans/\${id}/commands/claim\`;`,
     ].join("\n"),
-    "probe.sh": 'curl "$ORIGIN/api/brain/turns/$TURN_ID/events"\n',
+    "probe.sh": 'curl "$ORIGIN/api/plans/$PLAN_ID/commands/claim"\n',
   });
   assert.deepEqual(refusals(report), []);
   assert.deepEqual(
     report.resolved.map((entry) => [entry.caller.display, entry.caller.kind, entry.route]),
     [
-      ["/api/brain/turns/{…}", CALLER_KIND.BUILDER, "/api/brain/turns/([^/]+)"],
-      ["/api/brain/turns/{…}/events", CALLER_KIND.BUILDER, "/api/brain/turns/([^/]+)/events"],
+      ["/api/plans/{…}", CALLER_KIND.BUILDER, "/api/plans/([^/]+)"],
+      ["/api/plans/{…}/commands/claim", CALLER_KIND.BUILDER, "/api/plans/([^/]+)/commands/claim"],
     ],
   );
   assert.equal(report.resolved[1]?.caller.sites.length, 2);
@@ -93,15 +93,15 @@ test("a template interpolating a whole segment is matched against the pattern th
 test("a template whose interpolation is not a whole segment is refused as unreadable, not skipped", async () => {
   const report = await scratchReport({
     "client.ts": [
-      `const a = \`/api/brain/turns/\${id}-events\`;`,
-      `const b = \`/api/dev\${suffix}\`;`,
+      `const a = \`/api/plans/\${id}-commands\`;`,
+      `const b = \`/api/ev\${suffix}\`;`,
     ].join("\n"),
-    "probe.sh": `curl "$ORIGIN/api/devices$SUFFIX"\n`,
+    "probe.sh": `curl "$ORIGIN/api/events$SUFFIX"\n`,
   });
   assert.deepEqual(refusals(report), [
-    ["/api/brain/turns/{…}-events", REFUSAL.UNREADABLE_BUILDER],
-    ["/api/dev{…}", REFUSAL.UNREADABLE_BUILDER],
-    ["/api/devices{…}", REFUSAL.UNREADABLE_BUILDER],
+    ["/api/ev{…}", REFUSAL.UNREADABLE_BUILDER],
+    ["/api/events{…}", REFUSAL.UNREADABLE_BUILDER],
+    ["/api/plans/{…}-commands", REFUSAL.UNREADABLE_BUILDER],
   ]);
 });
 
@@ -142,7 +142,7 @@ test("comments are not callers, and skipped directories are not scanned", async 
 
 test("a package directory with no source directory contributes nothing, and the scan completes", async () => {
   const root = scratch({
-    "packages/one/src/client.ts": 'fetch("/api/devices");\n',
+    "packages/one/src/client.ts": 'fetch("/api/events");\n',
     "packages/two/src/nested/client.ts": 'const url = new URL("api/feedback", base);\n',
     "packages/stale/dist/index.js": 'fetch("/api/nowhere");\n',
     "packages/notes.md": "# not a package\n",
@@ -164,7 +164,7 @@ test("a package directory with no source directory contributes nothing, and the 
   assert.deepEqual(
     report.resolved.map((entry) => [entry.caller.display, entry.resolution, entry.route]),
     [
-      ["/api/devices", RESOLUTION.REWRITE, "/api/devices"],
+      ["/api/events", RESOLUTION.REWRITE, "/api/events"],
       ["/api/feedback", RESOLUTION.ALIAS, "/api/feedback"],
     ],
   );
@@ -173,10 +173,10 @@ test("a package directory with no source directory contributes nothing, and the 
 test("a paths-module export that is not a path is refused by name", async () => {
   const root = scratch({
     "paths.ts": [
-      'export const TABLE = { A: "/api/devices" } as const;',
+      'export const TABLE = { A: "/api/events" } as const;',
       "export const BOUND = 3;",
-      "export function turnPath(id: string): string {",
-      `  return \`/api/brain/turns/\${encodeURIComponent(id)}\`;`,
+      "export function planPath(id: string): string {",
+      `  return \`/api/plans/\${encodeURIComponent(id)}\`;`,
       "}",
       "export function count(): number {",
       "  return 1;",
@@ -195,8 +195,8 @@ test("a paths-module export that is not a path is refused by name", async () => 
   assert.deepEqual(
     report.resolved.map((entry) => [entry.caller.display, entry.caller.kind, entry.route]),
     [
-      ["/api/brain/turns/{…}", CALLER_KIND.BUILDER, "/api/brain/turns/([^/]+)"],
-      ["/api/devices", CALLER_KIND.STATIC, "/api/devices"],
+      ["/api/events", CALLER_KIND.STATIC, "/api/events"],
+      ["/api/plans/{…}", CALLER_KIND.BUILDER, "/api/plans/([^/]+)"],
     ],
   );
 });

@@ -11,6 +11,7 @@ import { workspaceEmbedding, workspaceFile } from "../server/db/workspace-schema
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
 import { readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
+import { conversationDirectory } from "../server/hosted/store/standing-conversations";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { countRowsWhere, deleteUser, insertDevice, instantColumn } from "./support/store-rows";
 
@@ -276,7 +277,7 @@ test("an observed conversation is opened on its session's first diff and stands 
   const elsewhere = await database.run(database.store.directory.observed(other, session, NOW));
   assert.ok(elsewhere);
   assert.notEqual(elsewhere, opened);
-  const standing = await database.run(database.store.directory.standing(userId));
+  const standing = await database.run(conversationDirectory(userId, 100));
   assert.deepEqual(
     standing
       .filter((conversation) => conversation.kind === CONVERSATION_KIND.OBSERVED)
@@ -349,7 +350,7 @@ test("retiring departed observed conversations stamps the sessions the roster no
   assert.equal(await stampedAt(departed), NOW + 1);
   assert.equal(await stampedAt(child.id), NOW + 1);
   assert.deepEqual(
-    (await database.run(directory.standing(userId)))
+    (await database.run(conversationDirectory(userId, 100)))
       .filter((conversation) => conversation.kind === CONVERSATION_KIND.OBSERVED)
       .map((conversation) => conversation.id)
       .sort(),

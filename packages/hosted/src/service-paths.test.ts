@@ -1,42 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { brainTurnEventsPath, HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "./service-paths.js";
+import { HOSTED_SERVICE_PATH, planPath, VOICE_SERVICE_PATH } from "./service-paths.js";
 
 test("account preferences have a stable endpoint path", () => {
   assert.equal(HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES, "/api/account/preferences");
 });
 
-test("the device registration has a stable endpoint path", () => {
-  assert.equal(HOSTED_SERVICE_PATH.DEVICES, "/api/devices");
-});
-
-test("Clear, the children reads, and the agents read stand beside the Conversation's reads under the same prefix", () => {
-  assert.equal(HOSTED_SERVICE_PATH.CONVERSATION_CLEAR, "/api/conversation/clear");
-  assert.equal(HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN, "/api/conversation/children");
-  assert.equal(HOSTED_SERVICE_PATH.CONVERSATION_AGENTS, "/api/conversation/agents");
-  assert.equal(
-    HOSTED_SERVICE_PATH.CONVERSATION_CHILD_MESSAGES,
-    `${HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN}/messages`,
-  );
-  assert.notEqual(
-    HOSTED_SERVICE_PATH.CONVERSATION_CLEAR,
-    HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES,
-  );
-});
-
-test("the voice service's paths are three distinct function routes of the service", () => {
-  assert.deepEqual(Object.values(VOICE_SERVICE_PATH), [
-    "/api/voice/sessions",
-    "/api/voice/introduction",
-    "/api/voice/audio",
-  ]);
-  assert.equal(new Set(Object.values(VOICE_SERVICE_PATH)).size, 3);
+test("the voice service's path is a function route of its own, apart from every hosted path", () => {
   const taken = new Set<string>(Object.values(HOSTED_SERVICE_PATH));
   for (const path of Object.values(VOICE_SERVICE_PATH)) assert.equal(taken.has(path), false);
 });
 
-test("a turn's event stream stands under the turns read, with the id inside the path", () => {
-  const turnId = "1a000000-0000-4000-8000-000000000003";
-  assert.equal(brainTurnEventsPath(turnId), `${HOSTED_SERVICE_PATH.BRAIN_TURNS}/${turnId}/events`);
-  assert.equal(brainTurnEventsPath("a/b"), `${HOSTED_SERVICE_PATH.BRAIN_TURNS}/a%2Fb/events`);
+test("a plan stands under the plans read, with its id inside the path as one segment", () => {
+  assert.equal(planPath("a/b"), `${HOSTED_SERVICE_PATH.PLANS}/a%2Fb`);
 });

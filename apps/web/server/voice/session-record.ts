@@ -1,10 +1,8 @@
 import type { Plan } from "@sidecar/hosted/plan-wire";
-import { and, asc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { type DevicePlatform, isDevicePlatform } from "../core.js";
-import { devices } from "../db/devices-schema.js";
 import { db } from "../db/query.js";
 import { voiceSessions } from "../db/voice-schema.js";
 import {
@@ -12,7 +10,6 @@ import {
   VOICE_DELEGATION_MODE,
   type VoiceCloseReason,
 } from "../db/voice-vocabulary.js";
-import { findHeldDevice } from "../hosted/device-store.js";
 import { readPlan } from "../hosted/plan-store.js";
 
 /**
@@ -27,7 +24,7 @@ import { readPlan } from "../hosted/plan-store.js";
  * the honest record, and a later connection's `session.closed` confirms it.
  * The seconds the quota meters are a separate ledger, `recordVoiceSeconds`.
  *
- * A sessions-route connection whose device socket went without a hang-up
+ * A connection whose device socket went without a hang-up
  * stamps `detached_at` on the open row, and a re-attach clears it, so an open
  * row stamped longer ago than the grace is a session no device came back for:
  * the scheduled tick reads those rows, oldest first and bounded, and ends
@@ -35,16 +32,8 @@ import { readPlan } from "../hosted/plan-store.js";
  * OpenAI by then is closed as a lost connection with its last unconfirmed
  * snapshot standing, so no row is read for closing twice.
  *
- * The device the session names is the one the handshake claimed, a Mac's row
- * or a phone's alike, and the write can name only a `devices` row the same
- * account holds: the id is read back out of that table under the account, so
- * a claim on another account's device, or on a row that has gone, leaves the
- * column null — the column's own word for a session that names no device —
- * and a briefing on offer stays unclaimed rather than claimed as someone
- * else's.
- *
- * A planning call's row also names the plan it was opened about, checked to
- * be the account's before anything is spent, and that binding is what a
+ * The row also names the plan the call was opened about, checked to be the
+ * account's before anything is spent, and that binding is what a
  * re-attach reads back: the attaching connection says nothing of a plan, so
  * a session cannot be moved onto another plan, or off its own, by what a
  * later connection sends.
@@ -60,12 +49,11 @@ type VoiceSessionRecordEffect<A> = Effect.Effect<
   SqlClient.SqlClient
 >;
 
-/** The session as its creation names it: the account, the live session, the device the handshake claimed, and the plan a planning call is about, if any. */
+/** The session as its creation names it: the account, the live session, and the plan the call is about. */
 interface VoiceSessionRegistration {
   userId: string;
   sessionId: string;
-  deviceId?: string | undefined;
-  planId?: string | undefined;
+  planId: string;
 }
 
 /** A plan as the account asking for a call about it names it. */
@@ -74,30 +62,13 @@ interface VoiceSessionPlanClaim {
   planId: string;
 }
 
-/** A device row as the account claiming it names it. */
-interface VoiceSessionDeviceClaim {
-  userId: string;
-  deviceId: string;
-}
-
-/**
- * A device row the account was shown to hold, as the session that claimed it
- * reads it: the platform the row named, and nothing where it named a word
- * this build does not know. It is the one place the caller's platform is
- * read, since the row is the account's own and the header the caller sent
- * names an id and never a platform.
- */
-interface HeldVoiceDevice {
-  readonly platform: DevicePlatform | undefined;
-}
-
 /** A live session as the account that opened it names it. */
 interface VoiceSessionOwnership {
   userId: string;
   sessionId: string;
 }
 
-/** A live session the account was shown to have opened: the plan its creation bound it to, if it was a planning call. */
+/** A live session the account was shown to have opened: the plan its creation bound it to, where its row names one. */
 interface OwnedVoiceSession {
   readonly planId: string | undefined;
 }
@@ -138,8 +109,6 @@ export interface VoiceSessionRecord {
    * session is already another account's, since the first owner keeps it.
    */
   register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<string | undefined>;
-  /** The device row the account holds under the id named, or nothing: the check the door makes before a session is spent on the claim. */
-  heldDevice(input: VoiceSessionDeviceClaim): VoiceSessionRecordEffect<HeldVoiceDevice | undefined>;
   /** The plan named, where the account holds it: the check the door makes before a planning call is spent, and what the call opens knowing. */
   heldPlan(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<Plan | undefined>;
   /** The live session named, where the account created it, with the plan it was bound to: one lookup over the indexed pair. */
@@ -168,21 +137,8 @@ const RegisterRequestSchema = Schema.Struct({
   userId: Schema.String,
   liveSessionId: Schema.String,
   delegationMode: Schema.Literal(VOICE_DELEGATION_MODE.CLIENT),
-  deviceId: Schema.NullOr(Schema.String),
-  planId: Schema.NullOr(Schema.String),
+  planId: Schema.String,
 });
-
-/**
- * The device id the row may carry, read back out of the account's own
- * `devices` rows rather than taken from the handshake: a claim on another
- * account's device, or on a row that has gone, selects nothing and the
- * column keeps the null that is its word for a session naming no device.
- * There is no builder spelling for a scalar subquery standing as an inserted
- * value, so it is a fragment over the same table, still inside the one
- * rendered statement and with both ids bound as its parameters.
- */
-const heldDeviceId = (deviceId: string | null, userId: string) =>
-  sql`(select ${devices.id} from ${devices} where ${devices.id} = ${deviceId} and ${devices.userId} = ${userId})`;
 
 const registerSession = SqlSchema.void({
   Request: RegisterRequestSchema,
@@ -193,7 +149,6 @@ const registerSession = SqlSchema.void({
         userId: row.userId,
         liveSessionId: row.liveSessionId,
         delegationMode: row.delegationMode,
-        deviceId: heldDeviceId(row.deviceId, row.userId),
         planId: row.planId,
       })
       .onConflictDoNothing({ target: voiceSessions.liveSessionId }),
@@ -312,23 +267,12 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           userId: input.userId,
           liveSessionId: input.sessionId,
           delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-          deviceId: input.deviceId ?? null,
-          planId: input.planId ?? null,
+          planId: input.planId,
         }),
         Effect.map(
           findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
           Option.match({ onNone: () => undefined, onSome: (row) => row.id }),
         ),
-      ),
-    heldDevice: (input) =>
-      Effect.map(
-        findHeldDevice(input),
-        Option.match({
-          onNone: () => undefined,
-          onSome: (row) => ({
-            platform: isDevicePlatform(row.platform) ? row.platform : undefined,
-          }),
-        }),
       ),
     heldPlan: (input) =>
       Effect.map(

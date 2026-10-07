@@ -1,20 +1,12 @@
-import { ASK_BOUNDS, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { OBSERVATION_TICK, OBSERVATION_TICK_PATH } from "./hosted/observation-bounds.js";
-import { TURN_EVENT_STREAM_BOUNDS, TURN_EVENT_STREAM_PATH } from "./hosted/turn-event-stream.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the voice functions carry the platform's longest generally
- * available duration. On the audio route that duration is the call's whole
- * life, since the service's own socket to OpenAI is the session and nothing
- * re-attaches to one.
+ * may run, so the voice function carries the platform's longest generally
+ * available duration.
  */
 export const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
-
-/** The per-turn read as its function is called: `brainTurnPath` rewritten onto its own function. */
-const BRAIN_TURN_READ_PATH = "/api/brain/turns/turn";
-/** A held turn read waits up to `ASK_BOUNDS.MAX_WAIT_MS`, with room for the standing reads either side of the wait. */
-const BRAIN_TURN_READ_MAX_DURATION_SECONDS = Math.ceil(ASK_BOUNDS.MAX_WAIT_MS / 1000) + 15;
 
 const API_PREFIX = "/api/";
 
@@ -32,11 +24,9 @@ export function routeKeyOf(path: string): string {
  * Grouping never moves a bound: a route joins a group whose duration is the
  * one it already had.
  */
-export const FUNCTION_GROUP = {
+const FUNCTION_GROUP = {
   DEFAULT: "default",
   OBSERVATION_TICK: "observation-tick",
-  TURN_EVENTS: "turn-events",
-  TURN_READ: "turn-read",
 } as const;
 type FunctionGroup = (typeof FUNCTION_GROUP)[keyof typeof FUNCTION_GROUP];
 
@@ -49,8 +39,8 @@ export interface FunctionDefinition {
   readonly routes: readonly string[];
   /**
    * Whether the bundle is a generated dispatcher over the routes, or the one
-   * route's own module. The voice routes export the `http.Server` Vercel
-   * upgrades WebSockets into, which no fetch dispatcher can front, so each
+   * route's own module. The voice route exports the `http.Server` Vercel
+   * upgrades WebSockets into, which no fetch dispatcher can front, so it
    * stays a function of its own.
    */
   readonly dispatches: boolean;
@@ -68,23 +58,13 @@ const GROUPS: readonly GroupDefinition[] = [
     maxDuration: OBSERVATION_TICK.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(OBSERVATION_TICK_PATH)],
   },
-  {
-    file: FUNCTION_GROUP.TURN_EVENTS,
-    maxDuration: TURN_EVENT_STREAM_BOUNDS.MAX_DURATION_SECONDS,
-    routes: [routeKeyOf(TURN_EVENT_STREAM_PATH)],
-  },
-  {
-    file: FUNCTION_GROUP.TURN_READ,
-    maxDuration: BRAIN_TURN_READ_MAX_DURATION_SECONDS,
-    routes: [routeKeyOf(BRAIN_TURN_READ_PATH)],
-  },
 ];
 
 const STANDALONE_ROUTES: readonly string[] = Object.values(VOICE_SERVICE_PATH).map(routeKeyOf);
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:
- * the grouped functions, the standalone voice functions, and the default
+ * the grouped functions, the standalone voice function, and the default
  * group over every route none of those claimed. Sorted by file, so the stubs,
  * the bundles, and the rewrites are written in one order.
  */

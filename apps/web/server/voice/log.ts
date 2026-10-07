@@ -1,11 +1,9 @@
-import type { DevicePlatform, HostedApiError } from "../core.js";
+import type { HostedApiError } from "../core.js";
 import type { VoiceSecondsOutcome } from "../hosted/quota.js";
-import type { VoiceRoute } from "./frames.js";
 
 /**
  * What the service writes down about itself: status codes, close codes,
- * outcome names, counts, and the platform of the device row a handshake
- * resolved. No line carries a session id, a bearer, an SDP, a transcript
+ * outcome names, and counts. No line carries a session id, a bearer, an SDP, a transcript
  * fragment, or any frame's content, so a log this service kept for a year
  * would still say nothing about anyone's conversation.
  */
@@ -27,23 +25,23 @@ export const LOG_EVENT = {
   /** The commentary that asks the model to begin, sent once the greeting stood. */
   GREETING_CUED: "greeting-cued",
   USAGE_RECORDED: "usage-recorded",
-  /** The hosted exchange stands on the session: the record, the brain, and the briefings run here for it. */
+  /** The hosted exchange stands on the session: the record and the brain run here for it. */
   EXCHANGE_ATTACHED: "exchange-attached",
   /** The composition offered an exchange and it could not stand on the session; the session is refused rather than run with no one to answer. */
   EXCHANGE_FAILED: "exchange-failed",
   /** The standing exchange reported something of itself: which of its fixed sentences, and nothing of the detail behind it. */
   EXCHANGE_REPORTED: "exchange-reported",
-  /** The device sent a frame its signed-in route does not admit; its socket was closed on it. */
+  /** The device sent a frame the service does not admit; its socket was closed on it. */
   FRAME_REFUSED: "frame-refused",
   SESSION_ENDED: "session-ended",
-  /** A session's own `voice_sessions` write failed; the route is all it says, as every other line is. */
+  /** A session's own `voice_sessions` write failed; the event is all it says. */
   SESSION_FAILED: "session-failed",
 } as const;
 
 /**
  * Whether `session.closed` was seen before the transports went, as the docs
  * define finalization, or whether the session was never ended here at all:
- * a sessions-route device socket that went without a hang-up leaves the
+ * a device socket that went without a hang-up leaves the
  * WebRTC session standing for the device to attach to again, and the
  * connection that later reads its `session.closed` is the one that confirms it.
  */
@@ -62,70 +60,37 @@ export interface RelayCounts {
   bytesToDevice: number;
   /** Reflected audio frames dropped by type, never forwarded. */
   droppedAudio: number;
-  /** Frames a route does not permit in that direction, dropped by type. */
-  droppedUnpermitted: number;
   /** Reports in the service's own vocabulary the device sent after the handshake, read here and never forwarded. */
   reportsRead: number;
-  /** Device frames a signed-in route refused, closing the socket; at most one, since the first ends the socket. */
+  /** Device frames the service refused, closing the socket; at most one, since the first ends the socket. */
   refusedUnpermitted: number;
 }
 
-/**
- * Which caller a line is about, where the handshake resolved one: the
- * platform of the `devices` row the account was shown to hold, so a failure
- * only one kind of caller sees is visible in these counts rather than in a
- * payload. It is read from that row and never from a header the caller chose,
- * and it is absent wherever no row was resolved — every upgrade refusal, a
- * handshake that named no device, a claim on a row the account does not
- * hold, the accountless introduction, and a re-attach, which proves the
- * session's owner rather than a device.
- */
-type ClientPlatform = { platform: DevicePlatform | undefined };
-
 export type LogEntry =
   | { event: typeof LOG_EVENT.UPGRADE_REFUSED; route: string; status: number }
-  | ({
-      event: typeof LOG_EVENT.SESSION_REFUSED;
-      route: VoiceRoute;
-      reason: HostedApiError;
-    } & ClientPlatform)
-  | { event: typeof LOG_EVENT.SESSION_CREATED; route: VoiceRoute }
-  | { event: typeof LOG_EVENT.SESSION_ATTACHED; route: VoiceRoute }
-  | { event: typeof LOG_EVENT.GREETING_SENT; route: VoiceRoute }
-  | { event: typeof LOG_EVENT.GREETING_ACKNOWLEDGED; route: VoiceRoute }
+  | { event: typeof LOG_EVENT.SESSION_REFUSED; reason: HostedApiError }
+  | { event: typeof LOG_EVENT.SESSION_CREATED }
+  | { event: typeof LOG_EVENT.SESSION_ATTACHED }
+  | { event: typeof LOG_EVENT.GREETING_SENT }
+  | { event: typeof LOG_EVENT.GREETING_ACKNOWLEDGED }
   | {
       event: typeof LOG_EVENT.GREETING_REFUSED;
-      route: VoiceRoute;
       errorType: string | undefined;
       errorCode: string | undefined;
     }
-  | { event: typeof LOG_EVENT.GREETING_UNACKNOWLEDGED; route: VoiceRoute }
-  | { event: typeof LOG_EVENT.GREETING_CUED; route: VoiceRoute }
-  | {
-      event: typeof LOG_EVENT.USAGE_RECORDED;
-      route: VoiceRoute;
-      seconds: number;
-      outcome: VoiceSecondsOutcome;
-    }
-  | { event: typeof LOG_EVENT.EXCHANGE_ATTACHED; route: VoiceRoute }
-  | ({ event: typeof LOG_EVENT.EXCHANGE_FAILED; route: VoiceRoute } & ClientPlatform)
-  | ({
-      event: typeof LOG_EVENT.EXCHANGE_REPORTED;
-      route: VoiceRoute;
-      reason: string;
-    } & ClientPlatform)
-  | ({
-      event: typeof LOG_EVENT.FRAME_REFUSED;
-      route: VoiceRoute;
-      type: string | undefined;
-    } & ClientPlatform)
+  | { event: typeof LOG_EVENT.GREETING_UNACKNOWLEDGED }
+  | { event: typeof LOG_EVENT.GREETING_CUED }
+  | { event: typeof LOG_EVENT.USAGE_RECORDED; seconds: number; outcome: VoiceSecondsOutcome }
+  | { event: typeof LOG_EVENT.EXCHANGE_ATTACHED }
+  | { event: typeof LOG_EVENT.EXCHANGE_FAILED }
+  | { event: typeof LOG_EVENT.EXCHANGE_REPORTED; reason: string }
+  | { event: typeof LOG_EVENT.FRAME_REFUSED; type: string | undefined }
   | ({
       event: typeof LOG_EVENT.SESSION_ENDED;
-      route: VoiceRoute;
       finalization: Finalization;
       seconds: number | undefined;
     } & RelayCounts)
-  | { event: typeof LOG_EVENT.SESSION_FAILED; route: VoiceRoute };
+  | { event: typeof LOG_EVENT.SESSION_FAILED };
 
 export type Log = (entry: LogEntry) => void;
 

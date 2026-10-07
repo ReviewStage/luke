@@ -13,7 +13,6 @@ import {
   isWireString,
   wireRecord as readWireRecord,
   type UnparsedWireValue,
-  type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
 import { declareReader } from "@sidecar/wire/effect";
@@ -211,34 +210,12 @@ function sameAccountPreferenceValue(current: UnparsedWireValue, next: UnparsedWi
   return JSON.stringify(current) === JSON.stringify(next);
 }
 
-function accountPreferenceRecord(value: UnparsedWireValue): WireRecord {
-  return isRecord(value) ? value : {};
-}
-
+/** A field's value as the merge settles it: the remote one where this device left it as last synced, its own otherwise. */
 function accountPreferenceWithLocalChanges(
-  field: AccountPreferenceField,
   remote: UnparsedWireValue,
   current: UnparsedWireValue,
   expected: UnparsedWireValue,
 ): UnparsedWireValue {
-  if (
-    field === APP_SETTING_SCHEMA.workspaceAgentDefaults.field ||
-    field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field
-  ) {
-    const entries = { ...accountPreferenceRecord(remote) };
-    const currentEntries = accountPreferenceRecord(current);
-    const expectedEntries = accountPreferenceRecord(expected);
-    const keys = new Set<string>();
-    for (const key of Object.keys(currentEntries)) keys.add(key);
-    for (const key of Object.keys(expectedEntries)) keys.add(key);
-    for (const key of keys) {
-      const currentEntry = currentEntries[key];
-      if (sameAccountPreferenceValue(currentEntry, expectedEntries[key])) continue;
-      if (currentEntry === undefined) delete entries[key];
-      else entries[key] = currentEntry;
-    }
-    return Object.keys(entries).length > 0 ? entries : undefined;
-  }
   return sameAccountPreferenceValue(current, expected) ? remote : current;
 }
 
@@ -251,7 +228,6 @@ function accountPreferencesWithLocalChanges(
   for (const field of ACCOUNT_PREFERENCE_FIELDS) {
     // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
     const value = accountPreferenceWithLocalChanges(
-      field,
       remote[field] as UnparsedWireValue,
       current[field] as UnparsedWireValue,
       expected[field] as UnparsedWireValue,
@@ -486,8 +462,7 @@ export class SettingsStore {
           if (!sameAccountPreferenceValue(persisted[field] as UnparsedWireValue, value)) {
             changed.push(field);
           }
-          if (value === undefined) delete next[field];
-          else Object.assign(next, { [field]: value });
+          Object.assign(next, { [field]: value });
         }
         return changed.length > 0 ? next : undefined;
       });
@@ -623,9 +598,7 @@ export class SettingsStore {
           },
         };
         if (persisted.account?.email && persisted.account.email !== account.email) {
-          for (const field of ACCOUNT_PREFERENCE_FIELDS) {
-            delete next[field];
-          }
+          for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
           delete next.accountPreferencesSync;
         }
         return next;
@@ -640,9 +613,7 @@ export class SettingsStore {
         if (!persisted.account) return undefined;
         const { account: _account, ...withoutAccount } = persisted;
         const next: PersistedSettings = { ...withoutAccount };
-        for (const field of ACCOUNT_PREFERENCE_FIELDS) {
-          delete next[field];
-        }
+        for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
         delete next.accountPreferencesSync;
         return next;
       }),

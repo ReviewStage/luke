@@ -55,9 +55,8 @@ in for the missing job before the first release.
   25-second deadline per account; and every tick begins by dropping the
   snapshot, the brain's transcript mark, and the pass record of every account no
   longer eligible, so a deleted key or a week's silence ends the observation
-  and empties what it kept. One account's pass is the same
-  read-only fan-out the on-demand endpoint runs, on a plugin built for that
-  pass alone under the account's decrypted key (`observation-pass.ts` over
+  and empties what it kept. One account's pass is a
+  read-only fan-out, on a plugin built for that pass alone under the account's decrypted key (`observation-pass.ts` over
   `cloud-observe.ts`): the workspaces, the chats, each chat's status, the agent
   kinds, and the projects the provider reports, and no chat's messages. A pass
   every provider answered whole replaces the account's one `roster_snapshot`
@@ -69,13 +68,13 @@ in for the missing job before the first release.
   retires, per provider it read, the conversation of every observed chat the
   roster no longer lists (`retireDepartedObservedConversations` in
   `store/observed-conversations.ts`, on the landed branch alone): stamped
-  `deleted_at` with its descendants on the terms of a Clear, skipped by every
+  `deleted_at` with its descendants, skipped by every
   read, purged thirty days on, and a chat listed again opens a fresh row
   under the partial index migration 0048 made. Nothing in the pass decides
   anything: no model runs in it, and nothing leaves it. The snapshot is never
   diffed: it is
-  what the Mac panel, the on-demand observe endpoint, and the brain's
-  `list_sessions` show, and what names the chats the opener may ask about.
+  what the brain's `list_sessions` shows, and what names the chats the opener
+  may ask about.
   The opener (`apps/web/server/hosted/brain-host/opener.ts`) runs for the
   same account right after its pass and under the same deadline, and what
   wakes it is a chat gaining messages, not the roster moving: for each cloud
@@ -137,19 +136,11 @@ in for the missing job before the first release.
   is pushed and nothing expires until it lifts; and an offer past its own instant is the sweep's to end, never pushed
   stale. A phone or watch reporting itself present is no reason to wait, since
   neither opens a session for an offer (`SPEAKING_PLATFORMS`, still
-  `{ macos }`); but a phone's or a watch's call that already stands claims a
-  briefing and speaks it exactly as a Mac's session does, since the exchange
-  behind the sessions and audio routes claims as the session's device and never
-  asks its platform, so such an offer is claimed and never pushed. Those are
-  two of the voice service's three routes (`apps/web/server/voice/frames.ts`
-  holds each route's frame policy; `apps/web/server/voice/opening.ts` holds
-  the openings): the sessions route, `/api/voice/sessions`, is a signed-in
-  device's WebRTC session, a Mac's or a phone's, created and relayed by the
-  service with the developer's voice and Luke's never transiting it; the
-  audio route, `/api/voice/audio`, is the third, where the service holds the
-  Live primary WebSocket on its own key for a device without WebRTC (the
-  watch) and relays PCM both ways, the one route on which audio transits the
-  service. The mark precedes the send:
+  `{ macos }`). The voice service has one route, `/api/voice/sessions`
+  (`apps/web/server/voice/frames.ts` holds its frame policy;
+  `apps/web/server/voice/opening.ts` its opening): a signed-in Mac's WebRTC
+  session about one plan, created and relayed by the service with the
+  developer's voice and Luke's never transiting it. The mark precedes the send:
   `markSpeechPushed` settles the offer under the conversation's lock, only a
   mark that landed is sent, and the next tick finds it settled, so what is
   guaranteed is at most one push per briefing, never that it arrived; a send
@@ -254,13 +245,11 @@ reads it, the moment the root first reaches it, so the edge is here rather than
 at the root that imports it), the renderer's own fiber sites — the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
-module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
+module-scope memoized runtime `apps/web/server/runtime.ts` and the three doors
 that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
 function module under `apps/web/server/routes/**` exports its `HttpRouter`
 through, which reads that runtime once per instance and lets the handler it
-builds do its own running), `apps/web/server/hosted/store-route.ts` (the same
-door for a hosted store route, whose handler is composed over the ambient
-`SqlClient` rather than a router), `apps/web/server/voice/function.ts`
+builds do its own running), `apps/web/server/voice/function.ts`
 (the voice service, stood for a function instance's life rather than for a
 request, so there is no request fiber to compose it into) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
@@ -384,8 +373,8 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
 reads it: `apps/desktop/src/shared/messages/acts.ts`,
-`packages/hosted/src/reads-wire.ts`, `packages/wire/src/effect/json-schema.ts`,
-and `apps/web/server/hosted/store/message-reads.ts` all produce or read it.
+`packages/wire/src/effect/json-schema.ts`, and
+`apps/web/server/hosted/store/message-reads.ts` all produce or read it.
 
 ### Idioms
 

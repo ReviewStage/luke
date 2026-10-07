@@ -59,9 +59,6 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
  */
 export const ACCOUNT_PREFERENCE_FIELDS = [
   APP_SETTING_SCHEMA.voice.field,
-  APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-  APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-  APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
 ] as const satisfies readonly AppSettingField[];
 
 export type AccountPreferenceField = (typeof ACCOUNT_PREFERENCE_FIELDS)[number];
@@ -72,23 +69,6 @@ const ACCOUNT_PREFERENCE_FIELD_SET: ReadonlySet<string> = new Set(ACCOUNT_PREFER
 
 function isAccountPreferenceField(value: UnparsedWireValue): value is AccountPreferenceField {
   return isWireString(value) && ACCOUNT_PREFERENCE_FIELD_SET.has(value);
-}
-
-function accountPreferenceDroppedMapEntries(
-  field: AccountPreferenceField,
-  rawValue: UnparsedWireValue,
-  parsedValue: UnparsedWireValue,
-): boolean {
-  if (
-    (field !== APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
-      field !== APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
-    !isRecord(rawValue)
-  ) {
-    return false;
-  }
-  const rawCount = Object.keys(rawValue).length;
-  if (rawCount === 0) return false;
-  return !isRecord(parsedValue) || Object.keys(parsedValue).length !== rawCount;
 }
 
 function parseAccountPreferences(
@@ -110,13 +90,6 @@ function parseAccountPreferences(
     }
     // SAFETY: The account-preference guard accepted this value as that setting's stored JSON shape.
     const parsedValue = parsed.value as UnparsedWireValue;
-    if (
-      source === "wire" &&
-      wireValue !== undefined &&
-      accountPreferenceDroppedMapEntries(field, wireValue, parsedValue)
-    ) {
-      return undefined;
-    }
     if (parsedValue !== undefined) {
       preferences[field] = parsedValue;
     }

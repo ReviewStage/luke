@@ -66,18 +66,6 @@ export interface ChildRecord {
   readonly failure: string | null;
 }
 
-/**
- * Where the account's children stand as one instant: the latest of any
- * child's stamps, the Clear that stamped one included, as Postgres renders it
- * to the microsecond, and that child's id to break a tie. Text rather than a
- * `Date` on the turn cursor's own terms: a millisecond cannot tell two stamps
- * set in the same millisecond apart.
- */
-export interface ChildrenHeadPosition {
-  readonly changedAt: string;
-  readonly id: string;
-}
-
 type ChildReadFailure = SqlError | Schema.SchemaError;
 
 /** The SDK's own name for a text part, which is what a task's words are read from. */
@@ -273,48 +261,6 @@ const findChild = SqlSchema.findOneOption({
   Result: ChildRowSchema,
   execute: (request) =>
     selectChildren(and(childOf(request.userId), eq(child.id, request.childId), STANDING_CHILD), 1),
-});
-
-/**
- * The instant a child last changed: opened, handed its task, stamped by a
- * Clear, its completion delivered, or its latest turn queued, started, or
- * settled, whichever is latest. Each stamp the child has not reached falls
- * back to its opening, so the expression is never null. The task's line
- * counts because the list answers its excerpt; the stamping counts because it
- * takes the child out of the list, which is a change the list reads
- * differently under; and the purge that removes the row thirty days on moves
- * the head once more, to whatever then stands.
- */
-const CHILD_CHANGED_AT = sql`
-  greatest(
-    ${child.createdAt},
-    coalesce(${firstLine.createdAt}, ${child.createdAt}),
-    coalesce(${child.deletedAt}, ${child.createdAt}),
-    coalesce(${child.completionDeliveredAt}, ${child.createdAt}),
-    coalesce(${latest.queuedAt}, ${child.createdAt}),
-    coalesce(${latest.startedAt}, ${child.createdAt}),
-    coalesce(${latest.settledAt}, ${child.createdAt})
-  )
-`;
-
-// Rendered as the turn cursor's instant is: the UTC wall clock with the zone
-// spelled here, so the text is a property of the query rather than of the
-// connection's TimeZone.
-const CHILD_CHANGED_AT_TEXT = sql<string>`((${CHILD_CHANGED_AT}) at time zone 'UTC')::text || '+00'`;
-
-const findChildrenHead = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, changedAt: Schema.String }),
-  execute: (request) =>
-    db
-      .select({ id: child.id, changedAt: CHILD_CHANGED_AT_TEXT })
-      .from(child)
-      .innerJoin(parent, PARENT_OF_CHILD)
-      .leftJoinLateral(latest, ON_TRUE)
-      .leftJoinLateral(firstLine, ON_TRUE)
-      .where(childOf(request.userId))
-      .orderBy(desc(CHILD_CHANGED_AT), desc(child.id))
-      .limit(1),
 });
 
 function childStatus(turnStatus: TurnStatus | null): ChildStatus {
@@ -577,13 +523,6 @@ export function readChild(
   childId: string,
 ): Effect.Effect<Option.Option<ChildRecord>, ChildReadFailure, SqlClient.SqlClient> {
   return Effect.map(findChild({ userId, childId }), Option.map(toChildRecord));
-}
-
-/** Where the account's children stand: the child that changed last and the instant it did, a stamped child counted; none while no child was ever opened. */
-export function childrenHead(
-  userId: string,
-): Effect.Effect<Option.Option<ChildrenHeadPosition>, ChildReadFailure, SqlClient.SqlClient> {
-  return findChildrenHead({ userId });
 }
 
 const SpawningMessageRowSchema = Schema.Struct({ id: Schema.String });

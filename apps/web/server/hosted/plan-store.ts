@@ -30,8 +30,7 @@ import { InstantColumnSchema } from "./store/database.js";
  * deleted, and a save that fails leaves the document as it was. A plan's
  * conversation is a `plan` conversation of the same account, opened once and
  * named on the row, and it goes with the plan: deleting the plan stamps it
- * `deleted_at` on the terms of a Clear, so the purge takes its words thirty
- * days on. Every function is an effect over the ambient `SqlClient` and names
+ * `deleted_at`, so the purge takes its words thirty days on. Every function is an effect over the ambient `SqlClient` and names
  * no database of its own.
  */
 

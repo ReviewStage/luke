@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { atInstant } from "@sidecar/wire/testing";
-import { eq } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import {
@@ -19,9 +18,7 @@ import {
   TURN_STATUS,
   type WireRecord,
 } from "../server/core";
-import { db } from "../server/db/query";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { voiceSessions } from "../server/db/voice-schema";
 import {
   APNS_DELIVERY,
   APNS_INTERRUPTION_LEVEL,
@@ -56,8 +53,6 @@ import {
   SPEECH_REFUSAL,
   type SpeechSweepStore,
 } from "../server/hosted/store/speech";
-import { type HostedBriefingDelivery, hostedBriefings } from "../server/voice/live-briefings";
-import { voiceSessionRecord } from "../server/voice/session-record";
 import {
   type HostedStoreTestRun,
   openHostedStoreTestDatabase,
@@ -244,50 +239,15 @@ async function deviceIds(userId: string): Promise<string[]> {
   return rows.map((row) => Schema.decodeUnknownSync(DeviceRowSchema)(row).id);
 }
 
-const sessionRecord = voiceSessionRecord(() => clock);
-
-const VoiceSessionDeviceRowSchema = Schema.Struct({ deviceId: Schema.NullOr(Schema.String) });
-
 /**
- * A call standing behind one device, as either signed-in route leaves it: the
- * `voice_sessions` row the opening registers naming that device, and one look
- * of the exchange's own briefing look over it, reading the device out of that
- * row the way `hostedLiveExchange` does. The look asks nothing about the
- * platform, so this is the same call on a Mac, a phone, or a watch. Answers
- * what it handed the service to speak.
+ * A briefing claimed by one device: the claim names the device and asks
+ * nothing about its platform, so this is the same claim from a Mac, a phone,
+ * or a watch. Answers the claim that landed.
  */
-async function standingCall(
-  userId: string,
-  deviceId: string,
-): Promise<readonly HostedBriefingDelivery[]> {
-  const liveSessionId = `sess_${randomUUID()}`;
-  await run(sessionRecord.register({ userId, sessionId: liveSessionId, deviceId }));
-  const spoken: HostedBriefingDelivery[] = [];
-  await run(
-    Effect.scoped(
-      Effect.flatMap(
-        hostedBriefings({
-          userId,
-          speech: store,
-          offers: database.store.speech,
-          tools: CATALOG_TOOL_SET,
-          deviceId: Effect.gen(function* () {
-            const [row] = yield* db
-              .select({ deviceId: voiceSessions.deviceId })
-              .from(voiceSessions)
-              .where(eq(voiceSessions.liveSessionId, liveSessionId));
-            if (row === undefined) return undefined;
-            return Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).deviceId ?? undefined;
-          }),
-          deliver: (delivery) => spoken.push(delivery),
-          now: () => clock,
-          report: () => undefined,
-        }),
-        (briefings) => briefings.look,
-      ),
-    ),
-  );
-  return spoken;
+async function claimedBy(userId: string, deviceId: string, messageId: string) {
+  const claimed = await run(claimSpeech(store, userId, messageId, deviceId, clock));
+  assert.ok(Result.isSuccess(claimed));
+  return claimed.success.claim;
 }
 
 function offer(overrides: Partial<SpeechOffer> = {}): SpeechOffer {
@@ -700,7 +660,7 @@ test("a pass reads only the accounts it is told", async () => {
   );
 });
 
-test("a phone's call standing: the session claims the briefing as the phone and speaks it, and no pass pushes it, inside the grace or past it", async () => {
+test("a briefing a phone's call claimed is pushed by no pass, inside the grace or past it", async () => {
   clock = NOW;
   const userId = await database.createUser();
   const phone = await device(userId, {
@@ -709,17 +669,10 @@ test("a phone's call standing: the session claims the briefing as the phone and 
     activeUntil: NOW + SPEECH_OFFER.TTL_MS,
   });
   const row = await offered(userId);
-  const spoken = await standingCall(userId, phone);
+  const claim = await claimedBy(userId, phone, row.messageId);
   const { seams, sent } = fakeSender();
 
-  assert.deepEqual(
-    spoken.map((delivery) => [
-      delivery.briefing,
-      delivery.claim.deviceId,
-      delivery.claim.messageId,
-    ]),
-    [[BRIEFING, phone, row.messageId]],
-  );
+  assert.deepEqual([claim.deviceId, claim.messageId], [phone, row.messageId]);
   assert.deepEqual(
     (await openOffers({ userId })).map((open) => [open.state, open.claimedByDeviceId]),
     [[SPEECH_STATE.CLAIMED, phone]],
@@ -734,7 +687,7 @@ test("a phone's call standing: the session claims the briefing as the phone and 
   ]);
 });
 
-test("a watch's call standing, as the audio route registers one: the session claims the briefing as the watch and the phone holding the token is pushed nothing; once the call has gone the next briefing is the push's", async () => {
+test("a briefing a watch's call claimed is pushed to nothing, not even the phone holding the token; the next briefing, which no call claims, is the push's", async () => {
   clock = NOW;
   const userId = await database.createUser();
   const watch = await device(userId, { platform: DEVICE_PLATFORM.WATCHOS, lastSeenAt: NOW });
@@ -745,17 +698,10 @@ test("a watch's call standing, as the audio route registers one: the session cla
     lastSeenAt: NOW - 60_000,
   });
   const claimed = await offered(userId);
-  const spoken = await standingCall(userId, watch);
+  const claim = await claimedBy(userId, watch, claimed.messageId);
   const { seams, sent } = fakeSender();
 
-  assert.deepEqual(
-    spoken.map((delivery) => [
-      delivery.briefing,
-      delivery.claim.deviceId,
-      delivery.claim.messageId,
-    ]),
-    [[BRIEFING, watch, claimed.messageId]],
-  );
+  assert.deepEqual([claim.deviceId, claim.messageId], [watch, claimed.messageId]);
   assert.deepEqual(await run(pushSpeech(seams, { now: clock, userIds: [userId] })), NOTHING);
   assert.equal(sent.length, 0);
   assert.deepEqual(await speechEvents(claimed.messageId), [
@@ -763,9 +709,8 @@ test("a watch's call standing, as the audio route registers one: the session cla
     { kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, deviceId: watch },
   ]);
 
-  // The watch hangs up: nothing looks at the offers any more, so the next
-  // briefing reaches the phone that holds the token, which the claim and not
-  // the platform is what had kept it from.
+  // The next briefing is claimed by nothing, so it reaches the phone that
+  // holds the token, which the claim and not the platform had kept it from.
   clock = NOW + 60_000;
   const pushed = await offered(userId);
   assert.deepEqual(await run(pushSpeech(seams, { now: clock, userIds: [userId] })), {

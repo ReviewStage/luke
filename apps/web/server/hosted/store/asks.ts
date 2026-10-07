@@ -78,7 +78,7 @@ interface AskDispatch {
   readonly turnId?: string;
 }
 
-/** The one answer a dispatch gives besides the row: the conversation it would run in no longer stands, a Clear having landed between the ask's admission and the dispatch's lock. */
+/** The one answer a dispatch gives besides the row: the conversation it would run in no longer stands, a deletion having landed between the ask's admission and the dispatch's lock. */
 export const ASK_DISPATCH_REFUSAL = {
   NO_CONVERSATION: "no_conversation",
 } as const;
@@ -96,7 +96,7 @@ export interface AskRecord {
   /**
    * Runs the dispatch under the conversation's lock unless a session is already written, handing it
    * the conversation's newest session as read under that lock, and writes what eve answered; answers
-   * the row after, or `NO_CONVERSATION` when the conversation no longer stands, so a Clear landing
+   * the row after, or `NO_CONVERSATION` when the conversation no longer stands, so a deletion landing
    * between the ask's admission and its dispatch is the caller's refusal and not a failure.
    */
   dispatchOnce(
