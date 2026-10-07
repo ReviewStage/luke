@@ -35,7 +35,6 @@ import { createPlan, readPlan, savePlanDocument } from "../server/hosted/plan-st
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
-  ESTIMATED_CHARS_PER_TOKEN,
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_AUDIO_APPEND,
   LIVE_INPUT_BOUNDS,
@@ -48,6 +47,7 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
   sessionInstructions,
+  startupTokens,
 } from "../server/live";
 import { deploymentExchange } from "../server/voice/deployment-exchange";
 import { VOICE_ROUTE } from "../server/voice/frames";
@@ -1363,7 +1363,7 @@ it.effect(
       const longText = String(longSeed?.text);
       assert.ok(longText.includes("Billing export"));
       assert.ok(!longText.includes(tail));
-      assert.ok(longText.length <= LIVE_INPUT_BOUNDS.TOKENS * ESTIMATED_CHARS_PER_TOKEN);
+      assert.ok(startupTokens(longText) <= LIVE_INPUT_BOUNDS.TOKENS);
       await hangUpConnection(cut.desktop, cut.attach, cut.upstream);
       await until(
         () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,

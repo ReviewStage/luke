@@ -1008,6 +1008,40 @@ test("a signed-in seed past the input bounds is refused by shape, before any ses
   assert.equal(context.openAi.creates.length, 0);
 });
 
+test("a signed-in seed past the startup token bound loses its oldest lines and keeps its developer notes", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+
+  const roster = developerMessage("Roster: one session working.");
+  // Each line is a thousand tokens at three ASCII characters to one, so ten
+  // with the roster are past the 8,192 the API takes and eight are not.
+  const lines = Array.from({ length: 10 }, (_, index) => ({
+    type: SEED_ITEM_TYPE,
+    role: SEED_ROLE.USER,
+    content: [{ type: SEED_CONTENT_TYPE.INPUT_TEXT, text: `${index}`.padEnd(3_000, "x") }],
+  }));
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, createFrame([roster, ...lines]));
+  await context.openAi.nextAttach();
+  const session = context.openAi.creates[0]?.body.session;
+  assert.ok(isRecord(session));
+  assert.deepEqual(session.input, [roster, ...lines.slice(2)]);
+});
+
+test("a signed-in seed whose developer notes alone are past the startup token bound is refused", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+
+  // A CJK character is a token of its own, so three full notes are past the bound.
+  const note = developerMessage("計".repeat(SESSIONS_INPUT_BOUNDS.CHARS));
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, createFrame([note, note, note]));
+  assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.INVALID_REQUEST);
+  assert.equal(context.openAi.creates.length, 0);
+});
+
 test("an introduction spends the shared ceiling only for an admitted frame, and is refused past it before any session is spent", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());

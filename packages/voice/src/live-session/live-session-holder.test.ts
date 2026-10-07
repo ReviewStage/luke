@@ -981,6 +981,37 @@ it.effect(
 );
 
 it.effect(
+  "an error naming no command, or naming one with no code, is logged by its type and code alone",
+  () =>
+    loggedLines((lines) =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+        assert.ok(created);
+        const planning = f.sidebands[0];
+        assert.ok(planning);
+        planning.started(created.sessionId);
+        planning.receive({
+          type: LIVE_SERVER_EVENT.ERROR,
+          event_id: "err-1",
+          error: { type: "server_error", code: null, message: "the words" },
+        });
+        planning.receive({
+          type: LIVE_SERVER_EVENT.ERROR,
+          event_id: "err-2",
+          client_event_id: "append-1",
+          error: { type: "invalid_request_error", code: "invalid_value", message: "the words" },
+        });
+        yield* settle();
+        assert.deepEqual(
+          lines.filter((line) => line.startsWith("voice error:")),
+          ["voice error: type=server_error code=none session=sess-1 planning=true"],
+        );
+      }),
+    ),
+);
+
+it.effect(
   "without the desk voice only a planning call is created, and no beat or briefing asks for a session",
   () =>
     Effect.gen(function* () {

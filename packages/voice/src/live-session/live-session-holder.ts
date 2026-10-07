@@ -14,12 +14,14 @@ import {
 } from "@sidecar/hosted";
 import {
   conversationSeedItems,
+  generalLiveError,
   type InitialItem,
   LIVE_CLOSE_REASON,
   LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   type LiveServerEvent,
   type LiveSessionClosed,
+  liveErrorFields,
   PROACTIVE_SPEECH_KIND,
   type ProactiveSpeechKind,
   type RosterSeedSession,
@@ -482,6 +484,12 @@ export class LiveSessionHolder {
         return Effect.void;
       case LIVE_SERVER_EVENT.SESSION_CLOSED:
         return this.#onClosed(session, event);
+      case LIVE_SERVER_EVENT.ERROR:
+        // The holder sends no command an error could name, so the general
+        // handler is the only one an error reaches here.
+        return generalLiveError(event)
+          ? Effect.logWarning(`voice error: ${liveErrorFields(event)} ${sessionFields(session)}`)
+          : Effect.void;
       default:
         return Effect.void;
     }

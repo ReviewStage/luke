@@ -431,6 +431,39 @@ const errorEventSchema: Schema.Codec<LiveErrorEvent, UnparsedWireValue> = schema
   }),
 );
 
+/** The client event an error is about, from whichever of its three places it arrived in; none for an error about no command. */
+export function liveErrorCommand(event: LiveErrorEvent): string | undefined {
+  return event.client_event_id ?? event.error.client_event_id ?? event.error.event_id;
+}
+
+/**
+ * Whether an error is one the conversations guide sends to a general
+ * handler: "errors whose code is `null` or whose client event ID is absent".
+ * A command's own handler still reads an error that names it; this one is
+ * logged as well when it came with no code.
+ */
+export function generalLiveError(event: LiveErrorEvent): boolean {
+  return event.error.code === undefined || liveErrorCommand(event) === undefined;
+}
+
+/** What an error's type or code may be written down as: a short machine word, or nothing of it. */
+const ERROR_WORD = /^[a-z0-9_.]{1,64}$/;
+
+function errorWord(value: string | undefined): string {
+  if (value === undefined) return "none";
+  return ERROR_WORD.test(value) ? value : "other";
+}
+
+/**
+ * An error as a log line may carry it: its type and code as the machine
+ * words they are, and never its message or param, which can quote what was
+ * sent. A type or code that is not a short machine word is written as
+ * `other`, so nothing the service chose to put there reaches a log.
+ */
+export function liveErrorFields(event: LiveErrorEvent): string {
+  return `type=${errorWord(event.error.type)} code=${errorWord(event.error.code)}`;
+}
+
 type LiveInfoEvent = Acknowledged & {
   type: typeof LIVE_SERVER_EVENT.INFO;
   code?: string;

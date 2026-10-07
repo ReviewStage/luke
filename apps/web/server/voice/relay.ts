@@ -9,6 +9,7 @@ import {
   type LiveClientEvent,
   type LiveServerEvent,
   type LiveSessionClosed,
+  liveErrorCommand,
   parseLiveServerEvent,
 } from "../live.js";
 import {
@@ -195,7 +196,7 @@ export function relaySession<R = never>(
     /** How a server event answers the opening command, or nothing when it is about something else. */
     const openingAnswer = (event: LiveServerEvent): OpeningSettled | undefined => {
       if (event.type === LIVE_SERVER_EVENT.ERROR) {
-        const about = event.client_event_id ?? event.error.client_event_id ?? event.error.event_id;
+        const about = liveErrorCommand(event);
         return about === openingEventId
           ? {
               outcome: OPENING_OUTCOME.REFUSED,

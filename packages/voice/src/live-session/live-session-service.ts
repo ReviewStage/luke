@@ -3,12 +3,15 @@ import { VOICE_PHASE, type VoicePhase } from "@sidecar/hosted/planning-view";
 import {
   chunkForAppend,
   commentaryAppend,
+  generalLiveError,
   instructionsAppend,
   LIVE_DELEGATION_TARGET,
   LIVE_IDLE_WINDOW_MS,
   LIVE_SERVER_EVENT,
   type LiveDelegationId,
   type LiveServerEvent,
+  liveErrorCommand,
+  liveErrorFields,
   PROACTIVE_SPEECH_KIND,
   type ProactiveSpeechKind,
   renderAskContext,
@@ -884,8 +887,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       case LIVE_SERVER_EVENT.USAGE_UPDATED:
         return Effect.void;
       case LIVE_SERVER_EVENT.ERROR: {
-        const about = event.client_event_id ?? event.error.client_event_id;
+        const about = liveErrorCommand(event);
         if (about !== undefined) session.channel.refuse(about);
+        // An error no command answers for is still written down, as its kind
+        // and code alone: the general handler the conversations guide asks for.
+        if (generalLiveError(event)) {
+          this.#options.report(
+            `A live error reached the general handler, ${liveErrorFields(event)}`,
+          );
+        }
         return Effect.void;
       }
       default:
