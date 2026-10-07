@@ -1,13 +1,20 @@
-import type { CredentialProvider } from "@sidecar/credentials/vocabulary";
 import {
+  CREDENTIAL_PROVIDERS,
+  type CredentialProvider,
+  isCredentialProviderId,
+} from "@sidecar/credentials/vocabulary";
+import {
+  type ObservedWorkspaceProject,
   PROVIDER_ID,
   type ProviderId,
   type WorkspaceAgentSelection,
   workspaceAgentModels,
+  workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
+import { isWorkspaceProviderId, type WorkspaceProviderId } from "#shared/messages/session";
 import { defaultProjectRowId } from "../settings-anchors";
 import type { WorkspaceProviderOption } from "./controls";
 import { SelectRow } from "./select-row";
@@ -19,6 +26,51 @@ import type { SettingsWrites } from "./writes";
    same absence, and an empty value for the same reason — no model, effort, or
    project id can collide with it. */
 const PROVIDER_DEFAULT_VALUE = "";
+
+/**
+ * The providers the default-workspace rows can offer: every provider
+ * currently offering projects, named the way its adapter names itself, plus
+ * one holding a stored default provider that is not offering right now — a
+ * provider falls back to its own display name, so the row still shows a
+ * choice it can name. A project has no such name to fall back to: its label
+ * lived on the observed list that stopped listing it, and an option labelled
+ * with the stored identity would offer a raw id for a default that already
+ * steers nothing. So each option carries only the projects its provider is
+ * offering, and a default the provider stops offering is cleared by the main
+ * process rather than shown here.
+ */
+export function workspaceProviderOptions(
+  offering: readonly ObservedWorkspaceProject[],
+  settings: AppSettingsView | undefined,
+): readonly WorkspaceProviderOption[] {
+  const fallbackName = (providerId: WorkspaceProviderId) =>
+    isCredentialProviderId(providerId) ? CREDENTIAL_PROVIDERS[providerId].displayName : providerId;
+  const names = new Map<WorkspaceProviderId, string>();
+  for (const project of offering) {
+    if (isWorkspaceProviderId(project.providerId)) {
+      names.set(project.providerId, project.providerName);
+    }
+  }
+  const storedProvider = settings?.defaultWorkspaceProvider;
+  if (storedProvider && !names.has(storedProvider)) {
+    names.set(storedProvider, fallbackName(storedProvider));
+  }
+  for (const providerId of Object.keys(settings?.workspaceProjectDefaults ?? {})) {
+    if (!isWorkspaceProviderId(providerId)) continue;
+    if (!names.has(providerId)) names.set(providerId, fallbackName(providerId));
+  }
+  return [...names.entries()].map(([id, name]) => {
+    const offered = offering
+      .filter((project) => project.providerId === id)
+      .map((project) => ({
+        id: workspaceProjectSelectionId(project),
+        label: project.targetName
+          ? `${project.repository} on ${project.targetName}`
+          : project.repository,
+      }));
+    return { id, name, projects: offered };
+  });
+}
 
 /**
  * Which model — and, where its agent takes one, which effort — this provider

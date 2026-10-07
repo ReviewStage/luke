@@ -4,7 +4,7 @@ import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from 
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, TRANSCRIPT_KIND, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { appSettingsWire } from "../../testing/spoken-setting-bridge";
 import { createHostOperator } from "./host-operator";
@@ -105,28 +105,6 @@ it.effect("every clearable plain setting reaches the host when cleared", () =>
       });
     }
   }),
-);
-
-it.effect(
-  "opening a transcript names the conversation and its kind, and the close carries nothing",
-  () =>
-    Effect.gen(function* () {
-      const { client, requests } = recordingClient();
-      const operator = operatorOver(client);
-
-      // The client above answers a settings write, which is no open; the operator reads that as the host not taking it.
-      assert.equal(yield* operator.openChildTranscript("agent-1", TRANSCRIPT_KIND.OBSERVED), false);
-      yield* operator.closeChildTranscript();
-
-      const [opened, closed] = requests;
-      assert.equal(opened?.method, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT);
-      assert.deepEqual(opened?.params, {
-        conversationId: "agent-1",
-        kind: TRANSCRIPT_KIND.OBSERVED,
-      });
-      assert.equal(closed?.method, GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT);
-      assert.deepEqual(closed?.params, {});
-    }),
 );
 
 it.effect("a forgotten entry travels as an absent value field", () =>

@@ -61,12 +61,7 @@ export interface AppGuideSetting {
   manual: string;
 }
 
-/**
- * The panel's tab bar, and so the tabs a panel-tab change is counted as. The
- * Sessions and Conversation tabs are hidden for now (LUKE-350): the renderer
- * still draws them but nothing reaches them, and they come back by returning
- * here and to the bar's own list.
- */
+/** The window's two places, and so the tabs a panel-tab change is counted as. */
 export const APP_PANEL_TAB = {
   /** The named plans, and the one open plan's saved document and call. */
   PLANS: "plans",
@@ -74,19 +69,6 @@ export const APP_PANEL_TAB = {
 } as const;
 
 export type AppPanelTab = (typeof APP_PANEL_TAB)[keyof typeof APP_PANEL_TAB];
-
-/**
- * The two orders the session list reads in. Defined here rather than in the
- * renderer because a spoken ask names an order too, and the words the panel's
- * own control uses and the words a tool call is validated against must be one
- * vocabulary — the renderer aliases this set rather than declaring its own.
- */
-export const SESSION_LIST_SORT = {
-  URGENCY: "urgency",
-  RECENCY: "recency",
-} as const;
-
-export type SessionListSort = (typeof SESSION_LIST_SORT)[keyof typeof SESSION_LIST_SORT];
 
 /** The guide's own rendering of a toggle's state. */
 export function appToggleText(enabled: boolean): AppToggleValue {

@@ -1216,8 +1216,7 @@ an aside, a second line of the developer's — by moving it to a fresh position
 where any row stands past it, and leaves it where it opened where none does,
 so the thread reads as it was heard: what was said while he worked, then what
 he did and thought, then what was said of it. Every device holds a message once, by its id, where its latest
-delivery placed it; `reads-wire.ts` states the rule and the desktop's
-`conversation-view-sync.ts` keeps it. A device from before this rule holds the line where it first read it and
+delivery placed it; `reads-wire.ts` states the rule. A device from before this rule holds the line where it first read it and
 reads it again where it moved, so it draws the line twice until it reads the
 conversation from its beginning; that is the cost of re-delivering by the
 one cursor every device already pages by, against the alternative — a new
@@ -1639,14 +1638,13 @@ signal a device polls between them. The handlers are
 `server/hosted/resource-reads.ts` and `server/hosted/change-signal.ts`, over
 the store alone and never a table, composed by `server/hosted/store-route.ts`
 under the same bearer and the same kill switch the observation tick keeps.
-Beside them stands the one write the Conversation tab has,
+Beside them stands the one write the Conversation had,
 `api/conversation/clear.ts` (`server/hosted/conversation-clear.ts`): a POST
 carrying nothing, which runs the store's Clear — the standing main and its
 descendants stamped, a new main opened — and answers the main it opened and
 how many conversations the stamp reached, so every Mac on the account sees
-the same empty main on its next poll. The desktop's side of all of it is
-`@sidecar/hosted`'s `conversation-client.ts`, and the picture a Mac keeps
-from the reads is `@sidecar/host`'s `conversation-view-sync.ts`.
+the same empty main on its next poll. No desktop reads any of it now: the
+Mac's Conversation tab and its client are gone.
 The messages read is the Conversation view: the store's `listMessages` over
 the standing main and every standing observed conversation, read back under
 the brain catalog's registry (`server/hosted/brain-tool-set.ts`, the

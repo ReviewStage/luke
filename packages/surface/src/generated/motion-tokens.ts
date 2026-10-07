@@ -21,9 +21,6 @@ export const MOTION_DELAY_MS = {
   ROW_STAGGER: 32,
 } as const;
 
-/** How far a bubble floats off the display's top edge. CSS: `--bubble-lift`. */
-export const BUBBLE_LIFT = 4;
-
 /** Tallest caption block the window holds — sized past a whole spoken reply,
  * because the block grows to the words and nothing scrolls; a taller stack
  * rolls up inside it. CSS: `--caption-max`. */
@@ -35,6 +32,3 @@ export const VOICE_BAND_INSET = 6;
 
 /** Expanded panel width. CSS: `--panel-width`. */
 export const PANEL_WIDTH = 620;
-
-/** Expanded panel height ceiling. CSS: `--panel-height-max`. */
-export const PANEL_MAX_HEIGHT = 520;

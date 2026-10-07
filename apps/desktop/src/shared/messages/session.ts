@@ -1,30 +1,8 @@
-import { isProviderId, type Session } from "@sidecar/session";
+import type { Session } from "@sidecar/session";
 import type { Rectangle, ResolvedNotchGeometry } from "@sidecar/surface";
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
-export {
-  isWorkspaceProviderId,
-  type SessionOpenResult,
-  type SessionWriteResult,
-  type WorkspaceProviderId,
-} from "@sidecar/session";
+export { isWorkspaceProviderId, type WorkspaceProviderId } from "@sidecar/session";
 export type { WindowMode } from "@sidecar/surface";
-
-/**
- * A session as its provider named it, read at a process boundary. The
- * provider id is admitted against the registry rather than typed by it: a
- * `SessionIdentity` carries the id its provider reported, and this build's own
- * registry is what says whether that is one it observes.
- */
-export function isSessionIdentity(value: UnparsedWireValue): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    isWireString(value.providerId) &&
-    isProviderId(value.providerId) &&
-    isWireString(value.providerSessionId) &&
-    value.providerSessionId.length > 0
-  );
-}
 
 /**
  * Which surface a window exists to draw. Every window loads the same renderer

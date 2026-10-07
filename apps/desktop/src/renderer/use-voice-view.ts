@@ -1,62 +1,18 @@
-import type { ConversationViewSnapshot } from "@sidecar/session";
-import { NoticeStrip } from "@sidecar/voice/orchestrator";
-import { Effect } from "effect";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
 import {
   IDLE_VOICE_VIEW,
   SILENT_VOICE_LEVELS,
   VOICE_COMMAND,
-  VOICE_COMMAND_OUTCOME,
-  type VoiceCommandOutcome,
   type VoiceLevels,
   type VoiceSpeakers,
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { useAct } from "./act";
-import {
-  foldLiveLines,
-  NO_LIVE_LINES,
-  type PlacedLiveEntry,
-  shownLiveEntries,
-} from "./conversation-live-lines";
-import { rendererServicesNow } from "./renderer-runtime";
 import { useAppState } from "./use-app-state";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
-
-/** What the strip says when the stored thread could not be deleted. */
-/** What the strip says of a Clear the service did not take: the thread stands exactly as it was. */
-export const CLEAR_FAILED_REASON =
-  "Luke's service could not clear the conversation, so it still stands. Try again in a moment.";
-
-/**
- * The two lines the panel puts on the strip itself: a fault and a notice the
- * main process answered to this panel's own press, which the voice window
- * never saw and so never reports.
- */
-interface PanelStripLines {
-  error: string | undefined;
-  notice: string | undefined;
-}
-
-const NO_PANEL_STRIP_LINES: PanelStripLines = { error: undefined, notice: undefined };
-
-/**
- * The view the panel draws: the voice window's report, with the panel's own
- * strip lines standing over the report's for as long as they last. Each line
- * displaces only its own slot, so a refusal never hides a fault, and a report
- * the panel adds nothing to is handed on as the same object.
- */
-export function panelVoiceView(reported: VoiceView, strip: PanelStripLines): VoiceView {
-  if (strip.error === undefined && strip.notice === undefined) return reported;
-  return {
-    ...reported,
-    voiceError: strip.error ?? reported.voiceError,
-    voiceNotice: strip.notice ?? reported.voiceNotice,
-  };
-}
 
 /**
  * How long a voice has been active, read off the relayed levels with the
@@ -187,18 +143,9 @@ function useVoiceActive(report: LevelReport, voice: WaveformVoice, live: boolean
   return live && active;
 }
 
-/** The thread before the first read lands, which is what a panel with no document yet compares live lines against. */
-const UNREAD_CONVERSATION: ConversationViewSnapshot = { groups: [], settled: false };
-
 interface VoiceViewState {
   /** The live conversation as the voice window last reported it. */
   view: VoiceView;
-  /**
-   * The lines the Conversation tab draws ahead of the record: the call's rows
-   * as reported, those that left the report while the record catches up, and
-   * none the record already shows (`conversation-live-lines.ts`).
-   */
-  liveConversationEntries: readonly PlacedLiveEntry[];
   /** Whether Luke is speaking — his reply under way — as of the last report. */
   speaking: boolean;
   /** Whether the developer's microphone is being heard, which can stand with {@link speaking}. */
@@ -210,8 +157,6 @@ interface VoiceViewState {
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   stopSpeaking: () => void;
   requestMicrophoneAccess: () => void;
-  /** Clears the visible history, the next call's context, and the stored file. */
-  clearConversationLines: () => void;
 }
 
 /**
@@ -223,7 +168,7 @@ interface VoiceViewState {
  * reload, close, or display change therefore costs the exchange nothing.
  */
 export function useVoiceView(): VoiceViewState {
-  const { act, tell } = useAct();
+  const { tell } = useAct();
   const state = useAppState();
   // A voice window that went away leaves no view behind, and an idle voice is
   // what every panel draws in its place.
@@ -242,59 +187,19 @@ export function useVoiceView(): VoiceViewState {
     luke: useVoiceActive(levelReport, WAVEFORM_VOICE.LUKE, view.lukeSpeaking),
   };
 
-  // The panel's own strip lines, on the same clock the voice window's strip
-  // keeps, because they share the box the developer reads them in. The strip
-  // reports each change into React state, so the view below re-composes on a
-  // line arriving or expiring.
-  const [stripLines, setStripLines] = useState(NO_PANEL_STRIP_LINES);
-  const [strip] = useState(() => {
-    const created: NoticeStrip = new NoticeStrip({
-      onChanged: () => setStripLines({ error: created.error, notice: created.notice }),
-      fork: (effect) => Effect.runForkWith(rendererServicesNow())(effect),
-    });
-    return created;
-  });
-  useEffect(() => () => strip.stop(), [strip]);
-
-  // The lines drawn ahead of the record, each until a row of its own session
-  // stands for it. The fold runs on each report; no clock re-reads it.
-  const lines = view.liveConversationLines;
-  const conversation = state?.conversation ?? UNREAD_CONVERSATION;
-  const [hold, setHold] = useState(NO_LIVE_LINES);
-  useEffect(() => {
-    setHold((standing) => foldLiveLines(standing, lines));
-  }, [lines]);
-  const liveConversationEntries = useMemo(
-    () => shownLiveEntries(hold, conversation),
-    [hold, conversation],
-  );
-
   const stopSpeaking = useCallback(() => {
     tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
   }, []);
   const requestMicrophoneAccess = useCallback(() => {
     tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS });
   }, []);
-  // The stored thread refusing to go is the main process's answer to this
-  // press, not anything the voice window saw, so it is the panel's own fault
-  // to report.
-  const clearConversationLines = useCallback(() => {
-    act(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.CLEAR_CONVERSATION })
-      .catch((): VoiceCommandOutcome => VOICE_COMMAND_OUTCOME.REFUSED)
-      .then((outcome) => {
-        if (outcome === VOICE_COMMAND_OUTCOME.REFUSED) strip.showError(CLEAR_FAILED_REASON);
-      });
-  }, [strip]);
-
   return {
-    view: panelVoiceView(view, stripLines),
-    liveConversationEntries,
+    view,
     speaking: view.lukeSpeaking,
     listening: view.listening,
     levels: levelReport.levels,
     voiceActive,
     stopSpeaking,
     requestMicrophoneAccess,
-    clearConversationLines,
   };
 }

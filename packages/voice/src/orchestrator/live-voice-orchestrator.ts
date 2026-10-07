@@ -43,15 +43,6 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   lukeCaptions: readonly string[] | undefined;
   /** The developer's own rows while they are still being said, under the captions preference alone. */
   developerCaptions: readonly string[] | undefined;
-  /**
-   * Both speakers' rows of the standing call, settled or not, for the
-   * Conversation tab to draw ahead of the record: a row settling is when the
-   * service starts writing it, and the panel keeps the line until the record
-   * shows it, so nothing is dropped here on a clock.
-   */
-  liveConversationLines: readonly LiveCaptionRow[];
-  /** Whether the developer is being heard and has not been transcribed yet. */
-  spokenAskPending: boolean;
   /** The plan the standing call is about, where the panel's open plan opened it; none for a desk call or no call. */
   callPlanId: string | undefined;
 }
@@ -100,8 +91,6 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.talkOpening === right.talkOpening &&
     left.lukeCaptions === right.lukeCaptions &&
     left.developerCaptions === right.developerCaptions &&
-    left.liveConversationLines === right.liveConversationLines &&
-    left.spokenAskPending === right.spokenAskPending &&
     left.callPlanId === right.callPlanId &&
     left.listening === right.listening &&
     left.lukeSpeaking === right.lukeSpeaking
@@ -152,9 +141,6 @@ export class LiveVoiceOrchestrator {
   #rows: readonly LiveCaptionRow[] = [];
   #lukeCaptions: readonly string[] | undefined;
   #developerCaptions: readonly string[] | undefined;
-  #liveLines: readonly LiveCaptionRow[] = [];
-  /** Whether a row of the developer's is still being said, which is what tells a fresh ask's place from one already written on. */
-  #askBeingSaid = false;
   #talkOpening = false;
   /** Whether the microphone was last heard live, kept across the call's own end so a lost session knows what it was carrying. */
   #lastListening = false;
@@ -628,16 +614,12 @@ export class LiveVoiceOrchestrator {
    * The captions as the panel draws them: Luke's words under the housing
    * while he speaks and there is a reason to read them, the developer's own
    * words while they are still being said and the captions preference asks
-   * for them, and every row of the call, settled or not, as a line the
-   * Conversation tab draws ahead of the record. A silent output is a reason to
+   * for them. A silent output is a reason to
    * read Luke, who could not otherwise be heard, and no reason to read the
    * developer, who said the words themselves; so their captions follow the
    * preference alone. A developer row is unsettled for the ledger's gap after
    * its last fragment, which is what keeps a finished sentence on screen a
-   * moment after the transcript catches up with it. A settled row is not
-   * dropped from the lines here: the panel drops a line once the record shows
-   * it, so the words never leave the screen between the settle and the read
-   * that brings them back.
+   * moment after the transcript catches up with it.
    */
   #recomposeCaptions(): void {
     const unsettled = this.#rows.filter((row) => !row.settled);
@@ -657,8 +639,6 @@ export class LiveVoiceOrchestrator {
     if (!sameWords(this.#developerCaptions, nextDeveloperCaptions)) {
       this.#developerCaptions = nextDeveloperCaptions;
     }
-    if (!sameLines(this.#liveLines, this.#rows)) this.#liveLines = this.#rows;
-    this.#askBeingSaid = unsettled.some((row) => row.entry.kind === CONVERSATION_ENTRY_KIND.ASK);
   }
 
   #compose(): LiveVoiceView {
@@ -671,8 +651,6 @@ export class LiveVoiceOrchestrator {
       talkOpening: this.#talkOpening,
       lukeCaptions: this.#lukeCaptions,
       developerCaptions: this.#developerCaptions,
-      liveConversationLines: this.#liveLines,
-      spokenAskPending: this.#status === LIVE_STATUS.LISTENING && !this.#askBeingSaid,
       callPlanId: this.#call === undefined ? undefined : this.#callPlan,
     };
   }
@@ -708,21 +686,4 @@ function sameWords(
   if (left === right) return true;
   if (!left || !right || left.length !== right.length) return false;
   return left.every((word, index) => word === right[index]);
-}
-
-function sameLines(left: readonly LiveCaptionRow[], right: readonly LiveCaptionRow[]) {
-  if (left.length !== right.length) return false;
-  return left.every((line, index) => {
-    const other = right[index];
-    return (
-      other !== undefined &&
-      line.rowId === other.rowId &&
-      line.voiceSessionId === other.voiceSessionId &&
-      line.settled === other.settled &&
-      line.startMs === other.startMs &&
-      line.endMs === other.endMs &&
-      line.entry.kind === other.entry.kind &&
-      line.entry.words === other.entry.words
-    );
-  });
 }

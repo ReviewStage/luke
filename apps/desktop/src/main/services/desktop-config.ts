@@ -10,8 +10,6 @@ interface DesktopLaunch {
   readonly captureOutput: string | undefined;
   readonly profile: string;
   readonly fixtureName: string | undefined;
-  readonly startPeeked: boolean;
-  readonly startInSlot: boolean;
   readonly captureMode: boolean;
   readonly fixtureMode: boolean;
 }

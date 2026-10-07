@@ -66,35 +66,6 @@ export function CopyIcon(): React.JSX.Element {
   );
 }
 
-export function ThumbsUpIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M7 10.5V20H4.6a1.1 1.1 0 0 1-1.1-1.1v-7.3a1.1 1.1 0 0 1 1.1-1.1z" />
-      <path d="M7 10.5l4.3-7.2a1.7 1.7 0 0 1 3.1.9V9h4.2a2.1 2.1 0 0 1 2.1 2.4l-1.1 6.7A2.3 2.3 0 0 1 17.3 20H7" />
-    </Glyph>
-  );
-}
-
-export function ThumbsDownIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M7 13.5V4H4.6a1.1 1.1 0 0 0-1.1 1.1v7.3a1.1 1.1 0 0 0 1.1 1.1z" />
-      <path d="M7 13.5l4.3 7.2a1.7 1.7 0 0 0 3.1-.9V15h4.2a2.1 2.1 0 0 0 2.1-2.4l-1.1-6.7A2.3 2.3 0 0 0 17.3 4H7" />
-    </Glyph>
-  );
-}
-
-/** Three dots in a line: more of a row's controls, folded behind one press. */
-export function EllipsisIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <circle cx="5" cy="12" r="1.1" fill="currentColor" />
-      <circle cx="12" cy="12" r="1.1" fill="currentColor" />
-      <circle cx="19" cy="12" r="1.1" fill="currentColor" />
-    </Glyph>
-  );
-}
-
 export function PencilIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
@@ -261,26 +232,6 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
-/**
- * A robot's head: a coding agent Luke follows, drawn where the chip naming
- * one leads to its transcript here rather than to the provider that runs it,
- * so the mark says whose words the row records and not which app to open.
- */
-export function RobotIcon({ className }: { className?: string } = {}): React.JSX.Element {
-  return (
-    <Glyph {...(className === undefined ? undefined : { className })}>
-      <rect x="4.6" y="8.4" width="14.8" height="11" rx="2.6" />
-      <path d="M12 8.4V5.2" />
-      <circle cx="12" cy="3.9" r="1.3" />
-      <path d="M4.6 13H2.6" />
-      <path d="M19.4 13h2" />
-      <circle cx="9.2" cy="13.4" r="1.1" fill="currentColor" stroke="none" />
-      <circle cx="14.8" cy="13.4" r="1.1" fill="currentColor" stroke="none" />
-      <path d="M9.4 16.6h5.2" />
-    </Glyph>
-  );
-}
-
 /** A person: the account the app is signed in as. */
 export function UserIcon(): React.JSX.Element {
   return (
@@ -316,33 +267,6 @@ export function LaptopIcon(): React.JSX.Element {
     <Glyph className="filter-icon">
       <rect x="4.2" y="5.4" width="15.6" height="10.4" rx="1.7" />
       <path d="M2.4 18.8h19.2" />
-    </Glyph>
-  );
-}
-
-/**
- * Work happening somewhere else. The badge on a session's mark says the same
- * thing in the same shape — two small puffs and one large over a flat base —
- * drawn here as an outline rather than a fill, because at this size it sits
- * beside the laptop and the pair has to read as one weight.
- */
-export function CloudIcon(): React.JSX.Element {
-  return (
-    <Glyph className="filter-icon">
-      <path d="M7.3 18.4h9.5a4.3 4.3 0 0 0 .8-8.52 6.1 6.1 0 0 0-11.66-1.3A4.35 4.35 0 0 0 7.3 18.4Z" />
-    </Glyph>
-  );
-}
-
-/** Realtime voice sessions: the familiar filled Material Symbols graphic_eq shape. */
-export function VoiceIcon(): React.JSX.Element {
-  return (
-    <Glyph className="filter-icon">
-      <path
-        d="M6 18q-.825 0-1.412-.587Q4 16.825 4 16V8q0-.825.588-1.412Q5.175 6 6 6t1.413.588Q8 7.175 8 8v8q0 .825-.587 1.413Q6.825 18 6 18Zm6 4q-.825 0-1.412-.587Q10 20.825 10 20V4q0-.825.588-1.412Q11.175 2 12 2t1.413.588Q14 3.175 14 4v16q0 .825-.587 1.413Q12.825 22 12 22Zm6-4q-.825 0-1.412-.587Q16 16.825 16 16V8q0-.825.588-1.412Q17.175 6 18 6t1.413.588Q20 7.175 20 8v8q0 .825-.587 1.413Q18.825 18 18 18Z"
-        fill="currentColor"
-        stroke="none"
-      />
     </Glyph>
   );
 }
@@ -412,74 +336,12 @@ export function RemoveIcon(): React.JSX.Element {
   );
 }
 
-/** Sends what was typed, drawn the way every chat surface draws it: an arrow up. */
-export function SendIcon(): React.JSX.Element {
-  return (
-    <Glyph className="control-icon">
-      <path d="M12 18.6V5.8" />
-      <path d="m6.4 11.2 5.6-5.6 5.6 5.6" />
-    </Glyph>
-  );
-}
-
-/** A speech bubble: words sent to a session. */
-export function MessageIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M20.4 6.2a1.8 1.8 0 0 0-1.8-1.8H5.4a1.8 1.8 0 0 0-1.8 1.8v7.4a1.8 1.8 0 0 0 1.8 1.8h3.4v3.8l4.4-3.8h5.4a1.8 1.8 0 0 0 1.8-1.8z" />
-    </Glyph>
-  );
-}
-
-/** A bolt: a control a session advertised, pressed. */
-export function ControlIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M13.2 2.8 5.6 13.6h5.6l-1 7.6 7.6-10.8h-5.6z" />
-    </Glyph>
-  );
-}
-
-/** Two lobes over a stem: Luke's thinking, the fold a reader opens to see it. */
-export function BrainIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M11 20.6V4.8a3 3 0 0 0-5 2.3 3 3 0 0 0-1.6 5 3 3 0 0 0 .8 5.1 3 3 0 0 0 5.8 3.4Z" />
-      <path d="M13 20.6V4.8a3 3 0 0 1 5 2.3 3 3 0 0 1 1.6 5 3 3 0 0 1-.8 5.1 3 3 0 0 1-5.8 3.4Z" />
-      <path d="M11 9.4a2.6 2.6 0 0 1-2.4 2.4" />
-      <path d="M13 13.8a2.6 2.6 0 0 1 2.6 2.4" />
-    </Glyph>
-  );
-}
-
-/** A box with its lid on: the settled thing filed away. */
-export function ArchiveIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M4 4.6h16v4H4z" />
-      <path d="M5.4 8.6v9.2a1.6 1.6 0 0 0 1.6 1.6h10a1.6 1.6 0 0 0 1.6-1.6V8.6" />
-      <path d="M10 12.4h4" />
-    </Glyph>
-  );
-}
-
 /** A plus: a workspace or an agent that did not exist before the action. */
 export function PlusIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
       <path d="M12 5.4v13.2" />
       <path d="M5.4 12h13.2" />
-    </Glyph>
-  );
-}
-
-/** Three lines: a roster or a listing, read whole. */
-export function ListIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M4.4 6.6h15.2" />
-      <path d="M4.4 12h15.2" />
-      <path d="M4.4 17.4h15.2" />
     </Glyph>
   );
 }
@@ -535,34 +397,6 @@ export function OptionsIcon(): React.JSX.Element {
       <path d="M3.6 15.6h2.6" />
       <path d="M10.6 15.6h9.8" />
       <circle cx="8.4" cy="15.6" r="2.2" />
-    </svg>
-  );
-}
-
-export function BranchGlyph(): React.JSX.Element {
-  return (
-    <svg className="row-branch-glyph" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-      <g fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
-        <circle cx="4.2" cy="3.4" r="1.55" />
-        <circle cx="4.2" cy="12.6" r="1.55" />
-        <circle cx="11.8" cy="5.2" r="1.55" />
-        <path d="M4.2 5v6M11.8 6.9c0 2.5-2.6 3-5.4 3.4" />
-      </g>
-    </svg>
-  );
-}
-
-export function CheckGlyph(): React.JSX.Element {
-  return (
-    <svg className="row-check" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
-      <path
-        d="M2.4 6.6l2.5 2.5 4.7-5.6"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
     </svg>
   );
 }

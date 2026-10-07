@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
-import { ACTION_REFUSAL } from "@sidecar/actions";
 import { GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
 import { ACTION_RESULT_STATUS, isRecord, isWireString } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
@@ -134,40 +133,6 @@ it.effect("a cloud provider's key is refused signed out, and the store never hel
       fixtureHostLayer(stateRoot),
     );
   }),
-);
-
-it.effect(
-  "a row's write reaches the host as a method and is refused for a session the roster does not hold",
-  (t) =>
-    Effect.gen(function* () {
-      const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
-      yield* Effect.provide(
-        Effect.gen(function* () {
-          const host = yield* HostTag;
-          const identity = { providerId: "conductor", providerSessionId: "chat-nobody-observed" };
-          const [sent, pressed] = yield* Effect.all(
-            [
-              host.gateway.call(GATEWAY_METHOD.SESSION_SEND_MESSAGE, { identity, text: "hello" }),
-              host.gateway.call(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL, {
-                identity,
-                controlId: "cancel-run",
-              }),
-            ],
-            { concurrency: "unbounded" },
-          );
-          // A fixture host observes nothing, so admission's own roster refusal is the
-          // answer for both writes: the method is wired, and nothing past admission ran.
-          for (const response of [sent, pressed]) {
-            assert.ok(response.ok);
-            assert.deepEqual(response.result, {
-              status: ACTION_RESULT_STATUS.REJECTED,
-              reason: ACTION_REFUSAL.NO_SESSION,
-            });
-          }
-        }),
-        fixtureHostLayer(stateRoot),
-      );
-    }),
 );
 
 it.effect(

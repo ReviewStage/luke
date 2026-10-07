@@ -367,16 +367,12 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# docs/DESIGN.md admits one native motion on the surface: the Conversation thread's
-# stamp column, scrolled in by the thread's own sideways scroll and put back by
-# scroll snapping, because only the browser sees the fingers lift. Everything
-# else moves on the spring, so a snap anywhere else is a second exception the
-# contract has not granted.
-snaps_outside_history=$(grep -rln 'scroll-snap-type' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer/styles" |
-    grep -v '/conversation\.css$' || true)
-if [[ -n "$snaps_outside_history" ]]; then
-    printf 'error: scroll snapping is the Conversation thread'"'"'s alone (docs/DESIGN.md); found in:\n%s\n' \
-        "$snaps_outside_history" >&2
+# docs/DESIGN.md admits no native motion on the surface: everything moves on
+# the spring, so a snap is an exception the contract has not granted.
+snaps=$(grep -rln 'scroll-snap-type' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer/styles" || true)
+if [[ -n "$snaps" ]]; then
+    printf 'error: the surface moves on the spring alone (docs/DESIGN.md); scroll snapping found in:\n%s\n' \
+        "$snaps" >&2
     exit 1
 fi
 

@@ -562,8 +562,7 @@ it.effect(
       yield* settleFibers();
       assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.LISTENING);
       assert.equal(f.views.at(-1)?.talkOpening, false);
-      assert.equal(f.views.at(-1)?.spokenAskPending, true);
-      // Both speakers' rows still being spoken are the live lines; Luke's are the captions while he speaks.
+      // Both speakers' rows still being spoken are the captions; Luke's while he speaks.
       call.events.onCaptions([
         row("row-1", CONVERSATION_ENTRY_KIND.ASK, "what needs me"),
         row("row-2", CONVERSATION_ENTRY_KIND.REPLY, "Two sessions"),
@@ -571,27 +570,14 @@ it.effect(
       call.settle(LIVE_STATUS.SPEAKING);
       yield* settleFibers();
       const speaking = f.views.at(-1);
-      assert.equal(speaking?.spokenAskPending, false);
       assert.deepEqual(speaking?.lukeCaptions, ["Two sessions"]);
       assert.deepEqual(speaking?.developerCaptions, ["what needs me"]);
-      assert.deepEqual(
-        speaking?.liveConversationLines.map((line) => line.entry.kind),
-        [CONVERSATION_ENTRY_KIND.ASK, CONVERSATION_ENTRY_KIND.REPLY],
-      );
-      // A settled row stays a live line, marked settled: the service is writing
-      // it, and the panel keeps drawing it until the record shows it.
+      // A settled row of the developer's leaves their captions.
       call.events.onCaptions([
         row("row-1", CONVERSATION_ENTRY_KIND.ASK, "what needs me", true),
         row("row-2", CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished"),
       ]);
       yield* settleFibers();
-      assert.deepEqual(
-        f.views.at(-1)?.liveConversationLines.map((line) => [line.entry.kind, line.settled]),
-        [
-          [CONVERSATION_ENTRY_KIND.ASK, true],
-          [CONVERSATION_ENTRY_KIND.REPLY, false],
-        ],
-      );
       assert.equal(f.views.at(-1)?.developerCaptions, undefined);
       // The count rose once for the whole exchange.
       assert.equal(f.openings.filter((opening) => opening !== undefined).length, 1);

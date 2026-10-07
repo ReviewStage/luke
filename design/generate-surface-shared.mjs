@@ -427,9 +427,6 @@ export const MOTION_DELAY_MS = {
 ${tsRecord(Object.entries(MOTION_DELAY_MS).map(([key, value]) => [key, value]))}
 } as const;
 
-/** How far a bubble floats off the display's top edge. CSS: \`--bubble-lift\`. */
-export const BUBBLE_LIFT = ${SURFACE_GEOMETRY_PX.BUBBLE_LIFT};
-
 /** Tallest caption block the window holds — sized past a whole spoken reply,
  * because the block grows to the words and nothing scrolls; a taller stack
  * rolls up inside it. CSS: \`--caption-max\`. */
@@ -441,9 +438,6 @@ export const VOICE_BAND_INSET = ${SURFACE_GEOMETRY_PX.VOICE_BAND_INSET};
 
 /** Expanded panel width. CSS: \`--panel-width\`. */
 export const PANEL_WIDTH = ${SURFACE_GEOMETRY_PX.PANEL_WIDTH};
-
-/** Expanded panel height ceiling. CSS: \`--panel-height-max\`. */
-export const PANEL_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.PANEL_MAX_HEIGHT};
 `;
 }
 

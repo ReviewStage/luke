@@ -34,7 +34,7 @@ import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.
  * `packages/hosted/fixtures/reads/` pin these answers.
  *
  * Every declaration below is composed directly as an Effect `Schema` and
- * exported under its own name; `conversation-client.ts`, `changes-client.ts`,
+ * exported under its own name; `changes-client.ts`
  * and `apps/web` read one through `readEither` and show it through
  * `emitJsonSchema`. Every record is a plain struct: whether a key a newer
  * service added is dropped or refused is the read's to say now, so an answer

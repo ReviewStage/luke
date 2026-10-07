@@ -7,13 +7,11 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
-import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanningDocument,
-  type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
   type PlanningView,
   planningSetFolderParamsSchema,
@@ -73,7 +71,7 @@ export function planFoldersFile(
 /** The service's side of the plans, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
-  "list" | "open" | "create" | "delete" | "repositories" | "claimCommand" | "settleCommand"
+  "list" | "open" | "create" | "delete" | "claimCommand" | "settleCommand"
 >;
 
 export interface PlanningDependencies {
@@ -87,18 +85,6 @@ export interface PlanningDependencies {
    * it to end; a desk session and the call about `keep` are left standing.
    */
   endPlanCall: (keep: string | undefined) => Effect.Effect<void>;
-  /**
-   * What opening the Connect GitHub page needs: the service it is on, the
-   * account this Mac is signed in as, which the page links GitHub for and no
-   * other, and the browser to open it in. The link itself happens there,
-   * under the browser's own Luke session; this process never holds GitHub's
-   * token.
-   */
-  connectGitHub: {
-    serviceBaseUrl: string;
-    accountId: () => Effect.Effect<string | undefined>;
-    openExternal: (url: string) => Effect.Effect<void>;
-  };
 }
 
 export interface PlanningComposer extends Composer {
@@ -137,7 +123,7 @@ export interface PlanningComposer extends Composer {
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client, folders, endPlanCall, connectGitHub } = dependencies;
+  const { kernel, account, client, folders, endPlanCall } = dependencies;
   const idleView = (): PlanningView => ({ ...IDLE_PLANNING_VIEW, folders: folders.read() ?? {} });
 
   /** Records `folderPath` as the plan's folder on this Mac, and draws it. */
@@ -354,27 +340,6 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           return yield* invalid("choosing a folder names a plan and a folder");
         recordFolder(read.success.planId, read.success.folderPath);
         return {};
-      }),
-    [GATEWAY_METHOD.PLANNING_REPOSITORIES]: () =>
-      Effect.gen(function* () {
-        if (!gate()) {
-          return carried<PlanningRepositoriesAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
-        }
-        const listed = yield* Effect.provide(client.repositories(), FetchHttpClient.layer);
-        return carried<PlanningRepositoriesAnswer>(
-          listed.ok ? listed.answer : { failure: listed.failure },
-        );
-      }),
-    // Opened for a signed-in account only; the panel reads the repositories
-    // again once the developer is back, so nothing here waits on the link.
-    [GATEWAY_METHOD.PLANNING_CONNECT_GITHUB]: () =>
-      Effect.gen(function* () {
-        if (!gate()) return { opened: false };
-        const accountId = yield* connectGitHub.accountId();
-        yield* connectGitHub.openExternal(
-          connectGitHubPageAddress(connectGitHub.serviceBaseUrl, accountId),
-        );
-        return { opened: true };
       }),
   };
 

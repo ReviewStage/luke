@@ -1,9 +1,4 @@
 import { Schema as EffectSchema } from "effect";
-import {
-  GITHUB_FAILURE,
-  type GitHubFailure,
-  githubRepositoryListAnswerSchema,
-} from "./github-wire.js";
 import { planCreateRequestSchema, planSchema, planSummarySchema } from "./plan-wire.js";
 
 /**
@@ -138,26 +133,10 @@ export const PLAN_CALL_FAILURE = {
 
 export type PlanCallFailure = (typeof PLAN_CALL_FAILURE)[keyof typeof PLAN_CALL_FAILURE];
 
-/** Why a call that goes through the account's GitHub connection answered nothing. */
-export type GitHubCallFailure = GitHubFailure | typeof PLAN_CALL_FAILURE.UNANSWERED;
-
-const githubCallFailureSchema = EffectSchema.Literals([
-  ...Object.values(GITHUB_FAILURE),
-  PLAN_CALL_FAILURE.UNANSWERED,
-]);
-
 /** Starting a plan, as the window hears it: the plan now active, or why none started. */
 export const planningStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.String }),
-  EffectSchema.Struct({ failure: githubCallFailureSchema }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
 ]);
 
 export type PlanningStartAnswer = typeof planningStartAnswerSchema.Type;
-
-/** The repository picker's list, or why the connection could not be read. */
-export const planningRepositoriesAnswerSchema = EffectSchema.Union([
-  githubRepositoryListAnswerSchema,
-  EffectSchema.Struct({ failure: githubCallFailureSchema }),
-]);
-
-export type PlanningRepositoriesAnswer = typeof planningRepositoriesAnswerSchema.Type;

@@ -1,22 +1,3 @@
-/* The panel's Plans tab: one page at a time inside the panel's own ceiling.
-   On the document page the header and the microphone row hold still, and
-   only the document scrolls between them. */
-.plans-view {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 10px;
-  font-size: 12.5px;
-}
-
-.plans-signed-out {
-  align-items: center;
-  justify-content: center;
-  padding: 24px 0;
-  color: var(--text-secondary);
-}
-
 .plan-list {
   display: flex;
   min-height: 0;
@@ -351,6 +332,11 @@
   color: #fff;
 }
 
+.plan-stop .control-icon {
+  width: 12px;
+  height: 12px;
+}
+
 /* The call in two lines: the voice's word, and under it the backend's line
    while the backend works. Each line is cut short on one line, so a long
    command never wraps the row and the dots are never cut. */
@@ -426,50 +412,12 @@
   gap: 4px;
 }
 
-.plan-form-repositories {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.plan-form-repositories legend {
-  margin-bottom: 4px;
-  padding: 0;
-}
-
-.plan-form-repository-list {
-  max-height: 180px;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-}
-
-.plan-form-repository {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 2px;
-}
-
-.plan-form-private,
 .plan-form-note {
   color: var(--text-secondary);
 }
 
 .plan-form-note {
   margin: 0;
-}
-
-.plan-form-github {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
 }
 
 .plan-form-actions {

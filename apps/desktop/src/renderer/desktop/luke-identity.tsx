@@ -54,9 +54,9 @@ export interface LukeIdentityProps {
 }
 
 /**
- * Luke at the head of the sidebar: his face, reacting to the same material
- * the notch wings read, his name, and one line saying what the voice is doing,
- * with a meter for whoever is talking.
+ * Luke at the head of the sidebar: his face, reacting to the voice and to
+ * the sessions he is watching, his name, and one line saying what the voice
+ * is doing, with a meter for whoever is talking.
  */
 export function LukeIdentity({
   tally,

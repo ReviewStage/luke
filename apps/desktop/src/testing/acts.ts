@@ -1,7 +1,4 @@
-import { TRANSCRIPT_KIND } from "@sidecar/wire";
 import { ACT_KIND, type Act, type ActKind } from "#shared/messages/acts";
-
-const IDENTITY = { providerId: "claude-code", providerSessionId: "session-a" };
 
 /**
  * One admissible act per kind. Total by its type, so a kind added to the
@@ -55,38 +52,6 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.UPDATE_INSTALL]: { kind: ACT_KIND.UPDATE_INSTALL },
   [ACT_KIND.UPDATE_OPEN_RELEASE]: { kind: ACT_KIND.UPDATE_OPEN_RELEASE },
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: { kind: ACT_KIND.UPDATE_OPEN_CHANGELOG },
-  [ACT_KIND.SESSION_OPEN]: { kind: ACT_KIND.SESSION_OPEN, payload: { identity: IDENTITY } },
-  [ACT_KIND.SESSION_OPEN_APPLICATION]: {
-    kind: ACT_KIND.SESSION_OPEN_APPLICATION,
-    payload: { identity: IDENTITY, applicationId: "conductor" },
-  },
-  [ACT_KIND.SESSION_OPEN_CHANGE]: {
-    kind: ACT_KIND.SESSION_OPEN_CHANGE,
-    payload: { identity: IDENTITY },
-  },
-  [ACT_KIND.SESSION_SEND_MESSAGE]: {
-    kind: ACT_KIND.SESSION_SEND_MESSAGE,
-    payload: { identity: IDENTITY, text: "please add a test for the retry" },
-  },
-  [ACT_KIND.SESSION_EXECUTE_CONTROL]: {
-    kind: ACT_KIND.SESSION_EXECUTE_CONTROL,
-    payload: { identity: IDENTITY, controlId: "cancel-run" },
-  },
-  [ACT_KIND.CONVERSATION_RATE_MESSAGE]: {
-    kind: ACT_KIND.CONVERSATION_RATE_MESSAGE,
-    payload: { messageId: "2b000000-0000-4000-8000-000000000202", rating: "up" },
-  },
-  [ACT_KIND.CONVERSATION_LOAD_OLDER]: { kind: ACT_KIND.CONVERSATION_LOAD_OLDER },
-  [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: {
-    kind: ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT,
-    payload: {
-      conversationId: "5e000000-0000-4000-8000-000000000001",
-      kind: TRANSCRIPT_KIND.CHILD,
-    },
-  },
-  [ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: {
-    kind: ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT,
-  },
   [ACT_KIND.NOTEBOOK_READ]: { kind: ACT_KIND.NOTEBOOK_READ },
   [ACT_KIND.PLANNING_REFRESH]: { kind: ACT_KIND.PLANNING_REFRESH },
   [ACT_KIND.PLANNING_CLOSE]: { kind: ACT_KIND.PLANNING_CLOSE },
@@ -102,8 +67,6 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_DELETE,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
   },
-  [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
-  [ACT_KIND.PLANNING_CONNECT_GITHUB]: { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
   [ACT_KIND.PLANNING_CHOOSE_FOLDER]: { kind: ACT_KIND.PLANNING_CHOOSE_FOLDER },
   [ACT_KIND.PLANNING_SET_FOLDER]: {
     kind: ACT_KIND.PLANNING_SET_FOLDER,
@@ -112,7 +75,7 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
-    payload: { command: "clear-conversation" },
+    payload: { command: "end-call" },
   },
   [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: {
     kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,

@@ -1,12 +1,10 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
-import type { LiveConversationLine } from "@sidecar/session";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
-import { VOICE_COMMAND, VOICE_COMMAND_OUTCOME } from "#shared/messages/voice-view";
 import type { ActRows } from "../act-router";
 import type { AppStateStore } from "../app-state";
 import type { ReportHandlers } from "../bridge-host";
@@ -38,36 +36,8 @@ export interface VoiceRuntimeDependencies {
   liveSession: LiveSessionActs;
   liveDiagnostics: () => Effect.Effect<Option.Option<LiveDiagnostics>>;
   recordProductEvent: RecordProductEvent;
-  /**
-   * The Conversation Clear, begun here as the voice window is told, and
-   * answering whether the service took it: the thread every panel draws is the
-   * service's, so a false answer is what the panel shows as a Clear that did
-   * not go, while the voice window has already retired its own turns at the press.
-   */
-  clearConversation: () => Effect.Effect<boolean>;
   /** Whether a panel is recording a chord, which holds the talk and stop presses. */
   setShortcutCapturing: (capturing: boolean) => void;
-  /**
-   * A read of the Conversation asked for now: the voice window's report says
-   * a spoken line settled or left with its call, which is when the service
-   * writes it, and the panel draws the line until the record shows it.
-   */
-  refreshConversation: () => void;
-}
-
-/**
- * Whether one report says the record is being written under a line the last
- * one carried: a row settled since, or a row left the report — the call
- * closing writes whatever still stood. Either is the moment to read the
- * record rather than wait the poll's cadence out.
- */
-function recordMovedUnderLines(
-  previous: readonly LiveConversationLine[],
-  next: readonly LiveConversationLine[],
-): boolean {
-  const settled = (lines: readonly LiveConversationLine[]) =>
-    lines.filter((line) => line.settled).length;
-  return settled(next) > settled(previous) || next.length < previous.length;
 }
 
 type VoiceRuntimeActKind =
@@ -88,24 +58,11 @@ export function voiceRuntimeActRows(
   return {
     // A panel's command to the voice window. The act's schema has already
     // bounded it; here it is checked to come from a panel — the voice window
-    // does not command itself — and handed on. A Clear reaches the service
-    // from here, because the main process is every panel's relay to the
-    // service that holds the thread; the voice window is told to retire its
-    // own turns at the press, whatever the service later answers, and the
-    // panel hears whether the Clear went.
-    [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel }) =>
-      Effect.gen(function* () {
-        if (!panel) return undefined;
-        // The voice window is told in this act's synchronous prefix — before
-        // the service is waited on — so its turns, marks, and context retire
-        // at the press. The answer, the service's, comes after and goes to
-        // the panel alone.
-        voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
-        if (command !== VOICE_COMMAND.CLEAR_CONVERSATION) return undefined;
-        return (yield* dependencies.clearConversation())
-          ? VOICE_COMMAND_OUTCOME.ACCEPTED
-          : VOICE_COMMAND_OUTCOME.REFUSED;
-      }),
+    // does not command itself — and handed on.
+    [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel }) => {
+      if (!panel) return;
+      voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
+    },
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
     [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp, planId }, { voice }) =>
@@ -157,11 +114,6 @@ export function voiceRuntimeReports(
       const held = state.snapshot().voice;
       state.update({ voice: { ...held, view } });
       panels.setVoiceExchange(liveExchangeActive(view));
-      if (
-        recordMovedUnderLines(held.view?.liveConversationLines ?? [], view.liveConversationLines)
-      ) {
-        dependencies.refreshConversation();
-      }
       if (countedKind !== undefined) {
         dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {
           exchange_kind: countedKind,

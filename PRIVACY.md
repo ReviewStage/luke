@@ -27,23 +27,8 @@ is held here, in memory or on disk.
 **Your conversation with Luke.** Nothing on your Mac holds your conversation
 with Luke: no part of his judgment runs here, so no record of what you said,
 what he spoke or announced, or what he did at your ask is kept on this
-machine, in memory or on disk. The Conversation tab draws the one record there
-is: the conversation Luke's own service keeps for your account, read by every
-Mac you sign in on, so two Macs on one account show the same thread. A signed-in Mac asks the service every few seconds what has
-changed and reads only what did, and it draws the 200 most recent turns; that
-is what is shown, not what is kept. A thumbs up or down you give one of Luke's
-messages there is written to the same service as a rating event beside that
-message, naming the verdict and the Mac it came from, so it shows on every
-device signed in to your account, including the next time you open Luke; a
-second verdict is a second event, pressing the filled thumb again takes your
-verdict back as a third event that says so and leaves the message unrated,
-and the newest is what every device shows. Taking a verdict back does not
-erase it: the record keeps every verdict you gave and the fact that you took
-it back, and only the newest is shown.
-Pressing thumbs down also offers the feedback composer, prefilled with that
-message and your ask before it, and nothing of it leaves the Mac unless you
-press Send. What the service keeps of it is described under "Your account"
-below.
+machine, in memory or on disk, and the Mac app does not read that record
+back.
 When a voice session opens, this Mac hands it a summary of the coding agent
 sessions on your screen (their titles, status, and branch, as the rows draw
 them), so the voice can follow what is on your desk as it stood when the
@@ -129,15 +114,6 @@ judgment runs, on our service, under the terms described under "Your account"
 below. Nothing of it is held on your Mac, in memory or on disk: a launch here
 begins with none and a quit lets nothing go, because there was nothing here.
 
-The Conversation tab's one control, **Clear**, asks Luke's service to clear
-your account's conversation: nothing is erased at once — the conversation is
-marked deleted, a new empty one is opened in its place, every Mac on the
-account stops showing it on its next read, and the service removes the
-marked conversation thirty days later. A Clear the service did not take
-leaves the thread standing and says so. Nothing on your Mac holds a copy to
-forget. Clearing never touches Luke's workspace rows, described above, which
-is where the things he remembers about you live, and never touches your
-agents' own files.
 
 Earlier versions of Luke kept the conversation, his working memory, the
 things he remembers about you, and a search index over his workspace files in
@@ -227,8 +203,7 @@ version of Luke wrote a dated note under `memory/` and promoted lines into
 it; each is left exactly where it is, for you to keep or delete, and nothing
 reads any of them. Asking Luke to forget removes the line you name from his
 `USER.md` on our service; a thing he never wrote down he says so about rather
-than claiming it erased. Forgetting does not delete the conversation itself;
-Clear is still the separate action above.
+than claiming it erased. Forgetting does not delete the conversation itself.
 
 **How the plan is written during a planning call.** While you talk a plan
 through with Luke on a planning call, a notetaker on our service writes the
@@ -247,12 +222,11 @@ OpenAI keeps the request and its reply under its own retention policy.
 the notebook back to you: `MEMORY.md`, `USER.md`, and the newest of the dated
 notes under `memory/`, as they stand on our service, drawn as the Markdown they
 are written in. It is a window and not a form: opening the page asks our
-service for your own account's rows over the same signed-in connection the
-Conversation tab reads through, the app holds the answer only while the page
+service for your own account's rows over the app's signed-in connection, the
+app holds the answer only while the page
 is on screen and keeps nothing of it on disk or after you leave, nothing on
 the page writes, and no model runs for it. The page is excluded from the
-session recording described under "What we collect", the way the
-Conversation tab is.
+session recording described under "What we collect".
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. Signing in with GitHub grants no
@@ -265,8 +239,7 @@ Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily
 counts — on an admin page of our site that only an account we have marked as an
 administrator can open; nothing you type, say, or run in a session appears on
-it. The service also keeps your account's conversation with Luke, as the
-record the Conversation tab draws on every Mac you sign in on. When Luke runs a turn for you on our service, that
+it. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
 turn writes rows to our database: your ask as it was given; Luke's reply, the
 summaries of his reasoning, and each tool he called with its input and its
 result, the briefing he offered you among them; the words an observation
@@ -292,10 +265,7 @@ your name and email to that record. The counts are event names and values from
 a fixed list. A voice session's start is counted
 with which of two sources opened it — our voice service on your account, or
 the accountless introduction — and never with a session id. A count made
-before you sign in is not sent. A thumbs up or down you give one of Luke's
-messages, or take back, is counted with the verdict or the fact that you took
-it back and whether the message was a reply or a briefing, and never with the
-message, its id, or a note you left. Nothing you type or say and nothing from
+before you sign in is not sent. Nothing you type or say and nothing from
 a session can appear in one: no titles, branches, file paths, prompts, or
 error text.
 
@@ -306,11 +276,9 @@ text the panel shows is replaced with blocks of the same length, so a session
 title, an error line, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. A screenshot
 you attach to the feedback form is left out, since a picture of your screen
-could carry another app's words, and so are the Conversation tab, the feedback
-form's message field, and the Memory page in Settings, as a second line. The
-Agents pages the Conversation tab turns to, the list and any agent's
-transcript, are left out on the same terms, since each draws under the tab's
-own blocked root. Luke does not report what you clicked.
+could carry another app's words, and so are the feedback form's message
+field and the Memory page in Settings, as a second line. Luke does not report
+what you clicked.
 
 Recording starts when Luke opens, before you sign in, so it covers the
 signed-out panel, the sign-in, and the spoken introduction that follows your
@@ -464,11 +432,8 @@ and where the briefing is no longer in the thread the Conversation opens at
 its end and says so.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
-and email you signed it with, and any screenshots you attached. A thumbs down
-on one of Luke's messages offers to open the form prefilled with that message
-and your ask before it, words already on your screen; they are yours to edit or
-delete, and like everything else in the form they reach us only when you press
-Send.
+and email you signed it with, and any screenshots you attached; they reach us
+only when you press Send.
 
 ## Who we send it to
 
@@ -626,18 +591,13 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Sign out of your Luke account to turn voice off.
 - Delete your Conductor key from its row in Settings, which removes it from
   our vault. Keys are also deleted when you delete your account.
-- Clear the Conversation tab to have the service mark your account's
-  conversation deleted (removed thirty days later, and gone from every Mac on
-  the account at its next read). Nothing on your Mac holds a copy to discard.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Delete any workspace file an earlier version of Luke left on your Mac;
   nothing reads it now. Luke's workspace rows on our service are edited
-  through Luke alone, are untouched by clearing the Conversation tab, and go
-  with your
-  account.
+  through Luke alone, and go with your account.
 - Luke may act on his own judgment in a turn you did not open — answering a
   coding agent, keeping his notes, on a look
-  — within the tool policy his configuration sets; the Conversation tab records
+  — within the tool policy his configuration sets; his conversation records
   such an action as his own, never as your request.
 - What you type or say to Luke goes to his main conversation; the
   conversation an ask is for is fixed at the moment you send it and never

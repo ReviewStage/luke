@@ -41,7 +41,7 @@ rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../apps/web/public/luk
 `app.dock.setIcon`. The Dock tile is swapped between the two mode icons as the
 theme changes.
 
-The notch panel draws the face itself rather than loading these SVGs, because it
+The panel draws the face itself rather than loading these SVGs, because it
 needs two things a baked asset cannot give it: `currentColor`, so it can take the
 microphone's colour, and CSS animation, so the renderer's `--face-motion` token can hold every loop still for
 a capture run or for reduced motion. SMIL answers to neither without JavaScript.

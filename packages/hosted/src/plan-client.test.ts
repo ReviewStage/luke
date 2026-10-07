@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
 import { Effect } from "effect";
-import { GITHUB_FAILURE } from "./github-wire.js";
 import { HostedPlanClient } from "./plan-client.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
 
@@ -116,55 +115,18 @@ it.effect("a plan with no name never travels", () =>
   }),
 );
 
-it.effect("GitHub's refusal reaches the caller as the reason the service named", () =>
-  Effect.gen(function* () {
-    const refusal = (reason: string) => ({
-      answer: () => ({ error: "github-unavailable", reason }),
-      status: HTTP_STATUS.CONFLICT,
-    });
-    const api = fakeCloudApi({
-      "POST /api/plans": refusal(GITHUB_FAILURE.EMPTY_REPOSITORY),
-      "GET /api/github/repositories": refusal(GITHUB_FAILURE.NOT_CONNECTED),
-    });
-
-    const started = yield* Effect.provide(client().create({ name: "Audit log" }), api.layer);
-    const listed = yield* Effect.provide(client().repositories(), api.layer);
-
-    assert.deepEqual(started, { ok: false, failure: GITHUB_FAILURE.EMPTY_REPOSITORY });
-    assert.deepEqual(listed, { ok: false, failure: GITHUB_FAILURE.NOT_CONNECTED });
-    assert.deepEqual(recordedRoutes(api.requests()), [
-      "POST /api/plans",
-      "GET /api/github/repositories",
-    ]);
-  }),
-);
-
-it.effect("reads the repository list the connection can read", () =>
-  Effect.gen(function* () {
-    const answer = {
-      repositories: [{ owner: "acme", name: "relay", private: true }],
-      truncated: false,
-    };
-    const api = fakeCloudApi({ "GET /api/github/repositories": { answer: () => answer } });
-
-    const listed = yield* Effect.provide(client().repositories(), api.layer);
-
-    assert.deepEqual(listed, { ok: true, answer });
-  }),
-);
-
-it.effect("a service that fails answers unanswered, never an empty list", () =>
+it.effect("a service that fails answers unanswered, never an empty list or a plan", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({
       "GET /api/plans": { answer: () => ({ plans: [] }) },
-      "GET /api/github/repositories": { answer: () => ({ repositories: [], truncated: false }) },
+      "POST /api/plans": { answer: () => ({ plan: PLAN }) },
     });
     api.fail();
 
     const plans = yield* Effect.provide(client().list(), api.layer);
-    const repositories = yield* Effect.provide(client().repositories(), api.layer);
+    const started = yield* Effect.provide(client().create({ name: "Audit log" }), api.layer);
 
     assert.deepEqual(plans, { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED });
-    assert.deepEqual(repositories, { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(started, { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED });
   }),
 );

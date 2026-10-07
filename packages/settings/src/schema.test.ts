@@ -250,7 +250,7 @@ test("a page's section draws its own members, in the order they claim", () => {
   const appearance = settingRowsForPage(SETTINGS_PAGE.APPEARANCE, SETTING_SECTION.MAIN, view);
   assert.deepEqual(
     appearance.map((row) => row.field),
-    ["openAtLogin", "showInDock", "showOnAllDisplays", "formFactor"],
+    ["openAtLogin", "showInDock"],
   );
   const voice = settingRowsForPage(SETTINGS_PAGE.VOICE, SETTING_SECTION.CONTROLS, view);
   assert.deepEqual(
