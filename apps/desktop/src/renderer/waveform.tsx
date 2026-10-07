@@ -35,10 +35,8 @@ export function waveformLive(input: { voice: WaveformVoice | undefined; speaking
 }
 
 /**
- * The meter draws what it is handed, from one of two sources. The panel hands
- * it the loudness the voice window measured and the main process relayed;
- * the introduction takeover, which holds a session of its own, hands it the
- * analyser on that stream and is told the voice's edges back. Whether
+ * The meter draws what it is handed: the loudness the voice window measured
+ * and the main process relayed. Whether
  * someone is speaking is a fact the wing and the face both act on, so the
  * bars only report it — they never decide it twice.
  */

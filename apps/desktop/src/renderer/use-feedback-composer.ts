@@ -1,6 +1,6 @@
 import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import {
@@ -18,8 +18,6 @@ import {
 } from "./feedback-entry";
 import { encodeFeedbackImage } from "./feedback-images";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { PANEL_STAND_DOWN, type SettingsView, standDownReturnPage } from "./settings-views";
 import { appStateNow } from "./use-app-state";
 import { type PanelEntrySurface, panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 
@@ -36,13 +34,6 @@ export interface UseFeedbackComposerOptions {
   presentation: PanelPresentation;
   /** Whether motion is reduced, which shortens the landing's hold. */
   stillMotion: boolean;
-  /** Which settings page leaving the composer comes back to. */
-  standDownPage: RefObject<SettingsView>;
-  /**
-   * Which tab leaving the composer comes back to: Settings, where the note is
-   * begun. Shared with the key slot, so each begin has to write it.
-   */
-  standDownTab: RefObject<PanelTab>;
 }
 
 export interface FeedbackComposer {
@@ -62,7 +53,7 @@ export interface FeedbackComposer {
  */
 export function useFeedbackComposer(options: UseFeedbackComposerOptions): FeedbackComposer {
   const { act } = useAct();
-  const { surface, presentation, stillMotion, standDownPage, standDownTab } = options;
+  const { surface, presentation, stillMotion } = options;
   const [notice, setNotice] = useState<string>();
   const [confirming, setConfirming] = useState<{
     confirmation: FeedbackConfirmation;
@@ -128,7 +119,6 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
   const entry = usePanelEntry<FeedbackEntry>({
     ...surface,
     aside: PANEL_PRESENTATION.FEEDBACK,
-    restoresPanel: (held) => held.fromPanel === true,
     isSendable,
     send: async (sending) => {
       const name = sending.name.trim();
@@ -180,8 +170,7 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
 
   /**
    * Opens the composer for a kind, from the section's own buttons, and stands
-   * the panel down to its shape, the way beginning a key entry stands it down
-   * to the slot: writing one note is one act. What opening does to a note
+   * the panel down to its shape: writing one note is one act. What opening does to a note
    * already there is {@link openedFeedbackEntry}'s to decide — a half-written
    * note is brought back rather than discarded. Leaving returns you to the
    * Feedback section on the settings front page.
@@ -189,26 +178,19 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
   const begin = useCallback(
     (kind: FeedbackKind): void => {
       setNotice(undefined);
-      // Leaving the composer — or the thank-you the send lands in — comes back
-      // to the Feedback section on the settings front page. Both are written
-      // here, because the tab is shared with the key slot and a return is a
-      // fact about what was begun, not about what was begun last.
-      standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK });
-      standDownTab.current = PANEL_TAB.SETTINGS;
       // Asking to write again is the confirmation's end: the composer takes
       // the shape back, and the return the landing held is dropped unrun.
       dropConfirmation();
       const opened = openedFeedbackEntry(entry.latest(), {
         kind,
-        fromPanel: true,
         // A fresh note starts signed with the account; a note already there
         // keeps its fields as its author left them, cleared ones included.
         signature: accountSignature(appStateNow()?.account),
       });
-      if (opened.entry) entry.apply(opened.entry);
+      if (opened) entry.apply(opened);
       entry.standDown();
     },
-    [dropConfirmation, entry.apply, entry.latest, entry.standDown, standDownPage, standDownTab],
+    [dropConfirmation, entry.apply, entry.latest, entry.standDown],
   );
 
   /**
@@ -228,7 +210,7 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
       finish();
       return;
     }
-    if (entry.latest()?.fromPanel === true) surface.restorePanel();
+    if (entry.latest() !== undefined) surface.restorePanel();
     else surface.leave();
   }, [dropConfirmation, entry.latest, surface.leave, surface.presentation, surface.restorePanel]);
 

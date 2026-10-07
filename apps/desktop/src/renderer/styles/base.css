@@ -17,35 +17,6 @@
   --voice-luke: var(--state-working);
   --state-attention: #ffa049;
   --state-complete: #6fdca4;
-  --state-idle: rgba(255, 255, 255, 0.44);
-
-  /* Provider brand colours, used only by the marks: Claude Code's published
-     coral, the vertical gradient Codex draws its mark with, the light half of
-     Conductor's two-colour palette — its dark half is the surface the mark
-     already sits on, so the pairing is the published one — Cursor's and
-     Copilot's marks, each published as one silhouette and so drawn in the light
-     form its brand uses on a dark surface, the two tones of OpenCode's
-     terminal mark: the frame, and the gray block its favicon keeps inside the
-     frame's opening on every surface, and the vertical metallic gradient
-     Superset's favicon draws its bracket mark with. Session state is carried
-     by the chips and the row tints instead, so the two colour systems never
-     compete for the same pixel. */
-  --mark-claude: #d97757;
-  --mark-claude-code: #d97757;
-  --mark-codex-top: #b1a7ff;
-  --mark-codex-middle: #7a9dff;
-  --mark-codex-bottom: #3941ff;
-  --mark-conductor: #eae8e6;
-  --mark-copilot: #ffffff;
-  --mark-cursor: #ffffff;
-  --mark-grok-build: #fcfcfc;
-  --mark-omp-top: #ed4abf;
-  --mark-omp-middle: #9b4dff;
-  --mark-omp-bottom: #5ad8e6;
-  --mark-opencode: #ffffff;
-  --mark-opencode-block: #5a5858;
-  --mark-superset-top: #b9b7b5;
-  --mark-superset-bottom: #858483;
 
   /* The one destructive colour, in the two weights a control that destroys
      something needs: a ground it can sit on and a text colour that reads on
@@ -145,7 +116,6 @@
   /* Rounder than the panel at half its size, and the same family: the slot is
      the panel stood down to one field, not a different object. */
   --slot-radius: 28px;
-  --wing-inset: 9px;
   /* The panel's own content edge: where the tab bar, the rows, and the composer
      all start. */
   --panel-inset: 20px;
@@ -187,18 +157,6 @@
      target are as tall as it, and every popup and the panel pad by it. */
   --strip-height: var(--capsule-height);
   --peek-width: max(calc(var(--notch-housing-width) + 248px), 458px);
-  /* The capsule with room for Luke's meter beside his face rather than instead
-     of it. Only the left wing needs it — that is where both are drawn — so
-     only that side grows: 18px for the meter and the 8px between them, added
-     to the 36px the capsule already has there. The right side keeps its 36px:
-     the one resting mark sits there against the housing, your own meter takes
-     exactly that mark's place while the microphone is heard, and a wider side
-     would only carry either toward an edge it must never reach. */
-  --capsule-voice-growth: 26px;
-  --capsule-voice-width: calc(var(--capsule-width) + var(--capsule-voice-growth));
-  /* Growing one side moves the shape's centre half the growth away from it, so
-     the right edge stays exactly where it was and only the left one travels. */
-  --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
   /* Luke's words under the housing, wrapping as they stream in and shown
      whole. `--caption-max` arrives from the shared surface tokens, the
      same number the compact window already holds below the capsule, so growing
@@ -254,32 +212,14 @@
   --slot-mark-size: 22px;
   --slot-gutter-gap: 9px;
   /* Measured off photographs of the hardware rather than guessed: the housing's
-     own corners are a convex 0.348 of its height, and where its sides meet the
-     top edge it flares outward on a concave 0.170 — about half the bottom
-     corner, not the sixth of it this was drawn at, which was small enough to
-     read as a straight edge with a chamfer. Deriving both from the reported
-     inset keeps the capsule matching whatever notch it is sitting beside. */
+     own corners are a convex 0.348 of its height. */
   --notch-convex-radius: calc(var(--capsule-height) * 0.348);
-  --notch-concave-radius: calc(var(--capsule-height) * 0.17);
-  /* Bounded by the shape the wing's state draws, never by the window: a compact
-     window is wider than the capsule, so clipping to the window would let
-     captions spill onto the desktop, and clipping to the peek would cut the
-     panel's captions short of the room it actually has. */
-  --wing-bound: var(--peek-width);
   position: relative;
   width: 100%;
   height: 100%;
 }
 
-/* The panel's corners are `--panel-radius`, not the housing's, and a flare
-   belongs to the corner it turns into rather than to the notch: beside the
-   housing it has to disappear into one, and at the panel's size it has to turn
-   a corner more than twice as round. So it keeps the proportion the hardware
-   holds between the two — 0.170 against 0.348 — and grows with the corner
-   instead of staying the size the housing wanted. */
 .app-stage[data-presentation="panel"] {
-  --notch-concave-radius: calc(var(--panel-radius) * 0.489);
-  --wing-bound: var(--panel-width);
   /* The open panel is the one shape drawn downward from the lift rather than
      inward from both edges of the strip: its height is its own measured
      height, and the bands ride at its foot. So the same edge they hang off is
@@ -295,21 +235,6 @@
      the shape's spring instead. */
   --voice-band-width: calc(var(--panel-width) - var(--panel-inset) * 2);
   --voice-band-widen: calc((var(--voice-band-width) - var(--voice-band-width-compact)) / 2);
-}
-
-/* The wings keep the capsule's quiet form while the slot is drawn — the face
-   and the one resting mark, nothing unfolded — because the slot is asking for a
-   key, and a list of sessions is not an answer to that. Only the bound changes, so nothing
-   spills past the narrower shape. The composer is asking for words and gets the
-   same quiet. */
-.app-stage[data-presentation="slot"] {
-  --notch-concave-radius: calc(var(--slot-radius) * 0.489);
-  --wing-bound: var(--slot-width);
-}
-
-.app-stage[data-presentation="feedback"] {
-  --notch-concave-radius: calc(var(--slot-radius) * 0.489);
-  --wing-bound: var(--feedback-width);
 }
 
 * {
@@ -346,20 +271,6 @@ button {
 
 button:disabled {
   cursor: default;
-}
-
-/* Any element that carries a session state gets its accent from one place. */
-[data-state="urgency-working"] {
-  --accent: var(--state-working);
-}
-[data-state="urgency-attention"] {
-  --accent: var(--state-attention);
-}
-[data-state="urgency-complete"] {
-  --accent: var(--state-complete);
-}
-[data-state="urgency-unknown"] {
-  --accent: var(--state-idle);
 }
 
 /* The black surface is the whole animation: one leaf element with no children
@@ -399,60 +310,9 @@ button:disabled {
     transform var(--duration-shape) var(--spring) var(--duration-exit);
 }
 
-/* Where the shape meets the top edge it flares outward on the same concave
-   curve the housing does, so a capsule beside the notch reads as one object
-   with it rather than as a black rectangle parked next to one. */
-.app-stage[data-notch="true"] .panel-surface::before,
-.app-stage[data-notch="true"] .panel-surface::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  width: var(--notch-concave-radius);
-  height: var(--notch-concave-radius);
-  opacity: 1;
-  /* The flare turns the surface's own corner, so it travels on the surface's
-     spring and waits out `--duration-exit` with it. Three properties here, and
-     the panel rule below overrides the delays by position. */
-  transition:
-    width var(--duration-shape) var(--spring) var(--duration-exit),
-    height var(--duration-shape) var(--spring) var(--duration-exit),
-    opacity var(--duration-quick) var(--motion-exit);
-}
-
-/* Sized in percentages of the element rather than in the radius the element is
-   already sized by, so a growing flare is a box resizing under a fixed gradient
-   instead of a gradient that has to be interpolated on every frame. The last
-   half-pixel is a feather: a hard stop inside a gradient is not antialiased, and
-   at the panel's radius the stair-steps on the arc would be plain. */
-.app-stage[data-notch="true"] .panel-surface::before {
-  right: 100%;
-  background: radial-gradient(
-    ellipse 100% 100% at 0 100%,
-    transparent calc(100% - 0.5px),
-    var(--surface-fill) 100%
-  );
-}
-
-.app-stage[data-notch="true"] .panel-surface::after {
-  left: 100%;
-  background: radial-gradient(
-    ellipse 100% 100% at 100% 100%,
-    transparent calc(100% - 0.5px),
-    var(--surface-fill) 100%
-  );
-}
-
-/* Growing, the flare leads with the surface rather than waiting for content to
-   leave; shrinking, the base rule's delay applies and the two close together. */
-.app-stage[data-notch="true"][data-presentation="panel"] .panel-surface::before,
-.app-stage[data-notch="true"][data-presentation="panel"] .panel-surface::after {
-  transition-delay: 0s, 0s, 0s;
-}
-
 /* The capsule joins the list only once the caption has grown it past the
    housing: a shape that has left the housing's footprint needs the depth, and
    one still inside it must stay indistinguishable from the hardware. */
-.app-stage[data-presentation="capsule"][data-caption="true"] .panel-surface,
 .app-stage[data-presentation="slot"] .panel-surface,
 .app-stage[data-presentation="feedback"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
@@ -475,29 +335,6 @@ button:disabled {
   width: var(--feedback-width);
   height: var(--feedback-height, 220px);
   border-radius: 0 0 var(--slot-radius) var(--slot-radius);
-}
-
-/* Luke answering, with nothing else open. The capsule holds one thing a side,
-   and his reply needs two: the face saying it is him, and the meter saying he
-   is still going. The shape grows to cover both rather than letting the meter
-   be drawn past the black onto the desktop.
-
-   This is the surface's own width, which is the one thing here that may be
-   animated — it is a leaf with no text to re-shape — and the compact window
-   already holds the peek, so there is room for it without asking the main
-   process for any. Your own voice is not here: your meter takes the resting
-   mark's place on the other side, and needs exactly the room the mark had,
-   so it grows nothing whether or not Luke is answering over it. */
-.app-stage[data-presentation="capsule"][data-luke-speaking="true"] .panel-surface {
-  width: var(--capsule-voice-width);
-  transform: translate(calc(-50% - var(--capsule-voice-shift)), var(--shape-top, 0px));
-  /* Growing leads, like every other state that grows. The base rule holds every
-     property back by `--duration-exit` so the shape never shrinks out from
-     under content still on screen; that delay is for leaving, and applying it
-     here is what let the meter arrive before the room for it did. Shrinking
-     keeps it, because this rule stops matching the moment the reply ends. */
-  transition-duration: var(--duration-shape);
-  transition-delay: 0s;
 }
 
 /* Luke's meter follows the room being made for it, the way the marks spread
@@ -536,36 +373,6 @@ button:disabled {
   }
 }
 
-/* Luke's words follow him onto the shape: the compact states grow a caption
-   block below the housing while there are words to draw. Gated on the words
-   rather than on the turn, because the first of them arrives a beat after the
-   reply starts and a shape grown around nothing reads as a twitch. The bands
-   carry the inset above themselves, so the growth adds the one below the
-   last of them. */
-.app-stage[data-presentation="capsule"][data-caption="true"] {
-  --caption-growth: calc(
-    var(--caption-size, 20px) +
-    var(--volume-hint-size) +
-    var(--voice-band-inset)
-  );
-}
-
-/* While there are words, the capsule holds the peek's width whatever the
-   pointer is doing. The caption wraps at one width in every state, so no
-   change of shape ever re-flows a line mid-morph — hovering a captioned
-   capsule unfolds the wings and moves the words not at all. Written after the
-   voice rules above so the wider shape wins their tie, and centred again: the
-   asymmetric growth was room for the meter, which the peek's width dwarfs.
-   Growing leads, exactly as the voice growth does — the base rule's delay is
-   for leaving — and stated against the caption rather than inherited from the
-   voice rule, because the speaking fixture draws words without a live turn. */
-.app-stage[data-presentation="capsule"][data-caption="true"] .panel-surface {
-  width: var(--peek-width);
-  transform: translate(-50%, var(--shape-top, 0px));
-  transition-duration: var(--duration-shape);
-  transition-delay: 0s;
-}
-
 .app-stage[data-presentation="panel"] .panel-surface {
   width: var(--panel-width);
   height: var(--panel-height, var(--panel-height-max));
@@ -597,94 +404,6 @@ button:disabled {
   pointer-events: none;
 }
 
-.wing-left {
-  right: calc(50% + var(--notch-housing-width) / 2);
-  left: calc(50% - var(--wing-bound) / 2);
-  justify-content: flex-end;
-}
-
-.wing-right {
-  right: calc(50% - var(--wing-bound) / 2);
-  left: calc(50% + var(--notch-housing-width) / 2);
-  justify-content: flex-start;
-}
-
-.wing-inner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 var(--wing-inset);
-}
-
-/* Anchored beside the housing rather than at the shape's far edge, in every
-   state. The far edge is the one a morph moves; marks that are opaque at rest
-   would travel its whole 88px on every peek, and the strip would collapse
-   toward an edge on its way out. Beside the housing the black under them never
-   moves, so the shrink direction is safe by construction: the strip closes
-   toward the notch and nothing is ever drawn on the desktop. Read the way a
-   list is — the first provider, the one that needs a person soonest, holds the
-   slot nearest the housing, which is also the one the capsule keeps. */
-.wing-marks {
-  display: flex;
-  height: 22px;
-  align-items: center;
-  gap: 7px;
-}
-
-/* The gate takes this place for its own label, and the developer's meter
-   takes it while the microphone is heard; neither can share the capsule's
-   side with the marks. Hidden outright rather than faded, the way the gate
-   always hid them: the swap happens beside the housing, inside black that
-   never moves, and the marks' own mount fade is what brings them back. */
-.wing-marks[data-drawn="false"] {
-  display: none;
-}
-
-/* Stacked at rest and spread flat once the shape has room. The spread is
-   transform-only: an animated `gap` would re-lay the strip out on every frame,
-   and `--mark-rest` carries each mark's resting seat as an offset from where
-   the flat strip already lays it out.
-
-   A mark never gives up its own width: while a shrinking capacity holds the
-   marks it dropped through their exit beat, the strip briefly carries more
-   than the wing has room for, and a shrinking flex item would squeeze the
-   marks that are staying out of their 14px seat to make room for ones already
-   leaving. */
-.wing-mark {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  transform: translateX(var(--mark-rest, 0px));
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring);
-  animation: wing-mount-fade var(--duration-quick) var(--motion-exit) backwards;
-}
-
-/* A mark mounting into a wing that is already unfolded waits out the shape's
-   own beat, or it is drawn ahead of an edge still most of its travel away. A
-   mark mounting into the resting strip waits for nothing: no shape is moving,
-   and the lead mark is drawn at rest, so a delay here would leave the wing
-   blank for the whole beat on a first roster or a new most urgent app. */
-.wing-marks[data-spread="true"] .wing-mark {
-  animation:
-    wing-mount-fade var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards,
-    wing-mount-travel var(--duration-shape) var(--spring)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards;
-}
-
-/* The capsule's side has room for one mark, so every mark past the first rests
-   exactly on it and is drawn nowhere until the shape spreads the strip out.
-   Overlapping them was tried: a facepile reads because avatars share one
-   circular frame, and these are heterogeneous glyphs at 14px, where a crescent
-   carries no identity at all. */
-.wing-mark[data-piled="false"] {
-  opacity: 0;
-}
-
 /* A meter's slot, rather than the meter itself: arriving is the wing's
    gesture and belongs to the slot, while the opacity and scale inside it are
    the meter's own answer to speech. One element cannot carry both. A meter is
@@ -695,137 +414,12 @@ button:disabled {
   align-items: center;
 }
 
-/* The marks spread across the last of the shape's travel and finish as it
-   settles, inside the black rather than ahead of it. */
-.app-stage[data-presentation="panel"] .wing-mark {
-  opacity: 1;
-  transform: none;
-  transition-duration: var(--duration-quick), var(--duration-shape);
-  transition-timing-function: var(--motion-exit), var(--spring);
-  transition-delay: calc(var(--duration-shape) - var(--duration-quick));
-}
-
-.provider-mark {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-
-/* The marks fill their box very differently — the Claude Code glyph is wide and
-   short, the Codex and Cursor marks are full-bleed, and Conductor's letter mark
-   is taller than it is wide — so each gets a uniform scale to sit at the same
-   optical weight. Proportions are untouched. */
-.provider-mark[data-mark="claude-code"] {
-  color: var(--mark-claude-code);
-  transform: scale(1.12);
-}
-
-/* The Claude app's mark fills its box edge to edge like Codex's, in the same
-   coral Claude Code's glyph wears: one brand, two marks. */
-.provider-mark[data-mark="claude"] {
-  color: var(--mark-claude);
-  transform: scale(0.94);
-}
-
-.provider-mark[data-mark="codex"] {
-  transform: scale(0.94);
-}
-
-.provider-mark[data-mark="chatgpt"] {
-  transform: scale(0.94);
-}
-
-.provider-mark[data-mark="conductor"] {
-  color: var(--mark-conductor);
-  transform: scale(0.93);
-}
-
-/* Copilot fills its box edge to edge the way the Codex and Cursor marks do, so
-   it takes the same scale they do. */
-.provider-mark[data-mark="copilot"] {
-  color: var(--mark-copilot);
-  transform: scale(0.94);
-}
-
-.provider-mark[data-mark="cursor"] {
-  color: var(--mark-cursor);
-  transform: scale(0.94);
-}
-
-/* The Apple Calendar mark carries its own colours, like Google Calendar's, so
-   no colour is set here; its tile fills the box edge to edge and takes the
-   full-bleed marks' scale. */
-.provider-mark[data-mark="apple-calendar"] {
-  transform: scale(0.94);
-}
-
-/* Gemini's aurora sparkle fills its box edge to edge the way the Codex and
-   Cursor marks do, so it takes the same scale they do. It carries Google's
-   own published colours, so none is set here. */
-.provider-mark[data-mark="gemini-cli"] {
-  transform: scale(0.94);
-}
-
-/* Google Calendar's product icon carries its own published colours, so no
-   colour is set here; it fills its box the way Codex and Cursor do and takes
-   the same scale they do. */
-.provider-mark[data-mark="google-calendar"] {
-  transform: scale(0.94);
-}
-
-/* Grok's comet fills its box edge to edge the way the Codex and Cursor marks
-   do, so it takes the same scale they do; it carries the near-white xAI
-   publishes it in. */
-.provider-mark[data-mark="grok-build"] {
-  color: var(--mark-grok-build);
-  transform: scale(0.94);
-}
-
-/* OMP's pi fills its cropped box top to bottom the way the Codex and Cursor
-   marks do, so it takes the same scale they do. It carries omp.sh's own
-   published gradient through the mark's paint server, so no colour is set
-   here. */
-.provider-mark[data-mark="omp"] {
-  transform: scale(0.94);
-}
-
-/* OpenCode's frame fills its box top to bottom the way the Codex and Cursor
-   marks do, so it takes the same scale they do. */
-.provider-mark[data-mark="opencode"] {
-  color: var(--mark-opencode);
-  transform: scale(0.94);
-}
-
 /* Superset's bracket mark is two and a half times as wide as it is tall, and
    it takes no scale at all: a credential row pulls its mark box left until a
    mark fitted to the box's width sits flush with the identity's clip
    boundary, so any overhang past the box is cut, not empty margin. Fitted to
    the width, the glyph carries less ink than the square marks — that is the
    published proportion, shown whole rather than enlarged and clipped. */
-
-/* The work is happening somewhere the user cannot see. The badge overhangs the
-   mark's box rather than sitting inside it, so it reads as attached to the mark
-   instead of crowding it, and it is out of flow so the mark stays where it was
-   whether or not a badge is drawn. It fills against the surface rather than
-   against whatever it is laid on: a session row tinted for attention would
-   otherwise recolour the badge, and where the work runs is not a state. Each
-   place that shows a mark sets the size, because a 32px session tile and a
-   text-height settings line cannot carry the same one. */
-.cloud-badge {
-  position: absolute;
-  display: grid;
-  border-radius: 50%;
-  background: var(--surface-fill);
-  box-shadow: inset 0 0 0 1px var(--hairline);
-  color: var(--text-secondary);
-  place-items: center;
-}
-
-/* The viewBox already carries the cloud's proportions, so a place that shows a
-   badge sets a width and the height follows from the shape. */
-.cloud-badge svg {
-  height: auto;
-}
 
 /* Luke's face ------------------------------------------------------------ */
 
@@ -839,15 +433,6 @@ button:disabled {
    The loud motions leave the square the artwork is drawn in — a pirouette and a
    duck both need more room than a face at rest — so nothing is clipped here. The
    wing clips them instead, at the housing, which is the edge that matters. */
-/* The box the hover is measured against. It wraps the face exactly and never
-   moves when a motion does — the motions transform layers inside the svg — so a
-   face mid-flyoff is still hovered where it took off from. Like the rest of the
-   wing it takes no pointer; the window's own pointer stream is what reads it,
-   which is how the strip's one button keeps every press. */
-.wing-face {
-  display: flex;
-  flex: 0 0 auto;
-}
 
 .luke-face {
   width: 18px;
@@ -1009,112 +594,6 @@ button:disabled {
   }
 }
 
-/* Nothing to blend into on a display without a housing, so the shape stops
-   pretending: it lifts off the edge and closes into a free-floating pill. The
-   lift is `--bubble-lift` from the shared surface tokens — the two cannot
-   disagree — and it is derived rather than chosen: the pill matches the
-   menu bar it floats beside, 24pt tall on a display without a housing. 32px
-   strip minus 4px each side is exactly that 24. */
-.app-stage:not([data-notch="true"]) {
-  --shape-top: var(--bubble-lift);
-  --strip-height: calc(var(--capsule-height) - var(--shape-top) * 2);
-}
-
-/* Signed out, the strip above the sign-in popup holds nothing: the wings draw
-   neither the face nor the marks while the gate stands, the "Sign in" label
-   reads only in the compact shapes, and the signed-out Luke steps out of the
-   popup's way. Beside a housing the band stays black regardless, because the
-   housing sits in it; a bubble has no housing to wrap, so an empty band there
-   is only room above the words, and the popup opens on no strip at all — its
-   row one gap under the pill's edge, and the strip's press target gone with
-   the strip rather than left over the row. The open panel keeps its strip
-   even signed out, because pressing it is how the panel closes. */
-.app-stage:not([data-notch="true"])[data-gated="true"][data-presentation="slot"] {
-  --strip-height: 0px;
-}
-
-.app-stage:not([data-notch="true"]) .panel-surface {
-  /* Half the resting strip, stated as that number rather than an overlarge
-     one: at rest the two draw the same pill, but an overlarge radius scales
-     with whatever box it is given, so a shape grown for captions curved its
-     sides to half its new height — under bands laid out for the
-     resting corner, whose first line ran past the curve onto the desktop.
-     Stated once here, the growth extends the pill downward with the corners
-     it had, the same way the notch capsule keeps its convex radius. */
-  border-radius: calc(var(--strip-height) / 2);
-}
-
-/* The panel and the slot keep the pill's lift rather than gluing themselves to
-   the top edge: a bubble afloat at one size and docked at another would read
-   as two objects, and there is nothing up there to blend into at any size. The
-   lift is `--bubble-lift` from the shared surface tokens — the expanded window
-   is grown by it so the lifted panel's shadow still fades out inside the
-   stage — and every corner rounds, because an edge nothing meets is an edge
-   with no reason to be square. */
-.app-stage:not([data-notch="true"])[data-presentation="panel"] .panel-surface {
-  height: var(--panel-height, var(--panel-height-max));
-  border-radius: var(--panel-radius);
-}
-
-.app-stage:not([data-notch="true"])[data-presentation="slot"] .panel-surface {
-  height: var(--slot-height, 96px);
-  border-radius: var(--slot-radius);
-}
-
-.app-stage:not([data-notch="true"]) .slot-stage {
-  transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
-}
-
-.app-stage:not([data-notch="true"])[data-presentation="slot"] .slot-stage[data-drawn="true"] {
-  transform: translateX(-50%) translateY(var(--shape-top));
-}
-
-.app-stage:not([data-notch="true"])[data-presentation="feedback"] .panel-surface {
-  height: var(--feedback-height, 220px);
-  border-radius: var(--slot-radius);
-}
-
-.app-stage:not([data-notch="true"]) .feedback-stage {
-  transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
-}
-
-.app-stage:not([data-notch="true"])[data-presentation="feedback"] .feedback-stage {
-  transform: translateX(-50%) translateY(var(--shape-top));
-}
-
-/* Sign-in label ---------------------------------------------------------- */
-
-/* The one thing the right wing draws instead of the marks: words, in the
-   panel's own text voice at a quieter size, because a rounded tabular face at
-   label length reads as a button that is not one. It reads in both compact
-   shapes — inside the capsule's side it stands down to fit, which is what
-   `--sign-in-fit` carries: notch-wings measures the text and the wing's own
-   room, and the label stands down from its resting scale just far enough to
-   stay inside the black, on transform like everything else that moves. Over
-   the open panel it hides, where the gate itself says it larger. */
-.sign-in-label {
-  /* Flush to the housing's edge: the notch is black on black, so an inset
-     reads as nothing here, and every pixel of it is room the words need. The
-     fit arithmetic mirrors this with `SIGN_IN_INSET`. */
-  margin-left: calc(-1 * var(--wing-inset));
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-weight: 640;
-  letter-spacing: 0.1px;
-  opacity: 0;
-  transform: scale(calc(0.88 * var(--sign-in-fit, 1)));
-  transform-origin: left center;
-  transition:
-    transform var(--duration-shape) var(--spring),
-    opacity var(--duration-quick) var(--motion-exit);
-  white-space: nowrap;
-  will-change: transform;
-}
-
-.app-stage[data-presentation="capsule"] .sign-in-label {
-  opacity: 1;
-}
-
 /* Voice caption ----------------------------------------------------------- */
 
 /* Luke's words, wrapping as they stream so the whole reply can be read — the
@@ -1169,19 +648,6 @@ button:disabled {
     opacity var(--duration-exit) var(--motion-exit),
     transform var(--duration-shape) var(--spring) var(--duration-exit),
     clip-path var(--duration-shape) var(--spring) var(--duration-exit);
-}
-
-/* First words arrive the way the meter does — crossing the last of the
-   shape's travel, so they land inside the black rather than ahead of the edge
-   still springing toward them. The clip alone takes no delay while the
-   caption is up: it is the shape's twin, not content following it. */
-.app-stage[data-presentation="capsule"][data-caption="true"] .voice-caption {
-  opacity: 1;
-  transition:
-    opacity var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)),
-    transform var(--duration-shape) var(--spring) var(--duration-exit),
-    clip-path var(--duration-shape) var(--spring);
 }
 
 /* The open panel keeps the same words at its foot: `--caption-rest` is the
@@ -1311,7 +777,6 @@ button:disabled {
 /* Arrives the way the caption's first words do — crossing the last of the
    shape's travel — and takes the pointer only while it is drawn: a hidden
    button must stay click-through, because everything it covers is desktop. */
-.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="capsule"] .volume-hint,
 .app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="panel"] .volume-hint {
   opacity: 1;
   pointer-events: auto;
@@ -2093,13 +1558,6 @@ button:disabled {
   gap: var(--slot-gutter-gap);
 }
 
-/* The label and the line under the field both start where the field does, so
-   the mark is the only thing outside that column. */
-.key-slot-label,
-.key-slot-foot {
-  padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
-}
-
 /* Larger than the mark on a settings line: here it is the only thing naming the
    provider, rather than a glyph beside its name. The badge grows with it. */
 .key-slot-mark {
@@ -2111,59 +1569,9 @@ button:disabled {
   place-items: center;
 }
 
-.key-slot-mark .provider-mark,
 .key-slot-mark .settings-icon {
   width: 16px;
   height: 16px;
-}
-
-.key-slot-mark .cloud-badge {
-  right: -1px;
-  bottom: -1px;
-  width: 11px;
-  height: 11px;
-}
-
-.key-slot-mark .cloud-badge svg {
-  width: 7px;
-}
-
-.key-slot-input {
-  min-width: 0;
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: 11px;
-}
-
-/* Held to the width of its longest word, so saying "Saving…" does not narrow
-   the field beside it. */
-.key-slot-confirm {
-  min-width: 76px;
-  /* Coming alive first, then hover feedback. The base button rule declares only
-     the second pair, so this replaces it rather than adding to it. */
-  transition:
-    transform var(--duration-fast) var(--spring-fast),
-    background-color var(--duration-quick) var(--motion-exit),
-    color var(--duration-quick) var(--motion-exit);
-}
-
-/* Nothing to confirm yet, so it is not offering anything: quiet, and held a
-   little small. The key landing in the field is what brings it up to size and
-   into the accent — the confirm arriving is the answer to the paste, and it
-   arrives without moving anything else on the line, because its place on the
-   line was never given up. Written past `.action-button:disabled`, which would
-   otherwise keep its colour under the dimming. */
-.key-slot .action-button[data-ready="false"] {
-  background: var(--raised);
-  color: var(--text-secondary);
-  transform: scale(0.92);
-}
-
-/* The line under the field yields to the buttons opposite it the same way the
-   panel's editor does. */
-.key-slot-foot .settings-note {
-  flex: 1;
-  min-width: 0;
 }
 
 /* Under the whole line, where the panel's editor puts it too. */
@@ -2222,10 +1630,7 @@ button:disabled {
 
   .panel-surface,
   .slot-stage,
-  .feedback-stage,
-  .key-slot-confirm,
-  .wing-mark,
-  .sign-in-label {
+  .feedback-stage {
     transition-duration: 1ms;
     transition-delay: 0ms;
   }

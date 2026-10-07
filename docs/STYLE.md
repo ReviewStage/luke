@@ -281,7 +281,7 @@ c->client_list_node = listLast(server.clients);
   with", "answers for".
 - One to three lines, directly above the statement.
 
-Not this, from `apps/desktop/src/renderer/app.tsx:190`:
+Not this, from an earlier `apps/desktop/src/renderer/app.tsx`:
 
 ```ts
 /**

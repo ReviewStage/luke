@@ -43,22 +43,6 @@ the host, and a web function alike.
 No full persona stands here: `@sidecar/guide`'s is the brain's, and shapes
 what the brain hands the voice.
 
-## What the voice knows of the desk, and what it must not
-
-`roster-seed.ts` is the one thing of the desk the voice knows, and **it is a
-summary, not a roster**, so a session can answer which agents run, wait, finished,
-or failed without a delegation. The brain's own roster — its identities, transcript
-reads, and everything an action names — is not here and never reaches the voice.
-
-`RosterSeedSession` is a narrow input the host maps its own `Session` onto, so
-this package reaches no registry and **the fields a line may not carry — the
-error, branch, repository, model, address, workspace — are absent from the type
-rather than dropped in the rendering.**
-
-The age bucket comes off `lastActivityAt`, the only timestamp any provider
-reports, so it says how long since the session was *written about* and never how
-long it has been working.
-
 ## Tests
 
 The tests here assert values and structure only. **No test reads the prose.**

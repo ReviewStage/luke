@@ -3,7 +3,7 @@
  * operator over the host it is handed, the host's events relayed to the
  * document the windows draw from, and this process's native capabilities
  * registered as one node on the host's registry. The runtime itself stands
- * behind the host; nothing here composes a store, a brain, or an observation.
+ * behind the host; nothing here composes a store or a brain.
  */
 import {
   type GatewayHost,
@@ -17,7 +17,7 @@ import {
   HOST_NODE_CAPABILITY,
   HOST_NODE_CAPABILITY_LIST,
 } from "@sidecar/host";
-import { isWireNumber, isWireString } from "@sidecar/wire";
+import { isWireString } from "@sidecar/wire";
 import { Effect, type Scope } from "effect";
 import type { AppStateStore } from "../app-state";
 import { createHostOperator, type HostOperator } from "./host-operator";
@@ -32,23 +32,12 @@ export interface GatewayWiringDependencies {
   /** This machine's native capabilities, performed here at the host's ask. */
   node: {
     openExternal: (url: string) => Promise<void>;
-    runAppleCalendarHelper: (
-      helperArguments: readonly string[],
-      timeoutMs: number,
-    ) => Promise<string>;
   };
 }
 
 export interface GatewayWiring {
   readonly host: HostOperator;
 }
-
-/** The commands the EventKit helper answers; an invocation naming anything else is refused here. */
-const APPLE_CALENDAR_HELPER_COMMANDS: ReadonlySet<string> = new Set([
-  "status",
-  "request-access",
-  "observe",
-]);
 
 export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(function* (
   dependencies: GatewayWiringDependencies,
@@ -69,9 +58,9 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
 
   /**
    * The capabilities this process performs at the host's ask. Each is
-   * validated here before anything native runs — the address a string, the
-   * helper command one the build knows — and each answers the host's own
-   * result vocabulary, so a refusal is typed and never a throw.
+   * validated here before anything native runs — the address a string — and
+   * each answers the host's own result vocabulary, so a refusal is typed and
+   * never a throw.
    */
   const perform: RemoteNodeInvoker = (capability, params) =>
     Effect.suspend(() => {
@@ -87,24 +76,6 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
               status: NODE_CAPABILITY_STATUS.OK,
               value: undefined,
             },
-          );
-        }
-        case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {
-          const helperArguments = params.arguments;
-          if (
-            !Array.isArray(helperArguments) ||
-            !helperArguments.every(isWireString) ||
-            !APPLE_CALENDAR_HELPER_COMMANDS.has(helperArguments[0] ?? "")
-          ) {
-            return failed("the helper invocation is not one this build runs");
-          }
-          const timeoutMs = params.timeoutMs;
-          if (!isWireNumber(timeoutMs)) return failed("timeoutMs must be a number");
-          return Effect.map(
-            Effect.promise(() =>
-              dependencies.node.runAppleCalendarHelper(helperArguments, timeoutMs),
-            ),
-            (value) => ({ status: NODE_CAPABILITY_STATUS.OK, value }),
           );
         }
         default:

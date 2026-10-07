@@ -6,14 +6,12 @@ import {
   layersInOrder,
 } from "@sidecar/host/effect";
 import { Context, Effect, Layer, Stream } from "effect";
-import { powerMonitor } from "electron";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
 import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
-import { createMachinePresence } from "./machine-presence";
 import { createNativeNode, type NativeNode } from "./native-node";
 import { createOperatorClient, type OperatorClient } from "./operator-client";
 import type { DesktopQuit } from "./quit";
@@ -130,12 +128,7 @@ export function composeDesktop(
   quit: DesktopQuit,
 ): Layer.Layer<DesktopTag | HostTag, DuplicateGatewayMethod> {
   const keychain = createKeychainService();
-  const presence = createMachinePresence(powerMonitor);
-  const hostAssembly = hostAssemblyLayerFor({
-    config,
-    cipher: keychain.cipher,
-    machinePresence: presence.read,
-  });
+  const hostAssembly = hostAssemblyLayerFor({ config, cipher: keychain.cipher });
 
   const assembly = Layer.effect(
     DesktopTag,
@@ -178,7 +171,6 @@ export function composeDesktop(
         config,
         state,
         native,
-        telemetry,
         operator,
         run,
         launchStanding: quit.launchStanding,
@@ -199,7 +191,6 @@ export function composeDesktop(
       operator.link({
         sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
-        introductionOwedChanged: () => windows.reconcileIntroduction(),
       });
 
       return { config, state, telemetry, native, updates, operator, windows, run };
@@ -209,14 +200,9 @@ export function composeDesktop(
   return Layer.unwrap(Effect.map(DesktopTag, launchSteps)).pipe(
     Layer.provideMerge(assembly),
     Layer.provideMerge(hostAssembly),
-    // The keychain and the machine's presence are the two services nothing
-    // else is built over: the host takes their readings as seams, so they are
-    // constructed before the assembly and begin before it.
-    Layer.provideMerge(
-      layersInOrder([
-        effectServiceLayer(keychain, config.report),
-        effectServiceLayer(presence, config.report),
-      ]),
-    ),
+    // The keychain is the one service nothing else is built over: the host
+    // takes its cipher as a seam, so it is constructed before the assembly
+    // and begins before it.
+    Layer.provideMerge(effectServiceLayer(keychain, config.report)),
   );
 }

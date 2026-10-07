@@ -3,34 +3,12 @@ import { type RefObject, useEffect, useRef, useState } from "react";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 
 /**
- * Everything Luke reacts to. It is deliberately the same material the count
- * badge reports — sessions, and whether the microphone is open — because the
- * face is the one thing the capsule always has room for, and a face that knew
+ * Everything Luke reacts to: who is being heard on the call. A face that knew
  * something the panel did not would be a second, quieter source of truth.
- *
- * The sessions asking for a person arrive as ids rather than as a count,
- * because what the face owes them is one nudge each as they start asking, and a
- * count cannot tell one starting from another being answered in the same poll.
  */
 export interface FaceContext {
   speaking: boolean;
   microphoneLive: boolean;
-  /**
-   * Whether announcements are held right now. A deterministic fact from the
-   * main process — the developer's own announce switch off, or the clock against
-   * observed meeting intervals — never anything a model decided.
-   */
-  announcementsHeld: boolean;
-  /**
-   * Whether the roster has been read at all yet. Until the first reading
-   * lands, an empty total means "not looked yet" rather than "nothing to
-   * watch", and the two must not wear the same face.
-   */
-  settled: boolean;
-  attention: readonly string[];
-  working: number;
-  complete: number;
-  total: number;
 }
 
 /**
@@ -41,81 +19,23 @@ export interface FaceContext {
  * and the face reads it as being listened to whether or not Luke is
  * answering over it.
  */
-export function speechFaceInputs(
-  speakers: VoiceSpeakers,
-): Pick<FaceContext, "speaking" | "microphoneLive"> {
+export function speechFaceInputs(speakers: VoiceSpeakers): FaceContext {
   return { speaking: speakers.lukeSpeaking, microphoneLive: speakers.listening };
 }
 
 /**
  * What Luke settles into, which is usually nothing whatever. A rest repeats for
- * as long as it is true, so the only motions allowed to be one are the three
- * that stay true while they hold: speech going into an open microphone, the
- * microphone open without it, and having nothing at all to watch.
+ * as long as it is true, so the only motions allowed to be one are the two
+ * that stay true while they hold: speech going into an open microphone, and
+ * the microphone open without it.
  *
  * Everything else rests as a still face — the drawing, and no motion — and
- * spends its moments on gestures instead. Nothing here asks who is waiting on
- * you, and nothing here rocks along with the work: a loop that runs for as long
- * as something is true is a loop that is always running for anyone whose
- * sessions usually need them, and a face that never stops moving is one you
- * stop reading. What was a rest is a gesture now; see `asidePool`.
+ * spends its moments on gestures instead: a face that never stops moving is
+ * one you stop reading.
  */
 export function restingMotion(context: FaceContext): FaceMotion | undefined {
   if (context.speaking) return FACE_MOTION.TALKING;
   if (context.microphoneLive) return FACE_MOTION.LISTENING;
-  // A meeting the calendar is holding announcements through. Sleeping is the
-  // one visual report the hold makes — Luke is deliberately not speaking —
-  // and it stays true for exactly as long as the meeting covers now, which is
-  // what a rest must do. Speech still outranks it: a developer who opens a
-  // turn mid-hold is talking to a face, not to a pillow.
-  if (context.announcementsHeld) return FACE_MOTION.SLEEPING;
-  // Nothing to watch at all, which is a different thing from nothing
-  // happening — and different again from not having looked yet. Until the
-  // first roster reading lands, the zero is the reading's absence, and Luke
-  // waits for it awake and still: falling asleep at launch would report an
-  // empty desk he has not actually seen.
-  if (context.total === 0 && context.settled) return FACE_MOTION.SLEEPING;
-  return undefined;
-}
-
-/**
- * What the face has already reacted to. Sessions arriving and finishing are
- * counted, because one arrival is the same news as any other; the ones asking
- * for a person are remembered by id, because three still asking is not the news
- * that one of them being answered as a fourth starts asking is, and the count
- * those two states share is the same number.
- */
-export interface FaceObservation {
-  attention: ReadonlySet<string>;
-  complete: number;
-  total: number;
-}
-
-function observedFace(
-  context: Pick<FaceContext, "attention" | "complete" | "total">,
-): FaceObservation {
-  return {
-    attention: new Set(context.attention),
-    complete: context.complete,
-    total: context.total,
-  };
-}
-
-/**
- * The one-shot a change has earned, if any. A session that has just started
- * asking outranks the other two: it is the only one of them that is about to
- * cost someone their attention, and the fidget is the face saying so — once, at
- * the moment it becomes true, rather than for however long it stays true.
- */
-export function noticedMotion(
-  previous: FaceObservation,
-  current: FaceObservation,
-): FaceMotion | undefined {
-  for (const session of current.attention) {
-    if (!previous.attention.has(session)) return FACE_MOTION.WAITING;
-  }
-  if (current.complete > previous.complete) return FACE_MOTION.SUCCESS;
-  if (current.total > previous.total) return FACE_MOTION.NOTIFICATION;
   return undefined;
 }
 
@@ -131,14 +51,13 @@ interface WeightedAside {
  * sit at the bottom, rare enough to stay surprises. They are what keeps a
  * permanent fixture from reading as a dead one — a face that never moves is a
  * screenshot — and between them the face is simply still. Nothing here means
- * anything: what does is chosen by `restingMotion` or fired by `noticedMotion`
- * at something that just changed.
+ * anything: what does is chosen by `restingMotion`.
  *
  * The same gesture twice running is allowed, and has to be. Two blinks a
  * half-minute apart is what a calm face does, and forbidding a repeat would
  * force something louder into every second moment.
  */
-const IDLE_ASIDES: readonly WeightedAside[] = [
+export const IDLE_ASIDES: readonly WeightedAside[] = [
   { motion: FACE_MOTION.IDLE, weight: 44 },
   { motion: FACE_MOTION.WINK, weight: 10 },
   { motion: FACE_MOTION.BOOP, weight: 8 },
@@ -151,25 +70,11 @@ const IDLE_ASIDES: readonly WeightedAside[] = [
 ];
 
 /**
- * The sway is the one gesture in the pool that means something, so it is in the
- * pool only while what it means is true. It is how work reads on a face that
- * plays no continuous motion while work runs: often enough to notice that
- * something is happening, seldom enough that the face is mostly still.
- */
-const WORKING_ASIDE: WeightedAside = { motion: FACE_MOTION.MONITORING, weight: 18 };
-
-/** What the next moment may be spent on, given what is true while it arrives. */
-export function asidePool(working: boolean): readonly WeightedAside[] {
-  return working ? [...IDLE_ASIDES, WORKING_ASIDE] : IDLE_ASIDES;
-}
-
-/**
  * Tricks for the pointer coming to rest on Luke himself. The flyoff is the
  * showpiece and takes most of the pool; the rest are the loudest of the idle
  * asides, because a hover has earned something bigger than a blink. Nothing
- * here may carry meaning — a hand crosses the strip whenever it likes, and a
- * face that hopped like a task had just finished would be lying about the
- * sessions.
+ * here may carry meaning — a hand crosses the window whenever it likes, and a
+ * face that played a meaning on a passing hand would be lying.
  */
 export const HOVER_ASIDES: readonly WeightedAside[] = [
   { motion: FACE_MOTION.FLYOFF, weight: 46 },
@@ -209,23 +114,19 @@ const stillnessDelay = () =>
   STILLNESS_MIN_MS + Math.random() * (STILLNESS_MAX_MS - STILLNESS_MIN_MS);
 
 /**
- * How far past the drawn face a hover still counts. The face is 18px in a
- * strip at the very top of the screen, and asking for the pixel is asking to
- * miss: a pointer resting anywhere near Luke means Luke. Wide enough to be
- * forgiving, narrow enough that the reach stays his — it must not swallow the
- * marks beside him or read the whole strip as a face.
+ * How far past the drawn face a hover still counts. Asking for the pixel is
+ * asking to miss: a pointer resting anywhere near Luke means Luke. Wide
+ * enough to be forgiving, narrow enough that the reach stays his — it must not
+ * swallow the name beside him or read the whole card as a face.
  */
 const HOVER_REACH_PX = 8;
 
 /**
  * Whether the pointer is resting on Luke himself, give or take the reach. Read
- * from the window's own pointer stream rather than from the face element,
- * because the wing takes no pointer at all: the strip under the housing is one
- * button, and a face that answered enter and leave itself would swallow the
- * press that opens the panel. The box is measured at each move rather than
- * cached, because it travels with the shape while never being what animates — a
- * motion transforms layers inside the svg, so a face mid-flyoff is still
- * hovered where it took off from.
+ * from the window's own pointer stream rather than from the face element, so
+ * a face mid-trick still answers where it took off from: a motion transforms
+ * layers inside the svg, and the box is measured at each move rather than
+ * cached.
  */
 export function useFaceHover(face: RefObject<HTMLElement | null>): boolean {
   const [hovered, setHovered] = useState(false);
@@ -234,9 +135,9 @@ export function useFaceHover(face: RefObject<HTMLElement | null>): boolean {
     const moved = (event: MouseEvent) => {
       const rect = face.current?.getBoundingClientRect();
       // No box is no reading, not a leave. The gate takes the face's place
-      // while sign-in stands, and a pointer that never moved off the capsule
-      // must not be told it left — the trick would rearm and fire again,
-      // unasked, the moment the face returned. Only a measured miss rearms it.
+      // while sign-in stands, and a pointer that never moved must not be told
+      // it left — the trick would rearm and fire again, unasked, the moment
+      // the face returned. Only a measured miss rearms it.
       if (rect === undefined || rect.width === 0) return;
       setHovered(
         event.clientX >= rect.left - HOVER_REACH_PX &&
@@ -267,8 +168,7 @@ export function useFaceHover(face: RefObject<HTMLElement | null>): boolean {
  * afresh for each play, and a fresh element starts its one play from the top.
  *
  * Repeats are not an edge case here. Half the pool is the blink, so the same
- * gesture twice is the likeliest thing to happen, and a second session starting
- * to ask while the first nudge is still playing has to bounce again.
+ * gesture twice is the likeliest thing to happen.
  */
 interface PlayingGesture {
   motion: FaceMotion;
@@ -295,44 +195,6 @@ export function useFaceMotion(context: FaceContext, still: boolean, hovered = fa
   const resting = restingMotion(context);
   const [gesture, setGesture] = useState<PlayingGesture>();
   const plays = useRef(0);
-  const observed = useRef(observedFace(context));
-  const { total, complete, attention, working, settled } = context;
-
-  // Which pool the next moment is drawn from, held in a ref rather than read in
-  // the waiting effect below: work starting and stopping is exactly the churn
-  // that would reschedule the wait forever and leave the face permanently still.
-  const busy = useRef(working > 0);
-  useEffect(() => {
-    busy.current = working > 0;
-  }, [working]);
-
-  // A session arriving, finishing, or turning to ask for you is worth reacting
-  // to once, rather than for as long as it stays true. Seeded from the first
-  // render, so a panel that opens onto four running sessions does not greet all
-  // four of them — nor bounce at the three that were already waiting.
-  //
-  // The list of askers is a fresh array every render, so this runs far more
-  // often than anything actually changes; what makes that free is that the
-  // comparison is against the sessions seen last time rather than against the
-  // last render.
-  // The first reading to settle is a baseline, not news: its sessions were
-  // already running before Luke looked, so greeting them would announce
-  // arrivals that never happened — the same reason the very first render
-  // seeds silently. Tracked against the settling seen last time, like the
-  // observations, so nothing else changing can replay the exemption.
-  const settledBefore = useRef(settled);
-  useEffect(() => {
-    const previous = observed.current;
-    const current = observedFace({ attention, complete, total });
-    observed.current = current;
-    const firstReading = settled && !settledBefore.current;
-    settledBefore.current = settled;
-    if (still || firstReading) return;
-    const noticed = noticedMotion(previous, current);
-    if (noticed === undefined) return;
-    plays.current += 1;
-    setGesture({ motion: noticed, play: plays.current });
-  }, [attention, complete, total, still, settled]);
 
   // The artwork plays each motion once and leaves the face at the pose it
   // started from, so this is only the bookkeeping that catches up with it: the
@@ -349,9 +211,8 @@ export function useFaceMotion(context: FaceContext, still: boolean, hovered = fa
 
   // The pointer arriving on the face is greeted once, at the arrival, and
   // staying put earns nothing more: leaving and coming back is what asks again.
-  // Tracked against the pointer seen last time rather than the last render, for
-  // the same reason the observations above are — so nothing else changing under
-  // a held hover can replay the trick.
+  // Tracked against the pointer seen last time rather than the last render, so
+  // nothing else changing under a held hover can replay the trick.
   const hoveredBefore = useRef(false);
   useEffect(() => {
     const arrived = hovered && !hoveredBefore.current;
@@ -368,20 +229,14 @@ export function useFaceMotion(context: FaceContext, still: boolean, hovered = fa
     if (still || resting !== undefined || gesture !== undefined) return;
     const timer = window.setTimeout(() => {
       plays.current += 1;
-      setGesture({
-        motion: chooseAside(asidePool(busy.current), Math.random()),
-        play: plays.current,
-      });
+      setGesture({ motion: chooseAside(IDLE_ASIDES, Math.random()), play: plays.current });
     }, stillnessDelay());
     return () => window.clearTimeout(timer);
   }, [gesture, resting, still]);
 
   // A gesture a rest has taken the face back from is over, not paused: left set,
   // it would surface partway through its own timer the moment the rest ended,
-  // which reads as a glitch rather than a gesture. Every such gesture, not only
-  // the ones a rest arrived on top of — a session that starts asking into an
-  // open microphone is a moment the face missed, rather than one it owes you the
-  // instant the microphone closes.
+  // which reads as a glitch rather than a gesture.
   useEffect(() => {
     if (resting !== undefined && gesture !== undefined) setGesture(undefined);
   }, [resting, gesture]);
@@ -391,18 +246,15 @@ export function useFaceMotion(context: FaceContext, still: boolean, hovered = fa
   if (still) return { repeat: false, play: 0 };
   // The rest if there is one, the gesture if there is not, and stillness if
   // there is neither. A rest owns the face outright, because each of the
-  // three says something that is true right now — and the microphone ones
-  // carry the face's colour, which is the only report the capsule makes of an
-  // open microphone. Deciding it here rather than in an effect that runs
+  // two says something that is true right now — and they carry the face's
+  // colour, which is how the face reports an open microphone. Deciding it here rather than in an effect that runs
   // afterwards is what keeps a microphone opened mid gesture from going
   // untinted until the gesture runs out.
   //
   // Each gesture gets its own play, so each one is drawn afresh and each one
   // is therefore played. A rest keeps one play throughout, so its loop is
   // never rebuilt underneath itself — and a gesture the rest is covering is
-  // not being played at all, so it does not get one either. Counting that one
-  // would restart the microphone's tilt at a session it is meant to ignore,
-  // and again a frame later when the rest dropped it.
+  // not being played at all, so it does not get one either.
   return {
     motion: resting ?? gesture?.motion,
     repeat: resting !== undefined,

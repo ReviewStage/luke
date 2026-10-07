@@ -1,4 +1,3 @@
-import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import {
   isOptionalWireString,
@@ -36,7 +35,7 @@ export interface VoiceView extends VoiceSpeakers {
   lukeCaptions: readonly string[] | undefined;
   /** The developer's own words still being said, drawn only under the captions preference. */
   developerCaptions: readonly string[] | undefined;
-  /** The plan the standing call is about, where the panel's open plan opened it; none for a desk call or no call. */
+  /** The plan the standing call is about, where the panel's open plan opened it; none for no call. */
   callPlanId: string | undefined;
 }
 
@@ -114,13 +113,4 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   return (
     isOptionalWireStrings(value.lukeCaptions) && isOptionalWireStrings(value.developerCaptions)
   );
-}
-
-/**
- * Who opened the exchange the count is about. A session opened for Luke's own
- * speech was opened by no press, which is the whole of what tells his
- * announcement from a turn the developer took.
- */
-export function voiceExchangeKind(input: { microphoneCall: boolean }): ProductExchangeKind {
-  return input.microphoneCall ? PRODUCT_EXCHANGE_KIND.SPOKEN : PRODUCT_EXCHANGE_KIND.ANNOUNCEMENT;
 }

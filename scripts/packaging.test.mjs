@@ -13,10 +13,6 @@ import {
   APP_UPDATE_CACHE_DIR_NAME,
   APP_UPDATE_FEED_URL,
   APPLE_EVENTS_USAGE_DESCRIPTION,
-  addonCompilerArguments,
-  appleCalendarHelperInfoPlist,
-  CALENDARS_USAGE_DESCRIPTION,
-  CALENDARS_USAGE_KEYS,
   ICONSET_SOURCES,
   iconutilArguments,
   LICENSE_RESOURCE_NAME,
@@ -171,59 +167,19 @@ test("every native helper is built, shipped, and signed", () => {
   const builderBinaries = config.mac.binaries;
 
   for (const helper of NATIVE_HELPERS) {
-    const builderResource = builderShipped.find(
-      (resource) => resource.to === (helper.bundle ?? helper.binary),
-    );
+    const builderResource = builderShipped.find((resource) => resource.to === helper.binary);
     assert.ok(builderResource, `${helper.binary} reaches the electron-builder bundle`);
     assert.ok(
-      builderResource.from.endsWith(helper.bundle ?? helper.binary),
+      builderResource.from.endsWith(helper.binary),
       `${helper.binary} is copied from its built output`,
     );
-    const explicitlySigned = builderBinaries.some((resourcePath) =>
-      resourcePath.endsWith(helper.binary),
+    assert.ok(
+      builderBinaries.some((resourcePath) => resourcePath.endsWith(helper.binary)),
+      `${helper.binary} is signed explicitly by electron-builder`,
     );
-    assert.equal(
-      explicitlySigned,
-      helper.bundle === undefined,
-      helper.bundle
-        ? `${helper.bundle} is signed as a nested app bundle, not again as a loose binary`
-        : `${helper.binary} is signed explicitly by electron-builder`,
-    );
-    assert.ok(helper.source.endsWith(".swift") || helper.source.endsWith(".m"));
-    assert.equal(helper.binary.endsWith(".node"), helper.source.endsWith(".m"));
+    assert.ok(helper.source.endsWith(".swift"));
     assert.ok(helper.frameworks.length > 0);
   }
-});
-
-test("the calendar helper's bundle names itself Luke and carries the usage sentences", () => {
-  const calendarHelper = NATIVE_HELPERS.find((helper) => helper.source === "AppleCalendar.swift");
-  assert.equal(calendarHelper?.bundle, "Luke.app");
-  assert.equal(calendarHelper?.binary, "Luke");
-
-  const plist = appleCalendarHelperInfoPlist();
-  const builderExtendInfo = builderConfig().mac.extendInfo;
-  for (const key of CALENDARS_USAGE_KEYS) {
-    assert.ok(plist.includes(`<key>${key}</key>`));
-    assert.equal(builderExtendInfo[key], CALENDARS_USAGE_DESCRIPTION);
-  }
-  assert.ok(plist.includes(CALENDARS_USAGE_DESCRIPTION));
-  assert.ok(plist.includes("<key>CFBundleIdentifier</key>"));
-  assert.ok(plist.includes("<key>CFBundleExecutable</key>\n\t<string>Luke</string>"));
-  assert.ok(plist.includes("<key>CFBundleDisplayName</key>\n\t<string>Luke</string>"));
-  assert.ok(plist.includes("<key>CFBundleIconFile</key>\n\t<string>Luke.icns</string>"));
-});
-
-test("the stationary window addon is compiled as a loadable Node-API module", () => {
-  const stationary = NATIVE_HELPERS.find(
-    (helper) => helper.binary === "mac-stationary-window.node",
-  );
-
-  assert.ok(stationary, "the stationary window addon is declared");
-  const compilerArguments = addonCompilerArguments("s", "o", stationary.frameworks);
-  assert.deepEqual(compilerArguments.slice(0, 3), ["clang", "-target", SWIFT_TARGET_TRIPLE]);
-  assert.ok(compilerArguments.includes("-dynamiclib"));
-  assert.ok(compilerArguments.includes("-Wl,-undefined,dynamic_lookup"));
-  assert.ok(compilerArguments.includes("AppKit"));
 });
 
 test("the talk key is compiled against the framework that reads it", () => {

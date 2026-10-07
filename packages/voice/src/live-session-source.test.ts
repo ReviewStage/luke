@@ -5,17 +5,14 @@ import {
   type PlanActivityFrame,
   type PlanDraftFrame,
   VOICE_SERVICE_FRAME,
-  VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import {
-  developerSeedItem,
   LIVE_CLIENT_EVENT,
   LIVE_DEFAULTS,
   LIVE_SERVER_EVENT,
   LIVE_SESSION_OUTCOME,
   LIVE_VOICE,
-  PROACTIVE_SPEECH_KIND,
 } from "@sidecar/live";
 import type { ParsedJsonObject } from "@sidecar/wire/testing";
 import { Effect, Logger, type Scope } from "effect";
@@ -25,7 +22,6 @@ import {
   HOSTED_REATTACH_DELAYS_MS,
   type HostedLiveSessionOptions,
   HostedLiveSessionSource,
-  IntroductionLiveSessionSource,
   unavailableLiveDiagnostics,
 } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
@@ -47,7 +43,7 @@ const SDP_ANSWER =
   "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
 const SESSION_ID = "ls_123";
 const SERVICE_ORIGIN = "wss://voice.example.test";
-const INPUT = [developerSeedItem("Roster: one session working.")];
+const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const QUOTA = { used: 3, limit: 50, resetsAt: NOW + 3_600_000 };
 
 function createdFrame(overrides: ParsedJsonObject = {}) {
@@ -94,13 +90,13 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
 }
 
 it.live(
-  "the hosted source opens one socket with the bearer on its handshake and sends the create frame first",
+  "the hosted source opens one socket with the bearer on its handshake and sends the create frame first, naming its plan and seeding nothing",
   () =>
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame())]);
       const source = hosted(script, { voice: LIVE_VOICE.MARIN });
 
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: INPUT });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
 
       assert.equal(opened?.sessionId, SESSION_ID);
       assert.equal(opened?.sdpAnswer, SDP_ANSWER);
@@ -115,31 +111,13 @@ it.live(
         type: VOICE_SERVICE_FRAME.SESSION_CREATE,
         sdp: SDP_OFFER,
         voice: LIVE_VOICE.MARIN,
-        input: INPUT,
+        input: [],
+        planId: PLAN_ID,
       });
       const report = source.diagnostics();
       assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
       assert.deepEqual(report.quota, QUOTA);
     }),
-);
-
-it.live("a planning call's create frame names its plan and seeds nothing of the desk", () =>
-  Effect.gen(function* () {
-    const script = scriptedOpenSocket([answering(createdFrame())]);
-    const source = hosted(script, { voice: LIVE_VOICE.MARIN });
-    const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [], planId });
-
-    assert.equal(opened?.sessionId, SESSION_ID);
-    assert.deepEqual(JSON.parse(script.sockets[0]?.sent[0] ?? ""), {
-      type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-      sdp: SDP_OFFER,
-      voice: LIVE_VOICE.MARIN,
-      input: [],
-      planId,
-    });
-  }),
 );
 
 it.live(
@@ -149,7 +127,7 @@ it.live(
       const script = scriptedOpenSocket([answering(createdFrame({ voiceSessionId: "vs_1" }))]);
       const source = hosted(script, { voice: LIVE_VOICE.MARIN });
 
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: INPUT });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
 
       assert.equal(opened?.voiceSessionId, "vs_1");
     }),
@@ -160,7 +138,7 @@ it.live(
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame())]);
       const source = hosted(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened);
       const [socket] = script.sockets;
       assert.ok(socket);
@@ -207,7 +185,7 @@ it.live("the hosted source refuses to open without an access token and opens no 
     const script = scriptedOpenSocket([answering(createdFrame())]);
     const source = hosted(script, { readAccessToken: () => Effect.succeed(undefined) });
 
-    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
     assert.equal(script.opens.length, 0);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
   }),
@@ -226,14 +204,14 @@ it.live("the hosted source names a refused handshake by its status", () =>
         () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: code }),
       ]);
       const source = hosted(script);
-      assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
       assert.equal(source.diagnostics().lastOutcome, outcome);
     }
     const script = scriptedOpenSocket([
       () => ({ fault: SOCKET_OPEN_FAULT.NETWORK, errorName: "ECONNREFUSED" }),
     ]);
     const source = hosted(script);
-    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NETWORK_ERROR);
   }),
 );
@@ -253,7 +231,7 @@ it.live("the hosted source renews a refused bearer once and retries with the ren
         }),
     });
 
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
 
     assert.equal(opened?.sessionId, SESSION_ID);
     assert.deepEqual(
@@ -281,7 +259,7 @@ it.live("the hosted source does not carry a renewed bearer for another account",
         }),
     });
 
-    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
     assert.equal(script.opens.length, 1);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
   }),
@@ -312,7 +290,7 @@ it.live(
       for (const { frame, outcome } of cases) {
         const script = scriptedOpenSocket([answering(frame)]);
         const source = hosted(script);
-        assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+        assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
         assert.equal(source.diagnostics().lastOutcome, outcome);
         assert.equal(script.sockets[0]?.closedByClient, true);
       }
@@ -320,7 +298,7 @@ it.live(
         answering({ error: HOSTED_API_ERROR.QUOTA_EXHAUSTED, quota: QUOTA }),
       ]);
       const source = hosted(script);
-      yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.deepEqual(source.diagnostics().quota, QUOTA);
     }),
 );
@@ -335,7 +313,7 @@ it.live("the hosted source treats a frame that is neither answer nor error as ma
     for (const answer of answers) {
       const script = scriptedOpenSocket([answer]);
       const source = hosted(script);
-      assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
       assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE);
       assert.equal(script.sockets[0]?.closedByClient, true);
     }
@@ -348,12 +326,12 @@ it.live(
     Effect.gen(function* () {
       const closing = scriptedOpenSocket([closingOnSend(1011)]);
       const closed = hosted(closing);
-      assert.equal(yield* closed.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(yield* closed.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
       assert.equal(closed.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
 
       const silent = scriptedOpenSocket([() => undefined]);
       const quiet = hosted(silent, { requestTimeoutMs: 10 });
-      assert.equal(yield* quiet.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(yield* quiet.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID }), undefined);
       assert.equal(quiet.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
       assert.equal(silent.sockets[0]?.closedByClient, true);
       // A frame or close arriving after the deadline settled the wait records nothing over its outcome.
@@ -411,7 +389,7 @@ it.live(
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
       const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened);
       const sideband = yield* opened.attach();
       const read = yield* readSideband(sideband);
@@ -464,7 +442,7 @@ it.live("sends made during the gap are held and sent on the re-attached connecti
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
     const source = reattaching(script);
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
     assert.ok(opened);
     const sideband = yield* opened.attach();
     script.sockets[0]?.closeFromServer({ code: 1001 });
@@ -493,7 +471,7 @@ it.live(
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
       const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened?.reportActivity);
       yield* opened.attach();
       opened.reportActivity(true);
@@ -507,6 +485,7 @@ it.live(
             sdp: SDP_OFFER,
             voice: LIVE_DEFAULTS.VOICE,
             input: [],
+            planId: PLAN_ID,
           },
           { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true },
         ],
@@ -541,7 +520,7 @@ it.live(
         answering(attachedFrame()),
       ]);
       const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened?.reportActivity);
       const sideband = yield* opened.attach();
       // No report yet: a recycled connection is told nothing it was not told.
@@ -590,7 +569,7 @@ it.live(
         },
       ]);
       const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened?.reportActivity);
       const sideband = yield* opened.attach();
       script.sockets[0]?.closeFromServer({ code: 1001 });
@@ -623,7 +602,7 @@ it.live(
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
       const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened?.stopSpeaking);
       yield* opened.attach();
       opened.stopSpeaking();
@@ -637,6 +616,7 @@ it.live(
             sdp: SDP_OFFER,
             voice: LIVE_DEFAULTS.VOICE,
             input: [],
+            planId: PLAN_ID,
           },
           { type: VOICE_SERVICE_FRAME.SESSION_STOP },
         ],
@@ -666,7 +646,7 @@ it.live(
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
       const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened);
       yield* opened.attach();
       const [first] = script.sockets;
@@ -691,72 +671,12 @@ it.live(
 );
 
 it.live(
-  "a beat rides the socket as the service's own frame, and the service's spoken word is taken off the socket for the listener before the sideband reads it",
-  () =>
-    Effect.gen(function* () {
-      const script = scriptedOpenSocket([answering(createdFrame())]);
-      const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened?.speakBeat && opened.onSpoken);
-      const heard: string[] = [];
-      opened.onSpoken((kind) => heard.push(kind));
-      const reading = yield* readSideband(yield* opened.attach());
-      const beat = {
-        type: VOICE_SERVICE_FRAME.SESSION_BEAT,
-        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
-        firstName: "Ada",
-      } as const;
-      opened.speakBeat(beat);
-      const [first] = script.sockets;
-      assert.ok(first);
-      assert.deepEqual(
-        first.sent.map((data) => JSON.parse(data)),
-        [
-          {
-            type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-            sdp: SDP_OFFER,
-            voice: LIVE_DEFAULTS.VOICE,
-            input: [],
-          },
-          beat,
-        ],
-      );
-      first.receive({
-        type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
-        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
-      });
-      first.receive({
-        type: LIVE_SERVER_EVENT.SESSION_STARTED,
-        event_id: "e1",
-        session: { id: SESSION_ID },
-      });
-      // A frame that only mentions the type inside a value is a session's own and reads as one.
-      first.receive({
-        type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
-        event_id: "e2",
-        delta: "session.spoken",
-        start_ms: 0,
-        end_ms: 10,
-      });
-      yield* settled(
-        () => heard.length === 1 && reading.events.length === 2,
-        "the spoken word and the two session events to land",
-      );
-      assert.deepEqual(heard, [PROACTIVE_SPEECH_KIND.LAUNCH]);
-      assert.deepEqual(
-        reading.events.map((event) => event.type),
-        [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA],
-      );
-    }),
-);
-
-it.live(
   "a plan's draft from the service's notetaker is taken off the socket for its listener and never reaches the sideband",
   () =>
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame())]);
       const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened?.onPlanDraft);
       const drafts: PlanDraftFrame[] = [];
       opened.onPlanDraft((draft) => drafts.push(draft));
@@ -792,7 +712,7 @@ it.live(
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame())]);
       const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened?.onPlanActivity);
       const told: PlanActivityFrame[] = [];
       opened.onPlanActivity((activity) => told.push(activity));
@@ -834,7 +754,7 @@ it.live("re-attaching tries as many times as it has delays and then reports the 
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
     const source = reattaching(script);
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
     assert.ok(opened);
     const read = yield* readSideband(yield* opened.attach());
 
@@ -852,7 +772,7 @@ it.effect("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up"
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
     const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
     assert.ok(opened);
     const read = yield* readSideband(yield* opened.attach());
 
@@ -876,7 +796,7 @@ it.effect("closing while an attach attempt waits for its answer closes the socke
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), () => undefined]);
     const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
     assert.ok(opened);
     const sideband = yield* opened.attach();
 
@@ -897,7 +817,7 @@ it.effect("closing while a reattach wait stands interrupts it, opening no furthe
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
     const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
     assert.ok(opened);
     const sideband = yield* opened.attach();
 
@@ -913,7 +833,7 @@ it.effect("closing while a reattach wait stands interrupts it, opening no furthe
 it.effect("the hosted connection is pinged every thirty seconds, the first one interval in", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame())]);
-    const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
     assert.ok(opened);
     const [socket] = script.sockets;
     assert.ok(socket);
@@ -934,7 +854,7 @@ it.effect("closing the session's scope ends the pings", () =>
     const script = scriptedOpenSocket([answering(createdFrame())]);
     const socket = yield* Effect.scoped(
       Effect.gen(function* () {
-        const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+        const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
         assert.ok(opened);
         const [first] = script.sockets;
         assert.ok(first);
@@ -959,7 +879,7 @@ it.effect(
         answering(attachedFrame()),
       ]);
       const source = reattaching(script, { reattachDelaysMs: [0, 45_000] });
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened);
       yield* readSideband(yield* opened.attach());
 
@@ -1007,7 +927,7 @@ it.effect(
     loggedLines((lines) =>
       Effect.gen(function* () {
         const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
-        const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, input: [] });
+        const opened = yield* reattaching(script).create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
         assert.ok(opened);
         const read = yield* readSideband(yield* opened.attach());
 
@@ -1039,7 +959,7 @@ it.live("a service that refuses the attachment ends the tries at once", () =>
       answering({ error: HOSTED_API_ERROR.UPSTREAM_ERROR }),
     ]);
     const source = reattaching(script);
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
     assert.ok(opened);
     const read = yield* readSideband(yield* opened.attach());
 
@@ -1057,7 +977,7 @@ it.live(
     Effect.gen(function* () {
       const normal = scriptedOpenSocket([answering(createdFrame())]);
       const ended = reattaching(normal);
-      const first = yield* ended.create({ sdpOffer: SDP_OFFER, input: [] });
+      const first = yield* ended.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(first);
       const firstRead = yield* readSideband(yield* first.attach());
       normal.sockets[0]?.closeFromServer({ code: 1000 });
@@ -1067,7 +987,7 @@ it.live(
 
       const own = scriptedOpenSocket([answering(createdFrame())]);
       const hungUp = reattaching(own);
-      const second = yield* hungUp.create({ sdpOffer: SDP_OFFER, input: [] });
+      const second = yield* hungUp.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(second);
       const sideband = yield* second.attach();
       const secondRead = yield* readSideband(sideband);
@@ -1080,60 +1000,6 @@ it.live(
     }),
 );
 
-it.live("the introduction source carries no authorization and opens no sideband", () =>
-  Effect.gen(function* () {
-    const { quota: _quota, ...unmetered } = createdFrame();
-    const script = scriptedOpenSocket([answering(unmetered)]);
-    const source = new IntroductionLiveSessionSource({
-      serviceOrigin: SERVICE_ORIGIN,
-      openSocket: script.openSocket,
-      requestTimeoutMs: 50,
-    });
-
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: INPUT });
-
-    assert.equal(opened?.sessionId, SESSION_ID);
-    assert.equal(opened?.sdpAnswer, SDP_ANSWER);
-    assert.equal("attach" in (opened ?? {}), false);
-    assert.equal(script.opens[0]?.url, `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.INTRODUCTION}`);
-    assert.deepEqual(script.opens[0]?.headers, {});
-    // SAFETY: the source sent the frame it composed as JSON; the assertions read its shape.
-    const frame = JSON.parse(script.sockets[0]?.sent[0] ?? "") as ParsedJsonObject;
-    assert.equal(frame.type, VOICE_SERVICE_FRAME.SESSION_CREATE);
-    assert.equal(frame.voice, LIVE_DEFAULTS.VOICE);
-    assert.deepEqual(frame.input, INPUT);
-    // The service reads the connection's close as the hang-up, so the socket
-    // stands until the caller closes it.
-    assert.equal(script.sockets[0]?.closedByClient, false);
-    opened?.close();
-    assert.equal(script.sockets[0]?.closedByClient, true);
-    const report = source.diagnostics();
-    assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
-    assert.equal(report.sidebandAttached, false);
-    assert.equal(report.quota, undefined);
-  }),
-);
-
-it.live("the introduction source never reads a refusal as signed out", () =>
-  Effect.gen(function* () {
-    const refused = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 })]);
-    const source = new IntroductionLiveSessionSource({
-      serviceOrigin: SERVICE_ORIGIN,
-      openSocket: refused.openSocket,
-    });
-    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-    assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HTTP_ERROR);
-
-    const metered = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 429 })]);
-    const capped = new IntroductionLiveSessionSource({
-      serviceOrigin: SERVICE_ORIGIN,
-      openSocket: metered.openSocket,
-    });
-    assert.equal(yield* capped.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-    assert.equal(capped.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED);
-  }),
-);
-
 test("unavailable diagnostics name the fixture run apart from the missing account", () => {
   assert.equal(
     unavailableLiveDiagnostics({ fixtureMode: true }).lastOutcome,
@@ -1144,41 +1010,6 @@ test("unavailable diagnostics name the fixture run apart from the missing accoun
   assert.equal(missing.sidebandAttached, false);
   assert.equal(missing.voice, LIVE_DEFAULTS.VOICE);
 });
-
-it.live(
-  "the hosted source names this installation's device on the create handshake alone, and none while no device is registered",
-  () =>
-    Effect.gen(function* () {
-      const deviceId = "6f0b1d2e-3c4a-4b5c-8d6e-7f8091a2b3c4";
-      const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
-      let registered: string | undefined = deviceId;
-      const source = reattaching(script, { deviceId: () => registered });
-
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened);
-      yield* opened.attach();
-      const [first] = script.sockets;
-      assert.ok(first);
-      first.closeFromServer({ code: 1006 });
-      yield* openedSockets(script, 2);
-
-      assert.deepEqual(script.opens[0]?.headers, {
-        authorization: "Bearer token-1",
-        [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
-      });
-      assert.deepEqual(script.opens[1]?.headers, { authorization: "Bearer token-1" });
-
-      registered = undefined;
-      const unregistered = scriptedOpenSocket([answering(createdFrame())]);
-      assert.ok(
-        yield* hosted(unregistered, { deviceId: () => registered }).create({
-          sdpOffer: SDP_OFFER,
-          input: [],
-        }),
-      );
-      assert.deepEqual(unregistered.opens[0]?.headers, { authorization: "Bearer token-1" });
-    }),
-);
 
 /** An opening whose far side answers the first frame and speaks again in the same tick, before any continuation runs. */
 function answeringThenSpeaking(
@@ -1211,7 +1042,7 @@ it.live(
         ]),
       ]);
       const source = hosted(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened);
       const sideband = yield* opened.attach();
       // What the service spoke behind the answer is held by the socket until the sideband's own
@@ -1240,7 +1071,7 @@ it.live(
         ]),
       ]);
       const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened);
       const read = yield* readSideband(yield* opened.attach());
       const [first] = script.sockets;
@@ -1274,7 +1105,7 @@ it.live(
         },
       ]);
       const source = hosted(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
       assert.ok(opened);
       const sideband = yield* opened.attach();
       // The close was queued behind the answer; this pause is the recovering socket's turn on it,

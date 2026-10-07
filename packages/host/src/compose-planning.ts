@@ -95,7 +95,7 @@ export interface PlanningDependencies {
   folders: JsonStateFile<PlanFolders>;
   /**
    * Ends the planning call standing about any plan but `keep`, and waits for
-   * it to end; a desk session and the call about `keep` are left standing.
+   * it to end; the call about `keep` is left standing.
    */
   endPlanCall: (keep: string | undefined) => Effect.Effect<void>;
 }

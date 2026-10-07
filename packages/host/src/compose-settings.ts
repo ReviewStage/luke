@@ -5,7 +5,6 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import { ProductEventSender } from "@sidecar/analytics/sender";
-import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials";
 import {
   carried,
   GATEWAY_EVENT,
@@ -13,13 +12,8 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import { type AccountRefreshFailed, HostedVaultClient } from "@sidecar/hosted";
+import type { AccountRefreshFailed } from "@sidecar/hosted";
 import { catchAllButInterrupt } from "@sidecar/runtime/effect";
-import {
-  CLOUD_AGENT_PROVIDER_ID,
-  type CloudAgentProviderId,
-  isCloudAgentProviderId,
-} from "@sidecar/session";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
   type AccountPreferenceField,
@@ -28,16 +22,12 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   isAppSettingField,
-  isKeyedAppSettingField,
-  isSettingEntryKey,
   isSettingsResetScope,
-  type SettingEntryValue,
   settingAnalytics,
-  settingEntryGuard,
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Cause, Deferred, Effect, Queue, Redacted, type Scope } from "effect";
+import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@sidecar/wire";
+import { Cause, Effect, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -49,9 +39,7 @@ import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
-import { apiKeyRejection, SettingsStore, type StoredAccount } from "./settings-store.js";
-import { vaultStepBearer } from "./vault-step-bearer.js";
-import { type VaultStepEra, vaultStepEraStands } from "./vault-step-era.js";
+import { SettingsStore, type StoredAccount } from "./settings-store.js";
 import { reporterOf } from "./wire-helpers.js";
 
 type StoredSettings = SettingsUpdateResult["settings"]["stored"];
@@ -59,32 +47,19 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
 /**
  * What the settings write path reaches in the other concerns. Every one of
  * them is a genuine back-edge: a setting is where the developer changes what
- * a loop, a credential, or a voice does, so the write cannot be the leaf of
- * the graph however much simpler that would be.
+ * an account or a voice does, so the write cannot be the leaf of the graph
+ * however much simpler that would be.
  */
 interface SettingsLinks {
   refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
-  /** The vault holds a Conductor key, stored just now or found at sign-in; onboarding's key step is answered. */
-  readonly cloudKeyHeld: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
   readonly endLiveSession: Effect.Effect<void>;
-  /** The announcement hold read again for the panel once the pause or the meeting setting moved. */
-  readonly refreshAnnouncementHold: Effect.Effect<void>;
-  /** The device heartbeat sent now, so the quiet instant the pause or the meeting setting moved reaches the service at once. */
-  readonly reportPresence: Effect.Effect<void>;
-  broadcastWorkspaceProjects: Effect.Effect<void>;
-  workspaceProjectOffered: (
-    providerId: string,
-    providerProjectId: string,
-  ) => Effect.Effect<boolean>;
 }
 
 export interface SettingsComposer extends Composer {
   readonly store: SettingsStore;
   readonly recordProductEvent: RecordProductEvent;
-  /** One count per provider per day, as the observation pass makes it. */
-  recordProductEventOncePerDay: ProductEventSender["recordOncePerDay"];
   emitSettingsSnapshot: (settings: SettingsUpdateResult["settings"], reporter?: string) => void;
   emitSettings: () => Effect.Effect<void>;
   refusedSettings: (reason: string) => Effect.Effect<SettingsUpdateResult>;
@@ -100,22 +75,7 @@ export interface SettingsComposer extends Composer {
     refusal: string,
     reporter: string | undefined,
   ) => Effect.Effect<SettingsUpdateResult>;
-  /**
-   * The vault's key list read again, and a key an earlier build kept on this
-   * Mac handed to it: offered onto the vault's queue when the account's
-   * capabilities open, so a cloud provider's row answers for what the
-   * service holds. Offered rather than run, so the open waits on no network.
-   */
-  reconcileVaultKeys: () => Effect.Effect<void>;
-  /** The account is gone, and so is what its vault held: every cloud provider's row reads not connected. */
-  forgetVaultKeys: () => void;
   reconcileAccountPreferences: () => Effect.Effect<void>;
-  /**
-   * The developer's own preference write, on its way to the account behind it,
-   * offered rather than run: the observation composer asks for one from a
-   * promise-shaped body that has no fiber to yield on.
-   */
-  pushAccountPreferences: () => void;
   /** The account behind the hydrated preferences changed; the next push hydrates again. */
   forgetAccountPreferenceHydration: () => void;
   /** The count the account actions flush before they end the account they are authenticated with. */
@@ -158,29 +118,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       read: (links: SettingsLinks) => Effect.Effect<A, E>,
     ): Effect.Effect<A, E> => Effect.flatMap(late.value, read);
 
-    /**
-     * Which cloud agent providers the vault holds a key for, as it last listed
-     * them: what a Conductor row's connected state is read from, since the key
-     * itself is the service's and never this Mac's. Filled when the account's
-     * capabilities open, moved by each store and delete, and emptied when the
-     * account goes.
-     */
-    const vaultKeys = new Set<CloudAgentProviderId>();
-    /**
-     * The account the step now on the vault's queue began under, by address,
-     * or nothing between steps. The vault client reads its bearer fresh for
-     * every attempt, so the bearer is bound here to that account: a call whose
-     * header would be read after another account signed in reads no credential
-     * at all and never travels, rather than carrying the first account's key
-     * under the second's bearer.
-     */
-    let vaultStepAccount: string | undefined;
     const store = new SettingsStore({
       directory: () => kernel.stateRoot,
-      // A fixture or evidence run refuses the credentials it resolves, so nothing is
+      // A fixture or evidence run refuses the account it holds, so nothing is
       // reported as available that would not actually happen.
       credentialsUsable: runMode.observesProviders,
-      vaultKeyHeld: (providerId) => vaultKeys.has(providerId),
       cipher,
       overrides,
       fileSystem,
@@ -200,15 +142,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       appVersion: identity.appVersion,
       sends: runMode.sendsNetwork,
       readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
-      refreshAccount: () => linked((links) => links.refreshAccount()),
-      readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
-    });
-    const hostedVault = new HostedVaultClient({
-      serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      readAccessToken: () =>
-        runMode.sendsNetwork
-          ? Effect.map(readStoredAccount(), (account) => vaultStepBearer(account, vaultStepAccount))
-          : Effect.succeed(undefined),
       refreshAccount: () => linked((links) => links.refreshAccount()),
       readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
     });
@@ -264,273 +197,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       ),
       Effect.forever,
     );
-
-    /**
-     * Every touch of the vault's key list rides one queue, drained by a fiber
-     * of this composer's lifetime scope, in the order the hands and the
-     * account's edges took them and one at a time. A step is offered with
-     * the era its hand pressed in — the generation standing and the account
-     * signed in at the press — and begins only if that era still stands when
-     * the queue reaches it, so a Save that waited behind a reconcile's round
-     * trips cannot run under whoever signed in meanwhile; and every step that
-     * awaited the service checks the same two things before it writes, so a
-     * list that returns after a sign-out, or a store that finishes after the
-     * account changed, installs nothing. The bearer every call on the queue
-     * carries is the era's own account's, so a call that outlived it travels
-     * under nobody's.
-     */
-    const vaultActions = yield* Queue.unbounded<Effect.Effect<void>>();
-    let vaultGeneration = 0;
-
-    /** One step as the queue takes it: the account it began under is forgotten however it ends. */
-    const vaultStep = <Answer>(step: Effect.Effect<Answer>): Effect.Effect<Answer> =>
-      Effect.ensuring(
-        step,
-        Effect.sync(() => {
-          vaultStepAccount = undefined;
-        }),
-      );
-
-    /** A step offered onto the vault's queue and not waited for. */
-    const offerVault = (step: Effect.Effect<void>): Effect.Effect<void> =>
-      Effect.asVoid(Queue.offer(vaultActions, vaultStep(step)));
-
-    /**
-     * A step offered onto the vault's queue and waited for: the hand that
-     * pressed Save is answered once the steps ahead of it are done and its
-     * own has ended, with whatever its own ended in.
-     */
-    const enqueueVault = /* @__PURE__ */ Effect.fnUntraced(function* <Answer>(
-      step: Effect.Effect<Answer>,
-    ): Effect.fn.Return<Answer> {
-      const answer = yield* Deferred.make<Answer>();
-      yield* Queue.offer(
-        vaultActions,
-        Effect.flatMap(Effect.exit(vaultStep(step)), (exit) =>
-          Effect.asVoid(Deferred.done(answer, exit)),
-        ),
-      );
-      return yield* Deferred.await(answer);
-    });
-
-    /** The queue drained one step at a time, for as long as the fiber running it stands. */
-    const drainVaultActions = Queue.take(vaultActions).pipe(
-      Effect.flatMap((step) =>
-        Effect.catchCause(step, (cause) =>
-          // An interruption is this fiber being ended rather than a step going
-          // wrong, so it stands; every other way a step could not be carried
-          // is quiet here, since a waited-for step has already answered its
-          // hand through its own deferred.
-          Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.void,
-        ),
-      ),
-      Effect.forever,
-    );
-
-    /**
-     * Who is signed in, by address: the one name an identity refresh cannot
-     * add or drop mid-flight, where the opaque id can, so a store that
-     * outlived a refresh is not read as a sign-out.
-     */
-    const signedInAccountKey = (): Effect.Effect<string | undefined> =>
-      Effect.map(readStoredAccount(), (account) => account?.email);
-
-    /** Whether the era a step was pressed in still stands, so it may begin or still write. */
-    const vaultStillCurrent = (generation: number, accountKey: string): Effect.Effect<boolean> =>
-      Effect.map(signedInAccountKey(), (signedIn) =>
-        vaultStepEraStands({ generation, accountKey }, vaultGeneration, signedIn),
-      );
-
-    /** The era of a press: the generation standing and the account signed in, or nothing signed out. */
-    const vaultEraNow = (): Effect.Effect<VaultStepEra | undefined> =>
-      Effect.map(signedInAccountKey(), (accountKey) =>
-        accountKey === undefined ? undefined : { generation: vaultGeneration, accountKey },
-      );
-
-    /**
-     * A step begins only if the era of its press still stands; then its calls
-     * travel as that account. Answers whether it began.
-     */
-    const beginVaultStep = (era: VaultStepEra): Effect.Effect<boolean> =>
-      Effect.map(vaultStillCurrent(era.generation, era.accountKey), (stands) => {
-        if (stands) vaultStepAccount = era.accountKey;
-        return stands;
-      });
-
-    /**
-     * The row says what the vault last listed, so until the first list of a
-     * sign-in lands it says not connected; the emit that follows the list is
-     * what brings it to true. A list that could not be read is asked for once
-     * more, and one that still cannot leaves the last answer standing — the
-     * vault did not say its keys were gone, only that it could not be asked —
-     * until the next reconcile: a save, a sign-in, or a launch. Answers the
-     * providers listed, or nothing when the vault could not be asked.
-     */
-    const refreshVaultKeys = /* @__PURE__ */ Effect.fnUntraced(function* (
-      generation: number,
-      accountKey: string,
-    ): Effect.fn.Return<ReadonlySet<CloudAgentProviderId> | undefined> {
-      const listed = (yield* hostedVault.listKeys()) ?? (yield* hostedVault.listKeys());
-      if (listed === undefined) return undefined;
-      if (!(yield* vaultStillCurrent(generation, accountKey))) return undefined;
-      vaultKeys.clear();
-      for (const entry of listed) vaultKeys.add(entry.providerId);
-      return new Set(vaultKeys);
-    });
-
-    /**
-     * A cloud provider's key an earlier build kept encrypted on this Mac is
-     * handed to the vault once and then deleted here, so after this the
-     * machine holds none — and only to the account that build last synced it
-     * for, read from the tenant record it kept, so a later sign-in on a shared
-     * Mac cannot claim someone else's key. The vault's own list is read
-     * first: a provider the vault already holds a key for keeps the vault's,
-     * which the developer may have saved since from any device, and the
-     * leftover here is deleted without travelling. A key with no tenant on
-     * record, or another account's, stays where it is and is sent nowhere:
-     * its row reads not connected, and the developer enters the key again
-     * under their own account. A vault that refuses leaves the key for the
-     * next sign-in rather than losing it; an environment key is not Luke's to
-     * send. Answers whether the vault's list moved.
-     */
-    const migrateLocalCloudKeys = /* @__PURE__ */ Effect.fnUntraced(function* (
-      generation: number,
-      account: StoredAccount,
-      held: ReadonlySet<CloudAgentProviderId>,
-    ): Effect.fn.Return<boolean> {
-      const tenant = yield* Effect.orDie(store.readVaultSyncAccount());
-      if (tenant === undefined || (tenant !== account.id && tenant !== account.email)) {
-        return false;
-      }
-      let moved = false;
-      for (const providerId of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
-        const local = yield* Effect.orDie(store.readStoredApiKey(providerId));
-        if (local === undefined) continue;
-        if (!held.has(providerId)) {
-          // The key is revealed here alone, into the body the vault client sends.
-          const stored = yield* hostedVault.storeKey(providerId, Redacted.value(local));
-          if (!stored?.stored) continue;
-          moved = true;
-        }
-        if (!(yield* vaultStillCurrent(generation, account.email))) return moved;
-        // The vault answered that it holds this key, so the row says so from
-        // here whether or not the list that follows can be read.
-        vaultKeys.add(providerId);
-        yield* Effect.orDie(store.setApiKey(providerId, undefined));
-      }
-      return moved;
-    });
-
-    const reconcileVaultKeys = /* @__PURE__ */ Effect.fnUntraced(
-      function* (): Effect.fn.Return<void> {
-        const account = yield* readStoredAccount();
-        if (!account) return;
-        const era: VaultStepEra = { generation: vaultGeneration, accountKey: account.email };
-        yield* offerVault(
-          Effect.gen(function* () {
-            if (!(yield* beginVaultStep(era))) return;
-            const held = yield* refreshVaultKeys(era.generation, era.accountKey);
-            if (held === undefined) return;
-            if (yield* migrateLocalCloudKeys(era.generation, account, held)) {
-              yield* refreshVaultKeys(era.generation, era.accountKey);
-            }
-            if (!(yield* vaultStillCurrent(era.generation, era.accountKey))) return;
-            yield* emitSettings();
-            // A developer who already had a Conductor key in the vault has
-            // answered onboarding's key step before it was ever drawn.
-            if (vaultKeys.has(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR)) {
-              yield* linked((links) => links.cloudKeyHeld);
-            }
-          }),
-        );
-      },
-    );
-
-    /**
-     * The account is gone: the set empties now and the generation moves, so
-     * whatever vault call is still in flight installs nothing when it returns,
-     * and the sign-out's own emit reads the row as not connected.
-     */
-    function forgetVaultKeys(): void {
-      vaultGeneration += 1;
-      vaultKeys.clear();
-    }
-
-    /**
-     * A cloud agent provider's key: stored with Luke's service in the same
-     * press, under the account's own bearer, and never written to this
-     * machine, so the desktop holds no provider key. The row learns the
-     * result from the vault's own answer, and its connected state from what
-     * the vault now holds for the account still signed in. A leftover an
-     * earlier build kept here is deleted in the same press, since the vault's
-     * key is now the one that stands.
-     */
-    const storeCloudKey = /* @__PURE__ */ Effect.fnUntraced(function* (
-      providerId: CloudAgentProviderId,
-      apiKey: string | undefined,
-      reporter: string | undefined,
-    ): Effect.fn.Return<SettingsUpdateResult> {
-      // The era is the press's, read before the step is offered: a Save
-      // that waits behind the steps ahead of it belongs to the account that
-      // pressed, and begins under no other.
-      const era = yield* vaultEraNow();
-      if (era === undefined) {
-        return yield* refusedSettings(
-          "Sign in first: this key is held by Luke's service, not on this Mac.",
-        );
-      }
-      return yield* enqueueVault(storeCloudKeyStep(era, providerId, apiKey, reporter));
-    });
-
-    /** The Save's own step, once the queue reaches it. */
-    const storeCloudKeyStep = /* @__PURE__ */ Effect.fnUntraced(function* (
-      era: VaultStepEra,
-      providerId: CloudAgentProviderId,
-      apiKey: string | undefined,
-      reporter: string | undefined,
-    ): Effect.fn.Return<SettingsUpdateResult> {
-      const { generation, accountKey } = era;
-      if (!(yield* beginVaultStep(era))) {
-        return yield* refusedSettings(
-          "The account changed before the key was stored; sign in and enter it again.",
-        );
-      }
-      const normalized = apiKey?.trim();
-      if (normalized) {
-        // The same door the local path holds, and it already holds the
-        // vault's own shape rule: the length it caps at is the vault's, and
-        // printable ASCII admits no whitespace, so a key that passes here is
-        // one the vault stores, and each refusal names its own reason.
-        const rejection = apiKeyRejection(normalized, CREDENTIAL_PROVIDERS[providerId].keyFormat);
-        if (rejection) return yield* refusedSettings(rejection);
-        const stored = yield* hostedVault.storeKey(providerId, normalized);
-        if (!stored?.stored) {
-          return yield* refusedSettings("Could not store that key with Luke's service.");
-        }
-        if (!(yield* vaultStillCurrent(generation, accountKey))) {
-          return yield* refusedSettings("The account signed out while the key was being stored.");
-        }
-        vaultKeys.add(providerId);
-        yield* linked((links) => links.cloudKeyHeld);
-        yield* Effect.orDie(store.setApiKey(providerId, undefined));
-      } else {
-        const deleted = yield* hostedVault.deleteKey(providerId);
-        if (deleted === undefined) {
-          return yield* refusedSettings("Could not remove that key from Luke's service.");
-        }
-        if (!(yield* vaultStillCurrent(generation, accountKey))) {
-          return yield* refusedSettings("The account signed out while the key was being removed.");
-        }
-        vaultKeys.delete(providerId);
-      }
-      recordProductEvent(
-        normalized ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
-        { connection_id: providerId },
-      );
-      const settings = yield* Effect.orDie(store.snapshot());
-      emitSettingsSnapshot(settings, reporter);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
-    });
 
     const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined, PlatformError> =>
       Effect.map(store.readAccount(), (account) => account?.email);
@@ -676,8 +342,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const sideEffects = hostSettingSideEffects({
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
       endLiveSession: linked((links) => links.endLiveSession),
-      refreshAnnouncementHold: linked((links) => links.refreshAnnouncementHold),
-      reportPresence: linked((links) => links.reportPresence),
     });
 
     const applyHostSettingSideEffect = (
@@ -692,13 +356,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     ): Effect.fn.Return<void> {
       for (const field of changed) {
         yield* applyHostSettingSideEffect(field, result.settings);
-      }
-      if (
-        changed.includes(APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
-        changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
-        changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
-      ) {
-        yield* linked((links) => links.broadcastWorkspaceProjects);
       }
       emitSettingsSnapshot(result.settings);
     });
@@ -741,51 +398,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       [GATEWAY_METHOD.SETTINGS_UPDATE]: (params) =>
         Effect.gen(function* () {
           const field = params.field;
-          if (!isAppSettingField(field) || isKeyedAppSettingField(field)) {
-            return yield* invalid("field must name a plain setting");
-          }
+          if (!isAppSettingField(field)) return yield* invalid("field must name a setting");
           const parsed = APP_SETTING_SCHEMA[field].guard(params.value);
           if (!parsed.valid) return yield* invalid("value is not the shape that setting takes");
           const result = yield* settingsWrite(
             () => store.set(field, parsed.value),
-            (saved) =>
-              saved.reason
-                ? Effect.void
-                : Effect.gen(function* () {
-                    recordSettingUpdate(field, saved.settings);
-                    yield* applyHostSettingSideEffect(field, saved.settings);
-                  }),
-            "Could not save that setting on this system.",
-            reporterOf(params),
-          );
-          if (!result.reason && isAccountPreferenceField(field)) pushAccountPreferences();
-          return carried(result);
-        }),
-      [GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY]: (params) =>
-        Effect.gen(function* () {
-          const field = params.field;
-          if (!isKeyedAppSettingField(field))
-            return yield* invalid("field must name a keyed setting");
-          const key = params.key;
-          if (!isSettingEntryKey(field, key))
-            return yield* invalid("key is not one that setting takes");
-          // SAFETY: the guard is the parser; a wire value is one it reads.
-          const parsed = settingEntryGuard(field, key, params.value as UnparsedWireValue);
-          if (!parsed.valid) return yield* invalid("value is not the shape that entry takes");
-          // SAFETY: settingEntryGuard validated workspace project defaults as a wire string.
-          const projectWire = parsed.value as UnparsedWireValue;
-          if (
-            field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
-            isWireString(projectWire)
-          ) {
-            const offered = yield* linked((links) =>
-              links.workspaceProjectOffered(key, projectWire),
-            );
-            if (!offered) return yield* invalid("that project is not one a provider offers");
-          }
-          const result = yield* settingsWrite(
-            // SAFETY: settingEntryGuard validated the entry before it reaches the store.
-            () => store.setEntry(field, key, parsed.value as SettingEntryValue<typeof field>),
             (saved) =>
               saved.reason
                 ? Effect.void
@@ -824,38 +441,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           if (!result.reason && resetTouchesAccountPreferences(scope)) pushAccountPreferences();
           return carried(result);
         }),
-      [GATEWAY_METHOD.CREDENTIAL_SET_API_KEY]: (params) =>
-        Effect.gen(function* () {
-          const providerId = params.providerId;
-          if (!isCredentialProviderId(providerId))
-            return yield* invalid("providerId is not one this build knows");
-          const apiKey = params.apiKey;
-          if (apiKey !== undefined && !isWireString(apiKey)) {
-            return yield* invalid("apiKey must be a string");
-          }
-          // A cloud agent provider's key is the vault's alone: it takes the
-          // service's own path and never reaches the store on this Mac.
-          if (isCloudAgentProviderId(providerId)) {
-            return carried(yield* storeCloudKey(providerId, apiKey, reporterOf(params)));
-          }
-          const result = yield* settingsWrite(
-            () => store.setApiKey(providerId, apiKey),
-            (saved) =>
-              saved.reason
-                ? Effect.void
-                : Effect.sync(() => {
-                    recordProductEvent(
-                      apiKey?.trim()
-                        ? PRODUCT_EVENT.PROVIDER_CONNECT
-                        : PRODUCT_EVENT.PROVIDER_DISCONNECT,
-                      { connection_id: providerId },
-                    );
-                  }),
-            "Could not save that API key on this system.",
-            reporterOf(params),
-          );
-          return carried(result);
-        }),
       // A count the client's own surfaces made: read against the allowlist
       // again here, and queued only when it reads. Nothing observed can travel
       // in one, because the reader builds the event from the allowlist rather
@@ -876,16 +461,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       methods,
       store,
       recordProductEvent,
-      recordProductEventOncePerDay: (name, key, properties) =>
-        productEvents.recordOncePerDay(name, key, properties),
       emitSettingsSnapshot,
       emitSettings,
       refusedSettings,
       settingsWrite,
-      reconcileVaultKeys,
-      forgetVaultKeys,
       reconcileAccountPreferences,
-      pushAccountPreferences,
       forgetAccountPreferenceHydration: () => {
         accountPreferencesHydratedAccount = undefined;
       },
@@ -914,25 +494,24 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           );
         }
         // The settings read once so the file is warm for the composers built
-        // after this one, waited on by none of them. The read first drops the
-        // ciphertext of any key this build no longer names — the developer's
-        // own OpenAI key, until LUKE-205 — so a key nothing reads does not
-        // stay on disk. A failure holds nothing up and is written down, since
-        // a key that stayed on disk is worth a line.
+        // after this one, waited on by none of them. The read first drops
+        // every key and grant an earlier build stored and this one reads no
+        // longer, so a secret nothing reads does not stay on disk. A failure
+        // holds nothing up and is written down, since a secret that stayed on
+        // disk is worth a line.
         yield* Effect.forkScoped(
           catchAllButInterrupt(
-            Effect.andThen(store.retireStoredApiKeys(), store.snapshot()),
+            Effect.andThen(store.retireStoredSecrets(), store.snapshot()),
             (cause) =>
               Effect.sync(() => {
-                report(`Retiring stored API keys failed: ${Cause.pretty(cause)}`);
+                report(`Retiring stored secrets failed: ${Cause.pretty(cause)}`);
               }),
           ),
         );
-        // The two chains this composer holds, each drained by a fiber of the
-        // composer's own lifetime scope: the scope closing interrupts both
-        // before the stop above gives back what the start took.
+        // The chain this composer holds, drained by a fiber of the composer's
+        // own lifetime scope: the scope closing interrupts it before the stop
+        // above gives back what the start took.
         yield* Effect.forkScoped(drainAccountPreferencesSync);
-        yield* Effect.forkScoped(drainVaultActions);
       }),
     };
   },

@@ -1,28 +1,19 @@
-import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
-import { APP_SETTING_ID, APP_SETTING_KIND, isAppSettingId } from "@sidecar/guide";
+import { APP_SETTING_ID, isAppSettingId } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@sidecar/live";
 import {
   isProviderId,
-  isSessionFilter,
   isWorkspaceProviderId,
-  PROVIDER_ID,
-  PROVIDER_IDENTITY_BY_ID,
   type ProviderId,
   parseWorkspaceAgentSelection,
-  type SessionFilter,
   type WorkspaceAgentDefaults,
   type WorkspaceAgentSelection,
   type WorkspaceProviderId,
-  workspaceAgentModelLabel,
-  workspaceAgentModels,
 } from "@sidecar/session";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Result } from "effect";
 import {
-  choiceAnalytics,
   choiceSetting,
   hotkeySetting,
-  keyedSetting,
   optional,
   settingGuardFromEither,
   storedSetting,
@@ -37,14 +28,7 @@ import {
   type SettingGuardResult,
   type SettingsVisibility,
 } from "./schema-types.js";
-import {
-  APPEARANCE_PAGE,
-  ASK_EACH_TIME_CHOICE,
-  CONDUCTOR_DEFAULT_CHOICE,
-  CONDUCTOR_ROW_PATH,
-  CONNECTIONS_PAGE,
-  VOICE_PAGE,
-} from "./settings-paths.js";
+import { APPEARANCE_PAGE, VOICE_PAGE } from "./settings-paths.js";
 
 export {
   SETTING_ROWS,
@@ -61,11 +45,6 @@ export {
 // the same set and may not depend on anything here.
 export { APP_SETTING_ID, isAppSettingId };
 
-/* The default-workspace row's word for no default at all. An empty value
-   rather than a member of the provider set, so no provider id can collide
-   with it. */
-const NO_WORKSPACE_PROVIDER = "";
-
 /* The voice is an account preference every device applies, and every device
    reads the one Live vocabulary, so the row offers the whole of it. */
 const OFFERED_VOICE_LIST: readonly LiveVoice[] = LIVE_VOICE_LIST;
@@ -78,28 +57,8 @@ function voiceOptionLabel(voice: LiveVoice): string {
   return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
-function workspaceProviderName(providerId: WorkspaceProviderId): string {
-  return PROVIDER_IDENTITY_BY_ID[providerId].displayName;
-}
-
 /** Voice available and the microphone granted: the whole of what a control needs. */
 const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
-
-/**
- * The quiet rides the calendar block, and appears with its first connection —
- * a Google account, or this Mac's own Calendar.
- */
-const calendarConnected = (view: SettingsVisibility): boolean =>
-  (view.settings.calendarSignInAvailable && view.settings.calendarAccounts.length > 0) ||
-  view.settings.appleCalendar !== undefined;
-
-/**
- * The Conductor agent rows belong to a connected provider the build documents
- * a model table for.
- */
-const conductorAgentRowDrawn = (view: SettingsVisibility): boolean =>
-  view.settings.credentialSources[CREDENTIAL_PROVIDER_ID.CONDUCTOR] !== CREDENTIAL_SOURCE.NONE &&
-  workspaceAgentModels(PROVIDER_ID.CONDUCTOR).length > 0;
 
 function workspaceAgentDefaultsGuard(
   value: UnparsedWireValue,
@@ -117,45 +76,6 @@ function workspaceAgentDefaultsGuard(
   return settingGuardFromEither(
     Result.succeed(Object.keys(defaults).length > 0 ? defaults : undefined),
   );
-}
-
-/**
- * The stored chips come back only as far as this build still recognizes them:
- * a value that names no place, kind, app, or agent here — another build's
- * vocabulary, or a corrupted file — is dropped rather than held dormant, a
- * repeated value narrows no further than its first, and a selection left with
- * nothing reads as unset, which is the unnarrowed list.
- */
-function sessionFiltersGuard(
-  value: UnparsedWireValue,
-): SettingGuardResult<readonly SessionFilter[] | undefined> {
-  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
-  if (!Array.isArray(value)) return settingGuardFromEither(Result.fail(undefined));
-  const filters: SessionFilter[] = [];
-  for (const candidate of value) {
-    if (!isWireString(candidate) || !isSessionFilter(candidate)) continue;
-    if (filters.includes(candidate)) continue;
-    filters.push(candidate);
-  }
-  return settingGuardFromEither(Result.succeed(filters.length > 0 ? filters : undefined));
-}
-
-const MAXIMUM_SESSION_SEARCH_QUERY_LENGTH = 500;
-
-/**
- * The stored words come back exactly as typed, because the field they refill
- * is the developer's own text. Only a value that could not be a held search
- * reads as unset instead: words that are all whitespace narrow nothing, and a
- * value past any typeable length is a corrupted file rather than a question
- * someone is still asking.
- */
-function sessionSearchQueryGuard(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
-  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
-  if (!isWireString(value)) return settingGuardFromEither(Result.fail(undefined));
-  if (value.trim() === "" || value.length > MAXIMUM_SESSION_SEARCH_QUERY_LENGTH) {
-    return settingGuardFromEither(Result.succeed(undefined));
-  }
-  return settingGuardFromEither(Result.succeed(value));
 }
 
 const MAXIMUM_WORKSPACE_PROJECT_ID_LENGTH = 500;
@@ -291,70 +211,9 @@ export const APP_SETTING_SCHEMA = {
     adjustable: true,
     visible: voiceControlDrawn,
   }),
-  announceSessions: toggleSetting({
-    field: "announceSessions",
-    id: APP_SETTING_ID.ANNOUNCE_SESSIONS,
-    label: "Announce when sessions need you",
-    description:
-      "Whether announcements — a session waiting, stopping on an error, or finishing, and Luke's other unprompted remarks — are spoken as they happen. Switched off, Luke sleeps: announcements are held, then read out together, the still-true ones only, once it is switched back on. Conversations you open still answer aloud either way. Luke's face sleeps for as long as the switch is off.",
-    default: true,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.CONTROLS,
-    order: 120,
-    resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    manual: VOICE_PAGE,
-    sideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
-    adjustable: true,
-    visible: voiceControlDrawn,
-  }),
-  quietDuringMeetings: toggleSetting({
-    field: "quietDuringMeetings",
-    id: APP_SETTING_ID.QUIET_DURING_MEETINGS,
-    label: "Quiet during meetings",
-    description:
-      "Whether spoken announcements wait while a connected calendar shows a meeting on, then read out together once it ends. Switched on mid-meeting it takes hold at once. It changes nothing until a calendar — a Google Calendar account, or this Mac's Apple Calendar — is connected.",
-    default: true,
-    page: SETTINGS_PAGE.CONNECTIONS,
-    section: SETTING_SECTION.CALENDAR,
-    order: 130,
-    manual: `${CONNECTIONS_PAGE} — drawn once a calendar is connected`,
-    sideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
-    adjustable: true,
-    visible: calendarConnected,
-  }),
-  sessionFilters: storedSetting({
-    field: "sessionFilters",
-    default: undefined,
-    guard: sessionFiltersGuard,
-    // The selection is the session list's own view state, stored so the chips
-    // survive the panel closing and the app restarting; the root page is named
-    // only because a definition must name one.
-    page: SETTINGS_PAGE.ROOT,
-    section: SETTING_SECTION.MAIN,
-    order: 170,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    rows: SETTING_ROWS.NONE,
-    // The guide covers narrowing the list through the session-filter facts and
-    // the spoken filter tool's own vocabulary; the stored selection is what
-    // those already changed, not a setting of its own to describe.
-    ids: [],
-    guide: () => undefined,
-  }),
-  sessionSearchQuery: storedSetting({
-    field: "sessionSearchQuery",
-    default: undefined,
-    guard: sessionSearchQueryGuard,
-    page: SETTINGS_PAGE.ROOT,
-    section: SETTING_SECTION.MAIN,
-    order: 180,
-    sideEffect: SETTING_SIDE_EFFECT.NONE,
-    rows: SETTING_ROWS.NONE,
-    // The guide covers searching through the session-search facts and the
-    // spoken search tool's own vocabulary. No analytics either: the value is
-    // the developer's own text, which never travels.
-    ids: [],
-    guide: () => undefined,
-  }),
+  // The three below are account preferences the service still stores for the
+  // builds that drew a Connections page. This build draws no row for them and
+  // writes none of them; it carries what the account holds, and nothing more.
   defaultWorkspaceProvider: storedSetting({
     field: "defaultWorkspaceProvider",
     default: undefined,
@@ -364,158 +223,36 @@ export const APP_SETTING_SCHEMA = {
         (candidate): candidate is WorkspaceProviderId =>
           isWireString(candidate) && isWorkspaceProviderId(candidate),
       ),
-    page: SETTINGS_PAGE.CONNECTIONS,
-    section: SETTING_SECTION.WORKSPACES,
+    page: SETTINGS_PAGE.ROOT,
+    section: SETTING_SECTION.MAIN,
     order: 190,
-    resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    rows: SETTING_ROWS.SCHEMA,
-    ids: [APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER],
-    guide: (settings) => {
-      const stored = settings("defaultWorkspaceProvider");
-      return {
-        id: APP_SETTING_ID.DEFAULT_WORKSPACE_PROVIDER,
-        label: "Default workspace provider",
-        description:
-          "Which provider a conversational ask creates a new workspace in when the ask names none. " +
-          "Until one is chosen Luke asks when more than one provider could take it, and the first " +
-          "workspace created saves its provider as the default.",
-        kind: APP_SETTING_KIND.CHOICE,
-        // SAFETY: The field's own guard is what put a provider id in the store.
-        value: stored ? workspaceProviderName(stored as WorkspaceProviderId) : ASK_EACH_TIME_CHOICE,
-        choices: [
-          ASK_EACH_TIME_CHOICE,
-          workspaceProviderName(PROVIDER_ID.CODEX),
-          workspaceProviderName(PROVIDER_ID.CONDUCTOR),
-        ],
-        defaultValue: ASK_EACH_TIME_CHOICE,
-        adjustable: false,
-        manual: `${CONNECTIONS_PAGE}, under Workspaces`,
-      };
-    },
-    // The providers it chooses between are the ones the observation reported,
-    // so the row can offer nothing that was not seen — and the set is the one
-    // it offered, so anything else arriving out of the select is a broken
-    // control rather than a choice.
-    control: {
-      value: (stored) => stored ?? NO_WORKSPACE_PROVIDER,
-      options: (view) => [
-        { value: NO_WORKSPACE_PROVIDER, label: "Ask each time" },
-        ...view.workspaceProviders.map((provider) => ({
-          value: provider.id,
-          label: provider.name,
-        })),
-      ],
-      stored: (token, view) =>
-        view.workspaceProviders.find((provider) => provider.id === token)?.id,
-    },
-    analytics: { value: choiceAnalytics },
+    rows: SETTING_ROWS.NONE,
+    ids: [],
+    guide: () => undefined,
   }),
-  workspaceAgentDefaults: keyedSetting({
+  workspaceAgentDefaults: storedSetting({
     field: "workspaceAgentDefaults",
     default: undefined,
     guard: workspaceAgentDefaultsGuard,
-    page: SETTINGS_PAGE.CONNECTIONS,
-    section: SETTING_SECTION.PROVIDERS,
+    page: SETTINGS_PAGE.ROOT,
+    section: SETTING_SECTION.MAIN,
     order: 200,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    // Drawn by `WorkspaceAgentRow`, whose options are a provider's own
-    // documented model table rather than a set the build fixes here.
-    rows: SETTING_ROWS.BESPOKE,
-    ids: [APP_SETTING_ID.WORKSPACE_AGENT_MODEL, APP_SETTING_ID.WORKSPACE_AGENT_EFFORT],
-    guide: (settings) => {
-      // SAFETY: The field's own guard is what put these defaults in the store.
-      const defaults = settings("workspaceAgentDefaults") as WorkspaceAgentDefaults | undefined;
-      const chosen = defaults?.[PROVIDER_ID.CONDUCTOR];
-      const chosenAgent = chosen
-        ? workspaceAgentModels(PROVIDER_ID.CONDUCTOR).find((entry) => entry.agent === chosen.agent)
-        : undefined;
-      return [
-        {
-          id: APP_SETTING_ID.WORKSPACE_AGENT_MODEL,
-          label: "New Conductor agents run",
-          description:
-            "Which model a Conductor workspace or agent created through Luke starts with. Unset, " +
-            "Conductor's own defaults decide. An effort the model's agent documents may be named " +
-            "in the same change.",
-          kind: APP_SETTING_KIND.CHOICE,
-          value: chosen
-            ? workspaceAgentModelLabel(PROVIDER_ID.CONDUCTOR, chosen)
-            : CONDUCTOR_DEFAULT_CHOICE,
-          choices: [
-            CONDUCTOR_DEFAULT_CHOICE,
-            ...workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
-              entry.models.map((model) => model.label),
-            ),
-          ],
-          efforts: Object.fromEntries(
-            workspaceAgentModels(PROVIDER_ID.CONDUCTOR).flatMap((entry) =>
-              entry.efforts.length > 0
-                ? entry.models.map((model) => [model.label, entry.efforts] as const)
-                : [],
-            ),
-          ),
-          defaultValue: CONDUCTOR_DEFAULT_CHOICE,
-          adjustable: true,
-          manual: CONDUCTOR_ROW_PATH,
-        },
-        ...(chosen && chosenAgent && chosenAgent.efforts.length > 0
-          ? [
-              {
-                id: APP_SETTING_ID.WORKSPACE_AGENT_EFFORT,
-                label: "New Conductor agents' effort",
-                description:
-                  "How hard the chosen model thinks. Unset, Conductor's own default decides.",
-                kind: APP_SETTING_KIND.CHOICE,
-                value: chosen.effort ?? CONDUCTOR_DEFAULT_CHOICE,
-                choices: [CONDUCTOR_DEFAULT_CHOICE, ...chosenAgent.efforts],
-                defaultValue: CONDUCTOR_DEFAULT_CHOICE,
-                adjustable: true,
-                manual: CONDUCTOR_ROW_PATH,
-              },
-            ]
-          : []),
-      ];
-    },
-    // Two rows under one condition, answered per id so the field can hold
-    // a row drawn under another later.
-    visibleById: {
-      [APP_SETTING_ID.WORKSPACE_AGENT_MODEL]: conductorAgentRowDrawn,
-      [APP_SETTING_ID.WORKSPACE_AGENT_EFFORT]: conductorAgentRowDrawn,
-    },
-    entry: {
-      isKey: (value: UnparsedWireValue): value is ProviderId =>
-        isWireString(value) && isProviderId(value),
-      same: (
-        current: WorkspaceAgentSelection | undefined,
-        next: WorkspaceAgentSelection | undefined,
-      ) =>
-        current?.agent === next?.agent &&
-        current?.model === next?.model &&
-        current?.effort === next?.effort,
-    },
-    // Every entry rides one stored write, so one id counts them all.
-    analytics: { value: choiceAnalytics },
+    rows: SETTING_ROWS.NONE,
+    ids: [],
+    guide: () => undefined,
   }),
-  workspaceProjectDefaults: keyedSetting({
+  workspaceProjectDefaults: storedSetting({
     field: "workspaceProjectDefaults",
     default: undefined,
     guard: workspaceProjectDefaultsGuard,
-    page: SETTINGS_PAGE.CONNECTIONS,
-    section: SETTING_SECTION.PROVIDERS,
+    page: SETTINGS_PAGE.ROOT,
+    section: SETTING_SECTION.MAIN,
     order: 210,
-    resetScope: SETTINGS_RESET_SCOPE.WORKSPACES,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    // Drawn by `WorkspaceProjectRow`, one per provider, from the projects that
-    // provider's own observation reported.
-    rows: SETTING_ROWS.BESPOKE,
-    // Observed project names and defaults travel in the workspace-project context.
+    rows: SETTING_ROWS.NONE,
     ids: [],
     guide: () => undefined,
-    entry: {
-      isKey: (value: UnparsedWireValue): value is WorkspaceProviderId =>
-        isWireString(value) && isWorkspaceProviderId(value),
-      same: (current: string | undefined, next: string | undefined) => current === next,
-    },
   }),
 } as const;

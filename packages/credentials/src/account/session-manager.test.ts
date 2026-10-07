@@ -23,7 +23,6 @@ function manager(options: {
   stored?: StoredAccount;
   revoke?: (token: string) => Effect.Effect<void, Error>;
   exchangeCode?: () => Effect.Effect<{ accessToken: string; refreshToken: string }, Error>;
-  onSignOut?: (account: StoredAccount) => Effect.Effect<void>;
   client?: AccountClient;
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
   beforeClear?: Effect.Effect<void>;
@@ -81,7 +80,6 @@ function manager(options: {
       stopCapabilities: Effect.sync(() => {
         events.push("stop");
       }),
-      ...(options.onSignOut ? { onSignOut: options.onSignOut } : undefined),
     });
     // The subscriber every test is: a fiber forked into the test's own scope,
     // pumping every snapshot the instance settles on, exactly as
@@ -114,37 +112,6 @@ it.effect("sign out closes capabilities, clears storage, broadcasts, then revoke
     assert.deepEqual(calls, ["revoke"]);
     assert.equal(subject.stored(), undefined);
   }),
-);
-
-it.effect(
-  "sign out releases the departing account while its token still stands, and a failed release never holds it up",
-  () =>
-    Effect.gen(function* () {
-      const order: string[] = [];
-      const subject = yield* manager({
-        stored: STORED,
-        revoke: () =>
-          Effect.sync(() => {
-            order.push("revoke");
-          }),
-        onSignOut: (account) =>
-          Effect.gen(function* () {
-            order.push(
-              `release:${account.accessToken}:${
-                subject.stored() === undefined ? "cleared" : "standing"
-              }`,
-            );
-            // The release answers no typed failure; what a service that could
-            // not be reached leaves behind is the defect its own door raised.
-            return yield* Effect.die(new Error("service unreachable"));
-          }),
-      });
-      subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
-      yield* subject.instance.signOut({ revokeRemote: true });
-      assert.deepEqual(order, ["release:access:standing", "revoke"]);
-      assert.deepEqual(subject.events, ["stop"]);
-      assert.equal(subject.stored(), undefined);
-    }),
 );
 
 it.effect("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>

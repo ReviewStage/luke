@@ -5,10 +5,6 @@ export {
   type ChildSpawnRefusal,
 } from "./children.js";
 export {
-  ObservationLoop,
-  observationSupervisor,
-} from "./observation-loop.js";
-export {
   type BuiltPrompt,
   buildSystemPrompt,
   PROMPT_PROFILE,

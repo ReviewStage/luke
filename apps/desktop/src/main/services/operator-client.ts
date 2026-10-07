@@ -17,8 +17,6 @@ interface OperatorClientLinks {
    * something to talk to, or given back to the machine now that there is not.
    */
   reapplyTalkHotkey: () => void;
-  /** The host's word on whether the introduction is owed moved; the windows decide whether to begin it. */
-  introductionOwedChanged: () => void;
 }
 
 export interface OperatorClient {
@@ -32,19 +30,11 @@ export interface OperatorClient {
   ensureSettings: () => Effect.Effect<AppSettings | undefined>;
   signedIn: () => boolean;
   voiceAvailable: () => boolean;
-  /** Whether the host's onboarding record owes the spoken introduction, as last told. */
-  introductionOwed: () => boolean;
   /** One host bootstrap, adopted into the document every window is answered from. */
   readBootstrap: () => Effect.Effect<HostBootstrap | undefined>;
   /** Stops recording now, ahead of an action that ends the account it is filed under; the host's next replay event re-answers. */
   haltSessionReplay: () => void;
   resumeSessionReplay: () => void;
-  /**
-   * The introduction given to its end: the host writes the completion and
-   * drops the hold it stood behind. Begun here rather than waited on, because
-   * the ending the windows run is not the host's to hold up.
-   */
-  completeIntroduction: () => Effect.Effect<void>;
   /**
    * Reads the host's bootstrap into the document. An effect the composer runs
    * in the launch's own scope, never a promise this file built for itself.
@@ -69,8 +59,7 @@ export interface OperatorClientDependencies {
  * The one operator this process is. It relays the host's events to the
  * windows that draw them, remembers what a synchronous answer needs, and
  * offers this machine's native capabilities as one node. The runtime itself
- * stands behind the host; nothing here composes a store, a brain, or an
- * observation.
+ * stands behind the host; nothing here composes a store or a brain.
  */
 export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOperatorClient")(
   function* (
@@ -87,12 +76,10 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOpe
 
     /**
      * Whether a voice stands at all, which is the one thing this client decides
-     * for itself rather than draws: the keys ask it before claiming a chord and
-     * the mint asks it before the introduction's own. Everything else the host
-     * says goes into the document.
+     * for itself rather than draws: the keys ask it before claiming a chord.
+     * Everything else the host says goes into the document.
      */
     let voiceAvailable = false;
-    let introductionOwed = false;
     const unsubscribers: (() => void)[] = [];
 
     const gateway = yield* wireGateway({
@@ -105,7 +92,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOpe
 
     function adoptBootstrap(boot: HostBootstrap): void {
       voiceAvailable = boot.voiceAvailable;
-      introductionOwed = boot.introductionOwed;
       state.update(bootstrapPatch(state.snapshot(), boot));
     }
 
@@ -120,52 +106,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOpe
       }),
       gateway.host.onAccountChanged((account) => {
         state.update({ account });
-        // The sign-in that owes the introduction lands as two events, the
-        // record's and the account's, in either order; whichever comes second
-        // is the one the windows can act on.
-        links().introductionOwedChanged();
       }),
-      gateway.host.onIntroductionChanged((owed) => {
-        introductionOwed = owed;
-        links().introductionOwedChanged();
-      }),
-      gateway.host.onSessionsChanged((roster) => {
-        state.update({
-          sessions: {
-            ...state.snapshot().sessions,
-            roster: { sessions: roster.sessions },
-            settled: true,
-          },
-        });
-      }),
-      gateway.host.onWorkspaceProjectsChanged((workspaceProjects) => {
-        state.update({ sessions: { ...state.snapshot().sessions, workspaceProjects } });
-      }),
-      gateway.host.onCalendarsChanged((calendars) => {
-        state.update({ calendars });
-      }),
-      gateway.host.onAnnouncementsHeldChanged((held) => {
-        state.update({ announcements: { held } });
-      }),
-      gateway.host.onCalendarOnboardingChanged((calendarOwed) => {
-        state.update({ onboarding: { ...state.snapshot().onboarding, calendarOwed } });
-      }),
-      gateway.host.onConductorKeyOnboardingChanged((conductorKeyOwed) => {
-        state.update({ onboarding: { ...state.snapshot().onboarding, conductorKeyOwed } });
-      }),
-      // The live session's phase is written down for the panels and handed to
-      // the voice window as the event it is: a repeated wanted is a new ask,
-      // which a version of the document could not carry.
+      // The live session's phase is handed to the voice window as the event it is.
       gateway.host.onVoiceLiveSessionChanged((change) => {
-        state.update({
-          voice: {
-            ...state.snapshot().voice,
-            liveSession: {
-              phase: change.phase,
-              ...(change.sessionId !== undefined ? { sessionId: change.sessionId } : undefined),
-            },
-          },
-        });
         links().sendToVoice(channels.onVoiceLiveSessionChanged, change);
       }),
       // The host's own answer about recording stands the halt down: it is the
@@ -196,7 +139,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOpe
         }),
       signedIn: () => state.snapshot().account.status === ACCOUNT_STATUS.SIGNED_IN,
       voiceAvailable: () => voiceAvailable,
-      introductionOwed: () => introductionOwed,
       readBootstrap: () =>
         Effect.gen(function* () {
           const boot = yield* gateway.host.bootstrap();
@@ -205,7 +147,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("desktop/createOpe
         }),
       haltSessionReplay: () => setSessionReplayHalted(true),
       resumeSessionReplay: () => setSessionReplayHalted(false),
-      completeIntroduction: () => gateway.host.completeIntroduction(),
       /** The one bootstrap the launch reads: a host composed in this process is attached once and never goes away. */
       start: () =>
         Effect.gen(function* () {

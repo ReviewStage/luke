@@ -6,42 +6,34 @@ import {
   LIVE_TRANSPORT_STATE,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
+import { type PlanActivityFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import {
-  type PlanActivityFrame,
-  type SessionBeatFrame,
-  VOICE_SERVICE_FRAME,
-} from "@sidecar/hosted";
-import {
-  type InitialItem,
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
-  PROACTIVE_SPEECH_KIND,
-  type ProactiveSpeechKind,
   parseLiveServerEvent,
-  type RosterSeedSession,
-  rosterSeed,
-  SEED_ROLE,
 } from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Clock, Deferred, Duration, Effect, Exit, Fiber, Logger, Scope, type Stream } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Logger, Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
-import { LIVE_SESSION_END_CAUSE, LiveSessionHolder, WANTED_WORD } from "./live-session-holder.js";
+import { LIVE_SESSION_END_CAUSE, LiveSessionHolder } from "./live-session-holder.js";
 
 /**
- * The peer's holder of one hosted session, over a scripted source and
+ * The peer's holder of one hosted planning call, over a scripted source and
  * sideband. What these hold to is the whole of what the desktop still sends
- * once the exchange is the service's: the seed at creation, the stop, the
+ * once the exchange is the service's: the plan at creation, the stop, the
  * hang-up, and the idle report through the source's own door, and nothing on
  * a delegation, a transcript, or an acknowledgment, which are the service's
  * to read.
  */
+
+const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const BILLING_PLAN = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 class FakeSideband implements LiveSideband {
   readonly sent: LiveClientEvent[] = [];
@@ -108,51 +100,34 @@ function settle() {
 interface Fixture {
   holder: LiveSessionHolder;
   sidebands: FakeSideband[];
-  seeds: (readonly InitialItem[])[];
-  /** The plan each session was created about, in order; none for a desk session. */
-  plans: (string | undefined)[];
+  /** The plan each session was created about, in order. */
+  plans: string[];
   changes: VoiceLiveSessionChanged[];
   /** Every idle report the source's door was handed, in order. */
   reports: boolean[];
   /** How many times the source's stop door was asked. */
   stops: number;
-  /** Every beat the source's door was handed, in order. */
-  beats: SessionBeatFrame[];
-  /** Every kind the holder told its caller was spoken, in order. */
-  spoken: ProactiveSpeechKind[];
-  /** The service's word that a turn was spoken, as the source's door would deliver it. */
-  tellSpoken(kind: ProactiveSpeechKind): void;
   /** Every activity frame the holder told its caller, in order. */
   activity: PlanActivityFrame[];
   /** The service's activity frame, as the source's door would deliver it. */
   tellActivity(activity: PlanActivityFrame): void;
   created: number;
-  entries: ConversationEntry[];
-  roster: RosterSeedSession[];
   sourceAvailable: boolean;
   /** Whether the source opens the doors for the idle report and the stop, as the hosted source does and the keyed one does not. */
   reportsActivity: boolean;
   /** Where a creation waits before the source answers, so a test can hold one in flight. */
   createGate: Effect.Effect<void>;
-  open(): Effect.Effect<FakeSideband>;
+  open(planId?: string): Effect.Effect<FakeSideband>;
 }
 
-function fixture(
-  options: { deskVoice?: boolean } = {},
-): Effect.Effect<Fixture, never, Scope.Scope> {
+function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
     const sidebands: FakeSideband[] = [];
-    const seeds: (readonly InitialItem[])[] = [];
-    const plans: (string | undefined)[] = [];
+    const plans: string[] = [];
     const changes: VoiceLiveSessionChanged[] = [];
     const reports: boolean[] = [];
-    const beats: SessionBeatFrame[] = [];
-    const spoken: ProactiveSpeechKind[] = [];
-    let spokenListener: ((kind: ProactiveSpeechKind) => void) | undefined;
     const activity: PlanActivityFrame[] = [];
     let activityListener: ((activity: PlanActivityFrame) => void) | undefined;
-    const entries: ConversationEntry[] = [];
-    const roster: RosterSeedSession[] = [];
     const state = {
       sourceAvailable: true,
       reportsActivity: true,
@@ -163,7 +138,6 @@ function fixture(
     const source: LiveSessionSource = {
       create: (input) =>
         Effect.map(state.createGate, () => {
-          seeds.push([...input.input]);
           plans.push(input.planId);
           const sideband = new FakeSideband();
           sidebands.push(sideband);
@@ -182,12 +156,6 @@ function fixture(
                   stopSpeaking: () => {
                     state.stops += 1;
                   },
-                  speakBeat: (beat: SessionBeatFrame) => {
-                    beats.push(beat);
-                  },
-                  onSpoken: (listener: (kind: ProactiveSpeechKind) => void) => {
-                    spokenListener = listener;
-                  },
                   onPlanActivity: (listener: (activity: PlanActivityFrame) => void) => {
                     activityListener = listener;
                   },
@@ -203,13 +171,7 @@ function fixture(
     };
     const holder = yield* LiveSessionHolder.make({
       source: () => (state.sourceAvailable ? source : undefined),
-      conversationEntries: () => entries,
-      roster: () => roster,
       emit: (change) => changes.push(change),
-      ...options,
-      onSpoken: (kind) => {
-        spoken.push(kind);
-      },
       onPlanActivity: (word) => {
         activity.push(word);
       },
@@ -220,12 +182,9 @@ function fixture(
     return {
       holder,
       sidebands,
-      seeds,
       plans,
       changes,
       reports,
-      entries,
-      roster,
       get created() {
         return state.created;
       },
@@ -237,11 +196,6 @@ function fixture(
       },
       get stops() {
         return state.stops;
-      },
-      beats,
-      spoken,
-      tellSpoken: (kind) => {
-        spokenListener?.(kind);
       },
       activity,
       tellActivity: (word) => {
@@ -259,9 +213,9 @@ function fixture(
       set createGate(value: Effect.Effect<void>) {
         state.createGate = value;
       },
-      open: () =>
+      open: (planId = INVITES_PLAN) =>
         Effect.gen(function* () {
-          const created = yield* holder.createSession("offer");
+          const created = yield* holder.createSession("offer", planId);
           assert.ok(created);
           const sideband = sidebands[sidebands.length - 1];
           assert.ok(sideband);
@@ -278,49 +232,18 @@ function phases(changes: readonly VoiceLiveSessionChanged[]) {
 }
 
 it.effect(
-  "a created session is seeded from the desk and the record, attached before the answer, and its phases are announced",
+  "a created session is about its plan, attached before the answer, and its phases are announced",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      f.entries.push(
-        {
-          kind: CONVERSATION_ENTRY_KIND.ASK,
-          words: "What needs me?",
-          eventId: "e1",
-        },
-        {
-          kind: CONVERSATION_ENTRY_KIND.REPLY,
-          words: "Nothing yet.",
-          eventId: "e2",
-        },
-      );
-      const now = yield* Clock.currentTimeMillis;
-      f.roster.push({
-        identity: { providerId: "conductor", providerSessionId: "chat-1" },
-        title: "api on main",
-        provider: { displayName: "Conductor" },
-        status: SESSION_STATUS.WORKING,
-        lastActivityAt: now - 60_000,
-      });
-      const created = yield* f.holder.createSession("offer");
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
       assert.deepEqual(created, {
         sessionId: "sess-1",
         sdpAnswer: "answer-for-offer",
       });
       assert.equal(f.created, 1);
       assert.equal(f.holder.sessionStands(), true);
-      const [seed] = f.seeds;
-      assert.ok(seed);
-      const summary = rosterSeed(f.roster, now);
-      assert.ok(summary);
-      assert.deepEqual(
-        seed.map((item) => [item.role, item.content[0].text]),
-        [
-          [SEED_ROLE.DEVELOPER, summary.text],
-          [SEED_ROLE.USER, "What needs me?"],
-          [SEED_ROLE.ASSISTANT, "Nothing yet."],
-        ],
-      );
+      assert.deepEqual(f.plans, [INVITES_PLAN]);
       assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED]);
       f.sidebands[0]?.started("sess-1");
       yield* settle();
@@ -334,7 +257,7 @@ it.effect("no source means no session and nothing announced", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     f.sourceAvailable = false;
-    assert.equal(yield* f.holder.createSession("offer"), undefined);
+    assert.equal(yield* f.holder.createSession("offer", INVITES_PLAN), undefined);
     assert.deepEqual(f.changes, []);
     assert.equal(f.holder.sessionStands(), false);
   }),
@@ -385,7 +308,7 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       assert.equal(f.holder.stopSpeaking(), false);
-      const created = yield* f.holder.createSession("offer");
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
       assert.ok(created);
       const sideband = f.sidebands[0];
       assert.ok(sideband);
@@ -406,7 +329,7 @@ it.effect(
 
       // A source with no door, the keyed one straight to OpenAI, has no one to ask.
       f.reportsActivity = false;
-      const again = yield* f.holder.createSession("offer-2");
+      const again = yield* f.holder.createSession("offer-2", INVITES_PLAN);
       assert.ok(again);
       const second = f.sidebands[1];
       assert.ok(second);
@@ -541,8 +464,6 @@ it.effect("a sideband that drops is the session lost, and the drain closes what 
     second.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
     yield* Fiber.join(fiber);
     assert.equal(f.holder.sessionStands(), false);
-    // The wanted phase is nobody's here: nothing on this side asks for a session.
-    assert.equal(phases(f.changes).includes(LIVE_SESSION_PHASE.WANTED), false);
   }),
 );
 
@@ -550,7 +471,7 @@ it.effect("creating a session while one stands closes the standing one first", (
   Effect.gen(function* () {
     const f = yield* fixture();
     const first = yield* f.open();
-    const fiber = yield* Effect.forkChild(f.holder.createSession("second"));
+    const fiber = yield* Effect.forkChild(f.holder.createSession("second", INVITES_PLAN));
     yield* settle();
     assert.deepEqual(first.sent, []);
     assert.equal(first.hangUps, 1);
@@ -576,222 +497,8 @@ it.effect("the holder's scope closing releases a session still standing", () =>
   }),
 );
 
-const ARRIVAL: SessionBeatFrame = {
-  type: VOICE_SERVICE_FRAME.SESSION_BEAT,
-  kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
-  sessionTitle: "Fix the flaky test",
-};
-const CALENDAR: SessionBeatFrame = {
-  type: VOICE_SERVICE_FRAME.SESSION_BEAT,
-  kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-};
-const LAUNCH: SessionBeatFrame = {
-  type: VOICE_SERVICE_FRAME.SESSION_BEAT,
-  kind: PROACTIVE_SPEECH_KIND.LAUNCH,
-  firstName: "Ada",
-};
-
 it.effect(
-  "a beat asked for with no session announces wanted, goes through the source's door once the session starts, is settled by the service's word, and may then be asked again",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      assert.equal(f.holder.speakBeat(ARRIVAL), true);
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
-      // One ask per kind stands at a time, and a second kind asked meanwhile repeats no `wanted`.
-      assert.equal(f.holder.speakBeat(ARRIVAL), false);
-      assert.equal(f.holder.speakBeat(LAUNCH), true);
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
-      f.holder.withdrawBeat(PROACTIVE_SPEECH_KIND.LAUNCH);
-      assert.deepEqual(f.beats, []);
-      const created = yield* f.holder.createSession("offer");
-      assert.ok(created);
-      const sideband = f.sidebands[0];
-      assert.ok(sideband);
-      // Created and not yet started: the beat waits for the start, and nothing left the sideband.
-      assert.deepEqual(f.beats, []);
-      sideband.started(created.sessionId);
-      yield* settle();
-      assert.deepEqual(f.beats, [ARRIVAL]);
-      assert.deepEqual(sideband.sent, []);
-      assert.equal(f.holder.speakBeat(ARRIVAL), false);
-      // A briefing the service reports spoken is the caller's to count and settles no beat.
-      f.tellSpoken(PROACTIVE_SPEECH_KIND.BRIEFING);
-      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.BRIEFING]);
-      assert.equal(f.holder.speakBeat(ARRIVAL), false);
-      f.tellSpoken(PROACTIVE_SPEECH_KIND.ARRIVAL);
-      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.BRIEFING, PROACTIVE_SPEECH_KIND.ARRIVAL]);
-      // Settled: the kind may be asked for again, and a started session takes it at once.
-      assert.equal(f.holder.speakBeat(ARRIVAL), true);
-      assert.deepEqual(f.beats, [ARRIVAL, ARRIVAL]);
-      assert.deepEqual(phases(f.changes), [
-        LIVE_SESSION_PHASE.WANTED,
-        LIVE_SESSION_PHASE.CREATED,
-        LIVE_SESSION_PHASE.STARTED,
-      ]);
-    }),
-);
-
-it.effect(
-  "a waiting beat is withdrawn; one the service already has is the service's to speak; every beat goes with the session that ended",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      assert.equal(f.holder.speakBeat(CALENDAR), true);
-      assert.equal(f.holder.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING), true);
-      assert.equal(f.holder.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING), false);
-      const created = yield* f.holder.createSession("offer");
-      assert.ok(created);
-      const sideband = f.sidebands[0];
-      assert.ok(sideband);
-      sideband.started(created.sessionId);
-      yield* settle();
-      assert.deepEqual(f.beats, []);
-      assert.equal(f.holder.speakBeat(LAUNCH), true);
-      assert.deepEqual(f.beats, [LAUNCH]);
-      assert.equal(f.holder.withdrawBeat(PROACTIVE_SPEECH_KIND.LAUNCH), false);
-      assert.equal(f.holder.speakBeat(LAUNCH), false);
-      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
-      yield* settle();
-      // The session ended with the greeting unspoken: nothing is carried to the next, and the ask stands again.
-      assert.equal(f.holder.speakBeat(LAUNCH), true);
-      assert.deepEqual(phases(f.changes), [
-        LIVE_SESSION_PHASE.WANTED,
-        LIVE_SESSION_PHASE.CREATED,
-        LIVE_SESSION_PHASE.STARTED,
-        LIVE_SESSION_PHASE.CLOSED,
-        LIVE_SESSION_PHASE.WANTED,
-      ]);
-      // A word about a session already over settles nothing and tells nobody.
-      f.tellSpoken(PROACTIVE_SPEECH_KIND.LAUNCH);
-      assert.deepEqual(f.spoken, []);
-    }),
-);
-
-it.effect(
-  "a session that could not be stood leaves no beat waiting for it, so the kind may be asked again and wanted announced again",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.sourceAvailable = false;
-      assert.equal(f.holder.speakBeat(LAUNCH), true);
-      assert.equal(yield* f.holder.createSession("offer"), undefined);
-      assert.equal(f.holder.speakBeat(LAUNCH), true);
-      assert.equal(yield* f.holder.createSession("offer"), undefined);
-      assert.equal(f.holder.speakBeat(LAUNCH), true);
-      assert.deepEqual(phases(f.changes), [
-        LIVE_SESSION_PHASE.WANTED,
-        LIVE_SESSION_PHASE.WANTED,
-        LIVE_SESSION_PHASE.WANTED,
-      ]);
-      assert.deepEqual(f.beats, []);
-    }),
-);
-
-it.effect(
-  "wanting a session for a briefing announces wanted while none stands, and is refused while one does",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      assert.equal(f.holder.wantSession(), true);
-      assert.equal(f.holder.sessionWanted(), true);
-      // One word for however many reasons: a second want, or a beat asked meanwhile, repeats nothing.
-      assert.equal(f.holder.wantSession(), false);
-      assert.equal(f.holder.speakBeat(CALENDAR), true);
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
-      // A word unanswered for its standing is spent: the next reason asks afresh.
-      yield* TestClock.adjust(WANTED_WORD.STANDS_MS - 1);
-      assert.equal(f.holder.sessionWanted(), true);
-      yield* TestClock.adjust(1);
-      assert.equal(f.holder.sessionWanted(), false);
-      assert.equal(f.holder.wantSession(), true);
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED, LIVE_SESSION_PHASE.WANTED]);
-      // Dropped by the caller (a hold began, a sign-out): spent at once.
-      f.holder.dropWant();
-      assert.equal(f.holder.sessionWanted(), false);
-      assert.equal(f.holder.wantSession(), true);
-      const created = yield* f.holder.createSession("offer");
-      assert.ok(created);
-      assert.equal(f.holder.sessionWanted(), false);
-      // Created and not yet started: a session stands, and its exchange's look is what claims the offer.
-      assert.equal(f.holder.wantSession(), false);
-      const sideband = f.sidebands[0];
-      assert.ok(sideband);
-      sideband.started(created.sessionId);
-      yield* settle();
-      assert.equal(f.holder.wantSession(), false);
-      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 4);
-      yield* settle();
-      assert.equal(f.holder.wantSession(), true);
-      assert.deepEqual(phases(f.changes), [
-        LIVE_SESSION_PHASE.WANTED,
-        LIVE_SESSION_PHASE.WANTED,
-        LIVE_SESSION_PHASE.WANTED,
-        LIVE_SESSION_PHASE.CREATED,
-        LIVE_SESSION_PHASE.STARTED,
-        LIVE_SESSION_PHASE.CLOSED,
-        LIVE_SESSION_PHASE.WANTED,
-      ]);
-      assert.deepEqual(f.beats, [CALENDAR]);
-      assert.deepEqual(sideband.sent, []);
-    }),
-);
-
-it.effect(
-  "a beat is dropped on a source with no door, since a session with no service between will never speak it",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.reportsActivity = false;
-      assert.equal(f.holder.speakBeat(ARRIVAL), true);
-      const created = yield* f.holder.createSession("offer");
-      assert.ok(created);
-      const sideband = f.sidebands[0];
-      assert.ok(sideband);
-      sideband.started(created.sessionId);
-      yield* settle();
-      assert.deepEqual(f.beats, []);
-      assert.deepEqual(sideband.sent, []);
-      // Dropped rather than held: the kind may be asked for again.
-      assert.equal(f.holder.speakBeat(ARRIVAL), true);
-    }),
-);
-
-const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const BILLING_PLAN = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-
-it.effect(
-  "a planning call is created about its plan with nothing of the desk seeded, and a beat waits through it rather than being spoken into it",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "What needs me?", eventId: "e1" });
-      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
-      assert.ok(created);
-      assert.deepEqual(f.plans, [INVITES_PLAN]);
-      assert.deepEqual(f.seeds, [[]]);
-      const sideband = f.sidebands[0];
-      assert.ok(sideband);
-      sideband.started(created.sessionId);
-      yield* settle();
-
-      assert.equal(f.holder.speakBeat(LAUNCH), true);
-      assert.deepEqual(f.beats, []);
-      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
-      yield* settle();
-
-      // The next desk session is seeded from the desk again and hears the beat asked for then.
-      const desk = yield* f.open();
-      assert.deepEqual(f.plans, [INVITES_PLAN, undefined]);
-      assert.equal(f.seeds[1]?.length, 1);
-      assert.equal(f.holder.speakBeat(LAUNCH), true);
-      assert.deepEqual(f.beats, [LAUNCH]);
-      assert.deepEqual(desk.sent, []);
-    }),
-);
-
-it.effect(
-  "ending the plan call ends a call about another plan gracefully, and leaves the same plan's call and a desk session standing",
+  "ending the plan call ends a call about another plan gracefully, leaves the same plan's call standing, and leaving the plan ends any call",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -814,11 +521,17 @@ it.effect(
       yield* Fiber.join(ending);
       assert.equal(f.holder.sessionStands(), false);
 
-      const desk = yield* f.open();
-      yield* f.holder.endPlanCall(undefined);
+      const billing = yield* f.open(BILLING_PLAN);
       yield* f.holder.endPlanCall(BILLING_PLAN);
       assert.equal(f.holder.sessionStands(), true);
-      assert.deepEqual(desk.sent, []);
+      assert.deepEqual(billing.sent, []);
+      const leaving = yield* Effect.forkChild(f.holder.endPlanCall(undefined));
+      yield* settle();
+      assert.deepEqual(billing.sent, []);
+      assert.equal(billing.hangUps, 1);
+      billing.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 2);
+      yield* Fiber.join(leaving);
+      assert.equal(f.holder.sessionStands(), false);
     }),
 );
 
@@ -868,22 +581,22 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const desk = yield* f.open();
+      const prior = yield* f.open(BILLING_PLAN);
       const creating = yield* Effect.forkChild(f.holder.createSession("offer", INVITES_PLAN));
       yield* settle();
-      assert.deepEqual(desk.sent, []);
-      assert.equal(desk.hangUps, 1);
+      assert.deepEqual(prior.sent, []);
+      assert.equal(prior.hangUps, 1);
 
       yield* f.holder.endPlanCall(BILLING_PLAN);
-      desk.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
+      prior.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
       assert.equal(yield* Fiber.join(creating), undefined);
-      assert.deepEqual(f.plans, [undefined]);
+      assert.deepEqual(f.plans, [BILLING_PLAN]);
       assert.equal(f.holder.sessionStands(), false);
     }),
 );
 
 it.effect(
-  "a planning call passes on the service's activity about its own plan, drops one about another, and its end is told as nothing doing where a desk session's end tells nothing",
+  "a planning call passes on the service's activity about its own plan, drops one about another, and its end is told as nothing doing about its own plan",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -914,10 +627,12 @@ it.effect(
       f.tellActivity(working);
       assert.equal(f.activity.length, 2);
 
-      const desk = yield* f.open();
-      desk.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 1);
+      const billing = yield* f.open(BILLING_PLAN);
+      billing.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 1);
       yield* settle();
-      assert.equal(f.activity.length, 2);
+      assert.deepEqual(f.activity.slice(2), [
+        { type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY, planId: BILLING_PLAN, notes: false },
+      ]);
     }),
 );
 
@@ -939,49 +654,6 @@ function loggedLines<A>(
 function endLines(lines: readonly string[]): readonly string[] {
   return lines.filter((line) => line.startsWith("voice call ended:"));
 }
-
-it.effect(
-  "an ended call is logged with the hand that ended it, whether it was a planning call, and how long it stood",
-  () =>
-    loggedLines((lines) =>
-      Effect.gen(function* () {
-        const f = yield* fixture();
-        const created = yield* f.holder.createSession("offer", INVITES_PLAN);
-        assert.ok(created);
-        const planning = f.sidebands[0];
-        assert.ok(planning);
-        planning.started(created.sessionId);
-        yield* settle();
-        yield* TestClock.adjust(Duration.seconds(204));
-        const switching = yield* Effect.forkChild(f.holder.endPlanCall(BILLING_PLAN));
-        yield* settle();
-        planning.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 204);
-        yield* Fiber.join(switching);
-
-        const desk = yield* f.open();
-        yield* TestClock.adjust(Duration.seconds(3));
-        f.holder.reportTransport(LIVE_TRANSPORT_STATE.CLOSED, LIVE_PEER_END_REASON.CHANNEL_CLOSED);
-        yield* settle();
-        desk.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
-        yield* settle();
-
-        const lost = yield* f.open();
-        lost.dropConnection();
-        yield* settle();
-
-        assert.deepEqual(endLines(lines), [
-          "voice call ended: cause=plan_switched close_reason=close_requested session=sess-1 planning=true seconds=204",
-          "voice call ended: cause=peer_closed peer_reason=channel_closed close_reason=close_requested session=sess-2 planning=false seconds=3",
-          "voice call ended: cause=sideband_lost close_reason=connection_lost session=sess-3 planning=false seconds=0",
-        ]);
-        assert.ok(
-          lines.includes(
-            "voice transport: state=closed peer_reason=channel_closed session=sess-2 planning=false",
-          ),
-        );
-      }),
-    ),
-);
 
 it.effect(
   "an error naming no command, or naming one with no code, is logged by its type and code alone",
@@ -1008,24 +680,47 @@ it.effect(
         yield* settle();
         assert.deepEqual(
           lines.filter((line) => line.startsWith("voice error:")),
-          ["voice error: type=server_error code=none session=sess-1 planning=true"],
+          ["voice error: type=server_error code=none session=sess-1"],
         );
       }),
     ),
 );
 
-it.effect(
-  "without the desk voice only a planning call is created, and no beat or briefing asks for a session",
-  () =>
+it.effect("an ended call is logged with the hand that ended it and how long it stood", () =>
+  loggedLines((lines) =>
     Effect.gen(function* () {
-      const f = yield* fixture({ deskVoice: false });
-      assert.equal(yield* f.holder.createSession("offer"), undefined);
-      assert.equal(f.holder.speakBeat(ARRIVAL), false);
-      assert.equal(f.holder.wantSession(), false);
-      assert.deepEqual(f.changes, []);
-      assert.equal(f.created, 0);
+      const f = yield* fixture();
       const created = yield* f.holder.createSession("offer", INVITES_PLAN);
       assert.ok(created);
-      assert.deepEqual(f.plans, [INVITES_PLAN]);
+      const planning = f.sidebands[0];
+      assert.ok(planning);
+      planning.started(created.sessionId);
+      yield* settle();
+      yield* TestClock.adjust(Duration.seconds(204));
+      const switching = yield* Effect.forkChild(f.holder.endPlanCall(BILLING_PLAN));
+      yield* settle();
+      planning.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 204);
+      yield* Fiber.join(switching);
+
+      const peer = yield* f.open(BILLING_PLAN);
+      yield* TestClock.adjust(Duration.seconds(3));
+      f.holder.reportTransport(LIVE_TRANSPORT_STATE.CLOSED, LIVE_PEER_END_REASON.CHANNEL_CLOSED);
+      yield* settle();
+      peer.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
+      yield* settle();
+
+      const lost = yield* f.open();
+      lost.dropConnection();
+      yield* settle();
+
+      assert.deepEqual(endLines(lines), [
+        "voice call ended: cause=plan_switched close_reason=close_requested session=sess-1 seconds=204",
+        "voice call ended: cause=peer_closed peer_reason=channel_closed close_reason=close_requested session=sess-2 seconds=3",
+        "voice call ended: cause=sideband_lost close_reason=connection_lost session=sess-3 seconds=0",
+      ]);
+      assert.ok(
+        lines.includes("voice transport: state=closed peer_reason=channel_closed session=sess-2"),
+      );
     }),
+  ),
 );

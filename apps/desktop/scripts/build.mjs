@@ -83,13 +83,6 @@ await Promise.all([
     external: ["electron"],
     plugins: sentryPlugins(),
     define: {
-      // The Google Calendar client secret rides into the bundle from the
-      // packaging environment rather than sitting in source, where secret
-      // scanners cannot tell a desktop client's published "secret" from a
-      // real one; see google-calendar-oauth.ts.
-      PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET: JSON.stringify(
-        process.env.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET ?? "",
-      ),
       PACKAGED_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
       // Whether this bundle rides in a Developer ID release, which is what
       // decides the name — and so the state directory and Keychain entry —
@@ -166,8 +159,8 @@ await Promise.all([
     define: {
       "process.env.NODE_ENV": '"production"',
       // The analytics project the screen recorder files into, from the
-      // packaging environment rather than source, on the calendar secret's
-      // terms above. A build without one records nothing at all — the same
+      // packaging environment rather than source, where secret scanners
+      // cannot tell a published project key from a real secret. A build without one records nothing at all — the same
       // kill switch the site's own counting has, so a local run or an
       // unconfigured build cannot record into a stranger's project.
       PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),

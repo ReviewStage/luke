@@ -1,16 +1,11 @@
-import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
-import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   type FeedbackResult,
   type FeedbackSubmission,
   feedbackSubmission,
 } from "@sidecar/feedback";
 import {
-  LIVE_SDP_MAX_CHARACTERS,
-  type NotebookReadResult,
-  notebookReadResultSchema,
   type VoiceCreateLiveSessionResult,
   voiceCreateLiveSessionParamsSchema,
   voiceCreateLiveSessionResultSchema,
@@ -24,18 +19,13 @@ import {
   planningStartAnswerSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
-import { INTRODUCTION_SEED_BOUNDS, type LiveDiagnostics } from "@sidecar/live";
+import type { LiveDiagnostics } from "@sidecar/live";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
   isAppSettingField,
-  isKeyedAppSettingField,
-  isSettingEntryKey,
-  type KeyedAppSettingField,
   SETTINGS_RESET_SCOPE,
-  type SettingEntryValue,
-  settingEntryGuard,
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import type { WindowMode } from "@sidecar/surface";
@@ -50,7 +40,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { PLAN_MARKDOWN_MAX_CHARS } from "../plan-markdown";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
 import type { UpdateSnapshot } from "./update";
@@ -77,31 +67,11 @@ export const ACT_KIND = {
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
   SETTING_UPDATE: "setting.update",
-  SETTING_UPDATE_ENTRY: "setting.updateEntry",
   SETTINGS_RESET: "settings.reset",
-  CREDENTIAL_SET_API_KEY: "credential.setApiKey",
-  CREDENTIAL_OPEN_API_KEYS: "credential.openApiKeys",
-  CALENDAR_CONNECT_GOOGLE: "calendar.connectGoogle",
-  CALENDAR_CANCEL_GOOGLE_SIGN_IN: "calendar.cancelGoogleSignIn",
-  CALENDAR_REOPEN_GOOGLE_SIGN_IN: "calendar.reopenGoogleSignIn",
-  CALENDAR_REMOVE_ACCOUNT: "calendar.removeAccount",
-  CALENDAR_CONNECT_APPLE: "calendar.connectApple",
-  CALENDAR_DISCONNECT_APPLE: "calendar.disconnectApple",
-  CALENDAR_APPLE_ACCESS_STATUS: "calendar.appleAccessStatus",
-  CALENDAR_CANCEL_APPLE_CONNECT: "calendar.cancelAppleConnect",
-  CALENDAR_OPEN_SETTINGS: "calendar.openSettings",
-  CALENDAR_REFRESH: "calendar.refresh",
-  CALENDAR_SET_SELECTED: "calendar.setSelected",
   UPDATE_CHECK: "update.check",
   UPDATE_INSTALL: "update.install",
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
-  /**
-   * The Settings tab's Memory page asking what Luke has saved: his notebook
-   * as the service holds it, carried through the host's one read of it and
-   * drawn once, read-only, on the panel alone. Nothing of it is kept.
-   */
-  NOTEBOOK_READ: "notebook.read",
   /**
    * The panel's Plans tab asking the host: the plan list and the active
    * document read as the tab shows, one plan made the active one, the open
@@ -149,21 +119,6 @@ export const ACT_KIND = {
   WINDOW_COPY_TEXT: "window.copyText",
   WINDOW_QUIT: "window.quit",
   FEEDBACK_SEND: "feedback.send",
-  ONBOARDING_SKIP_CALENDAR: "onboarding.skipCalendar",
-  ONBOARDING_COMPLETE_CALENDAR: "onboarding.completeCalendar",
-  ONBOARDING_SKIP_CONDUCTOR_KEY: "onboarding.skipConductorKey",
-  /**
-   * The introduction's own GPT Live session: the takeover's SDP offer, with
-   * the titles field the service admits left empty, handed to the accountless voice service,
-   * which answers the SDP and holds the session's trusted side; and the
-   * hang-up, which closes the connection the service reads as the end. Both
-   * are answered only while the takeover holds the panel, and no credential
-   * travels in either.
-   */
-  INTRODUCTION_CREATE_SESSION: "introduction.createSession",
-  INTRODUCTION_END_SESSION: "introduction.endSession",
-  INTRODUCTION_COMPLETE: "introduction.complete",
-  INTRODUCTION_ABANDON: "introduction.abandon",
 } as const;
 
 export type ActKind = (typeof ACT_KIND)[keyof typeof ACT_KIND];
@@ -261,11 +216,11 @@ function record<Fields extends EffectSchema.Struct.Fields>(
 }
 
 /** An identifier's ends, admitted as written rather than trimmed, and refused when it carries nothing. */
-function exactText(max?: number): EffectSchema.Codec<string, string> {
-  const nonBlank = EffectSchema.String.check(
+function exactText(max: number): EffectSchema.Codec<string, string> {
+  return EffectSchema.String.check(
     EffectSchema.makeFilter((value) => value.trim().length > 0),
+    EffectSchema.isMaxLength(max),
   );
-  return max === undefined ? nonBlank : nonBlank.check(EffectSchema.isMaxLength(max));
 }
 
 /** An identifier's ends, admitted as written and admitting nothing at all. */
@@ -273,37 +228,20 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
   return EffectSchema.String.check(EffectSchema.isMaxLength(max));
 }
 
-/** A text collapsed to one line and trimmed, refused when nothing is left. */
-function oneLineText(max?: number): EffectSchema.Codec<string, string> {
-  const collapsed = EffectSchema.String.pipe(
-    EffectSchema.decodeTo(
-      EffectSchema.String,
-      SchemaTransformation.transform({
-        decode: (value: string) => value.replace(/\s+/gu, " ").trim(),
-        encode: (value: string) => value,
-      }),
-    ),
-  ).check(EffectSchema.makeFilter((value) => value.length > 0));
-  return max === undefined ? collapsed : collapsed.check(EffectSchema.isMaxLength(max));
-}
-
 /**
- * An identifier that has to match the one it names elsewhere — a plan, an
- * account, a calendar — so its ends are admitted as written rather than
- * trimmed into a value the host would not hold.
+ * An identifier that has to match the one it names elsewhere — a plan or an
+ * account — so its ends are admitted as written rather than trimmed into a
+ * value the host would not hold.
  */
 const exactId = exactText(512);
 
-/** Every credential provider this build registered, which is what its record is keyed by. */
-const CREDENTIAL_PROVIDER_IDS = Object.keys(CREDENTIAL_PROVIDERS).filter(isCredentialProviderId);
-
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
-  [Field in Exclude<AppSettingField, KeyedAppSettingField>]: {
+  [Field in AppSettingField]: {
     field: Field;
     value: AppSettingValue<Field>;
   };
-}[Exclude<AppSettingField, KeyedAppSettingField>];
+}[AppSettingField];
 
 /**
  * The one payload whose value is parsed by the field beside it. The parsed
@@ -318,38 +256,11 @@ const settingUpdatePayload: ActSchema<SettingUpdatePayload> = {
     }
     const value = raw;
     const field = value.field;
-    if (!isWireString(field) || !isAppSettingField(field) || isKeyedAppSettingField(field)) {
-      return malformed(["field"]);
-    }
+    if (!isWireString(field) || !isAppSettingField(field)) return malformed(["field"]);
     const parsed = APP_SETTING_SCHEMA[field].guard(value.value);
     if (!parsed.valid) return malformed(["value"]);
     // SAFETY: the field's own schema guard admitted this value for this field.
     return { ok: true, value: { field, value: parsed.value } as SettingUpdatePayload };
-  },
-};
-
-export type SettingEntryPayload = {
-  [Field in KeyedAppSettingField]: {
-    field: Field;
-    key: string;
-    value?: SettingEntryValue<Field>;
-  };
-}[KeyedAppSettingField];
-
-const settingEntryPayload: ActSchema<SettingEntryPayload> = {
-  read: (raw) => {
-    const named = ["field", "key", "value"];
-    if (!isRecord(raw) || Object.keys(raw).some((key) => !named.includes(key))) {
-      return malformed();
-    }
-    const value = raw;
-    const field = value.field;
-    if (!isWireString(field) || !isKeyedAppSettingField(field)) return malformed(["field"]);
-    const key = value.key;
-    if (!isWireString(key) || !isSettingEntryKey(field, key)) return malformed(["key"]);
-    if (!settingEntryGuard(field, key, value.value).valid) return malformed(["value"]);
-    // SAFETY: the entry guard above admitted this value for this field and key.
-    return { ok: true, value: { field, key, value: value.value } as SettingEntryPayload };
   },
 };
 
@@ -364,13 +275,6 @@ const answersAccount = wireResult<AccountSnapshot>();
 const press = (refusal: string): ActDeclaration<undefined, void> => ({
   payload: noPayload,
   result: answersNothing,
-  refusal,
-});
-
-/** A press whose answer is the settings the host now holds, for the row to redraw from. */
-const settingsPress = (refusal: string): ActDeclaration<undefined, SettingsUpdateResult> => ({
-  payload: noPayload,
-  result: answersSettings,
   refusal,
 });
 
@@ -416,67 +320,12 @@ export const ACT = {
     result: answersSettings,
     refusal: "Could not save that setting on this system.",
   },
-  [ACT_KIND.SETTING_UPDATE_ENTRY]: {
-    payload: settingEntryPayload,
-    result: answersSettings,
-    refusal: "Could not save that setting on this system.",
-  },
   [ACT_KIND.SETTINGS_RESET]: {
     payload: record({
       scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)),
     }),
     result: answersSettings,
     refusal: "Could not reset those settings on this system.",
-  },
-  [ACT_KIND.CREDENTIAL_SET_API_KEY]: {
-    payload: record({
-      providerId: EffectSchema.Literals(CREDENTIAL_PROVIDER_IDS),
-      apiKey: EffectSchema.optionalKey(exactTextAllowingEmpty(4096)),
-    }),
-    result: answersSettings,
-    refusal: "Could not save that API key on this system.",
-  },
-  [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: {
-    payload: record({
-      providerId: EffectSchema.Literals(CREDENTIAL_PROVIDER_IDS),
-    }),
-    result: answersNothing,
-    refusal: "Could not open that provider's keys page.",
-  },
-  [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: settingsPress(
-    "Could not connect Google Calendar on this system.",
-  ),
-  [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: press("Could not cancel that sign-in on this system."),
-  [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: press("Could not reopen that sign-in on this system."),
-  [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: {
-    payload: record({ accountId: exactId }),
-    result: answersSettings,
-    refusal: "Could not disconnect that account on this system.",
-  },
-  [ACT_KIND.CALENDAR_CONNECT_APPLE]: settingsPress(
-    "Could not connect Apple Calendar on this system.",
-  ),
-  [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: settingsPress(
-    "Could not disconnect Apple Calendar on this system.",
-  ),
-  [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: {
-    payload: noPayload,
-    result: wireResult<AppleCalendarAccess>(),
-    refusal: "Could not read Calendar access on this system.",
-  },
-  [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: press(
-    "Could not cancel that connection on this system.",
-  ),
-  [ACT_KIND.CALENDAR_OPEN_SETTINGS]: press("Could not open the Calendar privacy settings."),
-  [ACT_KIND.CALENDAR_REFRESH]: press("Could not read the calendars on this system."),
-  [ACT_KIND.CALENDAR_SET_SELECTED]: {
-    payload: record({
-      accountId: exactId,
-      calendarId: exactId,
-      selected: EffectSchema.Boolean,
-    }),
-    result: answersSettings,
-    refusal: "Could not save that calendar choice on this system.",
   },
   [ACT_KIND.UPDATE_CHECK]: {
     payload: noPayload,
@@ -486,13 +335,6 @@ export const ACT = {
   [ACT_KIND.UPDATE_INSTALL]: press("Could not install that update on this system."),
   [ACT_KIND.UPDATE_OPEN_RELEASE]: press("Could not open the releases page."),
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: press("Could not open the changelog."),
-  [ACT_KIND.NOTEBOOK_READ]: {
-    payload: noPayload,
-    result: wireResult<NotebookReadResult | undefined>(
-      (value) => value === undefined || isReadable(notebookReadResultSchema)(value),
-    ),
-    refusal: "Could not read Luke's memory on this system.",
-  },
   [ACT_KIND.PLANNING_REFRESH]: press("Could not read your plans on this system."),
   [ACT_KIND.PLANNING_SELECT]: {
     payload: record({ planId: exactId }),
@@ -599,32 +441,6 @@ export const ACT = {
     }),
     result: wireResult<FeedbackResult>(),
     refusal: "Could not send that on this system.",
-  },
-  [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: press("Could not skip that step on this system."),
-  [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: press("Could not settle that step on this system."),
-  [ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY]: press("Could not skip that step on this system."),
-  [ACT_KIND.INTRODUCTION_CREATE_SESSION]: {
-    payload: record({
-      sdp: exactText(LIVE_SDP_MAX_CHARACTERS),
-      titles: EffectSchema.Array(oneLineText(INTRODUCTION_SEED_BOUNDS.TITLE_CHARS)).check(
-        EffectSchema.isMaxLength(INTRODUCTION_SEED_BOUNDS.TITLES),
-      ),
-    }),
-    result: wireResult<VoiceCreateLiveSessionResult | undefined>(
-      (value) => value === undefined || isReadable(voiceCreateLiveSessionResultSchema)(value),
-    ),
-    refusal: "Could not open the introduction's voice session on this system.",
-  },
-  [ACT_KIND.INTRODUCTION_END_SESSION]: press("Could not end the introduction's voice session."),
-  [ACT_KIND.INTRODUCTION_COMPLETE]: {
-    payload: record({ given: EffectSchema.Boolean }),
-    result: answersNothing,
-    refusal: "Could not record the introduction on this system.",
-  },
-  [ACT_KIND.INTRODUCTION_ABANDON]: {
-    payload: record({ reason: oneLineText(1024) }),
-    result: answersNothing,
-    refusal: "Could not stand the introduction down on this system.",
   },
 } as const satisfies Record<ActKind, ActDeclaration<unknown, unknown>>;
 

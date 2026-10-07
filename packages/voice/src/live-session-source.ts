@@ -13,28 +13,23 @@ import {
   planDraftFrameFromWire,
   type SessionActivityFrame,
   type SessionAttachFrame,
-  type SessionBeatFrame,
   type SessionCreateFrame,
   type SessionHangUpFrame,
   type SessionStopFrame,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
-  sessionSpokenFrameFromWire,
   VOICE_SERVICE_FRAME,
-  VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import {
   decodeLivePayload,
-  type InitialItem,
   isLiveVoice,
   LIVE_DEFAULTS,
   LIVE_SESSION_OUTCOME,
   type LiveDiagnostics,
   type LiveSessionOutcome,
   type LiveVoice,
-  type ProactiveSpeechKind,
 } from "@sidecar/live";
 import {
   EXCESS_KEYS,
@@ -73,8 +68,7 @@ import {
 
 /**
  * Where a GPT Live session comes from — the signed-in account through Luke's
- * voice service, or the accountless introduction endpoint — and what each
- * answers with: the session's opaque id and the SDP answer the renderer
+ * voice service — and what it answers with: the session's opaque id and the SDP answer the renderer
  * applies, never a credential. Every session has the service between it and
  * OpenAI; nothing here opens one on a key of the developer's own. The trusted
  * side of the session (the sideband) is reached only through what a source
@@ -94,10 +88,8 @@ const UNAVAILABLE_STATUS = 503;
 export interface LiveSessionCreateInput {
   /** The renderer's SDP offer, as written. */
   sdpOffer: string;
-  /** The startup history, already bounded by `conversationSeedItems`. */
-  input: readonly InitialItem[];
-  /** The plan a planning call is about; absent for every other session. */
-  planId?: string;
+  /** The plan the call is about. */
+  planId: string;
 }
 
 /**
@@ -147,23 +139,10 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    */
   hangUp(): void;
   /**
-   * Asks the service to speak one of the build-fixed beats into this
-   * session, in the service's own vocabulary: the kind and the bounded
-   * observed values its script may mention, never a sentence composed here.
-   * Optional on the same terms as `reportActivity`.
-   */
-  speakBeat?(beat: SessionBeatFrame): void;
-  /**
-   * Tells the listener each proactive turn the service reports spoken to its
-   * end, by kind, as the service's own frame on the same socket says it; the
-   * sideband never sees that frame. Optional on the same terms as
-   * `reportActivity`.
-   */
-  onSpoken?(listener: (kind: ProactiveSpeechKind) => void): void;
-  /**
    * Tells the listener each draft of a planning call's plan the service's
-   * notetaker sends as it writes, on the same socket and the same terms as
-   * `onSpoken`; the sideband never sees that frame either.
+   * notetaker sends as it writes, as the service's own frame on the same
+   * socket says it; the sideband never sees that frame. Optional on the same
+   * terms as `reportActivity`.
    */
   onPlanDraft?(listener: (draft: PlanDraftFrame) => void): void;
   /**
@@ -171,17 +150,6 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * doing on a planning call, on the same terms as `onPlanDraft`.
    */
   onPlanActivity?(listener: (activity: PlanActivityFrame) => void): void;
-}
-
-/**
- * The introduction's session has no trusted half on the desktop; the voice
- * service holds that sideband. What the desktop holds instead is the
- * connection the session was created over: the service closes the session
- * on the caller's behalf the moment that connection ends, so the takeover
- * keeps it for the introduction's duration and `close` is the hang-up.
- */
-export interface IntroductionLiveSessionOpened extends LiveSessionCreated {
-  close(): void;
 }
 
 export interface LiveSessionSource {
@@ -196,16 +164,6 @@ export interface LiveSessionSource {
   ): Effect.Effect<LiveSessionOpened | undefined, never, Scope.Scope>;
   /** Applies to the next session: a voice is immutable once a session has started. */
   setVoice(voice: string | undefined): void;
-  diagnostics(): LiveDiagnostics;
-}
-
-/**
- * The introduction's source: the same create, no voice to set, and no
- * sideband on this side. Nothing of its session stands on a fiber here, so
- * its create asks for no scope.
- */
-export interface IntroductionSessionSource {
-  create(input: LiveSessionCreateInput): Effect.Effect<IntroductionLiveSessionOpened | undefined>;
   diagnostics(): LiveDiagnostics;
 }
 
@@ -314,18 +272,8 @@ interface ServiceSessionOptions {
   servicePath: string;
   openSocket: OpenSocket;
   logLabel: string;
-  /**
-   * The identity a socket's handshake carries. The introduction's endpoint
-   * takes none, so it omits this, and then neither the header nor the
-   * refresh-and-retry exists.
-   */
-  authorization?: AccountToken;
-  /**
-   * This installation's `devices` row id, read at each creation so a row
-   * registered after the source was built is still named; nothing while the
-   * device is not registered, and then the handshake carries no such header.
-   */
-  deviceId?: () => string | undefined;
+  /** The identity a socket's handshake carries. */
+  authorization: AccountToken;
   voice?: string;
   requestTimeoutMs?: number;
 }
@@ -340,8 +288,7 @@ interface ServiceSessionOptions {
 class ServiceLiveSessionSource {
   readonly #address: string;
   readonly #openSocket: OpenSocket;
-  readonly #authorization: AccountToken | undefined;
-  readonly #deviceId: (() => string | undefined) | undefined;
+  readonly #authorization: AccountToken;
   readonly #configuredVoice: LiveVoice;
   #voice: LiveVoice;
   readonly #requestTimeoutMs: number;
@@ -358,7 +305,6 @@ class ServiceLiveSessionSource {
     this.#address = address;
     this.#openSocket = options.openSocket;
     this.#authorization = options.authorization;
-    this.#deviceId = options.deviceId;
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
     this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, SERVICE_REQUEST_TIMEOUT_MS);
@@ -397,17 +343,15 @@ class ServiceLiveSessionSource {
       this.#sidebandAttached = false;
       const authorization = this.#authorization;
       const bearer = yield* this.#bearer();
-      if (authorization && bearer === undefined) {
+      if (bearer === undefined) {
         this.#outcome.record(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN, "no access token");
         return undefined;
       }
-      const deviceId = this.#deviceId?.();
-      let opening = yield* this.#open(bearer, deviceId);
+      let opening = yield* this.#open(bearer);
       if (
         !socketOpened(opening) &&
         opening.fault === SOCKET_OPEN_FAULT.REFUSED &&
-        opening.status === HTTP_STATUS.UNAUTHORIZED &&
-        authorization
+        opening.status === HTTP_STATUS.UNAUTHORIZED
       ) {
         // Routine expiry of an hour-lived token: renew once and retry once, only
         // on a bearer that actually changed and still answers for the same account.
@@ -419,12 +363,12 @@ class ServiceLiveSessionSource {
             this.#outcome.record(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN, "the account changed");
             return undefined;
           }
-          opening = yield* this.#open(renewed, deviceId);
+          opening = yield* this.#open(renewed);
         }
       }
       if (!socketOpened(opening)) {
         const { outcome, detail } = socketFaultOutcome(opening);
-        this.#refuse(outcome, detail);
+        this.#outcome.record(outcome, detail);
         return undefined;
       }
       const { socket } = opening;
@@ -432,8 +376,9 @@ class ServiceLiveSessionSource {
         type: VOICE_SERVICE_FRAME.SESSION_CREATE,
         sdp: input.sdpOffer,
         voice: this.#voice,
-        input: [...input.input],
-        ...(input.planId === undefined ? undefined : { planId: input.planId }),
+        // A planning call is seeded with nothing: what it knows is the plan's.
+        input: [],
+        planId: input.planId,
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       const created = answer === undefined ? undefined : this.#readCreated(answer);
@@ -444,19 +389,6 @@ class ServiceLiveSessionSource {
       this.#outcome.record(LIVE_SESSION_OUTCOME.SUCCEEDED);
       return { created, socket };
     });
-  }
-
-  /**
-   * A refusal is only a signed-out answer where an identity was sent at all;
-   * the introduction endpoint takes none, so its 401 is a fault worth chasing.
-   */
-  #refuse(outcome: LiveSessionOutcome, detail: string): void {
-    this.#outcome.record(
-      outcome === LIVE_SESSION_OUTCOME.NOT_SIGNED_IN && !this.#authorization
-        ? LIVE_SESSION_OUTCOME.HTTP_ERROR
-        : outcome,
-      detail,
-    );
   }
 
   protected holdSideband(socket: LiveSocket): LiveSideband {
@@ -480,7 +412,7 @@ class ServiceLiveSessionSource {
   protected attachOnce(sessionId: string): Effect.Effect<ReattachAttempt> {
     return Effect.gen({ self: this }, function* () {
       const bearer = yield* this.#bearer();
-      if (this.#authorization && bearer === undefined) return { outcome: REATTACH_ATTEMPT.REFUSED };
+      if (bearer === undefined) return { outcome: REATTACH_ATTEMPT.REFUSED };
       // The open and the guard over what it answered are one uninterruptible step, so a hang-up
       // that interrupts this fiber can never land between them and leave a socket nobody holds;
       // only the wait for the answer is interruptible, and interrupting it closes that socket.
@@ -525,24 +457,19 @@ class ServiceLiveSessionSource {
   }
 
   #bearer(): Effect.Effect<string | undefined> {
-    const authorization = this.#authorization;
-    if (!authorization) return Effect.succeed(undefined);
-    return Effect.map(authorization.readAccessToken(), (token) =>
+    return Effect.map(this.#authorization.readAccessToken(), (token) =>
       token ? `Bearer ${token}` : undefined,
     );
   }
 
   #holder(): Effect.Effect<string | undefined> {
-    const readAccountKey = this.#authorization?.readAccountKey;
+    const readAccountKey = this.#authorization.readAccountKey;
     return readAccountKey ? readAccountKey() : Effect.succeed(undefined);
   }
 
-  /** The handshake's headers: the bearer where one stands, and on a creation the device the session is opened for. */
-  #open(bearer: string | undefined, deviceId?: string): Effect.Effect<SocketOpening> {
-    return this.#openSocket(this.#address, {
-      ...(bearer === undefined ? undefined : { authorization: bearer }),
-      ...(deviceId === undefined ? undefined : { [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId }),
-    });
+  /** The handshake's one header: the bearer. */
+  #open(bearer: string): Effect.Effect<SocketOpening> {
+    return this.#openSocket(this.#address, { authorization: bearer });
   }
 
   /**
@@ -610,7 +537,10 @@ class ServiceLiveSessionSource {
           Result.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(payload.quota))) ??
           this.#quota;
       }
-      this.#refuse(HOSTED_ERROR_OUTCOME.get(error) ?? LIVE_SESSION_OUTCOME.HTTP_ERROR, error);
+      this.#outcome.record(
+        HOSTED_ERROR_OUTCOME.get(error) ?? LIVE_SESSION_OUTCOME.HTTP_ERROR,
+        error,
+      );
       return undefined;
     }
     this.#outcome.record(LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE, "no session id and SDP answer");
@@ -940,17 +870,13 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           matches: (data) => sessionActivityFrameFromWire(decodeLivePayload(data)) !== undefined,
         },
       });
-      // The service's own words, a spoken turn and a plan's draft and its activity,
-      // ride the same socket as the session's events and are taken off it here,
-      // before the sideband's Live grammar would read them as nothing.
-      const spokenListeners = new Set<(kind: ProactiveSpeechKind) => void>();
+      // The service's own words, a plan's draft and its activity, ride the
+      // same socket as the session's events and are taken off it here, before
+      // the sideband's Live grammar would read them as nothing.
       const draftListeners = new Set<(draft: PlanDraftFrame) => void>();
       const activityListeners = new Set<(activity: PlanActivityFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
-          onSpoken: (kind) => {
-            for (const listener of [...spokenListeners]) listener(kind);
-          },
           onPlanDraft: (draft) => {
             for (const listener of [...draftListeners]) listener(draft);
           },
@@ -988,16 +914,6 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           const frame: SessionHangUpFrame = { type: VOICE_SERVICE_FRAME.SESSION_HANG_UP };
           socket.send(JSON.stringify(frame));
         },
-        // A beat rides the same socket, held through a gap like any send. The
-        // exchange a re-attached connection stands is a fresh one, so a beat
-        // sent before the gap and not yet spoken is not said again behind it:
-        // the desktop learns of it as unspoken when the session ends.
-        speakBeat: (beat) => {
-          socket.send(JSON.stringify(beat));
-        },
-        onSpoken: (listener) => {
-          spokenListeners.add(listener);
-        },
         onPlanDraft: (listener) => {
           draftListeners.add(listener);
         },
@@ -1010,8 +926,8 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
 }
 
 /**
- * The socket with the service's own frames, `session.spoken`, `plan.draft`,
- * and `plan.activity`, taken off its arrivals and told to their listeners, so the
+ * The socket with the service's own frames, `plan.draft` and
+ * `plan.activity`, taken off its arrivals and told to their listeners, so the
  * sideband over it reads only what the session said. Every frame is checked
  * by the frame's own schema; the substring test ahead of it is only what
  * keeps a transcript delta from being decoded twice.
@@ -1019,7 +935,6 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
 function withoutServiceFrames(
   socket: LiveSocket,
   listeners: {
-    readonly onSpoken: (kind: ProactiveSpeechKind) => void;
     readonly onPlanDraft: (draft: PlanDraftFrame) => void;
     readonly onPlanActivity: (activity: PlanActivityFrame) => void;
   },
@@ -1030,12 +945,6 @@ function withoutServiceFrames(
     close: () => socket.close(),
     arrivals: Stream.filter(socket.arrivals, (arrival) => {
       if ("close" in arrival) return true;
-      if (arrival.frame.includes(VOICE_SERVICE_FRAME.SESSION_SPOKEN)) {
-        const spoken = sessionSpokenFrameFromWire(decodeLivePayload(arrival.frame));
-        if (spoken === undefined) return true;
-        listeners.onSpoken(spoken.kind);
-        return false;
-      }
       if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_DRAFT)) {
         const draft = planDraftFrameFromWire(decodeLivePayload(arrival.frame));
         if (draft === undefined) return true;
@@ -1051,41 +960,6 @@ function withoutServiceFrames(
       return true;
     }),
   };
-}
-
-export type IntroductionLiveSessionOptions = Omit<ServiceSourceOptions, "voice">;
-
-/**
- * The one-time introduction's session, before any account exists. The
- * handshake deliberately carries no authorization header — the endpoint takes
- * no identity and this source holds none to send — and the session has no
- * sideband on this side by type: the voice service holds it and sends the
- * greeting, so nothing on this machine can append to it. The socket the
- * service answered on is kept open and never read, because the service treats
- * its close as the caller hanging up; the caller closes it to end the session.
- */
-export class IntroductionLiveSessionSource
-  extends ServiceLiveSessionSource
-  implements IntroductionSessionSource
-{
-  constructor(options: IntroductionLiveSessionOptions) {
-    super({
-      ...options,
-      servicePath: VOICE_SERVICE_PATH.INTRODUCTION,
-      logLabel: "Introduction live session",
-    });
-  }
-
-  create(input: LiveSessionCreateInput): Effect.Effect<IntroductionLiveSessionOpened | undefined> {
-    return Effect.gen({ self: this }, function* () {
-      const opened = yield* this.createSession(input);
-      if (!opened) return undefined;
-      // Kept open and never read: the frames the service might send are dropped rather than held,
-      // so the hold on this socket cannot fill toward its bound and close it.
-      opened.socket.ignore();
-      return { ...opened.created, close: () => opened.socket.close() };
-    });
-  }
 }
 
 /**

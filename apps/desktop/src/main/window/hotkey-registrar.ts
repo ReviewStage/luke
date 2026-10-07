@@ -65,9 +65,8 @@ export interface HotkeyRegistrarOptions {
   registersGlobalKeys: boolean;
   /**
    * Whether the named key currently has something to serve. Answered per rank
-   * because the ranks can diverge: the introduction holds a voice for the talk
-   * key alone, and claiming the stop chord beside it would take a system key
-   * from every other app for nothing.
+   * because claiming a chord that serves nothing would take a system key from
+   * every other app for nothing.
    */
   hasCredentials: (rank: HotkeyRank) => boolean;
   shortcut?: ShortcutSurface;

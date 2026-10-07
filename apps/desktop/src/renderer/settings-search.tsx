@@ -19,13 +19,8 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { Highlighted } from "./search-field";
-import { matchesTokens, searchTokens } from "./session-model";
-import { type ConnectionVisibility, offeredConnections } from "./settings/connection-schema";
-import {
-  defaultProjectRowId,
-  SETTINGS_SEARCH_ANCHOR_ATTRIBUTE,
-  SETTINGS_SEARCH_ROW,
-} from "./settings-anchors";
+import { matchesTokens, searchTokens } from "./search-tokens";
+import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
 import {
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
@@ -45,7 +40,7 @@ import {
  * — one description of each setting, so the search and Luke's own account of
  * himself cannot drift apart — and each says for itself whether its row is
  * drawn, so nothing here restates a condition a page branches on. The rows
- * that are not settings (a permission, a key, a shortcut, the ways out) are
+ * that are not settings (a permission, a shortcut, the ways out) are
  * declared here, gated by the same conditions that draw them. A row the pages
  * are not drawing right now is not offered, because a result that leads to a
  * page without its row is a promise the page cannot keep.
@@ -71,7 +66,7 @@ export const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 /** One row a query can find, and where pressing it leads. */
 export interface SettingsSearchEntry {
   /**
-   * The row's own id: a setting's schema id, a provider's, or a member of
+   * The row's own id: a setting's schema id, or a member of
    * `SETTINGS_SEARCH_ROW`. It is what the landing seeks — as the anchor the
    * row wears.
    */
@@ -105,8 +100,6 @@ const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.VOICE]: "Voice",
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
-  [SETTINGS_VIEW.CONNECTIONS]: "Connections",
-  [SETTINGS_VIEW.MEMORY]: "Memory",
 } satisfies Record<SettingsView, string>;
 
 /** The pages in the order the front page offers them, which orders results. */
@@ -116,11 +109,9 @@ const PAGE_ORDER: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUB
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
 
 /**
- * The rows that are neither stored settings nor connections, each gated by the
- * condition that draws it. Declared as one table so a row added to a page has
- * one place to become findable — the same rule the guide states for its facts.
- * Every connection is `CONNECTION_SCHEMA`'s to declare, so nothing here
- * restates one.
+ * The rows that are not stored settings, each gated by the condition that
+ * draws it. Declared as one table so a row added to a page has one place to
+ * become findable — the same rule the guide states for its facts.
  */
 function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const entries: (SettingsSearchEntry | undefined)[] = [
@@ -193,46 +184,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.SHORTCUTS,
       haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
     },
-    // One entry per provider drawing a Default project row, named for its
-    // provider so the results can be told apart, each landing on its own row.
-    ...input.workspaceProviders.flatMap((provider): SettingsSearchEntry[] => {
-      const id = defaultProjectRowId(provider.id);
-      if (!id || !provider.offersProjects) return [];
-      return [
-        {
-          id,
-          label: `${provider.name} default project`,
-          page: SETTINGS_VIEW.CONNECTIONS,
-          haystack: [`${provider.name} default project`, "workspace creation ask each time"],
-        },
-      ];
-    }),
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);
-}
-
-/**
- * Every connection the pages are offering right now, read from the one table
- * that declares them: its id is the anchor its row already wears, its name is
- * the name the row draws, and its own `offered` is the condition that draws it
- * — so a connection can neither be found where it is not drawn nor go missing
- * from the search when it is.
- */
-function connectionEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
-  const visibility: ConnectionVisibility = {
-    settings: input.settings,
-    accountDrawn: input.accountDrawn,
-    workspaceProjects: input.workspaceProviders
-      .filter((provider) => provider.offersProjects)
-      .map((provider) => ({ id: provider.id, name: provider.name })),
-  };
-  return offeredConnections(visibility).map((spec) => ({
-    id: spec.id,
-    label: spec.name(visibility),
-    page: spec.page,
-    ...(spec.mark ? { icon: spec.mark } : undefined),
-    haystack: [spec.name(visibility), ...spec.haystack],
-  }));
 }
 
 /**
@@ -255,7 +208,7 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
       },
     ];
   });
-  const fixed = [...connectionEntries(input), ...fixedEntries(input)];
+  const fixed = fixedEntries(input);
   return PAGE_ORDER.flatMap((page) => [
     ...guided.filter((entry) => entry.page === page),
     ...fixed.filter((entry) => entry.page === page),

@@ -76,7 +76,6 @@
   --row-fan: 7px;
   --row-fan-limit: 5;
   --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
-  --bubble-lift: 4px;
   --caption-max: 210px;
   --voice-band-inset: 6px;
   --panel-width: 620px;

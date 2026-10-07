@@ -11,7 +11,6 @@ import {
   VOICE_KEYLESS_NOTE,
 } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
-import type { ConnectionInput } from "./connection-schema";
 import type { MicrophoneControl } from "./controls";
 import { AttentionMark } from "./marks";
 import { SchemaSettingRows } from "./schema-rows";
@@ -33,17 +32,15 @@ import type { SettingsWrites } from "./writes";
  * panel rather than being clipped by it.
  */
 export function VoiceSection({
-  input,
   view,
   writes,
   microphone,
 }: {
-  input: ConnectionInput;
   view: SettingsRowsInput;
   writes: SettingsWrites;
   microphone: MicrophoneControl;
 }): React.JSX.Element {
-  const settings = input.settings;
+  const settings = view.settings;
   const microphoneRow = microphoneAccessRow({
     voiceAvailable: microphone.voiceAvailable,
     status: microphone.status,

@@ -222,8 +222,8 @@ const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
 /**
  * Whether a planning call is in progress, which holds the expanded panel
  * against the pointer leaving: the developer is talking a plan through and
- * reading the document it writes, often with their hands elsewhere. A desk
- * call holds nothing, and neither does a call closing or failed.
+ * reading the document it writes, often with their hands elsewhere. A call
+ * closing or failed holds nothing.
  */
 export function planningCallHoldsPanel(
   view: Pick<VoiceView, "voiceStatus" | "callPlanId">,
@@ -266,7 +266,7 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
  * press that cannot be heard is no press; then the plan, since a call is
  * always about the open plan. The press toggles: while the developer is
  * heard on this plan's own call it mutes, and otherwise it opens the plan's
- * call or hears it again, hanging up a desk call or another plan's first,
+ * call or hears it again, hanging up another plan's first,
  * which is also how a call that failed or was lost is tried again. Muted is
  * this plan's own call standing with the developer not heard, so the button
  * says so rather than reading as a call not yet begun.

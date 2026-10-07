@@ -28,7 +28,6 @@ export {
   TURN_WAIT_QUERY,
 } from "./ask-wire.js";
 export { HOSTED_BRAIN_OPTION_BOUNDS } from "./brain-contract.js";
-export { HostedChangesClient, type HostedChangesClientOptions } from "./changes-client.js";
 export {
   type ConversationClearAnswer,
   conversationClearAnswerSchema,
@@ -40,14 +39,8 @@ export {
   SESSION_MESSAGES_QUERY,
 } from "./conversation-wire.js";
 export {
-  DEVICE_METHOD,
-  type DepartingCredential,
-  type DeviceMethod,
-  HostedDeviceClient,
-  type HostedDeviceClientOptions,
-} from "./device-client.js";
-export {
   BRIEFING_PUSH_PAYLOAD_KEY,
+  DEVICE_METHOD,
   DEVICE_PLATFORM,
   DEVICE_TOKEN_BOUNDS,
   type DeviceForgetAnswer,
@@ -118,7 +111,6 @@ export {
   VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
 } from "./live-contract.js";
-export { HostedNotebookClient, type HostedNotebookClientOptions } from "./notebook-client.js";
 export {
   NOTEBOOK_READ_BOUNDS,
   type NotebookAnswer,
@@ -203,11 +195,6 @@ export {
   unreadableRowRefusalSchema,
 } from "./reads-wire.js";
 export {
-  HostedRosterClient,
-  type HostedRosterClientOptions,
-  snapshotRoster,
-} from "./roster-client.js";
-export {
   brainTurnCancelPath,
   brainTurnEventsPath,
   brainTurnPath,
@@ -241,7 +228,6 @@ export {
   turnEventCursorSchema,
   turnEventSchema,
 } from "./turn-events-wire.js";
-export { HostedVaultClient } from "./vault-client.js";
 export {
   VAULT_KEY_MAX_LENGTH,
   type VaultKeyDeleteAnswer,

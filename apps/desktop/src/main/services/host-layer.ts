@@ -9,7 +9,6 @@ import {
   hostAssemblyLayer,
   hostKernelLayer,
   IdSource,
-  MachinePresenceReader,
   RunMode,
   reporterLayer,
   SecretCipher,
@@ -23,13 +22,11 @@ interface HostSeamDependencies {
   config: DesktopConfig;
   /** The client's own credential protection; the host encrypts nothing without it. */
   cipher: HostSeams["cipher"];
-  /** This machine's idle time and lock state, for the presence its device row reports; a test host reports none. */
-  machinePresence?: HostSeams["machinePresence"];
 }
 
 /** Every seam tag this process answers for, each stood up from what the launch already established. */
 function hostSeamLayersFor(dependencies: HostSeamDependencies) {
-  const { config, cipher, machinePresence } = dependencies;
+  const { config, cipher } = dependencies;
   const { runMode } = config;
   return Layer.mergeAll(
     Layer.succeed(StateRoot, config.stateRoot),
@@ -39,7 +36,6 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(SecretCipher, cipher),
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
-    Layer.succeed(MachinePresenceReader, { read: machinePresence }),
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, which the entry's `before-quit` asks for.
     Layer.succeed(ShutdownSignal, { notify: () => config.quit() }),

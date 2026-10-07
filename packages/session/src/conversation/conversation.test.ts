@@ -2,12 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   CONVERSATION_ENTRY_KIND,
-  type ConversationEntry,
   isConversationEntryKind,
   joinReplyMessages,
-  maximumConversationEntries,
   maximumConversationEntryLength,
-  recentConversationEntries,
   storedConversationEntry,
   streamingConversationEntry,
 } from "./conversation.js";
@@ -30,18 +27,6 @@ test("a streaming line is normalized like the settled line it previews", () => {
 
   // Words that trim to nothing preview nothing.
   assert.equal(streamingConversationEntry(CONVERSATION_ENTRY_KIND.REPLY, "   "), undefined);
-});
-
-test("the recent slice is the newest lines up to the seed's bound, oldest first", () => {
-  const entries: ConversationEntry[] = Array.from(
-    { length: maximumConversationEntries + 3 },
-    (_, index) => ({ kind: CONVERSATION_ENTRY_KIND.ASK, words: `ask ${index}` }),
-  );
-  const recent = recentConversationEntries(entries);
-  assert.equal(recent.length, maximumConversationEntries);
-  assert.equal(recent[0]?.words, "ask 3");
-  assert.equal(recent.at(-1)?.words, `ask ${maximumConversationEntries + 2}`);
-  assert.deepEqual(recentConversationEntries(entries.slice(0, 2)), entries.slice(0, 2));
 });
 
 test("a reply said as several messages is joined whole, in order, each its own paragraph", () => {

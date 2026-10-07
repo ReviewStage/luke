@@ -144,6 +144,3 @@ export function boundedAgentKinds(agents: readonly string[] | undefined): readon
 
 /** A workspace name reads in one breath; anything longer is a different ask. */
 export const maximumWorkspaceNameLength = 80;
-
-/** How many projects the app will offer workspace creation in at once. */
-export const maximumObservedWorkspaceProjects = 20;
