@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { replySentences } from "./run-events.js";
+import { finishedSentencesOf, replySentences } from "./run-events.js";
 
 test("a planning return written in Markdown is spoken as its words alone", () => {
   const reply = [
@@ -55,4 +55,36 @@ test("a heading's closing hashes go, and a line of only syntax says nothing", ()
 
 test("emphasis nested inside strong emphasis is taken out with it", () => {
   assert.deepEqual(replySentences("**Keep *both* flags.**"), ["Keep both flags."]);
+});
+
+/** Every cut the words take as they grow a character at a time is spoken as the first sentences of the whole. */
+function assertCutsHold(whole: string): void {
+  const sentences = replySentences(whole);
+  for (let length = 0; length <= whole.length; length += 1) {
+    const cut = replySentences(finishedSentencesOf(whole.slice(0, length)));
+    assert.deepEqual(
+      cut,
+      sentences.slice(0, cut.length),
+      `at ${length}: ${whole.slice(0, length)}`,
+    );
+  }
+}
+
+test("words still forming are cut at their last finished sentence, and the forming one waits", () => {
+  assert.equal(finishedSentencesOf("One agent finished. Another is"), "One agent finished.");
+  assert.equal(finishedSentencesOf("Still forming"), "");
+  assert.equal(finishedSentencesOf("A line.\nThe next"), "A line.");
+});
+
+test("a sentence inside emphasis still open or behind a list marker waits for its line", () => {
+  assert.equal(finishedSentencesOf("**Two things changed. Both"), "");
+  assert.equal(finishedSentencesOf("1. Read it. Then"), "1. Read it.");
+  assert.equal(finishedSentencesOf("1."), "");
+  for (const whole of [
+    "**Two things changed. Both are tested.** Nothing else did.",
+    "## The plan is complete.\n\n- Invites expire after *seven* days. Resend once.\n1. Read [the spec. Now](https://example.com) first.",
+    "Run this:\n```sh\npnpm test. Then\n```\nIt computes 2 * 3 * 4. Done.",
+  ]) {
+    assertCutsHold(whole);
+  }
 });

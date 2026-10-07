@@ -290,15 +290,35 @@ const SENTENCE_BOUNDARY = /(?<=[.!?…]["'”’)\]]*)\s+|\n+/;
 const SENTENCE_BOUNDARIES = new RegExp(SENTENCE_BOUNDARY.source, "g");
 
 /**
- * Words still forming, cut where their last finished sentence ends: the
+ * A delimiter left on a line once its Markdown is taken out that a later
+ * delimiter could still close: a star or underscore run opening on a word, a
+ * strikethrough, a tick, or a link's bracket. Note that this errs toward
+ * waiting, since a sentence held to its line's end is only later, while one
+ * said before its span closed is said with the syntax in it.
+ */
+const OPEN_SPAN = /\*+(?=[^\s*])|(?<![\w_])_+(?=[^\s_])|~~(?=\S)|`|\[/u;
+
+/**
+ * Words still forming, cut where their last finished sentence ends, so the
  * sentences of the cut are the first sentences of every text the words can
- * grow into, because a boundary is only ever followed by more words. Empty
- * while no sentence has finished.
+ * grow into. A finished line is always finished. Inside the line still
+ * forming, a sentence end counts only where the words up to it read aloud
+ * as the start of what the line reads now and leave no span open, because a
+ * list marker or emphasis closed later changes how the line before it is
+ * read. Empty while no sentence has finished.
  */
 export function finishedSentencesOf(forming: string): string {
-  let end = 0;
-  for (const boundary of forming.matchAll(SENTENCE_BOUNDARIES)) end = boundary.index;
-  return forming.slice(0, end);
+  const lineStart = forming.lastIndexOf("\n") + 1;
+  const spoken = spokenProse(forming);
+  const ends = [...forming.slice(lineStart).matchAll(SENTENCE_BOUNDARIES)].map(
+    (boundary) => lineStart + boundary.index,
+  );
+  for (const end of ends.reverse()) {
+    const said = spokenProse(forming.slice(0, end));
+    const line = said.slice(said.lastIndexOf("\n") + 1);
+    if (spoken.startsWith(said) && !OPEN_SPAN.test(line)) return forming.slice(0, end);
+  }
+  return forming.slice(0, Math.max(lineStart - 1, 0));
 }
 
 /**
