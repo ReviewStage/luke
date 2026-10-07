@@ -62,21 +62,6 @@ folder. The command runs in a macOS sandbox with no network access, no write
 access, and no access to `.env` files. Only the command's output goes to
 Luke's service. See [PRIVACY.md](PRIVACY.md) for details.
 
-## Agent session monitoring
-
-The repository also contains code that watches running agent sessions and
-tells you by voice when one needs you. It is turned off in the current build.
-It supports these agents:
-
-<!-- provider-agents:start -->
-| Agent | Local | Cloud |
-| --- | :---: | :---: |
-| Claude Code | ✅ |  |
-| Codex | ✅ |  |
-| Conductor |  | ✅ |
-| OMP | ✅ |  |
-<!-- provider-agents:end -->
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, see

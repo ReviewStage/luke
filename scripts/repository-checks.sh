@@ -281,11 +281,6 @@ pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts -
 # to a rewrite of the table or an extensionless alias the Build Output emits.
 pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
-# The public platform table is a direct projection of the session package's
-# narrow provider identity catalog. Privacy wording stays manually reviewed.
-pnpm --dir "$SIDECAR_REPO_ROOT/packages/session" exec tsx \
-    "$SIDECAR_REPO_ROOT/scripts/generate-provider-readme.ts" --check
-
 # Mount reveals, literal timings, loops, and layout-property animation obey the
 # renderer contract in DESIGN.md. The checker keeps the bounded face-artwork
 # exceptions explicit while rejecting new drift.
