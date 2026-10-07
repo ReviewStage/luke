@@ -298,6 +298,8 @@ interface Fixture {
   /** Every sideband adopted so far, in order; the session adopted over the nth is `sess-n`. */
   sidebands: FakeSideband[];
   spoken: string[];
+  /** Every line the service reported, in order. */
+  reports: string[];
   /** Every status `onStatus` was told, in order. */
   statuses: LiveSessionStatus[];
   service: LiveSessionService;
@@ -313,12 +315,13 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const record = new FakeRecord();
     const sidebands: FakeSideband[] = [];
     const spoken: string[] = [];
+    const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
         createId: () => `id-${++ids}`,
-        report: () => undefined,
+        report: (message) => reports.push(message),
         onProactiveSpoken: (kind) => spoken.push(kind),
         onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
         onStatus: (status) => statuses.push(status),
@@ -331,6 +334,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       record,
       sidebands,
       spoken,
+      reports,
       statuses,
       service,
       open: () =>
@@ -1069,6 +1073,40 @@ it.effect("an error naming an append refuses that append and never counts as suc
     sideband.output("One", 100, 200);
     assert.deepEqual(f.spoken, []);
   }),
+);
+
+it.effect(
+  "an error naming no command, or naming one with no code, is reported by its type and code alone",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.service.deliverBriefing({ briefing: "One.", decidedAt: f.clock.now });
+      yield* settle();
+      const first = sideband.sent[0];
+      assert.ok(first);
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-1",
+        error: { type: "server_error", code: "internal", message: "the words" },
+      });
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-2",
+        error: { code: null, client_event_id: first.event_id, message: "the words" },
+      });
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-3",
+        error: { type: "invalid_request_error", code: "invalid_value", event_id: "other-1" },
+      });
+      yield* settle();
+      assert.deepEqual(f.reports, [
+        "A live error reached the general handler, type=server_error code=internal",
+        "A live error reached the general handler, type=none code=none",
+      ]);
+    }),
 );
 
 it.effect(

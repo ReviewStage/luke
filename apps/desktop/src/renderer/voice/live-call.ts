@@ -10,12 +10,15 @@ import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
 import {
   closeEvent,
   decodeLivePayload,
+  generalLiveError,
   LIVE_IDLE_WINDOW_MS,
   LIVE_SERVER_EVENT,
   LIVE_STATUS,
   type LiveClientEvent,
   type LiveServerEvent,
   type LiveStatus,
+  liveErrorCommand,
+  liveErrorFields,
   muteEvent,
   parseLiveServerEvent,
   TRANSCRIPT_SPEAKER,
@@ -355,8 +358,15 @@ export class LiveCall implements LiveVoiceCall {
         event.end_ms,
       ),
     [LIVE_SERVER_EVENT.ERROR]: (event) => {
-      const about = event.client_event_id ?? event.error.client_event_id;
+      const about = liveErrorCommand(event);
       if (about !== undefined && this.#pendingSwitch?.eventId === about) this.#settleSwitch(false);
+      // An error no command answers for is still written down, as its kind
+      // and code alone; a session it ends is said through its close.
+      if (generalLiveError(event)) {
+        Effect.runForkWith(this.#services)(
+          Effect.logWarning(`voice error: ${liveErrorFields(event)}`),
+        );
+      }
     },
   };
 

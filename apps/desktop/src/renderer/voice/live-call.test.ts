@@ -16,7 +16,7 @@ import {
 } from "@sidecar/live";
 import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestrator";
 import type { WireRecord } from "@sidecar/wire";
-import { type Context, Deferred, Duration, Effect, Exit, Fiber, Scope } from "effect";
+import { type Context, Deferred, Duration, Effect, Exit, Fiber, Logger, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import {
   LiveCall,
@@ -1336,4 +1336,59 @@ it.effect(
       assert.equal(f.statuses.at(-1), LIVE_STATUS.MUTED);
       assert.deepEqual(f.speakers.at(-1), { listening: false, lukeSpeaking: false });
     }),
+);
+
+it.effect(
+  "an error naming no command, or naming one with no code, is logged by its type and code alone",
+  () => {
+    const lines: string[] = [];
+    return Effect.gen(function* () {
+      const f = yield* fixture();
+      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      yield* settle;
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* Fiber.join(opening);
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-1",
+        error: { type: "server_error", code: null, message: "said: the words" },
+      });
+      const unmuting = yield* Effect.forkChild(f.call.unmute());
+      yield* settle;
+      const sent = f.channel().sent.at(-1);
+      assert.ok(sent);
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-2",
+        error: {
+          type: "invalid_request_error",
+          code: "Not A Code: the words",
+          message: "the words",
+        },
+      });
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-3",
+        client_event_id: String(sent.event_id),
+        error: { type: "invalid_request_error", code: "invalid_value", message: "the words" },
+      });
+      assert.equal(yield* Fiber.join(unmuting), false);
+      yield* settle;
+      // The switch's own error answered the switch and nothing else.
+      assert.deepEqual(lines, [
+        "voice error: type=server_error code=none",
+        "voice error: type=invalid_request_error code=other",
+      ]);
+    }).pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make((options) => {
+            lines.push(String(options.message));
+          }),
+        ]),
+      ),
+    );
+  },
 );

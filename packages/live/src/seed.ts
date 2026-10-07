@@ -5,7 +5,7 @@ import {
   maximumConversationEntryLength,
   recentConversationEntries,
 } from "@sidecar/session";
-import { estimatedTokens } from "./tokens.js";
+import { startupTokens } from "./tokens.js";
 
 /**
  * What a session is told as it opens: the recent conversation, replayed from
@@ -91,7 +91,27 @@ export function developerSeedItem(text: string): InitialItem {
 
 /** The estimate the whole list is held under, counted over each message's text. */
 export function seedItemTokens(items: readonly InitialItem[]): number {
-  return items.reduce((total, item) => total + estimatedTokens(item.content[0].text), 0);
+  return items.reduce((total, item) => total + startupTokens(item.content[0].text), 0);
+}
+
+/**
+ * A startup history held under the API's token bound by the side that pays
+ * for it, rather than trusted to arrive there: the oldest of the
+ * conversation's lines go first, as `conversationSeedItems` drops them, and
+ * a developer message never does, since the application's own notes are
+ * what the session opens on. Nothing is answered where the developer
+ * messages alone are past the bound, which no conforming device sends.
+ */
+export function withinStartupBound(
+  items: readonly InitialItem[],
+): readonly InitialItem[] | undefined {
+  const kept = [...items];
+  while (seedItemTokens(kept) > LIVE_INPUT_BOUNDS.TOKENS) {
+    const oldest = kept.findIndex((item) => item.role !== SEED_ROLE.DEVELOPER);
+    if (oldest === -1) return undefined;
+    kept.splice(oldest, 1);
+  }
+  return kept;
 }
 
 /**
