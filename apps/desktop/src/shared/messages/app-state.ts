@@ -37,6 +37,8 @@ export const RUN_PROFILE = {
   DUPLEX: "duplex",
   /** The panel's Plans tab, opened at launch over a synthetic plan. */
   PLANNING: "planning",
+  /** The same plan, opened at launch on the whiteboard Luke drew for it. */
+  PLANNING_BOARD: "planning-board",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

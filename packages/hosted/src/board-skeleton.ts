@@ -25,9 +25,10 @@ import {
  * shape whoever wrote it.
  *
  * Text is never measured here, since no font stands on a server: a label's
- * size is estimated from its characters, and the Mac's canvas measures it
- * again when it loads the board (`restoreElements` with
- * `refreshDimensions`). Arrows run between the two shapes' edges along the
+ * size is estimated from its characters, generously, and the Mac's canvas
+ * keeps that size until the text is edited, because a canvas that measured it
+ * on load would measure before its hand-drawn font arrived and clip the
+ * text. Arrows run between the two shapes' edges along the
  * line joining their centers, and every shape an operation moves or resizes
  * takes its label and the arrows bound to it along.
  *
@@ -237,8 +238,13 @@ const EXCALIDRAW = {
   /** Excalidraw's hand-drawn font, its default from 0.18. */
   FONT_FAMILY: 5,
   LINE_HEIGHT: 1.25,
-  /** The average glyph width, as a share of the font size, used to estimate a label's width. */
-  GLYPH_WIDTH: 0.55,
+  /**
+   * A generous glyph width, as a share of the font size, used to estimate a
+   * label's width. Note that it runs wide on purpose, because the canvas
+   * clips free text to its element's width and measures it again only once
+   * edited, so an estimate short of the hand-drawn font cuts the text off.
+   */
+  GLYPH_WIDTH: 0.65,
   ROUNDNESS_ADAPTIVE: 3,
   ROUNDNESS_PROPORTIONAL: 2,
 } as const;

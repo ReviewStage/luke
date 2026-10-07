@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { BOARD_AUTHOR } from "@sidecar/hosted/board-wire";
 import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
@@ -13,6 +14,7 @@ import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import {
+  boardUnseen,
   COPY_SHOWN,
   callStatus,
   copyPlanDocument,
@@ -26,6 +28,7 @@ import {
   newestReadOnly,
   offersGitHubConnect,
   onEachReturn,
+  PLAN_VIEW,
   PLANS_PAGE,
   planningCallHoldsPanel,
   plansPage,
@@ -337,4 +340,31 @@ test("a planning call in progress holds the panel open, and a desk call or a fin
   assert.equal(on(LIVE_STATUS.CLOSING, INVITES), false);
   assert.equal(on(LIVE_STATUS.FAILED, INVITES), false);
   assert.equal(on(LIVE_STATUS.IDLE, undefined), false);
+});
+
+test("a draw of Luke's the developer has not seen marks the board, and only while the document shows", () => {
+  const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  const drawn = { revision: 4, elements: [], updatedBy: BOARD_AUTHOR.LUKE };
+  const seen = { planId, revision: 3 };
+
+  assert.equal(boardUnseen({ view: PLAN_VIEW.DOCUMENT, planId, board: drawn, seen }), true);
+  assert.equal(boardUnseen({ view: PLAN_VIEW.BOARD, planId, board: drawn, seen }), false);
+  assert.equal(
+    boardUnseen({
+      view: PLAN_VIEW.DOCUMENT,
+      planId,
+      board: { ...drawn, updatedBy: BOARD_AUTHOR.DEVELOPER },
+      seen,
+    }),
+    false,
+  );
+  assert.equal(
+    boardUnseen({ view: PLAN_VIEW.DOCUMENT, planId, board: drawn, seen: { planId, revision: 4 } }),
+    false,
+  );
+  // A board first read for a plan is the baseline, never new.
+  assert.equal(
+    boardUnseen({ view: PLAN_VIEW.DOCUMENT, planId, board: drawn, seen: undefined }),
+    false,
+  );
 });

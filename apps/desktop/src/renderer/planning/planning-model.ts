@@ -1,3 +1,4 @@
+import { BOARD_AUTHOR, type Board } from "@sidecar/hosted/board-wire";
 import { GITHUB_FAILURE, type GitHubRepository } from "@sidecar/hosted/github-wire";
 import type { Plan, PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
@@ -40,6 +41,37 @@ export const PLANS_PAGE = {
 } as const;
 
 export type PlansPage = (typeof PLANS_PAGE)[keyof typeof PLANS_PAGE];
+
+/** What the open plan's page shows under its header: the saved document, or the whiteboard. */
+export const PLAN_VIEW = {
+  DOCUMENT: "document",
+  BOARD: "board",
+} as const;
+
+export type PlanView = (typeof PLAN_VIEW)[keyof typeof PLAN_VIEW];
+
+/** The board's revision the developer last had in view, for the plan it belongs to. */
+export interface SeenBoard {
+  readonly planId: string;
+  readonly revision: number;
+}
+
+/**
+ * Whether the board holds a draw of Luke's the developer has not seen: a
+ * revision of his past the last one they had in view, while the document is
+ * shown. A board first read for a plan is the baseline and never new.
+ */
+export function boardUnseen(input: {
+  readonly view: PlanView;
+  readonly planId: string | undefined;
+  readonly board: Board | undefined;
+  readonly seen: SeenBoard | undefined;
+}): boolean {
+  const { view, planId, board, seen } = input;
+  if (view === PLAN_VIEW.BOARD || board === undefined || seen === undefined) return false;
+  if (seen.planId !== planId) return false;
+  return board.updatedBy === BOARD_AUTHOR.LUKE && board.revision > seen.revision;
+}
 
 /**
  * The page the tab shows. An open plan is the document page, in every panel

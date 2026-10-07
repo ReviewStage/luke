@@ -149,6 +149,54 @@
   font-size: 12px;
 }
 
+/* The switch between the document and the whiteboard, on the sessions
+   sort's own segmented look. */
+.plan-view-switch {
+  flex: 0 0 auto;
+}
+
+.plan-view-switch .sort-option {
+  position: relative;
+}
+
+/* Luke drew on the board since the developer last looked. */
+.plan-view-unseen {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--voice-luke);
+}
+
+/* The whiteboard fills the page between the header and the microphone row;
+   Excalidraw draws to the size of the box it is given, so the canvas's box
+   is the page's own. */
+.plan-board {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text-secondary);
+}
+
+.plan-board > p {
+  margin: 0;
+  text-align: center;
+}
+
+.plan-board-canvas {
+  position: absolute;
+  inset: 0;
+}
+
 .plan-title {
   margin: 0;
   overflow: hidden;

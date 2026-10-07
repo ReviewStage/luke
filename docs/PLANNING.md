@@ -39,7 +39,9 @@ A reviewer can hold the build to these as easily as to the layout:
 - The assumption list is read-only: plain text, with nothing to click.
 - No conversation transcript pane. Captions show what is being said now; the
   document is the record.
-- One visible document. There are no split views or second documents.
+- One visible view at a time. The open plan shows its document or its
+  whiteboard ("Whiteboard" below), never both side by side, and there are no
+  second documents.
 - No window of its own. Planning lives in the notch panel (LUKE-347): there is
   no separate planning window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -151,6 +153,9 @@ same commit, and nothing refreshes it. The header shows it as
 - `‹`, back to the list, which leaves the plan.
 - The plan's name.
 - The repository line, as `owner/repository · branch @ short commit`.
+- **Document | Board**, the switch between the plan's document and its
+  whiteboard. A plan always opens on its document. A dot on Board means Luke
+  drew there since the developer last looked at it.
 - **Copy**, the one action on the document. It is always enabled, however
   much of the plan is written. It copies the current document as described in
   "Copy". It never launches an agent and never asks the model anything.
@@ -169,6 +174,40 @@ same commit, and nothing refreshes it. The header shows it as
   "None recorded".
 - If the saved document cannot be read, the region shows the failure and a
   `Try again` button. The tab never draws a document it did not read.
+
+### Whiteboard
+
+Each plan has one whiteboard, an Excalidraw scene that Luke and the developer
+both draw on. It shows in place of the document, between the header and the
+microphone row.
+
+- **Luke draws through the planning model.** Its `draw_on_board` tool sends
+  operations: add a labelled box, ellipse, or diamond, an arrow between two
+  ids, a line of text, or a line; update; remove; clear. The service turns
+  them into Excalidraw elements and saves the board as its next revision
+  (`packages/hosted/src/board-skeleton.ts`, `apps/web/server/hosted/board-tool.ts`).
+  The voice hands a request to draw to the planning model, as it does any
+  other request.
+- **The developer draws with Excalidraw's own tools.** Images, embeds, and
+  export are left out. A change is saved once the developer pauses, over the
+  revision of the board they last had.
+- **Luke reads the board every turn.** The planning model's standing context
+  carries the board as text under `[board]` (`board-text.ts`), so whatever
+  the developer drew is in front of it on its next turn, and it names the
+  same ids back to change it.
+- **Two writers, one revision.** A save made over a board that moved is
+  refused, and the writer merges by element version and saves again. An
+  erased element stays on the board, marked erased, so a merge never brings it
+  back.
+- **The Mac reads the board** when a plan opens, when the tab shows, and when
+  the call's activity says a draw just settled. A draw is never pushed
+  separately.
+- **Excalidraw is its own bundle** (`whiteboard.js`), loaded the first time a
+  board is shown, with its fonts shipped beside it. The bundle every window
+  parses never carries it.
+- **The board is never recorded.** Its root is left out of the screen
+  recording, because a canvas draws its words as pixels that the recording's
+  text masking cannot reach.
 
 ### The notetaker
 
@@ -629,7 +668,9 @@ changes when a check is run, not when one is planned.
   the microphone row, and the capsule and captions during a planning call
   have never been seen running. `./scripts/evidence.sh` captures the panel
   expanded on the Plans tab over a synthetic plan
-  (`app-smoke-planning.png`, from `--profile planning --expanded`) and over
+  (`app-smoke-planning.png`, from `--profile planning --expanded`), on the
+  plan's whiteboard (`app-smoke-planning-board.png`, from
+  `--profile planning-board --expanded`), and over
   the synthetic plan list with none open (`app-smoke-expanded.png`, the panel
   opening on Plans with Sessions and Conversation hidden), but neither
   capture has been taken yet.

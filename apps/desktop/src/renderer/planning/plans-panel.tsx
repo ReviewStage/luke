@@ -9,8 +9,9 @@ import type { PlansControl } from "./use-plans-tab";
  * One page at a time, the way the Conversation tab turns between its thread
  * and its agents. The document page holds its header and its microphone row
  * still and scrolls the document between them, inside the panel's own
- * ceiling. It does not record anything of its own: the panel's session
- * replay masks every word it draws, as it does the rest of the panel.
+ * ceiling, or shows the plan's whiteboard there instead. It does not record
+ * anything of its own: the panel's session replay masks every word it draws,
+ * as it does the rest of the panel, and leaves the whiteboard out whole.
  */
 export function PlansPanel({ control }: { control: PlansControl }): React.JSX.Element {
   if (!control.signedIn) {
@@ -39,6 +40,8 @@ export function PlansPanel({ control }: { control: PlansControl }): React.JSX.El
             folders={control.folders}
             onChooseFolder={control.onChooseFolder}
             onDelete={control.onDeletePlan}
+            planView={control.planView}
+            board={control.board}
           />
           <MicrophoneRow
             status={control.status}

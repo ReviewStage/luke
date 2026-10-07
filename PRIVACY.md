@@ -324,7 +324,10 @@ title, an error line, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. A screenshot
 you attach to the feedback form is left out, since a picture of your screen
 could carry another app's words, and so are the Conversation tab, the feedback
-form's message field, and the Memory page in Settings, as a second line. The
+form's message field, the Memory page in Settings, and a plan's whiteboard,
+as a second line. The whiteboard draws its words as pixels, which the text
+masking cannot reach, so leaving it out is its only line, and recording what a
+canvas draws is switched off. The
 Agents pages the Conversation tab turns to, the list and any agent's
 transcript, are left out on the same terms, since each draws under the tab's
 own blocked root. Luke does not report what you clicked.

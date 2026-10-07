@@ -12,8 +12,10 @@ import {
   type CopyShown,
   DOCUMENT_REGION,
   NO_ASSUMPTIONS_LINE,
+  PLAN_VIEW,
 } from "./planning-model";
 import { MicrophoneRow, PlanDocumentView, PlanList } from "./planning-parts";
+import type { PlansControl } from "./use-plans-tab";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -36,10 +38,13 @@ const RESTING = { shown: COPY_SHOWN.IDLE, onPress: ignore };
 
 const FOLDERS = { [PLAN.id]: "/Users/dev/relay" };
 
+const ON_DOCUMENT = { shown: PLAN_VIEW.DOCUMENT, unseen: false, onChoose: ignore };
+
 function documentMarkup(
   plan: Plan,
   copied: CopyShown = COPY_SHOWN.IDLE,
   folders: Readonly<Record<string, string>> = FOLDERS,
+  planView: PlansControl["planView"] = ON_DOCUMENT,
 ): string {
   return renderToStaticMarkup(
     createElement(PlanDocumentView, {
@@ -50,6 +55,8 @@ function documentMarkup(
       copy: { shown: copied, onPress: ignore },
       folders,
       onChooseFolder: ignore,
+      planView,
+      board: undefined,
     }),
   );
 }
@@ -61,6 +68,17 @@ test("the saved body is drawn as Markdown under the plan's name and folder line"
   assert.match(markup, /<p class="plan-repository">~\/relay<\/p>/u);
   assert.match(markup, /<p class="markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
+});
+
+test("the open plan offers its document and its whiteboard, and marks the board when Luke drew there unseen", () => {
+  const quiet = documentMarkup(PLAN);
+  const drawn = documentMarkup(PLAN, COPY_SHOWN.IDLE, FOLDERS, { ...ON_DOCUMENT, unseen: true });
+
+  assert.match(quiet, /aria-pressed="true"[^>]*>Document<\/button>/u);
+  assert.match(quiet, /aria-pressed="false"[^>]*>Board<\/button>/u);
+  assert.doesNotMatch(quiet, /plan-view-unseen/u);
+  assert.match(drawn, /aria-label="Board, Luke drew something new"/u);
+  assert.match(drawn, /class="plan-view-unseen"/u);
 });
 
 test("a plan this Mac holds no folder for offers Choose folder in place of the folder line", () => {
@@ -85,10 +103,13 @@ test("the document offers no way to write, confirm, or approve anything", () => 
   const markup = documentMarkup(PLAN);
 
   assert.doesNotMatch(markup, /<textarea|contenteditable|type="text"/u);
-  // Copy is the document's one action, and it writes nothing; Back only leaves it.
+  // Copy is the document's one action, and it writes nothing; Back only
+  // leaves it, and the switch only turns to the whiteboard and back.
   const buttons = markup.match(/<button[^>]*>/gu) ?? [];
   assert.deepEqual(buttons, [
     '<button type="button" class="icon-button plan-back" aria-label="Back to plans" title="Back">',
+    '<button type="button" class="sort-option" data-active="true" aria-pressed="true" aria-label="Document">',
+    '<button type="button" class="sort-option" data-active="false" aria-pressed="false" aria-label="Board">',
     '<button type="button" class="plan-button plan-copy-button">',
   ]);
   assert.doesNotMatch(markup, /Approve|Version|History|Ready/u);
@@ -153,6 +174,8 @@ test("a document that could not be read shows the failure and Try again, never a
       copy: RESTING,
       folders: FOLDERS,
       onChooseFolder: ignore,
+      planView: ON_DOCUMENT,
+      board: undefined,
     }),
   );
 
