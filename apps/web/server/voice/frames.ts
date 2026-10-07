@@ -22,7 +22,7 @@ import {
 
 /** The three upgrades the service answers, by the path each stands on. */
 export const VOICE_ROUTE = {
-  /** A signed-in device's WebRTC session, a Mac's or a phone's: the exchange is the service's, and the device sends the stop, the hang-up, and its idle. */
+  /** A signed-in device's WebRTC session, a Mac's or a phone's: the exchange is the service's, its close included, and the device sends the stop, the hang-up, and its idle. */
   SESSIONS: "sessions",
   /** The accountless introduction: the service keeps the sideband, the caller sees captions. */
   INTRODUCTION: "introduction",
@@ -65,6 +65,8 @@ export const FRAME_DECISION = {
   REPORT: "report",
   /** A frame the route does not admit from the device: the socket is closed on it. */
   REFUSE: "refuse",
+  /** The device's hang-up, read as an ask for the close the service sends itself and forwarded nowhere. */
+  HANG_UP: "hang-up",
 } as const;
 
 type FrameDecision = (typeof FRAME_DECISION)[keyof typeof FRAME_DECISION];
@@ -81,16 +83,28 @@ const INTRODUCTION_SERVER_EVENTS: readonly string[] = RENDERER_SERVER_EVENTS.map
 const INTRODUCTION_CLIENT_EVENTS: readonly string[] = RENDERER_CLIENT_EVENTS;
 
 /**
- * The one Live event a signed-in device still sends once the exchange is
- * the service's: the graceful hang-up. Every append is the exchange's, the
- * stop key's included, and the exchange stands here, so a device sending
- * any append is an older build or a re-wired local exchange, either of which
- * would have every answer heard twice; and no instruction text of the
- * device's choosing reaches the session through this route. A Mac and a
- * phone send the same four frames — this hang-up and the three reports
- * below — and the route reads them the same way, whichever sent them.
+ * What a signed-in device sends toward OpenAI once the exchange is the
+ * service's: nothing. Every append is the exchange's, the stop key's
+ * included, and the exchange stands here, so a device sending any append is
+ * an older build or a re-wired local exchange, either of which would have
+ * every answer heard twice; and no instruction text of the device's choosing
+ * reaches the session through this route. The close is the exchange's too,
+ * as the server-controls guide asks one owner per action: a device's hang-up
+ * is read below as an ask for it, never forwarded.
  */
-export const SESSIONS_CLIENT_EVENTS: readonly string[] = [LIVE_CLIENT_EVENT.CLOSE];
+const SESSIONS_CLIENT_EVENTS: readonly string[] = [];
+
+/**
+ * A signed-in device's hang-up: the service's own frame a Mac sends, and the
+ * Live close a phone or an older Mac still sends, read alike as an ask for
+ * the session's close, which the exchange sends itself. A Mac and a phone
+ * send the same frames, this hang-up and the three reports below, and the
+ * route reads them the same way, whichever sent them.
+ */
+const SESSIONS_HANG_UP_FRAMES: readonly string[] = [
+  VOICE_SERVICE_FRAME.SESSION_HANG_UP,
+  LIVE_CLIENT_EVENT.CLOSE,
+];
 
 /** The service-vocabulary frames a signed-in device sends after the handshake, read here and never forwarded: its idle, and the stop key. */
 export const SESSIONS_REPORT_FRAMES: readonly string[] = [
@@ -161,8 +175,8 @@ const TOWARD_DEVICE = {
 
 /**
  * What each route does with a frame the device sent toward OpenAI: what it
- * forwards untouched, what it reads as a report in the service's own
- * vocabulary, and what becomes of anything else, an unreadable frame
+ * forwards untouched, what it reads as a hang-up or a report in the
+ * service's own vocabulary, and what becomes of anything else, an unreadable frame
  * included. A signed-in device, on either of its routes, is refused with the
  * close, so an older build of any platform after the cutover is refused where
  * it can be seen and never doubles the exchange standing here; an
@@ -172,6 +186,7 @@ const TOWARD_DEVICE = {
  */
 interface FromDevicePolicy {
   readonly forwarded: readonly string[];
+  readonly hangUps: readonly string[];
   readonly reports: readonly string[];
   /** What becomes of any other frame, an unreadable one included. */
   readonly otherwise: FrameDecision;
@@ -180,19 +195,25 @@ interface FromDevicePolicy {
 /** The introduction holds no exchange to report to, so it reads no report. */
 const NO_REPORTS: readonly string[] = [];
 
+/** A route whose device's close is forwarded as it was sent, since no exchange there owns it. */
+const NO_HANG_UPS: readonly string[] = [];
+
 const FROM_DEVICE = {
   [VOICE_ROUTE.SESSIONS]: {
     forwarded: SESSIONS_CLIENT_EVENTS,
+    hangUps: SESSIONS_HANG_UP_FRAMES,
     reports: SESSIONS_REPORT_FRAMES,
     otherwise: FRAME_DECISION.REFUSE,
   },
   [VOICE_ROUTE.INTRODUCTION]: {
     forwarded: INTRODUCTION_CLIENT_EVENTS,
+    hangUps: NO_HANG_UPS,
     reports: NO_REPORTS,
     otherwise: FRAME_DECISION.DROP_UNPERMITTED,
   },
   [VOICE_ROUTE.AUDIO]: {
     forwarded: AUDIO_CLIENT_EVENTS,
+    hangUps: NO_HANG_UPS,
     reports: AUDIO_REPORT_FRAMES,
     otherwise: FRAME_DECISION.REFUSE,
   },
@@ -221,6 +242,7 @@ export function deviceFrameDecision(type: string | undefined, route: VoiceRoute)
   const policy = FROM_DEVICE[route];
   if (type === undefined) return policy.otherwise;
   if (policy.forwarded.includes(type)) return FRAME_DECISION.FORWARD;
+  if (policy.hangUps.includes(type)) return FRAME_DECISION.HANG_UP;
   if (policy.reports.includes(type)) return FRAME_DECISION.REPORT;
   return policy.otherwise;
 }

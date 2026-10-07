@@ -661,6 +661,36 @@ it.live(
 );
 
 it.live(
+  "the hosted session's hang-up asks the service for the close in its own frame and sends no session.close, held through a gap",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      yield* opened.attach();
+      const [first] = script.sockets;
+      assert.ok(first);
+      first.closeFromServer({ code: 1001 });
+      // The gap begins where the socket's own reader takes that close, which is the turn after it.
+      yield* pause;
+      // Hung up in the gap: the session outlives the service's recycle, so the ask still stands.
+      opened.hangUp();
+      yield* openedSockets(script, 2);
+      const second = script.sockets[1];
+      assert.ok(second);
+      yield* settled(() => second.sent.length >= 2, "the held hang-up behind the attach frame");
+      assert.deepEqual(
+        second.sent.map((data) => JSON.parse(data)),
+        [
+          { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: SESSION_ID },
+          { type: VOICE_SERVICE_FRAME.SESSION_HANG_UP },
+        ],
+      );
+    }),
+);
+
+it.live(
   "a beat rides the socket as the service's own frame, and the service's spoken word is taken off the socket for the listener before the sideband reads it",
   () =>
     Effect.gen(function* () {

@@ -13,7 +13,6 @@ import {
 } from "@sidecar/hosted";
 import {
   type InitialItem,
-  LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
   LIVE_SERVER_EVENT,
@@ -46,6 +45,8 @@ import { LIVE_SESSION_END_CAUSE, LiveSessionHolder, WANTED_WORD } from "./live-s
 
 class FakeSideband implements LiveSideband {
   readonly sent: LiveClientEvent[] = [];
+  /** How many times the source's hang-up door asked the service to close this session. */
+  hangUps = 0;
   closed = false;
   readonly #hold: SocketHold = holdSocket({
     send: () => undefined,
@@ -152,7 +153,6 @@ function fixture(
     let activityListener: ((activity: PlanActivityFrame) => void) | undefined;
     const entries: ConversationEntry[] = [];
     const roster: RosterSeedSession[] = [];
-    let ids = 0;
     const state = {
       sourceAvailable: true,
       reportsActivity: true,
@@ -171,6 +171,9 @@ function fixture(
             sessionId: `sess-${sidebands.length}`,
             sdpAnswer: `answer-for-${input.sdpOffer}`,
             attach: () => Effect.succeed(sideband),
+            hangUp: () => {
+              sideband.hangUps += 1;
+            },
             ...(state.reportsActivity
               ? {
                   reportActivity: (idle: boolean) => {
@@ -203,7 +206,6 @@ function fixture(
       conversationEntries: () => entries,
       roster: () => roster,
       emit: (change) => changes.push(change),
-      createId: () => `id-${++ids}`,
       ...options,
       onSpoken: (kind) => {
         spoken.push(kind);
@@ -442,14 +444,15 @@ it.effect(
 );
 
 it.effect(
-  "the peer's hang-up closes gracefully: session.close goes up, and session.closed ends the session with its reason and releases its scope",
+  "the peer's hang-up asks the service for the close and sends none, and session.closed ends the session with its reason and releases its scope",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
       const fiber = yield* Effect.forkChild(f.holder.endSession(LIVE_SESSION_END_CAUSE.HANG_UP));
       yield* settle();
-      assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+      assert.deepEqual(sideband.sent, []);
+      assert.equal(sideband.hangUps, 1);
       assert.deepEqual(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSING);
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 42);
       yield* Fiber.join(fiber);
@@ -460,9 +463,9 @@ it.effect(
         reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
       });
       assert.equal(f.holder.sessionStands(), false);
-      // A second ask to end finds nothing standing and sends nothing more.
+      // A second ask to end finds nothing standing and asks nothing more.
       yield* f.holder.endSession(LIVE_SESSION_END_CAUSE.HANG_UP);
-      assert.equal(sideband.sent.length, 1);
+      assert.equal(sideband.hangUps, 1);
     }),
 );
 
@@ -509,7 +512,8 @@ it.effect(
       const second = yield* f.open();
       f.holder.reportTransport(LIVE_TRANSPORT_STATE.CLOSED);
       yield* settle();
-      assert.deepEqual(second.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+      assert.deepEqual(second.sent, []);
+      assert.equal(second.hangUps, 1);
       second.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 3);
       yield* settle();
       assert.equal(f.holder.sessionStands(), false);
@@ -532,10 +536,8 @@ it.effect("a sideband that drops is the session lost, and the drain closes what 
     const second = yield* f.open();
     const fiber = yield* Effect.forkChild(f.holder.stop());
     yield* settle();
-    assert.deepEqual(
-      second.sent.map((event) => event.type),
-      [LIVE_CLIENT_EVENT.CLOSE],
-    );
+    assert.deepEqual(second.sent, []);
+    assert.equal(second.hangUps, 1);
     second.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
     yield* Fiber.join(fiber);
     assert.equal(f.holder.sessionStands(), false);
@@ -550,10 +552,8 @@ it.effect("creating a session while one stands closes the standing one first", (
     const first = yield* f.open();
     const fiber = yield* Effect.forkChild(f.holder.createSession("second"));
     yield* settle();
-    assert.deepEqual(
-      first.sent.map((event) => event.type),
-      [LIVE_CLIENT_EVENT.CLOSE],
-    );
+    assert.deepEqual(first.sent, []);
+    assert.equal(first.hangUps, 1);
     first.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 5);
     const created = yield* Fiber.join(fiber);
     assert.deepEqual(created, {
@@ -808,7 +808,8 @@ it.effect(
 
       const ending = yield* Effect.forkChild(f.holder.endPlanCall(BILLING_PLAN));
       yield* settle();
-      assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+      assert.deepEqual(sideband.sent, []);
+      assert.equal(sideband.hangUps, 1);
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 5);
       yield* Fiber.join(ending);
       assert.equal(f.holder.sessionStands(), false);
@@ -836,7 +837,8 @@ it.effect(
       yield* settle();
       const sideband = f.sidebands[0];
       assert.ok(sideband);
-      assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+      assert.deepEqual(sideband.sent, []);
+      assert.equal(sideband.hangUps, 1);
       assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSING);
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
       assert.equal(yield* Fiber.join(creating), undefined);
@@ -869,7 +871,8 @@ it.effect(
       const desk = yield* f.open();
       const creating = yield* Effect.forkChild(f.holder.createSession("offer", INVITES_PLAN));
       yield* settle();
-      assert.deepEqual(desk.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+      assert.deepEqual(desk.sent, []);
+      assert.equal(desk.hangUps, 1);
 
       yield* f.holder.endPlanCall(BILLING_PLAN);
       desk.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);

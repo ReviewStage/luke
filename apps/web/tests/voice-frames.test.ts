@@ -15,7 +15,6 @@ import {
   FRAME_DECISION,
   frameType,
   routeForPath,
-  SESSIONS_CLIENT_EVENTS,
   SESSIONS_REPORT_FRAMES,
   upstreamFrameDecision,
   VOICE_ROUTE,
@@ -67,15 +66,15 @@ test("a signed-in session is shown every frame OpenAI sends, unread ones include
   assert.equal(upstreamFrameDecision(undefined, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
 });
 
-test("a signed-in device may send the hang-up alone, is read for its idle report, its stop, and its beats, and is refused on anything else", () => {
-  assert.deepEqual(SESSIONS_CLIENT_EVENTS, [LIVE_CLIENT_EVENT.CLOSE]);
+test("a signed-in device forwards nothing, is read for its hang-up, its idle report, its stop, and its beats, and is refused on anything else", () => {
   assert.deepEqual(SESSIONS_REPORT_FRAMES, [
     VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
     VOICE_SERVICE_FRAME.SESSION_STOP,
     VOICE_SERVICE_FRAME.SESSION_BEAT,
   ]);
-  for (const type of SESSIONS_CLIENT_EVENTS) {
-    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
+  // The close is the service's to send: a Mac's hang-up and a phone's own close are both an ask for it.
+  for (const type of [VOICE_SERVICE_FRAME.SESSION_HANG_UP, LIVE_CLIENT_EVENT.CLOSE]) {
+    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.HANG_UP);
   }
   for (const type of SESSIONS_REPORT_FRAMES) {
     assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.REPORT);
@@ -171,6 +170,7 @@ test("the audio route forwards the device's audio and its hang-up, reads its idl
   }
   for (const type of [
     VOICE_SERVICE_FRAME.SESSION_BEAT,
+    VOICE_SERVICE_FRAME.SESSION_HANG_UP,
     LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
     LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
     LIVE_CLIENT_EVENT.THINKING_APPEND,

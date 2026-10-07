@@ -15,6 +15,7 @@ import {
   type SessionAttachFrame,
   type SessionBeatFrame,
   type SessionCreateFrame,
+  type SessionHangUpFrame,
   type SessionStopFrame,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
@@ -138,6 +139,13 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * it or appends it. Optional on the same terms as `reportActivity`.
    */
   stopSpeaking?(): void;
+  /**
+   * Asks the service standing between this peer and the session for the
+   * session's close, in the service's own vocabulary: the service owns the
+   * one `session.close`, so nothing on this side sends it, and the
+   * `session.closed` it draws arrives on the sideband as every event does.
+   */
+  hangUp(): void;
   /**
    * Asks the service to speak one of the build-fixed beats into this
    * session, in the service's own vocabulary: the kind and the bounded
@@ -972,6 +980,12 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         // when the connection comes back.
         stopSpeaking: () => {
           const frame: SessionStopFrame = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
+          socket.send(JSON.stringify(frame));
+        },
+        // The hang-up rides the same socket, held through a gap like any send,
+        // since the session it asks the service to close outlives the gap.
+        hangUp: () => {
+          const frame: SessionHangUpFrame = { type: VOICE_SERVICE_FRAME.SESSION_HANG_UP };
           socket.send(JSON.stringify(frame));
         },
         // A beat rides the same socket, held through a gap like any send. The
