@@ -1,3 +1,4 @@
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { Effect } from "effect";
 
 /**
@@ -15,6 +16,7 @@ import type { Effect } from "effect";
 export const LIVE_BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   QUESTION_QUEUED: "question_queued",
+  CODE_SHOWN: "code_shown",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
   ENDED: "ended",
@@ -52,6 +54,12 @@ export type LiveBrainRunEvent =
       /** A question the planning model queued for the developer, and the answer it recommends. */
       readonly question: string;
       readonly recommendation: string;
+    }
+  | {
+      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CODE_SHOWN;
+      readonly runId: string;
+      /** Code of the plan's folder the planning model put on screen, by place, for Luke's next words. */
+      readonly ref: CodeRef;
     }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {

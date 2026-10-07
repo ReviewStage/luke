@@ -73,6 +73,7 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionSpokenFrameSchema: liveContract.sessionSpokenFrameSchema,
     planDraftFrameSchema: liveContract.planDraftFrameSchema,
     planActivityFrameSchema: liveContract.planActivityFrameSchema,
+    planCodeFrameSchema: liveContract.planCodeFrameSchema,
     sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
     sessionAudioCreatedFrameSchema: liveContract.sessionAudioCreatedFrameSchema,
@@ -102,6 +103,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planCommandResultSchema: planWire.planCommandResultSchema,
     planCommandSettleAnswerSchema: planWire.planCommandSettleAnswerSchema,
     planDeleteAnswerSchema: planWire.planDeleteAnswerSchema,
+    codeRefSchema: planWire.codeRefSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
   "projects-wire": {
     hostedProjectsAnswerSchema: projectsWire.hostedProjectsAnswerSchema,

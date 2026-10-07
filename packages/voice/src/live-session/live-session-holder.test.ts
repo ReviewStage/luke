@@ -8,6 +8,7 @@ import {
 } from "@sidecar/gateway";
 import {
   type PlanActivityFrame,
+  type PlanCodeFrame,
   type SessionBeatFrame,
   VOICE_SERVICE_FRAME,
 } from "@sidecar/hosted";
@@ -125,6 +126,12 @@ interface Fixture {
   activity: PlanActivityFrame[];
   /** The service's activity frame, as the source's door would deliver it. */
   tellActivity(activity: PlanActivityFrame): void;
+  /** Every code frame the holder told its caller, in order. */
+  code: PlanCodeFrame[];
+  /** The service's code frame, as the source's door would deliver it. */
+  tellCode(code: PlanCodeFrame): void;
+  /** Every plan whose call the holder told its caller ended, in order. */
+  callsEnded: string[];
   created: number;
   entries: ConversationEntry[];
   roster: RosterSeedSession[];
@@ -150,6 +157,9 @@ function fixture(
     let spokenListener: ((kind: ProactiveSpeechKind) => void) | undefined;
     const activity: PlanActivityFrame[] = [];
     let activityListener: ((activity: PlanActivityFrame) => void) | undefined;
+    const code: PlanCodeFrame[] = [];
+    let codeListener: ((code: PlanCodeFrame) => void) | undefined;
+    const callsEnded: string[] = [];
     const entries: ConversationEntry[] = [];
     const roster: RosterSeedSession[] = [];
     let ids = 0;
@@ -188,6 +198,9 @@ function fixture(
                   onPlanActivity: (listener: (activity: PlanActivityFrame) => void) => {
                     activityListener = listener;
                   },
+                  onPlanCode: (listener: (code: PlanCodeFrame) => void) => {
+                    codeListener = listener;
+                  },
                 }
               : undefined),
           };
@@ -210,6 +223,12 @@ function fixture(
       },
       onPlanActivity: (word) => {
         activity.push(word);
+      },
+      onPlanCode: (frame) => {
+        code.push(frame);
+      },
+      onPlanCallEnded: (planId) => {
+        callsEnded.push(planId);
       },
       onSessionCreated: () => {
         state.created += 1;
@@ -245,6 +264,11 @@ function fixture(
       tellActivity: (word) => {
         activityListener?.(word);
       },
+      code,
+      tellCode: (frame) => {
+        codeListener?.(frame);
+      },
+      callsEnded,
       get reportsActivity() {
         return state.reportsActivity;
       },
@@ -876,6 +900,36 @@ it.effect(
       assert.equal(yield* Fiber.join(creating), undefined);
       assert.deepEqual(f.plans, [undefined]);
       assert.equal(f.holder.sessionStands(), false);
+    }),
+);
+
+it.effect(
+  "a planning call passes on the code Luke shows about its own plan, drops code about another, and tells its end so the code goes with it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+
+      const shown: PlanCodeFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_CODE,
+        planId: INVITES_PLAN,
+        ref: { path: "src/invite.ts", startLine: 3, endLine: 5 },
+      };
+      f.tellCode(shown);
+      f.tellCode({ ...shown, planId: BILLING_PLAN });
+      assert.deepEqual(f.code, [shown]);
+
+      sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 4);
+      yield* settle();
+      assert.deepEqual(f.callsEnded, [INVITES_PLAN]);
+      // Code arriving after the call ended reaches nobody.
+      f.tellCode(shown);
+      assert.equal(f.code.length, 1);
     }),
 );
 

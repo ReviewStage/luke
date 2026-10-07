@@ -14,6 +14,7 @@ import {
 } from "@sidecar/gateway";
 import {
   type PlanActivityFrame,
+  type PlanCodeFrame,
   type PlanDraftFrame,
   type SessionBeatFrame,
   VOICE_SERVICE_FRAME,
@@ -90,6 +91,8 @@ export interface LiveDependencies {
   showPlanDraft: (draft: PlanDraftFrame) => void;
   /** Where the service's word of what each part of Luke is doing on a planning call goes, and the call's end clearing it. */
   showPlanActivity: (activity: PlanActivityFrame) => void;
+  /** Where code Luke puts on screen during a planning call goes. */
+  showPlanCode: (code: PlanCodeFrame) => void;
   /** Where a planning call's end goes, so the code it put on screen is cleared with it. */
   planCallEnded: (planId: string) => void;
 }
@@ -184,6 +187,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     onPlanDraft: (draft) => dependencies.showPlanDraft(draft),
     // What each part of Luke is doing on the call, as the service says it.
     onPlanActivity: (activity) => dependencies.showPlanActivity(activity),
+    onPlanCode: (code) => dependencies.showPlanCode(code),
     onPlanCallEnded: (planId) => dependencies.planCallEnded(planId),
     // The service's word that a turn was spoken to its end, by kind: the
     // counts and the arrival's moment are this side's record, kept here as

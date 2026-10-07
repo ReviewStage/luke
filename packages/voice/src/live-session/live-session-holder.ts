@@ -8,6 +8,7 @@ import {
 import {
   type LiveSessionCreated,
   type PlanActivityFrame,
+  type PlanCodeFrame,
   type PlanDraftFrame,
   type SessionBeatFrame,
   VOICE_SERVICE_FRAME,
@@ -112,6 +113,8 @@ export interface LiveSessionHolderOptions {
    * is told as a snapshot with nothing doing, so none outlives the call.
    */
   onPlanActivity?: (activity: PlanActivityFrame) => void;
+  /** Luke put code on screen on the standing planning call, on the same terms as `onPlanDraft`. */
+  onPlanCode?: (code: PlanCodeFrame) => void;
   /** The planning call about the plan named ended, so what it put on screen goes with it. */
   onPlanCallEnded?: (planId: string) => void;
 }
@@ -417,6 +420,7 @@ export class LiveSessionHolder {
       opened.onSpoken?.((kind) => this.#spoken(session, kind));
       opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
       opened.onPlanActivity?.((activity) => this.#activity(session, activity));
+      opened.onPlanCode?.((code) => this.#code(session, code));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -702,6 +706,12 @@ export class LiveSessionHolder {
   #activity(session: HeldSession, activity: PlanActivityFrame): void {
     if (session.ended || activity.planId !== session.planId) return;
     this.#options.onPlanActivity?.(activity);
+  }
+
+  /** Code Luke put on screen on the call about the plan the session is bound to, passed on while the session stands. */
+  #code(session: HeldSession, code: PlanCodeFrame): void {
+    if (session.ended || code.planId !== session.planId) return;
+    this.#options.onPlanCode?.(code);
   }
 
   /**

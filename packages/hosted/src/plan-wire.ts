@@ -138,7 +138,7 @@ export const CODE_POINTER_TEXT_MAX_CHARS = 4_000;
 const codeLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
 /** Whether a reference names both of its lines or neither, in order and within the bound. */
-function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boolean {
+export function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boolean {
   if (ref.startLine === undefined || ref.endLine === undefined) {
     return ref.startLine === ref.endLine;
   }

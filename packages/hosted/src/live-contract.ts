@@ -13,7 +13,7 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { planDocumentSchema } from "./plan-wire.js";
+import { codeRefSchema, planDocumentSchema } from "./plan-wire.js";
 import { planActivitySchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
@@ -162,6 +162,13 @@ export const VOICE_SERVICE_FRAME = {
    * says each part's own state rather than one word for all of them.
    */
   PLAN_ACTIVITY: "plan.activity",
+  /**
+   * The service's fourth frame to the desktop, on a planning call alone:
+   * code of the plan's folder Luke is about to talk about, by place, sent as
+   * he starts to speak, so the Plans tab's code pane draws it from the
+   * Mac's own folder as he says it.
+   */
+  PLAN_CODE: "plan.code",
 } as const;
 
 /**
@@ -434,6 +441,15 @@ export const planActivityFrameSchema = Schema.Struct({
 
 export type PlanActivityFrame = typeof planActivityFrameSchema.Type;
 
+/** Code Luke put on screen on the call about the plan named, by place, as the service sends it to the desktop. */
+export const planCodeFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_CODE),
+  planId: wireUuidSchema,
+  ref: codeRefSchema,
+});
+
+export type PlanCodeFrame = typeof planCodeFrameSchema.Type;
+
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -525,6 +541,11 @@ export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame
 /** What each part of Luke is doing on a planning call, read the same answering way. */
 export function planActivityFrameFromWire(value: UnparsedWireValue): PlanActivityFrame | undefined {
   return admittedAnswer(planActivityFrameSchema, value);
+}
+
+/** The code Luke put on screen on a planning call, read the same answering way. */
+export function planCodeFrameFromWire(value: UnparsedWireValue): PlanCodeFrame | undefined {
+  return admittedAnswer(planCodeFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

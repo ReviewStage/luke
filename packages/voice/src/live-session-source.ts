@@ -8,8 +8,10 @@ import {
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
   type PlanActivityFrame,
+  type PlanCodeFrame,
   type PlanDraftFrame,
   planActivityFrameFromWire,
+  planCodeFrameFromWire,
   planDraftFrameFromWire,
   type SessionActivityFrame,
   type SessionAttachFrame,
@@ -163,6 +165,8 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * doing on a planning call, on the same terms as `onPlanDraft`.
    */
   onPlanActivity?(listener: (activity: PlanActivityFrame) => void): void;
+  /** Tells the listener each time Luke puts code on screen on a planning call, on the same terms as `onPlanDraft`. */
+  onPlanCode?(listener: (code: PlanCodeFrame) => void): void;
 }
 
 /**
@@ -938,6 +942,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       const spokenListeners = new Set<(kind: ProactiveSpeechKind) => void>();
       const draftListeners = new Set<(draft: PlanDraftFrame) => void>();
       const activityListeners = new Set<(activity: PlanActivityFrame) => void>();
+      const codeListeners = new Set<(code: PlanCodeFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
           onSpoken: (kind) => {
@@ -948,6 +953,9 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           },
           onPlanActivity: (activity) => {
             for (const listener of [...activityListeners]) listener(activity);
+          },
+          onPlanCode: (code) => {
+            for (const listener of [...codeListeners]) listener(code);
           },
         }),
       );
@@ -990,6 +998,9 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onPlanActivity: (listener) => {
           activityListeners.add(listener);
         },
+        onPlanCode: (listener) => {
+          codeListeners.add(listener);
+        },
       };
     });
   }
@@ -997,7 +1008,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
 
 /**
  * The socket with the service's own frames, `session.spoken`, `plan.draft`,
- * and `plan.activity`, taken off its arrivals and told to their listeners, so the
+ * `plan.activity`, and `plan.code`, taken off its arrivals and told to their listeners, so the
  * sideband over it reads only what the session said. Every frame is checked
  * by the frame's own schema; the substring test ahead of it is only what
  * keeps a transcript delta from being decoded twice.
@@ -1008,6 +1019,7 @@ function withoutServiceFrames(
     readonly onSpoken: (kind: ProactiveSpeechKind) => void;
     readonly onPlanDraft: (draft: PlanDraftFrame) => void;
     readonly onPlanActivity: (activity: PlanActivityFrame) => void;
+    readonly onPlanCode: (code: PlanCodeFrame) => void;
   },
 ): LiveSocket {
   return {
@@ -1032,6 +1044,12 @@ function withoutServiceFrames(
         const activity = planActivityFrameFromWire(decodeLivePayload(arrival.frame));
         if (activity === undefined) return true;
         listeners.onPlanActivity(activity);
+        return false;
+      }
+      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_CODE)) {
+        const code = planCodeFrameFromWire(decodeLivePayload(arrival.frame));
+        if (code === undefined) return true;
+        listeners.onPlanCode(code);
         return false;
       }
       return true;

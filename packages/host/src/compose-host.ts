@@ -9,8 +9,10 @@ import {
   HostedConversationClient,
   HostedPlanClient,
   type PlanActivityFrame,
+  type PlanCodeFrame,
   type PlanDraftFrame,
 } from "@sidecar/hosted";
+import { CODE_SOURCE } from "@sidecar/hosted/planning-view";
 import { observationSupervisor } from "@sidecar/runtime";
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
@@ -150,6 +152,7 @@ export const hostAssemblyLayer: Layer.Layer<
     let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
     let showPlanActivity: (activity: PlanActivityFrame) => void = () => undefined;
     let planCallEnded: (planId: string) => void = () => undefined;
+    let showPlanCode: (code: PlanCodeFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
@@ -159,6 +162,7 @@ export const hostAssemblyLayer: Layer.Layer<
       showPlanDraft: (draft) => showPlanDraft(draft),
       showPlanActivity: (activity) => showPlanActivity(activity),
       planCallEnded: (planId) => planCallEnded(planId),
+      showPlanCode: (code) => showPlanCode(code),
     });
     const planning = yield* composePlanning({
       kernel,
@@ -184,6 +188,7 @@ export const hostAssemblyLayer: Layer.Layer<
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
     planCallEnded = planning.callEnded;
+    showPlanCode = (code) => planning.showCode(code.planId, code.ref, CODE_SOURCE.LUKE);
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
     briefingsOffered = live.briefingsOffered;

@@ -35,6 +35,7 @@ import type { UserIdResolver } from "./http-effect.js";
 import { QUEUE_QUESTION_TOOL, queuedQuestionOf } from "./queue-question.js";
 import { makeRateBrake } from "./rate-brake.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
+import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
 /**
@@ -128,7 +129,7 @@ type JournalParts = StoredUIMessage["parts"];
 /**
  * What the journal's calls tell before the turn ends, in the order the calls
  * were written: the first slow step, once, as the desktop tells one per run,
- * and every question a planning call queued. Note that a planning call's
+ * and every question a planning call queued and all the code it showed. Note that a planning call's
  * repository command is named before the policy is asked, because it is a
  * planning tool and no catalog policy offers it, so the brain's own
  * `slowStepOf` would never count it. A queued question is told once its
@@ -144,6 +145,11 @@ function midTurnEventsOf(parts: JournalParts, trigger: BrainTurnTrigger): TurnEv
     if (name === QUEUE_QUESTION_TOOL.name) {
       const queued = queuedQuestionOf(part);
       if (queued !== undefined) bodies.push({ kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued });
+      continue;
+    }
+    if (name === SHOW_CODE_TOOL.name) {
+      const shown = shownCodeOf(part);
+      if (shown !== undefined) bodies.push({ kind: TURN_EVENT_KIND.CODE_SHOWN, ...shown });
       continue;
     }
     const step =

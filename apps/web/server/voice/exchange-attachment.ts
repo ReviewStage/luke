@@ -117,6 +117,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
           deps.report({ message, route: session.route, platform: session.platform }),
         ...(session.onSpoken ? { onProactiveSpoken: session.onSpoken } : undefined),
         ...(session.onActivity ? { onActivity: session.onActivity } : undefined),
+        ...(session.onCode ? { onCode: session.onCode } : undefined),
       });
       const adopted = yield* exchange.adopt({
         sessionId: session.sessionId,

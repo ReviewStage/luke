@@ -1,6 +1,7 @@
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
+import { type CodeRef, codeRangeIsReadable, codeRefSchema } from "./plan-wire.js";
 import { wireUuidSchema, writtenText } from "./service-wire.js";
 
 /**
@@ -37,6 +38,8 @@ export const TURN_EVENT_KIND = {
   SLOW_STEP: "slow_step",
   /** A planning turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
   QUESTION_QUEUED: "question_queued",
+  /** A planning turn put code of the plan's folder on screen, by place; told as the call is journaled, before the turn ends. */
+  CODE_SHOWN: "code_shown",
   /** Every action the turn dispatched has its result on the record; the reply's sentences follow. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the reply, in order, after the actions settled. */
@@ -85,6 +88,7 @@ export type TurnEventBody =
       readonly question: string;
       readonly recommendation: string;
     }
+  | ({ readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN } & CodeRef)
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };
@@ -108,6 +112,11 @@ export const turnEventSchema = EffectSchema.Union([
     question: writtenText,
     recommendation: writtenText,
   }),
+  EffectSchema.Struct({
+    ...eventBase,
+    kind: EffectSchema.Literal(TURN_EVENT_KIND.CODE_SHOWN),
+    ...codeRefSchema.fields,
+  }).check(EffectSchema.makeFilter(codeRangeIsReadable)),
   EffectSchema.Struct({
     ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.ACTIONS_SETTLED),

@@ -14,6 +14,7 @@ import {
   HTTP_STATUS,
   isDeviceWireId,
   type PlanActivityFrame,
+  type PlanCodeFrame,
   type PlanDraftFrame,
   type SessionSpokenFrame,
   VOICE_SERVICE_FRAME,
@@ -635,6 +636,18 @@ export class VoiceService {
                   type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
                   planId: opened.planId,
                   ...activity,
+                };
+                this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
+              },
+              // Code Luke is about to talk about, by place, sent the same
+              // way, so the Plans tab's code pane draws it from the Mac's
+              // own folder as he says it.
+              onCode: (ref) => {
+                if (opened.planId === undefined) return;
+                const frame: PlanCodeFrame = {
+                  type: VOICE_SERVICE_FRAME.PLAN_CODE,
+                  planId: opened.planId,
+                  ref,
                 };
                 this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
               },

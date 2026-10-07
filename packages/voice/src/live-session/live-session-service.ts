@@ -1,4 +1,5 @@
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { VOICE_PHASE, type VoicePhase } from "@sidecar/hosted/planning-view";
 import {
   chunkForAppend,
@@ -116,6 +117,23 @@ function queuedQuestionNote(question: string, recommendation: string): string {
   return `Ask the developer this next, one question at a time, once they have answered anything you have already asked: ${question} Recommended answer: ${recommendation}`;
 }
 
+/** Where code on screen is, as the voice is told it: the file and the lines lit, if any. */
+function codePlace(ref: CodeRef): string {
+  if (ref.startLine === undefined || ref.endLine === undefined) return ref.path;
+  return ref.startLine === ref.endLine
+    ? `${ref.path}, line ${ref.startLine}`
+    : `${ref.path}, lines ${ref.startLine} to ${ref.endLine}`;
+}
+
+/**
+ * Code the planning model put on the developer's screen, as the voice is
+ * handed it: context it keeps without saying, so Luke can point at a line
+ * by its number the way a person sharing a screen would.
+ */
+function codeOnScreenNote(ref: CodeRef): string {
+  return `The developer's screen now shows ${codePlace(ref)}, lit. Refer to it as on screen, by line number where it helps; don't read the code aloud.`;
+}
+
 /**
  * How long after a fragment lands its row's write is put off, so a burst of
  * deltas is one write rather than one per syllable. Each fragment re-arms it,
@@ -170,6 +188,8 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
   /** What the standing session's voice and brain are doing, told whole on a change alone. */
   onStatus?: (status: LiveSessionStatus) => void;
+  /** Code the planning model named is to go on the developer's screen now, as Luke starts to speak. */
+  onCode?: (ref: CodeRef) => void;
 }
 
 /**
@@ -240,6 +260,12 @@ interface StandingSession {
   readonly openAsks: Map<string, OpenAsk>;
   /** The voice's wait, where it is in one; see `LiveSessionStatus`. */
   voicePhase: VoicePhase | undefined;
+  /**
+   * Code the planning model named, held until Luke next starts to say words
+   * queued for him, so it goes on screen as he talks about it; the newest
+   * replaces any still held.
+   */
+  pendingCode: { readonly ref: CodeRef; readonly delegationId: LiveDelegationId } | undefined;
   /**
    * The session's last word, settled by its own reader: the `session.closed`
    * it read, or the close that ended the arrivals before one came. The
@@ -770,6 +796,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         claimedDelegations: new Set(),
         openAsks: new Map(),
         voicePhase: undefined,
+        pendingCode: undefined,
         retained: [],
         pendingRows: new Map(),
         idleReported: false,
@@ -875,7 +902,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           event.end_ms,
         );
         session.channel.outputReached(event.end_ms);
-        if (session.voicePhase === VOICE_PHASE.ABOUT_TO_ANSWER) this.#voiceIn(session, undefined);
+        if (session.voicePhase === VOICE_PHASE.ABOUT_TO_ANSWER) {
+          this.#voiceIn(session, undefined);
+          this.#releaseCode(session);
+        }
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
         if (isClientDelegation(event))
@@ -1202,6 +1232,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED:
         this.#speakSentence(exchange, queuedQuestionNote(event.question, event.recommendation));
         return;
+      // Code is held for the words it belongs to, which start with Luke's next answer.
+      case LIVE_BRAIN_RUN_EVENT.CODE_SHOWN: {
+        const session = this.#sessionOf(exchange);
+        if (session)
+          session.pendingCode = { ref: event.ref, delegationId: this.#delegationOf(exchange) };
+        return;
+      }
       // The brain tells the settle as soon as no write of the run is still
       // out, which for a read-only run is at its first words, so the gate
       // below releases the reply earlier without meaning anything weaker.
@@ -1251,6 +1288,27 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     }
     // Told after the note is queued, so the planner gives way to Luke about to say it in one change.
     this.#reportStatus();
+  }
+
+  /**
+   * Puts the held code on the developer's screen and tells the voice it is
+   * there, so the words Luke has just begun and the lines lit arrive
+   * together.
+   */
+  #releaseCode(session: StandingSession): void {
+    const held = session.pendingCode;
+    if (held === undefined) return;
+    session.pendingCode = undefined;
+    this.#options.onCode?.(held.ref);
+    session.channel.enqueue(
+      Effect.suspend(() =>
+        Effect.asVoid(
+          session.channel.send(
+            thinkingAppend(this.#input(held.delegationId, codeOnScreenNote(held.ref))),
+          ),
+        ),
+      ),
+    );
   }
 
   /** One sentence of an exchange's reply, into its session under its delegation; a session since closed hears nothing of it. */

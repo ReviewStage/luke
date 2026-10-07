@@ -15,6 +15,7 @@ import {
 } from "../public-research.js";
 import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL, runInRepository } from "../repository-shell.js";
+import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
 import type { PlanDocumentBinding } from "../update-plan-tool.js";
 import type { HostedToolDeclaration } from "./tools.js";
 
@@ -109,6 +110,7 @@ Once it is, queue nothing more: any question Luke still holds is moot. Open your
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
+- show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means. The developer can point at code too: their pointer arrives with their words as "[developer is pointing at]" and the lines they lit.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet.
 
@@ -193,7 +195,8 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient;
 /**
  * The tools a planning turn is offered, in the order the model reads them.
  * None writes the plan, which is the notetaker's; `queue_question` hands the
- * voice a question mid-turn (`queue-question.ts`); `run_in_repository` runs a
+ * voice a question mid-turn (`queue-question.ts`); `show_code` puts lines of
+ * the plan's folder on the developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
  * command in the plan's folder on the developer's Mac, under the same
  * binding; the public search and page read (`public-research.ts`)
  * answer what the repository cannot. Every read's result goes back to the
@@ -203,6 +206,10 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...QUEUE_QUESTION_TOOL,
     run: (_call, input) => Effect.succeed(runQueueQuestion(input)),
+  },
+  {
+    ...SHOW_CODE_TOOL,
+    run: (_call, input) => Effect.succeed(runShowCode(input)),
   },
   {
     ...RUN_IN_REPOSITORY_TOOL,
