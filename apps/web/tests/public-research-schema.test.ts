@@ -1,5 +1,6 @@
 import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sidecar/wire/testing";
 import { test } from "vitest";
+import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 
@@ -33,5 +34,13 @@ test("queue_question offers exactly a bounded question and recommendation, with 
     ROOT,
     "queue-question-tool-input",
     jsonSchemaOf(QUEUE_QUESTION_TOOL.inputSchema),
+  );
+});
+
+test("draw_on_board offers exactly operations on the board, with no account or plan to name", async () => {
+  await settleJsonSchemaGolden(
+    ROOT,
+    "draw-on-board-tool-input",
+    jsonSchemaOf(DRAW_ON_BOARD_TOOL.inputSchema),
   );
 });

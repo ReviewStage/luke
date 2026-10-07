@@ -76,6 +76,7 @@ const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
 - The repository: run_in_repository, which runs shell commands in the plan's folder on the developer's Mac.
 - Research: search_web and read_web_page, which can search the Internet.
+- The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
 
 Delegate to the backend when:
 - The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
@@ -83,6 +84,7 @@ Delegate to the backend when:
 - A correction changes the work already requested.
 - The developer answers a question, or says they are unsure: pass the answer to the backend so it can queue what the answer unblocked.
 - You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
+- The developer asks to see something drawn, or mentions something they drew on the board.
 
 Do not delegate to the backend when:
 - You can answer from the conversation or a still-current result.

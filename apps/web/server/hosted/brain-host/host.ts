@@ -1,3 +1,4 @@
+import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
 import {
   failedHousekeeping,
   type MemoryHousekeepingResult,
@@ -28,6 +29,7 @@ import {
   type WireRecord,
 } from "../../core.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
+import { readBoard } from "../board-store.js";
 import { CATALOG_TOOL_SET, HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
 import type { HostedRefusal } from "../http-effect.js";
@@ -472,7 +474,14 @@ export function brainHost(seams: BrainHostSeams): Effect.Effect<BrainHost> {
           const { userId } = admitted.target;
           const now = seams.now();
           if (admitted.kind === CONVERSATION_KIND.PLAN) {
-            return planningStandingContext(yield* planOf(admitted.target), now);
+            const plan = yield* planOf(admitted.target);
+            const board =
+              plan === undefined ? Option.none() : yield* readBoard(userId, plan.plan.id);
+            return planningStandingContext(
+              plan,
+              Option.getOrElse(board, () => EMPTY_BOARD),
+              now,
+            );
           }
           const roster = yield* rosterOf(userId);
           const defaults = yield* readWorkspaceDefaults(userId);

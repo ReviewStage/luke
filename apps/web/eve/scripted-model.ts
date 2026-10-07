@@ -1,3 +1,5 @@
+import { BOARD_OP } from "@sidecar/hosted/board-skeleton";
+import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-wire";
 import type { LanguageModel } from "ai";
 import { Option, Schema } from "effect";
 import {
@@ -7,6 +9,7 @@ import {
   mockModel,
 } from "eve/evals";
 import { BRAIN_TOOL, WORKSPACE_FILE } from "../server/core.js";
+import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool.js";
 import { BRAIN_HOST_MODEL_FIXTURE } from "../server/hosted/brain-host/bounds.js";
 import { documentTextOf } from "../server/hosted/brain-host/planning.js";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
@@ -20,7 +23,9 @@ import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
  * context, it plans instead: it answers with one question and writes
  * nothing, since the plan's notetaker writes the document; told to look
  * something up, it searches the public web for it instead and answers with
- * the first source the search found, or says it found none. It is selected
+ * the first source the search found, or says it found none; told to draw
+ * something, it draws it on the plan's board as one labelled box and says
+ * so. It is selected
  * only by the fixture's own environment variable and a deployment never
  * names it.
  */
@@ -33,6 +38,11 @@ export const SCRIPTED_PLANNING_REPLY = "Who should be able to do that?";
 export const SCRIPTED_LOOK_UP = "Look up: ";
 export const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
 export const SCRIPTED_NO_SOURCE_REPLY = "I found no source for that, so it stays an open question.";
+/** What a developer's words start with when they ask the scripted planner to draw the rest as one box. */
+export const SCRIPTED_DRAW = "Draw: ";
+/** The id the scripted planner gives the box it draws. */
+export const SCRIPTED_DRAWN_ID = "sketch";
+export const SCRIPTED_DRAWN_REPLY = "It's on the board.";
 
 /** What the newest standing context carries, read by the reader handed in. */
 function newestStanding(
@@ -61,6 +71,21 @@ function researchReply(searched: MockModelToolResult): MockModelResponse {
 function planningResponse(request: MockModelRequest): MockModelResponse {
   const searched = request.toolResults.find((result) => result.name === SEARCH_WEB_TOOL.name);
   if (searched) return researchReply(searched);
+  if (request.toolResults.some((result) => result.name === DRAW_ON_BOARD_TOOL.name)) {
+    return { text: SCRIPTED_DRAWN_REPLY };
+  }
+  if (request.lastUserMessage?.startsWith(SCRIPTED_DRAW)) {
+    const label = request.lastUserMessage.slice(SCRIPTED_DRAW.length);
+    const element = {
+      type: BOARD_ELEMENT_TYPE.RECTANGLE,
+      id: SCRIPTED_DRAWN_ID,
+      x: 0,
+      y: 0,
+      label,
+    };
+    const operations = [{ op: BOARD_OP.ADD, element }];
+    return { toolCalls: [{ name: DRAW_ON_BOARD_TOOL.name, input: { operations } }] };
+  }
   if (request.lastUserMessage?.startsWith(SCRIPTED_LOOK_UP)) {
     const query = request.lastUserMessage.slice(SCRIPTED_LOOK_UP.length);
     return { toolCalls: [{ name: SEARCH_WEB_TOOL.name, input: { query } }] };

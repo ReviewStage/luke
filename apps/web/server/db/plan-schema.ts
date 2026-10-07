@@ -1,7 +1,8 @@
+import type { BoardAuthor, BoardElement } from "@sidecar/hosted/board-wire";
 import type { PlanFields } from "@sidecar/hosted/plan-template";
 import type { PlanAssumption, PlanCommandResult } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
 import { conversations } from "./storage-schema.js";
@@ -72,4 +73,23 @@ export const planCommand = pgTable("plan_command", {
   claimedAt: instant("claimed_at"),
   /** What the Mac answered: the exit code, stdout, and stderr; null until it does. */
   result: jsonb("result").$type<PlanCommandResult>(),
+});
+
+/**
+ * A plan's whiteboard: the Excalidraw elements Luke and the developer draw,
+ * and the revision each write moves by one. A plan has no row until its
+ * board is first drawn on, and reads as revision 0 with nothing on it until
+ * then. Every write replaces `elements` whole under the plan row's lock and
+ * only over the revision its writer read (`board-store.ts`). The row goes
+ * with its plan.
+ */
+export const planBoard = pgTable("plan_board", {
+  planId: uuid("plan_id")
+    .primaryKey()
+    .references(() => plan.id, { onDelete: "cascade" }),
+  elements: jsonb("elements").$type<readonly BoardElement[]>().notNull().default(sql`'[]'::jsonb`),
+  revision: integer("revision").notNull(),
+  /** Who wrote this revision, Luke or the developer. */
+  updatedBy: text("updated_by").$type<BoardAuthor>().notNull(),
+  updatedAt: instant("updated_at").notNull().defaultNow(),
 });

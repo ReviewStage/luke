@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { BOARD_AUTHOR } from "@sidecar/hosted/board-wire";
 import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
@@ -19,6 +20,9 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
+  SCRIPTED_DRAW,
+  SCRIPTED_DRAWN_ID,
+  SCRIPTED_DRAWN_REPLY,
   SCRIPTED_LOOK_UP,
   SCRIPTED_NO_SOURCE_REPLY,
   SCRIPTED_PLANNING_REPLY,
@@ -28,6 +32,8 @@ import {
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
+import { readBoard, writeBoard } from "../server/hosted/board-store";
+import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_REFUSAL,
@@ -477,6 +483,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
             RUN_IN_REPOSITORY_TOOL.name,
             SEARCH_WEB_TOOL.name,
             READ_WEB_PAGE_TOOL.name,
+            DRAW_ON_BOARD_TOOL.name,
           ],
         );
       }),
@@ -524,6 +531,47 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         assert.equal(reply, SCRIPTED_PLANNING_REPLY);
         assert.deepEqual(yield* windowDocument(userId, planId), SAVED);
+      }),
+  );
+
+  it.effect(
+    "asked to draw, the planning model draws on the plan's board, and what the developer draws reaches its next turn",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+
+        const reply = yield* planningTurn(host, session, "turn_0", `${SCRIPTED_DRAW}Invite API`);
+
+        assert.equal(reply, SCRIPTED_DRAWN_REPLY);
+        const drawn = Option.getOrThrow(yield* readBoard(userId, planId));
+        assert.equal(drawn.revision, 1);
+        assert.equal(drawn.updatedBy, BOARD_AUTHOR.LUKE);
+        assert.ok(drawn.elements.some((element) => element.id === SCRIPTED_DRAWN_ID));
+
+        const developer = {
+          id: "dev-note",
+          type: "text",
+          x: 0,
+          y: 200,
+          width: 120,
+          height: 25,
+          version: 1,
+          isDeleted: false,
+          text: "Rate limit invites",
+        } as const;
+        yield* writeBoard(
+          userId,
+          planId,
+          drawn.revision,
+          [...drawn.elements, developer],
+          BOARD_AUTHOR.DEVELOPER,
+        );
+        const context = yield* host.standingContext(yield* admitted(host, session));
+
+        assert.ok(context.includes('"Invite API"'));
+        assert.ok(context.includes('dev-note "Rate limit invites" at 0,200'));
+        assert.ok(context.includes("last changed by the developer"));
       }),
   );
 

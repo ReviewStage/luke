@@ -9,6 +9,7 @@ import {
 import { test } from "vitest";
 import * as actionWire from "./action-wire.js";
 import * as askWire from "./ask-wire.js";
+import * as boardWire from "./board-wire.js";
 import * as conversationClearWire from "./conversation-clear-wire.js";
 import * as conversationWire from "./conversation-wire.js";
 import * as deviceWire from "./device-wire.js";
@@ -46,6 +47,14 @@ const EFFECT_MODULE_SCHEMAS = {
     hostedBrainAskAnswerSchema: askWire.hostedBrainAskAnswerSchema,
     hostedBrainTurnAnswerSchema: askWire.hostedBrainTurnAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof askWire>,
+  "board-wire": {
+    boardElementSchema: boardWire.boardElementSchema,
+    boardElementsSchema: boardWire.boardElementsSchema,
+    boardSchema: boardWire.boardSchema,
+    boardAnswerSchema: boardWire.boardAnswerSchema,
+    boardSaveRequestSchema: boardWire.boardSaveRequestSchema,
+    boardSaveAnswerSchema: boardWire.boardSaveAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
   "conversation-clear-wire": {
     conversationClearAnswerSchema: conversationClearWire.conversationClearAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof conversationClearWire>,
