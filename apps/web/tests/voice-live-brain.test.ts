@@ -331,6 +331,67 @@ it.live(
 );
 
 it.live(
+  "the first sentence of an answer that follows only settled calls reaches the service while the turn still runs, and the rest follow with the end",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      const accepted = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
+      );
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target,
+        kind: CONVERSATION_KIND.MAIN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const events = spokenTurn(FIRST_EVE_TURN, NOW);
+      const answer = events.findIndex((event) => event.type === "message.completed");
+      const forming = stampedEveEvent(
+        {
+          type: "message.appended",
+          data: {
+            turnId: FIRST_EVE_TURN,
+            sequence: 0,
+            stepIndex: 1,
+            messageDelta: "One agent finished. Another is",
+          },
+        },
+        NOW,
+      );
+      yield* Effect.promise(() => play([...events.slice(0, answer), forming], standing));
+      yield* f.arrived(3);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      assert.deepEqual(
+        f.events.map((event) =>
+          event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE ? event.sentence : event.kind,
+        ),
+        [
+          LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
+          LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+          "One agent finished.",
+        ],
+      );
+
+      yield* Effect.promise(() => play(events.slice(answer), standing));
+      yield* f.arrived(5);
+      assert.deepEqual(
+        f.events
+          .slice(3)
+          .map((event) =>
+            event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE ? event.sentence : event.kind,
+          ),
+        ["Another is waiting on you.", LIVE_BRAIN_RUN_EVENT.ENDED],
+      );
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
   "a refusal at the door is spoken as the build's own note for it, and every refusal has one",
   () =>
     Effect.gen(function* () {

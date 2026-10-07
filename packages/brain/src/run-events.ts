@@ -59,6 +59,8 @@ export const BRAIN_RUN_EVENT = {
   REASONING_COMPLETED: "reasoning_completed",
   /** A message of the turn is complete: the words the turn opened with, words steered in, or the model's finished answer. */
   MESSAGE_COMPLETED: "message_completed",
+  /** A step's words so far, cut at their last finished sentence, while the turn still runs; the completed answer carries them whole. */
+  TEXT_DRAFTED: "text_drafted",
   /** The context was folded, before the turn's first inference or inside the run. */
   COMPACTION_COMPLETED: "compaction_completed",
   /** The turn's execution is over, however it ended. */
@@ -228,6 +230,13 @@ export type BrainRunEventBody =
     }
   | { readonly kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED; readonly message: UIMessage }
   | {
+      readonly kind: typeof BRAIN_RUN_EVENT.TEXT_DRAFTED;
+      /** The step the words belong to, numbered from one as `STEP_STARTED` numbers it. */
+      readonly step: number;
+      /** Every word the step has formed so far, through its last finished sentence; it only grows. */
+      readonly text: string;
+    }
+  | {
       readonly kind: typeof BRAIN_RUN_EVENT.COMPACTION_COMPLETED;
       readonly compaction: TurnCompaction;
     }
@@ -278,6 +287,19 @@ export function slowStepOf(policy: EffectiveToolPolicy, name: string): SlowStepK
 }
 
 const SENTENCE_BOUNDARY = /(?<=[.!?…]["'”’)\]]*)\s+|\n+/;
+const SENTENCE_BOUNDARIES = new RegExp(SENTENCE_BOUNDARY.source, "g");
+
+/**
+ * Words still forming, cut where their last finished sentence ends: the
+ * sentences of the cut are the first sentences of every text the words can
+ * grow into, because a boundary is only ever followed by more words. Empty
+ * while no sentence has finished.
+ */
+export function finishedSentencesOf(forming: string): string {
+  let end = 0;
+  for (const boundary of forming.matchAll(SENTENCE_BOUNDARIES)) end = boundary.index;
+  return forming.slice(0, end);
+}
 
 /**
  * A reply as the sentences it is spoken in: its Markdown taken out, split at

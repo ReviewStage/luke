@@ -64,12 +64,12 @@ import { type BeatTurn, ProactiveQueue, type ProactiveRequest } from "./proactiv
  * on a session another party created and offered it for adoption; it is
  * fed every append the trusted side makes, each awaiting its acknowledgment;
  * it hands each delegation to the brain as a spoken ask and streams the reply
- * back as commentary once every action the run writes has settled, the
+ * back as commentary a finished sentence at a time while the run goes on,
+ * each once every action the run journaled ahead of it has settled, the
  * reply of the newest ask alone, since a later delegation supersedes what
- * the earlier one asked — the words
- * of a step that only read arrive as they form, and nothing is said of the
- * ask's mere acceptance, which the delegation guide has the model answer from
- * the conversation rather than from a status report; it writes both speakers'
+ * the earlier one asked — and nothing is said of the ask's mere acceptance,
+ * which the delegation guide has the model answer from the conversation
+ * rather than from a status report; it writes both speakers'
  * utterances into the record as rows that grow with their fragments; and it closes gracefully on
  * idle, on the peer's hang-up, and on the drain,
  * recording the usage the final event confirms. The peer owns the microphone
@@ -1359,15 +1359,16 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * Ends an exchange once its run has: a run that ended with nothing said is
+   * Ends an exchange once its run has: a run that did not complete is
    * spoken as the standing note for how it ended, and a completed one that
    * said nothing says nothing. A silenced one says nothing either way.
    */
   #finalize(exchange: Exchange): void {
     exchange.finalize = undefined;
     if (this.#exchanges.get(exchange.runId) === exchange) this.#exchanges.delete(exchange.runId);
-    const unspoken = exchange.spokenChunks === 0 && exchange.buffered.length === 0;
-    if (unspoken && exchange.end !== undefined && exchange.end !== LIVE_BRAIN_RUN_END.COMPLETED) {
+    // Note that the note follows any sentence the run released while it ran,
+    // because those told only what it had settled so far.
+    if (exchange.end !== undefined && exchange.end !== LIVE_BRAIN_RUN_END.COMPLETED) {
       this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
     }
     // Told after the note is queued, so the planner gives way to Luke about to say it in one change.

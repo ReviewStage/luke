@@ -29,6 +29,7 @@ export {
   type BrainRunEvent,
   type BrainRunEventBody,
   type BrainTurnOrigin,
+  finishedSentencesOf,
   isToolRefusalStatus,
   replySentences,
   SLOW_STEP_KIND,

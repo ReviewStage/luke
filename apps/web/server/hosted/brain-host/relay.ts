@@ -17,6 +17,7 @@ import {
   type BrainRunEvent,
   type BrainRunEventBody,
   type BrainRunUsage,
+  finishedSentencesOf,
   isRecord,
   isWireString,
   sessionKey,
@@ -61,7 +62,11 @@ import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from 
  * journal, which appends in arrival order, holds the step's call before its
  * reasoning while the turn runs; the answer the turn completes with orders
  * every step as the model produced it — its reasoning, then its calls, then
- * its words — and replaces the journal whole.
+ * its words — and replaces the journal whole. A step's words reach the
+ * journal while it runs only a finished sentence at a time: eve's deltas are
+ * gathered here, and the writer is told the step's words through their last
+ * finished sentence each time another finishes, never at every token, so
+ * the voice can say what follows settled calls before the turn ends.
  */
 
 /** One part of the answer as a step produced it, kept until the turn completes and the message is told whole. */
@@ -97,12 +102,32 @@ function orderedParts(step: RelayStep): readonly RelayPart[] {
   );
 }
 
+/** A step's words as eve streams them: the messages it completed, the one still forming, and how much of them the writer was told. */
+interface RelayDraft {
+  /** The step's completed messages, joined by line breaks as the reply joins them. */
+  readonly completed: string;
+  readonly forming: string;
+  /** The length of the words the writer last took, which only grows. */
+  readonly told: number;
+  /** eve's id for the last event read into the draft, which sorts as eve emitted them, so an event eve delivers again adds nothing. */
+  readonly eventId: string;
+}
+
+const EMPTY_DRAFT: RelayDraft = { completed: "", forming: "", told: 0, eventId: "" };
+
+/** Two runs of words as the reply reads them: on lines of their own. */
+function joinedWords(head: string, tail: string): string {
+  return head.length === 0 ? tail : `${head}\n${tail}`;
+}
+
 interface RelayTurnState {
   readonly kind: BrainHostTurn;
   readonly sequence: number;
   readonly steps: Readonly<Record<string, RelayStep>>;
   /** Each step's usage under its index, so a step eve replays reports its usage once. */
   readonly usageBySteps: Readonly<Record<string, BrainRunUsage>>;
+  /** Each step's words under its index while they form; absent in state an earlier build kept. */
+  readonly drafts?: Readonly<Record<string, RelayDraft>>;
   /** Whether the store refused the ask that opened the turn: a turn with no ask on record settles no answer. */
   readonly askRefused?: true;
 }
@@ -418,15 +443,32 @@ export class StreamRelay {
           event.data.reasoning,
           standing,
         );
+      case "message.appended": {
+        const { turnId, stepIndex, messageDelta } = event.data;
+        return this.#drafted(turnId, stepIndex, event.meta.id, standing, (draft) => ({
+          ...draft,
+          forming: draft.forming + messageDelta,
+        }));
+      }
       case "message.completed": {
         const { turnId, stepIndex, message } = event.data;
         if (message === null) return Effect.void;
-        return Effect.sync(() =>
+        const kept = Effect.sync(() =>
           standing.state.update((state) =>
             withTurn(state, turnId, (turn) =>
-              withPart(turn, stepIndex, { kind: "text", text: message ?? "" }),
+              withPart(turn, stepIndex, { kind: "text", text: message }),
             ),
           ),
+        );
+        if (message.length === 0) return kept;
+        // The finished message is the step's words whole, its last sentence included.
+        return Effect.andThen(
+          kept,
+          this.#drafted(turnId, stepIndex, event.meta.id, standing, (draft) => ({
+            ...draft,
+            completed: joinedWords(draft.completed, message),
+            forming: "",
+          })),
         );
       }
       case "step.completed": {
@@ -694,6 +736,47 @@ export class StreamRelay {
           this.#seams.report(`The briefing of turn ${eveTurnId} could not be put on offer.`);
         }
       }
+    });
+  }
+
+  /**
+   * Reads one of eve's text events into its step's draft and, where another
+   * sentence finished, tells the writer the step's words through it. A draft
+   * the writer refused keeps its count, so the next sentence tells the words
+   * again; an event eve delivers again finds its id read and adds nothing.
+   * Note that an event without an id, from a session older than eve's stamping
+   * of one, is read as it comes, since nothing could tell it from another.
+   */
+  #drafted(
+    eveTurnId: string,
+    stepIndex: number,
+    eventId: string | undefined,
+    standing: RelayStanding,
+    grow: (draft: RelayDraft) => RelayDraft,
+  ): RelayEffect<void> {
+    return Effect.gen({ self: this }, function* () {
+      const turn = standing.state.get().turns[eveTurnId];
+      if (!turn) return;
+      const key = String(stepIndex);
+      const held = turn.drafts?.[key] ?? EMPTY_DRAFT;
+      if (eventId !== undefined && eventId <= held.eventId) return;
+      const draft = { ...grow(held), eventId: eventId ?? held.eventId };
+      const withDraft = (next: RelayDraft) =>
+        standing.state.update((state) =>
+          withTurn(state, eveTurnId, (current) => ({
+            ...current,
+            drafts: { ...current.drafts, [key]: next },
+          })),
+        );
+      withDraft(draft);
+      const text = finishedSentencesOf(joinedWords(draft.completed, draft.forming));
+      if (text.length <= draft.told) return;
+      const written = yield* this.#tell(eveTurnId, standing, {
+        kind: BRAIN_RUN_EVENT.TEXT_DRAFTED,
+        step: stepOf(stepIndex),
+        text,
+      });
+      if (written) withDraft({ ...draft, told: text.length });
     });
   }
 

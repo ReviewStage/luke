@@ -56,9 +56,10 @@ import { projectTurnEvents } from "../hosted/turn-event-stream.js";
  * by is the ask's own id, since eve names the turn only once it starts, and
  * every event is translated back to it. A run is cancelled through
  * `stopAsk`, the same Stop the typed route carries, so the voice's stop key
- * and the developer's Stop button stop a turn the same way. On the eve path the reply arrives
- * whole at the turn's end; what the stream carries mid-turn is the slow step
- * and the actions settling, which is what the voice speaks meanwhile.
+ * and the developer's Stop button stop a turn the same way. What the stream
+ * carries mid-turn is the slow step, each queued question, and each sentence
+ * of the reply once it has finished forming and every call ahead of it has
+ * settled, which is what the voice speaks meanwhile.
  *
  * The brain is built in the socket's own scope and every follow an accepted
  * ask starts is a fiber in it, so the socket detaching interrupts each of
@@ -338,7 +339,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       if (ended) emit(runEventOf(last, askId));
       return ended;
     }
-    for (const event of events.slice(turnTold.seq)) {
+    for (const event of events.filter((event) => event.seq > turnTold.seq)) {
       emit(runEventOf(event, askId));
       if (event.kind === TURN_EVENT_KIND.ACTIONS_SETTLED) turnTold.settled = true;
       turnTold.seq = event.seq;

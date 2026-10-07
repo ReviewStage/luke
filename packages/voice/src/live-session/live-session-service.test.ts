@@ -2073,6 +2073,39 @@ it.effect(
 );
 
 it.effect(
+  "a run that fails after a sentence it released while it ran keeps that sentence said and is still spoken as the standing note",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What does the repository hold?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Looked.",
+      });
+      yield* settle();
+      sideband.acknowledge(0, 1000, 1100);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.FAILED,
+      });
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(
+        commentary.map((event) => ("content" in event ? event.content : undefined)),
+        ["Looked.", RUN_END_NOTE[LIVE_BRAIN_RUN_END.FAILED]],
+      );
+    }),
+);
+
+it.effect(
   "a run that ends during the ask's record write is finalized once the write lands, its end spoken as the standing note",
   () =>
     Effect.gen(function* () {
