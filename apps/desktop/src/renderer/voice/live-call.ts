@@ -141,8 +141,9 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
  * a scope closes once. Every bound the call keeps is an `Effect.sleep` forked
  * into that same scope, so nothing is left armed behind a session that ended.
  * The verbs {@link LiveVoiceCall} declares answer Effects rather than
- * Promises, all but the output's silence, which waits on nothing: the orchestrator above the peer runs each on the fiber it already
- * holds, so nothing here converts one to the other.
+ * Promises, all but the output's silence, which waits on nothing: the
+ * orchestrator above the peer runs each on the fiber it already holds, so
+ * nothing here converts one to the other.
  */
 export class LiveCall implements LiveVoiceCall {
   readonly #options: LiveCallOptions;
