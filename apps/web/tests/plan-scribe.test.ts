@@ -212,6 +212,10 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           scribe.observe(heard("Only admins can add people.", 0, 1_000));
           yield* quiet;
+          yield* settledRead(
+            Effect.sync(() => reports.length),
+            (count) => count > 0,
+          );
           assert.equal((yield* savedBody(userId, planId)).includes(PROBLEM), false);
           assert.equal(reports.length, 1);
 
@@ -233,12 +237,16 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.scoped(
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
-          const { scribe, drafts } = yield* scribeFor(userId, planId, [
+          const { scribe, drafts, writing } = yield* scribeFor(userId, planId, [
             { goal: { problem: PROBLEM, outcome: OUTCOME } },
           ]);
 
           scribe.observe(heard("Only admins can add people, and it hits members.", 0, 1_000));
           yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
+          yield* settledRead(
+            Effect.sync(() => writing.length),
+            (count) => count > 0,
+          );
           // The model streams its answer across drafts spaced a beat apart.
           for (let beat = 0; beat < 20; beat += 1) {
             yield* Effect.andThen(
@@ -247,7 +255,10 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
             );
           }
 
-          const last = drafts.at(-1);
+          const last = yield* settledRead(
+            Effect.sync(() => drafts.at(-1)),
+            (draft) => draft?.savedAt !== undefined,
+          );
           assert.ok(last?.savedAt !== undefined);
           assert.equal(last.document.body, yield* savedBody(userId, planId));
           assert.ok(drafts.length >= 2);
@@ -261,12 +272,16 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const before = yield* savedBody(userId, planId);
-        const { scribe, drafts } = yield* scribeFor(userId, planId, [
+        const { scribe, drafts, reports } = yield* scribeFor(userId, planId, [
           { brokenAfter: { goal: { problem: PROBLEM, outcome: OUTCOME } } },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
         yield* quiet;
+        yield* settledRead(
+          Effect.sync(() => reports.length),
+          (count) => count > 0,
+        );
 
         assert.equal(yield* savedBody(userId, planId), before);
         assert.equal(drafts.at(-1)?.document.body, before);
@@ -287,6 +302,10 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         yield* settle;
         assert.deepEqual(writing, []);
         yield* quiet;
+        yield* settledRead(
+          Effect.sync(() => writing.length),
+          (count) => count > 0,
+        );
         // The model streams its answer across drafts spaced a beat apart.
         for (let beat = 0; beat < 20; beat += 1) {
           yield* Effect.andThen(
@@ -295,7 +314,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           );
         }
 
-        assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+        const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(PROBLEM));
+        assert.ok(body.includes(PROBLEM));
         assert.deepEqual(writing, [true, false]);
       }),
     ),
@@ -309,9 +329,19 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
         yield* quiet;
+        yield* settledRead(
+          Effect.sync(() => writing.length),
+          (count) => count > 0,
+        );
+        // The timeout's own wait is armed just after; let the run reach it before time moves.
+        yield* settle;
         assert.deepEqual(writing, [true]);
 
         yield* Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.TIMEOUT_MS)), settle);
+        yield* settledRead(
+          Effect.sync(() => reports.length),
+          (count) => count > 0,
+        );
         assert.deepEqual(writing, [true, false]);
         assert.equal(reports.length, 1);
       }),
