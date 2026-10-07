@@ -45,8 +45,6 @@ export interface VoiceCapabilityAssemblerOptions {
    */
   openSocket?: OpenSocket;
   refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
-  /** This installation's device row id, for the hosted session's handshake; absent or answering nothing, the handshake names no device. */
-  deviceId?: () => string | undefined;
   report?: (message: string) => void;
 }
 
@@ -128,7 +126,6 @@ export class VoiceCapabilityAssembler {
               readAccessToken: seams.readAccessToken,
               refreshAccount: seams.refreshAccount,
               readAccountKey: seams.readAccountKey,
-              ...(this.#options.deviceId ? { deviceId: this.#options.deviceId } : undefined),
               ...(voice ? { voice } : undefined),
             })
           : undefined;

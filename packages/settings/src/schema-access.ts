@@ -1,13 +1,11 @@
 import type { ProductSettingValue } from "@sidecar/analytics";
-import { APP_SETTING_ID, type AppGuideSetting, type AppSettingId } from "@sidecar/guide";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Result, Schema } from "effect";
+import type { AppGuideSetting, AppSettingId } from "@sidecar/guide";
+import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { Schema } from "effect";
 import { APP_SETTING_SCHEMA } from "./schema.js";
-import { settingGuardFromEither } from "./schema-builders.js";
 import type {
   AppSettingGuideSettings,
   SettingControl,
-  SettingEntryDefinition,
   SettingGuardResult,
   SettingOption,
   SettingSection,
@@ -16,7 +14,7 @@ import type {
   SettingsVisibility,
   StoredSettingValue,
 } from "./schema-types.js";
-import { SETTING_ROWS, SETTINGS_PAGE, SETTINGS_RESET_SCOPE } from "./schema-types.js";
+import { SETTING_ROWS, SETTINGS_RESET_SCOPE } from "./schema-types.js";
 import type { RuntimeStatus } from "./status.js";
 
 type GuardValue<Definition> = Definition extends {
@@ -39,11 +37,6 @@ export type StoredAppSettings = {
     : never]?: AppSettingValue<Field>;
 };
 
-/** What one key of a map-valued setting holds. */
-export type SettingEntryValue<Field extends AppSettingField> = NonNullable<
-  NonNullable<AppSettingValue<Field>>[keyof NonNullable<AppSettingValue<Field>>]
->;
-
 /**
  * Every stored field, in the order its schema entry claims. The order is the
  * entries' own `order` rather than the object literal's, because a formatter or
@@ -61,7 +54,7 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
 /**
  * Account preferences are the settings an account carries across its Macs.
  * Machine-local controls — launch at login, Dock, display layout, hotkeys,
- * microphone routing, local list filters, credentials, and calendar grants —
+ * microphone routing, and credentials —
  * stay in each device's own store.
  */
 export const ACCOUNT_PREFERENCE_FIELDS = [
@@ -144,56 +137,6 @@ export function accountPreferencesFromStored(
   return parseAccountPreferences(value, "stored");
 }
 
-/** The settings whose value is a map, and so can be written one entry at a time. */
-export type KeyedAppSettingField = {
-  [Field in AppSettingField]: "entry" extends keyof (typeof APP_SETTING_SCHEMA)[Field]
-    ? Field
-    : never;
-}[AppSettingField];
-
-export function isKeyedAppSettingField(value: UnparsedWireValue): value is KeyedAppSettingField {
-  return isAppSettingField(value) && "entry" in APP_SETTING_SCHEMA[value];
-}
-
-function settingEntry(field: KeyedAppSettingField): SettingEntryDefinition<never> {
-  // SAFETY: KeyedAppSettingField is derived only from schema members that declare `entry`.
-  return (APP_SETTING_SCHEMA[field] as { entry: SettingEntryDefinition<never> }).entry;
-}
-
-export function isSettingEntryKey(
-  field: KeyedAppSettingField,
-  key: UnparsedWireValue,
-): key is string {
-  return settingEntry(field).isKey(key);
-}
-
-export function sameSettingEntry(
-  field: KeyedAppSettingField,
-  current: UnparsedWireValue,
-  next: UnparsedWireValue,
-): boolean {
-  // SAFETY: The selected entry definition owns both values; `never` erases the keyed union.
-  return settingEntry(field).same(current as never, next as never);
-}
-
-/**
- * Validates one entry by running the field's own whole-map guard over a map
- * holding only that entry: an entry the guard drops is one the map would have
- * dropped, so the two readings of what is valid cannot drift apart. Clearing an
- * entry carries no value to check.
- */
-export function settingEntryGuard(
-  field: KeyedAppSettingField,
-  key: string,
-  value: UnparsedWireValue,
-): SettingGuardResult<unknown> {
-  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
-  const parsed = APP_SETTING_SCHEMA[field].guard({ [key]: value });
-  // SAFETY: The guard validated the map; indexing recovers the single entry under test.
-  const kept = parsed.valid ? (parsed.value as WireRecord | undefined)?.[key] : undefined;
-  return settingGuardFromEither(kept === undefined ? Result.fail(undefined) : Result.succeed(kept));
-}
-
 export const SettingsResetScopeSchema = Schema.Literals(Object.values(SETTINGS_RESET_SCOPE));
 
 const readsSettingsResetScope = Schema.is(SettingsResetScopeSchema);
@@ -238,11 +181,7 @@ export function settingGuideEntries(
   return APP_SETTING_FIELDS.flatMap((field) => [...guideEntriesFor(field, read)]);
 }
 
-/**
- * Whether a field's row is drawn right now. A field that declares no condition
- * is always drawn; one whose entries answer to conditions of their own is asked
- * per id instead.
- */
+/** Whether a field's row is drawn right now. A field that declares no condition is always drawn. */
 function settingVisible(field: AppSettingField, view: SettingsVisibility): boolean {
   return APP_SETTING_SCHEMA[field].visible?.(view) ?? true;
 }
@@ -250,13 +189,7 @@ function settingVisible(field: AppSettingField, view: SettingsVisibility): boole
 /** Whether the row one guide id names is drawn right now. */
 export function settingIdVisible(id: string, view: SettingsVisibility): boolean {
   const field = settingFieldForGuideId(id);
-  if (!field) return false;
-  if (!settingVisible(field, view)) return false;
-  // SAFETY: The table is keyed by the field's own ids, of which this is one.
-  const byId = APP_SETTING_SCHEMA[field].visibleById as
-    | Readonly<Partial<Record<string, (view: SettingsVisibility) => boolean>>>
-    | undefined;
-  return byId?.[id]?.(view) ?? true;
+  return field !== undefined && settingVisible(field, view);
 }
 
 /**
@@ -370,20 +303,6 @@ function typedAppSettingDefaults(): AppSettingDefaults {
 }
 
 export const APP_SETTING_DEFAULTS = typedAppSettingDefaults();
-
-export const SETTING_PAGE = {
-  // SAFETY: Each entry maps one settings id to the page its schema declares;
-  // the `satisfies` below is what checks the set ends up complete.
-  ...(Object.fromEntries(
-    Object.values(APP_SETTING_SCHEMA).flatMap((definition) =>
-      definition.ids.map((id) => [id, definition.page]),
-    ),
-  ) as Record<AppSettingId, SettingsPage>),
-  // Which calendars count is chosen on the rows themselves rather than
-  // through a settings field, so it is the one id whose page cannot be
-  // derived from the schema. Named here so the `Record` stays total.
-  [APP_SETTING_ID.CALENDAR_SELECTED]: SETTINGS_PAGE.CONNECTIONS,
-} satisfies Record<AppSettingId, SettingsPage>;
 
 export function settingsScopeChanged(
   settings: Pick<StoredAppSettings, AppSettingField>,

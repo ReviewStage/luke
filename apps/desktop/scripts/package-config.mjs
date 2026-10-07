@@ -15,67 +15,6 @@ export const MICROPHONE_USAGE_DESCRIPTION =
 // over audibly playing music is what makes it land in context.
 export const APPLE_EVENTS_USAGE_DESCRIPTION =
   "Luke turns Music and Spotify down while you talk, and back up afterwards";
-// The sentence macOS shows when it asks for full calendar access — the only
-// access EventKit reads under — so it is what consent is given against: one
-// sentence naming exactly what is read.
-export const CALENDARS_USAGE_DESCRIPTION =
-  "This app requires access to your calendar to read event start and end times.";
-
-/**
- * Every key macOS may look the calendar sentence up under: the full-access
- * and write-only keys EventKit's macOS 14 access levels document, and the
- * legacy key TCC's own prompt machinery has always used. All carry the same
- * sentence, in both bundles that can be asked — the app's Info.plist and the
- * helper bundle's — so the dialog can never say two different things
- * depending on which binary asked.
- */
-export const CALENDARS_USAGE_KEYS = [
-  "NSCalendarsFullAccessUsageDescription",
-  "NSCalendarsWriteOnlyAccessUsageDescription",
-  "NSCalendarsUsageDescription",
-];
-
-/**
- * The Info.plist of the calendar helper's own minimal bundle. The helper
- * answers to TCC as itself, so this plist is what the consent dialog is
- * judged against and drawn from: EventKit looks the usage sentence up here
- * before TCC ever hears the question, and the dialog and System Settings
- * name the asker by the display name here — "Luke", where a bare binary
- * would be named by its filename. The sentence is the same constant the
- * app's Info.plist carries, so the dialog can never say two different
- * things depending on which binary asked.
- */
-export function appleCalendarHelperInfoPlist() {
-  const usageEntries = CALENDARS_USAGE_KEYS.map(
-    (key) => `\t<key>${key}</key>\n\t<string>${CALENDARS_USAGE_DESCRIPTION}</string>`,
-  ).join("\n");
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-\t<key>CFBundleExecutable</key>
-\t<string>Luke</string>
-\t<key>CFBundleIdentifier</key>
-\t<string>dev.reviewstage.luke.apple-calendar</string>
-\t<key>CFBundleInfoDictionaryVersion</key>
-\t<string>6.0</string>
-\t<key>CFBundleName</key>
-\t<string>Luke</string>
-\t<key>CFBundleDisplayName</key>
-\t<string>Luke</string>
-\t<key>CFBundleIconFile</key>
-\t<string>Luke.icns</string>
-\t<key>CFBundlePackageType</key>
-\t<string>APPL</string>
-\t<key>LSMinimumSystemVersion</key>
-\t<string>${MACOS_DEPLOYMENT_TARGET}</string>
-\t<key>LSUIElement</key>
-\t<true/>
-${usageEntries}
-</dict>
-</plist>
-`;
-}
 // The bundle carries one icon for every mode, so the icns is cut from the dark
 // tile — space black reads on either desktop. The running app swaps the Dock
 // image between the light and dark tiles itself; see applyDockIcon in main.ts.
@@ -95,24 +34,6 @@ export const SIGNING_MODE = {
   AD_HOC: "ad-hoc",
   DEVELOPER_ID: "developer-id",
 };
-
-export function addonCompilerArguments(source, output, frameworks = ["AppKit"]) {
-  return [
-    "clang",
-    "-target",
-    SWIFT_TARGET_TRIPLE,
-    "-fobjc-arc",
-    "-Wall",
-    "-dynamiclib",
-    // Node-API symbols have no library to link against at build time; they
-    // resolve from the Electron binary the addon is loaded into.
-    "-Wl,-undefined,dynamic_lookup",
-    ...frameworks.flatMap((framework) => ["-framework", framework]),
-    source,
-    "-o",
-    output,
-  ];
-}
 
 export function swiftCompilerArguments(source, output, frameworks = ["AppKit"]) {
   return [

@@ -109,9 +109,6 @@ importers:
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
-      '@sidecar/calendar':
-        specifier: workspace:*
-        version: link:../../packages/calendar
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../../packages/credentials
@@ -393,9 +390,6 @@ importers:
 
   packages/analytics:
     dependencies:
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../credentials
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
@@ -465,31 +459,6 @@ importers:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/calendar:
-    dependencies:
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../credentials
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
-
   packages/credentials:
     dependencies:
       '@effect/platform-node':
@@ -501,9 +470,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface
@@ -629,9 +595,6 @@ importers:
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../analytics
-      '@sidecar/calendar':
-        specifier: workspace:*
-        version: link:../calendar
       '@sidecar/credentials':
         specifier: workspace:*
         version: link:../credentials
@@ -762,18 +725,9 @@ importers:
 
   packages/panel:
     dependencies:
-      '@sidecar/calendar':
-        specifier: workspace:*
-        version: link:../calendar
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/surface':
         specifier: workspace:*
         version: link:../surface
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -784,27 +738,15 @@ importers:
       '@types/react':
         specifier: 19.2.18
         version: 19.2.18
-      '@types/react-dom':
-        specifier: 19.2.4
-        version: 19.2.4(@types/react@19.2.18)
-      react-dom:
-        specifier: 'catalog:'
-        version: 19.2.8(react@19.2.8)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/providers:
     dependencies:
       '@sidecar/actions':
         specifier: workspace:*
         version: link:../actions
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../credentials
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -886,12 +828,6 @@ importers:
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../analytics
-      '@sidecar/calendar':
-        specifier: workspace:*
-        version: link:../calendar
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../credentials
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
@@ -919,10 +855,6 @@ importers:
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/surface:
-    dependencies:
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -933,9 +865,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/voice:
     dependencies:

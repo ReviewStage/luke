@@ -1,4 +1,3 @@
-import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "@sidecar/calendar/vocabulary";
 import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, type AppSettingField } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
@@ -19,7 +18,7 @@ import { clientSettingSideEffects } from "./settings-side-effects";
  * hold — carried to the host, which stores it, applies its own side effects,
  * counts it, and tells every other window; and then applied here for the side
  * effects only this process has hands on: the login item, the Dock, the
- * displays, the form factor, the keys, the duck.
+ * keys, the duck.
  */
 export interface SettingsRowsDependencies {
   host: HostOperator;
@@ -32,27 +31,10 @@ export interface SettingsRowsDependencies {
   applyLoginItem: (openAtLogin: boolean) => void;
   panels: PanelManager;
   mediaDuck: MediaDuckController;
-  /** Opens a page in the default browser; the address lives in this file. */
-  openExternal: (url: string) => void;
 }
 
-/** Which kinds this file answers for: the settings writes and the connection rows beside them. */
-type SettingsActKind =
-  | typeof ACT_KIND.SETTING_UPDATE
-  | typeof ACT_KIND.SETTING_UPDATE_ENTRY
-  | typeof ACT_KIND.SETTINGS_RESET
-  | typeof ACT_KIND.CREDENTIAL_SET_API_KEY
-  | typeof ACT_KIND.CALENDAR_CONNECT_GOOGLE
-  | typeof ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN
-  | typeof ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN
-  | typeof ACT_KIND.CALENDAR_REMOVE_ACCOUNT
-  | typeof ACT_KIND.CALENDAR_CONNECT_APPLE
-  | typeof ACT_KIND.CALENDAR_DISCONNECT_APPLE
-  | typeof ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS
-  | typeof ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT
-  | typeof ACT_KIND.CALENDAR_OPEN_SETTINGS
-  | typeof ACT_KIND.CALENDAR_REFRESH
-  | typeof ACT_KIND.CALENDAR_SET_SELECTED;
+/** Which kinds this file answers for: the settings writes. */
+type SettingsActKind = typeof ACT_KIND.SETTING_UPDATE | typeof ACT_KIND.SETTINGS_RESET;
 
 /** How every settings row below answers: a write carried, or a refusal the row can draw. */
 interface SettingsWriter {
@@ -155,14 +137,6 @@ export function settingsActRows(
   };
 
   return {
-    // The renderer can replace or clear a provider's credential but never
-    // reads it back; the reply reports only where each key now comes from,
-    // and the key itself crosses once, to the host that keeps it.
-    [ACT_KIND.CREDENTIAL_SET_API_KEY]: ({ providerId, apiKey }, { sender }) =>
-      write(
-        ACT_KIND.CREDENTIAL_SET_API_KEY,
-        host.setProviderApiKey(providerId, apiKey, reporterOf(sender)),
-      ),
     [ACT_KIND.SETTING_UPDATE]: (payload, { sender }) => {
       const holder = chordHolder(payload);
       if (holder) return refuse(`That chord is reserved for the ${holder} key.`);
@@ -176,16 +150,6 @@ export function settingsActRows(
             : applyClientSettingSideEffect(payload.field, result.settings, sender),
       );
     },
-    [ACT_KIND.SETTING_UPDATE_ENTRY]: ({ field, key, value }, { sender }) =>
-      write(
-        ACT_KIND.SETTING_UPDATE_ENTRY,
-        // SAFETY: the act's own schema parsed this value for this field and key.
-        host.updateSettingEntry(field, key, value as never, reporterOf(sender)),
-        (result) =>
-          result.reason
-            ? Effect.void
-            : applyClientSettingSideEffect(field, result.settings, sender),
-      ),
     [ACT_KIND.SETTINGS_RESET]: ({ scope }, { sender }) =>
       write(ACT_KIND.SETTINGS_RESET, host.resetSettings(scope, reporterOf(sender)), (result) =>
         result.reason
@@ -198,64 +162,6 @@ export function settingsActRows(
               (field) => applyClientSettingSideEffect(field, result.settings, sender, true),
               { discard: true },
             ),
-      ),
-    ...connectionActRows(dependencies),
-  };
-}
-
-/** Which kinds the connection rows below answer for. */
-type ConnectionActKind = Exclude<
-  SettingsActKind,
-  | typeof ACT_KIND.SETTING_UPDATE
-  | typeof ACT_KIND.SETTING_UPDATE_ENTRY
-  | typeof ACT_KIND.SETTINGS_RESET
-  | typeof ACT_KIND.CREDENTIAL_SET_API_KEY
->;
-
-/**
- * The calendar rows, proxied to the host that owns each grant: the
- * consent flows, the loopback redirects, the exchanges, the stored accounts
- * and selections, the renewals and the revocations all run there, and the
- * renderer's reply is the settings snapshot alone. The EventKit helper itself
- * runs here, at the host's ask through the native node, so the consent dialog
- * a connect raises is still raised on this machine by the press that asked for
- * it. The one address opened from here — the Privacy pane a row's press names
- * — is the client's own act.
- */
-function connectionActRows(
-  dependencies: Pick<
-    SettingsRowsDependencies,
-    "host" | "reporterOf" | "lastSettings" | "openExternal"
-  >,
-): Pick<ActRows, ConnectionActKind> {
-  const { host, reporterOf, openExternal } = dependencies;
-  const { write } = settingsWriter(dependencies);
-  return {
-    [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: (_payload, { sender }) =>
-      write(ACT_KIND.CALENDAR_CONNECT_GOOGLE, host.connectGoogleCalendar(reporterOf(sender))),
-    [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: () => host.cancelGoogleCalendarSignIn(),
-    [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: () => host.reopenGoogleCalendarSignIn(),
-    [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: ({ accountId }, { sender }) =>
-      write(
-        ACT_KIND.CALENDAR_REMOVE_ACCOUNT,
-        host.removeCalendarAccount(accountId, reporterOf(sender)),
-      ),
-    [ACT_KIND.CALENDAR_CONNECT_APPLE]: (_payload, { sender }) =>
-      write(ACT_KIND.CALENDAR_CONNECT_APPLE, host.connectAppleCalendar(reporterOf(sender))),
-    [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: (_payload, { sender }) =>
-      write(ACT_KIND.CALENDAR_DISCONNECT_APPLE, host.disconnectAppleCalendar(reporterOf(sender))),
-    [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: () => host.cancelAppleCalendarConnect(),
-    [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: () =>
-      Effect.map(
-        host.appleCalendarAccessStatus(),
-        Option.getOrElse(() => APPLE_CALENDAR_ACCESS.NOT_DETERMINED),
-      ),
-    [ACT_KIND.CALENDAR_REFRESH]: () => host.refreshCalendars(),
-    [ACT_KIND.CALENDAR_OPEN_SETTINGS]: () => openExternal(CALENDAR_PRIVACY_PANE_URL),
-    [ACT_KIND.CALENDAR_SET_SELECTED]: ({ accountId, calendarId, selected }, { sender }) =>
-      write(
-        ACT_KIND.CALENDAR_SET_SELECTED,
-        host.setCalendarSelected(accountId, calendarId, selected, reporterOf(sender)),
       ),
   };
 }

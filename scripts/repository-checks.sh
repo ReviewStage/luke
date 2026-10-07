@@ -24,7 +24,6 @@ required_files=(
     apps/desktop/scripts/electron-builder-config.mjs
     apps/desktop/scripts/electron-builder-hooks.mjs
     apps/desktop/scripts/prepare-builder-assets.mjs
-    apps/desktop/native/macos/ScreenGeometry.swift
     apps/desktop/native/macos/TalkKey.swift
     packages/wire/package.json
     scripts/release-macos.sh

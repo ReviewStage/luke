@@ -1,10 +1,7 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
-import { FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
-import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
 import {
   cssCustomProperties,
@@ -18,9 +15,6 @@ import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state"
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
-import type { CalendarGateControl } from "./calendar-gate";
-import type { ConductorKeyGateControl } from "./conductor-key-gate";
-import { ConsentConnectSlot } from "./consent-connect-slot";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
@@ -29,26 +23,23 @@ import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { focusSearchField } from "./search-field";
-import { displaySessions, sessionTally } from "./session-model";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
-import { KeySlot } from "./settings/key-slot";
-import { workspaceProviderOptions } from "./settings/workspace-rows";
 import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
-import { PANEL_STAND_DOWN, SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
-import { useConnections } from "./use-connections";
 import { useFeedbackComposer } from "./use-feedback-composer";
 import { useMeasuredHeight } from "./use-measured-height";
 import type { PanelEntrySurface } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
+import { useSignIn } from "./use-sign-in";
 import { useStateWithRef } from "./use-state-with-ref";
-import { fixtureVoice, useVoiceView } from "./use-voice-view";
+import { FIXTURE_SPEAKING_CAPTIONS, fixtureVoice, useVoiceView } from "./use-voice-view";
 import {
   outputSilent,
   type VolumeHintDismissal,
@@ -68,12 +59,6 @@ function surfaceHeightStyle(
   return cssCustomProperties(properties);
 }
 
-/**
- * What the calendars slice reads as before the first snapshot lands. Held as
- * a constant so a render before it redraws nothing that was already drawn.
- */
-const EMPTY_CALENDARS: readonly ObservedAccountCalendars[] = [];
-
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
   // Everything main holds, on the one channel it holds it on, and this
@@ -81,13 +66,8 @@ export function App(): React.JSX.Element {
   // against: what arrives is the whole document at a version that only rises.
   const state = useAppState();
   const account = state?.account;
-  const sessionsSettled = state?.sessions.settled === true;
-  const calendars = state?.calendars ?? EMPTY_CALENDARS;
-  const announcementsHeld = state?.announcements.held === true;
-  const calendarOnboardingOwed = state?.onboarding.calendarOwed === true;
-  const conductorKeyOnboardingOwed = state?.onboarding.conductorKeyOwed === true;
   const outputAudio = state?.audio.outputAudio;
-  const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
+  const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
   // Whether the Plans tab is on its new-plan form; an open plan is the host's
   // and outlasts the tab, but a half-filled form is this panel's alone.
@@ -101,16 +81,7 @@ export function App(): React.JSX.Element {
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
     [state?.settings],
   );
-  // What the sidebar's face reacts to: every session Luke is watching.
-  const tally = useMemo(() => sessionTally(state ? displaySessions(state) : []), [state]);
-  const workspaceProjects = state?.sessions.workspaceProjects;
-  const workspaceProviders = useMemo(
-    () => workspaceProviderOptions(workspaceProjects ?? [], settings),
-    [workspaceProjects, settings],
-  );
-  const [slotElement, slotHeight] = useMeasuredHeight();
   const [signInSlotElement, signInSlotHeight] = useMeasuredHeight();
-  const [connectElement, connectHeight] = useMeasuredHeight();
   const [feedbackElement, feedbackHeight] = useMeasuredHeight();
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
@@ -120,28 +91,7 @@ export function App(): React.JSX.Element {
   const [silenceStretch, setSilenceStretch] = useState(0);
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
-  /**
-   * Whether a composer is held, mirrored for the presentation cluster: the
-   * pointer holds the panel open for a credential still on screen.
-   */
-  const credentialHeld = useRef(false);
-  /**
-   * The settings page whatever is standing in the panel's place was begun
-   * from — a key's provider row, the calendar's block under Integrations, or
-   * the Feedback section on the front page — so leaving that shape ends back
-   * on the page it began on. Written by each begin, because the return is a
-   * fact about what was begun rather than about what was begun last: one page
-   * remembered for all three landed a cancelled note on Connections, wherever
-   * the note had actually been started — and the tab is written on the same
-   * terms. A ref rather
-   * than state: it is read only when the panel is restored, by a callback
-   * that has to stay stable.
-   */
-  const standDownPage = useRef<SettingsView>(SETTINGS_VIEW.ROOT);
-  const standDownTab = useRef<PanelTab>(PANEL_TAB.SETTINGS);
   const feedbackHeld = useRef(false);
-  /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
-  const consentConnectHeld = useRef(false);
   /** Whether a planning call is in progress, mirrored from the voice view below. */
   const planningHeld = useRef(false);
 
@@ -205,11 +155,6 @@ export function App(): React.JSX.Element {
     leave,
     expand,
   } = usePanelPresentation({
-    // True while a field someone could be part-way through is actually on
-    // screen. An entry outlives the tab it was started on, so holding the
-    // panel open for one that is not drawn would leave the pointer unable to
-    // close a panel showing nothing but plans.
-    entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
     planningHeld: () => planningHeld.current,
     // The settings search closes with the shape it was opened on, taking its
     // query with it: no search survives the panel closing.
@@ -217,19 +162,14 @@ export function App(): React.JSX.Element {
   });
 
   /**
-   * Brings the panel back around the line the entry belongs to, and leaves it
-   * open the way every other way of opening it does — the pointer closes it by
-   * visiting and leaving.
+   * Brings the panel back around the Feedback section a note was begun from —
+   * the settings front page, which changing to the tab lands on — and leaves
+   * it open the way every other way of opening it does.
    */
   const restorePanel = useCallback(() => {
-    changeTab(standDownTab.current);
-    // The row this shape was begun from lives on one page, and changeTab has
-    // just reset the tab to its front page: without this, the answer to what
-    // was just done — the check beside a provider, the thank-you where the
-    // note was written — would land on a page nobody is looking at.
-    if (standDownTab.current === PANEL_TAB.SETTINGS) setSettingsView(standDownPage.current);
+    changeTab(PANEL_TAB.SETTINGS);
     expand();
-  }, [changeTab, expand, setSettingsView]);
+  }, [changeTab, expand]);
 
   /**
    * The panel every composer stands down from and comes back to, gathered
@@ -247,16 +187,7 @@ export function App(): React.JSX.Element {
     heldRef: feedbackHeld,
   };
 
-  const connections = useConnections({
-    surface: panelEntrySurface,
-    credentialHeld,
-    consentConnectHeld,
-    standDownPage,
-    standDownTab,
-    expand,
-    calendars,
-  });
-  const slotOccupant = connections.slotOccupant;
+  const signIn = useSignIn({ surface: panelEntrySurface, expand });
 
   const stillMotion = usePrefersReducedMotion();
 
@@ -264,8 +195,6 @@ export function App(): React.JSX.Element {
     surface: panelEntrySurface,
     presentation,
     stillMotion,
-    standDownPage,
-    standDownTab,
   });
 
   /**
@@ -431,7 +360,6 @@ export function App(): React.JSX.Element {
   // The mode and the tab main decided for this window.
   useEffect(() => {
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
-      if (eventName === "mode:compact") applyAuthoritativeMode("compact");
       if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
       if (eventName === "tab:settings") changeTab(PANEL_TAB.SETTINGS);
     });
@@ -511,19 +439,13 @@ export function App(): React.JSX.Element {
         stopSpeaking();
         return;
       }
-      // Escape out of the slot is the entry's own way out, wherever the caret
-      // happens to be: the slot is the only thing on screen, so there is nothing
-      // else it could mean. The sign-in wait and the consent connect borrow
-      // the same shape, so the same key withdraws whichever is holding it.
+      // Escape out of the slot withdraws the sign-in it waits on: the slot is
+      // the only thing on screen, so there is nothing else it could mean.
       if (presentation === PANEL_PRESENTATION.SLOT) {
-        if (connections.signInWaitNow() !== undefined) connections.cancelSignIn();
-        else if (connections.consentWaiting()) connections.cancelConsentSignIn();
-        else connections.cancelEntry();
+        signIn.cancelSignIn();
         return;
       }
-      // Escape out of the composer leaves the shape and keeps the draft: a
-      // note is longer than a key, and a key is the only thing Escape is
-      // allowed to discard.
+      // Escape out of the composer leaves the shape and keeps the draft.
       if (presentation === PANEL_PRESENTATION.FEEDBACK) {
         feedback.control.dismiss();
         return;
@@ -559,11 +481,7 @@ export function App(): React.JSX.Element {
     settingsSearchOpen,
     setSettingsView,
     settingsView,
-    connections.cancelConsentSignIn,
-    connections.cancelEntry,
-    connections.cancelSignIn,
-    connections.consentWaiting,
-    connections.signInWaitNow,
+    signIn.cancelSignIn,
     listening,
     plans.back,
     speaking,
@@ -580,12 +498,6 @@ export function App(): React.JSX.Element {
   const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
 
-  // What the slot's field is for depends on what answers for that provider now,
-  // and settings resolve after the first render.
-  const slotSource =
-    connections.credentialEntry && settings
-      ? settings.credentialSources[connections.credentialEntry.providerId]
-      : CREDENTIAL_SOURCE.NONE;
   const microphone: MicrophoneControl = {
     status: state.audio.microphoneStatus,
     voiceAvailable: settings.voiceAvailable,
@@ -617,68 +529,6 @@ export function App(): React.JSX.Element {
     onCapture: changeShortcutCapture,
   };
 
-  // The calendar step of onboarding, assembled only while it stands: still
-  // owed by the main process's record, and with at least one source this
-  // build can offer — a gate with no way through is never drawn. A connection
-  // does not lower it: the panel body hands the gate the Connections page's
-  // own calendar block to review, until Done or the skip answers the step and
-  // the record's broadcast takes it down.
-  const gateSettings = settings;
-  // Onboarding's key step, drawn while the host says it stands: Connect is
-  // the Connections row's own entry, which opens the key page and the slot,
-  // and the gate falls on the host's word once the vault holds the key. The
-  // empty desk offers the same press once the step is behind us.
-  const providerConnect = {
-    connected:
-      gateSettings.credentialSources[CREDENTIAL_PROVIDER_ID.CONDUCTOR] !== CREDENTIAL_SOURCE.NONE,
-    onConnect: () => connections.connectFromRoster(CREDENTIAL_PROVIDER_ID.CONDUCTOR),
-  };
-  const conductorKeyGate: ConductorKeyGateControl | undefined = conductorKeyOnboardingOwed
-    ? {
-        connecting: connections.credentialEntry !== undefined,
-        onConnect: providerConnect.onConnect,
-        onSkip: () => {
-          changeTab(PANEL_TAB.PLANS);
-          tell(ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY);
-        },
-      }
-    : undefined;
-  const calendarGate: CalendarGateControl | undefined =
-    calendarOnboardingOwed &&
-    (gateSettings.appleCalendarAvailable || gateSettings.calendarSignInAvailable)
-      ? {
-          ...(gateSettings.appleCalendarAvailable
-            ? {
-                apple: {
-                  connecting: connections.appleCalendar.connecting,
-                  onConnect: connections.appleCalendar.onSignIn,
-                },
-              }
-            : undefined),
-          ...(gateSettings.calendarSignInAvailable
-            ? {
-                google: {
-                  connecting: connections.calendar.connecting,
-                  onConnect: connections.calendar.onSignIn,
-                },
-              }
-            : undefined),
-          // A consent flow run from the gate parks the panel's tab on the
-          // Connections page for its slot to come back to, and the gate masks
-          // that while it stands — so answering the step also brings the tab
-          // home, or onboarding would end on Integrations instead of the
-          // Plans tab the arrival beat is about to call all set.
-          onSkip: () => {
-            changeTab(PANEL_TAB.PLANS);
-            tell(ACT_KIND.ONBOARDING_SKIP_CALENDAR);
-          },
-          onDone: () => {
-            changeTab(PANEL_TAB.PLANS);
-            tell(ACT_KIND.ONBOARDING_COMPLETE_CALENDAR);
-          },
-        }
-      : undefined;
-
   return (
     <div
       className="app-stage"
@@ -693,7 +543,7 @@ export function App(): React.JSX.Element {
       // a band of its own below the caption block.
       data-volume-hint={String(volumeHint)}
       data-presentation={presentation}
-      // Whether sign-in still stands between Luke and anything to watch, so the
+      // Whether sign-in still stands between Luke and the plans, so the
       // stylesheet knows the strip holds nothing while a popup is drawn.
       data-gated={String(accountGated)}
       data-capture={String(state.run.captureMode)}
@@ -701,42 +551,29 @@ export function App(): React.JSX.Element {
       // lays it out.
       data-surface="desktop"
       style={{
-        // One slot shape, three possible occupants: the surface follows the
-        // height of whichever is actually drawn.
-        ...surfaceHeightStyle(
-          connections.signInWait !== undefined
-            ? signInSlotHeight
-            : slotOccupant.current === PANEL_STAND_DOWN.CONSENT
-              ? connectHeight
-              : slotHeight,
-          feedbackHeight,
-        ),
+        // The slot follows the height of the sign-in wait drawn in it.
+        ...surfaceHeightStyle(signInSlotHeight, feedbackHeight),
         ...caption.style,
       }}
     >
       <span className="panel-surface" data-hit-region={HIT_REGION.SURFACE} aria-hidden="true" />
 
-      {/* The window's content. Inert while the panel stands down to a field,
-          a consent wait, or a note, which are drawn as a sheet over it. */}
+      {/* The window's content. Inert while the panel stands down to a sign-in
+          wait or a note, which are drawn as a sheet over it. */}
       <div className="desktop-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
         <DesktopShell
           gates={{
             accountRequired: state.run.accountRequired,
-            signInFailure: connections.signInFailure,
-            onBeginSignIn: connections.beginSignIn,
-            conductorKeyGate,
-            calendarGate,
+            signInFailure: signIn.signInFailure,
+            onBeginSignIn: signIn.beginSignIn,
             signInFace,
           }}
           identity={{
-            tally,
             levels: voiceLevels,
             speakers,
             voiceActive,
             fixtureSpeaking,
             voiceOpening: talkOpening,
-            announcementsHeld,
-            sessionsSettled,
           }}
           tab={tab}
           onTabChange={changeTab}
@@ -769,61 +606,27 @@ export function App(): React.JSX.Element {
             microphone,
             updates,
             settings,
-            credentials: connections.credentials,
             feedback: feedback.control,
             panelOpen,
-            workspaceProviders,
-            calendar: connections.calendar,
-            appleCalendar: connections.appleCalendar,
             onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
             shortcuts,
             searchOpen: settingsSearchOpen,
             onSearchClose: closeSettingsSearch,
-            // The same hold the ask field and the session search report
-            // through: one caret anywhere in the panel is hands being here.
+            // One caret anywhere in the panel is hands being here.
             onSearchEngaged: changeAskEngagement,
           }}
         />
       </div>
       <span className="desktop-scrim" aria-hidden="true" />
 
-      {/* The panel stood down to its field, drawn as a sheet in the same
-          window. */}
-      {/* The three shapes that borrow the slot never draw together: the
-          gate's sign-in wait suppresses the settings tab's two entries
-          outright — the two are never on screen at once — and the key and
-          consent-connect pills split the remaining case by which entry
-          holds the slot. A pill held through an old exit must not resurface
-          under another's wait. */}
-      {connections.signInWait === undefined ? (
-        <>
-          <KeySlot
-            control={connections.credentials}
-            source={slotSource}
-            drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.KEY}
-            measure={slotElement}
-          />
-          {/* The panel stood down while a consent sign-in waits on the
-              browser, on the key slot's exact terms. */}
-          <ConsentConnectSlot
-            entry={connections.consentEntry}
-            drawn={slotOpen && slotOccupant.current === PANEL_STAND_DOWN.CONSENT}
-            onCancel={connections.cancelConsentSignIn}
-            onReopen={connections.reopenConsentPage}
-            onOpenSystemSettings={() => tell(ACT_KIND.CALENDAR_OPEN_SETTINGS)}
-            measure={connectElement}
-          />
-        </>
-      ) : null}
-      {connections.credentialEntry === undefined && connections.consentEntry === undefined ? (
-        /* The panel stood down to the account sign-in it is waiting on. */
-        <SignInSlot
-          {...(connections.signInWait ? { provider: connections.signInWait } : undefined)}
-          drawn={slotOpen}
-          onCancel={connections.cancelSignIn}
-          measure={signInSlotElement}
-        />
-      ) : null}
+      {/* The panel stood down to the account sign-in it is waiting on, drawn
+          as a sheet in the same window. */}
+      <SignInSlot
+        {...(signIn.signInWait ? { provider: signIn.signInWait } : undefined)}
+        drawn={slotOpen}
+        onCancel={signIn.cancelSignIn}
+        measure={signInSlotElement}
+      />
       {/* The panel stood down to the composer, on the same terms. */}
       <FeedbackSlot
         control={feedback.control}
@@ -879,12 +682,7 @@ export function App(): React.JSX.Element {
           inert while hidden so its button cannot be tabbed to. It carries a
           hit region of its own and sits above the hover strip, so Got it
           answers the press instead of the panel opening under it. */}
-      <span
-        className="volume-hint"
-        role="status"
-        inert={!volumeHint}
-        data-hit-region={HIT_REGION.CAPSULE}
-      >
+      <span className="volume-hint" role="status" inert={!volumeHint}>
         <span className="volume-hint-text">{volumeHintText(outputAudio)}</span>
         <button type="button" className="volume-hint-dismiss" onClick={dismissVolumeHint}>
           Got it

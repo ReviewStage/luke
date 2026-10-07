@@ -28,8 +28,7 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * There is no switch — `PRIVACY.md` is where a user learns this happens, so
  * that file carries the whole of the disclosure and has to keep doing it. No
  * account is among the reasons either. Recording begins at the first paint of
- * an ordinary launch, before anyone has signed in and through the spoken
- * introduction, because the launch is where what goes wrong goes wrong and a
+ * an ordinary launch, before anyone has signed in, because the launch is where what goes wrong goes wrong and a
  * recording that waited for a sign-in never saw it. A session that reaches
  * one is joined to the person there; a session that never does stays
  * anonymous, which is the part `PRIVACY.md` has to say plainly, because such
@@ -170,8 +169,7 @@ function scrubbedProperties(properties: Properties): Properties {
 }
 
 /**
- * The project the recording is filed under, fixed at build time the way the
- * calendar client's secret is. A build packaged without one records nothing —
+ * The project the recording is filed under, fixed at build time. A build packaged without one records nothing —
  * the same kill switch the site's own counting has, so a local run or an
  * unconfigured build measures nothing rather than measuring into a stranger's
  * project.

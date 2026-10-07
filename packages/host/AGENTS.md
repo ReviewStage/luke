@@ -15,16 +15,14 @@ The same goes for drawing: there is no `electron`, `react`, or DOM import here,
 and the two files that needed one were split at that line into
 `apps/desktop/src/main/ipc/` and `apps/desktop/src/main/native/`.
 
-Every environment override is a `Config` read of the variable's own name, and a
-credential is `Config.redacted` because the store hands one on to that provider's
-adapter and nothing else. The settings store reads no environment itself — it is
-handed what was resolved.
+Every environment override is a `Config` read of the variable's own name. The
+settings store reads no environment itself — it is handed what was resolved.
 
-## Three shapes in the composition that are easy to undo
+## Two shapes in the composition that are easy to undo
 
 Each concern is a composer owning its own state, timers, and Gateway methods,
 built as a scoped layer whose build runs `start` and whose scope closing runs
-`stop`. Three details of that are load-bearing and look like accidents:
+`stop`. Two details of that are load-bearing and look like accidents:
 
 - **The stop is registered before the start runs**, not as the release of a
   successful acquire, because a composer's `stop` is written to give back what a
@@ -32,22 +30,16 @@ built as a scoped layer whose build runs `start` and whose scope closing runs
 - **The layers are built sequentially, never merged.** `Layer.merge` builds its
   sides concurrently and closes them in parallel; a start that fails must release
   what began, in reverse, at once.
-- **A cadence forks its scope from the one its composer was built in**
-  (`cadenceGate`), so its fibers run on the host's own services and the host's
-  close ends them whatever became of the stop. A fork does not inherit the
-  interrupt status of whoever made it, so a body armed from inside an
-  uninterruptible region — a composer's start, an acquire, a finalizer — is
-  still one the disarm's interruption can end.
 
 A method two composers claim fails the build with `DuplicateGatewayMethod`, so
 that one does not need stating here. `client.bootstrap` is the one method no
-composer owns: it reads six of them, and giving it to any would hand that
-composer references to the other five.
+composer owns: it reads several of them, and giving it to any would hand that
+composer references to the others.
 
 ## One drain, in one place
 
 The quit is the closing of the one scope the host layer was built in, and the
-scope's finalizers are its order: drain, loops disarmed, every composer's stop in
+scope's finalizers are its order: drain, every composer's stop in
 reverse, store closed. The drain runs once whichever door asks for it.
 
 **A caller that ran the steps itself would be a second order for the same quit,
@@ -58,25 +50,17 @@ cut off.**
 
 **The host reaches no brain and writes no record for a voice session.** The
 exchange stands on the voice service: every spoken ask is admitted through
-`acceptAsk` there, every reply is appended there over the same
-socket the relay pipes, and the account's record is the service's. What this
-package keeps is `LiveSessionHolder`, which creates the session for the peer's
-offer (seeded from the desk as this Mac sees it),
-ends it on the peer's hang-up or the drain, and carries the peer's idle, the
-stop key, and the onboarding beats to the service as `session.activity`,
-`session.stop`, and `session.beat`, since the idle decision is made against
-appends only the service made, the stop's instruction is the service's to
-append, and every beat's words are the build's script the service speaks. It
-appends nothing at all. What it decides is which beat is owed (`compose-live.ts`
-over `arrival-flow.ts` and the onboarding record: the arrival beat once per
-install, the calendar line while the gate shows, the launch greeting once per
-run after the arrival has played, none of them under a hold), and it announces
-`wanted` for one so the peer opens a muted session to say it into; the
-service's `session.spoken` frame is what settles `arrivalSpokenAt` and the
-first-announcement count, which stay this side's. Nothing on this side speaks
-unprompted. The sessions route closes a desktop socket that sends any other
-frame, so a re-wired local exchange is refused at the relay rather than heard
-twice.
+`acceptAsk` there, every reply is appended there over the same socket the
+relay pipes, and the account's record is the service's. What this package
+keeps is `LiveSessionHolder`, which creates the planning call about the open
+plan for the peer's offer, ends it on the peer's hang-up, a plan switch, or the
+drain, and carries the peer's idle and the stop key to the service as
+`session.activity` and `session.stop`, since the idle decision is made against
+appends only the service made and the stop's instruction is the service's to
+append. It appends nothing at all, and nothing on this side speaks unprompted:
+a call is only ever opened by a press about a plan. The sessions route closes a
+desktop socket that sends any other frame, so a re-wired local exchange is
+refused at the relay rather than heard twice.
 
 The stop is asked for only while Luke is speaking, since the instruction the
 service appends for it is standing text a silent model would read as a rule for
@@ -84,6 +68,6 @@ its next answer.
 
 ## One door that exists for the graph
 
-`account-preferences-client.ts` would belong beside the vault client in
+`account-preferences-client.ts` would belong beside the plan client in
 `@sidecar/hosted`, but the snapshot it carries is `@sidecar/settings` vocabulary
 and `settings` already reaches `hosted`. This is the lowest package holding both.

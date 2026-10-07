@@ -18,9 +18,8 @@ import { codeChallenge, createCodeVerifier } from "./pkce.js";
  * One consent trip, from a press to a grant: an authorization page opened in
  * the user's own browser, a code handed back on a loopback redirect that never
  * leaves this machine, and a PKCE-verified exchange with whoever issued the
- * page. Every provider Luke asks consent of runs this same trip — the Luke
- * account and Google Calendar — and differs only in the four things the
- * options below name: which ports the redirect may land on, what the
+ * page. Every provider Luke asks consent of runs this same trip — today the
+ * Luke account — and differs only in the four things the options below name: which ports the redirect may land on, what the
  * authorization page's URL is, what the exchange does with the code, and how
  * the landing card is worded.
  *
@@ -62,7 +61,6 @@ const SHARED_REASON = {
   UNAVAILABLE: "Luke could not open a sign-in callback on this machine.",
   ALREADY_WAITING: "A sign-in is already waiting in your browser.",
   BROWSER: "Luke could not open the sign-in page in your browser.",
-  UNCONFIGURED: "Sign-in is not configured in this build.",
 } as const;
 
 /**
@@ -171,20 +169,6 @@ export interface LoopbackConsentOptions<Grant> {
    */
   openExternal(url: string): void | Promise<void>;
   timeoutMs?: number | undefined;
-}
-
-/**
- * The flow a run that does not hold a provider's registration offers: the
- * press answers with why, and there is nothing to cancel or reopen. A row
- * drawn this way beats one whose button fails after the user has consented.
- */
-export function unofferedConsent<Grant>(): LoopbackConsent<Grant> {
-  const unconfigured = { reason: SHARED_REASON.UNCONFIGURED };
-  return {
-    signInEffect: () => Effect.succeed(unconfigured),
-    cancel: () => undefined,
-    reopen: () => undefined,
-  };
 }
 
 export interface LoopbackConsent<Grant> {

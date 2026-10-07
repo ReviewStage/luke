@@ -24,8 +24,3 @@ icon = "badge-check"
 command = "./scripts/evidence.sh"
 available_in = [ "local" ]
 icon = "camera"
-
-[scripts.run.record-evidence]
-command = "pnpm evidence:record"
-available_in = [ "local" ]
-icon = "video"

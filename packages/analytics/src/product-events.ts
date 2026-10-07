@@ -1,6 +1,5 @@
-import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
-import { PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
+import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -366,9 +365,19 @@ export function productSessionCountBucket(count: number): ProductSessionCountBuc
   );
 }
 
+/**
+ * The connections a counted connect or disconnect may name: the Conductor key
+ * an older build's Connections page held, so its counts still validate.
+ */
+const PRODUCT_CONNECTION_ID = {
+  CONDUCTOR: PROVIDER_ID.CONDUCTOR,
+} as const;
+
+type ProductConnectionId = (typeof PRODUCT_CONNECTION_ID)[keyof typeof PRODUCT_CONNECTION_ID];
+
 interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.APP_VERSION]: string;
-  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: CredentialProviderId;
+  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: ProductConnectionId;
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: ProviderId;
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: ProductCalendarSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: ProductSessionCountBucket;
@@ -404,7 +413,7 @@ type EnumeratedProductEventProperty = Exclude<
 
 /** Every value each enumerable property may ever hold. */
 const PRODUCT_EVENT_PROPERTY_VALUES = {
-  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: Object.values(CREDENTIAL_PROVIDER_ID),
+  [PRODUCT_EVENT_PROPERTY.CONNECTION_ID]: Object.values(PRODUCT_CONNECTION_ID),
   [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: PROVIDER_ID_LIST,
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: Object.values(PRODUCT_CALENDAR_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: Object.values(PRODUCT_VOICE_SESSION_SOURCE),

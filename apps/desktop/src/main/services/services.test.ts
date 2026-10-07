@@ -85,7 +85,6 @@ function fixtureConfig(
     launch: {
       captureOutput: undefined,
       profile: "idle",
-      fixtureName: "smoke",
       captureMode: false,
       fixtureMode: true,
     },

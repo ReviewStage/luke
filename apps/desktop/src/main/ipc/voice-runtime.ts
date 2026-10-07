@@ -1,5 +1,4 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
-import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
@@ -48,8 +47,7 @@ type VoiceRuntimeActKind =
   | typeof ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY
   | typeof ACT_KIND.VOICE_STOP_SPEAKING
   | typeof ACT_KIND.VOICE_DIAGNOSTICS
-  | typeof ACT_KIND.MICROPHONE_OPEN_SETTINGS
-  | typeof ACT_KIND.CREDENTIAL_OPEN_API_KEYS;
+  | typeof ACT_KIND.MICROPHONE_OPEN_SETTINGS;
 
 export function voiceRuntimeActRows(
   dependencies: VoiceRuntimeDependencies,
@@ -89,11 +87,6 @@ export function voiceRuntimeActRows(
       dependencies.openExternal(
         "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
       ),
-    [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: ({ providerId }) => {
-      const provider = CREDENTIAL_PROVIDERS[providerId];
-      if (provider.connection !== CREDENTIAL_CONNECTION.KEY || !provider.apiKeysUrl) return;
-      void dependencies.openExternal(provider.apiKeysUrl);
-    },
   };
 }
 

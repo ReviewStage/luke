@@ -8,7 +8,6 @@ import {
   type OutputAudioState,
 } from "#shared/messages/audio";
 import type { AppStateStore } from "../app-state";
-import { runAppleCalendarHelper } from "../native/apple-calendar-helper";
 import { MediaDuckController } from "../native/media-duck";
 import {
   microphoneRouteWatcher as createMicrophoneRouteWatcher,
@@ -30,10 +29,6 @@ const readMicrophoneStatusWord = Schema.decodeUnknownSync(
 export interface NativeNodeCapabilities {
   /** Hands an address to the operating system; a throw is an open that did not land. */
   openExternal: (url: string) => Promise<void>;
-  runAppleCalendarHelper: (
-    helperArguments: readonly string[],
-    timeoutMs: number,
-  ) => Promise<string>;
 }
 
 interface NativeNodeDependencies {
@@ -101,7 +96,6 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
     name: "native",
     capabilities: {
       openExternal: config.openExternal,
-      runAppleCalendarHelper,
     },
     mediaDuck,
     setMediaDuckEnabled: (enabled) => mediaDuck.setEnabled(enabled),

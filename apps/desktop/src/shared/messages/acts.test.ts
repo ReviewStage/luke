@@ -47,12 +47,24 @@ test("an envelope that is not one act of a named kind is refused whole", () => {
   );
 });
 
-test("the live session acts carry the peer's offer verbatim, a transport state the peer connection names, and one boolean", () => {
+test("the live session acts carry the peer's offer verbatim about its plan, a transport state the peer connection names, and one boolean", () => {
   const offer = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
-  const create = parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: offer } });
-  assert.deepEqual(create, { kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: offer } });
+  const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  const create = parsedAct({
+    kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+    payload: { sdp: offer, planId },
+  });
+  assert.deepEqual(create, {
+    kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
+    payload: { sdp: offer, planId },
+  });
   assert.equal(
-    parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: "" } }),
+    parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: "", planId } }),
+    undefined,
+  );
+  // Every call is about a plan: an offer about none is no offer at all.
+  assert.equal(
+    parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: offer } }),
     undefined,
   );
   assert.equal(parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION }), undefined);
@@ -96,8 +108,6 @@ test("a settings write carries a value its own field admits, parsed for the row"
   assert.ok(update("openAtLogin", true));
   assert.equal(update("openAtLogin", "yes"), undefined);
   assert.equal(update("notASetting", true), undefined);
-  // A keyed field has its own kind; the plain write refuses it.
-  assert.equal(update("workspaceProjectDefaults", "luke"), undefined);
   // The value the row is handed is the one the field's schema admitted, so a
   // guard that normalizes is the only reading of it there is.
   const parsed = parsedAct({
@@ -106,18 +116,6 @@ test("a settings write carries a value its own field admits, parsed for the row"
   });
   assert.ok(parsed && "payload" in parsed);
   assert.deepEqual(parsed.payload, { field: "voiceHotkey", value: "Alt+Space" });
-  const entry = (field: WireValue, key: WireValue, value: WireValue) =>
-    parsedAct({ kind: ACT_KIND.SETTING_UPDATE_ENTRY, payload: { field, key, value } });
-  assert.ok(entry("workspaceProjectDefaults", "conductor", "luke"));
-  // A keyed entry cleared is the key with no value at all.
-  assert.ok(
-    parsedAct({
-      kind: ACT_KIND.SETTING_UPDATE_ENTRY,
-      payload: { field: "workspaceProjectDefaults", key: "conductor" },
-    }),
-  );
-  assert.equal(entry("openAtLogin", "conductor", "luke"), undefined);
-  assert.equal(entry("workspaceProjectDefaults", "nowhere", "luke"), undefined);
 });
 
 test("an outcome is one of the three answers and nothing else", () => {

@@ -135,7 +135,7 @@ interface LiveStartupOptions {
   model?: string | undefined;
   /** Chosen at creation and immutable after startup. */
   voice?: LiveVoice;
-  /** The startup history; `conversationSeedItems` bounds it. */
+  /** The startup history, held under `LIVE_INPUT_BOUNDS`. */
   input?: readonly InitialItem[];
 }
 

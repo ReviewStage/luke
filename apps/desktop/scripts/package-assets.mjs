@@ -8,7 +8,7 @@ import { NATIVE_HELPERS } from "./package-layout.mjs";
 
 export function packageAssetPaths({ appRoot }) {
   const helperPaths = NATIVE_HELPERS.map((helper) =>
-    path.join(appRoot, ".build", "native", helper.bundle ?? helper.binary),
+    path.join(appRoot, ".build", "native", helper.binary),
   );
   const iconPath = path.join(appRoot, ".build", "Luke.icns");
   const licensePath = path.join(appRoot, ".build", LICENSE_RESOURCE_NAME);

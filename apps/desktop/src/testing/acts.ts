@@ -18,41 +18,11 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.SETTING_UPDATE,
     payload: { field: "openAtLogin", value: true },
   },
-  [ACT_KIND.SETTING_UPDATE_ENTRY]: {
-    kind: ACT_KIND.SETTING_UPDATE_ENTRY,
-    payload: { field: "workspaceProjectDefaults", key: "conductor", value: "luke" },
-  },
   [ACT_KIND.SETTINGS_RESET]: { kind: ACT_KIND.SETTINGS_RESET, payload: { scope: "voice" } },
-  [ACT_KIND.CREDENTIAL_SET_API_KEY]: {
-    kind: ACT_KIND.CREDENTIAL_SET_API_KEY,
-    payload: { providerId: "conductor", apiKey: "sk-test" },
-  },
-  [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: {
-    kind: ACT_KIND.CREDENTIAL_OPEN_API_KEYS,
-    payload: { providerId: "conductor" },
-  },
-  [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: { kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE },
-  [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: { kind: ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN },
-  [ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN]: { kind: ACT_KIND.CALENDAR_REOPEN_GOOGLE_SIGN_IN },
-  [ACT_KIND.CALENDAR_REMOVE_ACCOUNT]: {
-    kind: ACT_KIND.CALENDAR_REMOVE_ACCOUNT,
-    payload: { accountId: "account-1" },
-  },
-  [ACT_KIND.CALENDAR_CONNECT_APPLE]: { kind: ACT_KIND.CALENDAR_CONNECT_APPLE },
-  [ACT_KIND.CALENDAR_DISCONNECT_APPLE]: { kind: ACT_KIND.CALENDAR_DISCONNECT_APPLE },
-  [ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS]: { kind: ACT_KIND.CALENDAR_APPLE_ACCESS_STATUS },
-  [ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT]: { kind: ACT_KIND.CALENDAR_CANCEL_APPLE_CONNECT },
-  [ACT_KIND.CALENDAR_OPEN_SETTINGS]: { kind: ACT_KIND.CALENDAR_OPEN_SETTINGS },
-  [ACT_KIND.CALENDAR_REFRESH]: { kind: ACT_KIND.CALENDAR_REFRESH },
-  [ACT_KIND.CALENDAR_SET_SELECTED]: {
-    kind: ACT_KIND.CALENDAR_SET_SELECTED,
-    payload: { accountId: "account-1", calendarId: "calendar-1", selected: true },
-  },
   [ACT_KIND.UPDATE_CHECK]: { kind: ACT_KIND.UPDATE_CHECK },
   [ACT_KIND.UPDATE_INSTALL]: { kind: ACT_KIND.UPDATE_INSTALL },
   [ACT_KIND.UPDATE_OPEN_RELEASE]: { kind: ACT_KIND.UPDATE_OPEN_RELEASE },
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: { kind: ACT_KIND.UPDATE_OPEN_CHANGELOG },
-  [ACT_KIND.NOTEBOOK_READ]: { kind: ACT_KIND.NOTEBOOK_READ },
   [ACT_KIND.PLANNING_REFRESH]: { kind: ACT_KIND.PLANNING_REFRESH },
   [ACT_KIND.PLANNING_CLOSE]: { kind: ACT_KIND.PLANNING_CLOSE },
   [ACT_KIND.PLANNING_SELECT]: {
@@ -79,7 +49,10 @@ export const ONE_ACT_OF_EACH_KIND = {
   },
   [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: {
     kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-    payload: { sdp: "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n" },
+    payload: {
+      sdp: "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n",
+      planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+    },
   },
   [ACT_KIND.VOICE_END_LIVE_SESSION]: { kind: ACT_KIND.VOICE_END_LIVE_SESSION },
   [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: {
@@ -105,21 +78,5 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.FEEDBACK_SEND]: {
     kind: ACT_KIND.FEEDBACK_SEND,
     payload: { submission: { kind: "feedback", message: "it works", images: [] } },
-  },
-  [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: { kind: ACT_KIND.ONBOARDING_SKIP_CALENDAR },
-  [ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY]: { kind: ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY },
-  [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: { kind: ACT_KIND.ONBOARDING_COMPLETE_CALENDAR },
-  [ACT_KIND.INTRODUCTION_CREATE_SESSION]: {
-    kind: ACT_KIND.INTRODUCTION_CREATE_SESSION,
-    payload: { sdp: "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n", titles: ["Fix the flaky test"] },
-  },
-  [ACT_KIND.INTRODUCTION_END_SESSION]: { kind: ACT_KIND.INTRODUCTION_END_SESSION },
-  [ACT_KIND.INTRODUCTION_COMPLETE]: {
-    kind: ACT_KIND.INTRODUCTION_COMPLETE,
-    payload: { given: true },
-  },
-  [ACT_KIND.INTRODUCTION_ABANDON]: {
-    kind: ACT_KIND.INTRODUCTION_ABANDON,
-    payload: { reason: "the voice never connected" },
   },
 } as const satisfies { readonly [Kind in ActKind]: Act & { kind: Kind } };

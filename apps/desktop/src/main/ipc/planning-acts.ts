@@ -47,7 +47,7 @@ type PlanningActKind =
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
-  if (!sender.panel || sender.introduction) {
+  if (!sender.panel) {
     throw new ActRefused({ message: ACT[kind].refusal });
   }
 }

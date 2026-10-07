@@ -5,7 +5,8 @@ import { Schema } from "effect";
  * rather than beside the desktop's settings schema because two things outside
  * that schema have to name the same set: the guide a spoken change is
  * validated against, and the product-event vocabulary, which may carry a
- * setting's id but never its value.
+ * setting's id but never its value. The ids of settings this build no longer
+ * offers stay, so a count an older build still sends under one validates.
  */
 export const APP_SETTING_ID = {
   VOICE: "voice",

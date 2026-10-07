@@ -60,7 +60,6 @@ test("the state root is the moved path, and the launch's flags are read from its
   const steps: string[] = [];
   const config = bootstrap(steps, ["electron", ".", "--fixture", "smoke", "--profile", "working"]);
   assert.equal(config.stateRoot, path.join("/tmp", "appData", DEVELOPMENT_APP_NAME));
-  assert.equal(config.launch.fixtureName, "smoke");
   assert.equal(config.launch.profile, "working");
   assert.equal(config.launch.captureMode, false);
   assert.equal(config.launch.fixtureMode, true);

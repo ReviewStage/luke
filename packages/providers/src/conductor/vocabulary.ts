@@ -1,8 +1,9 @@
-import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_PROVIDERS } from "@sidecar/credentials/vocabulary";
 import {
   ACTION_KIND,
   type AdvertisedControl,
   AGENT_IDENTITY,
+  PROVIDER_ID,
+  PROVIDER_IDENTITY_BY_ID,
   SESSION_CONTROL_KIND,
   SESSION_STATUS,
   type SessionProvider,
@@ -15,11 +16,10 @@ import {
  * the bounds every read is held to. Nothing here issues a request.
  */
 
-// Shared with the credential registry so the key the user saves and the
+// The provider identity core names, so the key the service holds and the
 // provider Luke observes with it can never name different things.
-export const CONDUCTOR_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.CONDUCTOR;
-export const CONDUCTOR_PROVIDER_NAME =
-  CREDENTIAL_PROVIDERS[CREDENTIAL_PROVIDER_ID.CONDUCTOR].displayName;
+export const CONDUCTOR_PROVIDER_ID = PROVIDER_ID.CONDUCTOR;
+export const CONDUCTOR_PROVIDER_NAME = PROVIDER_IDENTITY_BY_ID[PROVIDER_ID.CONDUCTOR].displayName;
 
 export const CONDUCTOR_ENVIRONMENT = {
   API_URL: "CONDUCTOR_API_URL",

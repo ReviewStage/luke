@@ -12,7 +12,7 @@ import {
 } from "./feedback-entry";
 
 function entry(overrides: Partial<FeedbackEntry> = {}): FeedbackEntry {
-  return { ...freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, true), ...overrides };
+  return { ...freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK), ...overrides };
 }
 
 test("whitespace is not a note", () => {
@@ -29,62 +29,29 @@ test("nothing being written cannot be sent", () => {
   assert.equal(isSendable(undefined), false);
 });
 
-test("opening with nothing there starts a fresh note, drafted with what was given", () => {
-  const opened = openedFeedbackEntry(undefined, {
-    kind: FEEDBACK_KIND.PROMPT,
-    fromPanel: false,
-    draft: "let Luke restart a stuck run",
-  });
-
-  assert.equal(opened.drafted, true);
-  assert.deepEqual(opened.entry, {
-    ...freshFeedbackEntry(FEEDBACK_KIND.PROMPT, false),
-    message: "let Luke restart a stuck run",
-  });
-
-  const undrafted = openedFeedbackEntry(undefined, {
-    kind: FEEDBACK_KIND.FEEDBACK,
-    fromPanel: true,
-  });
-  assert.equal(undrafted.drafted, false);
-  assert.deepEqual(undrafted.entry, freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, true));
+test("opening with nothing there starts a fresh note of the asked kind", () => {
+  assert.deepEqual(
+    openedFeedbackEntry(undefined, { kind: FEEDBACK_KIND.PROMPT }),
+    freshFeedbackEntry(FEEDBACK_KIND.PROMPT),
+  );
 });
 
-test("a half-written note is brought back, never overwritten by a draft", () => {
-  const current = entry({ message: "the capsule count is wrong", name: "Ada" });
-  const opened = openedFeedbackEntry(current, {
-    kind: FEEDBACK_KIND.PROMPT,
-    fromPanel: false,
-    draft: "let Luke restart a stuck run",
-  });
-
-  assert.equal(opened.drafted, false);
-  // The words, the signature, and even the kind stay: only where leaving
-  // returns you follows the latest ask.
-  assert.deepEqual(opened.entry, { ...current, fromPanel: false });
+test("a half-written note is brought back as its author left it", () => {
+  const current = entry({ message: "the plan lost a question", name: "Ada" });
+  // The words, the signature, and even the kind stay.
+  assert.deepEqual(openedFeedbackEntry(current, { kind: FEEDBACK_KIND.PROMPT }), current);
 });
 
-test("an empty note is relabelled to the asked kind and takes the draft", () => {
-  const opened = openedFeedbackEntry(entry({ message: "  " }), {
-    kind: FEEDBACK_KIND.PROMPT,
-    fromPanel: false,
-    draft: "let Luke restart a stuck run",
-  });
-
-  assert.equal(opened.drafted, true);
-  assert.equal(opened.entry?.kind, FEEDBACK_KIND.PROMPT);
-  assert.equal(opened.entry?.message, "let Luke restart a stuck run");
+test("an empty note is relabelled to the asked kind", () => {
+  const opened = openedFeedbackEntry(entry({ message: "  " }), { kind: FEEDBACK_KIND.PROMPT });
+  assert.equal(opened?.kind, FEEDBACK_KIND.PROMPT);
 });
 
 test("a note mid-send is not touched by an open", () => {
-  const opened = openedFeedbackEntry(entry({ message: "it broke", busy: true }), {
-    kind: FEEDBACK_KIND.PROMPT,
-    fromPanel: false,
-    draft: "something else",
-  });
-
-  assert.equal(opened.drafted, false);
-  assert.equal(opened.entry, undefined);
+  assert.equal(
+    openedFeedbackEntry(entry({ message: "it broke", busy: true }), { kind: FEEDBACK_KIND.PROMPT }),
+    undefined,
+  );
 });
 
 test("a signed-in account signs a fresh note; signed out, it starts unsigned", () => {
@@ -95,8 +62,8 @@ test("a signed-in account signs a fresh note; signed out, it starts unsigned", (
     provider: ACCOUNT_PROVIDER.GITHUB,
   });
   assert.deepEqual(signature, { name: "Ada", email: "ada@example.com" });
-  assert.deepEqual(freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, true, signature), {
-    ...freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, true),
+  assert.deepEqual(freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, signature), {
+    ...freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK),
     name: "Ada",
     email: "ada@example.com",
   });
@@ -119,25 +86,23 @@ test("a signed-in account signs a fresh note; signed out, it starts unsigned", (
 test("opening with nothing there starts the note signed with the account", () => {
   const opened = openedFeedbackEntry(undefined, {
     kind: FEEDBACK_KIND.FEEDBACK,
-    fromPanel: true,
     signature: { name: "Ada", email: "ada@example.com" },
   });
 
-  assert.equal(opened.entry?.name, "Ada");
-  assert.equal(opened.entry?.email, "ada@example.com");
+  assert.equal(opened?.name, "Ada");
+  assert.equal(opened?.email, "ada@example.com");
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 test("a note already there keeps its fields as its author left them, cleared ones included", () => {
-  const cleared = entry({ message: "the capsule count is wrong", name: "", email: "" });
+  const cleared = entry({ message: "the plan lost a question", name: "", email: "" });
   const opened = openedFeedbackEntry(cleared, {
     kind: FEEDBACK_KIND.FEEDBACK,
-    fromPanel: true,
     signature: { name: "Ada", email: "ada@example.com" },
   });
 
-  assert.equal(opened.entry?.name, "");
-  assert.equal(opened.entry?.email, "");
+  assert.equal(opened?.name, "");
+  assert.equal(opened?.email, "");
 });
 
 test("a chip draws the image it holds", () => {

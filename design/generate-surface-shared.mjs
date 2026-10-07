@@ -5,16 +5,15 @@
 //
 //   node design/generate-surface-shared.mjs
 //
-// It writes four committed outputs into packages/surface/src/generated, all from the
+// It writes three committed outputs into packages/surface/src/generated, all from the
 // tables further down:
 //
 //   src/motion-tokens.css       springs, durations, and the layout sizes
 //   src/motion-tokens.ts        the same durations and sizes, as numbers
-//   src/provider-mark-paths.ts  SVG path data for every provider mark
-//   src/session-display.ts      urgency labels and order
+//   src/provider-mark-paths.ts  SVG path data for the sign-in provider marks
 //
 // The React that traces the marks, and the rules that consume the tokens, stay
-// in each app: a shared component would pull desktop-only marks into the web
+// in each app: a shared component would pull desktop-only code into the web
 // bundle. Emitting the data from here keeps the second copy from being a
 // second source. `repository-checks.sh` runs this with `--check`.
 
@@ -58,13 +57,8 @@ const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
 const ROW_FAN_PX = 7;
 const ROW_FAN_LIMIT = 5;
 
-// Window layout sizes the main process and both stylesheets spend. The bubble
-// lift is derived: the pill matches the 24pt menu bar it floats beside, which
-// is the 32px compact strip minus this much on each side. `--shape-top` is
-// assigned from `--bubble-lift` only on a display without a housing; a notch
-// stays at the edge.
+// Window layout sizes the main process and both stylesheets spend.
 const SURFACE_GEOMETRY_PX = {
-  BUBBLE_LIFT: 4,
   // The caption block grows to the words and nothing scrolls, so the
   // reservation sits past what a reply wraps to at the peek's width: fourteen
   // 14px lines plus the block's own padding, room enough for two long
@@ -83,34 +77,10 @@ const SURFACE_GEOMETRY_PX = {
   PANEL_MAX_HEIGHT: 520,
 };
 
-// ---------- Session display ----------
-// How the surface ranks a row, not what the provider observed. Keys are the
-// SESSION_URGENCY members declared in @sidecar/session; values are the
-// sentence a row states when the provider reported nothing else. "Urgency"
-// rather than "display state" because the latter still collides with
-// SESSION_STATUS in conversation, and the sort already speaks this language.
-const URGENCY_LABEL = {
-  WORKING: "Working",
-  ATTENTION: "Needs you",
-  COMPLETE: "Complete",
-  UNKNOWN: "Idle",
-};
-const URGENCY_PRIORITY = ["ATTENTION", "WORKING", "COMPLETE", "UNKNOWN"];
-
 // ---------- Provider mark paths ----------
 // Each is the provider's own mark, reproduced rather than redrawn. Attribution
 // lives with the React that traces them; this table is only the geometry.
 const MARK_PATHS = {
-  CLAUDE:
-    "m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z",
-  CLAUDE_CODE:
-    "M21 10.5h3v3h-3v3h-1.5v3H18v-3h-1.5v3H15v-3H9v3H7.5v-3H6v3H4.5v-3H3v-3H0v-3h3v-6h18Zm-15 0h1.5v-3H6Zm10.5 0H18v-3h-1.5z",
-  CODEX:
-    "M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z",
-  COPILOT:
-    "M23.922 16.997C23.061 18.492 18.063 22.02 12 22.02 5.937 22.02.939 18.492.078 16.997A.641.641 0 0 1 0 16.741v-2.869a.883.883 0 0 1 .053-.22c.372-.935 1.347-2.292 2.605-2.656.167-.429.414-1.055.644-1.517a10.098 10.098 0 0 1-.052-1.086c0-1.331.282-2.499 1.132-3.368.397-.406.89-.717 1.474-.952C7.255 2.937 9.248 1.98 11.978 1.98c2.731 0 4.767.957 6.166 2.093.584.235 1.077.546 1.474.952.85.869 1.132 2.037 1.132 3.368 0 .368-.014.733-.052 1.086.23.462.477 1.088.644 1.517 1.258.364 2.233 1.721 2.605 2.656a.841.841 0 0 1 .053.22v2.869a.641.641 0 0 1-.078.256Zm-11.75-5.992h-.344a4.359 4.359 0 0 1-.355.508c-.77.947-1.918 1.492-3.508 1.492-1.725 0-2.989-.359-3.782-1.259a2.137 2.137 0 0 1-.085-.104L4 11.746v6.585c1.435.779 4.514 2.179 8 2.179 3.486 0 6.565-1.4 8-2.179v-6.585l-.098-.104s-.033.045-.085.104c-.793.9-2.057 1.259-3.782 1.259-1.59 0-2.738-.545-3.508-1.492a4.359 4.359 0 0 1-.355-.508Zm2.328 3.25c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm-5 0c.549 0 1 .451 1 1v2c0 .549-.451 1-1 1-.549 0-1-.451-1-1v-2c0-.549.451-1 1-1Zm3.313-6.185c.136 1.057.403 1.913.878 2.497.442.544 1.134.938 2.344.938 1.573 0 2.292-.337 2.657-.751.384-.435.558-1.15.558-2.361 0-1.14-.243-1.847-.705-2.319-.477-.488-1.319-.862-2.824-1.025-1.487-.161-2.192.138-2.533.529-.269.307-.437.808-.438 1.578v.021c0 .265.021.562.063.893Zm-1.626 0c.042-.331.063-.628.063-.894v-.02c-.001-.77-.169-1.271-.438-1.578-.341-.391-1.046-.69-2.533-.529-1.505.163-2.347.537-2.824 1.025-.462.472-.705 1.179-.705 2.319 0 1.211.175 1.926.558 2.361.365.414 1.084.751 2.657.751 1.21 0 1.902-.394 2.344-.938.475-.584.742-1.44.878-2.497Z",
-  CURSOR:
-    "M11.503.131 1.891 5.678a.84.84 0 0 0-.42.726v11.188c0 .3.162.575.42.724l9.609 5.55a1 1 0 0 0 .998 0l9.61-5.55a.84.84 0 0 0 .42-.724V6.404a.84.84 0 0 0-.42-.726L12.497.131a1.01 1.01 0 0 0-.996 0M2.657 6.338h18.55c.263 0 .43.287.297.515L12.23 22.918c-.062.107-.229.064-.229-.06V12.335a.59.59 0 0 0-.295-.51l-9.11-5.257c-.109-.063-.064-.23.061-.23",
   /*
    * GitHub's Octocat mark, verbatim from the invertocat GitHub publishes, on
    * its 16-unit canvas. Drawn wherever a GitHub sign-in names itself: the
@@ -118,55 +88,8 @@ const MARK_PATHS = {
    */
   GITHUB:
     "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z",
-  GROK_BUILD_ORBIT:
-    "M210.484 312.759L343.465 210.383C349.984 205.364 359.302 207.322 362.408 215.117C378.758 256.231 371.454 305.64 338.925 339.563C306.397 373.487 261.137 380.927 219.768 363.983L174.577 385.803C239.394 432.008 318.104 420.581 367.289 369.251C406.303 328.564 418.386 273.104 407.088 223.091L407.19 223.198C390.807 149.726 411.218 120.359 453.03 60.3072C454.02 58.8833 455.01 57.4595 456 56L400.978 113.382V113.204L210.45 312.794",
-  GROK_BUILD_TAIL:
-    "M183.042 337.641C136.519 291.294 144.54 219.567 184.236 178.203C213.59 147.59 261.683 135.096 303.666 153.464L348.755 131.75C340.632 125.627 330.221 119.042 318.275 114.414C264.277 91.2407 199.63 102.774 155.735 148.516C113.513 192.549 100.236 260.254 123.036 318.027C140.069 361.206 112.148 391.748 84.0229 422.575C74.0561 433.503 64.0553 444.431 56 456L183.007 337.677",
-  OPENAI:
-    "M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z",
-  /*
-   * OMP's own site mark, verbatim from the favicon.svg omp.sh serves: a pi
-   * whose right leg runs long, on a 64-unit canvas, filled with the site's
-   * pink-to-cyan diagonal gradient — the component carries the paint server,
-   * and the dark tile behind it stays the row's own ground.
-   */
-  OMP: "M14 16h36v8H40v32h-8V24h-6v22h-8V24h-4z",
-  OPENCODE_FRAME: "M384 416H128V96H384V416ZM320 160H192V352H320V160Z",
-  OPENCODE_BLOCK: "M320 224V352H192V224H320Z",
-  // One 12-unit square per grid cell, the idiom Superset's own wordmark path
-  // uses, so adjacent cells merge into the four bracket strokes when filled.
-  SUPERSET:
-    "M12 0H24V12H12ZM24 0H36V12H24ZM60 0H72V12H60ZM72 0H84V12H72ZM96 0H108V12H96ZM108 0H120V12H108ZM144 0H156V12H144ZM156 0H168V12H156ZM12 12H24V24H12ZM60 12H72V24H60ZM108 12H120V24H108ZM156 12H168V24H156ZM0 24H12V36H0ZM48 24H60V36H48ZM120 24H132V36H120ZM168 24H180V36H168ZM0 36H12V48H0ZM48 36H60V48H48ZM120 36H132V48H120ZM168 36H180V48H168ZM12 48H24V60H12ZM60 48H72V60H60ZM108 48H120V60H108ZM156 48H168V60H156ZM12 60H24V72H12ZM24 60H36V72H24ZM60 60H72V72H60ZM72 60H84V72H72ZM96 60H108V72H96ZM108 60H120V72H108ZM144 60H156V72H144ZM156 60H168V72H156Z",
 };
 
-const CONDUCTOR_MARK_PATHS = [
-  "M4.57422 63.6992H22.373V37.251H4.57422C3.58785 37.2511 2.78711 38.0517 2.78711 39.0381V61.9121C2.78725 62.8984 3.58794 63.6991 4.57422 63.6992Z",
-  "M36.5977 63.6992H18.7988V37.251H36.5977C37.584 37.2511 38.3848 38.0517 38.3848 39.0381V61.9121C38.3846 62.8984 37.5839 63.6991 36.5977 63.6992Z",
-  "M4.57422 100.297H22.373V73.8486H4.57422C3.58785 73.8488 2.78711 74.6493 2.78711 75.6357V98.5098C2.78725 99.496 3.58794 100.297 4.57422 100.297Z",
-  "M36.5977 100.297H18.7988V73.8486H36.5977C37.584 73.8488 38.3848 74.6493 38.3848 75.6357V98.5098C38.3846 99.496 37.5839 100.297 36.5977 100.297Z",
-  "M4.57422 136.896H22.373V110.447H4.57422C3.58785 110.447 2.78711 111.248 2.78711 112.234V135.108C2.78725 136.095 3.58794 136.895 4.57422 136.896Z",
-  "M36.5977 136.896H18.7988V110.447H36.5977C37.584 110.447 38.3848 111.248 38.3848 112.234V135.108C38.3846 136.095 37.5839 136.895 36.5977 136.896Z",
-  "M22.873 173.493H40.6719V147.045H22.873C21.8867 147.045 21.0859 147.846 21.0859 148.832V171.706C21.0861 172.692 21.8868 173.493 22.873 173.493Z",
-  "M37.0967 173.493V147.045H58.9707V173.493H37.0967Z",
-  "M55.3955 173.493V147.045H77.2695V173.493H55.3955Z",
-  "M91.4941 173.493H73.6953V147.045H91.4941C92.4805 147.045 93.2812 147.846 93.2812 148.832V171.706C93.2811 172.692 92.4804 173.493 91.4941 173.493Z",
-  "M77.7695 136.896H95.5684V110.447H77.7695C76.7832 110.447 75.9824 111.248 75.9824 112.234V135.108C75.9826 136.095 76.7833 136.895 77.7695 136.896Z",
-  "M109.793 136.896H91.9941V110.447H109.793C110.779 110.447 111.58 111.248 111.58 112.234V135.108C111.58 136.095 110.779 136.895 109.793 136.896Z",
-  "M22.873 27.1006H40.6719V0.652344H22.873C21.8867 0.652488 21.0859 1.45305 21.0859 2.43945V25.3135C21.0861 26.2998 21.8868 27.1004 22.873 27.1006Z",
-  "M37.0967 27.1006V0.652344H58.9707V27.1006H37.0967Z",
-  "M55.3955 27.1006V0.652344H77.2695V27.1006H55.3955Z",
-  "M73.6963 27.1006V0.652344H95.5703V27.1006H73.6963Z",
-  "M109.793 27.1006H91.9941V0.652344H109.793C110.779 0.652488 111.58 1.45305 111.58 2.43945V25.3135C111.58 26.2998 110.779 27.1004 109.793 27.1006Z",
-  "M77.7695 63.6992H95.5684V37.251H77.7695C76.7832 37.2511 75.9824 38.0517 75.9824 39.0381V61.9121C75.9826 62.8984 76.7833 63.6991 77.7695 63.6992Z",
-  "M109.793 63.6992H91.9941V37.251H109.793C110.779 37.2511 111.58 38.0517 111.58 39.0381V61.9121C111.58 62.8984 110.779 63.6991 109.793 63.6992Z",
-];
-
-/*
- * Google's own "G" sign-in mark, verbatim from the artwork Google publishes
- * for identity buttons (trademark of Google LLC), on its 18-unit canvas. Four
- * filled layers rather than one path, because the mark carries its own
- * colours. Do not restyle or recolour.
- */
 const GOOGLE_MARK_LAYERS = [
   {
     fill: "#4285F4",
@@ -185,166 +108,6 @@ const GOOGLE_MARK_LAYERS = [
     path: "M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z",
   },
 ];
-
-/*
- * Google Calendar's flat product icon, verbatim from the mark Google
- * distributes (the 2020 icon; trademark of Google LLC). It is the one mark
- * that carries its own colours rather than a single brand colour, so it is a
- * list of filled layers instead of one path. Geometry as published: a 200×200
- * box with the artwork offset by 3.75 on each axis, which the component
- * reproduces with the same translate. Do not restyle or recolour.
- */
-const GOOGLE_CALENDAR_MARK_LAYERS = [
-  {
-    fill: "#ffffff",
-    path: "M148.882,43.618l-47.368-5.263l-57.895,5.263L38.355,96.25l5.263,52.632l52.632,6.579l52.632-6.579l5.263-53.947L148.882,43.618z",
-  },
-  {
-    fill: "#1a73e8",
-    path: "M65.211,125.276c-3.934-2.658-6.658-6.539-8.145-11.671l9.132-3.763c0.829,3.158,2.276,5.605,4.342,7.342c2.053,1.737,4.553,2.592,7.474,2.592c2.987,0,5.553-0.908,7.697-2.724s3.224-4.132,3.224-6.934c0-2.868-1.132-5.211-3.395-7.026s-5.105-2.724-8.5-2.724h-5.276v-9.039H76.5c2.921,0,5.382-0.789,7.382-2.368c2-1.579,3-3.737,3-6.487c0-2.447-0.895-4.395-2.684-5.855s-4.053-2.197-6.803-2.197c-2.684,0-4.816,0.711-6.395,2.145s-2.724,3.197-3.447,5.276l-9.039-3.763c1.197-3.395,3.395-6.395,6.618-8.987c3.224-2.592,7.342-3.895,12.342-3.895c3.697,0,7.026,0.711,9.974,2.145c2.947,1.434,5.263,3.421,6.934,5.947c1.671,2.539,2.5,5.382,2.5,8.539c0,3.224-0.776,5.947-2.329,8.184c-1.553,2.237-3.461,3.947-5.724,5.145v0.539c2.987,1.25,5.421,3.158,7.342,5.724c1.908,2.566,2.868,5.632,2.868,9.211s-0.908,6.776-2.724,9.579c-1.816,2.803-4.329,5.013-7.513,6.618c-3.197,1.605-6.789,2.421-10.776,2.421C73.408,129.263,69.145,127.934,65.211,125.276z",
-  },
-  {
-    fill: "#1a73e8",
-    path: "M121.25,79.961l-9.974,7.25l-5.013-7.605l17.987-12.974h6.895v61.197h-9.895L121.25,79.961z",
-  },
-  {
-    fill: "#ea4335",
-    path: "M148.882,196.25l47.368-47.368l-23.684-10.526l-23.684,10.526l-10.526,23.684L148.882,196.25z",
-  },
-  {
-    fill: "#34a853",
-    path: "M33.092,172.566l10.526,23.684h105.263v-47.368H43.618L33.092,172.566z",
-  },
-  {
-    fill: "#4285f4",
-    path: "M12.039-3.75C3.316-3.75-3.75,3.316-3.75,12.039v136.842l23.684,10.526l23.684-10.526V43.618h105.263l10.526-23.684L148.882-3.75H12.039z",
-  },
-  {
-    fill: "#188038",
-    path: "M-3.75,148.882v31.579c0,8.724,7.066,15.789,15.789,15.789h31.579v-47.368H-3.75z",
-  },
-  {
-    fill: "#fbbc04",
-    path: "M148.882,43.618v105.263h47.368V43.618l-23.684-10.526L148.882,43.618z",
-  },
-  {
-    fill: "#1967d2",
-    path: "M196.25,43.618V12.039c0-8.724-7.066-15.789-15.789-15.789h-31.579v47.368H196.25z",
-  },
-];
-
-/*
- * The macOS Calendar app icon's flat anatomy — a white tile, the red header
- * with its JUL, and the thin 17 the marketing icon always shows — drawn here
- * as layers, because Apple distributes the icon only as raster app artwork
- * and ships no vector mark to reproduce (a trademark of Apple Inc.). Like
- * Google Calendar's, it carries its own colours and is never recoloured to a
- * theme. A 40×40 box, with the band depth, letter and digit extents, weights,
- * and colours measured off Apple's 512px artwork.
- */
-const APPLE_CALENDAR_MARK_LAYERS = [
-  {
-    fill: "#ffffff",
-    path: "M9 0H31A9 9 0 0 1 40 9V31A9 9 0 0 1 31 40H9A9 9 0 0 1 0 31V9A9 9 0 0 1 9 0Z",
-  },
-  {
-    fill: "#f4574e",
-    path: "M9 0H31A9 9 0 0 1 40 9V12.6H0V9A9 9 0 0 1 9 0Z",
-  },
-  {
-    fill: "#ffffff",
-    path: "M16.4 4V6.6A2 2 0 0 1 12.4 6.6V5.9H13.7V6.6A0.7 0.7 0 0 0 15.1 6.6V4ZM18 4H19.3V6.4A0.9 0.9 0 0 0 21.1 6.4V4H22.4V6.4A2.2 2.2 0 0 1 18 6.4ZM24.2 4H25.5V7.3H27.6V8.6H24.2Z",
-  },
-  {
-    fill: "#2d2d2d",
-    path: "M15.8 16.4V34H14.2V19.1L11.8 20.8V19.1L14.6 16.4ZM19.4 16.4H27.8V17.9L22.6 34H20.9L26 18H19.4Z",
-  },
-];
-
-/*
- * Gemini's aurora sparkle, verbatim from the vector the Gemini web app
- * inlines at gemini.google.com (trademark of Google LLC): the rounded
- * four-pointed star masks a field of gaussian-blurred colour blobs, so the
- * artwork is a mask path plus filtered layers rather than one path. Each
- * layer keeps the published blur radius and filter region; the published
- * alpha mask is reproduced as a white luminance mask, which passes exactly
- * the same pixels. One green blob is deliberately present twice — the
- * published artwork stacks it to deepen that lobe.
- */
-const GEMINI_CLI_MARK_MASK_PATH =
-  "M32.447 0c.68 0 1.273.465 1.439 1.125a38.904 38.904 0 001.999 5.905c2.152 5 5.105 9.376 8.854 13.125 3.751 3.75 8.126 6.703 13.125 8.855a38.98 38.98 0 005.906 1.999c.66.166 1.124.758 1.124 1.438 0 .68-.464 1.273-1.125 1.439a38.902 38.902 0 00-5.905 1.999c-5 2.152-9.375 5.105-13.125 8.854-3.749 3.751-6.702 8.126-8.854 13.125a38.973 38.973 0 00-2 5.906 1.485 1.485 0 01-1.438 1.124c-.68 0-1.272-.464-1.438-1.125a38.913 38.913 0 00-2-5.905c-2.151-5-5.103-9.375-8.854-13.125-3.75-3.749-8.125-6.702-13.125-8.854a38.973 38.973 0 00-5.905-2A1.485 1.485 0 010 32.448c0-.68.465-1.272 1.125-1.438a38.903 38.903 0 005.905-2c5-2.151 9.376-5.104 13.125-8.854 3.75-3.749 6.703-8.125 8.855-13.125a38.972 38.972 0 001.999-5.905A1.485 1.485 0 0132.447 0z";
-
-const GEMINI_CLI_MARK_LAYERS = [
-  {
-    fill: "#FFE432",
-    blur: 2.46,
-    region: { x: -19.824, y: 13.152, width: 39.274, height: 43.217 },
-    path: "M-5.859 50.734c7.498 2.663 16.116-2.33 19.249-11.152 3.133-8.821-.406-18.131-7.904-20.794-7.498-2.663-16.116 2.33-19.25 11.151-3.132 8.822.407 18.132 7.905 20.795z",
-  },
-  {
-    fill: "#FC413D",
-    blur: 11.891,
-    region: { x: -15.001, y: -40.257, width: 84.868, height: 85.688 },
-    path: "M27.433 21.649c10.3 0 18.651-8.535 18.651-19.062 0-10.528-8.35-19.062-18.651-19.062S8.78-7.94 8.78 2.587c0 10.527 8.35 19.062 18.652 19.062z",
-  },
-  {
-    fill: "#00B95C",
-    blur: 10.109,
-    region: { x: -20.776, y: 11.927, width: 79.454, height: 90.916 },
-    path: "M20.184 82.608c10.753-.525 18.918-12.244 18.237-26.174-.68-13.93-9.95-24.797-20.703-24.271C6.965 32.689-1.2 44.407-.519 58.337c.681 13.93 9.95 24.797 20.703 24.271z",
-  },
-  {
-    fill: "#00B95C",
-    blur: 10.109,
-    region: { x: -20.776, y: 11.927, width: 79.454, height: 90.916 },
-    path: "M20.184 82.608c10.753-.525 18.918-12.244 18.237-26.174-.68-13.93-9.95-24.797-20.703-24.271C6.965 32.689-1.2 44.407-.519 58.337c.681 13.93 9.95 24.797 20.703 24.271z",
-  },
-  {
-    fill: "#00B95C",
-    blur: 10.109,
-    region: { x: -19.845, y: 15.459, width: 79.731, height: 81.505 },
-    path: "M30.954 74.181c9.014-5.485 11.427-17.976 5.389-27.9-6.038-9.925-18.241-13.524-27.256-8.04-9.015 5.486-11.428 17.977-5.39 27.902 6.04 9.924 18.242 13.523 27.257 8.038z",
-  },
-  {
-    fill: "#3186FF",
-    blur: 9.606,
-    region: { x: 29.832, y: -11.552, width: 75.117, height: 73.758 },
-    path: "M67.391 42.993c10.132 0 18.346-7.91 18.346-17.666 0-9.757-8.214-17.667-18.346-17.667s-18.346 7.91-18.346 17.667c0 9.757 8.214 17.666 18.346 17.666z",
-  },
-  {
-    fill: "#FBBC04",
-    blur: 8.706,
-    region: { x: -38.583, y: -16.253, width: 78.135, height: 78.758 },
-    path: "M-13.065 40.944c9.33 7.094 22.959 4.869 30.442-4.972 7.483-9.84 5.987-23.569-3.343-30.663C4.704-1.786-8.924.439-16.408 10.28c-7.483 9.84-5.986 23.57 3.343 30.664z",
-  },
-  {
-    fill: "#3186FF",
-    blur: 7.775,
-    region: { x: 8.107, y: -5.966, width: 78.877, height: 77.539 },
-    path: "M34.74 51.43c11.135 7.656 25.896 5.524 32.968-4.764 7.073-10.287 3.779-24.832-7.357-32.488C49.215 6.52 34.455 8.654 27.382 18.94c-7.072 10.288-3.779 24.833 7.357 32.49z",
-  },
-  {
-    fill: "#749BFF",
-    blur: 6.957,
-    region: { x: 13.587, y: -18.488, width: 56.272, height: 51.81 },
-    path: "M54.984-2.336c2.833 3.852-.808 11.34-8.131 16.727-7.324 5.387-15.557 6.631-18.39 2.78-2.833-3.853.807-11.342 8.13-16.728 7.324-5.387 15.558-6.631 18.39-2.78z",
-  },
-  {
-    fill: "#FC413D",
-    blur: 5.876,
-    region: { x: -15.526, y: -31.297, width: 70.856, height: 69.306 },
-    path: "M31.727 16.104C43.053 5.598 46.94-8.626 40.41-15.666c-6.53-7.04-21.006-4.232-32.332 6.274s-15.214 24.73-8.683 31.77c6.53 7.04 21.006 4.232 32.332-6.274z",
-  },
-  {
-    fill: "#FFEE48",
-    blur: 7.273,
-    region: { x: -14.168, y: 20.964, width: 55.501, height: 51.571 },
-    path: "M8.51 53.838c6.732 4.818 14.46 5.55 17.262 1.636 2.802-3.915-.384-10.994-7.116-15.812-6.731-4.818-14.46-5.55-17.261-1.636-2.802 3.915.383 10.994 7.115 15.812z",
-  },
-];
-
-const CLOUD_BADGE_PATH =
-  "M4.5 14a4.5 4.5 0 0 1-1.259-8.82 7 7 0 0 1 13.518 0A4.5 4.5 0 0 1 15.5 14z";
 
 // ---------- Emission ----------
 const CHECK_ONLY = process.argv.includes("--check");
@@ -396,7 +159,6 @@ function motionTokensCss() {
   --row-fan: ${ROW_FAN_PX}px;
   --row-fan-limit: ${ROW_FAN_LIMIT};
   --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
-  --bubble-lift: ${px(SURFACE_GEOMETRY_PX.BUBBLE_LIFT)};
   --caption-max: ${px(SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT)};
   --voice-band-inset: ${px(SURFACE_GEOMETRY_PX.VOICE_BAND_INSET)};
   --panel-width: ${px(SURFACE_GEOMETRY_PX.PANEL_WIDTH)};
@@ -435,9 +197,6 @@ export const VOICE_CAPTION_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_
 /** The one gap between the strip, each band grown below it, and the shape's
  * bottom edge. CSS: \`--voice-band-inset\`. */
 export const VOICE_BAND_INSET = ${SURFACE_GEOMETRY_PX.VOICE_BAND_INSET};
-
-/** Expanded panel width. CSS: \`--panel-width\`. */
-export const PANEL_WIDTH = ${SURFACE_GEOMETRY_PX.PANEL_WIDTH};
 `;
 }
 
@@ -450,109 +209,23 @@ function providerMarkPathsTs() {
   const pathConsts = Object.entries(MARK_PATHS)
     .map(([name, path]) => tsStringConst(`${name}_PATH`, path))
     .join("\n\n");
-  const conductor = CONDUCTOR_MARK_PATHS.map((path) => `  "${path}",`).join("\n");
   // One property per line, matching the shape Biome would format these to —
   // the emitted file is committed and linted, so the two must agree exactly.
-  const layersTs = (layers) =>
-    layers
-      .map((layer) => `  {\n    fill: "${layer.fill}",\n    path: "${layer.path}",\n  },`)
-      .join("\n");
-  const google = layersTs(GOOGLE_MARK_LAYERS);
-  const googleCalendar = layersTs(GOOGLE_CALENDAR_MARK_LAYERS);
-  const appleCalendar = layersTs(APPLE_CALENDAR_MARK_LAYERS);
-  const gemini = GEMINI_CLI_MARK_LAYERS.map(
-    (layer) =>
-      `  {\n    fill: "${layer.fill}",\n    blur: ${layer.blur},\n    region: { x: ${layer.region.x}, y: ${layer.region.y}, width: ${layer.region.width}, height: ${layer.region.height} },\n    path: "${layer.path}",\n  },`,
+  const google = GOOGLE_MARK_LAYERS.map(
+    (layer) => `  {\n    fill: "${layer.fill}",\n    path: "${layer.path}",\n  },`,
   ).join("\n");
   return `// Generated by design/generate-surface-shared.mjs. Do not edit by hand: change
 // the tables in that script and re-run it.
 //
-// SVG path data for every provider mark both surfaces draw. The React that
-// traces them stays in each app, because the desktop ships marks the marketing
-// mock does not, and a shared component would pull that into the web bundle.
+// SVG path data for the marks a sign-in names itself by. The React that traces
+// them stays in each app.
 
 ${pathConsts}
 
-export const CONDUCTOR_MARK_PATHS = [
-${conductor}
-] as const;
-
-// The marks that carry their own colours. Google's "G" sign-in mark, drawn as
-// filled layers in an 18×18 box.
+// Google's "G" sign-in mark, drawn as filled layers in an 18×18 box.
 export const GOOGLE_MARK_LAYERS: readonly { fill: string; path: string }[] = [
 ${google}
 ];
-
-// Google Calendar's flat product icon, drawn as filled layers in a 200×200 box
-// offset by 3.75 on each axis.
-export const GOOGLE_CALENDAR_MARK_LAYERS: readonly { fill: string; path: string }[] = [
-${googleCalendar}
-];
-
-// The macOS Calendar app icon's flat anatomy in a 40×40 box, drawn in the
-// generator because Apple ships no vector mark to reproduce.
-export const APPLE_CALENDAR_MARK_LAYERS: readonly { fill: string; path: string }[] = [
-${appleCalendar}
-];
-
-// Gemini's aurora sparkle: the rounded star masks a field of blurred colour
-// blobs, so it is a mask path plus filtered layers rather than one path.
-${tsStringConst("GEMINI_CLI_MARK_MASK_PATH", GEMINI_CLI_MARK_MASK_PATH)}
-
-export const GEMINI_CLI_MARK_LAYERS: readonly {
-  fill: string;
-  blur: number;
-  region: { x: number; y: number; width: number; height: number };
-  path: string;
-}[] = [
-${gemini}
-];
-
-${tsStringConst("CLOUD_BADGE_PATH", CLOUD_BADGE_PATH)}
-`;
-}
-
-function sessionDisplayTs() {
-  const labels = Object.entries(URGENCY_LABEL)
-    .map(([key, label]) => `  [SESSION_URGENCY.${key}]: "${label}",`)
-    .join("\n");
-  const priority = URGENCY_PRIORITY.map((key) => `  SESSION_URGENCY.${key},`).join("\n");
-  return `// Generated by design/generate-surface-shared.mjs. Do not edit by hand: change
-// the tables in that script and re-run it.
-//
-// The label a row states for each urgency and the order the surface draws them
-// in. The value set itself is \`@sidecar/session\`'s, because a fixture
-// snapshot and a session model both name it; only the wording and the ranking
-// are decisions this package gets to make, and they live here so the marketing
-// mock cannot advertise a different sentence or a different top row than the
-// product draws.
-
-import { SESSION_URGENCY, type SessionUrgency } from "@sidecar/session";
-
-const URGENCY_LABEL = {
-${labels}
-} as const;
-
-/** The sentence a row states for this urgency when the provider reported nothing else. */
-export function urgencyLabel(urgency: SessionUrgency): string {
-  return URGENCY_LABEL[urgency];
-}
-
-/** The urgency order the surface reads top-down and the badge collapses to. */
-const URGENCY_PRIORITY: readonly SessionUrgency[] = [
-${priority}
-];
-
-/** Most urgent first, and within one urgency the one that moved most recently. */
-export function compareSessionsByUrgency(
-  left: { urgency: SessionUrgency; lastActivityAt: number },
-  right: { urgency: SessionUrgency; lastActivityAt: number },
-): number {
-  return (
-    URGENCY_PRIORITY.indexOf(left.urgency) - URGENCY_PRIORITY.indexOf(right.urgency) ||
-    right.lastActivityAt - left.lastActivityAt
-  );
-}
 `;
 }
 
@@ -560,7 +233,6 @@ const outputs = [
   ["motion-tokens.css", motionTokensCss()],
   ["motion-tokens.ts", motionTokensTs()],
   ["provider-mark-paths.ts", providerMarkPathsTs()],
-  ["session-display.ts", sessionDisplayTs()],
 ];
 
 for (const [name, content] of outputs) {

@@ -87,18 +87,6 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
-/** Two arrows chasing each other: reads the list again, right now. */
-export function RefreshIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M20.8 5.2v4.6h-4.6" />
-      <path d="M3.2 18.8v-4.6h4.6" />
-      <path d="M4.5 9.8a7.8 7.8 0 0 1 12.9-2.9l3.4 2.9" />
-      <path d="M19.5 14.2a7.8 7.8 0 0 1-12.9 2.9l-3.4-2.9" />
-    </Glyph>
-  );
-}
-
 /** An arrow turning back on itself: returns a setting to its default. */
 export function ResetIcon(): React.JSX.Element {
   return (
@@ -129,18 +117,6 @@ export function PopUpIcon(): React.JSX.Element {
   );
 }
 
-/** A plug: the services Luke connects to beyond the agents themselves. */
-export function PlugIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M9 2.6v5.2" />
-      <path d="M15 2.6v5.2" />
-      <path d="M6 7.8h12v4.4a4.4 4.4 0 0 1-4.4 4.4h-3.2A4.4 4.4 0 0 1 6 12.2Z" />
-      <path d="M12 16.6v4.8" />
-    </Glyph>
-  );
-}
-
 /** Points into a page: the row it sits on opens one. */
 export function ChevronIcon(): React.JSX.Element {
   return (
@@ -155,15 +131,6 @@ export function BackIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
       <path d="m14.6 5.8-6.2 6.2 6.2 6.2" />
-    </Glyph>
-  );
-}
-
-/** A project's folder: where a conversational ask creates new workspaces. */
-export function FolderIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M3.4 6.2a1.8 1.8 0 0 1 1.8-1.8h4l2 2.4h7.6a1.8 1.8 0 0 1 1.8 1.8v9.2a1.8 1.8 0 0 1-1.8 1.8H5.2a1.8 1.8 0 0 1-1.8-1.8Z" />
     </Glyph>
   );
 }
@@ -354,17 +321,6 @@ export function DocumentIcon(): React.JSX.Element {
       <path d="M13.8 2.9v4.8h4.8" />
       <path d="M8.2 12.4h7.6" />
       <path d="M8.2 16.2h7.6" />
-    </Glyph>
-  );
-}
-
-/** A closed notebook: Luke's own memory, searched, read, or written to. */
-export function BookIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M5.2 4.6a1.8 1.8 0 0 1 1.8-1.8h11.8v15.6H7a1.8 1.8 0 0 0-1.8 1.8Z" />
-      <path d="M5.2 20.2a1.8 1.8 0 0 0 1.8 1.8h11.8v-3.6" />
-      <path d="M9.4 7.4h6" />
     </Glyph>
   );
 }

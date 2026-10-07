@@ -10,9 +10,8 @@ import { planningActRows } from "./planning-acts";
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, introduction: false };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const INTRODUCTION: ActSender = { ...PANEL, introduction: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const REQUEST = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
@@ -129,20 +128,18 @@ it.effect("Choose folder answers the folder picked, or null when the picker was 
   }),
 );
 
-it.effect("neither the voice window nor the takeover reaches the plans", () =>
+it.effect("the voice window does not reach the plans", () =>
   Effect.gen(function* () {
     const f = fixture();
 
-    for (const sender of [VOICE, INTRODUCTION]) {
-      const selected = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_SELECT, payload: { planId: PLAN_ID } },
-        sender,
-      );
-      assert.deepEqual(selected, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.PLANNING_SELECT].refusal,
-      });
-    }
+    const selected = yield* f.router.performAct(
+      { kind: ACT_KIND.PLANNING_SELECT, payload: { planId: PLAN_ID } },
+      VOICE,
+    );
+    assert.deepEqual(selected, {
+      status: ACT_OUTCOME_STATUS.REFUSED,
+      reason: ACT[ACT_KIND.PLANNING_SELECT].refusal,
+    });
     assert.deepEqual(f.asked, []);
   }),
 );
@@ -157,10 +154,8 @@ it.effect(
       assert.equal(talked.status, ACT_OUTCOME_STATUS.DONE);
       assert.deepEqual(f.talked, [PLAN_ID]);
 
-      for (const sender of [VOICE, INTRODUCTION]) {
-        const refused = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, sender);
-        assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
-      }
+      const refused = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, VOICE);
+      assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
       f.view.activePlanId = undefined;
       const unopened = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, PANEL);
       assert.deepEqual(unopened, {

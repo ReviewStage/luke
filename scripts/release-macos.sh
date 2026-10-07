@@ -10,13 +10,7 @@ if [[ -z "${LUKE_CODESIGN_IDENTITY:-}" ]]; then
     printf 'error: LUKE_CODESIGN_IDENTITY must name a Developer ID Application identity\n' >&2
     exit 1
 fi
-# The packaging step bakes this into the app bundle; without it the DMG would
-# ship with no Google Calendar sign-in at all, silently. See .github/RELEASE.md.
-if [[ -z "${GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET:-}" ]]; then
-    printf 'error: GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET must hold the Google Calendar client secret\n' >&2
-    exit 1
-fi
-# Baked into the renderer the same way; without it the recorder never starts,
+# Baked into the renderer at packaging; without it the recorder never starts,
 # and a release that records nothing is indistinguishable from one nobody
 # switched on. See .github/RELEASE.md.
 if [[ -z "${POSTHOG_PROJECT_API_KEY:-}" ]]; then

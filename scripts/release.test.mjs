@@ -119,12 +119,7 @@ test("hosted releases require and package every desktop integration credential",
     workflow.indexOf("- name: Verify signed application"),
   );
 
-  for (const credential of [
-    "GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET",
-    "POSTHOG_PROJECT_API_KEY",
-    "SENTRY_AUTH_TOKEN",
-    "SENTRY_DSN",
-  ]) {
+  for (const credential of ["POSTHOG_PROJECT_API_KEY", "SENTRY_AUTH_TOKEN", "SENTRY_DSN"]) {
     const secretMapping = new RegExp(`${credential}: \\\${{ secrets\\.${credential} }}`);
     assert.match(credentialCheck, secretMapping);
     assert.match(releaseBuild, secretMapping);

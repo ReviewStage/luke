@@ -1,6 +1,6 @@
 import type { ProductSettingValue } from "@sidecar/analytics";
 import type { AppGuideSetting, AppSettingId } from "@sidecar/guide";
-import type { SessionFilter, WorkspaceAgentDefaults, WorkspaceProviderId } from "@sidecar/session";
+import type { WorkspaceAgentDefaults, WorkspaceProviderId } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeStatus } from "./status.js";
 
@@ -9,27 +9,21 @@ export const SETTINGS_PAGE = {
   VOICE: "voice",
   APPEARANCE: "appearance",
   SHORTCUTS: "shortcuts",
-  CONNECTIONS: "connections",
-  /** What Luke has saved: his notebook read from the service, drawn and never written here. */
-  MEMORY: "memory",
 } as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];
 
 /**
- * Which run of rows inside a page draws a setting. A page is not one list: the
- * Connections page draws its workspace choice, its key sync, its providers, and
- * its calendars under headings of their own, and a setting has to say which of
- * them it stands in rather than leave the section to pick its own members.
+ * Which run of rows inside a page draws a setting. A page is not always one
+ * list: the Voice page draws its controls below the permission that lets Luke
+ * listen, and a setting has to say which run it stands in rather than leave
+ * the section to pick its own members.
  */
 export const SETTING_SECTION = {
   /** The page's own plain run of rows, for a page that has only one. */
   MAIN: "main",
   /** The voice controls, below the permission that lets Luke listen. */
   CONTROLS: "controls",
-  WORKSPACES: "workspaces",
-  PROVIDERS: "providers",
-  CALENDAR: "calendar",
 } as const;
 
 export type SettingSection = (typeof SETTING_SECTION)[keyof typeof SETTING_SECTION];
@@ -38,7 +32,6 @@ export const SETTINGS_RESET_SCOPE = {
   VOICE: "voice",
   APPEARANCE: "appearance",
   SHORTCUTS: "shortcuts",
-  WORKSPACES: "workspaces",
 } as const;
 
 export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETTINGS_RESET_SCOPE];
@@ -56,7 +49,6 @@ export const SETTING_SIDE_EFFECT = {
   TALK_HOTKEY: "talk-hotkey",
   STOP_HOTKEY: "stop-hotkey",
   MEDIA_DUCK: "media-duck",
-  ANNOUNCEMENT_HOLD: "announcement-hold",
 } as const;
 
 export type SettingSideEffectId = (typeof SETTING_SIDE_EFFECT)[keyof typeof SETTING_SIDE_EFFECT];
@@ -78,7 +70,6 @@ export type StoredSettingValue =
   | string
   | number
   | boolean
-  | readonly SessionFilter[]
   | WorkspaceAgentDefaults
   | Readonly<Partial<Record<WorkspaceProviderId, string>>>
   | undefined;
@@ -89,18 +80,6 @@ export type AppSettingGuideSettings = (field: string) => StoredSettingValue;
 export interface SettingGuardResult<Value> {
   valid: boolean;
   value: Value;
-}
-
-/**
- * Declares a setting whose value is a map of per-key entries, so one entry can
- * be written under the store's own lock. A caller that read the map, merged an
- * entry, and wrote the whole thing back would drop any entry saved while its
- * write was in flight — the lost update `#serialize` exists to prevent.
- */
-export interface SettingEntryDefinition<Value> {
-  isKey(value: UnparsedWireValue): boolean;
-  /** Whether the stored entry already says what a write would say. */
-  same(current: Value | undefined, next: Value | undefined): boolean;
 }
 
 /**
@@ -118,20 +97,8 @@ export interface SettingsVisibility {
    * holds only the way in.
    */
   voiceControlsDrawn: boolean;
-  /** Whether the Account section — and so the Provider section — stands. */
+  /** Whether the Account section stands. */
   accountDrawn: boolean;
-  /**
-   * The providers the workspace rows may name: the ones currently offering
-   * projects, plus a stored default that is not — a choice the row cannot show
-   * is one that can be neither seen nor cleared. Only a provider actually
-   * offering projects draws a Default project row of its own, which is what
-   * `offersProjects` says.
-   */
-  workspaceProviders: readonly {
-    id: WorkspaceProviderId;
-    name: string;
-    offersProjects: boolean;
-  }[];
 }
 
 /** One option a row's control draws, which is not always what the guide says aloud. */
@@ -192,12 +159,6 @@ export interface AppSettingSchemaEntry<
   ) => AppGuideSetting | readonly AppGuideSetting[] | undefined;
   /** Whether its row is drawn right now. Absent means always drawn. */
   readonly visible?: ((view: SettingsVisibility) => boolean) | undefined;
-  /**
-   * Whether one of its guide ids is drawn right now, for the one field whose
-   * entries stand under conditions of their own. Never declared beside
-   * `visible`: a row cannot answer to two records of the same fact.
-   */
-  readonly visibleById?: Readonly<Partial<Record<Id, (view: SettingsVisibility) => boolean>>>;
   readonly control?: SettingControl<Value> | undefined;
   /** The value a spoken change's word means, for an adjustable setting. */
   readonly spokenValue?: ((value: string) => Value | undefined) | undefined;

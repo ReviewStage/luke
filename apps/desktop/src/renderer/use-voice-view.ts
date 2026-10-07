@@ -54,6 +54,20 @@ function isRunProfile(profile: string): profile is RunProfile {
   return RUN_PROFILES.has(profile);
 }
 
+/**
+ * What the speaking evidence run captions the reply with. A capture run never
+ * opens a call, so there are no words to draw unless the fixture supplies
+ * them — and it must, or the caption strip ships unphotographed. Synthetic,
+ * like every fixture, and shaped like a reply of several messages: the first
+ * long enough to wrap, and two more behind it, so the wrapped form of the
+ * strip and the stack of segments it draws are both in the frame.
+ */
+export const FIXTURE_SPEAKING_CAPTIONS: readonly string[] = [
+  "The plan now says the parser keeps its own cache, the migration runs once at launch, and the old reader stays until every install has moved over.",
+  "Two questions are still open in the plan.",
+  "Say the word and we can settle the first one now.",
+];
+
 /** What the profile stages, or nothing for the idle run and any word this build does not know. */
 export function fixtureVoice(profile: string): FixtureVoice | undefined {
   return isRunProfile(profile) ? FIXTURE_VOICES.get(profile) : undefined;
@@ -101,8 +115,6 @@ export function voiceNoticeToShow(input: {
  * their own.
  */
 export type VoiceActivity = { readonly [voice in WaveformVoice]: boolean };
-
-export const NO_VOICE_ACTIVITY: VoiceActivity = { developer: false, luke: false };
 
 /**
  * A fresh object per report even at a repeated loudness, so a hangover

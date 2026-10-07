@@ -20,18 +20,14 @@ if [[ ! -x "$APP_EXECUTABLE" ]]; then
     exit 1
 fi
 # The captures below launch the packaged app, so they prove the bundle runs but
-# not that electron-builder carried everything into it: a helper, the addon, or
+# not that electron-builder carried everything into it: a helper or
 # the icon can be missing from a bundle whose panel still paints.
-for helper in mac-screen-geometry mac-talk-key; do
+for helper in mac-talk-key; do
     if [[ ! -x "$PACKAGED_APP/Contents/Resources/$helper" ]]; then
         printf 'error: packaged app is missing the %s helper\n' "$helper" >&2
         exit 1
     fi
 done
-if [[ ! -f "$PACKAGED_APP/Contents/Resources/mac-stationary-window.node" ]]; then
-    printf 'error: packaged app is missing the mac-stationary-window.node addon\n' >&2
-    exit 1
-fi
 BUNDLE_ICON_FILE=$(plutil -extract CFBundleIconFile raw -o - "$PACKAGED_APP/Contents/Info.plist")
 PACKAGED_ICON="$PACKAGED_APP/Contents/Resources/$BUNDLE_ICON_FILE"
 if [[ ! -f "$PACKAGED_ICON" ]]; then
@@ -60,18 +56,17 @@ capture_evidence() {
 # The window opens on Plans: the fixture's synthetic plan list, with no plan
 # open.
 capture_evidence expanded --expanded --capture-evidence "$SIDECAR_EXPANDED_EVIDENCE_PATH"
-capture_evidence compact --compact --capture-evidence "$SIDECAR_COMPACT_EVIDENCE_PATH"
 # Luke speaking: his meter beside his talking face in the sidebar, and his
 # words captioned over the work column.
-capture_evidence speaking --profile speaking --compact --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
+capture_evidence speaking --profile speaking --capture-evidence "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 # The speaking run with the Mac's output off: the captions are forced on and
 # the volume hint stands in its own band below the caption block with its Got
 # it button. The state is the profile's own — a capture run reads no system
 # volume — so the frame is deterministic like every other.
-capture_evidence muted --profile muted --compact --capture-evidence "$SIDECAR_MUTED_EVIDENCE_PATH"
+capture_evidence muted --profile muted --capture-evidence "$SIDECAR_MUTED_EVIDENCE_PATH"
 # Both speakers heard at once, the full-duplex frame, both drawn from the
 # profile's staged levels.
-capture_evidence duplex --profile duplex --compact --capture-evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH"
+capture_evidence duplex --profile duplex --capture-evidence "$SIDECAR_DUPLEX_EVIDENCE_PATH"
 # The panel's Plans tab over the fixture's synthetic plan: the open plan's
 # saved document with its assumption checklist, scrolled inside the panel's
 # own ceiling, and the idle microphone row under it.
@@ -113,11 +108,9 @@ validate_evidence() {
 }
 
 # Every capture is Luke's one app window at the size it opens at
-# (DESKTOP_WINDOW in apps/desktop/src/main/window/panel-manager.ts): the
-# compact flag no longer changes the window, only what is drawn in it.
+# (DESKTOP_WINDOW in apps/desktop/src/main/window/panel-manager.ts).
 for evidence_path in \
     "$SIDECAR_EXPANDED_EVIDENCE_PATH" \
-    "$SIDECAR_COMPACT_EVIDENCE_PATH" \
     "$SIDECAR_SPEAKING_EVIDENCE_PATH" \
     "$SIDECAR_MUTED_EVIDENCE_PATH" \
     "$SIDECAR_DUPLEX_EVIDENCE_PATH" \
@@ -126,7 +119,6 @@ for evidence_path in \
 done
 
 printf 'Expanded visual evidence: %s\n' "$SIDECAR_EXPANDED_EVIDENCE_PATH"
-printf 'Compact visual evidence: %s\n' "$SIDECAR_COMPACT_EVIDENCE_PATH"
 printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 printf 'Muted visual evidence: %s\n' "$SIDECAR_MUTED_EVIDENCE_PATH"
 printf 'Duplex visual evidence: %s\n' "$SIDECAR_DUPLEX_EVIDENCE_PATH"

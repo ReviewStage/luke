@@ -151,17 +151,6 @@ export function isListedWorkspaceAgentModel(
   return selection.effort === undefined || entry.efforts.includes(selection.effort);
 }
 
-/** The name a person reads for a chosen model, falling back to its id. */
-export function workspaceAgentModelLabel(
-  providerId: string,
-  selection: WorkspaceAgentSelection,
-): string {
-  const entry = workspaceAgentModels(providerId).find(
-    (candidate) => candidate.agent === selection.agent,
-  );
-  return entry?.models.find((model) => model.id === selection.model)?.label ?? selection.model;
-}
-
 export function parseWorkspaceAgentSelection(
   providerId: string,
   value: UnparsedWireValue,

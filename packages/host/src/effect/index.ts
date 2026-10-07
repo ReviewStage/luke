@@ -7,7 +7,6 @@ export {
   AppIdentity,
   Environment,
   IdSource,
-  MachinePresenceReader,
   RunMode,
   reporterLayer,
   SecretCipher,

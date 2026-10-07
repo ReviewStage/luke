@@ -43,7 +43,6 @@
     "@effect/vitest": "catalog:",
     "@sentry/esbuild-plugin": "5.4.0",
     "@sidecar/analytics": "workspace:*",
-    "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/devtrace": "workspace:*",
     "@sidecar/feedback": "workspace:*",

@@ -30,8 +30,6 @@ import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
   greetingCue,
   greetingInstruction,
-  INTRODUCTION_SEED_BOUNDS,
-  introductionSeedItems,
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
@@ -1556,17 +1554,6 @@ test("a device header in no device id's shape is refused with 400 before any soc
     [VOICE_SERVICE_HEADER.DEVICE_ID]: "not-a-device",
   });
   assert.deepEqual(malformed, { status: UPGRADE_STATUS.BAD_REQUEST });
-});
-
-test("the largest seed the desktop can compose is admitted by the introduction's own bound", () => {
-  const items = introductionSeedItems({
-    titles: Array.from({ length: INTRODUCTION_SEED_BOUNDS.TITLES + 4 }, () =>
-      "t".repeat(INTRODUCTION_SEED_BOUNDS.TITLE_CHARS * 2),
-    ),
-    name: "n".repeat(INTRODUCTION_SEED_BOUNDS.NAME_CHARS * 2),
-  });
-  assert.equal(items.length, INTRODUCTION_INPUT_BOUNDS.MESSAGES);
-  assert.ok((items[0]?.content[0].text.length ?? Number.NaN) <= INTRODUCTION_INPUT_BOUNDS.CHARS);
 });
 
 const WATCH_DEVICE_ID = "7d8e9f0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a";

@@ -8,14 +8,6 @@ export function appSettingsWire(settings: AppSettingsView): AppSettings {
   );
   // SAFETY: APP_SETTING_FIELDS enumerates every schema-derived stored field exactly once.
   const stored = storedEntries as StoredAppSettings;
-  const status: RuntimeStatus = {
-    credentialSources: settings.credentialSources,
-    secretStorage: settings.secretStorage,
-    voiceAvailable: settings.voiceAvailable,
-    calendarSignInAvailable: settings.calendarSignInAvailable,
-    calendarAccounts: settings.calendarAccounts,
-    appleCalendarAvailable: settings.appleCalendarAvailable,
-    ...(settings.appleCalendar ? { appleCalendar: settings.appleCalendar } : undefined),
-  };
+  const status: RuntimeStatus = { voiceAvailable: settings.voiceAvailable };
   return { stored, status };
 }

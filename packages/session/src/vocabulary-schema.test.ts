@@ -9,9 +9,7 @@ import {
   PROVIDER_ID,
   ProviderIdSchema,
   SESSION_APPLICATION_ID,
-  SESSION_FILTER,
   SessionApplicationIdSchema,
-  SessionFilterSchema,
   TOOL_PART_STATE,
   ToolPartStateSchema,
   WorkspaceProviderIdSchema,
@@ -59,15 +57,8 @@ test("the provider catalog's schemas hold exactly the ids the build declares", (
   ]);
 });
 
-test("a session filter is a place, the voice kind, an app, or an agent, and nothing else", () => {
-  settlesVocabulary(SessionFilterSchema, [
-    ...Object.values(SESSION_FILTER),
-    ...Object.values(PROVIDER_ID),
-    ...Object.values(HOSTED_AGENT_ID),
-    ...Object.values(SESSION_APPLICATION_ID),
-  ]);
+test("a session application is one of its own ids, and nothing else", () => {
   settlesVocabulary(SessionApplicationIdSchema, Object.values(SESSION_APPLICATION_ID), [
-    SESSION_FILTER.VOICE,
     PROVIDER_ID.CODEX,
   ]);
 });

@@ -12,14 +12,13 @@ import type { Effect } from "effect";
  * over its trusted sideband, so the call can carry no authority to speak.
  */
 /**
- * Who opened the session, which decides whether a capture device rides its
- * offer: a press is the user action the WebRTC guide asks the microphone be
- * requested from, and a session opened for Luke's own speech carries none.
+ * What a session is opened about. Every session is opened by a press, the
+ * user action the WebRTC guide asks the microphone be requested from, so a
+ * capture device rides every offer.
  */
 export interface LiveVoiceCallOpening {
-  byPress: boolean;
-  /** The plan a planning call is about, which the host creates the session about; absent for every other call. */
-  planId?: string;
+  /** The plan the call is about, which the host creates the session about. */
+  planId: string;
 }
 
 export interface LiveVoiceCall {
@@ -30,10 +29,9 @@ export interface LiveVoiceCall {
   readonly standing: boolean;
   /**
    * Builds the peer, hands the offer to the host, and waits for the session
-   * to start; a press's microphone track rides the offer disabled, and any
-   * other opening carries no device. Answers whether a session stands at the
-   * end of it. Runs on the fiber the caller already holds rather than one of
-   * its own.
+   * to start; the press's microphone track rides the offer disabled. Answers
+   * whether a session stands at the end of it. Runs on the fiber the caller
+   * already holds rather than one of its own.
    */
   open(opening: LiveVoiceCallOpening): Effect.Effect<boolean>;
   /** Opens the capture device if none stands and asks the session to hear it; the track enables on the acknowledgment. */
@@ -82,8 +80,7 @@ export interface LiveVoiceCallEvents {
   /**
    * The caption rows as the transcript ledger groups them, both speakers,
    * each row stable once opened and growing in place: Luke's rows while he
-   * speaks are the captions, and every row still being spoken is a line the
-   * Conversation tab draws ahead of the record.
+   * speaks are the captions.
    */
   onCaptions(rows: readonly LiveCaptionRow[]): void;
   /** The one failure a session can end in that the panel should say. */
