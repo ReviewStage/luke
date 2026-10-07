@@ -1,5 +1,16 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Duration, Effect, Schema as EffectSchema, Option, Result, Schedule } from "effect";
+import {
+  Cause,
+  Clock,
+  Duration,
+  Effect,
+  Schema as EffectSchema,
+  Exit,
+  Fiber,
+  Option,
+  Result,
+  Schedule,
+} from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -274,6 +285,41 @@ export interface AskSeams {
   readonly eve: EveSessions;
 }
 
+/**
+ * How long one dispatch may run, eve's answer and the write of it together.
+ * eve's accept queues the message and runs no turn, so it answers in well
+ * under a second; one that has not answered in thirty is not going to, and a
+ * caller that went meanwhile (a voice socket detaching) holds its function
+ * open no longer than this, far inside the voice function's 800-second cap.
+ */
+export const ASK_DISPATCH_DEADLINE = Duration.seconds(30);
+
+/**
+ * The dispatch run to its end whoever stops waiting for it, up to the
+ * deadline: forked detached and joined inside an uninterruptible region, so
+ * a caller interrupted meanwhile waits for the write of what eve answered
+ * rather than rolling it back with eve's turn already running, and no ask
+ * is ever left unbound to a turn eve took. The deadline interrupts the
+ * dispatch itself, which rolls back as an interrupted caller did before:
+ * answered as nothing, the ask stands unbound and the caller refuses it.
+ */
+function dispatchedWithinDeadline<A, E, R>(
+  dispatch: Effect.Effect<A, E, R>,
+): Effect.Effect<Option.Option<A>, E, R> {
+  return Effect.uninterruptible(
+    Effect.gen(function* () {
+      const running = yield* Effect.forkDetach(dispatch);
+      const deadline = yield* Effect.forkDetach(
+        Effect.andThen(Effect.sleep(ASK_DISPATCH_DEADLINE), Fiber.interrupt(running)),
+      );
+      const exit = yield* Fiber.await(running);
+      yield* Fiber.interrupt(deadline);
+      if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return Option.none();
+      return Option.some(yield* exit);
+    }),
+  );
+}
+
 /** An eve the client never reached reads as a refusal carrying the gateway's own status, since eve named none. */
 const unreachableSend = () =>
   Effect.succeed({ outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY });
@@ -332,8 +378,13 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
   // An eve that could not be reached is the same refusal as one that answered outside its shape,
   // with the gateway's own status for the operator: the row is left standing for a retry, and the
   // transaction the dispatch runs in commits nothing for it, as it commits nothing for a refusal.
+  // Note that the dispatch cannot be interrupted, because eve takes the message before the row
+  // records what eve answered: a caller that went in between (a voice socket detaching) would roll
+  // the record back with eve's turn already running, and no turn would ever be bound to the ask.
+  // A dispatch past its deadline is refused as an eve that could not be reached is, the row left
+  // standing for a retry.
   let failed: AskOutcome | undefined;
-  const dispatched = yield* seams.asks.dispatchOnce(
+  const dispatch = seams.asks.dispatchOnce(
     { userId, conversationId },
     ask.id,
     Effect.fnUntraced(function* (sessionId) {
@@ -362,6 +413,11 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
       };
     }),
   );
+  const within = yield* dispatchedWithinDeadline(dispatch);
+  if (Option.isNone(within)) {
+    return Result.fail({ refusal: ASK_REFUSAL.UPSTREAM, status: HOSTED_HTTP_STATUS.BAD_GATEWAY });
+  }
+  const dispatched = within.value;
   if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
     return Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND });
   }

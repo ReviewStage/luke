@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import type { LanguageModel } from "ai";
-import { Effect, Exit, Option, Schema, Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
@@ -138,14 +138,25 @@ function mintEveSession(): string {
 
 interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];
+  /** The session each open was answered with, in order: eve's own record of what it took. */
+  readonly sessions: string[];
+  /** While set, an open has taken the message and answers only once this settles, as eve across the network does. */
+  answerWhen: Deferred.Deferred<void> | undefined;
 }
 
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
+    sessions: [],
+    answerWhen: undefined,
     open(message) {
-      eve.opened.push(message);
-      return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: mintEveSession() });
+      return Effect.gen(function* () {
+        const sessionId = mintEveSession();
+        eve.opened.push(message);
+        eve.sessions.push(sessionId);
+        if (eve.answerWhen !== undefined) yield* Deferred.await(eve.answerWhen);
+        return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId };
+      });
     },
     send(sessionId) {
       return Effect.succeed({
@@ -664,6 +675,56 @@ it.live(
         [["dl_1", "Another is waiting on you."]],
       );
       assert.deepEqual([...lost.reports, ...back.reports], []);
+      yield* Effect.promise(() => detach(back));
+    }),
+);
+
+it.live(
+  "a detach while eve is taking the ask still records what eve answered, so the re-attach follows the ask to its turn and speaks the reply once",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const lost = yield* Effect.promise(() => stand(target, undefined, { planning: true }));
+      const answer = yield* Deferred.make<void>();
+      lost.eve.answerWhen = answer;
+      lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
+      lost.socket.receive(delegated("dl_1", 2500));
+      yield* settled(() => lost.eve.opened.length === 1, "eve to take the ask");
+      // The socket goes while eve has the ask and its answer is still on the way back.
+      const detaching = yield* Effect.forkChild(Effect.promise(() => detach(lost)));
+      // The detach is given the time to reach the dispatch before eve answers.
+      yield* Effect.sleep(QUIET_MS * 4);
+      yield* Deferred.succeed(answer, undefined);
+      yield* Fiber.join(detaching);
+      const back = yield* Effect.promise(() =>
+        stand(target, undefined, { planning: true, reattach: lost.liveSessionId }),
+      );
+      const [opened] = lost.eve.sessions;
+      assert.ok(opened);
+      yield* Effect.promise(() =>
+        play(spokenTurn(FIRST_EVE_TURN, NOW), {
+          sessionId: opened,
+          target,
+          kind: CONVERSATION_KIND.MAIN,
+          turn: BRAIN_HOST_TURN.SPOKEN,
+          model: "scripted-model",
+          state: memoryRelayState(),
+        }),
+      );
+      yield* settled(
+        () => back.commentary().length >= 2,
+        "the reply to be spoken on the re-attach",
+        async () => `reports ${JSON.stringify(back.reports)}; sent ${socketSent(back)}`,
+      );
+      yield* Effect.sleep(QUIET_MS * 4);
+      assert.deepEqual(lost.commentary(), []);
+      assert.deepEqual(
+        back.commentary().map((event) => [event.delegation_id, event.content]),
+        [
+          ["dl_1", "One agent finished."],
+          ["dl_1", "Another is waiting on you."],
+        ],
+      );
       yield* Effect.promise(() => detach(back));
     }),
 );
