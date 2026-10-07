@@ -32,17 +32,6 @@ test("the first ask opens the account's main once, however many open it together
   assert.equal(await database.run(standingMain(userId, NOW)), first);
 });
 
-test("a first ask and a Clear racing on an account with no main both land, and one standing main is left: the one the Clear opened", async () => {
-  const userId = await database.createUser();
-  const [asked, cleared] = await Promise.all([
-    database.run(standingMain(userId, NOW)),
-    database.run(database.store.main.clear(userId, NOW)),
-  ]);
-  const standing = await standingMains(userId);
-  assert.deepEqual(standing, [cleared.opened]);
-  assert.deepEqual(cleared.cleared, asked === cleared.opened ? [] : [asked]);
-});
-
 test("a cleared main is not the standing one: the next ask opens another beside the stamped row", async () => {
   const userId = await database.createUser();
   const first = await database.run(standingMain(userId, NOW));

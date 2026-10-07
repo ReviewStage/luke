@@ -45,55 +45,6 @@ interface Exchange {
 
 const EXCHANGES: readonly Exchange[] = [
   {
-    name: "sessions-messages",
-    request: () => new Request(`${ORIGIN}/api/sessions/messages`),
-    handle: async () => {
-      const { handleConversationRead } = await import("../server/hosted/conversation-read.js");
-      const { executeConversationRead } = await import("../server/hosted/action-execute.js");
-      const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
-      return runWithoutDatabase(
-        handleConversationRead({
-          ...hostedVaultSeams,
-          encryptionSecret: undefined,
-          request: new Request(`${ORIGIN}/api/sessions/messages`),
-          execute: executeConversationRead,
-        }),
-      );
-    },
-  },
-  {
-    name: "projects",
-    request: () => new Request(`${ORIGIN}/api/projects`),
-    handle: async () => {
-      const { handleProjects } = await import("../server/hosted/projects.js");
-      const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
-      const { runWeb } = await import("../server/runtime.js");
-      return runWeb(
-        handleProjects({
-          ...hostedVaultSeams,
-          encryptionSecret: undefined,
-          request: new Request(`${ORIGIN}/api/projects`),
-        }),
-      );
-    },
-  },
-  {
-    name: "observe",
-    request: () => new Request(`${ORIGIN}/api/observe`),
-    handle: async () => {
-      const { handleObserve } = await import("../server/hosted/observe.js");
-      const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
-      const { runWeb } = await import("../server/runtime.js");
-      return runWeb(
-        handleObserve({
-          ...hostedVaultSeams,
-          encryptionSecret: undefined,
-          request: new Request(`${ORIGIN}/api/observe`),
-        }),
-      );
-    },
-  },
-  {
     name: "events",
     request: () =>
       new Request(`${ORIGIN}/api/events`, {
@@ -174,7 +125,7 @@ test("the group answers each route the way its own handler answers it", async ()
 
 test("a wrong method on a declared path is the handler's own refusal, not the group's", async () => {
   const answered = await routeFromHttpRouter(observationApp()).fetch(
-    new Request(`${ORIGIN}/api/projects`, { method: "DELETE" }),
+    new Request(`${ORIGIN}/api/events`, { method: "DELETE" }),
   );
   const carried = await recordedResponse(answered);
 
@@ -194,11 +145,11 @@ test("a path the group declares no route for is refused with the hosted not-foun
 
 test("a HEAD on a declared path keeps the handler's own status and drops the body", async () => {
   const answered = await routeFromHttpRouter(observationApp()).fetch(
-    new Request(`${ORIGIN}/api/projects`, { method: "HEAD" }),
+    new Request(`${ORIGIN}/api/events`, { method: "HEAD" }),
   );
   const carried = await recordedResponse(answered);
 
-  // handleProjects only answers GET; HEAD is refused exactly as DELETE is above.
+  // handleEvents only answers POST; HEAD is refused exactly as DELETE is above.
   assert.equal(carried.status, 405);
   assert.equal(carried.body, "");
   await settleResponseGolden(GOLDEN_ROOT, "head-method-not-allowed", carried);

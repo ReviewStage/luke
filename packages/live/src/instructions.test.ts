@@ -1,47 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { APPEND_TOKEN_BOUND, chunkForAppend } from "./chunks.js";
-import {
-  greetingCue,
-  greetingInstruction,
-  LIVE_SCENE,
-  planningOpeningInstruction,
-  sessionInstructions,
-} from "./instructions.js";
+import { greetingCue, planningOpeningInstruction, sessionInstructions } from "./instructions.js";
 import { estimatedTokens } from "./tokens.js";
 
 /** The API's bound on `instructions`, in tokens. */
 const INSTRUCTIONS_TOKEN_BOUND = 16_384;
 
-const blocksOf = (scene: (typeof LIVE_SCENE)[keyof typeof LIVE_SCENE]): string[] =>
-  sessionInstructions(scene).split("\n\n");
-
-for (const scene of Object.values(LIVE_SCENE)) {
-  test(`the ${scene} scene's instructions sit well under the API's bound`, () => {
-    assert.ok(estimatedTokens(sessionInstructions(scene)) < INSTRUCTIONS_TOKEN_BOUND / 8);
-  });
-}
-
-test("the introduction is told the same thing as the desktop, except that nothing is connected", () => {
-  const desktop = blocksOf(LIVE_SCENE.DESKTOP);
-  const introduction = blocksOf(LIVE_SCENE.INTRODUCTION);
-  const policyAt = desktop.findIndex((block) => block.startsWith("Delegation policy:"));
-
-  assert.ok(policyAt > 0);
-  assert.deepEqual(introduction.slice(0, policyAt), desktop.slice(0, policyAt));
-  assert.ok(introduction.slice(policyAt).join("\n\n").includes("Nothing is connected"));
-  assert.equal(introduction.join("\n").includes("list_sessions"), false);
+test("the planning call's instructions sit well under the API's bound", () => {
+  assert.ok(estimatedTokens(sessionInstructions()) < INSTRUCTIONS_TOKEN_BOUND / 8);
 });
 
-test("the greeting is one append's worth of instruction", () => {
-  const greeting = greetingInstruction();
-
-  assert.ok(estimatedTokens(greeting) <= APPEND_TOKEN_BOUND);
-  assert.equal(chunkForAppend(greeting).length, 1);
-  assert.equal(greeting.includes("\n"), false);
-});
-
-test("the cue that follows it is one append's worth of commentary", () => {
+test("the cue that follows the opening is one append's worth of commentary", () => {
   const cue = greetingCue();
 
   assert.ok(estimatedTokens(cue) <= APPEND_TOKEN_BOUND);
@@ -57,15 +27,12 @@ test("a planning call's opening is one append's worth of instruction", () => {
   assert.equal(opening.includes("\n"), false);
 });
 
-test("a planning call is told the desktop's speaking policies over the planning model's reads, and no save to delegate", () => {
-  const desktop = blocksOf(LIVE_SCENE.DESKTOP);
-  const planning = blocksOf(LIVE_SCENE.PLANNING);
-  const policyAt = desktop.findIndex((block) => block.startsWith("Delegation policy:"));
-  const planningPolicy = planning.slice(policyAt).join("\n\n");
+test("a planning call delegates to the planning model's reads, and has no save to delegate", () => {
+  const blocks = sessionInstructions().split("\n\n");
+  const policy = blocks.find((block) => block.startsWith("Delegation policy:"));
 
-  assert.deepEqual(planning.slice(1, policyAt), desktop.slice(1, policyAt));
+  assert.ok(policy);
   // The notetaker writes the plan, so the voice never delegates to save it.
-  assert.equal(planningPolicy.includes("update_plan"), false);
-  assert.ok(planningPolicy.includes("run_in_repository"));
-  assert.equal(planningPolicy.includes("list_sessions"), false);
+  assert.equal(policy.includes("update_plan"), false);
+  assert.ok(policy.includes("run_in_repository"));
 });

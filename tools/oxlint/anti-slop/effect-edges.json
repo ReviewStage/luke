@@ -16,7 +16,6 @@
     "apps/web/eve/tools/brain.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
-    "apps/web/server/hosted/store-route.ts",
     "apps/web/server/route-effect.ts",
     "apps/web/server/runtime.ts",
     "apps/web/server/seed-clients.ts",

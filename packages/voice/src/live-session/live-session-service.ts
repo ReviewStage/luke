@@ -12,12 +12,7 @@ import {
   type LiveServerEvent,
   liveErrorCommand,
   liveErrorFields,
-  PROACTIVE_SPEECH_KIND,
-  type ProactiveSpeechKind,
   renderAskContext,
-  type SpeechOpening,
-  speechAppends,
-  speechOpening,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   type TranscriptSpeaker,
@@ -57,7 +52,6 @@ import {
   type LiveBrainRunEvent,
 } from "./live-brain.js";
 import type { LiveRecord } from "./live-record.js";
-import { type BeatTurn, ProactiveQueue, type ProactiveRequest } from "./proactive-queue.js";
 
 /**
  * The one voice session and everything its trusted side owes it. It stands
@@ -190,25 +184,9 @@ export interface AdoptableSession extends Pick<LiveSessionOpened, "sessionId" | 
   readonly started: boolean;
 }
 
-/** A briefing as the brain delivered it; the rest of the delivery rides along for a held re-decision. */
-export interface BriefingDelivery {
-  briefing: string;
-  decidedAt: number;
-}
-
-export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
+export interface LiveSessionServiceOptions {
   createId: () => string;
   report: (message: string) => void;
-  /** A proactive turn was settled spoken, for the bookkeeping the beats owe. */
-  onProactiveSpoken?: (kind: ProactiveSpeechKind) => void;
-  /**
-   * A briefing's last append is about to be sent under the event id given,
-   * so a record that ties the append's acknowledgment and the speech after it
-   * to the briefing's own message can be told which message before the
-   * session answers. Told once per briefing, for the append whose speech
-   * settles it.
-   */
-  onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
   /** What the standing session's voice and brain are doing, told whole on a change alone. */
   onStatus?: (status: LiveSessionStatus) => void;
 }
@@ -422,9 +400,8 @@ function isClientDelegation(
   );
 }
 
-export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDelivery> {
-  readonly #options: LiveSessionServiceOptions<Delivery>;
-  readonly #queue: ProactiveQueue<Delivery>;
+export class LiveSessionService {
+  readonly #options: LiveSessionServiceOptions;
   #standing: StandingSession | undefined;
   readonly #exchanges = new Map<string, Exchange>();
   readonly #stopRunEvents: () => void;
@@ -474,7 +451,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   readonly #record: LiveRecord;
 
   private constructor(
-    options: LiveSessionServiceOptions<Delivery>,
+    options: LiveSessionServiceOptions,
     collaborators: { readonly brain: LiveBrain; readonly record: LiveRecord },
     running: { readonly fibers: FiberSet.FiberSet<void, unknown>; readonly tasks: SerialQueue },
     clock: Clock.Clock,
@@ -487,7 +464,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     this.#tasks = running.tasks;
     this.#clock = clock;
     this.#sessions = sessions;
-    this.#queue = new ProactiveQueue({ now: () => this.#now() });
     this.#stopRunEvents = this.#brain.onRunEvent((event) => this.#onRunEvent(event));
   }
 
@@ -503,13 +479,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * exchange as the socket scope's own finalizer — so this scope owns what
    * the service runs and never the close itself.
    */
-  static make<Delivery extends BriefingDelivery>(
-    options: LiveSessionServiceOptions<Delivery>,
-  ): Effect.Effect<
-    LiveSessionService<Delivery>,
-    never,
-    Scope.Scope | LiveBrainTag | LiveRecordTag
-  > {
+  static make(
+    options: LiveSessionServiceOptions,
+  ): Effect.Effect<LiveSessionService, never, Scope.Scope | LiveBrainTag | LiveRecordTag> {
     return Effect.gen(function* () {
       const fibers = yield* FiberSet.make<void>();
       const tasks = yield* serialQueue({
@@ -610,10 +582,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     });
   }
 
-  /** The session is running: what waited for its start is spoken, and the idle clock reads from here. */
+  /** The session is running: appends can reach it, and the idle clock reads from here. */
   #started(session: StandingSession): void {
     session.started = true;
-    this.#drain();
     this.#considerIdle(session);
   }
 
@@ -721,18 +692,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (idle) this.#considerIdle(session);
   }
 
-  /** A briefing the brain decided: spoken into the standing session, or kept for the one adopted next. */
-  deliverBriefing(delivery: Delivery): void {
-    this.#queue.requestBriefing(delivery);
-    this.#drain();
-  }
-
-  /** An onboarding beat, each spoken at most once to the end per run. */
-  speakBeat(turn: BeatTurn): void {
-    this.#queue.requestBeat(turn);
-    this.#drain();
-  }
-
   /**
    * The stop key: the model is told to stop and then wait, once, through the
    * standing session's own queue, and every exchange of the session is
@@ -776,14 +735,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (this.#stopped) return;
       this.#stopped = true;
       this.#stopRunEvents();
-      this.#queue.clear();
       yield* this.endSession();
     });
   }
 
   /**
    * The detach: `stop`'s bookkeeping with nothing said to the session. The
-   * run events and the queue are given up and the standing session is torn
+   * run events are given up and the standing session is torn
    * down here, its rows written and its transport released, but no
    * `session.close` goes up, because the session is not this service's to
    * end: its peer still holds it and will attach to it again elsewhere. Run
@@ -794,7 +752,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (this.#stopped) return;
       this.#stopped = true;
       this.#stopRunEvents();
-      this.#queue.clear();
       const session = this.#standing;
       const releasing = this.#releasing;
       if (session !== undefined) yield* this.#over(session);
@@ -970,7 +927,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       case LIVE_SERVER_EVENT.THINKING_APPENDED:
       case LIVE_SERVER_EVENT.COMMENTARY_APPENDED:
         if (event.client_event_id !== undefined) {
-          session.channel.acknowledge(event.client_event_id, event.end_ms);
+          session.channel.acknowledge(event.client_event_id);
         }
         return Effect.void;
       case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
@@ -985,7 +942,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           event.start_ms,
           event.end_ms,
         );
-        session.channel.outputReached(event.end_ms);
         if (session.voicePhase === VOICE_PHASE.ABOUT_TO_ANSWER) this.#voiceIn(session, undefined);
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
@@ -1534,92 +1490,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   #input(delegationId: LiveDelegationId, content: string) {
     return { eventId: this.#options.createId(), delegationId, content };
-  }
-
-  /** Speaks the pending proactive turns in order into the standing session; with none, they wait for the next. */
-  #drain(): void {
-    if (!this.#queue.hasPending) return;
-    const session = this.#speakable();
-    if (!session) return;
-    for (const request of this.#queue.take()) this.#speakProactive(session, request);
-  }
-
-  #speakProactive(session: StandingSession, request: ProactiveRequest<Delivery>): void {
-    const opening = speechOpening(request.turn);
-    if (opening) {
-      this.#speakOpening(session, request, opening);
-      return;
-    }
-    const chunks = speechAppends(request.turn);
-    chunks.forEach((chunk, index) => {
-      const last = index === chunks.length - 1;
-      session.channel.enqueue(
-        Effect.gen({ self: this }, function* () {
-          const input = this.#input(null, chunk);
-          if (last && request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
-            this.#options.onBriefingAppend?.(request.delivery, input.eventId);
-          }
-          const taken = yield* session.channel.send(commentaryAppend(input), {
-            ...(last
-              ? {
-                  onSpoken: () => {
-                    this.#queue.spoken(request);
-                    this.#options.onProactiveSpoken?.(request.kind);
-                  },
-                }
-              : undefined),
-          });
-          if (!taken && last) this.#queue.release(request);
-        }),
-      );
-    });
-  }
-
-  /**
-   * The conversations guide's greeting before the caller speaks: the
-   * instruction appended and acknowledged first, then the one commentary that
-   * has the model begin, and no cue at all for an instruction the session
-   * refused or never acknowledged, so a greeting that did not land is not
-   * begun on the strength of the cue alone.
-   *
-   * A greeting opens a conversation, and only one nothing has opened yet.
-   * Decided when the channel reaches it, so every append enqueued ahead of it
-   * has left: a session Luke has already been asked to speak into (a briefing
-   * the exchange claimed the moment the session stood, a reply) or on which
-   * either speaker has already been heard is not greeted, because the
-   * instruction to greet now has the model drop what it is saying to say
-   * "Hey" instead, and a conversation under way is not opened again. Such a
-   * greeting is settled as spoken all the same, so the device that owes it
-   * once per run stops asking for it.
-   */
-  #speakOpening(
-    session: StandingSession,
-    request: ProactiveRequest<Delivery>,
-    opening: SpeechOpening,
-  ): void {
-    session.channel.enqueue(
-      Effect.gen({ self: this }, function* () {
-        if (session.channel.commentarySent || session.ledger.lastActivityMs() !== undefined) {
-          this.#queue.spoken(request);
-          this.#options.onProactiveSpoken?.(request.kind);
-          return;
-        }
-        const instructed = yield* session.channel.send(
-          instructionsAppend(this.#input(null, opening.instruction)),
-        );
-        if (!instructed) {
-          this.#queue.release(request);
-          return;
-        }
-        const cued = yield* session.channel.send(commentaryAppend(this.#input(null, opening.cue)), {
-          onSpoken: () => {
-            this.#queue.spoken(request);
-            this.#options.onProactiveSpoken?.(request.kind);
-          },
-        });
-        if (!cued) this.#queue.release(request);
-      }),
-    );
   }
 
   /**

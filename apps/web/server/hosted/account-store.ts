@@ -1,10 +1,10 @@
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { user } from "../db/auth-schema.js";
-import { accountPreference, accountWorkspacePreference } from "../db/preferences-schema.js";
+import { accountPreference } from "../db/preferences-schema.js";
 import { db } from "../db/query.js";
 import { InstantColumnSchema } from "./store/database.js";
 
@@ -49,16 +49,7 @@ export function deleteAccount(
 
 const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
-  defaultWorkspaceProvider: Schema.NullOr(Schema.String),
   updatedAt: InstantColumnSchema,
-});
-
-const WorkspacePreferenceRowSchema = Schema.Struct({
-  providerId: Schema.String,
-  defaultProjectId: Schema.NullOr(Schema.String),
-  agent: Schema.NullOr(Schema.String),
-  model: Schema.NullOr(Schema.String),
-  effort: Schema.NullOr(Schema.String),
 });
 
 const findPreference = SqlSchema.findOneOption({
@@ -68,7 +59,6 @@ const findPreference = SqlSchema.findOneOption({
     db
       .select({
         voice: accountPreference.voice,
-        defaultWorkspaceProvider: accountPreference.defaultWorkspaceProvider,
         updatedAt: accountPreference.updatedAt,
       })
       .from(accountPreference)
@@ -76,97 +66,25 @@ const findPreference = SqlSchema.findOneOption({
       .limit(1),
 });
 
-const findWorkspacePreferences = SqlSchema.findAll({
-  Request: Schema.String,
-  Result: WorkspacePreferenceRowSchema,
-  execute: (userId) =>
-    db
-      .select({
-        providerId: accountWorkspacePreference.providerId,
-        defaultProjectId: accountWorkspacePreference.defaultProjectId,
-        agent: accountWorkspacePreference.agent,
-        model: accountWorkspacePreference.model,
-        effort: accountWorkspacePreference.effort,
-      })
-      .from(accountWorkspacePreference)
-      .where(eq(accountWorkspacePreference.userId, userId)),
-});
-
-function rowPreferences(
-  preference: {
-    voice: string | null;
-    defaultWorkspaceProvider: string | null;
-  },
-  workspacePreferences: readonly {
-    providerId: string;
-    defaultProjectId: string | null;
-    agent: string | null;
-    model: string | null;
-    effort: string | null;
-  }[],
-): AccountPreferences {
-  const workspaceProjectDefaults: Record<string, string> = {};
-  const workspaceAgentDefaults: Record<string, { agent: string; model?: string; effort?: string }> =
-    {};
-
-  for (const row of workspacePreferences) {
-    if (row.defaultProjectId) {
-      workspaceProjectDefaults[row.providerId] = row.defaultProjectId;
-    }
-    if (row.agent) {
-      workspaceAgentDefaults[row.providerId] = {
-        agent: row.agent,
-        ...(row.model ? { model: row.model } : undefined),
-        ...(row.effort ? { effort: row.effort } : undefined),
-      };
-    }
-  }
-
-  return (
-    accountPreferencesFromStored({
-      ...(preference.voice ? { voice: preference.voice } : undefined),
-      ...(preference.defaultWorkspaceProvider
-        ? { defaultWorkspaceProvider: preference.defaultWorkspaceProvider }
-        : undefined),
-      ...(Object.keys(workspaceProjectDefaults).length > 0
-        ? { workspaceProjectDefaults }
-        : undefined),
-      ...(Object.keys(workspaceAgentDefaults).length > 0 ? { workspaceAgentDefaults } : undefined),
-    }) ?? {}
-  );
-}
-
-/**
- * One account's stored snapshot, or nothing for an account that has stored
- * none. The scalar row and its per-provider rows are read in one transaction,
- * so a write landing between the two cannot answer half of each.
- */
+/** One account's stored snapshot, or nothing for an account that has stored none. */
 export function readAccountPreferences(
   userId: string,
 ): Effect.Effect<AccountPreferencesRow | undefined, AccountSeamFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const preference = yield* findPreference(userId);
-        if (Option.isNone(preference)) return undefined;
-        const workspacePreferences = yield* findWorkspacePreferences(userId);
-        return {
-          preferences: rowPreferences(preference.value, workspacePreferences),
-          updatedAt: preference.value.updatedAt,
-        };
+  return Effect.map(
+    findPreference(userId),
+    Option.match({
+      onNone: () => undefined,
+      onSome: (row) => ({
+        preferences: accountPreferencesFromStored(row.voice ? { voice: row.voice } : {}) ?? {},
+        updatedAt: row.updatedAt,
       }),
-    ),
+    }),
   );
 }
 
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   voice: Schema.NullOr(Schema.String),
-  // Deliberately an unvalidated string, not a provider id: a shipped phone
-  // echoes whatever workspace provider it last held, including ids this build
-  // no longer knows, and the desktop already reads an unknown one as unset.
-  // Narrowing this column would refuse that phone's every preference write.
-  defaultWorkspaceProvider: Schema.NullOr(Schema.String),
   updatedAt: Schema.Date,
 });
 
@@ -183,126 +101,22 @@ const upsertPreference = SqlSchema.void({
       .values({
         userId: write.userId,
         voice: write.voice,
-        defaultWorkspaceProvider: write.defaultWorkspaceProvider,
         updatedAt: write.updatedAt,
       })
       .onConflictDoUpdate({
         target: accountPreference.userId,
-        set: {
-          voice: write.voice,
-          defaultWorkspaceProvider: write.defaultWorkspaceProvider,
-          updatedAt: write.updatedAt,
-        },
+        set: { voice: write.voice, updatedAt: write.updatedAt },
       }),
 });
 
-const deleteWorkspacePreferences = SqlSchema.void({
-  Request: Schema.String,
-  execute: (userId) =>
-    db.delete(accountWorkspacePreference).where(eq(accountWorkspacePreference.userId, userId)),
-});
-
-const WorkspacePreferenceWriteSchema = Schema.Struct({
-  userId: Schema.String,
-  providerId: Schema.String,
-  defaultProjectId: Schema.NullOr(Schema.String),
-  agent: Schema.NullOr(Schema.String),
-  model: Schema.NullOr(Schema.String),
-  effort: Schema.NullOr(Schema.String),
-  updatedAt: Schema.Date,
-});
-
-/** Every per-provider row in one statement: the transaction holds them together already, and one round-trip writes them as one. */
-const insertWorkspacePreferences = SqlSchema.void({
-  Request: Schema.Array(WorkspacePreferenceWriteSchema),
-  execute: (writes) =>
-    db.insert(accountWorkspacePreference).values(
-      writes.map((write) => ({
-        userId: write.userId,
-        providerId: write.providerId,
-        defaultProjectId: write.defaultProjectId,
-        agent: write.agent,
-        model: write.model,
-        effort: write.effort,
-        updatedAt: write.updatedAt,
-      })),
-    ),
-});
-
-interface WorkspacePreferenceWrite {
-  userId: string;
-  providerId: string;
-  defaultProjectId: string | null;
-  agent: string | null;
-  model: string | null;
-  effort: string | null;
-  updatedAt: Date;
-}
-
-function workspacePreferenceRows(
-  userId: string,
-  preferences: AccountPreferences,
-  updatedAt: Date,
-): WorkspacePreferenceWrite[] {
-  const projects = preferences.workspaceProjectDefaults ?? {};
-  const agents = preferences.workspaceAgentDefaults ?? {};
-  const rows = new Map<string, WorkspacePreferenceWrite>();
-  const rowFor = (providerId: string) => {
-    const existing = rows.get(providerId);
-    if (existing) return existing;
-    const row = {
-      userId,
-      providerId,
-      defaultProjectId: null,
-      agent: null,
-      model: null,
-      effort: null,
-      updatedAt,
-    };
-    rows.set(providerId, row);
-    return row;
-  };
-
-  for (const [providerId, defaultProjectId] of Object.entries(projects)) {
-    if (defaultProjectId) rowFor(providerId).defaultProjectId = defaultProjectId;
-  }
-  for (const [providerId, agent] of Object.entries(agents)) {
-    if (!agent) continue;
-    const row = rowFor(providerId);
-    row.agent = agent.agent;
-    row.model = agent.model ?? null;
-    row.effort = agent.effort ?? null;
-  }
-
-  return [...rows.values()];
-}
-
-/**
- * Replaces the account's stored snapshot whole: the scalar row is written,
- * then the per-provider rows are deleted and written again, all under one
- * transaction, so a reader never sees the old providers beside the new
- * scalars and a refused write leaves the snapshot exactly as it stood.
- */
+/** Replaces the account's stored snapshot whole, and answers the instant it was written. */
 export function writeAccountPreferences(
   userId: string,
   preferences: AccountPreferences,
 ): Effect.Effect<Date, AccountSeamFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(
-      Effect.gen(function* () {
-        const updatedAt = yield* DateTime.nowAsDate;
-        yield* upsertPreference({
-          userId,
-          voice: preferences.voice ?? null,
-          defaultWorkspaceProvider: preferences.defaultWorkspaceProvider ?? null,
-          updatedAt,
-        });
-        yield* deleteWorkspacePreferences(userId);
-        // Note that an empty insert is skipped rather than rendered, because the builder refuses a statement with no rows.
-        const rows = workspacePreferenceRows(userId, preferences, updatedAt);
-        if (rows.length > 0) yield* insertWorkspacePreferences(rows);
-        return updatedAt;
-      }),
-    ),
-  );
+  return Effect.gen(function* () {
+    const updatedAt = yield* DateTime.nowAsDate;
+    yield* upsertPreference({ userId, voice: preferences.voice ?? null, updatedAt });
+    return updatedAt;
+  });
 }

@@ -1,6 +1,13 @@
 import type { Cause } from "effect";
 import { Effect, Option } from "effect";
-import { isRecord, text, type UnparsedWireValue } from "../core.js";
+import { auth } from "../auth.js";
+import {
+  isRecord,
+  text,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
+} from "../core.js";
 
 /** The subject a signed-in OAuth userinfo answer names. */
 export interface OAuthUserInfo {
@@ -49,4 +56,22 @@ export function userIdForAuthorization(
     Effect.map((identity) => Option.fromUndefinedOr(identity?.sub || undefined)),
     Effect.orElseSucceed(Option.none<string>),
   );
+}
+
+/**
+ * The auth service's own userinfo endpoint, read at the hosted API boundary.
+ * The call is the auth service's promise, wrapped once here so the
+ * resolution below is an effect a route yields rather than a promise each
+ * route rewraps.
+ */
+export const hostedUserInfo: UserInfoEndpoint = (input) =>
+  Effect.tryPromise(async () => {
+    // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
+    const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
+    return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
+  });
+
+/** The bearer resolved against the deployment's own account store, the same for every hosted route that reads it on its own fiber. */
+export function resolveHostedUserId(request: Request): Effect.Effect<Option.Option<string>> {
+  return hostedUserId(request, hostedUserInfo);
 }

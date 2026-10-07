@@ -1,16 +1,10 @@
 import type { UserIdResolver } from "../hosted/http-effect.js";
-import type {
-  HostedSpend,
-  IntroductionSpend,
-  QuotaEffect,
-  VoiceSecondsOutcome,
-} from "../hosted/quota.js";
+import type { HostedSpend, QuotaEffect, VoiceSecondsOutcome } from "../hosted/quota.js";
 
 /**
- * What the voice functions ask of the account side of this same deployment,
+ * What the voice function asks of the account side of this same deployment,
  * as direct calls rather than routes: whose socket this is, whether their
- * allowance covers one more session, whether the accountless introduction's
- * shared ceiling has room for one more, and what one closed session cost. A
+ * allowance covers one more session, and what one closed session cost. A
  * signed-in device's bearer is resolved exactly as every hosted route resolves
  * the one on its own request, and is held no longer than the handshake it
  * arrived on.
@@ -24,8 +18,6 @@ export interface VoiceAccounts {
   resolveUserId: UserIdResolver<string>;
   /** Spends one session of the account's daily allowance. */
   spend(userId: string): QuotaEffect<HostedSpend>;
-  /** Spends one introduction of the deployment's shared daily ceiling, the one the introduction mint spends. */
-  spendIntroduction(): QuotaEffect<IntroductionSpend>;
   /** Records a closed session's billed seconds once. */
   recordSeconds(input: {
     userId: string;

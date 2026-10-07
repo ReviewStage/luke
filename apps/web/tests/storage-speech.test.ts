@@ -6,18 +6,13 @@ import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
   CONVERSATION_EVENT_KIND,
-  CONVERSATION_VIEW_TOOL_KIND,
-  type ConversationViewEvent,
   DEVICE_PLATFORM,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
-  readStoredUIMessages,
   SPEECH_EXPIRY_REASON,
   type StoredUIMessage,
-  selectConversationView,
   TURN_ORIGIN,
   TURN_STATUS,
-  unparsedWire,
   type WireRecord,
 } from "../server/core";
 import { devices } from "../server/db/devices-schema";
@@ -51,7 +46,6 @@ import {
   insertMessage,
   insertTurn,
   readEventsByMessage,
-  readMessageById,
   setConversationDeletedAt,
 } from "./support/store-rows";
 
@@ -175,47 +169,6 @@ async function reportQuiet(userId: string, deviceId: string, quietUntil: number 
   );
 }
 
-/** Whether the Conversation view, over the announcement's row and its events as stored, marks it unspoken. */
-async function viewMarksUnspoken(row: Announced): Promise<boolean> {
-  const stored = await readMessageById(run, row.messageId);
-  assert.ok(stored);
-  const { id, role, parts, metadata } = stored;
-  const read = await run(
-    readStoredUIMessages(
-      unparsedWire(JSON.parse(JSON.stringify([{ id, role, parts, metadata }]))),
-      CATALOG_TOOL_SET,
-    ),
-  );
-  assert.ok(read.ok);
-  const [message] = read.value;
-  assert.ok(message);
-  const viewEvents: ConversationViewEvent[] = (
-    await run(database.store.events.forMessages(row.userId, [row.messageId]))
-  ).map((event) => ({ messageId: event.messageId, kind: event.kind, seq: event.seq }));
-  const [group] = selectConversationView({
-    main: [],
-    observed: [
-      {
-        session: SESSION,
-        messages: [{ message, seq: 1, turnId: row.turnId, createdAt: NOW, placedAt: NOW }],
-      },
-    ],
-    turns: [
-      {
-        id: row.turnId,
-        origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
-        status: TURN_STATUS.SETTLED,
-        queuedAt: NOW,
-      },
-    ],
-    events: viewEvents,
-    toolKinds: new Map([[BRAIN_TOOL.ANNOUNCE, CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE]]),
-  });
-  const tool = group?.messages[0]?.tools[0];
-  assert.ok(tool && tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE);
-  return tool.unspoken;
-}
-
 test("announce puts the briefing on offer once, with its expiry, and the offer reads back as it stands", async () => {
   clock = NOW;
   const row = await announced();
@@ -230,7 +183,7 @@ test("announce puts the briefing on offer once, with its expiry, and the offer r
       payload: { expiresAt: NOW + SPEECH_OFFER.TTL_MS },
     },
   ]);
-  assert.deepEqual(await run(database.store.speech.open(row.userId)), [
+  assert.deepEqual(await openOffers({ userId: row.userId }), [
     {
       userId: row.userId,
       conversationId: row.conversationId,
@@ -255,7 +208,6 @@ test("announce puts the briefing on offer once, with its expiry, and the offer r
     await run(markSpeechSpoken(store, row.userId, unoffered.messageId, MAC)),
     Result.fail(SPEECH_REFUSAL.NOT_OFFERED),
   );
-  assert.equal(await viewMarksUnspoken(row), false);
 });
 
 test("at most one authorization to speak per briefing, never that it was heard: of two devices claiming at once exactly one is authorized, only that one can report it spoken, and the report closes the offer", async () => {
@@ -319,7 +271,6 @@ test("at most one authorization to speak per briefing, never that it was heard: 
   ]) {
     assert.deepEqual(await late, Result.fail(SPEECH_REFUSAL.SETTLED));
   }
-  assert.equal(await viewMarksUnspoken(row), false);
 
   const unclaimed = await offered(row.userId);
   assert.deepEqual(
@@ -500,7 +451,7 @@ test("a push closes an offer nobody claimed, records the device pushed to, never
   ]);
 });
 
-test("the sweep expires an offer past its instant, claimed or not, marks it unspoken in the view, and never offers it again", async () => {
+test("the sweep expires an offer past its instant, claimed or not, records why, and never offers it again", async () => {
   clock = NOW;
   const unclaimed = await offered();
   const claimed = await offered(unclaimed.userId);
@@ -548,7 +499,6 @@ test("the sweep expires an offer past its instant, claimed or not, marks it unsp
       deviceId: null,
       payload: { reason: SPEECH_EXPIRY_REASON.DUE },
     });
-    assert.equal(await viewMarksUnspoken(row), true);
     assert.deepEqual(
       await run(claimSpeech(store, row.userId, row.messageId, PHONE, clock)),
       Result.fail(SPEECH_REFUSAL.SETTLED),
@@ -558,7 +508,6 @@ test("the sweep expires an offer past its instant, claimed or not, marks it unsp
     (await openOffers({ userId: unclaimed.userId })).map((offer) => offer.messageId),
     [fresh.messageId],
   );
-  assert.equal(await viewMarksUnspoken(fresh), false);
 });
 
 test("a quiet instant mutes and saves nothing: an offer of an account reporting quiet expires due on its own instant like any other, and the sweep skips a conversation the Clear stamped and stops at its bound", async () => {
@@ -637,5 +586,4 @@ test("a sweep write racing a settled transition is refused under the lock: the o
     (await speechEvents(due.messageId)).map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
   );
-  assert.equal(await viewMarksUnspoken(due), false);
 });

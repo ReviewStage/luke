@@ -30,7 +30,6 @@ const MODULE_SCHEMAS = {
   session: {
     LiveTransportTypeSchema: session.LiveTransportTypeSchema,
     LiveDelegationTypeSchema: session.LiveDelegationTypeSchema,
-    LiveAudioFormatSchema: session.LiveAudioFormatSchema,
     liveCreateAnswerSchema: session.liveCreateAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof session>,
 } as const;

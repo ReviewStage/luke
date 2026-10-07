@@ -54,7 +54,6 @@ test("the sessions function's bundle reaches the exchange and the live-session d
     "server/voice/exchange-attachment.ts",
     "server/voice/live-exchange.ts",
     "server/voice/live-brain.ts",
-    "server/voice/live-briefings.ts",
     "server/voice/live-record.ts",
     "server/voice/live-sideband.ts",
   ]) {

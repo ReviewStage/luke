@@ -1,4 +1,4 @@
-import { resolveHostedUserId } from "../../hosted/vault-route.js";
+import { resolveHostedUserId } from "../../hosted/bearer.js";
 import { plansApp } from "../../plans-app.js";
 import { routeFromHttpRouter } from "../../route-effect.js";
 

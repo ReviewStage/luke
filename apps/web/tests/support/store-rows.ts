@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { MessageRoleSchema } from "@sidecar/wire";
-import { and, count, eq, isNull, sql } from "drizzle-orm";
+import { and, count, eq, isNull } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import type { StoredUIMessage } from "../../server/core";
@@ -323,61 +323,6 @@ export function readMessagesByConversationTyped(
   );
 }
 
-/**
- * Writes a numbered row in place the way `writer.ts` does: the conversation's
- * journal revision moves and the row takes it, in one statement, so a test
- * that streams or finishes a journal beneath the writer moves the head as the
- * writer would.
- *
- * Note that the bump is a data-modifying CTE rather than a second statement,
- * because what this stands for is the writer's own single statement; the
- * builder spells one as a `$with` over an update that returns its new value.
- */
-export function amendMessageInPlace(
-  run: HostedStoreTestRun,
-  row: {
-    readonly conversationId: string;
-    readonly id: string;
-    readonly parts: unknown;
-    readonly finishedAt?: Date;
-  },
-): Promise<void> {
-  const bumped = db.$with("bumped").as(
-    db
-      .update(conversations)
-      .set({ journalRevision: sql`${conversations.journalRevision} + 1` })
-      .where(eq(conversations.id, row.conversationId))
-      .returning({ journalRevision: conversations.journalRevision }),
-  );
-  return run(
-    Effect.asVoid(
-      db
-        .with(bumped)
-        .update(messages)
-        .set({
-          // SAFETY: as in `insertMessage` above — a row the column type forbids
-          // is one of the rows this helper exists to write.
-          parts: row.parts as MessageInsert["parts"],
-          revision: sql`(select ${bumped.journalRevision} from ${bumped})`,
-          // A finish the caller did not name leaves the column as it stands.
-          finishedAt: sql`coalesce(${row.finishedAt ?? null}, ${messages.finishedAt})`,
-        })
-        .where(eq(messages.id, row.id)),
-    ),
-  );
-}
-
-export function readMessageById(
-  run: HostedStoreTestRun,
-  id: string,
-): Promise<MessageRowFull | undefined> {
-  return run(
-    Effect.map(db.select().from(messages).where(eq(messages.id, id)), (rows) =>
-      rows[0] === undefined ? undefined : decodeMessageRow(rows[0]),
-    ),
-  );
-}
-
 export interface EventInsertRow {
   readonly userId: string;
   readonly conversationId: string;
@@ -464,48 +409,6 @@ export const DeviceRowSchema = Schema.Struct({
   pushToken: Schema.NullOr(Schema.String),
   pushEnvironment: Schema.NullOr(Schema.String),
 });
-export type DeviceRow = Schema.Schema.Type<typeof DeviceRowSchema>;
-const decodeDeviceRow = Schema.decodeUnknownSync(DeviceRowSchema);
-
-/** The device columns the decoded row names, which is every column but the two a test never reads. */
-const DEVICE_FIELDS = {
-  id: devices.id,
-  userId: devices.userId,
-  installationId: devices.installationId,
-  platform: devices.platform,
-  lastSeenAt: devices.lastSeenAt,
-  activeUntil: devices.activeUntil,
-  quietUntil: devices.quietUntil,
-  pushToken: devices.pushToken,
-  pushEnvironment: devices.pushEnvironment,
-};
-
-export function readDeviceById(
-  run: HostedStoreTestRun,
-  id: string,
-): Promise<DeviceRow | undefined> {
-  return run(
-    Effect.map(db.select(DEVICE_FIELDS).from(devices).where(eq(devices.id, id)), (rows) =>
-      rows[0] === undefined ? undefined : decodeDeviceRow(rows[0]),
-    ),
-  );
-}
-
-export function setVoiceSessionDeviceId(
-  run: HostedStoreTestRun,
-  liveSessionId: string,
-  deviceId: string | null,
-): Promise<void> {
-  return run(
-    Effect.asVoid(
-      db
-        .update(voiceSessions)
-        .set({ deviceId })
-        .where(eq(voiceSessions.liveSessionId, liveSessionId)),
-    ),
-  );
-}
-
 export function setDeviceQuietUntil(
   run: HostedStoreTestRun,
   id: string,

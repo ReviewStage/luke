@@ -1,18 +1,16 @@
 import type { Effect, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { DeviceHeartbeatRequest, DevicePlatform, PushEnvironment } from "../core.js";
+import type { DevicePlatform, PushEnvironment } from "../core.js";
 
 /**
  * The device record's vocabulary: what a registration and a heartbeat write,
- * and the seams a caller runs them through. `server/devices-vault-app.ts`
- * dispatches the three writes against these seams; `change-signal.ts`'s poll
- * moves the same row through `touchDevice` alone, which is why the seam
- * lives here rather than beside the route that dispatches all three.
+ * and the seams a caller runs them through. The briefing push forgets a row
+ * whose token Apple reports gone through `forgetDevice`.
  */
 
 /** A push token with the gateway that issued it, as a row stores the pair. */
-export interface DevicePushAddress {
+interface DevicePushAddress {
   token: string;
   environment: PushEnvironment;
 }
@@ -23,7 +21,7 @@ export interface DevicePushAddress {
  * it, because a device that registers before Apple has handed its token back
  * still has the token it registered with last time.
  */
-export interface DeviceRegistration {
+interface DeviceRegistration {
   installationId: string;
   platform: DevicePlatform;
   push: DevicePushAddress | undefined;
@@ -36,7 +34,7 @@ export interface DeviceRegistration {
  * when the device reported them; the heartbeat carries no quiet instant, the
  * change-signal poll does.
  */
-export interface DeviceHeartbeat {
+interface DeviceHeartbeat {
   deviceId: string;
   /** `null` clears the presence on file, which is how a device reports it went idle. */
   activeUntil: Date | null | undefined;
@@ -64,22 +62,4 @@ export interface DeviceSeams {
   touchDevice: (userId: string, heartbeat: DeviceHeartbeat, now: Date) => DeviceEffect<boolean>;
   /** Deletes the row only where this account holds it; answers whether a row went. */
   forgetDevice: (userId: string, deviceId: string) => DeviceEffect<boolean>;
-}
-
-/** A push address off a registration or heartbeat body, or none if the fields did not pair. */
-export function pushAddress(fields: {
-  pushToken?: string | null;
-  pushEnvironment?: PushEnvironment;
-}): DevicePushAddress | undefined {
-  if (!fields.pushToken || fields.pushEnvironment === undefined) return undefined;
-  return { token: fields.pushToken, environment: fields.pushEnvironment };
-}
-
-/** A heartbeat request as the seam takes it. */
-export function heartbeatFrom(request: DeviceHeartbeatRequest): DeviceHeartbeat {
-  return {
-    deviceId: request.deviceId,
-    activeUntil: request.activeUntil === undefined ? undefined : new Date(request.activeUntil),
-    push: request.pushToken === null ? null : pushAddress(request),
-  };
 }

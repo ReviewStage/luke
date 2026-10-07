@@ -5,7 +5,7 @@ import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect } from "effect";
 import { user } from "../server/db/auth-schema";
-import { accountPreference, accountWorkspacePreference } from "../server/db/preferences-schema";
+import { accountPreference } from "../server/db/preferences-schema";
 import { db } from "../server/db/query";
 import { hostedUsage } from "../server/db/usage-schema";
 import {
@@ -21,10 +21,9 @@ import { testSqlClient } from "./support/sql-client";
  * The delete is the one action root AGENTS.md treats as unrecoverable, so
  * what is pinned here is the unit as well as the answer: the dependent rows
  * of exactly the named account go with it, another account's stand, and a
- * rewritten snapshot replaces its per-provider rows whole rather than
- * merging into what stood.
+ * rewritten snapshot replaces what stood whole rather than merging into it.
  *
- * Synthetic accounts, provider ids, and project ids throughout.
+ * Synthetic accounts throughout.
  */
 
 const openUser = Effect.gen(function* () {
@@ -45,7 +44,6 @@ const countRows = (userId: string) =>
   Effect.gen(function* () {
     return {
       preferences: yield* rowsOwnedBy(accountPreference.userId, userId),
-      workspaces: yield* rowsOwnedBy(accountWorkspacePreference.userId, userId),
       usage: yield* rowsOwnedBy(hostedUsage.userId, userId),
     };
   });
@@ -61,49 +59,23 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
   it.effect("a written snapshot reads back whole, at the instant it was written", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const written = yield* writeAccountPreferences(userId, {
-        voice: "cedar",
-        defaultWorkspaceProvider: "conductor",
-        workspaceProjectDefaults: { conductor: "project-a", codex: "project-b" },
-        workspaceAgentDefaults: {
-          conductor: { agent: "claude", model: "opus", effort: "high" },
-        },
-      });
+      const written = yield* writeAccountPreferences(userId, { voice: "cedar" });
 
       const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.preferences, {
-        voice: "cedar",
-        defaultWorkspaceProvider: "conductor",
-        workspaceProjectDefaults: { conductor: "project-a", codex: "project-b" },
-        workspaceAgentDefaults: {
-          conductor: { agent: "claude", model: "opus", effort: "high" },
-        },
-      });
+      assert.deepEqual(read?.preferences, { voice: "cedar" });
       assert.equal(read?.updatedAt.getTime(), written.getTime());
     }),
   );
 
-  it.effect("a rewrite replaces the per-provider rows rather than merging into them", () =>
+  it.effect("a rewrite replaces the snapshot rather than merging into it", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      yield* writeAccountPreferences(userId, {
-        workspaceProjectDefaults: { conductor: "project-a", codex: "project-b" },
-      });
-      yield* writeAccountPreferences(userId, {
-        voice: "marin",
-        workspaceProjectDefaults: { conductor: "project-c" },
-      });
+      yield* writeAccountPreferences(userId, { voice: "cedar" });
+      yield* writeAccountPreferences(userId, {});
 
       const read = yield* readAccountPreferences(userId);
-      assert.deepEqual(read?.preferences, {
-        voice: "marin",
-        workspaceProjectDefaults: { conductor: "project-c" },
-      });
-      assert.deepEqual(yield* countRows(userId), {
-        preferences: 1,
-        workspaces: 1,
-        usage: 0,
-      });
+      assert.deepEqual(read?.preferences, {});
+      assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
     }),
   );
 
@@ -121,10 +93,7 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
       const erased = yield* openUser;
       const kept = yield* openUser;
       for (const userId of [erased, kept]) {
-        yield* writeAccountPreferences(userId, {
-          voice: "cedar",
-          workspaceProjectDefaults: { conductor: "project-a" },
-        });
+        yield* writeAccountPreferences(userId, { voice: "cedar" });
         yield* db.insert(hostedUsage).values({ userId, day: "2099-01-01", calls: 3 });
       }
 
@@ -132,16 +101,8 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
 
       const remaining = yield* db.select({ id: user.id }).from(user).where(eq(user.id, erased));
       assert.equal(remaining.length, 0);
-      assert.deepEqual(yield* countRows(erased), {
-        preferences: 0,
-        workspaces: 0,
-        usage: 0,
-      });
-      assert.deepEqual(yield* countRows(kept), {
-        preferences: 1,
-        workspaces: 1,
-        usage: 1,
-      });
+      assert.deepEqual(yield* countRows(erased), { preferences: 0, usage: 0 });
+      assert.deepEqual(yield* countRows(kept), { preferences: 1, usage: 1 });
     }),
   );
 });

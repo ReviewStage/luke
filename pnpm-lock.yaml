@@ -656,9 +656,6 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -834,9 +831,6 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

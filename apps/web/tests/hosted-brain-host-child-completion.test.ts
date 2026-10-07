@@ -38,7 +38,6 @@ import { lockConversationRow } from "../server/hosted/brain-host/recorded-sessio
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import type { ConversationTarget } from "../server/hosted/store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
-import { clearMainConversation } from "../server/hosted/store/soft-delete";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { eveUnreachable } from "./support/no-network";
 import {
@@ -654,31 +653,4 @@ test("a parent cleared while eve was refusing the send no longer stands when a s
   assert.equal(eve.opened.length, 0);
   assert.equal(s.reports.length, 1);
   assert.match(s.reports[0] ?? "", /the conversation no longer stands/);
-});
-
-test("a completion claimed beside the account's Clear takes its locks in the Clear's order, and the two agree on which came first", async () => {
-  const userId = await database.createUser();
-  const { child, parentId } = await childOf({ userId, parentKind: CONVERSATION_KIND.MAIN });
-  const eve = fakeEve();
-  const s = seams({ eve: eve.eve });
-  // The claim locks the user row and then the parent, as the Clear and the child open do, so on a
-  // Postgres with more than one connection neither waits on a lock the other holds while holding
-  // one the other wants. Whichever ran first, the Clear stamps the parent and the child, and the
-  // completion is either delivered before it or claimed against nothing after it.
-  const [delivery, cleared] = await database.run(
-    Effect.all([deliverChildCompletion(s, child), clearMainConversation(userId, new Date(NOW))], {
-      concurrency: "unbounded",
-    }),
-  );
-  assert.deepEqual([...cleared.cleared].sort(), [parentId, child.conversationId].sort());
-  if (delivery === CHILD_COMPLETION_DELIVERY.DELIVERED) {
-    assert.equal(await stampOf(child), NOW);
-    assert.equal(eve.sent.length, 1);
-  } else {
-    assert.equal(delivery, CHILD_COMPLETION_DELIVERY.NOTHING);
-    assert.equal(await stampOf(child), null);
-    assert.equal(eve.sent.length, 0);
-  }
-  const rows = await readConversationById(database.run, child.conversationId);
-  assert.notEqual(rows[0]?.deletedAt, null);
 });

@@ -1,33 +1,22 @@
 import assert from "node:assert/strict";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { test } from "vitest";
+import { LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "../server/live";
 import {
-  LIVE_CLIENT_EVENT,
-  LIVE_INPUT_AUDIO_APPEND,
-  LIVE_SERVER_EVENT,
-  RENDERER_CLIENT_EVENTS,
-  RENDERER_SERVER_EVENTS,
-} from "../server/live";
-import {
-  AUDIO_CLIENT_EVENTS,
-  AUDIO_REPORT_FRAMES,
   deviceFrameDecision,
   FRAME_DECISION,
   frameType,
-  routeForPath,
+  isVoicePath,
   SESSIONS_REPORT_FRAMES,
   upstreamFrameDecision,
-  VOICE_ROUTE,
 } from "../server/voice/frames";
 import { frameBytes, frameText } from "../server/voice/socket";
 
-test("the three upgrade paths map to the three routes and nothing else does", () => {
-  assert.equal(routeForPath(VOICE_SERVICE_PATH.SESSIONS), VOICE_ROUTE.SESSIONS);
-  assert.equal(routeForPath(VOICE_SERVICE_PATH.INTRODUCTION), VOICE_ROUTE.INTRODUCTION);
-  assert.equal(routeForPath(VOICE_SERVICE_PATH.AUDIO), VOICE_ROUTE.AUDIO);
-  assert.equal(routeForPath(`${VOICE_SERVICE_PATH.SESSIONS}/`), undefined);
-  assert.equal(routeForPath(`${VOICE_SERVICE_PATH.AUDIO}/`), undefined);
-  assert.equal(routeForPath("/"), undefined);
+test("the sessions path is the one upgrade path, and nothing else is", () => {
+  assert.equal(isVoicePath(VOICE_SERVICE_PATH.SESSIONS), true);
+  assert.equal(isVoicePath(`${VOICE_SERVICE_PATH.SESSIONS}/`), false);
+  assert.equal(isVoicePath("/api/voice/audio"), false);
+  assert.equal(isVoicePath("/"), false);
 });
 
 test("a frame's type is read from its JSON record alone", () => {
@@ -45,48 +34,41 @@ test("a binary frame reads as nothing, a text frame as its text, and each counts
   assert.equal(frameBytes({ text: "é" }), 2);
 });
 
-test("reflected audio is dropped by type toward the device on the Mac's and phone's routes", () => {
-  for (const route of [VOICE_ROUTE.SESSIONS, VOICE_ROUTE.INTRODUCTION]) {
-    assert.equal(
-      upstreamFrameDecision(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, route),
-      FRAME_DECISION.DROP_AUDIO,
-    );
-    assert.equal(
-      upstreamFrameDecision(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, route),
-      FRAME_DECISION.DROP_AUDIO,
-    );
-  }
+test("reflected audio is dropped by type toward the device", () => {
+  assert.equal(
+    upstreamFrameDecision(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND),
+    FRAME_DECISION.DROP_AUDIO,
+  );
+  assert.equal(
+    upstreamFrameDecision(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA),
+    FRAME_DECISION.DROP_AUDIO,
+  );
 });
 
 test("a signed-in session is shown every frame OpenAI sends, unread ones included", () => {
-  assert.equal(
-    upstreamFrameDecision(LIVE_SERVER_EVENT.DELEGATION_CREATED, VOICE_ROUTE.SESSIONS),
-    FRAME_DECISION.FORWARD,
-  );
-  assert.equal(upstreamFrameDecision(undefined, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
+  assert.equal(upstreamFrameDecision(LIVE_SERVER_EVENT.DELEGATION_CREATED), FRAME_DECISION.FORWARD);
+  assert.equal(upstreamFrameDecision(undefined), FRAME_DECISION.FORWARD);
 });
 
-test("a signed-in device forwards nothing, is read for its hang-up, its idle report, its stop, and its beats, and is refused on anything else", () => {
+test("a signed-in device forwards nothing, is read for its hang-up, its idle report, and its stop, and is refused on anything else", () => {
   assert.deepEqual(SESSIONS_REPORT_FRAMES, [
     VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
     VOICE_SERVICE_FRAME.SESSION_STOP,
-    VOICE_SERVICE_FRAME.SESSION_BEAT,
   ]);
-  // The close is the service's to send: a Mac's hang-up and a phone's own close are both an ask for it.
+  // The close is the service's to send: the Mac's hang-up and an older build's own close are both an ask for it.
   for (const type of [VOICE_SERVICE_FRAME.SESSION_HANG_UP, LIVE_CLIENT_EVENT.CLOSE]) {
-    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.HANG_UP);
+    assert.equal(deviceFrameDecision(type), FRAME_DECISION.HANG_UP);
   }
   for (const type of SESSIONS_REPORT_FRAMES) {
-    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.REPORT);
+    assert.equal(deviceFrameDecision(type), FRAME_DECISION.REPORT);
   }
-  assert.equal(
-    deviceFrameDecision(VOICE_SERVICE_FRAME.SESSION_ACTIVITY, VOICE_ROUTE.SESSIONS),
-    FRAME_DECISION.REPORT,
-  );
-  // The exchange's own appends from an older build of any platform, the microphone
-  // switch that never crosses this socket, a handshake frame after the
-  // handshake, and a frame whose type cannot be read: each closes the socket.
+  assert.equal(deviceFrameDecision(VOICE_SERVICE_FRAME.SESSION_ACTIVITY), FRAME_DECISION.REPORT);
+  // The exchange's own appends from an older build, the microphone switch
+  // that never crosses this socket, the device's own audio, a handshake frame
+  // after the handshake, and a frame whose type cannot be read: each closes
+  // the socket.
   for (const type of [
+    LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND,
     LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
     LIVE_CLIENT_EVENT.THINKING_APPEND,
     LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
@@ -95,101 +77,6 @@ test("a signed-in device forwards nothing, is read for its hang-up, its idle rep
     VOICE_SERVICE_FRAME.SESSION_ATTACH,
     undefined,
   ]) {
-    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.REFUSE);
+    assert.equal(deviceFrameDecision(type), FRAME_DECISION.REFUSE);
   }
-});
-
-test("the introduction is shown exactly the renderer's server events and may send exactly its client events", () => {
-  for (const selector of RENDERER_SERVER_EVENTS) {
-    assert.equal(
-      upstreamFrameDecision(selector.type, VOICE_ROUTE.INTRODUCTION),
-      FRAME_DECISION.FORWARD,
-    );
-  }
-  for (const type of [
-    LIVE_SERVER_EVENT.DELEGATION_CREATED,
-    LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
-    LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
-    undefined,
-  ]) {
-    assert.equal(
-      upstreamFrameDecision(type, VOICE_ROUTE.INTRODUCTION),
-      FRAME_DECISION.DROP_UNPERMITTED,
-    );
-  }
-  for (const type of RENDERER_CLIENT_EVENTS) {
-    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.INTRODUCTION), FRAME_DECISION.FORWARD);
-  }
-  for (const type of [
-    LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
-    LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
-    LIVE_CLIENT_EVENT.THINKING_APPEND,
-    undefined,
-  ]) {
-    assert.equal(
-      deviceFrameDecision(type, VOICE_ROUTE.INTRODUCTION),
-      FRAME_DECISION.DROP_UNPERMITTED,
-    );
-  }
-});
-
-test("the audio route forwards Luke's audio and the renderer's server events to the device, and drops the echo of the device's own audio and everything else", () => {
-  assert.equal(
-    upstreamFrameDecision(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, VOICE_ROUTE.AUDIO),
-    FRAME_DECISION.FORWARD,
-  );
-  for (const selector of RENDERER_SERVER_EVENTS) {
-    assert.equal(upstreamFrameDecision(selector.type, VOICE_ROUTE.AUDIO), FRAME_DECISION.FORWARD);
-  }
-  assert.equal(
-    upstreamFrameDecision(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, VOICE_ROUTE.AUDIO),
-    FRAME_DECISION.DROP_AUDIO,
-  );
-  for (const type of [
-    LIVE_SERVER_EVENT.DELEGATION_CREATED,
-    LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
-    LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
-    LIVE_SERVER_EVENT.THINKING_APPENDED,
-    undefined,
-  ]) {
-    assert.equal(upstreamFrameDecision(type, VOICE_ROUTE.AUDIO), FRAME_DECISION.DROP_UNPERMITTED);
-  }
-});
-
-test("the audio route forwards the device's audio and its hang-up, reads its idle and its stop, and is refused on anything else, the beat included", () => {
-  assert.deepEqual(AUDIO_CLIENT_EVENTS, [LIVE_INPUT_AUDIO_APPEND, LIVE_CLIENT_EVENT.CLOSE]);
-  assert.deepEqual(AUDIO_REPORT_FRAMES, [
-    VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
-    VOICE_SERVICE_FRAME.SESSION_STOP,
-  ]);
-  for (const type of AUDIO_CLIENT_EVENTS) {
-    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.AUDIO), FRAME_DECISION.FORWARD);
-  }
-  for (const type of AUDIO_REPORT_FRAMES) {
-    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.AUDIO), FRAME_DECISION.REPORT);
-  }
-  for (const type of [
-    VOICE_SERVICE_FRAME.SESSION_BEAT,
-    VOICE_SERVICE_FRAME.SESSION_HANG_UP,
-    LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
-    LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
-    LIVE_CLIENT_EVENT.THINKING_APPEND,
-    LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
-    LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
-    VOICE_SERVICE_FRAME.SESSION_CREATE,
-    VOICE_SERVICE_FRAME.SESSION_ATTACH,
-    LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA,
-    undefined,
-  ]) {
-    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.AUDIO), FRAME_DECISION.REFUSE);
-  }
-  // The device's audio is the audio route's alone: the sessions route still closes the socket on it.
-  assert.equal(
-    deviceFrameDecision(LIVE_INPUT_AUDIO_APPEND, VOICE_ROUTE.SESSIONS),
-    FRAME_DECISION.REFUSE,
-  );
-  assert.equal(
-    deviceFrameDecision(LIVE_INPUT_AUDIO_APPEND, VOICE_ROUTE.INTRODUCTION),
-    FRAME_DECISION.DROP_UNPERMITTED,
-  );
 });

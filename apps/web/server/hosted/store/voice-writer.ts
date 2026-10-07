@@ -18,7 +18,6 @@ import {
   TRANSCRIPT_SPEAKER,
   type TranscriptSpeaker,
 } from "../../live.js";
-import { markSpeechSpoken, SPEECH_REFUSAL } from "./speech.js";
 import {
   type ConversationTarget,
   type SpokenAskAttach,
@@ -31,10 +30,8 @@ import {
  * The voice writer: what a GPT Live session's event stream leaves in the
  * record. It writes the tables the plan gives the voice and no other — the
  * timed segments of what was actually said, by whom, in milliseconds on the
- * session's own clock; the `speech.spoken` transition that says a briefing
- * was heard rather than merely offered, taken through the speech module as
- * the device the session belongs to, so only a briefing that device claimed
- * is marked; and each speaker's utterance as a row of the Conversation. The
+ * session's own clock, and each speaker's utterance as a row of the
+ * conversation. The
  * `voice_sessions` row itself is another writer's: the voice service creates
  * it when it creates the session and closes it on `session.closed`, and this
  * writer only reads it for its id, so a session whose row it cannot find is
@@ -46,9 +43,7 @@ import {
  * row with `closed_at` null may still gain segments, a row that has segments
  * is not thereby closed, and nothing this writer keeps between events lives
  * anywhere but the record: a row's words are read back from the segments
- * already written over the span the service names, and the only memory kept
- * in the process is which message a commentary append carried, which the
- * same connection that sent the append learns the answer to.
+ * already written over the span the service names.
  *
  * What is spoken becomes a message through one door, `upsertSpokenRow`,
  * called by the live session service behind each fragment: the row is named
@@ -66,8 +61,7 @@ import {
  * their ids and keep growing after the handover. Every utterance of Luke's is
  * an assistant row authored by the voice model, whatever prompted the words —
  * an answer he gave himself, what he said before handing an ask to the brain,
- * a briefing or the brain's reply read aloud, a greeting or a beat spoken
- * from the build's script — so the Conversation shows what the developer
+ * the brain's reply read aloud, the opening — so the record shows what the developer
  * actually heard, and a reading stands beside the message it was read from
  * rather than in place of it. Segments may overlap, because timed deltas do,
  * and no audio is ever stored.
@@ -78,18 +72,11 @@ import {
  * session row's own lock, which is the transaction the client opens.
  */
 
-/** The live session a stream belongs to, and the conversation its asks and briefings belong to. */
+/** The live session a stream belongs to, and the conversation its asks belong to. */
 export interface VoiceTarget {
   readonly userId: string;
   readonly liveSessionId: string;
   readonly conversation: ConversationTarget;
-}
-
-/** A commentary append the voice service sent, so the ack and the speech that follows can be tied to the message it carried. */
-export interface CommentaryAppend {
-  /** The client event id the append was sent with, which the `commentary.appended` ack names back. */
-  readonly clientEventId: string;
-  readonly messageId: string;
 }
 
 export const VOICE_WRITE_REFUSAL = {
@@ -98,8 +85,6 @@ export const VOICE_WRITE_REFUSAL = {
   NO_CONVERSATION: STORE_WRITE_REFUSAL.NO_CONVERSATION,
   NO_MESSAGE: STORE_WRITE_REFUSAL.NO_MESSAGE,
   MESSAGE_REFUSED: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
-  /** The briefing was not this session's device's to say: nobody claimed it, another device did, or it had already ended. */
-  NOT_CLAIMANT: SPEECH_REFUSAL.NOT_CLAIMANT,
 } as const;
 
 type VoiceWriteRefusal = (typeof VOICE_WRITE_REFUSAL)[keyof typeof VOICE_WRITE_REFUSAL];
@@ -131,8 +116,6 @@ export interface VoiceWriter {
     target: VoiceTarget,
     event: LiveServerEvent,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
-  /** Tells the writer which message a commentary append carries, before the stream acknowledges it. */
-  noteAppend(target: VoiceTarget, append: CommentaryAppend): void;
   /** One speaker's utterance as it stands: inserted under the ledger's id on first sight, grown in place after, cut from the session's segments over its span each time. */
   upsertSpokenRow(
     target: VoiceTarget,
@@ -154,16 +137,8 @@ export interface VoiceWriter {
 }
 
 interface VoiceWriterOptions {
-  /** The messages and events writer, which the spoken ask and the speech event go through. */
+  /** The messages writer, which the spoken rows and the spoken ask go through. */
   readonly store: StoreWriter;
-}
-
-/** An append the service sent, from the ack that placed it to the speech that followed it. */
-interface PendingAppend {
-  readonly messageId: string;
-  readonly conversation: ConversationTarget;
-  /** Where the appended commentary ends on the session's clock; unknown until the ack. */
-  spokenFromMs?: number;
 }
 
 type SegmentDelta = Extract<
@@ -173,11 +148,6 @@ type SegmentDelta = Extract<
       | typeof LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA
       | typeof LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA;
   }
->;
-
-type CommentaryAppended = Extract<
-  LiveServerEvent,
-  { type: typeof LIVE_SERVER_EVENT.COMMENTARY_APPENDED }
 >;
 
 const SEGMENT_ROLE_OF_DELTA = {
@@ -207,16 +177,13 @@ const VoiceSessionKeySchema = Schema.Struct({
   liveSessionId: Schema.String,
 });
 
-/** The `voice_sessions` row this writer reads: its id, and the device the session belongs to. */
-const VoiceSessionRowSchema = Schema.Struct({
-  id: Schema.String,
-  deviceId: Schema.NullOr(Schema.String),
-});
+/** The `voice_sessions` row this writer reads: its id. */
+const VoiceSessionRowSchema = Schema.Struct({ id: Schema.String });
 
 /** The `voice_sessions` row read by its account and the Live API's own id for it, locked or not. */
 const voiceSessionOf = (key: { userId: string; liveSessionId: string }) =>
   db
-    .select({ id: voiceSessions.id, deviceId: voiceSessions.deviceId })
+    .select({ id: voiceSessions.id })
     .from(voiceSessions)
     .where(
       and(eq(voiceSessions.userId, key.userId), eq(voiceSessions.liveSessionId, key.liveSessionId)),
@@ -300,16 +267,6 @@ const findUtteranceSegments = SqlSchema.findAll({
 });
 
 export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
-  /** Appends by live session and client event id: the one thing kept in memory, and only until the speech lands. */
-  const pending = new Map<string, Map<string, PendingAppend>>();
-  const appendsOf = (liveSessionId: string): Map<string, PendingAppend> => {
-    const standing = pending.get(liveSessionId);
-    if (standing !== undefined) return standing;
-    const created = new Map<string, PendingAppend>();
-    pending.set(liveSessionId, created);
-    return created;
-  };
-
   /** One segment, at the next position of the session's own sequence; the primary key is the backstop. Answers the session row. */
   function appendSegment(
     target: VoiceTarget,
@@ -336,63 +293,6 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         }),
       ),
     );
-  }
-
-  /**
-   * A briefing is known to have been said when the session's own voice
-   * follows the append: the first output delta that begins at or after the
-   * appended commentary's end marks the briefing spoken, once, as the device
-   * the session belongs to — the speech module admits the mark only from the
-   * device that claimed the offer, so a session with no device, or one whose
-   * device did not claim, marks nothing — and the append is forgotten.
-   * Every append the delta has reached is marked by it, since two briefings
-   * appended back to back may both be answered by one delta and a second
-   * would otherwise wait for speech that never comes.
-   */
-  function markSpoken(
-    target: VoiceTarget,
-    delta: SegmentDelta,
-    voiceSession: VoiceSessionRow,
-  ): Effect.Effect<VoiceWriteResult | undefined, VoiceWriteFailure, SqlClient.SqlClient> {
-    return Effect.gen(function* () {
-      const appends = appendsOf(target.liveSessionId);
-      let outcome: VoiceWriteResult | undefined;
-      for (const [clientEventId, append] of appends) {
-        if (append.spokenFromMs === undefined || delta.start_ms < append.spokenFromMs) continue;
-        appends.delete(clientEventId);
-        if (voiceSession.deviceId === null) {
-          outcome = Result.fail(VOICE_WRITE_REFUSAL.NOT_CLAIMANT);
-          continue;
-        }
-        const marked = yield* markSpeechSpoken(
-          { writer: store },
-          target.userId,
-          append.messageId,
-          voiceSession.deviceId,
-          // Which session said it, and when on that session's clock.
-          { voiceSessionId: voiceSession.id, atMs: delta.start_ms },
-        );
-        if (Result.isSuccess(marked)) {
-          outcome ??= WRITTEN;
-        } else {
-          outcome = Result.fail(
-            marked.failure === SPEECH_REFUSAL.NOT_FOUND
-              ? VOICE_WRITE_REFUSAL.NO_MESSAGE
-              : VOICE_WRITE_REFUSAL.NOT_CLAIMANT,
-          );
-        }
-      }
-      return outcome;
-    });
-  }
-
-  function placeAppend(target: VoiceTarget, appended: CommentaryAppended): VoiceWriteResult {
-    const clientEventId = appended.client_event_id;
-    if (clientEventId === undefined) return IGNORED;
-    const append = appendsOf(target.liveSessionId).get(clientEventId);
-    if (append === undefined) return IGNORED;
-    append.spokenFromMs = appended.end_ms;
-    return WRITTEN;
   }
 
   /**
@@ -485,24 +385,12 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   return {
     upsertSpokenRow,
     attachSpokenAsk,
-    noteAppend(target, append) {
-      appendsOf(target.liveSessionId).set(append.clientEventId, {
-        messageId: append.messageId,
-        conversation: target.conversation,
-      });
-    },
     consume: (target, event) =>
       Effect.gen(function* () {
         switch (event.type) {
           case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
+          case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA:
             return Option.isNone(yield* appendSegment(target, event)) ? NO_SESSION : WRITTEN;
-          case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA: {
-            const voiceSession = yield* appendSegment(target, event);
-            if (Option.isNone(voiceSession)) return NO_SESSION;
-            return (yield* markSpoken(target, event, voiceSession.value)) ?? WRITTEN;
-          }
-          case LIVE_SERVER_EVENT.COMMENTARY_APPENDED:
-            return placeAppend(target, event);
           default:
             return IGNORED;
         }

@@ -18,18 +18,6 @@ the host, and a web function alike.
   trusted side.**
 - `liveSessionConfig` sets **no field the API does not document for WebRTC** — no
   `audio.format`, no tools, no speed, no truncation.
-- `livePrimarySessionConfig` is the same startup document for a **primary
-  WebSocket**: `audio.format` and **no** `client.data_channel`, since a socket
-  that *is* the session has no channel to restrict and only a primary WebSocket
-  is given a format. One format carries **both directions** and is fixed at
-  startup, so the default — PCM16 at 16 kHz, ruled on 2026-09-14 — is Luke's
-  voice as much as the device's microphone, and changing it is a product
-  decision. `session.start` and the primary socket's own
-  `session.input_audio.append` stand beside the creation request rather than
-  in `LIVE_CLIENT_EVENT`, which is the in-session set a renderer's channel is
-  stated over: a renderer never starts a session or appends audio, and the
-  service's one route that forwards a device's audio names the append by its
-  own constant.
 - `instructions.ts` is the Live prompting guide's starter template with its
   brackets filled in and one block beside them, the speaking policies. **Every
   other optional control from the guide's appendix is absent until listening
@@ -37,8 +25,6 @@ the host, and a web function alike.
   paraphrases every commentary it is handed, so the spoken words are chosen
   here and nowhere else; each line is one labelled policy stating one behavior,
   the template's own shape, with no sample line.
-  `INTRODUCTION` names no delegation capability and says never, because the
-  accountless endpoint wires no carrier.
 
 No full persona stands here: `@sidecar/guide`'s is the brain's, and shapes
 what the brain hands the voice.

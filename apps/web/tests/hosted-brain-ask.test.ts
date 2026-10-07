@@ -1,33 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import {
-  ASK_ORIGIN,
-  HOSTED_API_ERROR,
-  hostedBrainAskAnswerSchema,
-  hostedBrainTurnAnswerSchema,
-  TURN_WAIT_QUERY,
-} from "@sidecar/hosted";
-import {
-  EXCESS_KEYS,
-  TURN_ORIGIN,
-  TURN_STATUS,
-  type TurnStatus,
-  type UnparsedWireValue,
-  type WireBoundaryInput,
-} from "@sidecar/wire";
-import { readEither } from "@sidecar/wire/effect";
+import { ASK_ORIGIN } from "@sidecar/hosted";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
-import {
-  Deferred,
-  Duration,
-  Effect,
-  Fiber,
-  Option,
-  PartitionedSemaphore,
-  Result,
-  Schema,
-} from "effect";
+import { Deferred, Duration, Effect, Fiber, PartitionedSemaphore, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, test } from "vitest";
 import { db } from "../server/db/query";
@@ -36,14 +13,11 @@ import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   ASK_DISPATCH_DEADLINE,
   ASK_REFUSAL,
+  type AskInput,
   acceptAsk,
   askStanding,
-  handleBrainAsk,
-  handleBrainTurn,
-  handleBrainTurnCancel,
   STOP_REFUSAL,
   stopAsk,
-  TURN_WAIT_POLL_MS,
 } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -73,16 +47,14 @@ import {
 } from "../server/hosted/store/asks";
 import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { noDatabase } from "./support/no-database";
 
 /**
- * The ask routes over the real store on PGlite. The ownership refusals here
- * are C2c's route-level half, ridden here because a door merges with its
- * refusals asserted: another account's conversation, a cleared conversation,
- * and a turn whose conversation records no session are each refused at the
- * HTTP layer before eve is reached, and eve being reached is the failure each
- * test names. The ask record is the in-memory shape of the table the routes
- * will stand on; the routes read nothing of it the table will not hold.
+ * The ask door over the real store on PGlite. The ownership refusals here
+ * are the door's own: another account's conversation and a cleared
+ * conversation are each refused before eve is reached, and eve being
+ * reached is the failure each test names. The ask record is the in-memory
+ * shape of the table the door stands on; the door reads nothing of it the
+ * table does not hold.
  */
 
 const NOW = 1_800_000_000_000;
@@ -96,7 +68,6 @@ const writer = await database.run(
   }),
 );
 
-const ORIGIN = "https://luke.test";
 const CLIENT_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
 
 let sessionsMinted = 0;
@@ -197,8 +168,6 @@ type EveCall =
 
 interface FakeEve extends EveSessions {
   readonly calls: EveCall[];
-  /** The bearers eve was reached under. */
-  readonly bearers: string[];
   /** Sessions eve has retired, so a follow-up to one reads as such. */
   readonly retired: Set<string>;
   failNext: number | undefined;
@@ -206,14 +175,13 @@ interface FakeEve extends EveSessions {
   activeTurn: string | undefined;
   /** The turns eve's cancels actually ended, in order. */
   readonly cancelledTurns: string[];
-  /** What the world does while a cancel is on the wire, between the route's read and eve's answer. */
+  /** What the world does while a cancel is on the wire, between the Stop's read and eve's answer. */
   beforeCancel: () => Promise<void>;
 }
 
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     calls: [],
-    bearers: [],
     retired: new Set(),
     failNext: undefined,
     activeTurn: undefined,
@@ -259,92 +227,33 @@ function fakeEve(): FakeEve {
   return eve;
 }
 
-/** The widest of the three route bundles, named from the route that takes it: the module keeps the shape private. */
-type CancelOptions = Parameters<typeof handleBrainTurnCancel>[0];
-
 interface Harness {
   readonly asks: ReturnType<typeof memoryAsks>;
   readonly eve: FakeEve;
-  options(request: Request, userId: string | undefined): CancelOptions;
+  /** Accepts one ask over the harness's record and eve. */
+  ask(input: AskInput): Promise<Effect.Success<ReturnType<typeof acceptAsk>>>;
 }
 
 function harness(): Harness {
   const asks = memoryAsks();
   const eve = fakeEve();
-  const built: Harness = {
-    asks,
-    eve,
-    options: (request, userId) => ({
-      request,
-      resolveUserId: () => Effect.succeed(Option.fromUndefinedOr(userId)),
-      store: database.store,
-      writer,
-      asks,
-      eve: (authorization) => {
-        eve.bearers.push(authorization);
-        return eve;
-      },
-    }),
-  };
-  return built;
+  return { asks, eve, ask: (input) => database.run(acceptAsk({ asks, eve }, input)) };
 }
 
-function bearer(userId: string): string {
-  return `Bearer token-${userId}`;
-}
-
-function askRequest(userId: string, body: WireBoundaryInput): Request {
-  return new Request(`${ORIGIN}/api/brain/ask`, {
-    method: "POST",
-    headers: {
-      authorization: bearer(userId),
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-}
-
-/** The ask route reached with the wrong method. */
-function askRead(userId: string): Request {
-  return new Request(`${ORIGIN}/api/brain/ask`, {
-    method: "GET",
-    headers: { authorization: bearer(userId) },
-  });
-}
-
-function turnRequest(
+/** What a caller that has already resolved the account hands the door: an ask in the given conversation. */
+function askIn(
   userId: string,
-  id: string | undefined,
-  query: Readonly<Record<string, string>> = {},
-  method = "GET",
-): Request {
-  const url = new URL(`${ORIGIN}/api/brain/turns/turn.ts`);
-  if (id !== undefined) url.searchParams.set("id", id);
-  for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
-  return new Request(url, {
-    method,
-    headers: { authorization: bearer(userId) },
-  });
-}
-
-async function body(response: Response): Promise<UnparsedWireValue> {
-  // SAFETY: the route's own JSON answer; the schema read is the validation.
-  return (await response.json()) as UnparsedWireValue;
-}
-
-function parse<Value, Encoded>(
-  schema: Schema.Codec<Value, Encoded>,
-  value: UnparsedWireValue,
-): Value | undefined {
-  // Every answer read here belongs to a family declared tolerant, so the read
-  // drops a key a newer service may have added.
-  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
-}
-
-async function errorOf(response: Response): Promise<[number, string]> {
-  // SAFETY: the handler's own JSON refusal, read for its status and slug.
-  const read = (await response.json()) as { error: string };
-  return [response.status, read.error];
+  conversationId: string,
+  overrides: Partial<AskInput> = {},
+): AskInput {
+  return {
+    userId,
+    conversationId,
+    question: "what changed?",
+    origin: ASK_ORIGIN.TYPED,
+    clientId: CLIENT_ID,
+    ...overrides,
+  };
 }
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
@@ -379,7 +288,6 @@ interface TurnOverrides {
   readonly status?: TurnStatus;
   readonly settledAt?: Date;
   readonly cancelRequestedAt?: Date;
-  /** eve's own id for the turn, as the relay writes it at eve's start; absent, the row is the opener's inbox or one from before the column. */
   readonly eveTurnId?: string;
 }
 
@@ -397,17 +305,25 @@ async function turnRow(
           conversationId,
           origin: TURN_ORIGIN.TYPED,
           status: overrides.status ?? TURN_STATUS.RUNNING,
-          eveTurnId: overrides.eveTurnId ?? null,
           queuedAt: new Date(NOW),
           startedAt: new Date(NOW),
           settledAt: overrides.settledAt ?? null,
           cancelRequestedAt: overrides.cancelRequestedAt ?? null,
+          eveTurnId: overrides.eveTurnId ?? null,
         })
         .returning({ id: turns.id });
       return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
   return row.id;
+}
+
+function settleTurn(turnId: string, settledAt: Date) {
+  return database.run(
+    Effect.asVoid(
+      db.update(turns).set({ status: TURN_STATUS.SETTLED, settledAt }).where(eq(turns.id, turnId)),
+    ),
+  );
 }
 
 function setConversationRuntimeSessionId(conversationId: string, sessionId: string) {
@@ -428,20 +344,6 @@ function stampConversationDeletedAt(conversationId: string, deletedAt: Date) {
     ),
   );
 }
-
-function settleTurn(turnId: string, settledAt: Date) {
-  return database.run(
-    Effect.asVoid(
-      db.update(turns).set({ status: TURN_STATUS.SETTLED, settledAt }).where(eq(turns.id, turnId)),
-    ),
-  );
-}
-
-const ASK = {
-  question: "what changed?",
-  origin: ASK_ORIGIN.TYPED,
-  clientId: CLIENT_ID,
-};
 
 test("eve's origin is the environment's where it names one and the caller's own otherwise, a blank name counting as none", async () => {
   const before = process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN];
@@ -563,139 +465,59 @@ test("a tick on a machine that is neither configured nor deployed dials the orig
   );
 });
 
-test("the gates each refuse on their own: method, bearer, body, the path's id, and the wait bound", async () => {
-  const userId = await database.createUser();
-  const h = harness();
-  assert.deepEqual(
-    await errorOf(await database.run(handleBrainAsk(h.options(askRead(userId), userId)))),
-    [405, HOSTED_API_ERROR.METHOD_NOT_ALLOWED],
-  );
-  assert.deepEqual(
-    await errorOf(
-      await database.run(handleBrainAsk(h.options(askRequest(userId, ASK), undefined))),
-    ),
-    [401, HOSTED_API_ERROR.INVALID_TOKEN],
-  );
-  assert.deepEqual(
-    await errorOf(
-      await database.run(
-        handleBrainAsk(h.options(askRequest(userId, { ...ASK, extra: 1 }), userId)),
-      ),
-    ),
-    [400, HOSTED_API_ERROR.INVALID_REQUEST],
-  );
-  assert.deepEqual(
-    await errorOf(
-      await database.run(
-        handleBrainAsk(
-          h.options(askRequest(userId, { ...ASK, origin: TURN_ORIGIN.TRANSCRIPT_CHANGE }), userId),
-        ),
-      ),
-    ),
-    [400, HOSTED_API_ERROR.INVALID_REQUEST],
-  );
-  assert.deepEqual(
-    await errorOf(
-      await database.run(handleBrainTurn(h.options(turnRequest(userId, undefined), userId))),
-    ),
-    [400, HOSTED_API_ERROR.INVALID_REQUEST],
-  );
-  assert.deepEqual(
-    await errorOf(
-      await database.run(handleBrainTurn(h.options(turnRequest(userId, "not-a-uuid"), userId))),
-    ),
-    [404, HOSTED_API_ERROR.NOT_FOUND],
-  );
-  assert.deepEqual(
-    await errorOf(
-      await database.run(
-        handleBrainTurn(
-          h.options(turnRequest(userId, randomUUID(), { [TURN_WAIT_QUERY]: "90000" }), userId),
-        ),
-      ),
-    ),
-    [400, HOSTED_API_ERROR.INVALID_REQUEST],
-  );
-  assert.deepEqual(
-    await errorOf(
-      await database.run(
-        handleBrainTurnCancel(h.options(turnRequest(userId, randomUUID()), userId)),
-      ),
-    ),
-    [405, HOSTED_API_ERROR.METHOD_NOT_ALLOWED],
-  );
-  assert.deepEqual(h.eve.calls, []);
-});
-
 test("an ask naming another account's conversation is refused as not found before eve is reached, and nothing is recorded", async () => {
   const owner = await database.createUser();
   const other = await database.createUser();
   const owned = await conversation(owner);
   const h = harness();
-  const response = await database.run(
-    handleBrainAsk(h.options(askRequest(other, { ...ASK, conversationId: owned }), other)),
+  assert.deepEqual(
+    await h.ask(askIn(other, owned)),
+    Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND }),
   );
-  assert.deepEqual(await errorOf(response), [404, HOSTED_API_ERROR.NOT_FOUND]);
   assert.deepEqual(h.eve.calls, []);
   assert.equal(h.asks.rows.size, 0);
 });
 
-test("an ask naming a cleared conversation is refused as not found before eve is reached; the account's next ask without one opens a fresh main", async () => {
+test("an ask naming a cleared conversation is refused as not found before eve is reached, and nothing is recorded", async () => {
   const userId = await database.createUser();
   const cleared = await conversation(userId, { deletedAt: new Date(NOW) });
   const h = harness();
-  const refused = await database.run(
-    handleBrainAsk(h.options(askRequest(userId, { ...ASK, conversationId: cleared }), userId)),
+  assert.deepEqual(
+    await h.ask(askIn(userId, cleared)),
+    Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND }),
   );
-  assert.deepEqual(await errorOf(refused), [404, HOSTED_API_ERROR.NOT_FOUND]);
   assert.deepEqual(h.eve.calls, []);
-
-  const opened = await database.run(handleBrainAsk(h.options(askRequest(userId, ASK), userId)));
-  assert.equal(opened.status, 202);
-  const answer = parse(hostedBrainAskAnswerSchema, await body(opened));
-  assert.ok(answer);
-  assert.notEqual(answer.conversationId, cleared);
-  assert.equal(h.eve.calls.length, 1);
+  assert.equal(h.asks.rows.size, 0);
 });
 
-test("the first ask opens the conversation's session under the caller's own bearer and its turn is the session's first; a second ask follows up on the recorded session and stands on its delivery", async () => {
+test("the first ask opens the conversation's session and its turn is the session's first; a second ask follows up on the recorded session and stands on its delivery", async () => {
   const userId = await database.createUser();
+  const conversationId = await conversation(userId);
   const h = harness();
-  const first = await database.run(handleBrainAsk(h.options(askRequest(userId, ASK), userId)));
-  assert.equal(first.status, 202);
-  const accepted = parse(hostedBrainAskAnswerSchema, await body(first));
-  assert.ok(accepted);
+  const first = await h.ask(askIn(userId, conversationId));
+  assert.ok(Result.isSuccess(first));
+  const accepted = first.success;
+  assert.equal(accepted.conversationId, conversationId);
   assert.equal(accepted.queuedAt, NOW);
-  assert.deepEqual(h.eve.bearers, [bearer(userId)]);
   const [open] = h.eve.calls;
   assert.ok(open && open.kind === "open");
   assert.deepEqual(open.message, {
-    conversationId: accepted.conversationId,
+    conversationId,
     turn: BRAIN_HOST_TURN.TYPED,
-    message: ASK.question,
+    message: "what changed?",
   });
   const recorded = h.asks.rows.get(accepted.id);
   assert.ok(recorded?.sessionId);
   assert.equal(recorded.turnId, hostTurnId(recorded.sessionId, EVE_FIRST_TURN_ID));
   assert.equal(recorded.deliveryId, undefined);
 
-  await setConversationRuntimeSessionId(accepted.conversationId, recorded.sessionId);
-  const second = await database.run(
-    handleBrainAsk(
-      h.options(
-        askRequest(userId, {
-          ...ASK,
-          clientId: randomUUID(),
-          origin: ASK_ORIGIN.SPOKEN,
-        }),
-        userId,
-      ),
-    ),
+  await setConversationRuntimeSessionId(conversationId, recorded.sessionId);
+  const second = await h.ask(
+    askIn(userId, conversationId, { clientId: randomUUID(), origin: ASK_ORIGIN.SPOKEN }),
   );
-  assert.equal(second.status, 202);
-  const followUp = parse(hostedBrainAskAnswerSchema, await body(second));
-  assert.ok(followUp);
-  assert.equal(followUp.conversationId, accepted.conversationId);
+  assert.ok(Result.isSuccess(second));
+  const followUp = second.success;
+  assert.equal(followUp.conversationId, conversationId);
   const [, send] = h.eve.calls;
   assert.ok(send && send.kind === "send");
   assert.equal(send.sessionId, recorded.sessionId);
@@ -708,11 +530,10 @@ test("the first ask opens the conversation's session under the caller's own bear
 
 test("a follow-up before the conversation row records the session still goes to the session the last ask opened, so two sessions never race for one conversation", async () => {
   const userId = await database.createUser();
+  const conversationId = await conversation(userId);
   const h = harness();
-  await database.run(handleBrainAsk(h.options(askRequest(userId, ASK), userId)));
-  await database.run(
-    handleBrainAsk(h.options(askRequest(userId, { ...ASK, clientId: randomUUID() }), userId)),
-  );
+  await h.ask(askIn(userId, conversationId));
+  await h.ask(askIn(userId, conversationId, { clientId: randomUUID() }));
   assert.deepEqual(
     h.eve.calls.map((call) => call.kind),
     ["open", "send"],
@@ -731,24 +552,13 @@ test("a follow-up goes to the newest session the record knows of, by eve's own s
   const conversationId = await conversation(userId, {
     runtimeSessionId: older,
   });
-  const first = parse(
-    hostedBrainAskAnswerSchema,
-    await body(
-      await database.run(
-        handleBrainAsk(h.options(askRequest(userId, { ...ASK, conversationId }), userId)),
-      ),
-    ),
-  );
-  assert.ok(first);
-  const record = h.asks.rows.get(first.id);
+  const first = await h.ask(askIn(userId, conversationId));
+  assert.ok(Result.isSuccess(first));
+  const record = h.asks.rows.get(first.success.id);
   assert.ok(record);
-  h.asks.rows.set(first.id, { ...record, sessionId: newer });
+  h.asks.rows.set(first.success.id, { ...record, sessionId: newer });
 
-  await database.run(
-    handleBrainAsk(
-      h.options(askRequest(userId, { ...ASK, conversationId, clientId: randomUUID() }), userId),
-    ),
-  );
+  await h.ask(askIn(userId, conversationId, { clientId: randomUUID() }));
   const [, send] = h.eve.calls;
   assert.ok(send && send.kind === "send");
   assert.equal(send.sessionId, newer);
@@ -762,10 +572,7 @@ test("a session eve has retired is opened again for the ask that found it so", a
     runtimeSessionId: stale,
   });
   h.eve.retired.add(stale);
-  const response = await database.run(
-    handleBrainAsk(h.options(askRequest(userId, { ...ASK, conversationId }), userId)),
-  );
-  assert.equal(response.status, 202);
+  assert.ok(Result.isSuccess(await h.ask(askIn(userId, conversationId))));
   assert.deepEqual(
     h.eve.calls.map((call) => call.kind),
     ["send", "open"],
@@ -777,187 +584,82 @@ test("a session eve has retired is opened again for the ask that found it so", a
 
 test("the same client id is the same ask: answered again with the same id and dispatched once; a dispatch eve refused is dispatched again on the retry", async () => {
   const userId = await database.createUser();
+  const conversationId = await conversation(userId);
   const h = harness();
   h.eve.failNext = 503;
-  const refused = await database.run(handleBrainAsk(h.options(askRequest(userId, ASK), userId)));
-  assert.deepEqual(await errorOf(refused), [502, HOSTED_API_ERROR.UPSTREAM_ERROR]);
+  assert.deepEqual(
+    await h.ask(askIn(userId, conversationId)),
+    Result.fail({ refusal: ASK_REFUSAL.UPSTREAM, status: 503 }),
+  );
   assert.equal(h.asks.rows.size, 1);
 
-  const retried = await database.run(handleBrainAsk(h.options(askRequest(userId, ASK), userId)));
-  assert.equal(retried.status, 202);
-  const accepted = parse(hostedBrainAskAnswerSchema, await body(retried));
-  assert.ok(accepted);
-  const again = await database.run(handleBrainAsk(h.options(askRequest(userId, ASK), userId)));
-  assert.equal(again.status, 202);
-  const same = parse(hostedBrainAskAnswerSchema, await body(again));
-  assert.deepEqual(same, accepted);
+  const retried = await h.ask(askIn(userId, conversationId));
+  assert.ok(Result.isSuccess(retried));
+  assert.deepEqual(await h.ask(askIn(userId, conversationId)), retried);
   assert.equal(h.eve.calls.length, 2);
   assert.equal(h.asks.rows.size, 1);
 });
 
-test("a turn read answers a turn row's stamps under the id asked by, an ask without a turn as queued, and another account's turn or an ask over a cleared conversation as not found", async () => {
+test("the standing read answers a turn row under its own id, an ask without a turn on its record alone, an ask whose turn started with that turn, and another account's id or a cleared conversation's as not found", async () => {
   const owner = await database.createUser();
   const other = await database.createUser();
   const h = harness();
+  const reads = { store: database.store, asks: h.asks };
+  const standing = (userId: string, id: string) => database.run(askStanding(reads, userId, id));
   const conversationId = await conversation(owner);
   const turnId = await turnRow(owner, conversationId, {
     status: TURN_STATUS.SETTLED,
     settledAt: new Date(NOW + 5_000),
   });
-  const read = await database.run(handleBrainTurn(h.options(turnRequest(owner, turnId), owner)));
-  assert.equal(read.status, 200);
-  const answer = parse(hostedBrainTurnAnswerSchema, await body(read));
-  assert.deepEqual(answer, {
-    id: turnId,
-    turnId,
-    conversationId,
-    origin: TURN_ORIGIN.TYPED,
-    status: TURN_STATUS.SETTLED,
-    queuedAt: NOW,
-    startedAt: NOW,
-    settledAt: NOW + 5_000,
-  });
+  const turn = await standing(owner, turnId);
+  assert.equal(turn?.ask, undefined);
   assert.deepEqual(
-    await errorOf(
-      await database.run(handleBrainTurn(h.options(turnRequest(other, turnId), other))),
-    ),
-    [404, HOSTED_API_ERROR.NOT_FOUND],
+    turn?.turn && {
+      id: turn.turn.id,
+      conversationId: turn.turn.conversationId,
+      origin: turn.turn.origin,
+      status: turn.turn.status,
+      queuedAt: turn.turn.queuedAt.getTime(),
+      startedAt: turn.turn.startedAt?.getTime(),
+      settledAt: turn.turn.settledAt?.getTime(),
+    },
+    {
+      id: turnId,
+      conversationId,
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.SETTLED,
+      queuedAt: NOW,
+      startedAt: NOW,
+      settledAt: NOW + 5_000,
+    },
   );
 
-  const asked = parse(
-    hostedBrainAskAnswerSchema,
-    await body(
-      await database.run(
-        handleBrainAsk(h.options(askRequest(owner, { ...ASK, conversationId }), owner)),
-      ),
-    ),
-  );
-  assert.ok(asked);
-  const row = h.asks.rows.get(asked.id);
-  assert.ok(row);
-  h.asks.rows.set(asked.id, beforeItsTurn(row));
-  const queued = parse(
-    hostedBrainTurnAnswerSchema,
-    await body(await database.run(handleBrainTurn(h.options(turnRequest(owner, asked.id), owner)))),
-  );
-  assert.deepEqual(queued, {
-    id: asked.id,
-    conversationId,
-    origin: TURN_ORIGIN.TYPED,
-    status: TURN_STATUS.QUEUED,
-    queuedAt: NOW,
-  });
-
-  assert.deepEqual(
-    await errorOf(
-      await database.run(handleBrainTurn(h.options(turnRequest(other, asked.id), other))),
-    ),
-    [404, HOSTED_API_ERROR.NOT_FOUND],
-  );
-
-  await stampConversationDeletedAt(conversationId, new Date(NOW));
-  assert.deepEqual(
-    await errorOf(
-      await database.run(handleBrainTurn(h.options(turnRequest(owner, asked.id), owner))),
-    ),
-    [404, HOSTED_API_ERROR.NOT_FOUND],
-  );
-  assert.deepEqual(
-    await errorOf(
-      await database.run(handleBrainTurn(h.options(turnRequest(owner, turnId), owner))),
-    ),
-    [404, HOSTED_API_ERROR.NOT_FOUND],
-  );
-});
-
-test("the in-process standing read answers what the turn route answers: for a queued ask, for a turn row, for another account's id, and for a conversation cleared under both", async () => {
-  const owner = await database.createUser();
-  const other = await database.createUser();
-  const h = harness();
-  const conversationId = await conversation(owner);
-  const turnId = await turnRow(owner, conversationId, {
-    cancelRequestedAt: new Date(NOW + 1),
-  });
-  const asked = parse(
-    hostedBrainAskAnswerSchema,
-    await body(
-      await database.run(
-        handleBrainAsk(h.options(askRequest(owner, { ...ASK, conversationId }), owner)),
-      ),
-    ),
-  );
-  assert.ok(asked);
-  const record = h.asks.rows.get(asked.id);
+  const asked = await h.ask(askIn(owner, conversationId));
+  assert.ok(Result.isSuccess(asked));
+  const record = h.asks.rows.get(asked.success.id);
   assert.ok(record);
-  h.asks.rows.set(asked.id, beforeItsTurn(record));
-  const reads = { store: database.store, run: database.run, asks: h.asks };
-  const routed = async (userId: string, id: string) =>
-    parse(
-      hostedBrainTurnAnswerSchema,
-      await body(await database.run(handleBrainTurn(h.options(turnRequest(userId, id), userId)))),
-    );
+  h.asks.rows.set(asked.success.id, beforeItsTurn(record));
+  assert.deepEqual(await standing(owner, asked.success.id), {
+    ask: beforeItsTurn(record),
+    turn: undefined,
+  });
 
-  for (const id of [asked.id, turnId]) {
-    const viaRoute = await routed(owner, id);
-    assert.ok(viaRoute);
-    assert.deepEqual((await database.run(askStanding(reads, owner, id)))?.answer, viaRoute);
-    assert.equal(await routed(other, id), undefined);
-    assert.equal(await database.run(askStanding(reads, other, id)), undefined);
+  h.asks.rows.set(asked.success.id, { ...record, turnId });
+  assert.deepEqual(await standing(owner, asked.success.id), {
+    ask: { ...record, turnId },
+    turn: turn?.turn,
+  });
+
+  for (const id of [asked.success.id, turnId]) {
+    assert.equal(await standing(other, id), undefined);
   }
+  assert.equal(await standing(owner, randomUUID()), undefined);
 
   await stampConversationDeletedAt(conversationId, new Date(NOW));
-  for (const id of [asked.id, turnId]) {
-    assert.deepEqual(
-      await errorOf(await database.run(handleBrainTurn(h.options(turnRequest(owner, id), owner)))),
-      [404, HOSTED_API_ERROR.NOT_FOUND],
-    );
-    assert.equal(await database.run(askStanding(reads, owner, id)), undefined);
+  for (const id of [asked.success.id, turnId]) {
+    assert.equal(await standing(owner, id), undefined);
   }
 });
-
-test("the in-process ask answers what the ask route answers: the same record again for the same client id, and the same refusal for another account's conversation", async () => {
-  const owner = await database.createUser();
-  const other = await database.createUser();
-  const h = harness();
-  const conversationId = await conversation(owner);
-  const seams = {
-    run: database.run,
-    asks: h.asks,
-    eve: h.eve,
-  };
-  const routed = parse(
-    hostedBrainAskAnswerSchema,
-    await body(
-      await database.run(
-        handleBrainAsk(h.options(askRequest(owner, { ...ASK, conversationId }), owner)),
-      ),
-    ),
-  );
-  assert.ok(routed);
-  assert.deepEqual(
-    await database.run(acceptAsk(seams, { ...ASK, conversationId, userId: owner })),
-    Result.succeed(routed),
-  );
-  assert.equal(h.eve.calls.length, 1);
-
-  assert.deepEqual(
-    await errorOf(
-      await database.run(
-        handleBrainAsk(h.options(askRequest(other, { ...ASK, conversationId }), other)),
-      ),
-    ),
-    [404, HOSTED_API_ERROR.NOT_FOUND],
-  );
-  assert.deepEqual(
-    await database.run(acceptAsk(seams, { ...ASK, conversationId, userId: other })),
-    Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND }),
-  );
-  assert.equal(h.eve.calls.length, 1);
-});
-
-function cancelRequest(userId: string, id: string | undefined): Request {
-  return turnRequest(userId, id, {}, "POST");
-}
 
 test("a Stop on a running turn is eve's cancel of that turn in the conversation's recorded session and a stamp on the row; on an ask still waiting it is a stamp on the record and reaches eve not at all", async () => {
   const userId = await database.createUser();
@@ -966,102 +668,50 @@ test("a Stop on a running turn is eve's cancel of that turn in the conversation'
   const conversationId = await conversation(userId, {
     runtimeSessionId: sessionId,
   });
+  const seams = { store: database.store, asks: h.asks, writer, eve: h.eve };
   const turnId = await turnRow(userId, conversationId, { eveTurnId: "turn_1" });
   h.eve.activeTurn = "turn_1";
-  const cancelled = await database.run(
-    handleBrainTurnCancel(h.options(cancelRequest(userId, turnId), userId)),
+  assert.deepEqual(
+    await database.run(stopAsk(seams, userId, turnId)),
+    Result.succeed({ status: TURN_STATUS.RUNNING, cancelRequestedAt: NOW }),
   );
-  assert.equal(cancelled.status, 200);
-  const answer = parse(hostedBrainTurnAnswerSchema, await body(cancelled));
-  assert.equal(answer?.cancelRequestedAt, NOW);
   assert.deepEqual(h.eve.calls, [{ kind: "cancel", sessionId, eveTurnId: "turn_1" }]);
   assert.deepEqual(h.eve.cancelledTurns, ["turn_1"]);
   const [row] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
 
-  const asked = parse(
-    hostedBrainAskAnswerSchema,
-    await body(
-      await database.run(
-        handleBrainAsk(h.options(askRequest(userId, { ...ASK, conversationId }), userId)),
-      ),
-    ),
-  );
-  assert.ok(asked);
-  const record = h.asks.rows.get(asked.id);
+  const asked = await h.ask(askIn(userId, conversationId));
+  assert.ok(Result.isSuccess(asked));
+  const record = h.asks.rows.get(asked.success.id);
   assert.ok(record);
-  h.asks.rows.set(asked.id, beforeItsTurn(record));
+  h.asks.rows.set(asked.success.id, beforeItsTurn(record));
   const callsBefore = h.eve.calls.length;
-  const stamped = await database.run(
-    handleBrainTurnCancel(h.options(cancelRequest(userId, asked.id), userId)),
+  assert.deepEqual(
+    await database.run(stopAsk(seams, userId, asked.success.id)),
+    Result.succeed({ status: TURN_STATUS.QUEUED, cancelRequestedAt: NOW }),
   );
-  assert.equal(stamped.status, 200);
-  const stampedAnswer = parse(hostedBrainTurnAnswerSchema, await body(stamped));
-  assert.equal(stampedAnswer?.status, TURN_STATUS.QUEUED);
-  assert.equal(stampedAnswer?.cancelRequestedAt, NOW);
-  assert.equal(h.asks.rows.get(asked.id)?.cancelRequestedAt?.getTime(), NOW);
+  assert.equal(h.asks.rows.get(asked.success.id)?.cancelRequestedAt?.getTime(), NOW);
   assert.equal(h.eve.calls.length, callsBefore);
 });
 
-test("the in-process Stop answers what the cancel route answers: for a running turn, for a waiting ask, for a turn whose conversation records no session, and for another account's id", async () => {
+test("a Stop on another account's id is refused as not found, and one on a turn whose conversation records no session as not running, leaving the row unstamped", async () => {
   const owner = await database.createUser();
   const other = await database.createUser();
   const h = harness();
-  const recorded = await conversation(owner, {
-    runtimeSessionId: mintSession(),
-  });
+  const seams = { store: database.store, asks: h.asks, writer, eve: h.eve };
+  const recorded = await conversation(owner, { runtimeSessionId: mintSession() });
   const running = await turnRow(owner, recorded, { eveTurnId: "turn_1" });
-  const unrecordedOwner = await database.createUser();
-  const unrecorded = await conversation(unrecordedOwner);
-  const orphan = await turnRow(unrecordedOwner, unrecorded);
-  const asked = parse(
-    hostedBrainAskAnswerSchema,
-    await body(
-      await database.run(
-        handleBrainAsk(h.options(askRequest(owner, { ...ASK, conversationId: recorded }), owner)),
-      ),
-    ),
-  );
-  assert.ok(asked);
-  const record = h.asks.rows.get(asked.id);
-  assert.ok(record);
-  h.asks.rows.set(asked.id, beforeItsTurn(record));
-  const seams = {
-    store: database.store,
-    run: database.run,
-    asks: h.asks,
-    writer,
-    eve: h.eve,
-  };
-
-  for (const id of [running, asked.id]) {
-    const viaRoute = parse(
-      hostedBrainTurnAnswerSchema,
-      await body(
-        await database.run(handleBrainTurnCancel(h.options(cancelRequest(owner, id), owner))),
-      ),
-    );
-    assert.ok(viaRoute);
-    assert.deepEqual(await database.run(stopAsk(seams, owner, id)), Result.succeed(viaRoute));
-    assert.deepEqual(
-      await errorOf(
-        await database.run(handleBrainTurnCancel(h.options(cancelRequest(other, id), other))),
-      ),
-      [404, HOSTED_API_ERROR.NOT_FOUND],
-    );
+  const asked = await h.ask(askIn(owner, recorded));
+  assert.ok(Result.isSuccess(asked));
+  for (const id of [running, asked.success.id]) {
     assert.deepEqual(
       await database.run(stopAsk(seams, other, id)),
       Result.fail({ refusal: STOP_REFUSAL.NOT_FOUND }),
     );
   }
-  assert.deepEqual(
-    await errorOf(
-      await database.run(
-        handleBrainTurnCancel(h.options(cancelRequest(unrecordedOwner, orphan), unrecordedOwner)),
-      ),
-    ),
-    [409, HOSTED_API_ERROR.NOT_RUNNING],
-  );
+  const unrecordedOwner = await database.createUser();
+  const unrecorded = await conversation(unrecordedOwner);
+  const orphan = await turnRow(unrecordedOwner, unrecorded);
   assert.deepEqual(
     await database.run(stopAsk(seams, unrecordedOwner, orphan)),
     Result.fail({ refusal: STOP_REFUSAL.NOT_RUNNING }),
@@ -1087,12 +737,7 @@ test("a Stop cancels only the turn it was aimed at: the intended turn ending whi
     next = await turnRow(userId, conversationId, { eveTurnId: "turn_2" });
     h.eve.activeTurn = "turn_2";
   };
-  const seams = {
-    store: database.store,
-    asks: h.asks,
-    writer,
-    eve: h.eve,
-  };
+  const seams = { store: database.store, asks: h.asks, writer, eve: h.eve };
   const outcome = await database.run(stopAsk(seams, userId, intended));
   assert.ok(Result.isSuccess(outcome));
   assert.deepEqual(h.eve.cancelledTurns, []);
@@ -1112,18 +757,12 @@ test("a Stop cancels only the turn it was aimed at: the intended turn ending whi
 test("a running row that names no eve turn takes the stamp alone: eve is asked nothing, since nothing of eve's stands under it to name", async () => {
   const userId = await database.createUser();
   const h = harness();
-  const sessionId = mintSession();
   const conversationId = await conversation(userId, {
-    runtimeSessionId: sessionId,
+    runtimeSessionId: mintSession(),
   });
   const unnamed = await turnRow(userId, conversationId);
   h.eve.activeTurn = "turn_5";
-  const seams = {
-    store: database.store,
-    asks: h.asks,
-    writer,
-    eve: h.eve,
-  };
+  const seams = { store: database.store, asks: h.asks, writer, eve: h.eve };
   const outcome = await database.run(stopAsk(seams, userId, unnamed));
   assert.deepEqual(Result.isSuccess(outcome) && outcome.success.cancelRequestedAt, NOW);
   assert.deepEqual(h.eve.calls, []);
@@ -1168,80 +807,6 @@ test("the writer stamps a Stop on a turn the conversation holds once, and refuse
 });
 
 it.effect(
-  "a held read answers the moment the turn settles, and at the bound with the turn as it then stands",
-  () =>
-    Effect.gen(function* () {
-      const userId = yield* Effect.promise(() => database.createUser());
-      const conversationId = yield* Effect.promise(() => conversation(userId));
-      const turnId = yield* Effect.promise(() => turnRow(userId, conversationId));
-      const [row] = yield* Effect.promise(() =>
-        database.run(database.store.turns.named(userId, [turnId])),
-      );
-      assert.ok(row);
-      // The turn as memory holds it, so each poll is a synchronous read the test clock steps
-      // through: an adjust runs the read that fell due and arms the next wait before it returns.
-      // The client refuses every statement, which is what shows the held read touches no row.
-      let turn = row;
-      let reads = 0;
-      const h = harness();
-      const held = (wait: string) =>
-        Effect.forkChild(
-          Effect.provide(
-            handleBrainTurn({
-              ...h.options(turnRequest(userId, turnId, { [TURN_WAIT_QUERY]: wait }), userId),
-              store: {
-                turns: {
-                  ...database.store.turns,
-                  named: () =>
-                    Effect.sync(() => {
-                      reads += 1;
-                      return [turn];
-                    }),
-                },
-              },
-            }),
-            noDatabase,
-          ),
-          { startImmediately: true },
-        );
-
-      const settling = yield* held("5000");
-      yield* TestClock.adjust(`${TURN_WAIT_POLL_MS} millis`);
-      assert.equal(reads, 2);
-      turn = { ...turn, status: TURN_STATUS.SETTLED, settledAt: new Date(NOW + 1_000) };
-      yield* TestClock.adjust(`${TURN_WAIT_POLL_MS} millis`);
-      const answered = yield* Fiber.join(settling);
-      assert.equal(answered.status, 200);
-      const settled = parse(
-        hostedBrainTurnAnswerSchema,
-        yield* Effect.promise(() => body(answered)),
-      );
-      assert.equal(settled?.status, TURN_STATUS.SETTLED);
-      assert.equal(settled?.settledAt, NOW + 1_000);
-      assert.equal(reads, 3);
-
-      // Held to a bound off the poll's grid: three polls, then the bound's own read, which sees
-      // the stamp that landed after the last poll.
-      turn = { ...row };
-      reads = 0;
-      const running = yield* held("1800");
-      yield* TestClock.adjust(`${TURN_WAIT_POLL_MS * 3} millis`);
-      assert.equal(reads, 4);
-      turn = { ...turn, cancelRequestedAt: new Date(NOW + 1_700) };
-      yield* TestClock.adjust("300 millis");
-      const response = yield* Fiber.join(running);
-      const stamped = parse(
-        hostedBrainTurnAnswerSchema,
-        yield* Effect.promise(() => body(response)),
-      );
-      assert.equal(response.status, 200);
-      assert.equal(stamped?.status, TURN_STATUS.RUNNING);
-      assert.equal(stamped?.cancelRequestedAt, NOW + 1_700);
-      assert.equal(reads, 5);
-    }),
-);
-
-it.effect(
   "a dispatch eve never answers is released at the deadline: the ask is refused as eve unreachable and its row stands undispatched for a retry",
   () =>
     Effect.gen(function* () {
@@ -1260,7 +825,7 @@ it.effect(
       };
       const accepting = yield* Effect.forkChild(
         Effect.provide(
-          acceptAsk({ asks: h.asks, eve: hung }, { ...ASK, conversationId, userId }),
+          acceptAsk({ asks: h.asks, eve: hung }, askIn(userId, conversationId)),
           database.sql,
         ),
         { startImmediately: true },

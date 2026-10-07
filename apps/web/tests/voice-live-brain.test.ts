@@ -171,7 +171,7 @@ function fakeEve(): FakeEve {
   return eve;
 }
 
-/** A fresh account with its standing main, the conversation a spoken ask lands in. */
+/** A fresh account with a conversation, the one a spoken ask lands in unless a test names another. */
 async function account(): Promise<ConversationTarget> {
   const userId = await database.createUser();
   const conversationId = await insertConversation(database.run, { userId });
@@ -202,7 +202,7 @@ async function stand(
   target: ConversationTarget,
   bounds: NonNullable<HostedLiveBrainOptions["bounds"]> = QUICK,
   store: HostedLiveBrainOptions["store"] = database.store,
-  pinned?: string,
+  conversationId: string = target.conversationId,
   record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
 ): Promise<Stand> {
   const eve = fakeEve();
@@ -215,7 +215,7 @@ async function stand(
     Scope.provide(
       hostedLiveBrain({
         userId: target.userId,
-        ...(pinned === undefined ? undefined : { conversationId: pinned }),
+        conversationId,
         asks: { asks: record, eve },
         store,
         writer,
@@ -571,7 +571,7 @@ it.live(
             : askEffects.named(userId, id),
       };
       const f = yield* Effect.promise(() =>
-        stand(target, QUICK, database.store, undefined, record),
+        stand(target, QUICK, database.store, target.conversationId, record),
       );
       const first = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q1"))));
       const second = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q2"))));
@@ -629,7 +629,7 @@ it.live(
           }),
       };
       const f = yield* Effect.promise(() =>
-        stand(target, QUICK, database.store, undefined, record),
+        stand(target, QUICK, database.store, target.conversationId, record),
       );
       const first = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q1"))));
       const second = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q2"))));
@@ -716,7 +716,7 @@ it.live(
           askStanding({ store: database.store, asks: askEffects }, target.userId, accepted.runId),
         ),
       );
-      assert.notEqual(stamped?.answer.cancelRequestedAt, undefined);
+      assert.notEqual(stamped?.turn?.cancelRequestedAt ?? null, null);
 
       yield* Effect.promise(() => play(events.slice(requested), standing));
       yield* f.arrived(5);

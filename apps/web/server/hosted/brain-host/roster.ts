@@ -13,7 +13,7 @@ import {
 import type { ObservationStore } from "../observation-pass.js";
 import { storedRoster } from "../observation-pass.js";
 import type { ObservedRoster } from "../observed-roster.js";
-import type { VaultKeyRow } from "../vault-route.js";
+import type { VaultKeyRow } from "../vault-key-store.js";
 
 /**
  * The roster the hosted brain is shown: the account's stored snapshot, the

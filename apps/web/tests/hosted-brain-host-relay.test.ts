@@ -222,13 +222,22 @@ async function rows(target: ConversationTarget) {
   return { turnRows, messageRows };
 }
 
-/** The rows a device would take past the position it holds: the store's own cursor read, in sequence. */
+/**
+ * The rows a device would take past the position it holds: the conversation's
+ * rows whose place is past it, in sequence, with an absent turn or finish
+ * read as absent.
+ */
 async function pastCursor(target: ConversationTarget, after: number) {
-  const read = await database.run(
-    database.store.messages.list(target.userId, target.conversationId, CATALOG_TOOL_SET, { after }),
-  );
-  assert.ok(read.ok);
-  return read.value;
+  const stored = await readMessagesByConversationTyped(database.run, target.conversationId);
+  return stored
+    .filter((row) => row.seq > after)
+    .map((row) => ({
+      id: row.id,
+      seq: row.seq,
+      clientId: row.clientId,
+      turnId: row.turnId ?? undefined,
+      finishedAt: row.finishedAt ?? undefined,
+    }));
 }
 
 function readMessageSeqs(records: readonly { readonly seq: number }[]): number[] {

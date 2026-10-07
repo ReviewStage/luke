@@ -82,10 +82,9 @@ const SERVER_ERROR_FLOOR = 500;
 const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
 
 /**
- * The nine requests a hand probe sends, the page, and eve's health, each with
- * the status production answered on 2026-09-12 (the audio route's, added on
- * 2026-09-14, is what its two siblings answer): a 401, 405, or 426 is the
- * handler present and refusing the caller, which is what a probe with no
+ * The requests a hand probe sends, the page, and eve's health, each with the
+ * status its handler answers a caller with no credential: a 401, 405, or 426
+ * is the handler present and refusing the caller, which is what a probe with no
  * credential should see. The OPTIONS door meets the same handlers' preflight refusals;
  * the page is not on it, because the allowlist is a prefix and `/` would
  * unprotect every OPTIONS on the deployment, and eve's health answers OPTIONS
@@ -94,24 +93,18 @@ const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]
 export const EXPECTED_STATUS = {
   [PROBE_DOOR.BYPASS_SECRET]: new Map([
     [SITE_ROOT_PATH, PROBE_STATUS.OK],
-    ["/api/observe", PROBE_STATUS.UNAUTHORIZED],
+    ["/api/plans", PROBE_STATUS.UNAUTHORIZED],
     ["/api/observation/tick", PROBE_STATUS.UNAUTHORIZED],
-    ["/api/devices", PROBE_STATUS.METHOD_NOT_ALLOWED],
-    ["/api/brain/ask", PROBE_STATUS.METHOD_NOT_ALLOWED],
+    ["/api/events", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/voice/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
-    ["/api/voice/introduction", PROBE_STATUS.UPGRADE_REQUIRED],
-    ["/api/voice/audio", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/feedback", PROBE_STATUS.METHOD_NOT_ALLOWED],
     [EVE_HEALTH_PATH, PROBE_STATUS.OK],
   ]),
   [PROBE_DOOR.OPTIONS_ALLOWLIST]: new Map([
-    ["/api/observe", PROBE_STATUS.METHOD_NOT_ALLOWED],
+    ["/api/plans", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/observation/tick", PROBE_STATUS.METHOD_NOT_ALLOWED],
-    ["/api/devices", PROBE_STATUS.METHOD_NOT_ALLOWED],
-    ["/api/brain/ask", PROBE_STATUS.METHOD_NOT_ALLOWED],
+    ["/api/events", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/voice/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
-    ["/api/voice/introduction", PROBE_STATUS.UPGRADE_REQUIRED],
-    ["/api/voice/audio", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/feedback", PROBE_STATUS.METHOD_NOT_ALLOWED],
   ]),
 } satisfies Readonly<Record<ProbeDoor, ReadonlyMap<string, number>>>;

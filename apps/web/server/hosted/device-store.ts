@@ -136,21 +136,13 @@ export function registerDevice(write: {
 
 const HeldDeviceSchema = Schema.Struct({ userId: Schema.String, deviceId: Schema.String });
 
-const HeldDeviceRowSchema = Schema.Struct({ id: Schema.String, platform: Schema.String });
-
-/**
- * The account's own device row by id, or none: the one fact a voice session's
- * device claim is admitted on, with the platform the row named beside it, so
- * the caller a session was opened from is read here rather than from a header
- * the caller chose. The platform is answered as the column holds it, a word
- * this build may not know, and `isDevicePlatform` is what narrows it.
- */
-export const findHeldDevice = SqlSchema.findOneOption({
+/** The account's own device row by id, or none: a heartbeat moves only a row its account holds. */
+const findHeldDevice = SqlSchema.findOneOption({
   Request: HeldDeviceSchema,
-  Result: HeldDeviceRowSchema,
+  Result: DeviceIdRowSchema,
   execute: (key) =>
     db
-      .select({ id: devices.id, platform: devices.platform })
+      .select({ id: devices.id })
       .from(devices)
       .where(and(eq(devices.userId, key.userId), eq(devices.id, key.deviceId)))
       .limit(1),

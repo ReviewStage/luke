@@ -15,9 +15,8 @@ import type { WebSocket } from "ws";
  * the one difference from the callbacks this replaced: those registered a
  * listener for the opening frame, dropped it, and registered another when the
  * pipe stood, so whatever a peer sent while the session was being stood up was
- * received and discarded. It is carried now, which is what the route's own
- * admission is for — the introduction still forwards only what a renderer's
- * data channel may send, whenever it was sent.
+ * received and discarded. It is carried now, and the relay's own admission
+ * reads it whenever it was sent.
  *
  * The reader's listener stands before this answers, because `ws` emits a frame
  * to whoever listens at that instant: a caller holding a paused socket resumes
@@ -33,7 +32,7 @@ export const SOCKET_CLOSE_CODE = {
   NORMAL: 1000,
   /** The service itself is leaving, or the upstream left first. */
   GOING_AWAY: 1001,
-  /** The peer sent something this route does not admit, or was refused. */
+  /** The peer sent something the service does not admit, or was refused. */
   POLICY_VIOLATION: 1008,
 } as const;
 
@@ -64,25 +63,6 @@ export function frameText(frame: VoiceFrame): string | undefined {
   return "text" in frame ? frame.text : undefined;
 }
 
-/**
- * The text frames a door took off a paused socket before its consumers stood,
- * handed to the listeners already standing on it, the sideband the exchange
- * reads, the way the socket itself would have handed them: emitted on the
- * socket's own `message` event, as the text each arrived as and in the order
- * it arrived. Called while the socket is still paused and before the reader
- * this module registers stands, since that reader resumes the socket the
- * moment it does; the pipe is handed the same frames through
- * {@link VoiceSocketOptions.held} instead. The caller hands over a copy of the
- * door's list, never the list: the door's own reader still stands on the
- * socket and holds again whatever is emitted to it while it is paused, which
- * is these frames on their way back.
- */
-export function replayHeldFrames(socket: WebSocket, held: readonly string[]): void {
-  for (const text of held) {
-    socket.emit("message", Buffer.from(text, "utf8"), false);
-  }
-}
-
 export interface VoiceSocketOptions {
   /**
    * How many bytes the peer may send before this closes the socket, counted
@@ -93,15 +73,6 @@ export interface VoiceSocketOptions {
    * sees is the peer going, which is a hangup it already knows how to end.
    */
   readonly byteBudget?: number | undefined;
-  /**
-   * Text frames a door took off this socket before this reader stood, what a
-   * primary socket said beside `session.started`, offered to the stream ahead
-   * of anything the socket emits from here on, so a consumer reads them in
-   * the order the far side said them. They spend no budget: the budget is
-   * what a peer sends this service, and these are what the far side said
-   * before anyone listened.
-   */
-  readonly held?: readonly string[] | undefined;
 }
 
 export function voiceSocket(
@@ -124,9 +95,6 @@ export function voiceSocket(
       { openTimeout: 0 },
     );
     const inbound = yield* Queue.make<VoiceFrame, Cause.Done>();
-    for (const text of options.held ?? []) {
-      Queue.offerUnsafe(inbound, { text });
-    }
     const writer = yield* platform.writer;
     const standing = yield* Deferred.make<void>();
     const overspent = yield* Deferred.make<void>();
