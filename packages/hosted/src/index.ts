@@ -110,6 +110,7 @@ export {
   type SessionBeatFrame,
   type SessionCreatedFrame,
   type SessionCreateFrame,
+  type SessionPointerFrame,
   type SessionReportFrame,
   type SessionSpokenFrame,
   type SessionStopFrame,

@@ -13,7 +13,7 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { codeRefSchema, planDocumentSchema } from "./plan-wire.js";
+import { CODE_POINTER_TEXT_MAX_CHARS, codeRefSchema, planDocumentSchema } from "./plan-wire.js";
 import { planActivitySchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
@@ -169,6 +169,12 @@ export const VOICE_SERVICE_FRAME = {
    * Mac's own folder as he says it.
    */
   PLAN_CODE: "plan.code",
+  /**
+   * The desktop's word, on a planning call, that the developer pointed at
+   * code on screen: a file opened, or lines selected with what they say, so
+   * the service tells the voice and the planner what "this" means.
+   */
+  SESSION_POINTER: "session.pointer",
 } as const;
 
 /**
@@ -400,11 +406,25 @@ export const sessionBeatFrameSchema = Schema.Union([
 
 export type SessionBeatFrame = typeof sessionBeatFrameSchema.Type;
 
+/**
+ * The developer pointing at code on a planning call's screen: the place, and
+ * the lines they selected as the file reads, bounded; a file opened whole
+ * carries no lines.
+ */
+export const sessionPointerFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_POINTER),
+  ref: codeRefSchema,
+  text: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(CODE_POINTER_TEXT_MAX_CHARS))),
+});
+
+export type SessionPointerFrame = typeof sessionPointerFrameSchema.Type;
+
 /** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
 export const sessionReportFrameSchema = Schema.Union([
   sessionActivityFrameSchema,
   sessionStopFrameSchema,
   sessionBeatFrameSchema,
+  sessionPointerFrameSchema,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 export type SessionReportFrame = typeof sessionReportFrameSchema.Type;

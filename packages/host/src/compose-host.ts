@@ -169,6 +169,9 @@ export const hostAssemblyLayer: Layer.Layer<
       account,
       folders: planFoldersFile(() => kernel.stateRoot, report),
       endPlanCall: (keep) => live.service.endPlanCall(keep),
+      pointAt: (pointer) => {
+        live.service.pointAt(pointer);
+      },
       client: new HostedPlanClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,

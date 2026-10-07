@@ -127,7 +127,7 @@ export const planCommandSettleAnswerSchema = EffectSchema.Struct({
 });
 
 /** The most lines one code reference points at; a reference is a passage, not a file. */
-export const CODE_REF_MAX_LINES = 200;
+const CODE_REF_MAX_LINES = 200;
 
 /** The most characters of a path one code reference names: macOS's own bound. */
 export const CODE_PATH_MAX_CHARS = 1_024;

@@ -746,6 +746,11 @@ export class VoiceService {
                   case VOICE_SERVICE_FRAME.SESSION_BEAT:
                     exchange.speakBeat(report);
                     return;
+                  // The developer's pointer means something on a planning call alone.
+                  case VOICE_SERVICE_FRAME.SESSION_POINTER:
+                    if (opened.planId !== undefined)
+                      exchange.service.pointAt(report.ref, report.text);
+                    return;
                 }
               },
         onFrameRefused: (type) => {

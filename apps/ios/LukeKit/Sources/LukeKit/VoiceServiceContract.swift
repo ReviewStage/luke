@@ -19,6 +19,7 @@ import Foundation
 /// `sessionAttached`, and `sessionSpoken`. `sessionBeat` is the desktop's
 /// alone and is transcribed so the set stays whole, never sent, and so are
 /// `planDraft`, `planActivity`, and `planCode`, which the service sends on a planning call,
+/// and `sessionPointer`, which the desktop sends on one,
 /// and a planning call is the Mac's alone.
 public enum VoiceServiceFrame: String, CaseIterable, Sendable {
     case sessionCreate = "session.create"
@@ -32,6 +33,7 @@ public enum VoiceServiceFrame: String, CaseIterable, Sendable {
     case planDraft = "plan.draft"
     case planActivity = "plan.activity"
     case planCode = "plan.code"
+    case sessionPointer = "session.pointer"
 }
 
 /// `LIVE_CLIENT_EVENT` in `packages/live/src/events.ts`, whole: every Live
@@ -363,7 +365,7 @@ enum VoiceServiceIncomingFrame: Equatable, Sendable {
                 return
             }
             self = .spoken(kind)
-        case .sessionCreate, .sessionAttach, .sessionActivity, .sessionStop, .sessionBeat:
+        case .sessionCreate, .sessionAttach, .sessionActivity, .sessionStop, .sessionBeat, .sessionPointer:
             // The device's own frames, echoed back by nothing: not an event of the session.
             self = .unreadable
         case .planDraft, .planActivity, .planCode:

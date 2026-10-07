@@ -28,7 +28,7 @@ function textOf(code: PlanCode): string[] {
 }
 
 const INVITE = [
-  'import { db } from "../db";',
+  'import { db } from "./db.js";',
   "",
   "export async function acceptInvite(token: string) {",
   "  const invite = await db.invites.find(token);",

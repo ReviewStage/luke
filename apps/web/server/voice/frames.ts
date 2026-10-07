@@ -92,11 +92,16 @@ const INTRODUCTION_CLIENT_EVENTS: readonly string[] = RENDERER_CLIENT_EVENTS;
  */
 export const SESSIONS_CLIENT_EVENTS: readonly string[] = [LIVE_CLIENT_EVENT.CLOSE];
 
-/** The service-vocabulary frames a signed-in device sends after the handshake, read here and never forwarded: its idle, and the stop key. */
+/**
+ * The service-vocabulary frames a signed-in device sends after the handshake,
+ * read here and never forwarded: its idle, the stop key, a beat, and the
+ * developer pointing at code on a planning call's screen.
+ */
 export const SESSIONS_REPORT_FRAMES: readonly string[] = [
   VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
   VOICE_SERVICE_FRAME.SESSION_STOP,
   VOICE_SERVICE_FRAME.SESSION_BEAT,
+  VOICE_SERVICE_FRAME.SESSION_POINTER,
 ];
 
 /**

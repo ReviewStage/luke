@@ -131,7 +131,7 @@ export type CodeToken = typeof codeTokenSchema.Type;
  * first, or why it drew none. It stands for the call alone: nothing of it
  * enters the plan.
  */
-export const planCodeSchema = EffectSchema.Struct({
+const planCodeSchema = EffectSchema.Struct({
   source: EffectSchema.Literals(Object.values(CODE_SOURCE)),
   ref: codeRefSchema,
   /** The file's line the first drawn line is; the screen holds a window of a long file around the lines pointed at. */

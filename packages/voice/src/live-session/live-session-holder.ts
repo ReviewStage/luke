@@ -11,6 +11,7 @@ import {
   type PlanCodeFrame,
   type PlanDraftFrame,
   type SessionBeatFrame,
+  type SessionPointerFrame,
   VOICE_SERVICE_FRAME,
 } from "@sidecar/hosted";
 import {
@@ -585,6 +586,21 @@ export class LiveSessionHolder {
    * session opened through no service has no door, and the microphone is
    * the peer's to mute and is not touched here.
    */
+  /**
+   * The developer pointed at code on the standing planning call's screen:
+   * told to the service through the source's door once the session has
+   * started. Answers whether it was told; a pointer with no planning call
+   * standing to hear it is dropped.
+   */
+  pointAt(pointer: SessionPointerFrame): boolean {
+    const session = this.#held;
+    if (!session?.started || session.ended || session.planId === undefined) return false;
+    const point = session.opened.pointAt;
+    if (point === undefined) return false;
+    point(pointer);
+    return true;
+  }
+
   stopSpeaking(): boolean {
     const session = this.#held;
     if (!session?.started || session.ended) return false;

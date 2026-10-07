@@ -772,6 +772,46 @@ it.effect(
 );
 
 it.effect(
+  "the developer pointing at code is told to the voice at once and rides the next ask alone",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+
+      assert.equal(
+        f.service.pointAt(
+          { path: "src/invite.ts", startLine: 7, endLine: 8 },
+          "  if (expired(invite))\n    throw",
+        ),
+        true,
+      );
+      yield* settle();
+      const notes = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
+        "content" in event ? event.content : "",
+      );
+      assert.ok(
+        notes.some(
+          (note) =>
+            note.includes("src/invite.ts, lines 7 to 8") && note.includes("if (expired(invite))"),
+        ),
+      );
+
+      sideband.input("Why not check it here?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      sideband.input("And the admin path?", 1000, 1800);
+      sideband.delegation("item_2", 1900);
+      yield* settle();
+
+      const [first, second] = f.brain.asks;
+      assert.ok(first?.question.includes("[developer is pointing at] src/invite.ts, lines 7 to 8"));
+      assert.ok(first?.question.includes("if (expired(invite))"));
+      assert.ok(second !== undefined && !second.question.includes("[developer is pointing at]"));
+    }),
+);
+
+it.effect(
   "a slow step earns the exchange's one thinking append, and the reply streams only after the actions settled, each chunk awaiting its ack",
   () =>
     Effect.gen(function* () {

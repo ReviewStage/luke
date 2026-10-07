@@ -69,6 +69,7 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionActivityFrameSchema: liveContract.sessionActivityFrameSchema,
     sessionStopFrameSchema: liveContract.sessionStopFrameSchema,
     sessionBeatFrameSchema: liveContract.sessionBeatFrameSchema,
+    sessionPointerFrameSchema: liveContract.sessionPointerFrameSchema,
     sessionReportFrameSchema: liveContract.sessionReportFrameSchema,
     sessionSpokenFrameSchema: liveContract.sessionSpokenFrameSchema,
     planDraftFrameSchema: liveContract.planDraftFrameSchema,

@@ -17,6 +17,7 @@ import {
   type SessionAttachFrame,
   type SessionBeatFrame,
   type SessionCreateFrame,
+  type SessionPointerFrame,
   type SessionStopFrame,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
@@ -140,6 +141,12 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * it or appends it. Optional on the same terms as `reportActivity`.
    */
   stopSpeaking?(): void;
+  /**
+   * Tells the service the developer pointed at code on a planning call's
+   * screen, as the service's own frame on the same socket. Optional on the
+   * same terms as `reportActivity`.
+   */
+  pointAt?(pointer: SessionPointerFrame): void;
   /**
    * Asks the service to speak one of the build-fixed beats into this
    * session, in the service's own vocabulary: the kind and the bounded
@@ -981,6 +988,10 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         stopSpeaking: () => {
           const frame: SessionStopFrame = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
           socket.send(JSON.stringify(frame));
+        },
+        // A pointer rides the same socket, held through a gap like any send.
+        pointAt: (pointer) => {
+          socket.send(JSON.stringify(pointer));
         },
         // A beat rides the same socket, held through a gap like any send. The
         // exchange a re-attached connection stands is a fresh one, so a beat

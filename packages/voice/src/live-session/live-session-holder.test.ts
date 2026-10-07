@@ -10,6 +10,7 @@ import {
   type PlanActivityFrame,
   type PlanCodeFrame,
   type SessionBeatFrame,
+  type SessionPointerFrame,
   VOICE_SERVICE_FRAME,
 } from "@sidecar/hosted";
 import {
@@ -132,6 +133,8 @@ interface Fixture {
   tellCode(code: PlanCodeFrame): void;
   /** Every plan whose call the holder told its caller ended, in order. */
   callsEnded: string[];
+  /** Every pointer the source's door was handed, in order. */
+  pointers: SessionPointerFrame[];
   created: number;
   entries: ConversationEntry[];
   roster: RosterSeedSession[];
@@ -160,6 +163,7 @@ function fixture(
     const code: PlanCodeFrame[] = [];
     let codeListener: ((code: PlanCodeFrame) => void) | undefined;
     const callsEnded: string[] = [];
+    const pointers: SessionPointerFrame[] = [];
     const entries: ConversationEntry[] = [];
     const roster: RosterSeedSession[] = [];
     let ids = 0;
@@ -200,6 +204,9 @@ function fixture(
                   },
                   onPlanCode: (listener: (code: PlanCodeFrame) => void) => {
                     codeListener = listener;
+                  },
+                  pointAt: (pointer: SessionPointerFrame) => {
+                    pointers.push(pointer);
                   },
                 }
               : undefined),
@@ -269,6 +276,7 @@ function fixture(
         codeListener?.(frame);
       },
       callsEnded,
+      pointers,
       get reportsActivity() {
         return state.reportsActivity;
       },
@@ -931,6 +939,29 @@ it.effect(
       f.tellCode(shown);
       assert.equal(f.code.length, 1);
     }),
+);
+
+it.effect("the developer's pointer reaches the service on a started planning call alone", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const pointer: SessionPointerFrame = {
+      type: VOICE_SERVICE_FRAME.SESSION_POINTER,
+      ref: { path: "src/invite.ts", startLine: 7, endLine: 8 },
+      text: "  if (expired(invite))",
+    };
+    const desk = yield* f.open();
+    assert.equal(f.holder.pointAt(pointer), false);
+    desk.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 1);
+    yield* settle();
+
+    const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+    assert.ok(created);
+    assert.equal(f.holder.pointAt(pointer), false, "not before the session started");
+    f.sidebands.at(-1)?.started(created.sessionId);
+    yield* settle();
+    assert.equal(f.holder.pointAt(pointer), true);
+    assert.deepEqual(f.pointers, [pointer]);
+  }),
 );
 
 it.effect(

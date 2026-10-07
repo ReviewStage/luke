@@ -6,15 +6,26 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
+import {
+  type HostedPlanClient,
+  type PlanActivityFrame,
+  type PlanDraftFrame,
+  type SessionPointerFrame,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/hosted";
 import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
-import { type CodeRef, codeRefSchema } from "@sidecar/hosted/plan-wire";
+import {
+  CODE_POINTER_TEXT_MAX_CHARS,
+  type CodeRef,
+  codeRefSchema,
+} from "@sidecar/hosted/plan-wire";
 import {
   CODE_SOURCE,
   type CodeSource,
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
+  type PlanCode,
   type PlanningDocument,
   type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
@@ -53,6 +64,23 @@ const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString }
 
 /** The developer's code on screen names the place, and the plan is the open one. */
 const planningShowCodeParamsSchema = Schema.Struct({ ref: codeRefSchema });
+
+/**
+ * What the developer pointed at, as the call is told it: the place, and the
+ * lines they selected as the file reads, cut to what a pointer carries; a
+ * file opened whole, or one that drew nothing, carries no lines.
+ */
+function pointerOf(code: PlanCode): SessionPointerFrame {
+  const { ref, lines, firstLine = 1 } = code;
+  const base = { type: VOICE_SERVICE_FRAME.SESSION_POINTER, ref } as const;
+  if (lines === undefined || ref.startLine === undefined || ref.endLine === undefined) return base;
+  const text = lines
+    .slice(ref.startLine - firstLine, ref.endLine - firstLine + 1)
+    .map((line) => line.map((token) => token.text).join(""))
+    .join("\n")
+    .slice(0, CODE_POINTER_TEXT_MAX_CHARS);
+  return { ...base, text };
+}
 
 /** One ask to put code on screen, for the plan it was named about. */
 interface CodeAsk {
@@ -102,6 +130,8 @@ export interface PlanningDependencies {
    * it to end; a desk session and the call about `keep` are left standing.
    */
   endPlanCall: (keep: string | undefined) => Effect.Effect<void>;
+  /** Tells the planning call standing, if any, what the developer pointed at on screen. */
+  pointAt: (pointer: SessionPointerFrame) => void;
   /**
    * What opening the Connect GitHub page needs: the service it is on, the
    * account this Mac is signed in as, which the page links GitHub for and no
@@ -160,7 +190,7 @@ export interface PlanningComposer extends Composer {
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client, folders, endPlanCall, connectGitHub } = dependencies;
+  const { kernel, account, client, folders, endPlanCall, pointAt, connectGitHub } = dependencies;
   const idleView = (): PlanningView => ({ ...IDLE_PLANNING_VIEW, folders: folders.read() ?? {} });
 
   /** Records `folderPath` as the plan's folder on this Mac, and draws it. */
@@ -297,6 +327,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       const code = yield* planCode(view.folders[ask.planId], ask.ref, ask.source);
       if (view.activePlanId !== ask.planId || codeGeneration !== generation) return;
       write({ code });
+      // Note that the call hears what the developer pointed at only once it
+      // is on their screen, so Luke is never told of lines they cannot see.
+      if (ask.source === CODE_SOURCE.DEVELOPER && code.unreadable === undefined) {
+        pointAt(pointerOf(code));
+      }
     }),
   );
 

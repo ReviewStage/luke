@@ -67,12 +67,13 @@ test("a signed-in session is shown every frame OpenAI sends, unread ones include
   assert.equal(upstreamFrameDecision(undefined, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
 });
 
-test("a signed-in device may send the hang-up alone, is read for its idle report, its stop, and its beats, and is refused on anything else", () => {
+test("a signed-in device may send the hang-up alone, is read for its idle report, its stop, its beats, and its pointer, and is refused on anything else", () => {
   assert.deepEqual(SESSIONS_CLIENT_EVENTS, [LIVE_CLIENT_EVENT.CLOSE]);
   assert.deepEqual(SESSIONS_REPORT_FRAMES, [
     VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
     VOICE_SERVICE_FRAME.SESSION_STOP,
     VOICE_SERVICE_FRAME.SESSION_BEAT,
+    VOICE_SERVICE_FRAME.SESSION_POINTER,
   ]);
   for (const type of SESSIONS_CLIENT_EVENTS) {
     assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
@@ -171,6 +172,7 @@ test("the audio route forwards the device's audio and its hang-up, reads its idl
   }
   for (const type of [
     VOICE_SERVICE_FRAME.SESSION_BEAT,
+    VOICE_SERVICE_FRAME.SESSION_POINTER,
     LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
     LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
     LIVE_CLIENT_EVENT.THINKING_APPEND,

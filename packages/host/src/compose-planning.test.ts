@@ -7,7 +7,11 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@sidecar/gateway";
-import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import {
+  type PlanCallResult,
+  type SessionPointerFrame,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/hosted";
 import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
@@ -155,6 +159,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
   return Effect.gen(function* () {
     const told: PlanningView[] = [];
     const opened: string[] = [];
+    const pointers: SessionPointerFrame[] = [];
     const waiters: {
       wanted: (view: PlanningView) => boolean;
       seen: Deferred.Deferred<PlanningView>;
@@ -185,6 +190,9 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           yield* standing.closing ?? Effect.void;
           standing.about = undefined;
         }),
+      pointAt: (pointer) => {
+        pointers.push(pointer);
+      },
       connectGitHub: {
         serviceBaseUrl: SERVICE_BASE_URL,
         accountId: () => Effect.succeed(ACCOUNT_ID),
@@ -204,7 +212,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         waiters.push({ wanted, seen });
         return yield* Deferred.await(seen);
       });
-    return { planning, call, told, last, opened, viewWhere };
+    return { planning, call, told, last, opened, viewWhere, pointers };
   });
 }
 
@@ -912,4 +920,44 @@ it.effect("code named about a plan that is not open is not drawn", () =>
       );
     }),
   ).pipe(Effect.provide(nodeFiles)),
+);
+
+it.effect(
+  "the developer's lines are told to the call once on screen, with what they read; Luke's own code is told nothing",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        const { call, planning, viewWhere, pointers } = yield* planOnFolder(service);
+
+        const lukes = viewWhere((view) => view.code !== undefined);
+        planning.showCode(
+          INVITES,
+          { path: "invite.ts", startLine: 1, endLine: 2 },
+          CODE_SOURCE.LUKE,
+        );
+        yield* lukes;
+        assert.deepEqual(pointers, []);
+
+        const selected = viewWhere((view) => view.code?.source === CODE_SOURCE.DEVELOPER);
+        yield* call(GATEWAY_METHOD.PLANNING_SHOW_CODE, {
+          ref: { path: "invite.ts", startLine: 2, endLine: 3 },
+        });
+        yield* selected;
+        const opened = viewWhere((view) => view.code?.ref.startLine === undefined);
+        yield* call(GATEWAY_METHOD.PLANNING_SHOW_CODE, { ref: { path: "invite.ts" } });
+        yield* opened;
+        // The pointer is told just after the view that draws it.
+        yield* Effect.yieldNow;
+
+        assert.deepEqual(pointers, [
+          {
+            type: VOICE_SERVICE_FRAME.SESSION_POINTER,
+            ref: { path: "invite.ts", startLine: 2, endLine: 3 },
+            text: "  return token;\n}",
+          },
+          { type: VOICE_SERVICE_FRAME.SESSION_POINTER, ref: { path: "invite.ts" } },
+        ]);
+      }),
+    ).pipe(Effect.provide(nodeFiles)),
 );

@@ -6,7 +6,7 @@ import { CODE_SOURCE, CODE_UNREADABLE, type PlanCode } from "@sidecar/hosted/pla
  */
 
 /** The most files the quick open lists for one query. */
-export const QUICK_OPEN_MAX_MATCHES = 30;
+const QUICK_OPEN_MAX_MATCHES = 30;
 
 /** What the pane says while nothing is on it. */
 export const CODE_PANE_EMPTY_LINE =
