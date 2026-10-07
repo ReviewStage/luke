@@ -1323,7 +1323,7 @@ function seededTexts(context: Stand, index: number): Array<{ role: unknown; text
 }
 
 it.effect(
-  "a planning call opens knowing its saved plan: the name, the document, and its assumptions, and a document past the startup bound is cut from its end",
+  "a planning call opens knowing its saved plan: the name, the document, and its assumptions, and a document past the startup bound, alone or in any script, is cut from its end and never refused",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
@@ -1365,9 +1365,31 @@ it.effect(
       assert.ok(!longText.includes(tail));
       assert.ok(startupTokens(longText) <= LIVE_INPUT_BOUNDS.TOKENS);
       await hangUpConnection(cut.desktop, cut.attach, cut.upstream);
+
+      // A body past the bound on its own is still cut and never refused: a
+      // CJK character is a token of its own, so twenty thousand of them are
+      // more than twice the room, where four characters to a token let all of
+      // them through.
+      const wide = await database.run(
+        createPlan(context.target.userId, { ...PLAN, name: "請求書の書き出し" }),
+      );
+      await database.run(
+        savePlanDocument(context.target.userId, wide.id, {
+          body: `# 請求書の書き出し\n\n${"請求書を書き出す。".repeat(2_500)}\n${tail}\n`,
+          assumptions: [],
+        }),
+      );
+      const wideCall = await openSession(context, wide.id);
+      const [wideSeed, ...wideRest] = seededTexts(context, 2);
+      assert.deepEqual(wideRest, []);
+      const wideText = String(wideSeed?.text);
+      assert.ok(wideText.includes("請求書の書き出し"));
+      assert.ok(!wideText.includes(tail));
+      assert.ok(startupTokens(wideText) <= LIVE_INPUT_BOUNDS.TOKENS);
+      await hangUpConnection(wideCall.desktop, wideCall.attach, wideCall.upstream);
       await until(
-        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
-        () => `both calls to be reported ended; log ${JSON.stringify(context.log)}`,
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 3,
+        () => `all three calls to be reported ended; log ${JSON.stringify(context.log)}`,
       );
       await context.stop();
     }),
