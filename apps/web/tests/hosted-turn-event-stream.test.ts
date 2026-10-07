@@ -594,6 +594,20 @@ test("the projection: a settled turn with no words tells the settled mark and th
   );
 });
 
+test("the projection: a reply written in Markdown is spoken without its syntax, and the journal it was read from keeps it", () => {
+  const settled = { ...TURN, status: TURN_STATUS.SETTLED } as const;
+  const text =
+    "**The plan is complete.**\n- Invites expire after `7` days.\n- See [the spec](https://example.com).";
+  const record = journal([{ type: UI_PART_TYPE.TEXT, text, state: UI_PART_STATE.DONE }]);
+  assert.deepEqual(
+    projectTurnEvents(settled, record).flatMap((event) =>
+      event.kind === TURN_EVENT_KIND.REPLY_SENTENCE ? [event.sentence] : [],
+    ),
+    ["The plan is complete.", "Invites expire after 7 days.", "See the spec."],
+  );
+  assert.deepEqual(record.parts, [{ type: UI_PART_TYPE.TEXT, text, state: UI_PART_STATE.DONE }]);
+});
+
 test("the stream's words are the brain's own: the event kinds are members of the run stream's set, and the slow step kinds are its", () => {
   const runEventKinds = new Set<string>(Object.values(BRAIN_RUN_EVENT));
   for (const kind of Object.values(TURN_EVENT_KIND)) assert.equal(runEventKinds.has(kind), true);

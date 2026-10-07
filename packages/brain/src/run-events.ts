@@ -11,6 +11,7 @@ import {
 } from "@sidecar/wire";
 import type { UIMessage } from "ai";
 import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
+import { spokenProse } from "./spoken-prose.js";
 import { BRAIN_TOOL } from "./tools.js";
 import type { BrainTurnTrigger } from "./turn.js";
 
@@ -278,9 +279,14 @@ export function slowStepOf(policy: EffectiveToolPolicy, name: string): SlowStepK
 
 const SENTENCE_BOUNDARY = /(?<=[.!?…]["'”’)\]]*)\s+|\n+/;
 
-/** A reply as the sentences it is spoken in: split at sentence ends and line breaks, each trimmed, none empty. */
+/**
+ * A reply as the sentences it is spoken in: its Markdown taken out, split at
+ * sentence ends and line breaks, each trimmed, none empty. The syntax goes
+ * before the split, so emphasis that spans a sentence end is still read as a
+ * pair and a list item is still a line of its own.
+ */
 export function replySentences(text: string): readonly string[] {
-  return text
+  return spokenProse(text)
     .split(SENTENCE_BOUNDARY)
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 0);
