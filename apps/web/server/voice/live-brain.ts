@@ -6,10 +6,12 @@ import {
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
   type LiveBrainCancel,
+  type LiveBrainRecoveredRun,
+  type LiveBrainRecovery,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
-import { Cause, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
+import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import {
   ASK_ORIGIN,
@@ -40,6 +42,7 @@ import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-event-stream.js";
+import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 
 /**
  * The hosted implementation of the live brain: Luke's judgment reached in
@@ -60,6 +63,12 @@ import { projectTurnEvents } from "../hosted/turn-event-stream.js";
  * carries mid-turn is the slow step, each queued question, and each sentence
  * of the reply once it has finished forming and every call ahead of it has
  * settled, which is what the voice speaks meanwhile.
+ *
+ * How far each turn was told is written on the ask's row before it is told,
+ * so a connection that re-attaches to the session on another function
+ * instance takes the runs up again from the event after the last one told
+ * (`recoverRuns`). Written first, a telling the socket's loss cut between
+ * the write and the voice is lost rather than said twice.
  *
  * The brain is built in the socket's own scope and every follow an accepted
  * ask starts is a fiber in it, so the socket detaching interrupts each of
@@ -136,6 +145,9 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
 interface FollowTold {
   action: string | undefined;
 }
+
+/** No recovered run: the session's revisions start from nothing, and nothing is followed. */
+const NO_RECOVERY: LiveBrainRecovery = { revision: 0, runs: [], follow: Effect.void };
 
 /** What has been told of one turn, whichever follow told it: its teller, the last event's number, and whether its actions settled. */
 interface TurnTold {
@@ -222,8 +234,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   const socket = yield* Effect.scope;
   const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
-  /** Each followed ask by the order it was submitted in, so the newest of several is known. */
+  /** Each followed ask by its task revision, so the newest of several is known. */
   const followed = new Map<string, number>();
+  /** How far each turn a recovered run is on was told by the connection before, as the record holds it. */
+  const recoveredSeq = new Map<string, number>();
   /** The turn each followed ask was last seen bound to. */
   const boundTurn = new Map<string, string>();
   // Note that eve folds asks that waited together into one turn, so several
@@ -269,17 +283,28 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * A later ask that reaches a turn an earlier one is already telling takes
    * it over from the next event on, told first that the actions settled
    * where they already had, so its reply is not held back for a mark it
-   * never heard.
+   * never heard. A turn a connection before this one told part of is told
+   * from where it stopped, and where that part carried the settle, its
+   * teller hears the settle again first, since the exchange this connection
+   * stood for it never did and would hold the rest of the reply back.
    */
-  const tellerOf = Effect.fnUntraced(function* (askId: string, turnId: string) {
+  const tellerOf = Effect.fnUntraced(function* (
+    askId: string,
+    turnId: string,
+    events: readonly TurnEvent[],
+  ) {
     const standing = toldOfTurn.get(turnId);
     if (standing === undefined) {
+      const seq = recoveredSeq.get(turnId) ?? 0;
       const told: TurnTold = {
         teller: yield* newestOn(askId, turnId),
-        seq: 0,
-        settled: false,
+        seq,
+        settled: events.some(
+          (event) => event.seq <= seq && event.kind === TURN_EVENT_KIND.ACTIONS_SETTLED,
+        ),
       };
       toldOfTurn.set(turnId, told);
+      if (told.settled) emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: told.teller });
       return told;
     }
     if ((followed.get(askId) ?? 0) > (followed.get(standing.teller) ?? 0)) {
@@ -287,6 +312,38 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       if (standing.settled) emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: askId });
     }
     return standing;
+  });
+
+  /**
+   * Tells events under the ask, its row first moved past them, as one step
+   * the socket's close cannot cut: a telling is written down before it is
+   * told, so a connection that takes the run up again never tells it twice.
+   * A row the store could not move is reported and the events told all the
+   * same, since leaving the reply unsaid now is worse than a re-attach that
+   * might say it again.
+   */
+  const tell = Effect.fnUntraced(function* (
+    askId: string,
+    told: { readonly seq: number; readonly ended: boolean },
+    events: readonly LiveBrainRunEvent[],
+  ) {
+    if (events.length === 0) return;
+    const at = told.ended ? new Date(yield* Clock.currentTimeMillis) : undefined;
+    yield* Effect.uninterruptible(
+      options.asks.asks
+        .told(askId, at === undefined ? { seq: told.seq } : { seq: told.seq, endAt: at })
+        .pipe(
+          Effect.tapError(logStoreFailure),
+          Effect.catch(() =>
+            Effect.sync(() => options.report("How far a spoken ask was told could not be written")),
+          ),
+          Effect.andThen(
+            Effect.sync(() => {
+              for (const event of events) emit(event);
+            }),
+          ),
+        ),
+    );
   });
 
   /**
@@ -324,7 +381,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       return true;
     }
     const message = journal.value[0]?.message;
-    const turnTold = yield* tellerOf(askId, turn.id);
+    const events = projectTurnEvents(turn, message);
+    const turnTold = yield* tellerOf(askId, turn.id, events);
     const telling = turnTold.teller === askId;
     // The activity goes ahead of the events, so a call answered in the turn's last step is told before its end.
     const action = telling ? pendingActionOf(message) : undefined;
@@ -332,18 +390,28 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       told.action = action;
       emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: askId, action });
     }
-    const events = projectTurnEvents(turn, message);
     const last = events.at(-1);
     const ended = last?.kind === TURN_EVENT_KIND.ENDED;
     if (!telling) {
-      if (ended) emit(runEventOf(last, askId));
+      if (ended) yield* tell(askId, { seq: 0, ended }, [runEventOf(last, askId)]);
       return ended;
     }
-    for (const event of events.filter((event) => event.seq > turnTold.seq)) {
-      emit(runEventOf(event, askId));
+    const fresh = events.filter((event) => event.seq > turnTold.seq);
+    // A turn told to its end under another ask still ends this one's run, so its exchange settles.
+    const toTell = ended && fresh.length === 0 ? [last] : fresh;
+    // The row keeps the last event told short of the end, whose own number is no position the
+    // record needs: `end_told_at` says the end was told.
+    let stored = 0;
+    for (const event of fresh) {
       if (event.kind === TURN_EVENT_KIND.ACTIONS_SETTLED) turnTold.settled = true;
+      if (event.kind !== TURN_EVENT_KIND.ENDED) stored = event.seq;
       turnTold.seq = event.seq;
     }
+    yield* tell(
+      askId,
+      { seq: stored, ended },
+      toTell.map((event) => runEventOf(event, askId)),
+    );
     return ended;
   });
 
@@ -355,9 +423,9 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * waiting forever on a turn eve never started. A follow the scope's close
    * interrupted tells nothing: the session it would have told is gone.
    */
-  function follow(askId: string) {
+  function follow(askId: string, revision: number) {
     if (followed.has(askId)) return Effect.void;
-    followed.set(askId, followed.size + 1);
+    followed.set(askId, revision);
     const told: FollowTold = { action: undefined };
     const cadence = Schedule.spaced(bounds.POLL).pipe(
       Schedule.setInputType<boolean>(),
@@ -395,6 +463,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         question: ask.question,
         origin: ASK_ORIGIN.SPOKEN,
         clientId: ask.submissionId,
+        voice: { sessionId: ask.sessionId, revision: ask.revision },
       };
       const pinned = options.conversationId;
       return Effect.gen(function* () {
@@ -408,7 +477,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
             refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.failure.refusal],
           };
         }
-        yield* follow(outcome.success.id);
+        yield* follow(outcome.success.id, ask.revision);
         return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.success.id };
       }).pipe(
         Effect.provideService(SqlClient.SqlClient, sql),
@@ -445,6 +514,51 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           Effect.sync(() => {
             options.report("A spoken ask's Stop could not be written down");
             return LIVE_BRAIN_CANCEL.FAILED;
+          }),
+        ),
+      );
+    },
+    recoverRuns(sessionId) {
+      return Effect.gen(function* () {
+        const asked = yield* options.asks.asks.spokenIn(options.userId, sessionId);
+        const now = yield* Clock.currentTimeMillis;
+        for (const ask of asked) {
+          if (ask.turnId === undefined) continue;
+          recoveredSeq.set(ask.turnId, Math.max(recoveredSeq.get(ask.turnId) ?? 0, ask.toldSeq));
+        }
+        const runs: LiveBrainRecoveredRun[] = [];
+        for (const ask of asked) {
+          if (ask.endToldAt !== undefined) continue;
+          const standing = yield* askStanding(reads, options.userId, ask.id);
+          if (standing === undefined) continue;
+          const { turn } = standing;
+          const settledAt = turn?.settledAt?.getTime();
+          runs.push({
+            runId: ask.id,
+            delegationId: ask.clientId,
+            revision: ask.revision,
+            stopped: ask.cancelRequestedAt !== undefined || Boolean(turn?.cancelRequestedAt),
+            // A reply that settled longer ago than a detached session is kept for its device is no longer news.
+            stale: settledAt !== undefined && now - settledAt > VOICE_DETACH_GRACE_MS,
+          });
+        }
+        const recovery: LiveBrainRecovery = {
+          revision: Math.max(0, ...asked.map((ask) => ask.revision)),
+          runs,
+          follow: Effect.provideService(
+            Effect.forEach(runs, (run) => follow(run.runId, run.revision), { discard: true }),
+            SqlClient.SqlClient,
+            sql,
+          ),
+        };
+        return recovery;
+      }).pipe(
+        Effect.provideService(SqlClient.SqlClient, sql),
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() =>
+          Effect.sync(() => {
+            options.report("A re-attached session's spoken asks could not be read back");
+            return NO_RECOVERY;
           }),
         ),
       );

@@ -18,13 +18,23 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
-import { Effect, Fiber, Option, PartitionedSemaphore, Result, Schema } from "effect";
+import {
+  Deferred,
+  Duration,
+  Effect,
+  Fiber,
+  Option,
+  PartitionedSemaphore,
+  Result,
+  Schema,
+} from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, test } from "vitest";
 import { db } from "../server/db/query";
 import { conversations, turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
+  ASK_DISPATCH_DEADLINE,
   ASK_REFUSAL,
   acceptAsk,
   askStanding,
@@ -157,6 +167,9 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
         assert.ok(row);
         put({ ...row, cancelRequestedAt: at });
       }),
+    // The ask routes take no spoken ask, so no voice session's asks are ever read back or told.
+    spokenIn: () => Effect.succeed([]),
+    told: () => Effect.void,
   };
   function latestSession(userId: string, conversationId: string): string | undefined {
     let latest: AskRow | undefined;
@@ -1225,5 +1238,43 @@ it.effect(
       assert.equal(stamped?.status, TURN_STATUS.RUNNING);
       assert.equal(stamped?.cancelRequestedAt, NOW + 1_700);
       assert.equal(reads, 5);
+    }),
+);
+
+it.effect(
+  "a dispatch eve never answers is released at the deadline: the ask is refused as eve unreachable and its row stands undispatched for a retry",
+  () =>
+    Effect.gen(function* () {
+      const userId = yield* Effect.promise(() => database.createUser());
+      const conversationId = yield* Effect.promise(() => conversation(userId));
+      const h = harness();
+      // eve takes the message and never answers, as a call hung on the wire would.
+      const reached = yield* Deferred.make<void>();
+      const hung: EveSessions = {
+        ...h.eve,
+        open: (message) =>
+          Effect.andThen(
+            Effect.sync(() => h.eve.calls.push({ kind: "open", message })),
+            Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
+          ),
+      };
+      const accepting = yield* Effect.forkChild(
+        Effect.provide(
+          acceptAsk({ asks: h.asks, eve: hung }, { ...ASK, conversationId, userId }),
+          database.sql,
+        ),
+        { startImmediately: true },
+      );
+      yield* Deferred.await(reached);
+      yield* TestClock.adjust(Duration.subtract(ASK_DISPATCH_DEADLINE, Duration.seconds(1)));
+      assert.equal(accepting.pollUnsafe(), undefined);
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.deepEqual(
+        yield* Fiber.join(accepting),
+        Result.fail({ refusal: ASK_REFUSAL.UPSTREAM, status: 502 }),
+      );
+      const [row] = h.asks.rows.values();
+      assert.ok(row);
+      assert.deepEqual([row.clientId, row.sessionId], [CLIENT_ID, undefined]);
     }),
 );

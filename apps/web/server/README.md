@@ -1153,7 +1153,20 @@ turn only once it starts; the brain follows the ask through `askStanding` on
 a schedule, projects its turn's events with the same `projectTurnEvents` C7's
 stream serves, and translates each back to the ask's id. There is no HTTP hop
 and so no second function ceiling to re-attach across. Each follow is a fiber of the socket's own scope, so
-the socket detaching interrupts it and nothing is emitted after. A turn that
+the socket detaching interrupts it and nothing is emitted after. What the
+detach cut short is not lost with it: a spoken ask's row carries the voice
+session it was delegated in and its revision there, how far its turn was told
+(`told_seq`, short of the end), and when its end was told (`end_told_at`), each
+written before the voice hears it. A connection that re-attaches to the session
+adopts it as started and asks the brain to recover it (`recoverRuns`): every
+ask of that session whose end was not told comes back as its exchange, under
+its own delegation and revision, and is followed again from the event after
+the last one told. The session's revisions go on from the newest recorded, so
+an older run stays superseded; a run whose turn carries a Stop comes back
+silenced; and so does one whose turn settled more than `VOICE_DETACH_GRACE_MS`
+before the re-attach, past which the reply is no longer news. Written before it
+is told, a telling the detach cut between the write and the voice is lost and
+never said twice. A turn that
 does not end inside the follow bound, or an ask the record no longer holds,
 is told as a failed end so the exchange settles rather than waiting forever. On the eve
 path the reply arrives whole at the turn's end; what the follow carries

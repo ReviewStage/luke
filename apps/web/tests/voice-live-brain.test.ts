@@ -7,6 +7,7 @@ import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
+  type LiveBrainAsk,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
 import { arrival } from "@sidecar/voice/testing";
@@ -105,6 +106,19 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
+
+/** The revisions the file's asks are numbered by, so a later ask is the newer one as the service numbers it. */
+let revisions = 0;
+
+/** A spoken ask as the service submits one: in a voice session, at the next revision of the file's order. */
+function spokenAsk(
+  question: string,
+  submissionId: string = randomUUID(),
+  sessionId: string = `voice_${randomUUID()}`,
+): LiveBrainAsk {
+  revisions += 1;
+  return { submissionId, question, sessionId, revision: revisions };
+}
 
 /** An eve session id of this test's own: the relay names a turn by session and eve turn, so a counted id would collide across the files that share one database on CI. */
 function mintSession(): string {
@@ -248,7 +262,7 @@ it.live(
       const target = yield* Effect.promise(() => account());
       const f = yield* Effect.promise(() => stand(target));
       const submissionId = randomUUID();
-      const ask = { submissionId, question: "Developer: what needs me?" };
+      const ask = spokenAsk("Developer: what needs me?", submissionId);
 
       const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(ask)));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
@@ -276,7 +290,7 @@ it.live(
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
       const f = yield* Effect.promise(() => stand(target));
-      const ask = { submissionId: randomUUID(), question: "q" };
+      const ask = spokenAsk("q");
       const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(ask)));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
@@ -336,9 +350,7 @@ it.live(
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
       const f = yield* Effect.promise(() => stand(target));
-      const accepted = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-      );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       const standing: RelayStanding = {
@@ -398,9 +410,7 @@ it.live(
       const target = yield* Effect.promise(() => account());
       const f = yield* Effect.promise(() => stand(target));
       f.eve.failNext = 502;
-      const refused = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-      );
+      const refused = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.deepEqual(refused, {
         outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
         refusal: HOSTED_ASK_REFUSAL_NOTE[ASK_REFUSAL.UPSTREAM],
@@ -421,9 +431,7 @@ it.live(
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
       const f = yield* Effect.promise(() => stand(target, BOUNDED));
-      const accepted = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-      );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       yield* f.arrived(1);
@@ -454,9 +462,7 @@ it.live(
           messages: { ...database.store.messages, byClientId: () => Effect.succeed(unreadable) },
         }),
       );
-      const accepted = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-      );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
@@ -484,9 +490,7 @@ it.live("an ask the record no longer holds ends as failed rather than being foll
   Effect.gen(function* () {
     const target = yield* Effect.promise(() => account());
     const f = yield* Effect.promise(() => stand(target));
-    const accepted = yield* Effect.promise(() =>
-      database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-    );
+    const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
     assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
     if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
     yield* Effect.promise(() => deleteConversation(database.run, target.conversationId));
@@ -502,9 +506,7 @@ it.live("stop ends every follow: a turn that completes after it reaches no liste
   Effect.gen(function* () {
     const target = yield* Effect.promise(() => account());
     const f = yield* Effect.promise(() => stand(target));
-    const accepted = yield* Effect.promise(() =>
-      database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-    );
+    const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
     assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
     if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
     yield* Effect.promise(() => f.stop());
@@ -553,12 +555,8 @@ it.live(
       const f = yield* Effect.promise(() =>
         stand(target, QUICK, database.store, undefined, record),
       );
-      const first = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q1" })),
-      );
-      const second = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q2" })),
-      );
+      const first = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q1"))));
+      const second = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q2"))));
       assert.equal(first.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       assert.equal(second.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (first.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
@@ -615,12 +613,8 @@ it.live(
       const f = yield* Effect.promise(() =>
         stand(target, QUICK, database.store, undefined, record),
       );
-      const first = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q1" })),
-      );
-      const second = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q2" })),
-      );
+      const first = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q1"))));
+      const second = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q2"))));
       assert.equal(first.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       assert.equal(second.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (first.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
@@ -664,9 +658,7 @@ it.live(
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
       const f = yield* Effect.promise(() => stand(target));
-      const accepted = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-      );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
@@ -807,9 +799,7 @@ it.live(
         ),
       );
       const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
-      const accepted = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-      );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       assert.deepEqual(
@@ -861,9 +851,7 @@ it.live(
         ),
       );
       const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
-      const accepted = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-      );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       const standing: RelayStanding = {
@@ -917,9 +905,7 @@ it.live(
         ),
       );
       const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
-      const accepted = yield* Effect.promise(() =>
-        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
-      );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       const standing: RelayStanding = {
@@ -956,5 +942,145 @@ it.live(
         ],
       );
       yield* Effect.promise(() => f.stop());
+    }),
+);
+
+/** An instant long enough before the real clock that a turn settled then is no longer news to a re-attach. */
+const LONG_AGO = 1_700_000_000_000;
+
+/** A relay whose turns settle long ago, as one a connection lost minutes back would have left. */
+const pastRelay = new StreamRelay({
+  writer,
+  asks: askEffects,
+  stopTurn: () => Effect.void,
+  offer: () => Effect.succeed(false),
+  deliverCompletion: () => Effect.void,
+  now: () => LONG_AGO,
+  report: () => undefined,
+});
+
+/** The standing a spoken ask's first turn is played under, in the eve session its ask was handed to. */
+async function spokenStanding(target: ConversationTarget, askId: string): Promise<RelayStanding> {
+  return {
+    sessionId: await sessionOf(target, askId),
+    target,
+    kind: CONVERSATION_KIND.MAIN,
+    turn: BRAIN_HOST_TURN.SPOKEN,
+    model: "scripted-model",
+    state: memoryRelayState(),
+  };
+}
+
+it.live(
+  "a re-attach takes up a run the lost connection accepted and tells it from the event after the last one told: nothing said before the loss is said again, and a run told to its end is not taken up twice",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const voiceSession = `voice_${randomUUID()}`;
+      const lost = yield* Effect.promise(() => stand(target));
+      const ask = spokenAsk("q", randomUUID(), voiceSession);
+      const accepted = yield* Effect.promise(() => database.run(lost.brain.submitAsk(ask)));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing = yield* Effect.promise(() => spokenStanding(target, accepted.runId));
+      const events = spokenTurn(FIRST_EVE_TURN, NOW);
+      const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* lost.arrived(1);
+      yield* Effect.promise(() => lost.stop());
+      // The turn finishes while no connection holds the session.
+      yield* Effect.promise(() => play(events.slice(requested), standing));
+
+      const back = yield* Effect.promise(() => stand(target));
+      const recovery = yield* Effect.promise(() =>
+        database.run(back.brain.recoverRuns(voiceSession)),
+      );
+      assert.equal(recovery.revision, ask.revision);
+      assert.deepEqual(recovery.runs, [
+        {
+          runId: accepted.runId,
+          delegationId: ask.submissionId,
+          revision: ask.revision,
+          stopped: false,
+          stale: false,
+        },
+      ]);
+      yield* Effect.promise(() => database.run(recovery.follow));
+      yield* back.arrived(4);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      assert.deepEqual(
+        back.events.map((event) => [event.kind, event.runId]),
+        [
+          [LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, accepted.runId],
+          [LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, accepted.runId],
+          [LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, accepted.runId],
+          [LIVE_BRAIN_RUN_EVENT.ENDED, accepted.runId],
+        ],
+      );
+      yield* Effect.promise(() => back.stop());
+
+      const again = yield* Effect.promise(() => stand(target));
+      const settled = yield* Effect.promise(() =>
+        database.run(again.brain.recoverRuns(voiceSession)),
+      );
+      assert.deepEqual([settled.revision, settled.runs], [ask.revision, []]);
+      assert.deepEqual(back.reports, []);
+      yield* Effect.promise(() => again.stop());
+    }),
+);
+
+it.live(
+  "a re-attach reads back the session's newest revision and each run's own, a run the developer stopped as stopped, and a reply that settled long ago as stale",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const voiceSession = `voice_${randomUUID()}`;
+      const lost = yield* Effect.promise(() => stand(target));
+      const old = spokenAsk("q1", randomUUID(), voiceSession);
+      const stopped = spokenAsk("q2", randomUUID(), voiceSession);
+      const elsewhere = spokenAsk("q3");
+      const first = yield* Effect.promise(() => database.run(lost.brain.submitAsk(old)));
+      assert.equal(first.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (first.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      // The first ask's turn settles long ago, untold, since its follow is gone with the connection.
+      const standing = yield* Effect.promise(() => spokenStanding(target, first.runId));
+      yield* Effect.promise(() => lost.stop());
+      for (const event of spokenTurn(FIRST_EVE_TURN, LONG_AGO)) {
+        yield* Effect.promise(() => database.run(pastRelay.handle(event, standing)));
+      }
+      const holding = yield* Effect.promise(() => stand(target));
+      const second = yield* Effect.promise(() => database.run(holding.brain.submitAsk(stopped)));
+      const third = yield* Effect.promise(() => database.run(holding.brain.submitAsk(elsewhere)));
+      assert.equal(second.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      assert.equal(third.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (second.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      assert.equal(
+        yield* Effect.promise(() => database.run(holding.brain.cancelRun(second.runId))),
+        LIVE_BRAIN_CANCEL.CANCELLED,
+      );
+      yield* Effect.promise(() => holding.stop());
+
+      const back = yield* Effect.promise(() => stand(target));
+      const recovery = yield* Effect.promise(() =>
+        database.run(back.brain.recoverRuns(voiceSession)),
+      );
+      assert.equal(recovery.revision, stopped.revision);
+      assert.deepEqual(recovery.runs, [
+        {
+          runId: first.runId,
+          delegationId: old.submissionId,
+          revision: old.revision,
+          stopped: false,
+          stale: true,
+        },
+        {
+          runId: second.runId,
+          delegationId: stopped.submissionId,
+          revision: stopped.revision,
+          stopped: true,
+          stale: false,
+        },
+      ]);
+      yield* Effect.promise(() => back.stop());
     }),
 );
