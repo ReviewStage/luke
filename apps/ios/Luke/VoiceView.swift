@@ -107,6 +107,8 @@ struct VoiceView: View {
         return LiveCall(
             seams: LiveCallSeams(
                 makePeerConnection: { try factory.makePeerConnection() },
+                activateAudio: { try factory.activateAudio() },
+                releaseAudio: { factory.releaseAudio() },
                 openMicrophone: { try factory.openMicrophone() },
                 createSession: { sdp, voice in await client.create(sdpOffer: sdp, voice: voice).sideband },
                 voice: { DeviceSettingsSnapshot.read(from: .standard).voice },
