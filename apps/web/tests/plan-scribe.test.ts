@@ -50,20 +50,23 @@ const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Du
 const quiet = Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS)), settle);
 
 /**
- * The saved body once it reads as `expected`, settling again between reads
+ * What `read` answers once it reads as `expected`, settling again between reads
  * within a bound, since how many turns of the loop a run's store work takes
  * is the machine's; what it last read either way, so a failed assertion shows
- * the body.
+ * the value.
  */
-const savedBodyOnce = (userId: string, planId: string, expected: (body: string) => boolean) =>
+const settledRead = <A, E, R>(read: Effect.Effect<A, E, R>, expected: (value: A) => boolean) =>
   Effect.gen(function* () {
-    let body = yield* savedBody(userId, planId);
-    for (let attempt = 0; attempt < 50 && !expected(body); attempt += 1) {
+    let value = yield* read;
+    for (let attempt = 0; attempt < 50 && !expected(value); attempt += 1) {
       yield* settle;
-      body = yield* savedBody(userId, planId);
+      value = yield* read;
     }
-    return body;
+    return value;
   });
+
+const savedBodyOnce = (userId: string, planId: string, expected: (body: string) => boolean) =>
+  settledRead(savedBody(userId, planId), expected);
 
 const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
@@ -98,7 +101,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           assert.equal((yield* savedBody(userId, planId)).includes(PROBLEM), false);
 
           yield* quiet;
-          assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+          const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(PROBLEM));
+          assert.ok(body.includes(PROBLEM));
         }),
       ),
   );
@@ -112,7 +116,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         scribe.observe(said("So the problem is that only an admin can add someone.", 0, 2_000));
         yield* quiet;
 
-        assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+        const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(PROBLEM));
+        assert.ok(body.includes(PROBLEM));
       }),
     ),
   );
@@ -132,7 +137,10 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         scribe.observe(heard("Yes, reuse them.", 1_200, 2_000));
         yield* quiet;
 
-        const handed = asked.join("\n");
+        const handed = yield* settledRead(
+          Effect.sync(() => asked.join("\n")),
+          (text) => text.length > 0,
+        );
         assert.ok(handed.includes("Invites could reuse memberships."));
         assert.ok(handed.includes("Yes, reuse them."));
         assert.ok(handed.includes("src/db/schema/memberships.ts"));
@@ -154,7 +162,11 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         scribe.observe(heard("It's for workspace members.", 5_000, 6_000));
         yield* quiet;
 
-        const body = yield* savedBody(userId, planId);
+        const body = yield* savedBodyOnce(
+          userId,
+          planId,
+          (saved) => saved.includes(PROBLEM) && saved.includes(OUTCOME),
+        );
         assert.ok(body.includes(PROBLEM));
         assert.ok(body.includes(OUTCOME));
       }),
@@ -200,6 +212,10 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           scribe.observe(heard("Only admins can add people.", 0, 1_000));
           yield* quiet;
+          yield* settledRead(
+            Effect.sync(() => reports.length),
+            (count) => count > 0,
+          );
           assert.equal((yield* savedBody(userId, planId)).includes(PROBLEM), false);
           assert.equal(reports.length, 1);
 
@@ -221,12 +237,16 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.scoped(
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
-          const { scribe, drafts } = yield* scribeFor(userId, planId, [
+          const { scribe, drafts, writing } = yield* scribeFor(userId, planId, [
             { goal: { problem: PROBLEM, outcome: OUTCOME } },
           ]);
 
           scribe.observe(heard("Only admins can add people, and it hits members.", 0, 1_000));
           yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
+          yield* settledRead(
+            Effect.sync(() => writing.length),
+            (count) => count > 0,
+          );
           // The model streams its answer across drafts spaced a beat apart.
           for (let beat = 0; beat < 20; beat += 1) {
             yield* Effect.andThen(
@@ -235,7 +255,10 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
             );
           }
 
-          const last = drafts.at(-1);
+          const last = yield* settledRead(
+            Effect.sync(() => drafts.at(-1)),
+            (draft) => draft?.savedAt !== undefined,
+          );
           assert.ok(last?.savedAt !== undefined);
           assert.equal(last.document.body, yield* savedBody(userId, planId));
           assert.ok(drafts.length >= 2);
@@ -249,12 +272,16 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const before = yield* savedBody(userId, planId);
-        const { scribe, drafts } = yield* scribeFor(userId, planId, [
+        const { scribe, drafts, reports } = yield* scribeFor(userId, planId, [
           { brokenAfter: { goal: { problem: PROBLEM, outcome: OUTCOME } } },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
         yield* quiet;
+        yield* settledRead(
+          Effect.sync(() => reports.length),
+          (count) => count > 0,
+        );
 
         assert.equal(yield* savedBody(userId, planId), before);
         assert.equal(drafts.at(-1)?.document.body, before);
@@ -275,6 +302,10 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         yield* settle;
         assert.deepEqual(writing, []);
         yield* quiet;
+        yield* settledRead(
+          Effect.sync(() => writing.length),
+          (count) => count > 0,
+        );
         // The model streams its answer across drafts spaced a beat apart.
         for (let beat = 0; beat < 20; beat += 1) {
           yield* Effect.andThen(
@@ -283,7 +314,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           );
         }
 
-        assert.ok((yield* savedBody(userId, planId)).includes(PROBLEM));
+        const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(PROBLEM));
+        assert.ok(body.includes(PROBLEM));
         assert.deepEqual(writing, [true, false]);
       }),
     ),
@@ -297,9 +329,19 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
         yield* quiet;
+        yield* settledRead(
+          Effect.sync(() => writing.length),
+          (count) => count > 0,
+        );
+        // The timeout's own wait is armed just after; let the run reach it before time moves.
+        yield* settle;
         assert.deepEqual(writing, [true]);
 
         yield* Effect.andThen(TestClock.adjust(Duration.millis(PLAN_SCRIBE.TIMEOUT_MS)), settle);
+        yield* settledRead(
+          Effect.sync(() => reports.length),
+          (count) => count > 0,
+        );
         assert.deepEqual(writing, [true, false]);
         assert.equal(reports.length, 1);
       }),
