@@ -13,10 +13,9 @@ import {
   JWT_KEY_STORAGE,
 } from "./auth-policy.js";
 import { authProxy } from "./auth-proxy.js";
-import { DESKTOP_OAUTH_CLIENT, MOBILE_OAUTH_CLIENT } from "./oauth-clients.js";
+import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
 
 const DESKTOP_OAUTH_CLIENT_ID = DESKTOP_OAUTH_CLIENT.id;
-const MOBILE_OAUTH_CLIENT_ID = MOBILE_OAUTH_CLIENT.id;
 
 const deployment = authDeployment(process.env);
 const secrets = authSecrets(process.env);
@@ -84,7 +83,7 @@ export const auth = betterAuth({
       consentPage: "/consent.html",
       allowDynamicClientRegistration: false,
       clientPrivileges: denyOAuthClientPrivileges,
-      cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID, MOBILE_OAUTH_CLIENT_ID]),
+      cachedTrustedClients: new Set([DESKTOP_OAUTH_CLIENT_ID]),
       accessTokenExpiresIn: 60 * 60,
     }),
   ],

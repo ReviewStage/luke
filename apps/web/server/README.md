@@ -86,20 +86,11 @@ as `text[]`, which the Drizzle adapter writes as native arrays and the Kysely
 adapter as JSON strings Postgres refuses. `auth-database.test.ts` writes an
 access token through the adapter over PGlite to hold the two together.
 
-Dynamic client registration stays disabled. Two public clients are compiled in:
-
-- **`luke-desktop`** (`server/oauth-clients.ts`) — the macOS companion
-  app. It accepts loopback callbacks (`http://127.0.0.1/callback`) via a local
-  HTTP server during sign-in.
-
-- **`luke-mobile`** (`server/oauth-clients.ts`) — the iOS companion app.
-  It uses a custom URL scheme (`dev.tryluke.ios://oauth/callback`) because iOS
-  sign-in runs through `ASWebAuthenticationSession`, which delivers the callback
-  via the registered scheme rather than a local HTTP server. The scheme passes
-  Better Auth's `SafeUrlSchema` validation, which explicitly allows custom
-  schemes for native clients. Both clients share the same trust posture: no
-  client secret, PKCE required, skip consent as a trusted first-party app,
-  public client.
+Dynamic client registration stays disabled. One public client is compiled in:
+**`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
+accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
+during sign-in, holds no client secret, requires PKCE, and skips consent as a
+trusted first-party app.
 
 Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests
@@ -124,7 +115,7 @@ table: `pnpm functions:rewrites` regenerates both after adding, moving, or
 removing a route, and `repository-checks.sh` refuses drift on either half. The
 same script reads the other side of the table through `scripts/api-callers.ts`
 (`server/api-callers.ts`): every `/api/` literal and path builder a client in
-the repository spells — the desktop's, the packages', the iOS app's Swift, the
+the repository spells — the desktop's, the packages', the
 scripts' — and the exports of `@sidecar/hosted`'s paths module, evaluated, must
 resolve to a rewrite of the table or to an extensionless alias the Build Output
 emits, and a builder the check cannot read is refused by name rather than
@@ -1230,8 +1221,7 @@ where any row stands past it, and leaves it where it opened where none does,
 so the thread reads as it was heard: what was said while he worked, then what
 he did and thought, then what was said of it. Every device holds a message once, by its id, where its latest
 delivery placed it; `reads-wire.ts` states the rule and the desktop's
-`conversation-view-sync.ts` and the phone's `ConversationThread.swift` keep
-it. A device from before this rule holds the line where it first read it and
+`conversation-view-sync.ts` keeps it. A device from before this rule holds the line where it first read it and
 reads it again where it moved, so it draws the line twice until it reads the
 conversation from its beginning; that is the cost of re-delivering by the
 one cursor every device already pages by, against the alternative — a new
@@ -1677,8 +1667,7 @@ service mints and a device echoes: for messages and events one position per
 standing conversation, in conversation-id order so two cursors over the same
 positions are one string, and for turns the store's own `(changedAt, id)` to
 the microsecond; the shapes are `@sidecar/hosted`'s `reads-wire.ts`, pinned
-by the fixtures under `packages/hosted/fixtures/reads/` the Swift mirror
-reads against. A message still being written — the running turn's journal — is
+by the fixtures under `packages/hosted/fixtures/reads/`. A message still being written — the running turn's journal — is
 passed like any other row, and what brings it back is the conversation's
 `journal_revision`: every write to a numbered row in place (`writer.ts`'s
 three, the journal's parts as they stream, its finish at the turn's end, its

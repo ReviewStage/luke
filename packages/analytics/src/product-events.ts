@@ -505,41 +505,6 @@ export const PRODUCT_EVENT_BATCH_LIMIT = 50;
  */
 export const PRODUCT_EVENT_MAXIMUM_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * Which of Luke's own apps posted a batch, named in a request header rather
- * than an event property, so the events themselves stay one vocabulary and an
- * app cannot mislabel a single event. The header only ever selects between
- * the fixed `$lib` tags below — a bounded choice, never copied text — and a
- * batch that names no client, or names something outside the set, is the
- * desktop's, because every desktop build from before the header existed
- * already posts without one.
- */
-export const PRODUCT_EVENT_CLIENT_HEADER = "x-luke-client";
-
-export const PRODUCT_EVENT_CLIENT = {
-  DESKTOP: "desktop",
-  IOS: "ios",
-  WATCHOS: "watchos",
-} as const;
-
-export type ProductEventClient = (typeof PRODUCT_EVENT_CLIENT)[keyof typeof PRODUCT_EVENT_CLIENT];
-
-export const ProductEventClientSchema = Schema.Literals(Object.values(PRODUCT_EVENT_CLIENT));
-
-/** The `$lib` tag the service stamps on each client's batches. */
-export const PRODUCT_EVENT_CLIENT_LIB = {
-  [PRODUCT_EVENT_CLIENT.DESKTOP]: "luke-desktop",
-  [PRODUCT_EVENT_CLIENT.IOS]: "luke-ios",
-  [PRODUCT_EVENT_CLIENT.WATCHOS]: "luke-watchos",
-} as const satisfies Record<ProductEventClient, string>;
-
-const readsProductEventClient = Schema.is(ProductEventClientSchema);
-
-/** Reads the client a batch names, or the desktop for anything else. */
-export function productEventClientFromWire(value: UnparsedWireValue): ProductEventClient {
-  return readsProductEventClient(value) ? value : PRODUCT_EVENT_CLIENT.DESKTOP;
-}
-
 type PropertyReader = {
   [Property in ProductEventProperty]: (
     value: UnparsedWireValue,

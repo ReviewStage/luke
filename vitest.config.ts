@@ -29,7 +29,6 @@ export default defineConfig({
       "packages/brain",
       "packages/providers",
       "packages/panel",
-      "tools/ios-parity",
       "tools/trace-export",
       "apps/desktop",
       "apps/web",

@@ -4,12 +4,9 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
-  PRODUCT_EVENT_CLIENT_HEADER,
-  PRODUCT_EVENT_CLIENT_LIB,
   PRODUCT_EVENT_MAXIMUM_AGE_MS,
   type ProductEventBatch,
   productEventBatchFromWire,
-  productEventClientFromWire,
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
@@ -40,6 +37,9 @@ import { makeRateBrake } from "./rate-brake.js";
 
 /** Bigger than a full batch of allowlisted events can be, and refused before parsing. */
 const MAXIMUM_BODY_BYTES = 16_384;
+
+/** The `$lib` tag every batch is stamped with: the desktop is the one app that posts them. */
+const PRODUCT_EVENT_LIB = "luke-desktop";
 
 /** What the shared brake holds this endpoint to; a batch spends its own event count. */
 const RATE_LIMIT = {
@@ -94,7 +94,6 @@ function batchDocument(
   userId: string,
   now: number,
   person: PosthogPerson | undefined,
-  lib: string,
 ): PosthogBatch {
   return {
     api_key: projectApiKey,
@@ -104,7 +103,7 @@ function batchDocument(
         ...event.properties,
         distinct_id: userId,
         $geoip_disable: true,
-        $lib: lib,
+        $lib: PRODUCT_EVENT_LIB,
       };
       return {
         event: event.name,
@@ -183,16 +182,8 @@ export function handleEvents(
           Effect.orElseSucceed((): PosthogPerson | undefined => undefined),
         )
       : undefined;
-    // The header only selects between the fixed tags; anything else, including
-    // no header at all, is a desktop build.
-    const client = productEventClientFromWire(
-      request.headers.get(PRODUCT_EVENT_CLIENT_HEADER) ?? undefined,
-    );
     const response = yield* Effect.provide(
-      postBatchEffect(
-        batchDocument(events, projectApiKey, userId, now, person, PRODUCT_EVENT_CLIENT_LIB[client]),
-        upstream,
-      ),
+      postBatchEffect(batchDocument(events, projectApiKey, userId, now, person), upstream),
       upstream.httpClient ?? FetchHttpClient.layer,
     );
     if (!response) {

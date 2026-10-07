@@ -59,7 +59,7 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
 }
 
 /**
- * Account preferences are the settings shared by desktop, phone, and watch.
+ * Account preferences are the settings an account carries across its Macs.
  * Machine-local controls — launch at login, Dock, display layout, hotkeys,
  * microphone routing, local list filters, credentials, and calendar grants —
  * stay in each device's own store.

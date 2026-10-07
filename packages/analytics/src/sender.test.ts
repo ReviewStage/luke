@@ -11,8 +11,6 @@ import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import {
   PRODUCT_EVENT,
-  PRODUCT_EVENT_CLIENT,
-  PRODUCT_EVENT_CLIENT_HEADER,
   PRODUCT_SESSION_COUNT_BUCKET,
   type ProductEvent,
 } from "./product-events.js";
@@ -94,10 +92,6 @@ it.effect("a flush posts one bearer-authenticated batch and empties the queue", 
     assert.equal(recordedRequest(requests).url, ENDPOINT);
     assert.equal(recordedRequest(requests).method, "POST");
     assert.equal(recordedRequest(requests).authorization, "Bearer token-1");
-    assert.equal(
-      recordedRequest(requests).headers.get(PRODUCT_EVENT_CLIENT_HEADER),
-      PRODUCT_EVENT_CLIENT.DESKTOP,
-    );
     assert.deepEqual(sentEvents(recordedRequest(requests)), [
       { name: PRODUCT_EVENT.APP_LAUNCH, at: NOON, properties: { app_version: APP_VERSION } },
       { name: PRODUCT_EVENT.ACCOUNT_SIGN_IN, at: NOON, properties: {} },

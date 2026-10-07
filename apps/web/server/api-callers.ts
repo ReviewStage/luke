@@ -13,8 +13,8 @@ import { type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
  * were not, so a path constant could outlive its route and nothing failed
  * until production answered 404 (LUKE-186). This reads every `/api/` path a
  * client in the repository spells — the string and template literals of the
- * TypeScript, the string literals of the Swift, the paths in the shell
- * scripts, and the exports of the hosted paths module, evaluated — and
+ * TypeScript, the paths in the shell scripts, and the exports of the hosted
+ * paths module, evaluated — and
  * resolves each against the committed rewrites table and the extensionless
  * aliases the Build Output emits. A literal that resolves nowhere, a template
  * whose interpolation is not a whole path segment, and a paths-module export
@@ -23,23 +23,16 @@ import { type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
  */
 
 /** Where the clients live, relative to the repository root; `packages` stands for every package's `src`. */
-export const CALLER_ROOTS = [
-  "apps/desktop/src",
-  "apps/ios",
-  "packages",
-  "scripts",
-  "tools",
-] as const;
+export const CALLER_ROOTS = ["apps/desktop/src", "packages", "scripts", "tools"] as const;
 const PACKAGES_ROOT = "packages";
 const PACKAGE_SOURCE_DIRECTORY = "src";
-const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(["node_modules", "dist", ".build"]);
+const SKIPPED_DIRECTORIES: ReadonlySet<string> = new Set(["node_modules", "dist"]);
 
 /** The one module clients import their paths from; its exports are evaluated as well as read. */
 export const PATHS_MODULE = posix.join("packages", "hosted", "src", "service-paths.ts");
 
 const SOURCE_KIND = {
   TYPESCRIPT: "typescript",
-  SWIFT: "swift",
   SHELL: "shell",
 } as const;
 type SourceKind = (typeof SOURCE_KIND)[keyof typeof SOURCE_KIND];
@@ -52,7 +45,6 @@ const SOURCE_KIND_BY_EXTENSION: ReadonlyMap<string, SourceKind> = new Map([
   [".js", SOURCE_KIND.TYPESCRIPT],
   [".mjs", SOURCE_KIND.TYPESCRIPT],
   [".cjs", SOURCE_KIND.TYPESCRIPT],
-  [".swift", SOURCE_KIND.SWIFT],
   [".sh", SOURCE_KIND.SHELL],
 ]);
 
@@ -217,98 +209,6 @@ function typeScriptLiterals(source: string, file: string): readonly Literal[] {
   return literals;
 }
 
-const LINE_COMMENT = "//";
-const BLOCK_COMMENT_OPEN = "/*";
-const BLOCK_COMMENT_CLOSE = "*/";
-const MULTILINE_QUOTE = '"""';
-const INTERPOLATION_OPEN = "\\(";
-
-interface SwiftString {
-  readonly text: string;
-  /** The index just past the closing quote. */
-  readonly end: number;
-}
-
-/**
- * The literal starting at `start`, which must be a `"`; escapes are honoured,
- * an interpolation becomes one `HOLE`, and a `"""` literal is read to its
- * own closing `"""`. Answers the text without its quotes.
- */
-function readSwiftString(source: string, start: number): SwiftString {
-  const quote = source.startsWith(MULTILINE_QUOTE, start) ? MULTILINE_QUOTE : '"';
-  let index = start + quote.length;
-  let text = "";
-  while (index < source.length) {
-    if (source.startsWith(INTERPOLATION_OPEN, index)) {
-      index = skipSwiftInterpolation(source, index + INTERPOLATION_OPEN.length);
-      text += HOLE;
-      continue;
-    }
-    const character = source[index] ?? "";
-    if (character === "\\") {
-      text += source[index + 1] ?? "";
-      index += 2;
-      continue;
-    }
-    if (source.startsWith(quote, index)) return { text, end: index + quote.length };
-    text += character;
-    index += 1;
-  }
-  return { text, end: index };
-}
-
-/** From just inside `\(`, the index just past the parenthesis that closes it; a nested string is skipped whole. */
-function skipSwiftInterpolation(source: string, start: number): number {
-  let depth = 1;
-  let index = start;
-  while (index < source.length && depth > 0) {
-    const character = source[index];
-    if (character === '"') {
-      index = readSwiftString(source, index).end;
-      continue;
-    }
-    if (character === "(") depth += 1;
-    if (character === ")") depth -= 1;
-    index += 1;
-  }
-  return index;
-}
-
-function countLines(text: string): number {
-  return text.split("\n").length - 1;
-}
-
-function swiftLiterals(source: string): readonly Literal[] {
-  const literals: Literal[] = [];
-  let index = 0;
-  let line = 1;
-  while (index < source.length) {
-    const character = source[index];
-    if (source.startsWith(LINE_COMMENT, index)) {
-      const end = source.indexOf("\n", index);
-      index = end === -1 ? source.length : end;
-      continue;
-    }
-    if (source.startsWith(BLOCK_COMMENT_OPEN, index)) {
-      const close = source.indexOf(BLOCK_COMMENT_CLOSE, index + BLOCK_COMMENT_OPEN.length);
-      const end = close === -1 ? source.length : close + BLOCK_COMMENT_CLOSE.length;
-      line += countLines(source.slice(index, end));
-      index = end;
-      continue;
-    }
-    if (character === '"') {
-      const read = readSwiftString(source, index);
-      literals.push({ text: read.text, line });
-      line += countLines(source.slice(index, read.end));
-      index = read.end;
-      continue;
-    }
-    if (character === "\n") line += 1;
-    index += 1;
-  }
-  return literals;
-}
-
 const SHELL_COMMENT = /^\s*#/u;
 const SHELL_PATH = /\/api\/[^\s"'`<>()]*/gu;
 const SHELL_EXPANSION = /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*/gu;
@@ -328,8 +228,6 @@ function literalsOf(kind: SourceKind, source: string, file: string): readonly Li
   switch (kind) {
     case SOURCE_KIND.TYPESCRIPT:
       return typeScriptLiterals(source, file);
-    case SOURCE_KIND.SWIFT:
-      return swiftLiterals(source);
     case SOURCE_KIND.SHELL:
       return shellLiterals(source);
   }
