@@ -5,10 +5,10 @@ import type { Effect } from "effect";
 /**
  * The one GPT Live session as the policy above the peer drives it. The peer
  * connection, the microphone track, the data channel, and the element Luke's
- * voice plays through are the surface's; what the policy reaches is the four
+ * voice plays through are the surface's; what the policy reaches is the five
  * verbs the server-controls guide leaves to the renderer — open, unmute,
- * mute, close — and the status the peer reads off its own transport and
- * playback. Nothing here appends to the model: every append is the host's,
+ * mute, close, and silencing the output — and the status the peer reads off
+ * its own transport and playback. Nothing here appends to the model: every append is the host's,
  * over its trusted sideband, so the call can carry no authority to speak.
  */
 /**
@@ -45,6 +45,15 @@ export interface LiveVoiceCall {
    * session's own word on the switch.
    */
   mute(): Effect.Effect<boolean>;
+  /**
+   * Silences Luke on this device at once, for the stop: the server-controls
+   * guide leaves blocking the model's audio to the client, since muting the
+   * input does not stop the output and an instruction cannot retract what
+   * is already playing. Playback comes back once the utterance he was
+   * silenced in has ended, so what he says next is heard from its start. A
+   * call where he is not speaking has nothing to silence.
+   */
+  silenceOutput(): void;
   /** The graceful hang-up: `session.closed` registered, `session.close` sent, waited for under the guide's bound. */
   close(): Effect.Effect<void>;
 }

@@ -209,6 +209,8 @@ function build(
   let ends = 0;
   const remote: (MediaStream | undefined)[] = [];
   const local: (MediaStream | undefined)[] = [];
+  /** The element Luke plays through, as far as its `muted` goes. */
+  let outputSilenced = false;
   const wire: string[] = [];
   const call = new LiveCall({
     events: {
@@ -256,6 +258,9 @@ function build(
     },
     onRemoteStream: (value) => remote.push(value),
     onLocalStream: (value) => local.push(value),
+    onOutputSilenced: (silenced) => {
+      outputSilenced = silenced;
+    },
     onWireEvent: (direction, event) => wire.push(`${direction}:${String(event.type)}`),
     services,
   });
@@ -312,6 +317,7 @@ function build(
     ends: () => ends,
     remote,
     local,
+    outputSilenced: () => outputSilenced,
     wire,
     channel,
     started,
@@ -717,6 +723,73 @@ it.effect(
       assert.deepEqual(f.activity, [true]);
       f.call.reportRemoteAudioLevel(true);
       assert.deepEqual(f.activity, [true, false]);
+    }),
+);
+
+/** A call opened for Luke's own speech and started, with nothing pressed. */
+const startedCall = Effect.gen(function* () {
+  const f = yield* fixture();
+  const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+  yield* settle;
+  f.peer.gathered();
+  yield* settle;
+  f.started();
+  yield* Fiber.join(opening);
+  return f;
+});
+
+it.effect(
+  "a stop silences Luke at once and holds the silence through his pauses until the utterance ends, then his next one plays",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* startedCall;
+      f.call.reportRemoteAudioLevel(true);
+      f.call.silenceOutput();
+      assert.equal(f.outputSilenced(), true);
+      // The model still talking while it gets to the stop is not heard, pauses within the hangover included.
+      yield* advance(10_000);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(SPEAKING_HANGOVER_MS - 1);
+      f.call.reportRemoteAudioLevel(true);
+      assert.equal(f.outputSilenced(), true);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(SPEAKING_HANGOVER_MS - 1);
+      assert.equal(f.outputSilenced(), true);
+      yield* advance(1);
+      assert.equal(f.outputSilenced(), false);
+      // What he says next is heard from its first word.
+      f.call.reportRemoteAudioLevel(true);
+      assert.equal(f.outputSilenced(), false);
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
+    }),
+);
+
+it.effect("a stop while Luke is quiet silences nothing, so his next words are heard", () =>
+  Effect.gen(function* () {
+    const f = yield* startedCall;
+    f.call.silenceOutput();
+    f.call.reportRemoteAudioLevel(true);
+    assert.equal(f.outputSilenced(), false);
+  }),
+);
+
+it.effect(
+  "a call that ends while Luke is silenced lifts the silence, so the next call is heard",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* startedCall;
+      f.call.reportRemoteAudioLevel(true);
+      f.call.silenceOutput();
+      assert.equal(f.outputSilenced(), true);
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+        event_id: "closed",
+        reason: "expired",
+        usage: { seconds: 42 },
+      });
+      yield* settle;
+      assert.equal(f.call.standing, false);
+      assert.equal(f.outputSilenced(), false);
     }),
 );
 

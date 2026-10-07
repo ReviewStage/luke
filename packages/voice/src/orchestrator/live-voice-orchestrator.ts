@@ -114,7 +114,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
  * the host owns every append and the close decision. The talk key is held to
  * talk: its press opens the session if none stands and unmutes it, its
  * release mutes, and the microphone is open exactly between the two; the
- * stop key mutes the same way. The host's `voiceLiveSession.changed` is
+ * stop key mutes the same way and silences Luke where he is speaking. The host's `voiceLiveSession.changed` is
  * obeyed rather than reasoned about: wanted opens a session with no
  * microphone for whatever Luke has to say, closing hangs up, and a session
  * lost while the key is still held is listened to again on the session that
@@ -316,15 +316,19 @@ export class LiveVoiceOrchestrator {
   }
 
   /**
-   * The stop key, and the panel's Escape: the microphone closes, and the host
-   * tells the model to stop first where Luke is actually speaking. The stop
-   * goes first so a press mid-sentence reaches the model as soon as it can,
-   * and the mute lands even where the host could not be reached. A press
+   * The stop key, and the panel's Escape: the microphone closes, and where
+   * Luke is actually speaking his voice is silenced on this device at once
+   * and the host tells the model to stop. The silence goes first because the
+   * model obeys only when it next can, and the guide leaves blocking its
+   * audio to the client; the call brings playback back once the silenced
+   * utterance has ended. The stop goes before the mute so a press
+   * mid-sentence reaches the model as soon as it can, and the mute lands
+   * even where the host could not be reached. A press
    * against a call that is merely listening sends none: the instruction is
    * standing text in the session, so telling a silent model to stop steers
    * the answer it has not given yet. The talk key's release is `endTalk` and
-   * never carries the stop either: under hold-to-talk it mutes while Luke is
-   * routinely still answering. Pressed while a press's session is still
+   * never carries the stop or the silence either: under hold-to-talk it
+   * mutes while Luke is routinely still answering. Pressed while a press's session is still
    * opening, it cancels that press's unmute, so the session opens muted.
    */
   stopSpeaking(): Effect.Effect<boolean> {
@@ -335,7 +339,10 @@ export class LiveVoiceOrchestrator {
       if (this.#opening) return true;
       const call = this.#call;
       if (!call?.standing) return false;
-      if (call.status === LIVE_STATUS.SPEAKING) yield* this.#bridge.stopSpeaking();
+      if (call.status === LIVE_STATUS.SPEAKING) {
+        call.silenceOutput();
+        yield* this.#bridge.stopSpeaking();
+      }
       yield* call.mute();
       return true;
     });
@@ -343,8 +350,9 @@ export class LiveVoiceOrchestrator {
 
   /**
    * The panel's stop: the standing call ends now, whatever it is about. Where
-   * Luke is speaking the host tells the model to stop first, so his voice
-   * does not run on through the graceful close; then the microphone closes
+   * Luke is speaking he is silenced on this device and the host tells the
+   * model to stop first, so his voice does not run on through the graceful
+   * close; then the microphone closes
    * and the call is let go of at once, so the view reads no call before the
    * close has finished behind it. Unlike the stop key, nothing stands after
    * it: the next press opens a new call. A press over no call does nothing.
@@ -356,7 +364,10 @@ export class LiveVoiceOrchestrator {
       this.#lastListening = false;
       const call = this.#call;
       if (call?.standing && !this.#opening) {
-        if (call.status === LIVE_STATUS.SPEAKING) yield* this.#bridge.stopSpeaking();
+        if (call.status === LIVE_STATUS.SPEAKING) {
+          call.silenceOutput();
+          yield* this.#bridge.stopSpeaking();
+        }
         yield* call.mute();
       }
       yield* this.#hangUp();
