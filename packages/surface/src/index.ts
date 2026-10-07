@@ -9,7 +9,6 @@ export {
 export {
   MOTION_DELAY_MS,
   MOTION_DURATION_MS,
-  PANEL_MAX_HEIGHT,
   PANEL_WIDTH,
   VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
@@ -39,17 +38,9 @@ export {
 export { compareSessionsByUrgency, urgencyLabel } from "./generated/session-display.js";
 export {
   CAPSULE_SIDE_WIDTH,
-  DEFAULT_PANEL_FORM_FACTOR,
-  isPanelFormFactor,
   type NativeNotchGeometry,
-  PANEL_FORM_FACTOR,
-  PANEL_FORM_FACTOR_LIST,
-  type PanelFormFactor,
-  PanelFormFactorSchema,
   PEEK_MIN_WIDTH,
-  PEEK_SIDE_GROWTH,
   peekWidth,
-  positionNotchWindow,
   type Rectangle,
   type ResolvedNotchGeometry,
   resolveNotchGeometry,

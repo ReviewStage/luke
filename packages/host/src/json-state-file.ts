@@ -40,7 +40,7 @@ export interface JsonStateFile<T> {
  * The synchronous `node:fs` face beside `jsonStateFileEffect` in
  * `@sidecar/host/effect`, for the two callers that still read and write
  * synchronously: `compose-devices.ts`'s `DeviceCadence#deviceId()`, read from
- * a synchronous statement by `compose-conversation.ts` and `compose-host.ts`,
+ * a synchronous statement by `compose-host.ts`,
  * and the desktop's own last-run-version file, read before `whenReady`
  * resolves (`apps/desktop/src/main/services/update-service-host.ts`). The
  * onboarding record was the third and reads and writes through

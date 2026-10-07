@@ -21,7 +21,6 @@ import {
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "@sidecar/session";
 import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -836,7 +835,6 @@ export class SettingsStore {
           // Resolved the way the session source resolves it, so the panel marks
           // what would actually be heard while the persisted file remains optional.
           voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
-          formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
         },
         status: {
           // SAFETY: the registry list contains every credential provider exactly once.

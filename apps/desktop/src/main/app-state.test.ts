@@ -3,7 +3,6 @@ import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { runModeFor } from "@sidecar/host";
-import { TRANSCRIPT_KIND } from "@sidecar/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -23,8 +22,6 @@ const RUN = {
     captureOutput: undefined,
     profile: "idle",
     fixtureName: undefined,
-    startPeeked: false,
-    startInSlot: false,
     captureMode: false,
     fixtureMode: false,
   },
@@ -198,15 +195,6 @@ const BOOT: HostBootstrap = {
   sessions: [],
   sessionsSettled: false,
   announcementsHeld: false,
-  conversationView: { groups: [], settled: true },
-  children: { settled: true, children: [] },
-  agents: { settled: true, agents: [] },
-  childTranscript: {
-    conversationId: "5e000000-0000-4000-8000-000000000001",
-    kind: TRANSCRIPT_KIND.CHILD,
-    groups: [],
-    settled: true,
-  },
   workspaceProjects: [],
   calendars: [],
   calendarOnboardingOwed: false,
@@ -223,14 +211,6 @@ it("a host bootstrap lands in the document as the host answered it", () => {
   const held = app.snapshot();
   assert.equal(held.run.agentTraceEnabled, true);
   assert.equal(held.sessions.settled, false);
-  assert.deepEqual(held.conversation, { groups: [], settled: true });
-  assert.deepEqual(held.children, { settled: true, children: [] });
-  assert.deepEqual(held.agents, { settled: true, agents: [] });
-  assert.equal(held.childTranscript?.conversationId, "5e000000-0000-4000-8000-000000000001");
-  // A later bootstrap with no transcript open is the host having let it go.
-  const { childTranscript: _open, ...closed } = BOOT;
-  app.update(bootstrapPatch(app.snapshot(), closed));
-  assert.equal(app.snapshot().childTranscript, undefined);
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
 });
 

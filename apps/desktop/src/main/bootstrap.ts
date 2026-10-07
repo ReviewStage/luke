@@ -91,8 +91,6 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
       captureOutput,
       profile,
       fixtureName,
-      startPeeked: argv.includes("--peek"),
-      startInSlot: argv.includes("--slot"),
       captureMode,
       fixtureMode,
     },

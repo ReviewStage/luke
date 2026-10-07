@@ -253,9 +253,7 @@ the voice window alike, so no two windows share a browser registry),
 runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
 reads it, the moment the root first reaches it, so the edge is here rather than
 at the root that imports it), the renderer's own fiber sites —
-`apps/desktop/src/renderer/introduction/introduction-takeover.tsx`, the
-panel's own `apps/desktop/src/renderer/use-voice-view.ts` (the panel's notice
-strip forks its own clock the same way the voice window's does), and the
+`apps/desktop/src/renderer/introduction/introduction-takeover.tsx` and the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
 module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
@@ -319,10 +317,9 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   package — the account session manager's consent
   (`packages/credentials/src/loopback-consent.ts`, whose `openExternal` is a
   `void | Promise<void>` and whose `reopen()` is synchronous) and the calendar
-  sign-in's page (`packages/calendar/src/oauth.ts`) — and the session opens a
-  row press reaches wrap the same door in `Effect.tryPromise`; so what would
-  end this row is a decision about those two seams rather than an
-  implementation detail of this door.
+  sign-in's page (`packages/calendar/src/oauth.ts`) — so what would end this
+  row is a decision about those two seams rather than an implementation
+  detail of this door.
 - **`apps/desktop/src/main/app-state.ts`** — `AppStateStore`'s `snapshot`,
   `update`, and `touch` run their `SubscriptionRef` operation through
   `Effect.runSyncWith` on the services the launch handed them, never an empty

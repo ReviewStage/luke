@@ -13,9 +13,8 @@ import type { Session } from "@sidecar/session";
  * The identity travels for the refresh's diff and nothing else: it tells one
  * row from another between passes and never enters a rendered line.
  *
- * Luke's own voice chat is dropped, the same row `actableSessions` drops for
- * a row press: the summary presents every line as one of the developer's coding
- * agents, so a session told about itself would both say something untrue and
+ * Luke's own voice chat is dropped: the summary presents every line as one
+ * of the developer's coding agents, so a session told about itself would both say something untrue and
  * spend one of the ten slots a busy desk needs.
  */
 export function voiceRoster(sessions: readonly Session[]): readonly RosterSeedSession[] {

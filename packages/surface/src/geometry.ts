@@ -1,13 +1,3 @@
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { Schema } from "effect";
-import {
-  BUBBLE_LIFT,
-  PANEL_MAX_HEIGHT,
-  PANEL_WIDTH,
-  VOICE_BAND_INSET,
-  VOICE_CAPTION_MAX_HEIGHT,
-} from "./generated/motion-tokens.js";
-
 export interface Rectangle {
   x: number;
   y: number;
@@ -34,76 +24,20 @@ export interface ResolvedNotchGeometry {
   topInset: number;
   housingWidth: number;
   hasNotch: boolean;
-  source: "appkit" | "fixture" | "work-area" | "simulated";
+  source: "appkit" | "fixture" | "work-area";
 }
 
 /**
- * How the compact shape stands on a display without a camera housing — an
- * external monitor, or a MacBook built before the notch. `NOTCH` draws the
- * housing the display never had, pressed into the top edge; `BUBBLE` is the
- * free-floating pill, which is what every display without a housing gets until
- * the user asks otherwise. A display with a real notch answers to neither.
+ * The 14-inch MacBook Pro's housing, the one every drawn proportion was
+ * measured against and the one the capture fixture pins.
  */
-export const PANEL_FORM_FACTOR = {
-  NOTCH: "notch",
-  BUBBLE: "bubble",
-} as const;
-
-export type PanelFormFactor = (typeof PANEL_FORM_FACTOR)[keyof typeof PANEL_FORM_FACTOR];
-
-export const PANEL_FORM_FACTOR_LIST: readonly PanelFormFactor[] = Object.values(PANEL_FORM_FACTOR);
-
-export const PanelFormFactorSchema = Schema.Literals(Object.values(PANEL_FORM_FACTOR));
-
-const readsPanelFormFactor = Schema.is(PanelFormFactorSchema);
-
-/** Guards a form factor arriving from persisted or renderer-supplied data. */
-export function isPanelFormFactor(value: UnparsedWireValue): value is PanelFormFactor {
-  return readsPanelFormFactor(value);
-}
-
-export const DEFAULT_PANEL_FORM_FACTOR: PanelFormFactor = PANEL_FORM_FACTOR.BUBBLE;
-
-/**
- * The housing a display is given when it has none and the user asks for the
- * notch form: the 14-inch MacBook Pro's, the same housing the capture fixture
- * pins and the one every drawn proportion was measured against.
- */
-export const SIMULATED_HOUSING_WIDTH = 210;
+const REFERENCE_HOUSING_WIDTH = 210;
 
 export type WindowMode = "compact" | "expanded";
 
-interface NotchWindowLayout extends Rectangle {
-  notch: ResolvedNotchGeometry;
-}
-
-/**
- * The window is a stage for a shape the renderer draws and animates; it is not
- * the shape itself. Every window therefore holds the widest thing any mode can
- * draw — the panel, and the peek where a housing outgrows it — plus a margin
- * for what falls outside the shape: a spring overshooting its target, and the
- * shadow the peek and the panel cast. A clipped shadow is a hard edge, so the
- * margin runs along the bottom too. Everything the shape does not cover is
- * transparent and passes the pointer through.
- *
- * The margin is measured against what actually falls outside the shape rather
- * than chosen: `--surface-shadow` still puts ink about 35px below the panel —
- * a blur's tail reaches further than its radius — and the spring overshoots its
- * target by 1.5%. At 30 the last few percent of that tail met the window edge
- * as a faint line instead of fading out.
- */
+/** The capsule's side beside the housing, and how far the peek grows it. */
 export const CAPSULE_SIDE_WIDTH = 36;
-export const PEEK_SIDE_GROWTH = 88;
-export const SURFACE_MARGIN = 40;
-// BUBBLE_LIFT, VOICE_CAPTION_MAX_HEIGHT, VOICE_BAND_INSET, PANEL_WIDTH, and
-// PANEL_MAX_HEIGHT come from the shared surface tokens, so the window the
-// main process sizes and the shape the renderer draws cannot drift. The
-// bubble's lift is derived: the pill matches the 24pt menu bar it floats
-// beside — the 32px compact strip minus the lift on each side. The compact
-// window holds the caption block for the same reason it holds the peek's
-// width — speech must never cost an IPC resize. One inset closes the stack:
-// every band carries the gap above itself, so the last one still needs its
-// own gap before the shape's bottom edge.
+const PEEK_SIDE_GROWTH = 88;
 const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
 
 /**
@@ -115,7 +49,7 @@ const peekSideWidth = CAPSULE_SIDE_WIDTH + PEEK_SIDE_GROWTH;
  * reply past the room the window reserved. Mirrored by `--peek-width`'s floor
  * in the desktop stylesheet.
  */
-export const PEEK_MIN_WIDTH = SIMULATED_HOUSING_WIDTH + peekSideWidth * 2;
+export const PEEK_MIN_WIDTH = REFERENCE_HOUSING_WIDTH + peekSideWidth * 2;
 
 /** The peek's width beside this housing, never narrower than the floor. */
 export function peekWidth(housingWidth: number): number {
@@ -127,12 +61,16 @@ function snapToDevicePixels(value: number, scaleFactor?: number): number {
   return Math.round(value * scaleFactor) / scaleFactor;
 }
 
+/**
+ * The housing a display has, read from AppKit where the native helper
+ * answered for it and from the work area's inset where it did not; a display
+ * without a housing is never given one.
+ */
 export function resolveNotchGeometry(
   display: DisplayGeometry,
   native?: NativeNotchGeometry,
-  formFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR,
 ): ResolvedNotchGeometry {
-  const physical: ResolvedNotchGeometry = native
+  return native
     ? {
         topInset: snapToDevicePixels(
           Math.max(0, native.safeAreaTop, native.menuBarHeight ?? 0),
@@ -148,63 +86,4 @@ export function resolveNotchGeometry(
         hasNotch: false,
         source: "work-area",
       };
-  // A real housing is never argued with; only its absence takes the form
-  // factor's answer. Its resolved depth is carried through untouched — the
-  // window and the stylesheet already hold every housing to the same 32px floor.
-  if (physical.hasNotch || formFactor !== PANEL_FORM_FACTOR.NOTCH) return physical;
-  return {
-    topInset: physical.topInset,
-    housingWidth: SIMULATED_HOUSING_WIDTH,
-    hasNotch: true,
-    source: "simulated",
-  };
-}
-
-export function positionNotchWindow(
-  display: DisplayGeometry,
-  mode: WindowMode,
-  native?: NativeNotchGeometry,
-  formFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR,
-): NotchWindowLayout {
-  const notch = resolveNotchGeometry(display, native, formFactor);
-  const housingWidth = notch.hasNotch ? notch.housingWidth : 0;
-  // One width for both modes, so a mode change is a height-only resize and the
-  // window never moves. macOS lands a window's move and its content's relayout
-  // on different frames, so a mode change that also recentred a narrower
-  // window drew the capsule laid out for the new width against the old origin
-  // — flashed toward the panel's corner — before the move caught up. A height
-  // change has no such tear: the window stays put, and everything a shorter
-  // frame crops is transparent margin below a shape that has already closed.
-  const width = Math.min(
-    Math.max(PANEL_WIDTH, peekWidth(housingWidth)) + SURFACE_MARGIN * 2,
-    display.bounds.width,
-  );
-  // A bubble panel floats `BUBBLE_LIFT` below the top edge, and the margin was
-  // measured from a panel drawn at the edge, so the lift is added back or the
-  // last of the shadow's tail meets the window edge as a faint line.
-  const height =
-    mode === "expanded"
-      ? Math.min(
-          PANEL_MAX_HEIGHT + SURFACE_MARGIN + (notch.hasNotch ? 0 : BUBBLE_LIFT),
-          display.bounds.height,
-        )
-      : Math.min(
-          Math.ceil(Math.max(32, notch.topInset)) +
-            VOICE_CAPTION_MAX_HEIGHT +
-            VOICE_BAND_INSET +
-            SURFACE_MARGIN,
-          display.bounds.height,
-        );
-  const x = Math.round(display.bounds.x + (display.bounds.width - width) / 2);
-
-  return {
-    x,
-    // Electron coordinates start at the display's top edge. Anchoring here
-    // makes the black surface meet the camera housing instead of floating below
-    // the menu bar or in the middle of the screen.
-    y: display.bounds.y,
-    width,
-    height,
-    notch,
-  };
 }

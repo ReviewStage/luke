@@ -56,8 +56,6 @@ interface UseCaptionPresentationOptions {
   fixtureSpeaking: boolean;
   /** Whether the hint stands in its own band below the block. */
   volumeHint: boolean;
-  /** True while the shape is still riding down out of the panel. */
-  leavingPanel: boolean;
 }
 
 interface CaptionPresentation {
@@ -84,8 +82,7 @@ interface CaptionPresentation {
 export function useCaptionPresentation(
   options: UseCaptionPresentationOptions,
 ): CaptionPresentation {
-  const { lukeCaptions, developerCaptions, speakers, fixtureSpeaking, volumeHint, leavingPanel } =
-    options;
+  const { lukeCaptions, developerCaptions, speakers, fixtureSpeaking, volumeHint } = options;
   const [textElement, textHeight] = useMeasuredHeight();
   const element = useRef<HTMLSpanElement>(null);
   const [padding, setPadding] = useState(0);
@@ -192,23 +189,6 @@ export function useCaptionPresentation(
     };
   }, []);
 
-  /**
-   * The measured caption height the shape spends, held through a collapse
-   * out of the panel. The compact width lands at the flip and re-wraps the
-   * words while they are still riding down at the panel's foot, and a
-   * re-measure landing mid-ride would open the clip, retarget the surface
-   * past room nothing has made yet, and roll the stack against words still
-   * travelling. The collapse travels on the panel's
-   * numbers; the compact re-measure lands when the shape has settled, and
-   * grows it there the way words arriving at rest do.
-   */
-  const heldHeight = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (leavingPanel) return;
-    heldHeight.current = textHeight;
-  });
-  const shownHeight = leavingPanel ? heldHeight.current : textHeight;
-
   // Live words win; the held snapshot only ever finishes being read. A held
   // caption is drawn exactly as it was, its tone included.
   const texts = liveTexts ?? hold?.texts;
@@ -230,6 +210,6 @@ export function useCaptionPresentation(
     tone,
     settled,
     live,
-    style: captionSizeStyle(shownHeight, volumeHint, padding),
+    style: captionSizeStyle(textHeight, volumeHint, padding),
   };
 }

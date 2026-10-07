@@ -5,8 +5,7 @@ import {
   type GatewayShutdownSteps,
 } from "@sidecar/gateway";
 import {
-  HostedChangesClient,
-  HostedConversationClient,
+  HostedNotebookClient,
   HostedPlanClient,
   type PlanActivityFrame,
   type PlanDraftFrame,
@@ -21,9 +20,9 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import { composeAccount } from "./compose-account.js";
 import { composeCalendars } from "./compose-calendars.js";
-import { composeConversation } from "./compose-conversation.js";
 import { composeDevices } from "./compose-devices.js";
 import { composeLive } from "./compose-live.js";
+import { composeNotebook } from "./compose-notebook.js";
 import { composeObservation } from "./compose-observation.js";
 import { composePlanning, planFoldersFile } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
@@ -48,7 +47,7 @@ export const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   DEVICES: "devices",
-  CONVERSATION: "conversation",
+  NOTEBOOK: "notebook",
   CALENDARS: "calendars",
   OBSERVATION: "observation",
   LIVE: "live",
@@ -66,7 +65,7 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.SETTINGS,
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.DEVICES,
-  HOST_CONCERN.CONVERSATION,
+  HOST_CONCERN.NOTEBOOK,
   HOST_CONCERN.CALENDARS,
   HOST_CONCERN.OBSERVATION,
   HOST_CONCERN.LIVE,
@@ -118,23 +117,10 @@ export const hostAssemblyLayer: Layer.Layer<
       onAnnouncementHoldRead: () => announcementHoldRead(),
     });
     const devices = yield* composeDevices({ account, calendars, settings });
-    // The live composer is built after this one and decides on the offers
-    // the Conversation's events fold to, so the hand is set once it stands.
-    let briefingsOffered: (count: number) => void = () => undefined;
-    const conversation = composeConversation({
-      kernel,
-      settings,
+    const notebook = composeNotebook({
+      runMode,
       account,
-      devices,
-      refreshRoster: observation.refreshRoster,
-      onOpenOffers: (count) => briefingsOffered(count),
-      // Both clients carry the account's own token, holder fence included, so
-      // the one retry after a 401 can tell a renewed bearer from another person's.
-      heads: new HostedChangesClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
-      }),
-      client: new HostedConversationClient({
+      client: new HostedNotebookClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
@@ -167,29 +153,14 @@ export const hostAssemblyLayer: Layer.Layer<
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
-      connectGitHub: {
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        accountId: () =>
-          Effect.map(Effect.orDie(settings.store.readAccount()), (stored) => stored?.id),
-        // A browser that would not open is reported the way every other open is.
-        openExternal: (url) =>
-          Effect.tryPromise(() => kernel.openExternalThroughNode(url)).pipe(
-            Effect.catch((failure) => Effect.sync(() => kernel.reportOpenFailure(failure))),
-          ),
-      },
     });
     activePlanId = planning.activePlanId;
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
-    briefingsOffered = live.briefingsOffered;
 
-    const supervisor = yield* observationSupervisor([
-      observation.loop,
-      calendars.loop,
-      conversation.loop,
-    ]);
+    const supervisor = yield* observationSupervisor([observation.loop, calendars.loop]);
 
     /**
      * Every cadence the account gate holds open, as one scope rather than as a
@@ -236,7 +207,6 @@ export const hostAssemblyLayer: Layer.Layer<
     const closeCapabilities = Effect.gen(function* () {
       yield* capabilities.disarm;
       live.withdrawBeats();
-      conversation.reset();
       yield* planning.reset;
       observation.stopObservation();
       settings.forgetVaultKeys();
@@ -275,7 +245,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.SETTINGS]: settings,
       [HOST_CONCERN.ACCOUNT]: account,
       [HOST_CONCERN.DEVICES]: devices,
-      [HOST_CONCERN.CONVERSATION]: conversation,
+      [HOST_CONCERN.NOTEBOOK]: notebook,
       [HOST_CONCERN.CALENDARS]: calendars,
       [HOST_CONCERN.OBSERVATION]: observation,
       [HOST_CONCERN.LIVE]: live,
@@ -305,19 +275,12 @@ export const hostAssemblyLayer: Layer.Layer<
                 settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
               )
             : undefined;
-          const childTranscript = conversation.childTranscriptSnapshot();
           return {
             settings: carried(snapshot),
             account: carried(account.snapshot()),
             sessions: carried(observation.rosterForClients()),
             sessionsSettled: observation.rosterSettled(),
             announcementsHeld: quiet,
-            conversationView: carried(conversation.snapshot()),
-            children: carried(conversation.childrenSnapshot()),
-            agents: carried(conversation.agentsSnapshot()),
-            ...(childTranscript !== undefined
-              ? { childTranscript: carried(childTranscript) }
-              : undefined),
             workspaceProjects: carried(
               workspaceProjectDefaults === undefined
                 ? []

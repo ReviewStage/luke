@@ -7,24 +7,12 @@
  * answers a method and the client that calls it read the same words from one
  * contract. Nothing in this file performs anything.
  */
-import { RatingWordSchema, TRANSCRIPT_KIND, type WireValue } from "@sidecar/wire";
+import type { WireValue } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
 
 /** Every method the host answers, by the name a client calls it. */
 export const GATEWAY_METHOD = {
   SHUTDOWN: "gateway.shutdown",
-  /** The Conversation tab's Clear as the service's soft delete of the account's main conversation. */
-  CONVERSATION_CLEAR: "conversation.clear",
-  /** The developer's thumb on one of Luke's messages, or the press that takes it back, carried to the service as a rating event beside it. */
-  CONVERSATION_RATE_MESSAGE: "conversation.rateMessage",
-  /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
-  CONVERSATION_REFRESH: "conversation.refresh",
-  /** One page of older turns read back from where this device's history stands, for a reader at the top of the thread; the page arrives on the view, the answer says whether one landed. */
-  CONVERSATION_LOAD_OLDER: "conversation.loadOlder",
-  /** One transcript held open on this device, a child's or an observed session's: read to its end now and again whenever its list's head moves, until closed. */
-  // Named for the child's transcript still, an observed session's opening through the same method.
-  CONVERSATION_OPEN_CHILD_TRANSCRIPT: "conversation.openChildTranscript",
-  CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
   NOTEBOOK_READ: "notebook.read",
   /** The panel's Plans tab shows: the plan list read now, and the active plan's document with it. */
@@ -39,10 +27,6 @@ export const GATEWAY_METHOD = {
   PLANNING_DELETE: "planning.delete",
   /** The folder of this Mac a plan reads, chosen again for a plan this Mac holds none for. */
   PLANNING_SET_FOLDER: "planning.setFolder",
-  /** The repositories the account's GitHub connection can read, for a new plan's picker. */
-  PLANNING_REPOSITORIES: "planning.repositories",
-  /** The Connect GitHub page opened in the browser, for the account this Mac is signed in as. */
-  PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
   /** Everything a window's bootstrap reads of the host, in one answer. */
@@ -68,12 +52,6 @@ export const GATEWAY_METHOD = {
   CALENDAR_REFRESH: "calendar.refresh",
   CALENDAR_SET_SELECTED: "calendar.setSelected",
   SESSION_ROSTER: "session.roster",
-  SESSION_OPEN: "session.open",
-  SESSION_OPEN_APPLICATION: "session.openApplication",
-  SESSION_OPEN_CHANGE: "session.openChange",
-  /** The two writes a session's own row asks for, each admitted in the host against the roster it reads for itself. */
-  SESSION_SEND_MESSAGE: "session.sendMessage",
-  SESSION_EXECUTE_CONTROL: "session.executeControl",
   WORKSPACE_PROJECTS: "workspace.projects",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
@@ -254,60 +232,6 @@ export const voiceLiveSessionChangedSchema = Schema.Struct({
 
 export type VoiceLiveSessionChanged = typeof voiceLiveSessionChangedSchema.Type;
 
-/** `conversation.rateMessage`: which of Luke's messages, and the developer's verdict on it, or the word that takes one back. */
-export const conversationRateMessageParamsSchema = Schema.Struct({
-  /** The message as the view holds it, by its own id, admitted as written so it matches the row the host holds. */
-  messageId: keptText(512),
-  /** The word under the stored event's own rule, so the method and the row cannot say different things. */
-  rating: RatingWordSchema,
-});
-
-/**
- * How `conversation.rateMessage` ended. A rating is recorded or it is not,
- * and a control that asked has three different things to say about a
- * refusal: the service could not be asked at all, the message is not one the
- * account still holds, or it stands but is not one of Luke's — which no
- * control should have offered, so a client reads it as a row the thread has
- * moved past rather than as a rating to retry.
- */
-export const CONVERSATION_RATE_STATUS = {
-  RATED: "rated",
-  /** The run sends nothing, the account gate is closed, this device has no row on the service yet, or the call did not land. */
-  UNAVAILABLE: "unavailable",
-  /** No message by that id stands for the account on this device or on the service. */
-  NOT_FOUND: "not-found",
-  /** The message stands and is the account's, but only Luke's words take a rating. */
-  NOT_RATEABLE: "not-rateable",
-} as const;
-
-export type ConversationRateStatus =
-  (typeof CONVERSATION_RATE_STATUS)[keyof typeof CONVERSATION_RATE_STATUS];
-
-/** What `conversation.rateMessage` answers: whether the rating was recorded, and if not, which of the three refusals stands. */
-export const conversationRateMessageResultSchema = Schema.Struct({
-  status: Schema.Literals(Object.values(CONVERSATION_RATE_STATUS)),
-});
-
-export type ConversationRateMessageResult = typeof conversationRateMessageResultSchema.Type;
-
-/** What `conversation.loadOlder` answers: whether a page of older turns landed on the view, so the panel knows its ask is spent. */
-export const conversationLoadOlderResultSchema = Schema.Struct({
-  loaded: Schema.Boolean,
-});
-
-export type ConversationLoadOlderResult = typeof conversationLoadOlderResultSchema.Type;
-
-/**
- * `conversation.openChildTranscript`: which conversation, by the id its list
- * read it under, admitted as written so it matches the row the service
- * holds, and which list that was, a child's or an observed session's, since
- * the kind says whose head moving means the transcript has more to read.
- */
-export const conversationOpenChildTranscriptParamsSchema = Schema.Struct({
-  conversationId: keptText(512),
-  kind: Schema.Literals(Object.values(TRANSCRIPT_KIND)),
-});
-
 /**
  * One file of Luke's notebook as `notebook.read` carries it: where it stands
  * in the workspace, its Markdown from the front and cut at the service's own
@@ -417,15 +341,6 @@ export type GatewayRefusal =
   | InternalRefusal;
 
 export const GATEWAY_EVENT = {
-  /** The Conversation as the service's reads compose it, whole, whenever a poll moved it. */
-  CONVERSATION_VIEW_CHANGED: "conversationView.changed",
-  /** The account's children as the service's read lists them, whole, whenever a poll moved the list. */
-  CHILDREN_CHANGED: "children.changed",
-  /** The account's agents as the service's read lists them, whole, whenever a poll moved the list. */
-  AGENTS_CHANGED: "agents.changed",
-  /** The open transcript, whole, whenever a poll moved it; an empty payload says none is open. */
-  // Named for the child's transcript still, whichever kind is open.
-  CHILD_TRANSCRIPT_CHANGED: "childTranscript.changed",
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
   ACCOUNT_CHANGED: "account.changed",

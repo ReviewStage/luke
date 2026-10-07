@@ -58,10 +58,10 @@ cut off.**
 
 **The host reaches no brain and writes no record for a voice session.** The
 exchange stands on the voice service: every spoken ask is admitted through
-`acceptAsk` there, every reply and briefing is appended there over the same
+`acceptAsk` there, every reply is appended there over the same
 socket the relay pipes, and the account's record is the service's. What this
 package keeps is `LiveSessionHolder`, which creates the session for the peer's
-offer (seeded from the desk and the recent Conversation as this Mac sees them),
+offer (seeded from the desk as this Mac sees it),
 ends it on the peer's hang-up or the drain, and carries the peer's idle, the
 stop key, and the onboarding beats to the service as `session.activity`,
 `session.stop`, and `session.beat`, since the idle decision is made against
@@ -73,12 +73,7 @@ install, the calendar line while the gate shows, the launch greeting once per
 run after the arrival has played, none of them under a hold), and it announces
 `wanted` for one so the peer opens a muted session to say it into; the
 service's `session.spoken` frame is what settles `arrivalSpokenAt` and the
-first-announcement count, which stay this side's. It announces `wanted` for a
-briefing the same way (`briefing-session.ts`): when the Conversation's events
-fold to an offer still standing, this Mac is present as its heartbeat reports
-it, speech is free, and no session stands, at most once a minute; the session's
-exchange claims and says the briefing, and the trigger is a status edge from
-observed rows, never a model's word. Nothing on this side speaks
+first-announcement count, which stay this side's. Nothing on this side speaks
 unprompted. The sessions route closes a desktop socket that sends any other
 frame, so a re-wired local exchange is refused at the relay rather than heard
 twice.

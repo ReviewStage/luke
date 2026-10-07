@@ -10,15 +10,6 @@ export {
 } from "./account-call.js";
 export { AccountRefreshFailed, type AccountToken } from "./account-token.js";
 export {
-  HOSTED_ACTION_FAILURE,
-  HostedActionClient,
-  type HostedActionClientOptions,
-  type HostedActionFailure,
-  type HostedActionOutcome,
-  type HostedActionTarget,
-  type HostedActionWorkspaceOutcome,
-} from "./action-client.js";
-export {
   type HostedActionAnswer,
   type HostedActionWorkspaceAnswer,
   hostedActionAnswerSchema,
@@ -42,17 +33,6 @@ export {
   type ConversationClearAnswer,
   conversationClearAnswerSchema,
 } from "./conversation-clear-wire.js";
-export {
-  CONVERSATION_RATE_REFUSAL,
-  CONVERSATION_READ_FAILURE,
-  type ConversationRateRefusal,
-  type ConversationRateResult,
-  type ConversationReadResult,
-  type HistoryPageQuery,
-  HostedConversationClient,
-  type HostedConversationClientOptions,
-  type ReadPageQuery,
-} from "./conversation-client.js";
 export {
   type HostedConversationAnswer,
   type HostedConversationMessage,
@@ -138,6 +118,7 @@ export {
   VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
 } from "./live-contract.js";
+export { HostedNotebookClient, type HostedNotebookClientOptions } from "./notebook-client.js";
 export {
   NOTEBOOK_READ_BOUNDS,
   type NotebookAnswer,

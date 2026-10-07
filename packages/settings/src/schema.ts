@@ -16,12 +16,6 @@ import {
   workspaceAgentModelLabel,
   workspaceAgentModels,
 } from "@sidecar/session";
-import {
-  DEFAULT_PANEL_FORM_FACTOR,
-  isPanelFormFactor,
-  PANEL_FORM_FACTOR_LIST,
-  type PanelFormFactor,
-} from "@sidecar/surface";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Result } from "effect";
 import {
@@ -82,13 +76,6 @@ const OFFERED_VOICE_LIST: readonly LiveVoice[] = LIVE_VOICE_LIST;
 function voiceOptionLabel(voice: LiveVoice): string {
   const name = voice.charAt(0).toUpperCase() + voice.slice(1);
   return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
-}
-
-/* The forms read as names, and the bubble carries its status into the menu the
-   way the default voice does. */
-function formFactorOptionLabel(formFactor: PanelFormFactor): string {
-  const name = formFactor.charAt(0).toUpperCase() + formFactor.slice(1);
-  return formFactor === DEFAULT_PANEL_FORM_FACTOR ? `${name} (default)` : name;
 }
 
 function workspaceProviderName(providerId: WorkspaceProviderId): string {
@@ -334,38 +321,6 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD,
     adjustable: true,
     visible: calendarConnected,
-  }),
-  showOnAllDisplays: toggleSetting({
-    field: "showOnAllDisplays",
-    id: APP_SETTING_ID.SHOW_ON_ALL_DISPLAYS,
-    label: "Show Luke on all displays",
-    description:
-      "Whether Luke stands on every connected display at once; off keeps him to the main display alone.",
-    default: false,
-    page: SETTINGS_PAGE.APPEARANCE,
-    order: 150,
-    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    manual: APPEARANCE_PAGE,
-    sideEffect: SETTING_SIDE_EFFECT.DISPLAYS,
-    adjustable: true,
-  }),
-  formFactor: choiceSetting({
-    field: "formFactor",
-    id: APP_SETTING_ID.FORM_FACTOR,
-    label: "Form factor",
-    description:
-      "How Luke stands on a display without a camera housing — notch draws him one pressed into the top edge, bubble floats him just under it. A display with a real notch ignores this.",
-    values: PANEL_FORM_FACTOR_LIST,
-    say: (formFactor) => formFactor,
-    optionLabel: formFactorOptionLabel,
-    guard: (value: UnparsedWireValue) => optional(value, isPanelFormFactor),
-    default: DEFAULT_PANEL_FORM_FACTOR,
-    page: SETTINGS_PAGE.APPEARANCE,
-    order: 160,
-    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    manual: APPEARANCE_PAGE,
-    sideEffect: SETTING_SIDE_EFFECT.FORM_FACTOR,
-    adjustable: true,
   }),
   sessionFilters: storedSetting({
     field: "sessionFilters",

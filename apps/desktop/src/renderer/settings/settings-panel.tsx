@@ -9,7 +9,6 @@ import { useEffect, useRef, useState } from "react";
 import type { CredentialEntryControl } from "../credential-entry";
 import type { FeedbackEntryControl } from "../feedback-entry";
 import { voiceAttentionNote } from "../microphone-access";
-import { PANEL_TAB, panelPanelId, panelTabId } from "../panel-tabs";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import {
   landOnSettingsRow,
@@ -212,12 +211,7 @@ export function SettingsPanel({
   // The drawn page's reset, absent while that page stands at its defaults.
   const pageReset = pageResetControl(view, settings, writes);
   return (
-    <div
-      className="settings"
-      role="tabpanel"
-      id={panelPanelId(PANEL_TAB.SETTINGS)}
-      aria-labelledby={panelTabId(PANEL_TAB.SETTINGS)}
-    >
+    <div className="settings">
       {/* The search stands first, above a page's own head: it reads across
           every page, so it is the surface's field rather than the page's,
           the way a desktop settings window keeps its search above whichever

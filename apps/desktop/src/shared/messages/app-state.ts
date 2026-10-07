@@ -2,15 +2,10 @@ import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { LiveSessionPhase } from "@sidecar/gateway";
 import type { PlanningView } from "@sidecar/hosted/planning-view";
-import type {
-  ConversationViewSnapshot,
-  ObservedWorkspaceProject,
-  TranscriptSnapshot,
-} from "@sidecar/session";
+import type { ObservedWorkspaceProject } from "@sidecar/session";
 import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import type { AgentsSnapshot, ChildrenSnapshot } from "./agents";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
 import {
   type DisplayDiagnostic,
@@ -57,8 +52,6 @@ interface AppRunFacts {
   captureMode: boolean;
   fixtureMode: boolean;
   fixture: FixtureSnapshot;
-  startPeeked: boolean;
-  startInSlot: boolean;
   accountRequired: boolean;
   observesProviders: boolean;
   agentTraceEnabled: boolean;
@@ -121,15 +114,6 @@ interface AppVoiceSlice {
 }
 
 /**
- * The Conversation as the host's reads of the service compose it: the turn
- * groups of stored `UIMessage` rows the panel draws, whether a read has
- * landed, and the row the service could not read back where it named one.
- * The same on every display's panel, and the same on every Mac signed in to
- * the account, because the host reads it from the account's own record.
- */
-type AppConversationSlice = ConversationViewSnapshot;
-
-/**
  * What this run may record, as its two halves: what the host answered, and
  * whether an action that ended the account it files under has stood recording
  * down for the rest of the run.
@@ -162,13 +146,6 @@ export interface AppState {
   audio: AppAudioSlice;
   hotkeys: AppHotkeysSlice;
   voice: AppVoiceSlice;
-  conversation: AppConversationSlice;
-  /** The account's children as the host's read lists them, the same on every Mac signed in to the account. */
-  children: ChildrenSnapshot;
-  /** The account's agents, the observed sessions holding a turn, as the host's read lists them. */
-  agents: AgentsSnapshot;
-  /** The one transcript the host holds open for this Mac, a child's or an observed session's; nothing while none is. Named `childTranscript` still, kept so the slice name stays put. */
-  childTranscript: TranscriptSnapshot | undefined;
   /**
    * The Plans tab's named plans as the host's reads of the service
    * hold them: the list, the one active plan, and its saved document. Only

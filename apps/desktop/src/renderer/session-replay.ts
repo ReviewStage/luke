@@ -14,15 +14,14 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
  * every input is masked, the attributes that carry words or an image are
  * asterisked, and autocapture is off. What leaves is layout, pointer
- * positions, and asterisks of the right length. Eight elements also block
+ * positions, and asterisks of the right length. Five elements also block
  * their whole subtree with the library's fixed `ph-no-capture` class as a
- * second line: the Conversation tab's three pages (the thread, the Agents
- * list, and an open transcript), the feedback composer's message field, its
- * attached images and their preview, the Settings tab's Memory page, and a
- * plan's whiteboard. The whiteboard is the one surface that draws its words
- * on a canvas, which the text masking cannot reach, so its block is its only
- * line, and canvas recording is held off by name rather than by the library's
- * default.
+ * second line: the feedback composer's message field, its attached images
+ * and their preview, the Settings tab's Memory page, and a plan's
+ * whiteboard. The whiteboard is the one surface that draws its words on a
+ * canvas, which the text masking cannot reach, so its block is its only
+ * line, and canvas recording is held off by name rather than by the
+ * library's default.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
  * masking and those blocks are the whole of what decides it.

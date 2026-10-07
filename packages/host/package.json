@@ -14,9 +14,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@sidecar/actions": "workspace:*",
     "@sidecar/analytics": "workspace:*",
-    "@sidecar/brain": "workspace:*",
     "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/devtrace": "workspace:*",
@@ -26,7 +24,6 @@
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/settings": "workspace:*",
-    "@sidecar/surface": "workspace:*",
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:",

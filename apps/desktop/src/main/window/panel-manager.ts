@@ -1,10 +1,5 @@
 import type { RunMode } from "@sidecar/host";
-import {
-  DEFAULT_PANEL_FORM_FACTOR,
-  type NativeNotchGeometry,
-  type PanelFormFactor,
-  resolveNotchGeometry,
-} from "@sidecar/surface";
+import { type NativeNotchGeometry, resolveNotchGeometry } from "@sidecar/surface";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import {
   app,
@@ -124,7 +119,6 @@ export class PanelManager {
   readonly initialMode: WindowMode = "expanded";
   /** The window, keyed by the display it was opened against. */
   readonly #windows = new Map<number, BrowserWindow>();
-  #panelFormFactor: PanelFormFactor = DEFAULT_PANEL_FORM_FACTOR;
   #nativeScreens = new Map<number, NativeNotchGeometry>();
   /**
    * The display the introduction's takeover covers, absent when none does,
@@ -179,9 +173,6 @@ export class PanelManager {
     return "expanded";
   }
 
-  /** Nothing to stand down: an ordinary window does not cover the chat a row press opens. */
-  standDown(): void {}
-
   /**
    * Hands a payload to every living window, optionally skipping the one that
    * already holds the answer in its reply and must redraw from that rather
@@ -235,11 +226,7 @@ export class PanelManager {
       bounds: display.bounds,
       workArea: display.workArea,
       scaleFactor: display.scaleFactor,
-      notch: resolveNotchGeometry(
-        display,
-        this.#nativeScreens.get(display.id),
-        this.#panelFormFactor,
-      ),
+      notch: resolveNotchGeometry(display, this.#nativeScreens.get(display.id)),
     };
   }
 
@@ -250,16 +237,6 @@ export class PanelManager {
 
   focusIfExpanded(displayId: number): void {
     this.#focusWindow(this.#windows.get(displayId));
-  }
-
-  /** The developer owns the frame; only the takeover ever sets it. */
-  positionAll(): void {}
-
-  /** One window on the main display, whatever the stored choice says. */
-  setShowOnAllDisplays(_show: boolean): void {}
-
-  setFormFactor(formFactor: PanelFormFactor): void {
-    this.#panelFormFactor = formFactor;
   }
 
   /**
@@ -373,9 +350,6 @@ export class PanelManager {
       if (!window.isDestroyed()) window.showInactive();
     }
   }
-
-  /** No collapse runs on a clock any more; kept for the teardown that calls it. */
-  clearCollapseTimers(): void {}
 
   /** The main display, or the takeover's while one stands. */
   #effectiveDisplayId(): number {

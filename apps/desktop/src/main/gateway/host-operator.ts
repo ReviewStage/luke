@@ -6,10 +6,7 @@ import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snap
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@sidecar/gateway";
 import {
-  CONVERSATION_RATE_STATUS,
-  type ConversationRateMessageResult,
   carried,
-  conversationRateMessageResultSchema,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   gatewayEventReader,
@@ -25,26 +22,15 @@ import {
 import {
   PLAN_CALL_FAILURE,
   type PlanningBoardSaveParams,
-  type PlanningRepositoriesAnswer,
   type PlanningSetFolderParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningView,
-  planningRepositoriesAnswerSchema,
   planningStartAnswerSchema,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
-import {
-  type ConversationViewSnapshot,
-  isSessionWriteResult,
-  type ObservedWorkspaceProject,
-  type Session,
-  type SessionApplicationId,
-  type SessionIdentity,
-  type SessionWriteResult,
-  type TranscriptSnapshot,
-} from "@sidecar/session";
+import type { ObservedWorkspaceProject, Session } from "@sidecar/session";
 import type {
   AppSettingField,
   AppSettingValue,
@@ -54,25 +40,15 @@ import type {
 } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
-  type ActionResult,
   EXCESS_KEYS,
   isRecord,
   isWireBoolean,
   isWireString,
-  type RatingWord,
-  type TranscriptKind,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Option, Result } from "effect";
-import {
-  type AgentsSnapshot,
-  agentsSnapshotSchema,
-  type ChildrenSnapshot,
-  childrenSnapshotSchema,
-  transcriptSnapshotSchema,
-} from "#shared/messages/agents";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -92,11 +68,6 @@ export interface HostBootstrap {
   sessions: readonly Session[];
   sessionsSettled: boolean;
   announcementsHeld: boolean;
-  conversationView: ConversationViewSnapshot;
-  children: ChildrenSnapshot;
-  agents: AgentsSnapshot;
-  /** The one transcript the host holds open, a child's or an agent's, absent while none is. */
-  childTranscript?: TranscriptSnapshot;
   workspaceProjects: readonly ObservedWorkspaceProject[];
   calendars: readonly ObservedAccountCalendars[];
   calendarOnboardingOwed: boolean;
@@ -118,11 +89,6 @@ interface HostSettingsChange {
 interface HostSessionReplay {
   permitted: boolean;
   accountId?: string;
-}
-
-/** The open transcript as the host last told it; no transcript says none is open any more. */
-interface HostTranscript {
-  transcript: TranscriptSnapshot | undefined;
 }
 
 export interface HostOperator {
@@ -166,18 +132,6 @@ export interface HostOperator {
     reporter: string,
   ): Effect.Effect<SettingsUpdateResult>;
   sessionRoster(): Effect.Effect<{ sessions: readonly Session[]; settled: boolean }>;
-  openSession(identity: SessionIdentity): Effect.Effect<ActionResult>;
-  openSessionApplication(
-    identity: SessionIdentity,
-    applicationId: SessionApplicationId,
-  ): Effect.Effect<ActionResult>;
-  openSessionChange(identity: SessionIdentity): Effect.Effect<ActionResult>;
-  /** The two writes a session's row asks for; the host admits each against the roster before any provider sees it. */
-  sendSessionMessage(identity: SessionIdentity, text: string): Effect.Effect<SessionWriteResult>;
-  executeSessionControl(
-    identity: SessionIdentity,
-    controlId: string,
-  ): Effect.Effect<SessionWriteResult>;
   workspaceProjects(): Effect.Effect<readonly ObservedWorkspaceProject[]>;
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
@@ -201,22 +155,8 @@ export interface HostOperator {
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
   ): Effect.Effect<void>;
-  /** The Conversation tab's Clear: the service's soft delete of the account's main conversation, answered as whether it landed. */
-  clearConversation(): Effect.Effect<boolean>;
-  /** A read of the Conversation now: a spoken line settled and the record is being written, so the poll should not wait its cadence out. */
-  refreshConversation(): Effect.Effect<void>;
-  /** One page of older turns read onto the Conversation the host publishes, for a reader at the top of the thread; answers whether a page landed. */
-  loadOlderConversation(): Effect.Effect<boolean>;
-  /** One transcript held open on the host, read to its end and again as its list's head moves; answers whether the host took it. Named for the child's transcript still, kept so the Gateway method names stay put. */
-  openChildTranscript(conversationId: string, kind: TranscriptKind): Effect.Effect<boolean>;
-  closeChildTranscript(): Effect.Effect<void>;
   /** Luke's notebook as the service holds it, for the Settings page that shows what he has saved; nothing when the host could not read it. */
   readNotebook(): Effect.Effect<Option.Option<NotebookReadResult>>;
-  /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
-  rateConversationMessage(
-    messageId: string,
-    rating: RatingWord,
-  ): Effect.Effect<ConversationRateMessageResult>;
   /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
   planningRefresh(): Effect.Effect<void>;
   /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
@@ -230,10 +170,6 @@ export interface HostOperator {
   planningDelete(planId: string): Effect.Effect<boolean>;
   /** The folder of this Mac a plan reads, chosen again. */
   planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
-  /** The repositories the account's GitHub connection can read, or why it could not be read. */
-  planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
-  /** Opens the Connect GitHub page in the browser; whether it opened, which it does only for a signed-in account. */
-  planningConnectGitHub(): Effect.Effect<boolean>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   onboardingState(): Effect.Effect<
@@ -262,11 +198,6 @@ export interface HostOperator {
     listener: (calendars: readonly ObservedAccountCalendars[]) => void,
   ): () => void;
   onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
-  onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
-  onChildrenChanged(listener: (children: ChildrenSnapshot) => void): () => void;
-  onAgentsChanged(listener: (agents: AgentsSnapshot) => void): () => void;
-  /** Named for the child's transcript still, kept so the Gateway event name stays put. */
-  onChildTranscriptChanged(listener: (change: HostTranscript) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onIntroductionChanged(listener: (owed: boolean) => void): () => void;
   onConductorKeyOnboardingChanged(listener: (owed: boolean) => void): () => void;
@@ -332,27 +263,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     Effect.flatMap(result, (answer) => {
       const account = answered<AccountSnapshot>(record(answer)?.account);
       return account ? Effect.succeed(account) : unanswered(method, answer);
-    });
-
-  const actionResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<ActionResult> =>
-    Effect.flatMap(result, (answer) => {
-      const action = answered<ActionResult>(record(answer));
-      return action ? Effect.succeed(action) : unanswered(method, answer);
-    });
-
-  // A write's answer is read against its own shape rather than restored by
-  // assertion: the host may answer unknown where a write's answer was lost,
-  // and a row must draw that as neither a failure nor a success.
-  const writeResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<SessionWriteResult> =>
-    Effect.flatMap(result, (answer) => {
-      const written = record(answer);
-      return isSessionWriteResult(written) ? Effect.succeed(written) : unanswered(method, answer);
     });
 
   const fire = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<void> =>
@@ -479,37 +389,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           settled: answer?.settled === true,
         };
       }),
-    openSession: (identity) =>
-      actionResult(
-        GATEWAY_METHOD.SESSION_OPEN,
-        client.call(GATEWAY_METHOD.SESSION_OPEN, { identity: { ...identity } }),
-      ),
-    openSessionApplication: (identity, applicationId) =>
-      actionResult(
-        GATEWAY_METHOD.SESSION_OPEN_APPLICATION,
-        client.call(GATEWAY_METHOD.SESSION_OPEN_APPLICATION, {
-          identity: { ...identity },
-          applicationId,
-        }),
-      ),
-    openSessionChange: (identity) =>
-      actionResult(
-        GATEWAY_METHOD.SESSION_OPEN_CHANGE,
-        client.call(GATEWAY_METHOD.SESSION_OPEN_CHANGE, { identity: { ...identity } }),
-      ),
-    sendSessionMessage: (identity, text) =>
-      writeResult(
-        GATEWAY_METHOD.SESSION_SEND_MESSAGE,
-        client.call(GATEWAY_METHOD.SESSION_SEND_MESSAGE, { identity: { ...identity }, text }),
-      ),
-    executeSessionControl: (identity, controlId) =>
-      writeResult(
-        GATEWAY_METHOD.SESSION_EXECUTE_CONTROL,
-        client.call(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL, {
-          identity: { ...identity },
-          controlId,
-        }),
-      ),
     workspaceProjects: () =>
       Effect.map(client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS), (answer) =>
         answeredList<ObservedWorkspaceProject>(record(answer)?.projects),
@@ -559,24 +438,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           }),
         ),
       ),
-    clearConversation: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_CLEAR),
-        (answer) => record(answer)?.cleared === true,
-      ),
-    refreshConversation: () => fire(client.call(GATEWAY_METHOD.CONVERSATION_REFRESH)),
-    loadOlderConversation: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_LOAD_OLDER),
-        (answer) => record(answer)?.loaded === true,
-      ),
-    openChildTranscript: (conversationId, kind) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { conversationId, kind }),
-        (answer) => record(answer)?.opened === true,
-      ),
-    closeChildTranscript: () =>
-      fire(client.call(GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT)),
     readNotebook: () =>
       Effect.map(client.call(GATEWAY_METHOD.NOTEBOOK_READ), (answer) =>
         answer.ok
@@ -584,18 +445,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               readEither(notebookReadResultSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
             )
           : Option.none(),
-      ),
-    rateConversationMessage: (messageId, rating) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, { messageId, rating }),
-        (answer) =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(conversationRateMessageResultSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { status: CONVERSATION_RATE_STATUS.UNAVAILABLE },
       ),
     planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
     planningOpen: (planId) =>
@@ -628,23 +477,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(planningStartAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
-      ),
-    planningRepositories: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_REPOSITORIES),
-        (answer): PlanningRepositoriesAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(planningRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
-      ),
-    planningConnectGitHub: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB),
-        (answer) => record(answer)?.opened === true,
       ),
     planningBoardSave: (params) =>
       fire(
@@ -721,48 +553,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ANNOUNCEMENTS_HELD_CHANGED,
         (payload) => (isRecord(payload) && isWireBoolean(payload.held) ? payload.held : undefined),
-        listener,
-      ),
-    onConversationViewChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED,
-        (payload) =>
-          isRecord(payload) && Array.isArray(payload.groups) && isWireBoolean(payload.settled)
-            ? answered<ConversationViewSnapshot>(payload)
-            : undefined,
-        listener,
-      ),
-    onChildrenChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CHILDREN_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(childrenSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
-        listener,
-      ),
-    onAgentsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.AGENTS_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(agentsSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
-        listener,
-      ),
-    onChildTranscriptChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CHILD_TRANSCRIPT_CHANGED,
-        (payload): HostTranscript | undefined => {
-          if (!isRecord(payload)) return undefined;
-          // An empty record is the host saying none is open; anything else must read as a transcript.
-          if (Object.keys(payload).length === 0) return { transcript: undefined };
-          const read = readEither(transcriptSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload);
-          // The groups are the host's own composed rows, restored to the view's type as the Conversation snapshot's are.
-          return Result.isSuccess(read)
-            ? { transcript: answered<TranscriptSnapshot>(payload) }
-            : undefined;
-        },
         listener,
       ),
     onCalendarOnboardingChanged: (listener) =>

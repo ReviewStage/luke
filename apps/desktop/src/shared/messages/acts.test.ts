@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { maximumAskLength } from "@sidecar/session";
 import type { WireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import { ONE_ACT_OF_EACH_KIND } from "../../testing/acts";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type ActKind, isActOutcome, parsedAct } from "./acts";
-
-const IDENTITY = { providerId: "claude-code", providerSessionId: "session-a" };
 
 const KINDS: readonly ActKind[] = Object.values(ACT_KIND);
 
@@ -50,60 +47,6 @@ test("an envelope that is not one act of a named kind is refused whole", () => {
   );
 });
 
-test("a session act names one session by the identity its provider reported", () => {
-  const open = (identity: WireValue) =>
-    parsedAct({ kind: ACT_KIND.SESSION_OPEN, payload: { identity } });
-  assert.ok(open(IDENTITY));
-  assert.equal(open({ providerId: "claude-code" }), undefined);
-  assert.equal(open({ providerId: "nope", providerSessionId: "session-a" }), undefined);
-  assert.equal(open({ ...IDENTITY, providerSessionId: "" }), undefined);
-  assert.equal(open("session-a"), undefined);
-  // An app id outside the four this build opens is refused.
-  assert.ok(
-    parsedAct({
-      kind: ACT_KIND.SESSION_OPEN_APPLICATION,
-      payload: { identity: IDENTITY, applicationId: "chatgpt" },
-    }),
-  );
-  assert.equal(
-    parsedAct({
-      kind: ACT_KIND.SESSION_OPEN_APPLICATION,
-      payload: { identity: IDENTITY, applicationId: "terminal" },
-    }),
-    undefined,
-  );
-});
-
-test("a row's write names one observed session and carries its words or its control id", () => {
-  const send = (payload: WireValue) => parsedAct({ kind: ACT_KIND.SESSION_SEND_MESSAGE, payload });
-  assert.ok(send({ identity: IDENTITY, text: "please add a test" }));
-  // The message is the developer's own words, refused where no bound could
-  // admit them: nothing at all, or past the message bound the host applies.
-  assert.equal(send({ identity: IDENTITY, text: "   " }), undefined);
-  assert.equal(send({ identity: IDENTITY, text: "x".repeat(maximumAskLength + 1) }), undefined);
-  assert.equal(send({ identity: IDENTITY }), undefined);
-  assert.equal(
-    send({ identity: { providerId: "nope", providerSessionId: "s" }, text: "hi" }),
-    undefined,
-  );
-  // A route or an address never rides the act: the host reads the session's
-  // own route back out of its roster.
-  assert.equal(send({ identity: IDENTITY, text: "hi", link: "https://example.test" }), undefined);
-
-  const press = (payload: WireValue) =>
-    parsedAct({ kind: ACT_KIND.SESSION_EXECUTE_CONTROL, payload });
-  assert.ok(press({ identity: IDENTITY, controlId: "cancel-run" }));
-  // The id is admitted as the roster spelled it, so a padded or empty one
-  // names no advertised control.
-  assert.equal(press({ identity: IDENTITY, controlId: "" }), undefined);
-  assert.equal(press({ identity: IDENTITY, controlId: 7 }), undefined);
-  assert.equal(press({ identity: IDENTITY }), undefined);
-  assert.equal(
-    press({ identity: IDENTITY, controlId: "cancel-run", control: { id: "archive" } }),
-    undefined,
-  );
-});
-
 test("the live session acts carry the peer's offer verbatim, a transport state the peer connection names, and one boolean", () => {
   const offer = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
   const create = parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION, payload: { sdp: offer } });
@@ -133,12 +76,7 @@ test("the live session acts carry the peer's offer verbatim, a transport state t
 });
 
 test("a voice command is one of the three commands and carries nothing else", () => {
-  for (const command of [
-    "stop-speaking",
-    "end-call",
-    "request-microphone-access",
-    "clear-conversation",
-  ]) {
+  for (const command of ["stop-speaking", "end-call", "request-microphone-access"]) {
     assert.ok(parsedAct({ kind: ACT_KIND.VOICE_COMMAND, payload: { command } }));
   }
   // Nothing typed is a command to the voice window: Luke is voice only.
@@ -204,6 +142,6 @@ test("an answer's guard is the kind's own, so a shape another kind would take is
   );
   assert.equal(ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result(undefined), true);
   assert.equal(ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result({ sessionId: "sess_1" }), false);
-  assert.equal(ACT[ACT_KIND.VOICE_COMMAND].result("accepted"), true);
-  assert.equal(ACT[ACT_KIND.VOICE_COMMAND].result("sent"), false);
+  assert.equal(ACT[ACT_KIND.PLANNING_SELECT].result(true), true);
+  assert.equal(ACT[ACT_KIND.PLANNING_SELECT].result("opened"), false);
 });

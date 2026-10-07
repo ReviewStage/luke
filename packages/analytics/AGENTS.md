@@ -28,13 +28,12 @@ The session-replay client in each app runs on its library's own configuration, a
 nothing here governs a byte of it. Three things leave that way, none validated
 here:
 
-- **The recording** — the rendered panel, except the Conversation tab's blocked
-  subtree. A session's title, branch, and error line, the account's name and
-  address, and a screenshot attached to the feedback composer all travel because
-  they are drawn. Only typed-into fields are masked, and that is the library's
+- **The recording** — the rendered panel. The account's name and address, and
+  a screenshot attached to the feedback composer travel because they are
+  drawn. Only typed-into fields are masked, and that is the library's
   default rather than a posture the app keeps.
-- **Autocaptured events** — the text of whatever was clicked. Pressing a session
-  row sends that row's words.
+- **Autocaptured events** — the text of whatever was clicked. Pressing a row
+  sends that row's words.
 - **Unhandled exceptions**, with their message and stack.
 
 `productEventFromWire` never sees any of them, so a change here cannot make them

@@ -186,6 +186,118 @@
   pointer-events: none;
 }
 
+/* The search pill: a recessed well holding a question about the pages, its
+   ground the surface's own opaque fill so a row scrolling beneath it passes
+   under it, never through it. It arrives on a short curve — transform and
+   opacity only, on the shared tokens. */
+.search-pill {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface-fill);
+  cursor: text;
+  animation: search-enter var(--duration-quick) var(--motion-exit) both;
+  transition: border-color var(--duration-hover) ease;
+}
+
+@keyframes search-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Focus answers in the panel's own neutral voice: searching is looking, and
+   looking has no state. The edge alone answers. */
+.search-pill:focus-within {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.search-pill .search-glyph {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+/* The field itself is bare: the pill around it is the drawn edge. */
+.search-pill-input {
+  min-width: 0;
+  flex: 1;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 11.5px;
+  outline: none;
+}
+
+.search-pill-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* What the query left, said beside it. */
+.search-pill-count {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The way out of a held query without leaving the field. Colour is the whole
+   hover: the button must not grow or move inside an element that reflows the
+   pill. Padding is zeroed by hand — the engine's own button padding is
+   asymmetric, and in a 20px disc it reads as the glyph leaning to one side. */
+.search-pill-clear {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-tertiary);
+  place-items: center;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.search-pill-clear:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--text-primary);
+}
+
+.search-pill-clear .icon-button-glyph {
+  width: 10px;
+  height: 10px;
+}
+
+/* Where the query's words landed, so a result says why it matched. A wash
+   rather than the engine's yellow: the mark identifies text, and the row's
+   own colours keep saying everything else. No padding — these lines
+   ellipsize, and a mark that widened its text would push the truncation
+   around as the query changed. */
+.search-match {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
+  color: inherit;
+}
+
 /* With the pill standing, a page's header pins below it, past the pill's own
    dissolve band, so the two never trade paint at the same edge. The pill
    takes the top because the search is the surface's, reading across every

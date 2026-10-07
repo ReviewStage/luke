@@ -99,10 +99,8 @@ export function freshFeedbackEntry(
  * One request to open the composer, wherever it came from — the settings
  * section's buttons or a spoken ask carried through the same path.
  * `draft` is starting text for the note, and it is only ever words already
- * the user's: the section never sends one, the spoken tool's contract
- * forbids anything the user did not say, and the draft a thumbs down offers
- * quotes the rated message and the ask before it exactly as the thread drew
- * them on the user's own screen. `signature` is the
+ * the user's: the section never sends one, and the spoken tool's contract
+ * forbids anything the user did not say. `signature` is the
  * signed-in account's credit, and it seeds only a note that does not exist
  * yet: a note already there keeps its fields exactly as its author left
  * them, cleared ones included.

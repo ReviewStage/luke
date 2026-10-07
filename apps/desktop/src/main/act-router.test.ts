@@ -130,14 +130,14 @@ it.effect("an answer the kind's own guard refuses is a refusal rather than a val
     const router = createActRouter(
       rowsRecording([], {
         // SAFETY: this is the wrong-shaped answer under test.
-        [ACT_KIND.SESSION_SEND_MESSAGE]: () => ({ runId: "run-1" }) as never,
+        [ACT_KIND.PLANNING_SELECT]: () => ({ runId: "run-1" }) as never,
       }),
     );
     assert.deepEqual(
-      yield* perform(router, ONE_ACT_OF_EACH_KIND[ACT_KIND.SESSION_SEND_MESSAGE], PANEL),
+      yield* perform(router, ONE_ACT_OF_EACH_KIND[ACT_KIND.PLANNING_SELECT], PANEL),
       {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.SESSION_SEND_MESSAGE].refusal,
+        reason: ACT[ACT_KIND.PLANNING_SELECT].refusal,
       },
     );
   }),

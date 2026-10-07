@@ -1,12 +1,12 @@
 import path from "node:path";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@sidecar/gateway";
 import { type AgentId, DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
+import { ExternalOpenAnswerLostError } from "@sidecar/session";
 import type { WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { MachinePresence } from "./device-presence.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
-import { NodeAnswerLostError } from "./session-opens.js";
 import type { SecretCipher } from "./settings-store.js";
 
 export interface HostSeams {
@@ -76,8 +76,7 @@ export interface HostKernel {
    * the calendar sign-in's page — each a synchronous or promise-shaped
    * callback owned by `@sidecar/credentials` and `@sidecar/calendar`, and what
    * would end that is a decision about those seams rather than anything this
-   * kernel holds; the session opens a row press reaches wrap it in
-   * `Effect.tryPromise`.
+   * kernel holds.
    */
   openExternalThroughNode: (url: string) => Promise<void>;
   reportOpenFailure: (error: Error) => void;
@@ -148,7 +147,7 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
       );
       if (result.status === NODE_CAPABILITY_STATUS.OK) return;
       if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
-        throw new NodeAnswerLostError(result.reason);
+        throw new ExternalOpenAnswerLostError(result.reason);
       }
       throw new Error(result.reason);
     },

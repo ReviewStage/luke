@@ -10,10 +10,8 @@ import {
 import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
-import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
-  type GitHubCallFailure,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanActivity,
@@ -58,11 +56,7 @@ interface FakeService extends PlanningClient {
   deleteFails: boolean;
   /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
   listGate: Effect.Effect<void>;
-  createAnswer: PlanCallResult<Plan, GitHubCallFailure>;
-  repositoriesAnswer: PlanCallResult<
-    { repositories: { owner: string; name: string; private: boolean }[]; truncated: boolean },
-    GitHubCallFailure
-  >;
+  createAnswer: PlanCallResult<Plan, typeof PLAN_CALL_FAILURE.UNANSWERED>;
   /** Every read the service answered, in order, so a test can see that nothing reads on a clock. */
   readonly reads: string[];
   /** The commands waiting for this Mac to claim, oldest first. */
@@ -82,7 +76,6 @@ function fakeService(plans: Plan[]): FakeService {
     deleteFails: false,
     listGate: Effect.void,
     createAnswer: { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED },
-    repositoriesAnswer: { ok: true, answer: { repositories: [], truncated: false } },
     reads: [],
     commands: [],
     settled: [],
@@ -134,7 +127,6 @@ function fakeService(plans: Plan[]): FakeService {
         service.plans = service.plans.filter((candidate) => candidate.id !== planId);
         return true;
       }),
-    repositories: () => Effect.sync(() => service.repositoriesAnswer),
   };
   return service;
 }
@@ -160,13 +152,9 @@ interface StandingCall {
   closing?: Effect.Effect<void>;
 }
 
-const SERVICE_BASE_URL = "https://luke.test";
-const ACCOUNT_ID = "user-mac";
-
 function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
   return Effect.gen(function* () {
     const told: PlanningView[] = [];
-    const opened: string[] = [];
     const standing = options.call ?? { about: undefined };
     const recordedFolders = folderRecord();
     const planning = yield* composePlanning({
@@ -189,11 +177,6 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           yield* standing.closing ?? Effect.void;
           standing.about = undefined;
         }),
-      connectGitHub: {
-        serviceBaseUrl: SERVICE_BASE_URL,
-        accountId: () => Effect.succeed(ACCOUNT_ID),
-        openExternal: (url) => Effect.sync(() => void opened.push(url)),
-      },
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = planning.methods[method];
@@ -201,7 +184,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       return Effect.orDie(handler(params, context));
     };
     const last = () => told.at(-1);
-    return { planning, call, told, last, opened };
+    return { planning, call, told, last };
   });
 }
 
@@ -490,9 +473,9 @@ it.effect(
       const { call, last } = yield* subject(service);
       const request = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
 
-      service.createAnswer = { ok: false, failure: GITHUB_FAILURE.EMPTY_REPOSITORY };
+      service.createAnswer = { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED };
       assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_START, request), {
-        failure: GITHUB_FAILURE.EMPTY_REPOSITORY,
+        failure: PLAN_CALL_FAILURE.UNANSWERED,
       });
       assert.equal(last()?.activePlanId, undefined);
 
@@ -503,45 +486,6 @@ it.effect(
       assert.deepEqual(last()?.folders, { [INVITES]: "/Users/dev/relay" });
       assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: started });
       assert.deepEqual(last()?.plans, [summary(started)]);
-    }),
-);
-
-it.effect("the repository picker hears the list, or why the connection could not be read", () =>
-  Effect.gen(function* () {
-    const service = fakeService([]);
-    const { call } = yield* subject(service);
-    const answer = {
-      repositories: [{ owner: "acme", name: "relay", private: true }],
-      truncated: true,
-    };
-
-    service.repositoriesAnswer = { ok: true, answer };
-    assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REPOSITORIES), answer);
-
-    service.repositoriesAnswer = { ok: false, failure: GITHUB_FAILURE.NOT_CONNECTED };
-    assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REPOSITORIES), {
-      failure: GITHUB_FAILURE.NOT_CONNECTED,
-    });
-  }),
-);
-
-it.effect(
-  "Connect GitHub opens the page for this Mac's account, and nothing behind a closed gate",
-  () =>
-    Effect.gen(function* () {
-      const signedIn = yield* subject(fakeService([]));
-      const signedOut = yield* subject(fakeService([]), { signedIn: false });
-
-      assert.deepEqual(yield* signedIn.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB), {
-        opened: true,
-      });
-      assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB), {
-        opened: false,
-      });
-      assert.deepEqual(signedIn.opened, [
-        `${SERVICE_BASE_URL}/connect-github.html?account=${ACCOUNT_ID}`,
-      ]);
-      assert.deepEqual(signedOut.opened, []);
     }),
 );
 

@@ -14,9 +14,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/session": "workspace:*",
-    "@sidecar/wire": "workspace:*",
-    "effect": "catalog:"
+    "@sidecar/session": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
