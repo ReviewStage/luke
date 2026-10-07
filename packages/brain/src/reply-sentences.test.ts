@@ -52,3 +52,7 @@ test("a code block loses its fences and keeps its lines, and an autolink its bra
 test("a heading's closing hashes go, and a line of only syntax says nothing", () => {
   assert.deepEqual(replySentences("### Status ###\n***\n- \nAll green."), ["Status", "All green."]);
 });
+
+test("emphasis nested inside strong emphasis is taken out with it", () => {
+  assert.deepEqual(replySentences("**Keep *both* flags.**"), ["Keep both flags."]);
+});
