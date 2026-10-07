@@ -465,7 +465,7 @@ type StopRefused =
   | { readonly refusal: typeof STOP_REFUSAL.NOT_RUNNING }
   | { readonly refusal: typeof STOP_REFUSAL.UPSTREAM; readonly status: number };
 
-type StopOutcome = Result.Result<HostedBrainTurnAnswer, StopRefused>;
+export type StopOutcome = Result.Result<HostedBrainTurnAnswer, StopRefused>;
 
 /** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, and eve as the caller reaches it. */
 interface StopSeams extends AskStandingReads {

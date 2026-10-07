@@ -957,7 +957,11 @@ graceful hang-up's `session.close`, forwarded untouched, and three in the
 service's own vocabulary, read here and handed to the exchange rather than
 forwarded: `session.activity`, the peer's idle report; `session.stop`, the
 stop key, which the exchange answers with the one instruction it appends
-itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone); and
+itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone) and by
+blocking every exchange of the session: no reply delegated before the press
+is spoken, and each run still under way is cancelled through `stopAsk`, the
+typed Stop's own path, the voice told silently (`STOPPED_RUN_NOTE`) only once
+the cancel was taken; and
 `session.beat`, an onboarding beat or the launch greeting the device decided
 is owed, carrying the kind and the bounded observed values its script may
 mention (one working session's title, the talk key's label, the account's
@@ -1154,8 +1158,14 @@ is told as a failed end so the exchange settles rather than waiting forever. On 
 path the reply arrives whole at the turn's end; what the follow carries
 mid-turn is the slow step, each question a planning turn queued, and the
 actions settling. eve folds asks that waited together into one turn, so
-several follows can project one turn: the first to reach it tells it, and
-the rest tell only its end, so a reply is never said once per folded ask. A refusal at the door is
+several follows can project one turn: the newest ask tells it, since the
+service speaks only the newest request's reply, and the rest tell only its
+end, so a reply is never said once per folded ask. Each delegation is an
+exchange of its own in the service, a revision of the request: a newer one
+silences the older exchange's reply, slow-step note, and end note, and leaves
+its run to finish rather than cancelling it, because a planning call
+delegates every answer while the exploration it began still runs; the
+questions a silenced run queues are still handed on. A refusal at the door is
 spoken as the build's own note for it, never composed with the ask. One
 spoken ask leaves one developer line: the transcript's row, cut at the
 delegation by the voice writer under the delegation's id. Eve's received

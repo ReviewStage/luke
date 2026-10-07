@@ -1,9 +1,11 @@
 import { PLAN_ACTIVITY_ACTION_MAX_CHARS } from "@sidecar/hosted/planning-view";
 import {
+  LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
+  type LiveBrainCancel,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
@@ -17,6 +19,7 @@ import {
   storedToolName,
   TURN_END,
   TURN_EVENT_KIND,
+  TURN_STATUS,
   type TurnEnd,
   type TurnEvent,
   type TurnEventKind,
@@ -28,10 +31,13 @@ import {
   type AskStandingReads,
   acceptAsk,
   askStanding,
+  STOP_REFUSAL,
+  type StopOutcome,
+  stopAsk,
 } from "../hosted/brain-ask.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
-import type { HostedStore } from "../hosted/store/index.js";
+import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-event-stream.js";
 
@@ -48,7 +54,9 @@ import { projectTurnEvents } from "../hosted/turn-event-stream.js";
  * on a schedule until the turn ends; there is no HTTP hop and so no second
  * function ceiling to re-attach across. The run the service keys an exchange
  * by is the ask's own id, since eve names the turn only once it starts, and
- * every event is translated back to it. On the eve path the reply arrives
+ * every event is translated back to it. A run is cancelled through
+ * `stopAsk`, the same Stop the typed route carries, so the voice's stop key
+ * and the developer's Stop button stop a turn the same way. On the eve path the reply arrives
  * whole at the turn's end; what the stream carries mid-turn is the slow step
  * and the actions settling, which is what the voice speaks meanwhile.
  *
@@ -123,10 +131,16 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
   }
 }
 
-/** What a follow has told of its turn so far: the last event's number, and the activity last said. */
+/** What a follow has told of its turn so far: the activity last said. */
 interface FollowTold {
-  seq: number;
   action: string | undefined;
+}
+
+/** What has been told of one turn, whichever follow told it: its teller, the last event's number, and whether its actions settled. */
+interface TurnTold {
+  teller: string;
+  seq: number;
+  settled: boolean;
 }
 
 const isRepositoryCommand = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);
@@ -151,6 +165,27 @@ function pendingActionOf(journal: StoredUIMessage | undefined): string | undefin
   return `${action.slice(0, PLAN_ACTIVITY_ACTION_MAX_CHARS - 1)}…`;
 }
 
+/**
+ * What a Stop came to, as the service hears a cancel: a turn ended as
+ * cancelled, or one still to end that carries a stamp, is a cancel taken,
+ * since eve took it or the start will honour it; a turn that ended any other
+ * way had nothing left to cancel.
+ */
+function cancelOf(outcome: StopOutcome): LiveBrainCancel {
+  if (Result.isSuccess(outcome)) {
+    const { status, cancelRequestedAt } = outcome.success;
+    const taken =
+      status === TURN_STATUS.CANCELLED ||
+      (status !== TURN_STATUS.SETTLED &&
+        status !== TURN_STATUS.FAILED &&
+        cancelRequestedAt !== undefined);
+    return taken ? LIVE_BRAIN_CANCEL.CANCELLED : LIVE_BRAIN_CANCEL.NOT_RUNNING;
+  }
+  return outcome.failure.refusal === STOP_REFUSAL.UPSTREAM
+    ? LIVE_BRAIN_CANCEL.FAILED
+    : LIVE_BRAIN_CANCEL.NOT_RUNNING;
+}
+
 export interface HostedLiveBrainOptions {
   /** The account the voice session was opened for, resolved at the handshake and written to `voice_sessions`. */
   readonly userId: string;
@@ -165,6 +200,8 @@ export interface HostedLiveBrainOptions {
   readonly asks: AskSeams;
   /** The store the standing and the journal are read from, on the connection the socket's own fiber holds. */
   readonly store: Pick<HostedStore, "turns" | "messages">;
+  /** The writer a cancelled run's turn is stamped through, as the typed Stop stamps it. */
+  readonly writer: Pick<StoreWriter, "requestTurnCancel">;
   readonly report: (message: string) => void;
   /** The follow's own bounds, narrowed by a test so a poll is milliseconds and the bound is reached inside a test. */
   readonly bounds?: Partial<FollowBounds>;
@@ -184,11 +221,15 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   const socket = yield* Effect.scope;
   const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
-  const followed = new Set<string>();
+  /** Each followed ask by the order it was submitted in, so the newest of several is known. */
+  const followed = new Map<string, number>();
+  /** The turn each followed ask was last seen bound to. */
+  const boundTurn = new Map<string, string>();
   // Note that eve folds asks that waited together into one turn, so several
-  // follows can project one turn. The first to reach it tells it; the rest
-  // tell only its end, because each sentence told per ask was said per ask.
-  const tellerOfTurn = new Map<string, string>();
+  // follows can project one turn. The newest ask tells it, because the
+  // service speaks the newest request's reply alone; the rest tell only its
+  // end, because each sentence told per ask was said per ask.
+  const toldOfTurn = new Map<string, TurnTold>();
   const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
 
   function emit(event: LiveBrainRunEvent): void {
@@ -201,6 +242,53 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   }
 
   /**
+   * The newest followed ask bound to the turn, as a turn is first reached:
+   * every later ask whose binding no follow has seen yet is read once here,
+   * because eve binds the asks it folded into one turn in a single write and
+   * the follow that reaches the turn first may be any of theirs.
+   */
+  const newestOn = Effect.fnUntraced(function* (askId: string, turnId: string) {
+    const order = followed.get(askId) ?? 0;
+    for (const [later, laterOrder] of followed) {
+      if (laterOrder <= order || boundTurn.has(later)) continue;
+      const standing = yield* askStanding(reads, options.userId, later);
+      if (standing?.turn !== undefined) boundTurn.set(later, standing.turn.id);
+    }
+    let newest = askId;
+    for (const [candidate, candidateOrder] of followed) {
+      if (boundTurn.get(candidate) === turnId && candidateOrder > (followed.get(newest) ?? 0)) {
+        newest = candidate;
+      }
+    }
+    return newest;
+  });
+
+  /**
+   * Who tells the turn as this ask reaches it: the newest ask bound to it.
+   * A later ask that reaches a turn an earlier one is already telling takes
+   * it over from the next event on, told first that the actions settled
+   * where they already had, so its reply is not held back for a mark it
+   * never heard.
+   */
+  const tellerOf = Effect.fnUntraced(function* (askId: string, turnId: string) {
+    const standing = toldOfTurn.get(turnId);
+    if (standing === undefined) {
+      const told: TurnTold = {
+        teller: yield* newestOn(askId, turnId),
+        seq: 0,
+        settled: false,
+      };
+      toldOfTurn.set(turnId, told);
+      return told;
+    }
+    if ((followed.get(askId) ?? 0) > (followed.get(standing.teller) ?? 0)) {
+      standing.teller = askId;
+      if (standing.settled) emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: askId });
+    }
+    return standing;
+  });
+
+  /**
    * One look at where the ask stands: the events its turn has produced so
    * far, those past the ones already told emitted under the ask's id, and
    * what it is doing now where that differs from what was last told.
@@ -209,8 +297,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * turn whose journal the store cannot read: its sentences are in that
    * journal, so telling the turn's end without them would be a reply the
    * voice says nothing of, and reading again finds the same rows. A turn
-   * another ask was folded into is told by whichever follow reached it
-   * first; this ask then hears only the end, so its exchange still settles.
+   * another ask was folded into is told by the newest of them; the others
+   * hear only the end, so their exchanges still settle.
    */
   const look = Effect.fnUntraced(function* (askId: string, told: FollowTold) {
     const standing = yield* askStanding(reads, options.userId, askId);
@@ -220,6 +308,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     }
     const { turn } = standing;
     if (turn === undefined) return false;
+    boundTurn.set(askId, turn.id);
     // A planning call's turns call the planning tools, so the journal is read
     // under every tool a hosted conversation's rows may name.
     const journal = yield* options.store.messages.byClientId(
@@ -234,20 +323,27 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       return true;
     }
     const message = journal.value[0]?.message;
-    const teller = tellerOfTurn.get(turn.id) ?? askId;
-    tellerOfTurn.set(turn.id, teller);
+    const turnTold = yield* tellerOf(askId, turn.id);
+    const telling = turnTold.teller === askId;
     // The activity goes ahead of the events, so a call answered in the turn's last step is told before its end.
-    const action = teller === askId ? pendingActionOf(message) : undefined;
+    const action = telling ? pendingActionOf(message) : undefined;
     if (action !== told.action) {
       told.action = action;
       emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: askId, action });
     }
     const events = projectTurnEvents(turn, message);
-    for (const event of events.slice(told.seq)) {
-      if (teller === askId || event.kind === TURN_EVENT_KIND.ENDED) emit(runEventOf(event, askId));
-      told.seq = event.seq;
+    const last = events.at(-1);
+    const ended = last?.kind === TURN_EVENT_KIND.ENDED;
+    if (!telling) {
+      if (ended) emit(runEventOf(last, askId));
+      return ended;
     }
-    return events.at(-1)?.kind === TURN_EVENT_KIND.ENDED;
+    for (const event of events.slice(turnTold.seq)) {
+      emit(runEventOf(event, askId));
+      if (event.kind === TURN_EVENT_KIND.ACTIONS_SETTLED) turnTold.settled = true;
+      turnTold.seq = event.seq;
+    }
+    return ended;
   });
 
   /**
@@ -260,8 +356,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    */
   function follow(askId: string) {
     if (followed.has(askId)) return Effect.void;
-    followed.add(askId);
-    const told: FollowTold = { seq: 0, action: undefined };
+    followed.set(askId, followed.size + 1);
+    const told: FollowTold = { action: undefined };
     const cadence = Schedule.spaced(bounds.POLL).pipe(
       Schedule.setInputType<boolean>(),
       Schedule.while(({ input }) => !input),
@@ -326,6 +422,28 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
               outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
               refusal: HOSTED_ASK_REFUSAL_NOTE[ASK_REFUSAL.STORE],
             };
+          }),
+        ),
+      );
+    },
+    cancelRun(runId) {
+      return stopAsk(
+        {
+          store: options.store,
+          asks: options.asks.asks,
+          writer: options.writer,
+          eve: options.asks.eve,
+        },
+        options.userId,
+        runId,
+      ).pipe(
+        Effect.map(cancelOf),
+        Effect.provideService(SqlClient.SqlClient, sql),
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() =>
+          Effect.sync(() => {
+            options.report("A spoken ask's Stop could not be written down");
+            return LIVE_BRAIN_CANCEL.FAILED;
           }),
         ),
       );

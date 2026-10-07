@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { EMPTY_PLAN_UPDATE } from "@sidecar/hosted/plan-template";
 import {
+  LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
@@ -10,18 +11,20 @@ import {
 } from "@sidecar/voice/live-session";
 import { arrival } from "@sidecar/voice/testing";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
-import { Duration, Effect, Exit, Option, Scope } from "effect";
+import { Deferred, Duration, Effect, Exit, Option, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { ASK_REFUSAL } from "../server/hosted/brain-ask";
+import { ASK_REFUSAL, askStanding } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
+  EVE_CANCEL_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
+import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   memoryRelayState,
   type RelayStanding,
@@ -112,14 +115,20 @@ interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];
   /** The delivery id each send into a standing session was answered with, in order. */
   readonly delivered: string[];
+  /** Every cancel eve was asked for, as the session and eve's turn it was scoped to. */
+  readonly cancelled: (readonly [string, string])[];
   failNext: number | undefined;
+  /** The status eve refuses the next cancel with, where set. */
+  refuseCancel: number | undefined;
 }
 
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
     delivered: [],
+    cancelled: [],
     failNext: undefined,
+    refuseCancel: undefined,
     open(message) {
       eve.opened.push(message);
       if (eve.failNext !== undefined) {
@@ -134,8 +143,12 @@ function fakeEve(): FakeEve {
       eve.delivered.push(deliveryId);
       return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId, deliveryId });
     },
-    cancel() {
-      return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED });
+    cancel(sessionId, eveTurnId) {
+      eve.cancelled.push([sessionId, eveTurnId]);
+      if (eve.refuseCancel !== undefined) {
+        return Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.FAILED, status: eve.refuseCancel });
+      }
+      return Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED });
     },
   };
   return eve;
@@ -169,6 +182,7 @@ async function stand(
   bounds: NonNullable<HostedLiveBrainOptions["bounds"]> = QUICK,
   store: HostedLiveBrainOptions["store"] = database.store,
   pinned?: string,
+  record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
 ): Promise<Stand> {
   const eve = fakeEve();
   const events: LiveBrainRunEvent[] = [];
@@ -180,8 +194,9 @@ async function stand(
       hostedLiveBrain({
         userId: target.userId,
         ...(pinned === undefined ? undefined : { conversationId: pinned }),
-        asks: { asks: askEffects, eve },
+        asks: { asks: record, eve },
         store,
+        writer,
         report: (message) => reports.push(message),
         bounds,
       }),
@@ -459,11 +474,24 @@ it.live(
 );
 
 it.live(
-  "two asks eve folded into one turn hear its reply once between them, and each hears the turn's end",
+  "two asks eve folded into one turn hear its reply once, under the newer ask, even where the older ask's follow reaches the turn first, and each hears the turn's end",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() => stand(target));
+      // The newer ask's record is read only once the gate opens, so the older ask's follow is the
+      // first to reach the folded turn whatever the poll's phase.
+      const gate = yield* Deferred.make<void>();
+      let gated: string | undefined;
+      const record: HostedLiveBrainOptions["asks"]["asks"] = {
+        ...askEffects,
+        named: (userId, id) =>
+          id === gated
+            ? Effect.andThen(Deferred.await(gate), askEffects.named(userId, id))
+            : askEffects.named(userId, id),
+      };
+      const f = yield* Effect.promise(() =>
+        stand(target, QUICK, database.store, undefined, record),
+      );
       const first = yield* Effect.promise(() =>
         database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q1" })),
       );
@@ -474,6 +502,7 @@ it.live(
       assert.equal(second.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (first.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       if (second.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      gated = second.runId;
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, first.runId)),
         target,
@@ -483,19 +512,147 @@ it.live(
         state: memoryRelayState(),
       };
       yield* Effect.promise(() => play(spokenTurn(FIRST_EVE_TURN, NOW, f.eve.delivered), standing));
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      yield* Deferred.succeed(gate, undefined);
       yield* f.arrived(6);
       yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
 
       const sentences = f.events.flatMap((event) =>
-        event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE ? [event.sentence] : [],
+        event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE ? [[event.runId, event.sentence]] : [],
       );
-      assert.deepEqual(sentences, ["One agent finished.", "Another is waiting on you."]);
+      assert.deepEqual(sentences, [
+        [second.runId, "One agent finished."],
+        [second.runId, "Another is waiting on you."],
+      ]);
       const ended = f.events.flatMap((event) =>
         event.kind === LIVE_BRAIN_RUN_EVENT.ENDED ? [event.runId] : [],
       );
       assert.deepEqual(new Set(ended), new Set([first.runId, second.runId]));
       assert.equal(ended.length, 2);
       assert.deepEqual(f.reports, []);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a newer folded ask whose binding was not yet visible when the older one reached the turn takes the telling over from the next event, so the reply is still the newer ask's",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      // While hidden, the newer ask reads as bound to no turn, as it would between eve's queueing
+      // of the turn's row and the binding of the asks folded into it.
+      let hidden: string | undefined;
+      const record: HostedLiveBrainOptions["asks"]["asks"] = {
+        ...askEffects,
+        named: (userId, id) =>
+          Effect.map(askEffects.named(userId, id), (ask) => {
+            if (ask === undefined || id !== hidden) return ask;
+            const { turnId: _hidden, ...unbound } = ask;
+            return unbound;
+          }),
+      };
+      const f = yield* Effect.promise(() =>
+        stand(target, QUICK, database.store, undefined, record),
+      );
+      const first = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q1" })),
+      );
+      const second = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q2" })),
+      );
+      assert.equal(first.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      assert.equal(second.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (first.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      if (second.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      hidden = second.runId;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, first.runId)),
+        target,
+        kind: CONVERSATION_KIND.MAIN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const events = spokenTurn(FIRST_EVE_TURN, NOW, f.eve.delivered);
+      const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* f.arrived(1);
+      hidden = undefined;
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      yield* Effect.promise(() => play(events.slice(requested), standing));
+      yield* f.arrived(6);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+
+      const told = f.events.flatMap((event) =>
+        event.kind === LIVE_BRAIN_RUN_EVENT.ENDED ? [] : [[event.kind, event.runId]],
+      );
+      assert.deepEqual(told, [
+        [LIVE_BRAIN_RUN_EVENT.SLOW_STEP, first.runId],
+        [LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, second.runId],
+        [LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, second.runId],
+        [LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, second.runId],
+      ]);
+      assert.deepEqual(f.reports, []);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a run is cancelled through the typed Stop's own path: eve's cancel scoped to the turn and the row stamped, a refused cancel answered as failed, and an ended turn as nothing to cancel",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      const accepted = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
+      );
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
+      const standing: RelayStanding = {
+        sessionId,
+        target,
+        kind: CONVERSATION_KIND.MAIN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const events = spokenTurn(FIRST_EVE_TURN, NOW);
+      const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* f.arrived(1);
+      // eve's store hook records the session on the conversation as it starts, which is what a Stop reads.
+      yield* Effect.promise(() =>
+        database.run(claimRuntimeSession(target, sessionId, new Date(NOW))),
+      );
+
+      f.eve.refuseCancel = 503;
+      assert.equal(
+        yield* Effect.promise(() => database.run(f.brain.cancelRun(accepted.runId))),
+        LIVE_BRAIN_CANCEL.FAILED,
+      );
+      f.eve.refuseCancel = undefined;
+      assert.equal(
+        yield* Effect.promise(() => database.run(f.brain.cancelRun(accepted.runId))),
+        LIVE_BRAIN_CANCEL.CANCELLED,
+      );
+      assert.deepEqual(f.eve.cancelled, [
+        [sessionId, FIRST_EVE_TURN],
+        [sessionId, FIRST_EVE_TURN],
+      ]);
+      const stamped = yield* Effect.promise(() =>
+        database.run(
+          askStanding({ store: database.store, asks: askEffects }, target.userId, accepted.runId),
+        ),
+      );
+      assert.notEqual(stamped?.answer.cancelRequestedAt, undefined);
+
+      yield* Effect.promise(() => play(events.slice(requested), standing));
+      yield* f.arrived(5);
+      const ended = yield* Effect.promise(() => database.run(f.brain.cancelRun(accepted.runId)));
+      // The script runs the turn on to a settled end, which had nothing left to cancel.
+      assert.equal(ended, LIVE_BRAIN_CANCEL.NOT_RUNNING);
+      assert.equal(f.eve.cancelled.length, 2);
       yield* Effect.promise(() => f.stop());
     }),
 );
