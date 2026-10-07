@@ -20,6 +20,17 @@ import SwiftUI
 /// The screen polls the change signal while it stands in the foreground and
 /// draws only what it holds in memory.
 ///
+/// The thread opens at its end on the tail the store read, and follows new
+/// rows only while the reader is there: one who has scrolled up into what
+/// was said before is left where they are, with a control floating over the
+/// thread that returns them to the latest message. Reaching the top of the
+/// thread while older turns stand is the ask for the page before it, one at
+/// a time and never twice for one page; the page lands under the reader's
+/// place, the row that was topmost held where it was, so the words they were
+/// looking at do not move. A page that could not be read leaves the ask
+/// standing as a press to try again, and once nothing older stands the top
+/// of the thread is simply its beginning.
+///
 /// A briefing's notification tapped opens this screen at that briefing: the
 /// store resolves the tapped message to its row, the screen scrolls there and
 /// lifts the row for a moment, and where the message is not in the thread —
@@ -47,11 +58,38 @@ struct ConversationView: View {
     @State private var now = Date()
     /// The row a tap opened the screen at, lifted while the developer finds it.
     @State private var liftedRow: String?
+    /// Whether the thread's end stands in view: what new rows may pull the
+    /// scroll toward, and what the return control stands in for when not.
+    @State private var atEnd = true
+    /// Whether the rows that last landed were aimed at the end: the settle
+    /// pass finishes that jump even where the rows, taking their heights,
+    /// pushed the end marker out of view in between.
+    @State private var followingTail = false
+    /// Set once the opening jump to the thread's end has settled, and the one
+    /// thing that lets the history sentinel exist: before it, the first
+    /// layout still sits at the top, where the sentinel would fire at once
+    /// and drag the opened screen into history.
+    @State private var openSettled = false
+    /// Whether the last ask for older turns did not land, for the sentinel
+    /// to offer again as a press rather than asking on its own.
+    @State private var olderRefused = false
+    /// Where the screen should land once the rows a read just handed it have
+    /// been laid out: a `scrollTo` in the same turn as the state change would
+    /// name rows the reader has not built yet.
+    @State private var scrollIntent: ScrollIntent?
+
+    private enum ScrollIntent: Equatable {
+        /// The row that was topmost before older turns were prepended.
+        case anchor(String)
+    }
 
     private static let endId = "conversation-end"
     /// How long the row a tap opened at stays lifted.
     private static let liftDuration: Duration = .seconds(2)
     private static let layoutSettle: Duration = .milliseconds(300)
+    /// How long the top sentinel must stay in view before its ask counts: a
+    /// lazy row can flash realized while a tall thread's layout churns.
+    private static let sentinelDwell: Duration = .milliseconds(450)
     /// The row count the end was last re-aimed at, so the thread coming
     /// back on screen with nothing new leaves the reader's place alone.
     @State private var settledCount: Int?
@@ -74,6 +112,9 @@ struct ConversationView: View {
                             .foregroundStyle(Color.inkTertiary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
+                    }
+                    if conversation.hasOlder && openSettled {
+                        olderSentinel
                     }
                     let turnRows = turns
                     ForEach(Array(turnRows.enumerated()), id: \.element.id) { index, turn in
@@ -114,11 +155,22 @@ struct ConversationView: View {
                     Color.clear
                         .frame(height: 1)
                         .id(Self.endId)
+                        .onAppear { atEnd = true }
+                        .onDisappear { atEnd = false }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
             .safeAreaPadding(.bottom, bottomInset)
+            .overlay(alignment: .bottomTrailing) {
+                if !atEnd && conversation.opened {
+                    latestControl(proxy)
+                        .padding(.trailing, 16)
+                        .padding(.bottom, bottomInset + 12)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: atEnd)
             // Masked whole, the way the desktop blocks its Conversation
             // subtree: the recording sees the screen's frame and none of
             // its words.
@@ -129,25 +181,40 @@ struct ConversationView: View {
                 now = Date()
                 // Rows landing re-aim the scroll at the row a tap opened at,
                 // never past it to the end; a tap still seeking holds the
-                // screen where it is.
+                // screen where it is, and so does a reader who scrolled up
+                // into the thread, whether the rows landed under or over them.
                 switch conversation.opening {
                 case .seeking: return
                 case .found(let rowId): scroll(proxy, to: rowId)
-                case .missing, nil: scroll(proxy, to: Self.endId)
+                case .missing, nil:
+                    guard atEnd else { return }
+                    followingTail = true
+                    scroll(proxy, to: Self.endId)
                 }
             }
             // Lazy rows take their real heights after they land, so a page
             // aimed at the end while the screen is up settles short of it;
-            // once the layout stands, the end is aimed at again.
+            // once the layout stands, the end is aimed at again — while the
+            // reader is there — and only then may the history sentinel exist.
             .task(id: conversation.groups.count) {
                 let count = conversation.groups.count
                 guard settledCount != count else { return }
                 try? await Task.sleep(for: Self.layoutSettle)
                 guard !Task.isCancelled else { return }
+                let opening = settledCount == nil
                 settledCount = count
                 switch conversation.opening {
-                case .seeking, .found: return
-                case .missing, nil: scroll(proxy, to: Self.endId)
+                case .seeking, .found: break
+                case .missing, nil: if atEnd || opening || followingTail { scroll(proxy, to: Self.endId) }
+                }
+                followingTail = false
+                if conversation.opened { openSettled = true }
+            }
+            .onChange(of: scrollIntent) {
+                guard let intent = scrollIntent else { return }
+                scrollIntent = nil
+                switch intent {
+                case .anchor(let id): proxy.scrollTo(id, anchor: .top)
                 }
             }
             .onChange(of: conversation.opening) { _, opening in follow(opening, proxy) }
@@ -198,6 +265,86 @@ struct ConversationView: View {
             get: { foldChoices[turnId] },
             set: { foldChoices[turnId] = $0 }
         )
+    }
+
+    /// The top of the thread while older turns stand: reaching it is the ask
+    /// for the page before what is on screen, made once the reader has held
+    /// the top for a moment, and never while a page is on its way. A page
+    /// that did not land leaves the ask as a press, so a service that could
+    /// not be reached is not asked again and again on every layout pass.
+    @ViewBuilder
+    private var olderSentinel: some View {
+        if conversation.loadingOlder {
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Loading earlier messages…")
+            }
+            .font(.footnote)
+            .foregroundStyle(Color.inkTertiary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        } else if olderRefused {
+            Button {
+                askForOlder()
+            } label: {
+                Label("Earlier messages could not be loaded. Try again", systemImage: "arrow.clockwise")
+                    .font(.footnote)
+                    .foregroundStyle(Color.inkSecondary)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .accessibilityLabel("Loading earlier messages")
+                .task {
+                    try? await Task.sleep(for: Self.sentinelDwell)
+                    guard !Task.isCancelled else { return }
+                    askForOlder()
+                }
+        }
+    }
+
+    /// One page of older turns, prepended with the viewport held on the row
+    /// that was topmost, so the reader stays on the words they were looking
+    /// at; a thread short enough for its end to be in view too has no place
+    /// to hold and is left as it lands.
+    private func askForOlder() {
+        guard conversation.hasOlder, !conversation.loadingOlder else { return }
+        olderRefused = false
+        let anchor = atEnd ? nil : turns.first?.rows.first?.id
+        Task {
+            let landed = await conversation.loadOlder(account: account)
+            if landed {
+                // A page that brought the row a tap is seeking is scrolled to
+                // that row instead; holding the old topmost row would pull the
+                // reader off it.
+                if case .found = conversation.opening { return }
+                if let anchor { scrollIntent = .anchor(anchor) }
+            } else {
+                olderRefused = conversation.hasOlder
+            }
+        }
+    }
+
+    /// The way back to the latest message for a reader up in the thread,
+    /// floating over the rows the way a chat's own does.
+    private func latestControl(_ proxy: ScrollViewProxy) -> some View {
+        Button {
+            scroll(proxy, to: Self.endId)
+        } label: {
+            Image(systemName: "arrow.down")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color.ink)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(Color.ground))
+                .overlay(Circle().strokeBorder(Color.ink.opacity(0.12)))
+                .shadow(color: Color.ink.opacity(0.12), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Scroll to the latest message")
     }
 
     private func timeBreak(_ at: Date) -> some View {

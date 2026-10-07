@@ -217,6 +217,20 @@ public struct ConversationMessagesAnswer: Equatable, Sendable {
     public let hasMore: Bool
 }
 
+/// The history endpoint's answer — `ConversationHistoryAnswer`: one page
+/// read back from the tail, or from the position `older` last named, in the
+/// view's own grouping. `older` is where the next page back begins and
+/// `hasOlder` whether one stands; `next` is the messages cursor standing at
+/// the head as the page was read, so a device that opened on the tail reads
+/// forward from there and never walks the thread from its beginning.
+public struct ConversationHistoryAnswer: Equatable, Sendable {
+    public let conversations: [ConversationReadConversation]
+    public let groups: [ConversationReadTurnGroup]
+    public let older: String
+    public let hasOlder: Bool
+    public let next: String
+}
+
 /// One event row about a message — `ConversationReadEvent`.
 public struct ConversationReadEvent: Equatable, Sendable {
     public let seq: Int
@@ -475,6 +489,23 @@ extension ConversationMessagesAnswer: Decodable {
             groups: try container.decode([ConversationReadTurnGroup].self, forKey: .groups),
             next: try container.decode(String.self, forKey: .next),
             hasMore: try container.decode(Bool.self, forKey: .hasMore)
+        )
+    }
+}
+
+extension ConversationHistoryAnswer: Decodable {
+    private enum CodingKeys: String, CodingKey {
+        case conversations, groups, older, hasOlder, next
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            conversations: try container.decode([ConversationReadConversation].self, forKey: .conversations),
+            groups: try container.decode([ConversationReadTurnGroup].self, forKey: .groups),
+            older: try container.decode(String.self, forKey: .older),
+            hasOlder: try container.decode(Bool.self, forKey: .hasOlder),
+            next: try container.decode(String.self, forKey: .next)
         )
     }
 }
