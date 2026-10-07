@@ -110,6 +110,46 @@ function write(userId: string, conversationId: string, clientId = randomUUID()) 
 }
 
 it.effect(
+  "a spoken ask is read back by its voice session alone, oldest revision first, and how far it was told only moves forward: the seq never back, the first end instant standing",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await conversation(userId);
+      const voiceSessionId = `voice_${randomUUID()}`;
+      const spoken = (revision: number, sessionId = voiceSessionId) => ({
+        ...write(userId, conversationId),
+        origin: ASK_ORIGIN.SPOKEN,
+        voice: { sessionId, revision },
+      });
+      const newer = await asks.record(spoken(2));
+      const older = await asks.record(spoken(1));
+      await asks.record(spoken(3, `voice_${randomUUID()}`));
+      await asks.record(write(userId, conversationId));
+      const told = (id: string, seq: number, endAt?: Date) =>
+        database.run(askEffects.told(id, endAt === undefined ? { seq } : { seq, endAt }));
+      await told(newer.id, 4);
+      await told(newer.id, 2, new Date(NOW));
+      await told(newer.id, 3, new Date(NOW + 1000));
+      const read = await database.run(askEffects.spokenIn(userId, voiceSessionId));
+      assert.deepEqual(
+        read.map((ask) => [
+          ask.id,
+          ask.clientId,
+          ask.revision,
+          ask.toldSeq,
+          ask.endToldAt?.getTime(),
+        ]),
+        [
+          [older.id, older.clientId, 1, 0, undefined],
+          [newer.id, newer.clientId, 2, 4, NOW],
+        ],
+      );
+      const neighbour = await database.createUser();
+      assert.deepEqual(await database.run(askEffects.spokenIn(neighbour, voiceSessionId)), []);
+    }),
+);
+
+it.effect(
   "an ask is recorded once per conversation and client id, by the index: two arrivals at once leave one row and both read it, and the same client id in another conversation is another ask",
   () =>
     Effect.promise(async () => {

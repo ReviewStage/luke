@@ -8,6 +8,7 @@ import {
   type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainCancel,
+  type LiveBrainRecovery,
   type LiveBrainSubmission,
   LiveSessionService,
   ROW_WRITE_DEBOUNCE_MS,
@@ -175,6 +176,10 @@ class TurnOpeningBrain implements LiveBrain {
 
   cancelRun(): Effect.Effect<LiveBrainCancel> {
     return Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING);
+  }
+
+  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+    return Effect.succeed({ revision: 0, runs: [], follow: Effect.void });
   }
 
   onRunEvent(): () => void {

@@ -10,6 +10,7 @@ import {
   type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainCancel,
+  type LiveBrainRecovery,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
   LiveSessionService,
@@ -136,6 +137,10 @@ class FakeBrain implements LiveBrain {
 
   cancelRun(): Effect.Effect<LiveBrainCancel> {
     return Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING);
+  }
+
+  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+    return Effect.succeed({ revision: 0, runs: [], follow: Effect.void });
   }
 
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void {

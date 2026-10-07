@@ -13,6 +13,8 @@ export {
   type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainCancel,
+  type LiveBrainRecoveredRun,
+  type LiveBrainRecovery,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,

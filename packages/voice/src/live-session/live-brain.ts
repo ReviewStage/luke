@@ -76,6 +76,10 @@ export interface LiveBrainAsk {
   submissionId: string;
   /** The role-labelled transcript span the delegation is about, the developer's latest line marked as the ask. */
   question: string;
+  /** The voice session the delegation came in on, so a later connection to it can find the ask again. */
+  sessionId: string;
+  /** The ask's task revision in that session's order of delegations: a higher one supersedes a lower. */
+  revision: number;
 }
 
 export const LIVE_BRAIN_SUBMISSION = {
@@ -103,6 +107,31 @@ export const LIVE_BRAIN_CANCEL = {
 
 export type LiveBrainCancel = (typeof LIVE_BRAIN_CANCEL)[keyof typeof LIVE_BRAIN_CANCEL];
 
+/** One run a re-attached connection takes up again, as the brain's record holds it. */
+export interface LiveBrainRecoveredRun {
+  readonly runId: string;
+  /** The delegation the run answers, still open in the session the run was asked in. */
+  readonly delegationId: string;
+  readonly revision: number;
+  /** The developer stopped it: its cancel was already asked, and nothing of it is to be said. */
+  readonly stopped: boolean;
+  /** It ended too long before this connection to be news: nothing of it is to be said. */
+  readonly stale: boolean;
+}
+
+/**
+ * What a re-attached connection takes up of the runs an earlier connection
+ * to the same session accepted: the session's newest revision, settled or
+ * not, so an older run stays superseded; the runs not yet told to their end;
+ * and the follow that tells them from where the last telling stopped, which
+ * the caller runs once it can hear them.
+ */
+export interface LiveBrainRecovery {
+  readonly revision: number;
+  readonly runs: readonly LiveBrainRecoveredRun[];
+  readonly follow: Effect.Effect<void>;
+}
+
 export interface LiveBrain {
   /**
    * Submits a spoken ask under the spoken origin. An ask that arrives while
@@ -118,6 +147,13 @@ export interface LiveBrain {
    * not happen. The run still ends through its own seam.
    */
   cancelRun(runId: string): Effect.Effect<LiveBrainCancel>;
+  /**
+   * The runs an earlier connection to the session accepted and did not tell
+   * to their end, read back from the brain's record. Each is told again only
+   * from the event after the last one told, so nothing is said twice; what
+   * was told just before a connection was lost may be said never.
+   */
+  recoverRuns(sessionId: string): Effect.Effect<LiveBrainRecovery>;
   /** Hears the run seams for every run the brain holds; the service reads the kinds it knows by name. */
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void;
 }

@@ -31,6 +31,8 @@ import {
   type LiveBrain,
   type LiveBrainAsk,
   type LiveBrainCancel,
+  type LiveBrainRecoveredRun,
+  type LiveBrainRecovery,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
@@ -156,6 +158,13 @@ class FakeSideband implements LiveSideband {
   }
 }
 
+/** A recovery as the fake answers it: the session's newest revision, the runs taken up, and what their follow tells at once. */
+interface ScriptedRecovery {
+  readonly revision: number;
+  readonly runs: readonly LiveBrainRecoveredRun[];
+  readonly told: readonly LiveBrainRunEvent[];
+}
+
 class FakeBrain implements LiveBrain {
   readonly asks: LiveBrainAsk[] = [];
   refuse: string | undefined;
@@ -166,6 +175,12 @@ class FakeBrain implements LiveBrain {
   /** What the backend says of a cancel, answered only once `cancelWhen` settles where it is set. */
   cancel: LiveBrainCancel = LIVE_BRAIN_CANCEL.CANCELLED;
   cancelWhen: Deferred.Deferred<void> | undefined;
+  /** What a re-attached session takes up, and the events its follow tells the moment it runs; none by default. */
+  recovery: ScriptedRecovery = {
+    revision: 0,
+    runs: [],
+    told: [],
+  };
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
@@ -186,6 +201,19 @@ class FakeBrain implements LiveBrain {
       this.cancels.push(runId);
       if (this.cancelWhen !== undefined) yield* Deferred.await(this.cancelWhen);
       return this.cancel;
+    });
+  }
+
+  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+    return Effect.sync(() => {
+      const { revision, runs, told } = this.recovery;
+      return {
+        revision,
+        runs,
+        follow: Effect.sync(() => {
+          for (const event of told) this.fire(event);
+        }),
+      };
     });
   }
 
@@ -2256,5 +2284,149 @@ it.effect(
       sideband.delegation("item_3", 5000);
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
+    }),
+);
+
+/** A session an earlier connection held, adopted again as the device's re-attach hands it in: already started. */
+function reattach(f: Fixture, sessionId: string) {
+  return Effect.gen(function* () {
+    const sideband = new FakeSideband();
+    const adopted = yield* f.service.adoptSession({
+      sessionId,
+      attach: () => Effect.succeed(sideband),
+      started: true,
+    });
+    assert.ok(adopted);
+    return sideband;
+  });
+}
+
+/** A run a re-attach takes up, neither stopped nor stale unless the test says so. */
+function recoveredRun(
+  runId: string,
+  delegationId: string,
+  revision: number,
+  held: { stopped?: boolean; stale?: boolean } = {},
+): LiveBrainRecoveredRun {
+  return {
+    runId,
+    delegationId,
+    revision,
+    stopped: held.stopped ?? false,
+    stale: held.stale ?? false,
+  };
+}
+
+/** A run's whole reply as its follow tells it: the settle, one sentence, and a completed end. */
+function wholeReply(runId: string, sentence: string): LiveBrainRunEvent[] {
+  return [
+    { kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId },
+    { kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence },
+    { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId, end: LIVE_BRAIN_RUN_END.COMPLETED },
+  ];
+}
+
+it.effect(
+  "a re-attached session takes up the runs the lost connection accepted: the newest one's reply, finished in the gap, is spoken once under its own delegation, and an older one stays superseded",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.recovery = {
+        revision: 2,
+        runs: [recoveredRun("run-a", "item_a", 1), recoveredRun("run-b", "item_b", 2)],
+        // The follow tells what it finds the moment it runs, so an exchange not yet standing would miss it.
+        told: [
+          ...wholeReply("run-a", "The outdated answer."),
+          ...wholeReply("run-b", "The answer that stands."),
+        ],
+      };
+      const sideband = yield* reattach(f, "sess-live");
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(commentary.length, 1);
+      const [reply] = commentary;
+      assert.ok(reply && "content" in reply);
+      assert.equal(reply.content, "The answer that stands.");
+      assert.equal(reply.delegation_id, "item_b");
+    }),
+);
+
+it.effect(
+  "the newest run taken up, ended too long ago to be news, is silenced: nothing of its reply is said",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.recovery = {
+        revision: 1,
+        runs: [recoveredRun("run-a", "item_a", 1, { stale: true })],
+        told: wholeReply("run-a", "An answer from long ago."),
+      };
+      const sideband = yield* reattach(f, "sess-live");
+      yield* advanceClock(1000);
+      assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), []);
+    }),
+);
+
+it.effect(
+  "the newest run taken up, stopped by the developer on the lost connection, is silenced, and the stop key does not cancel it again",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.recovery = {
+        revision: 1,
+        runs: [recoveredRun("run-a", "item_a", 1, { stopped: true })],
+        told: [],
+      };
+      const sideband = yield* reattach(f, "sess-live");
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
+        runId: "run-a",
+        step: "repository_read",
+      });
+      yield* settle();
+      assert.deepEqual(sideband.sent, []);
+      // The connection that heard the stop key asked the cancel, so a press now tells of no second one.
+      assert.equal(f.service.stopSpeaking(), true);
+      yield* settle();
+      sideband.acknowledge(0, 1500, 1500);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-a",
+        end: LIVE_BRAIN_RUN_END.CANCELLED,
+      });
+      yield* advanceClock(1000);
+      assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), []);
+      assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), []);
+    }),
+);
+
+it.effect(
+  "a delegation heard after a re-attach goes on from the newest revision recorded, under the session's id, and supersedes a run taken up that is still under way",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.recovery = { revision: 3, runs: [recoveredRun("run-c", "item_c", 3)], told: [] };
+      const sideband = yield* reattach(f, "sess-live");
+      yield* settle();
+      sideband.input("Actually, plan it for the API.", 0, 800);
+      sideband.delegation("item_d", 900);
+      yield* settle();
+      assert.deepEqual(
+        f.brain.asks.map((ask) => [ask.submissionId, ask.sessionId, ask.revision]),
+        [["item_d", "sess-live", 4]],
+      );
+      for (const event of wholeReply("run-c", "The plan for the web app.")) f.brain.fire(event);
+      for (const event of wholeReply("run-1", "The plan for the API.")) f.brain.fire(event);
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(
+        commentary.map((event) => [
+          "content" in event && event.content,
+          "delegation_id" in event && event.delegation_id,
+        ]),
+        [["The plan for the API.", "item_d"]],
+      );
     }),
 );

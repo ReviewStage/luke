@@ -548,7 +548,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           const sideband = yield* this.#attach(opened, scope);
           const session = yield* this.#stand(opened.sessionId, sideband, scope);
           this.#standing = session;
-          if (opened.started) this.#started(session);
+          if (opened.started) {
+            this.#started(session);
+            yield* this.#recover(session);
+          }
           return true;
         }),
       );
@@ -581,6 +584,33 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.started = true;
     this.#drain();
     this.#considerIdle(session);
+  }
+
+  /**
+   * A session already started may be one an earlier connection held and
+   * lost, with runs the brain accepted for it still under way or ended and
+   * not yet told. Each comes back as the exchange it was, under its own
+   * delegation and revision, so the newest request's reply is spoken once
+   * on this connection and an older one stays superseded; one the developer
+   * stopped, or one that ended too long ago to be news, comes back silenced,
+   * so its exchange still settles and says nothing. The session's revisions
+   * go on from the newest the brain recorded, so a delegation heard from
+   * here supersedes every run taken up.
+   */
+  #recover(session: StandingSession): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      const recovery = yield* this.#brain.recoverRuns(session.sessionId);
+      session.revisions = Math.max(session.revisions, recovery.revision);
+      for (const run of recovery.runs) {
+        session.claimedDelegations.add(run.delegationId);
+        const exchange = newExchange(run.runId, run.delegationId, run.revision, session.sessionId);
+        if (run.revision < recovery.revision || run.stopped || run.stale) this.#silence(exchange);
+        exchange.cancelAsked = run.stopped;
+        this.#exchanges.set(run.runId, exchange);
+      }
+      this.#reportStatus();
+      yield* recovery.follow;
+    });
   }
 
   /**
@@ -1145,6 +1175,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       const submission = yield* this.#brain.submitAsk({
         submissionId: delegationId,
         question,
+        sessionId: session.sessionId,
+        revision: asked.revision,
       });
       // The rule is applied once more over the same span before the attach: the
       // API delivers a delegation ahead of the deltas it is about, and one that

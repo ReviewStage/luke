@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -38,12 +38,38 @@ export interface AskRow {
   readonly cancelRequestedAt?: Date;
 }
 
+/** Where a spoken ask came from: the voice session it was delegated in and its task revision there. */
+export interface AskVoice {
+  readonly sessionId: string;
+  readonly revision: number;
+}
+
 interface AskWrite {
   readonly userId: string;
   readonly conversationId: string;
   readonly clientId: string;
   readonly origin: AskOrigin;
   readonly createdAt: Date;
+  readonly voice?: AskVoice;
+}
+
+/** A spoken ask as a re-attached connection reads it back: its revision, and how much of its run was told. */
+interface SpokenAsk {
+  readonly id: string;
+  readonly clientId: string;
+  readonly revision: number;
+  readonly turnId?: string;
+  readonly cancelRequestedAt?: Date;
+  /** The last event of the turn told to the voice under this ask; 0 for none. */
+  readonly toldSeq: number;
+  /** When the run's end was told under this ask; absent while it has not been. */
+  readonly endToldAt?: Date;
+}
+
+/** How far one telling went: the turn's last event told, and the instant its end was told, where it was. */
+interface AskTold {
+  readonly seq: number;
+  readonly endAt?: Date;
 }
 
 interface AskDispatch {
@@ -80,6 +106,10 @@ export interface AskRecord {
   ): AskEffect<AskRow | AskDispatchRefusal>;
   /** Stamps a Stop on an ask whose turn has not started, for the start to honour. */
   cancelRequested(id: string, at: Date): AskEffect<void>;
+  /** The account's spoken asks delegated in the voice session, oldest revision first. */
+  spokenIn(userId: string, voiceSessionId: string): AskEffect<readonly SpokenAsk[]>;
+  /** Moves how far the ask's run was told forward, never back: the seq only grows and the end's first instant stands. */
+  told(id: string, told: AskTold): AskEffect<void>;
 }
 
 /** The binding the relay makes when eve's `turn.started` names the deliveries a turn carries. */
@@ -156,6 +186,7 @@ const AskWriteSchema = Schema.Struct({
   clientId: Schema.String,
   origin: Schema.Literals(Object.values(ASK_ORIGIN)),
   createdAt: Schema.Date,
+  voice: Schema.optional(Schema.Struct({ sessionId: Schema.String, revision: Schema.Int })),
 });
 
 /** The insert lands or finds the client id already standing in the conversation; either way the row is read back by that pair. */
@@ -170,6 +201,8 @@ const insertAsk = SqlSchema.void({
         clientId: ask.clientId,
         origin: ask.origin,
         createdAt: ask.createdAt,
+        voiceSessionId: ask.voice?.sessionId ?? null,
+        taskRevision: ask.voice?.revision ?? null,
       })
       .onConflictDoNothing({ target: [asks.conversationId, asks.clientId] }),
 });
@@ -284,6 +317,71 @@ const markCancelRequested = SqlSchema.void({
       .update(asks)
       .set({ cancelRequestedAt: cancel.at })
       .where(and(eq(asks.id, cancel.id), isNull(asks.cancelRequestedAt))),
+});
+
+const SpokenInSchema = Schema.Struct({ userId: Schema.String, voiceSessionId: Schema.String });
+
+const SpokenAskRowSchema = Schema.Struct({
+  id: Schema.String,
+  clientId: Schema.String,
+  revision: Schema.Int,
+  turnId: Schema.NullOr(Schema.String),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+  toldSeq: Schema.Int,
+  endToldAt: Schema.NullOr(InstantColumnSchema),
+});
+
+const findSpokenIn = SqlSchema.findAll({
+  Request: SpokenInSchema,
+  Result: SpokenAskRowSchema,
+  execute: (key) =>
+    db
+      .select({
+        id: asks.id,
+        clientId: asks.clientId,
+        revision: sql<number>`coalesce(${asks.taskRevision}, 0)`,
+        turnId: asks.turnId,
+        cancelRequestedAt: asks.cancelRequestedAt,
+        toldSeq: asks.toldSeq,
+        endToldAt: asks.endToldAt,
+      })
+      .from(asks)
+      .where(and(eq(asks.userId, key.userId), eq(asks.voiceSessionId, key.voiceSessionId)))
+      .orderBy(asc(asks.taskRevision), asc(asks.createdAt)),
+});
+
+function spokenAsk(read: Schema.Schema.Type<typeof SpokenAskRowSchema>): SpokenAsk {
+  return {
+    id: read.id,
+    clientId: read.clientId,
+    revision: read.revision,
+    toldSeq: read.toldSeq,
+    ...(read.turnId !== null ? { turnId: read.turnId } : undefined),
+    ...(read.cancelRequestedAt !== null
+      ? { cancelRequestedAt: read.cancelRequestedAt }
+      : undefined),
+    ...(read.endToldAt !== null ? { endToldAt: read.endToldAt } : undefined),
+  };
+}
+
+const ToldSchema = Schema.Struct({
+  id: Schema.String,
+  seq: Schema.Int,
+  /** The instant as ISO text, which `::timestamptz` reads exactly. */
+  endAt: Schema.NullOr(Schema.String),
+});
+
+/** The seq only grows, and the first instant an end was told stands. */
+const markTold = SqlSchema.void({
+  Request: ToldSchema,
+  execute: (told) =>
+    db
+      .update(asks)
+      .set({
+        toldSeq: sql`greatest(${asks.toldSeq}, ${told.seq})`,
+        endToldAt: sql`coalesce(${asks.endToldAt}, ${told.endAt}::timestamptz)`,
+      })
+      .where(eq(asks.id, told.id)),
 });
 
 const BindSchema = Schema.Struct({
@@ -436,6 +534,9 @@ export function askRecord(): AskRecord & AskDeliveryBinding {
     latestSession: (userId, conversationId) => latestSessionOf({ userId, conversationId }),
     dispatchOnce: (target, id, dispatch) => dispatchAskOnce(target, id, dispatch),
     cancelRequested: (id, at) => markCancelRequested({ id, at }),
+    spokenIn: (userId, voiceSessionId) =>
+      Effect.map(findSpokenIn({ userId, voiceSessionId }), (rows) => rows.map(spokenAsk)),
+    told: (id, told) => markTold({ id, seq: told.seq, endAt: told.endAt?.toISOString() ?? null }),
     bindDeliveries: (target, deliveryIds, turnId) =>
       deliveryIds.length === 0
         ? Effect.succeed([])

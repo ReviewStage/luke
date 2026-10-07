@@ -16,6 +16,7 @@ import {
   bigint,
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   primaryKey,
@@ -259,6 +260,11 @@ export const turns = pgTable(
  * `cancel_requested_at`, for the start that names its delivery to honour. CLAUDE.md calls the local record of
  * these "the requests"; this is the hosted tier's. An ask goes with its
  * conversation.
+ *
+ * A spoken ask also carries what a re-attached connection needs to pick it
+ * up again: the live session it was delegated in, its task revision in that
+ * session's order, how far its turn's events were told to the voice, and
+ * when the run's end was told. A typed ask has none of them.
  */
 export const asks = pgTable(
   "asks",
@@ -281,11 +287,22 @@ export const asks = pgTable(
     turnId: uuid("turn_id"),
     createdAt: instant("created_at").notNull().defaultNow(),
     cancelRequestedAt: instant("cancel_requested_at"),
+    /** The Live API's id of the voice session a spoken ask was delegated in; null for a typed ask. */
+    voiceSessionId: text("voice_session_id"),
+    /** The spoken ask's place in its voice session's order of delegations: a higher revision supersedes a lower. */
+    taskRevision: integer("task_revision"),
+    /** The last event of the ask's turn told to the voice under this ask short of its end, written before it is told. */
+    toldSeq: integer("told_seq").notNull().default(0),
+    /** When the run's end was told to the voice under this ask, written before it is told. */
+    endToldAt: instant("end_told_at"),
   },
   (table) => [
     uniqueIndex("asks_conversation_client").on(table.conversationId, table.clientId),
     index("asks_by_user").on(table.userId),
     index("asks_conversation_delivery").on(table.conversationId, table.deliveryId),
+    index("asks_by_voice_session")
+      .on(table.userId, table.voiceSessionId)
+      .where(sql`${table.voiceSessionId} is not null`),
   ],
 );
 

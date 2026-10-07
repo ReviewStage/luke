@@ -35,7 +35,7 @@ import {
 } from "./http.js";
 import type { UserIdResolver } from "./http-effect.js";
 import { makeRateBrake } from "./rate-brake.js";
-import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow } from "./store/asks.js";
+import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow, type AskVoice } from "./store/asks.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 import type { StoreWriter } from "./store/writer.js";
 
@@ -261,9 +261,10 @@ type AskRefused =
 
 type AskOutcome = Result.Result<HostedBrainAskAnswer, AskRefused>;
 
-/** An ask as a caller that has already resolved the account hands it over. */
+/** An ask as a caller that has already resolved the account hands it over; a spoken one names the voice session it came from. */
 export interface AskInput extends HostedBrainAskRequest {
   readonly userId: string;
+  readonly voice?: AskVoice;
 }
 
 /** What accepting an ask needs: the ask record built over the store's runner, and eve as the caller reaches it. */
@@ -312,6 +313,7 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* (
     clientId,
     origin,
     createdAt: now,
+    ...(input.voice === undefined ? undefined : { voice: input.voice }),
   });
   const accepted: AskOutcome = Result.succeed({
     id: ask.id,
