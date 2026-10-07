@@ -735,6 +735,14 @@ export class VoiceService {
                     return;
                 }
               },
+        // A sessions-route call's one close is its exchange's, the same
+        // graceful close the idle decision runs, so the device's hang-up and
+        // the relay's close on its behalf both ask the exchange for it. The
+        // audio route keeps the relay's own close for now.
+        closeSession:
+          exchange === undefined || route !== VOICE_ROUTE.SESSIONS
+            ? undefined
+            : exchange.service.endSession(),
         onFrameRefused: (type) => {
           this.#log({
             event: LOG_EVENT.FRAME_REFUSED,

@@ -16,8 +16,10 @@ import Foundation
 /// phone sends `sessionCreate`, `sessionAttach`, `sessionActivity`, and
 /// `sessionStop`; the watch the same but `sessionAttach`, since a primary
 /// socket has no attach to offer; both read `sessionCreated`,
-/// `sessionAttached`, and `sessionSpoken`. `sessionBeat` is the desktop's
-/// alone and is transcribed so the set stays whole, never sent, and so are
+/// `sessionAttached`, and `sessionSpoken`. `sessionBeat` and `sessionHangUp`
+/// are the desktop's alone and are transcribed so the set stays whole, never
+/// sent (the phone's hang-up is still `close`, which the sessions route reads
+/// as the same ask), and so are
 /// `planDraft` and `planActivity`, which the service sends on a planning call,
 /// and a planning call is the Mac's alone.
 public enum VoiceServiceFrame: String, CaseIterable, Sendable {
@@ -28,6 +30,7 @@ public enum VoiceServiceFrame: String, CaseIterable, Sendable {
     case sessionActivity = "session.activity"
     case sessionStop = "session.stop"
     case sessionBeat = "session.beat"
+    case sessionHangUp = "session.hangup"
     case sessionSpoken = "session.spoken"
     case planDraft = "plan.draft"
     case planActivity = "plan.activity"
@@ -37,9 +40,10 @@ public enum VoiceServiceFrame: String, CaseIterable, Sendable {
 /// event a client may send, trusted or not. `LiveClientEventType` in
 /// `LiveEvents.swift` is the untrusted peer's subset of it, the data channel's
 /// vocabulary; this is the set the service socket's grammar is read against.
-/// Both device routes forward only `close` from this set
-/// (`SESSIONS_CLIENT_EVENTS`, `AUDIO_CLIENT_EVENTS`); every append is the
-/// service's exchange's, so a device sends `close` and nothing else of it. The
+/// A device sends `close` and nothing else of it: the audio route forwards it
+/// (`AUDIO_CLIENT_EVENTS`), and the sessions route reads it as an ask for the
+/// close its exchange sends itself (`SESSIONS_HANG_UP_FRAMES`); every append
+/// is the service's exchange's. The
 /// watch's audio rides `VoiceServiceContract.inputAudioAppend`, which stands
 /// apart from this set as `LIVE_INPUT_AUDIO_APPEND` stands apart from
 /// `LIVE_CLIENT_EVENT`.
@@ -362,7 +366,7 @@ enum VoiceServiceIncomingFrame: Equatable, Sendable {
                 return
             }
             self = .spoken(kind)
-        case .sessionCreate, .sessionAttach, .sessionActivity, .sessionStop, .sessionBeat:
+        case .sessionCreate, .sessionAttach, .sessionActivity, .sessionStop, .sessionBeat, .sessionHangUp:
             // The device's own frames, echoed back by nothing: not an event of the session.
             self = .unreadable
         case .planDraft, .planActivity:

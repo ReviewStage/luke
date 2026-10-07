@@ -22,7 +22,7 @@ import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
-import { LiveCall } from "./live-call";
+import { LIVE_CLOSE_OWNER, LiveCall } from "./live-call";
 import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { startVoiceLevelMeter } from "./voice-level-meter";
@@ -99,6 +99,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
         },
+        // The sessions route's close is the service's to send; the hang-up asks for it.
+        closeOwner: LIVE_CLOSE_OWNER.SERVICE,
         createPeerConnection: () => new RTCPeerConnection(),
         createSilence: createBrowserSilence,
         // The press's device, chosen by facts read natively: the Mac's own

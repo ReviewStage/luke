@@ -39,10 +39,10 @@ import {
  * introduction routes and the echo of the device's own audio on the audio
  * route, on the introduction route admits only what a renderer's own data
  * channel would carry, on the sessions route admits from the device only the
- * hang-up, its idle report, and its stop, and on the audio route the same
- * with the device's own audio beside them, closing the socket on anything
- * else. The two reports are the frames read past their type: they
- * are the service's own vocabulary, handed to the exchange that holds the
+ * hang-up, read as an ask for the close, its idle report, and its stop, and
+ * on the audio route the hang-up, the idle, and the stop with the device's
+ * own audio beside them, closing the socket on anything else. The two
+ * reports are the frames read past their type: they are the service's own vocabulary, handed to the exchange that holds the
  * idle decision and the one instruction the stop appends, never to OpenAI. An opening command the service
  * sends of its own once `session.started` arrives follows the docs' order:
  * the command, then its acknowledgment or refusal matched by the id it was
@@ -53,7 +53,11 @@ import {
  * seconds it named; a device that goes first after asking for the close, or
  * once its socket was closed on a refused frame, or on a route whose session
  * cannot outlive this connection, has `session.close` sent on its behalf and
- * the sideband held open for the final event under a timeout; a sessions-route
+ * the sideband held open for the final event under a timeout. On the sessions
+ * route that close is the exchange's, as is the one a device's hang-up asks
+ * for: the server-controls guide asks one owner per action, so the relay
+ * forwards no device's close and sends none of its own where an exchange
+ * stands, and asks the exchange instead; a sessions-route
  * device whose socket simply went, the platform cutting a function at its
  * limit or the network dropping, leaves the WebRTC session standing for the
  * device's own re-attach and settles detached, closing only the sideband; a
@@ -120,6 +124,13 @@ export interface RelayOptions<R = never> {
   onDeviceReport?: ((report: SessionReportFrame) => void) | undefined;
   /** Runs once, when a device frame is refused and the socket closed on it, with the frame's type as far as it could be read. */
   onFrameRefused?: ((type: string | undefined) => void) | undefined;
+  /**
+   * The session's one `session.close`, sent by the exchange that owns it and
+   * waited on for `session.closed` under its own bound: asked once, at the
+   * device's hang-up or at its going after a hang-up or a refusal. Absent
+   * where no exchange stands, and then the relay sends the close itself.
+   */
+  closeSession?: Effect.Effect<void> | undefined;
   closeTimeoutMs?: number;
   openingTimeoutMs?: number;
 }
@@ -161,6 +172,8 @@ export function relaySession<R = never>(
     /** The `event_id` the opening command was sent with, until its acknowledgment settles it. */
     let openingEventId: string | undefined;
     let openingWait: Fiber.Fiber<void> | undefined;
+    /** Whether the session's close was asked for, so it is asked once whoever asks. */
+    let closeAsked = false;
 
     const settled = yield* Deferred.make<Finalization>();
     const settle = (finalization: Finalization): Effect.Effect<void> =>
@@ -170,6 +183,19 @@ export function relaySession<R = never>(
       Effect.flatMap(upstream.isOpen, (open) =>
         open ? upstream.send({ text: JSON.stringify(event) }) : Effect.void,
       );
+
+    /**
+     * The session's close, from its one owner: the exchange's own graceful
+     * close where one stands, forked so the pipe keeps reading while it
+     * waits, and the relay's own `session.close` where none does.
+     */
+    const askClose: Effect.Effect<void, never, Scope.Scope> = Effect.suspend(() => {
+      if (closeAsked) return Effect.void;
+      closeAsked = true;
+      return options.closeSession === undefined
+        ? sendUpstream(closeEvent(randomUUID()))
+        : Effect.asVoid(Effect.forkScoped(options.closeSession));
+    });
 
     /**
      * The opening command's answer, handled once: the acknowledgment, the
@@ -331,6 +357,11 @@ export function relaySession<R = never>(
         yield* refuse(type);
         return;
       }
+      if (decision === FRAME_DECISION.HANG_UP) {
+        deviceAskedClose = true;
+        yield* askClose;
+        return;
+      }
       if (decision === FRAME_DECISION.REPORT) {
         // The one frame read past its type: a report in the service's own
         // vocabulary that is not one is a frame the route does not admit.
@@ -361,7 +392,8 @@ export function relaySession<R = never>(
      * once, leaving the device to attach a fresh sideband and the connection
      * that reads `session.closed` to record the seconds. Every other going is
      * the docs' graceful close on the device's behalf: `session.close` goes
-     * up and the sideband is held for the final event so the seconds are
+     * up from the session's one owner, asked once however many hands asked,
+     * and the sideband is held for the final event so the seconds are
      * recorded, under the timeout after which finalization is reported
      * incomplete.
      */
@@ -382,7 +414,7 @@ export function relaySession<R = never>(
         yield* settle(FINALIZATION.UNCONFIRMED);
         return;
       }
-      yield* upstream.send({ text: JSON.stringify(closeEvent(randomUUID())) });
+      yield* askClose;
       yield* Effect.forkScoped(
         Effect.sleep(closeTimeoutMs).pipe(
           Effect.andThen(

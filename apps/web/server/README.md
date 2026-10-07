@@ -951,11 +951,12 @@ Conversation from another session's. From then on the relay is a pipe: OpenAI fr
 device untouched except `session.input_audio.append` and
 `session.output_audio.delta`, dropped by type so on this route and the
 introduction's the developer's voice and Luke's never transit the service (the
-audio route below is the one place they do); and from the device exactly four frames
-(`frames.ts`, `SESSIONS_CLIENT_EVENTS` and `SESSIONS_REPORT_FRAMES`): the
-graceful hang-up's `session.close`, forwarded untouched, and three in the
-service's own vocabulary, read here and handed to the exchange rather than
-forwarded: `session.activity`, the peer's idle report; `session.stop`, the
+audio route below is the one place they do); and from the device nothing
+forwarded at all (`frames.ts`): the hang-up (`SESSIONS_HANG_UP_FRAMES`), a
+Mac's `session.hangup` or a phone's own `session.close`, is read as an ask for
+the close the exchange sends itself (below), and three frames in the
+service's own vocabulary (`SESSIONS_REPORT_FRAMES`) are read here and handed
+to the exchange rather than forwarded: `session.activity`, the peer's idle report; `session.stop`, the
 stop key, which the exchange answers with the one instruction it appends
 itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone) and by
 blocking every exchange of the session: no reply delegated before the press
@@ -1354,11 +1355,19 @@ it, writes the row's `closed_at`, `close_reason`, and
 `recordVoiceSeconds` in `server/hosted/quota.ts`
 — the session row is the idempotency ledger: the seconds land only where none
 stand yet, so a report seen by two connections adds nothing — and closes both
-ends. A device hangs up by sending `session.close` itself, which the relay
-forwards and then holds the sideband for `session.closed` for 15 seconds, the
-docs' close sequence; a device socket that goes after that, or after a refused
-frame, or on the audio or introduction route, has `session.close` sent on its
-behalf on the same terms. A sessions-route socket that goes with neither is a
+ends. On this route the session's one `session.close` is the exchange's, as
+the server-controls guide asks one owner per action ("Assign one owner for
+each action"): a device hangs up by asking for it, and the relay hands the ask
+to the exchange's graceful close, the same one its idle decision runs, which
+registers for `session.closed` before it sends and holds the sideband for it
+for 15 seconds, the docs' close sequence. Neither the Mac's voice window, nor
+its host, nor the relay sends a close of its own; the window stops its
+microphone at the hang-up and keeps its peer up for `session.closed` under
+the same bound, then closes the peer, which OpenAI ends as `remote_hangup`
+where no close reached it. A device socket that goes after a hang-up, or
+after a refused frame, asks the same owner once more, which sends nothing
+twice. The audio and introduction routes, with no such owner, have
+`session.close` sent on the device's behalf by the relay on the same terms. A sessions-route socket that goes with neither is a
 detach (above): nothing is sent, nothing is recorded, and the unconfirmed
 snapshot stands until a re-attached connection reads `session.closed`. A
 detached session is bounded all the same, since a caller can drop the socket
