@@ -43,6 +43,8 @@ export const GATEWAY_METHOD = {
   PLANNING_REPOSITORIES: "planning.repositories",
   /** The Connect GitHub page opened in the browser, for the account this Mac is signed in as. */
   PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
+  /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
+  PLANNING_BOARD_SAVE: "planning.boardSave",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

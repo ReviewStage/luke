@@ -1,6 +1,6 @@
 import { applyBoardOps, type BoardOp, boardOpsInputSchema } from "@sidecar/hosted/board-skeleton";
 import { boardText } from "@sidecar/hosted/board-text";
-import { BOARD_AUTHOR } from "@sidecar/hosted/board-wire";
+import { BOARD_AUTHOR, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-wire";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { DateTime, Effect, Option, Result } from "effect";
@@ -72,7 +72,7 @@ const readInput = readEither(boardOpsInputSchema);
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
 export const DRAW_ON_BOARD_TOOL = {
-  name: "draw_on_board",
+  name: DRAW_ON_BOARD_TOOL_NAME,
   description:
     "Draw on the plan's whiteboard, which the developer sees beside the plan and can draw on " +
     "too. Add boxes, ellipses, and diamonds with labels, arrows between them by id, free text, " +

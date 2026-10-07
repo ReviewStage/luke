@@ -10,6 +10,13 @@ import {
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
+  type Board,
+  type BoardElement,
+  type BoardSaveAnswer,
+  boardAnswerSchema,
+  boardSaveAnswerSchema,
+} from "./board-wire.js";
+import {
   type GitHubRepositoryListAnswer,
   githubFailureAnswerSchema,
   githubRepositoryListAnswerSchema,
@@ -34,6 +41,7 @@ import {
 } from "./planning-view.js";
 import {
   HOSTED_SERVICE_PATH,
+  planBoardPath,
   planCommandClaimPath,
   planCommandPath,
   planPath,
@@ -163,6 +171,34 @@ export class HostedPlanClient {
         ? { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND }
         : UNANSWERED;
     });
+  }
+
+  /** One plan's whiteboard as it stands; nothing where the service did not answer one. */
+  readBoard(planId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask({ method: HTTP_METHOD.GET, path: planBoardPath(planId) }, boardAnswerSchema),
+      (answer) => answer?.board,
+    );
+  }
+
+  /**
+   * The developer's scene written over the revision it was drawn on: saved,
+   * or a conflict carrying the board as it stands; nothing where the service
+   * did not answer.
+   */
+  saveBoard(
+    planId: string,
+    baseRevision: number,
+    elements: readonly BoardElement[],
+  ): Effect.Effect<BoardSaveAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      {
+        method: HTTP_METHOD.PUT,
+        path: planBoardPath(planId),
+        body: JSON.stringify({ baseRevision, elements }),
+      },
+      boardSaveAnswerSchema,
+    );
   }
 
   /** Deletes one plan with its document and its conversation; whether the service deleted it. */

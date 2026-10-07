@@ -78,6 +78,8 @@ function fixture() {
           asked.push("connect");
           return account.signedIn;
         }),
+      planningBoardSave: (params) =>
+        Effect.sync(() => void asked.push(`board:${params.planId}:${params.baseRevision}`)),
     },
     chooseFolder: () =>
       Effect.sync(() => {
@@ -156,18 +158,44 @@ it.effect("Choose folder answers the folder picked, or null when the picker was 
 it.effect("neither the voice window nor the takeover reaches the plans", () =>
   Effect.gen(function* () {
     const f = fixture();
+    const board = { planId: PLAN_ID, baseRevision: 0, elements: [] };
 
     for (const sender of [VOICE, INTRODUCTION]) {
       const selected = yield* f.router.performAct(
         { kind: ACT_KIND.PLANNING_SELECT, payload: { planId: PLAN_ID } },
         sender,
       );
+      const saved = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_BOARD_SAVE, payload: board },
+        sender,
+      );
       assert.deepEqual(selected, {
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.PLANNING_SELECT].refusal,
       });
+      assert.deepEqual(saved, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_BOARD_SAVE].refusal,
+      });
     }
     assert.deepEqual(f.asked, []);
+  }),
+);
+
+it.effect("the panel's board save reaches the host with the revision it was drawn on", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+
+    const saved = yield* f.router.performAct(
+      {
+        kind: ACT_KIND.PLANNING_BOARD_SAVE,
+        payload: { planId: PLAN_ID, baseRevision: 3, elements: [] },
+      },
+      PANEL,
+    );
+
+    assert.equal(saved.status, ACT_OUTCOME_STATUS.DONE);
+    assert.deepEqual(f.asked, [`board:${PLAN_ID}:3`]);
   }),
 );
 

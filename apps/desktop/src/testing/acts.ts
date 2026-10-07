@@ -110,6 +110,25 @@ export const ONE_ACT_OF_EACH_KIND = {
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", folderPath: "/Users/dev/relay" },
   },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
+  [ACT_KIND.PLANNING_BOARD_SAVE]: {
+    kind: ACT_KIND.PLANNING_BOARD_SAVE,
+    payload: {
+      planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+      baseRevision: 1,
+      elements: [
+        {
+          id: "api",
+          type: "rectangle",
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 80,
+          version: 2,
+          isDeleted: false,
+        },
+      ],
+    },
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "clear-conversation" },

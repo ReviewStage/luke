@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import {
   GITHUB_FAILURE,
   type GitHubFailure,
@@ -98,6 +99,8 @@ export const planningViewSchema = EffectSchema.Struct({
   document: planningDocumentSchema,
   /** What each part of Luke is doing on the call about the active plan, as last told; absent with no plan open or no word yet. */
   activity: EffectSchema.optionalKey(planActivitySchema),
+  /** The active plan's whiteboard as last read or saved; absent with no plan open or before its first read lands. */
+  board: EffectSchema.optionalKey(boardSchema),
   /** The folder of this Mac each plan reads, by plan id; a plan this Mac holds no folder for is absent. */
   folders: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
 });
@@ -127,6 +130,14 @@ export const planningSetFolderParamsSchema = EffectSchema.Struct({
 });
 
 export type PlanningSetFolderParams = typeof planningSetFolderParamsSchema.Type;
+
+/** The developer's scene of a plan's board, as the panel asks it saved over the revision it was drawn on. */
+export const planningBoardSaveParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  ...boardSaveRequestSchema.fields,
+});
+
+export type PlanningBoardSaveParams = typeof planningBoardSaveParamsSchema.Type;
 
 /** Why a plan call answered nothing a window can draw. */
 export const PLAN_CALL_FAILURE = {

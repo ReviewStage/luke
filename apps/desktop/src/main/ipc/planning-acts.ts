@@ -1,4 +1,5 @@
 import type {
+  PlanningBoardSaveParams,
   PlanningRepositoriesAnswer,
   PlanningSetFolderParams,
   PlanningStartAnswer,
@@ -28,6 +29,7 @@ export interface PlanningActsDependencies {
     planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
     /** Opens the Connect GitHub page in the browser; whether it opened. */
     planningConnectGitHub(): Effect.Effect<boolean>;
+    planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   };
   /** The folder picker; the chosen folder's absolute path, or null when the developer cancelled. */
   chooseFolder: () => Effect.Effect<string | null>;
@@ -49,7 +51,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_CONNECT_GITHUB
   | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
   | typeof ACT_KIND.PLANNING_SET_FOLDER
-  | typeof ACT_KIND.PLANNING_TALK;
+  | typeof ACT_KIND.PLANNING_TALK
+  | typeof ACT_KIND.PLANNING_BOARD_SAVE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
@@ -123,6 +126,10 @@ export function planningActRows(
         throw new ActRefused({ message: ACT[ACT_KIND.PLANNING_TALK].refusal });
       }
       dependencies.talkAboutPlan(planId);
+    },
+    [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
+      return host.planningBoardSave(params);
     },
   };
 }

@@ -24,6 +24,7 @@ import {
 } from "@sidecar/gateway";
 import {
   PLAN_CALL_FAILURE,
+  type PlanningBoardSaveParams,
   type PlanningRepositoriesAnswer,
   type PlanningSetFolderParams,
   type PlanningStartAnswer,
@@ -233,6 +234,8 @@ export interface HostOperator {
   planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
   /** Opens the Connect GitHub page in the browser; whether it opened, which it does only for a signed-in account. */
   planningConnectGitHub(): Effect.Effect<boolean>;
+  /** The open plan's whiteboard as the developer left it, saved over the revision it was drawn on. */
+  planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   onboardingState(): Effect.Effect<
     | {
         calendarOnboardingOwed: boolean;
@@ -642,6 +645,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB),
         (answer) => record(answer)?.opened === true,
+      ),
+    planningBoardSave: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
+          planId: params.planId,
+          baseRevision: params.baseRevision,
+          elements: params.elements,
+        }),
       ),
     onboardingState: () =>
       Effect.map(client.call(GATEWAY_METHOD.ONBOARDING_STATE), (result) => {

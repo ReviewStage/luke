@@ -8,6 +8,14 @@ import {
   type GatewayMethod,
 } from "@sidecar/gateway";
 import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import {
+  BOARD_AUTHOR,
+  BOARD_ELEMENT_TYPE,
+  BOARD_SAVE,
+  type Board,
+  type BoardElement,
+  DRAW_ON_BOARD_TOOL_NAME,
+} from "@sidecar/hosted/board-wire";
 import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
@@ -69,6 +77,8 @@ interface FakeService extends PlanningClient {
   readonly settled: { planId: string; commandId: string; result: PlanCommandResult }[];
   /** Done once the first result is posted back. */
   readonly firstSettle: Deferred.Deferred<void>;
+  /** Each plan's board, by plan id; a plan with none answers no board, as a service that did not answer. */
+  boards: Record<string, Board>;
 }
 
 function fakeService(plans: Plan[]): FakeService {
@@ -83,6 +93,23 @@ function fakeService(plans: Plan[]): FakeService {
     commands: [],
     settled: [],
     firstSettle: Deferred.makeUnsafe<void>(),
+    boards: {},
+    readBoard: (planId) => Effect.sync(() => service.boards[planId]),
+    // The service's compare-and-set: a save lands only over the revision it was drawn on.
+    saveBoard: (planId, baseRevision, elements) =>
+      Effect.sync(() => {
+        const standing = service.boards[planId] ?? { revision: 0, elements: [] };
+        if (standing.revision !== baseRevision) {
+          return { outcome: BOARD_SAVE.CONFLICT, board: standing };
+        }
+        const board = {
+          revision: baseRevision + 1,
+          elements,
+          updatedBy: BOARD_AUTHOR.DEVELOPER,
+        };
+        service.boards[planId] = board;
+        return { outcome: BOARD_SAVE.SAVED, board };
+      }),
     // An empty queue holds the claim open, as the service does, rather than answering at once.
     claimCommand: () =>
       Effect.suspend(() => {
@@ -800,4 +827,116 @@ it.effect("a command for a plan this Mac holds no folder for runs nothing and sa
       assert.match(settled?.result.stderr ?? "", /no folder is chosen for this plan on this Mac/u);
     }),
   ),
+);
+
+/** A box as the canvas or the service holds one. */
+function box(id: string, version: number): BoardElement {
+  return {
+    id,
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    x: 0,
+    y: 0,
+    width: 200,
+    height: 80,
+    version,
+    isDeleted: false,
+  };
+}
+
+it.effect(
+  "opening a plan draws its board, and a draw the planning model settled on the call is read again",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        service.boards[INVITES] = { revision: 1, elements: [box("api", 1)] };
+        const { call, last, planning } = yield* subject(service);
+        yield* planning.lifetime;
+
+        yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+        assert.deepEqual(last()?.board, service.boards[INVITES]);
+
+        const drawn = { revision: 2, elements: [box("api", 1), box("db", 1)] };
+        service.boards[INVITES] = drawn;
+        planning.showActivity(
+          activityFrame(INVITES, { planner: { action: DRAW_ON_BOARD_TOOL_NAME }, notes: false }),
+        );
+        planning.showActivity(activityFrame(INVITES, { planner: {}, notes: false }));
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+        assert.deepEqual(last()?.board, drawn);
+      }),
+    ),
+);
+
+it.effect(
+  "the planning model going quiet reads the board again, in case a draw settled unseen",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        const { call, last, planning } = yield* subject(service);
+        yield* planning.lifetime;
+        yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+        planning.showActivity(activityFrame(INVITES, { planner: {}, notes: false }));
+
+        const drawn = { revision: 1, elements: [box("api", 1)] };
+        service.boards[INVITES] = drawn;
+        planning.showActivity(activityFrame(INVITES, { notes: false }));
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+        assert.deepEqual(last()?.board, drawn);
+      }),
+    ),
+);
+
+it.effect(
+  "the developer's scene saves over the revision it was drawn on, and a stale one draws the board the service holds",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.boards[INVITES] = { revision: 1, elements: [box("api", 1)] };
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const scene = [box("api", 2)];
+      const saved = yield* call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
+        planId: INVITES,
+        baseRevision: 1,
+        elements: scene,
+      });
+      const stale = yield* call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
+        planId: INVITES,
+        baseRevision: 1,
+        elements: [box("api", 3)],
+      });
+      const elsewhere = yield* call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
+        planId: BILLING,
+        baseRevision: 0,
+        elements: scene,
+      });
+
+      assert.deepEqual(saved, { saved: true });
+      assert.deepEqual(stale, { saved: false });
+      assert.deepEqual(elsewhere, { saved: false });
+      assert.equal(service.boards[BILLING], undefined);
+      assert.deepEqual(last()?.board, {
+        revision: 2,
+        elements: scene,
+        updatedBy: BOARD_AUTHOR.DEVELOPER,
+      });
+    }),
+);
+
+it.effect("leaving the open plan drops the board drawn for it", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    service.boards[INVITES] = { revision: 1, elements: [box("api", 1)] };
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
+
+    assert.equal(last()?.board, undefined);
+  }),
 );

@@ -7,6 +7,7 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
+import { BOARD_SAVE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-wire";
 import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
 import {
   IDLE_PLANNING_VIEW,
@@ -16,12 +17,13 @@ import {
   type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
   type PlanningView,
+  planningBoardSaveParamsSchema,
   planningSetFolderParamsSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, Result, Schema, type Scope, Semaphore } from "effect";
+import { Effect, Option, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -38,9 +40,13 @@ import type { RunMode } from "./run-mode.js";
  * happens. Every write happens during a planning call, and the notetaker's
  * drafts arrive on that call's own socket and are drawn in place: the list
  * and the open plan are read when the Plans tab shows, when a plan opens, and
- * when one starts, and never on a clock. The one loop here is the open plan's
- * folder commands (`planning-commands.ts`), which the planning model asks
- * this Mac to run.
+ * when one starts, and never on a clock. The open plan's whiteboard is read
+ * with its document, and again whenever the call's activity says a draw by
+ * the planning model just settled or the planning model stopped working, since
+ * a draw happens only inside its turn; the developer's own drawing is saved
+ * through here and the view takes the board as the service answered it. The
+ * loops here are the open plan's folder commands (`planning-commands.ts`),
+ * which the planning model asks this Mac to run, and those board reads.
  */
 
 /** Opening or deleting a plan names it and nothing else. */
@@ -73,7 +79,15 @@ export function planFoldersFile(
 /** The service's side of the plans, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
-  "list" | "open" | "create" | "delete" | "repositories" | "claimCommand" | "settleCommand"
+  | "list"
+  | "open"
+  | "create"
+  | "delete"
+  | "repositories"
+  | "claimCommand"
+  | "settleCommand"
+  | "readBoard"
+  | "saveBoard"
 >;
 
 export interface PlanningDependencies {
@@ -169,10 +183,17 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
   }
 
-  /** The view with no activity, as a plan left behind leaves it. */
-  function withoutActivity({ activity: _activity, ...rest }: PlanningView): PlanningView {
+  /** The view with no activity and no board, as a plan left behind leaves it. */
+  function withoutActivity({
+    activity: _activity,
+    board: _board,
+    ...rest
+  }: PlanningView): PlanningView {
     return rest;
   }
+
+  /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
+  const boardReads = yield* Queue.sliding<string>(1);
 
   /** The document of `planId` as held now, if the held one is that plan's. */
   function heldPlanOf(planId: string): PlanningDocument["plan"] {
@@ -221,6 +242,15 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     });
   }
 
+  /** Reads the active plan's board; a failed read keeps the board drawn. */
+  function readBoard(planId: string) {
+    return Effect.gen(function* () {
+      const board = yield* Effect.provide(client.readBoard(planId), FetchHttpClient.layer);
+      if (board === undefined || view.activePlanId !== planId) return;
+      write({ board });
+    });
+  }
+
   function showDraft(draft: PlanDraftFrame): void {
     const held = heldPlanOf(draft.planId);
     if (held === undefined || view.activePlanId !== draft.planId) return;
@@ -233,9 +263,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     write({ document: { status: PLANNING_READ.READY, plan } });
   }
 
+  /**
+   * Shows the call's activity, and asks for the board again where it says a
+   * draw just settled: the planning model's pending call was a draw and is
+   * not any more, or the planning model stopped working, which also covers a
+   * draw that settled between two words about it.
+   */
   function showActivity({ type: _type, planId, ...activity }: PlanActivityFrame): void {
     if (view.activePlanId !== planId) return;
+    const was = view.activity?.planner;
+    const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
+    const stopped = was !== undefined && activity.planner === undefined;
     write({ activity });
+    if (drew || stopped) Queue.offerUnsafe(boardReads, planId);
   }
 
   const methods: GatewayMethodTable = {
@@ -247,6 +287,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             yield* readList;
             const planId = view.activePlanId;
             if (planId !== undefined) yield* readDocument(planId);
+            if (planId !== undefined) yield* readBoard(planId);
           }),
         );
         return {};
@@ -273,6 +314,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         yield* serial(
           Effect.gen(function* () {
             yield* readDocument(planId);
+            yield* readBoard(planId);
             // Opening moved the plan to the head of the list.
             yield* readList;
           }),
@@ -365,6 +407,26 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           listed.ok ? listed.answer : { failure: listed.failure },
         );
       }),
+    // A save of another plan than the open one is dropped: its board is not drawn.
+    [GATEWAY_METHOD.PLANNING_BOARD_SAVE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningBoardSaveParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("saving a board names a plan and its scene");
+        const { planId, baseRevision, elements } = read.success;
+        if (!gate() || view.activePlanId !== planId) return { saved: false };
+        return yield* serial(
+          Effect.gen(function* () {
+            const answer = yield* Effect.provide(
+              client.saveBoard(planId, baseRevision, elements),
+              FetchHttpClient.layer,
+            );
+            if (answer === undefined) return { saved: false };
+            if (view.activePlanId === planId) write({ board: answer.board });
+            return { saved: answer.outcome === BOARD_SAVE.SAVED };
+          }),
+        );
+      }),
     // Opened for a signed-in account only; the panel reads the repositories
     // again once the developer is back, so nothing here waits on the link.
     [GATEWAY_METHOD.PLANNING_CONNECT_GITHUB]: () =>
@@ -393,14 +455,24 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The open plan's folder commands; every read of the plans is an ask's.
-    lifetime: servePlanningCommands({
-      client,
-      openPlan: () => {
-        const planId = view.activePlanId;
-        if (!gate() || planId === undefined) return undefined;
-        return { planId, folder: view.folders[planId] };
-      },
+    // The open plan's folder commands, and the board reads a settled draw
+    // asks for; every other read of the plans is an ask's.
+    lifetime: Effect.gen(function* () {
+      yield* servePlanningCommands({
+        client,
+        openPlan: () => {
+          const planId = view.activePlanId;
+          if (!gate() || planId === undefined) return undefined;
+          return { planId, folder: view.folders[planId] };
+        },
+      });
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(boardReads), (planId) =>
+            gate() ? serial(readBoard(planId)) : Effect.void,
+          ),
+        ),
+      );
     }),
   };
 });

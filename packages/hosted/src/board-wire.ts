@@ -36,6 +36,13 @@ export const BOARD_BOUNDS = {
   MAX_TOMBSTONES: 500,
 } as const;
 
+/**
+ * The planning model's tool that draws on a board. The Mac reads it off the
+ * planning call's activity, where a pending call names its tool, to know a
+ * draw just landed and read the board again.
+ */
+export const DRAW_ON_BOARD_TOOL_NAME = "draw_on_board";
+
 /** Who wrote a board's current revision. */
 export const BOARD_AUTHOR = {
   LUKE: "luke",
@@ -172,6 +179,8 @@ export const boardSaveAnswerSchema = EffectSchema.Struct({
   outcome: EffectSchema.Literals(Object.values(BOARD_SAVE)),
   board: boardSchema,
 });
+
+export type BoardSaveAnswer = typeof boardSaveAnswerSchema.Type;
 
 /** The board before anything was drawn on it. */
 export const EMPTY_BOARD: Board = { revision: 0, elements: [] };
