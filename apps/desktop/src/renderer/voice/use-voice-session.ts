@@ -117,6 +117,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           }),
         onRemoteStream: (remote) => rendererRegistry.set(remoteStreamAtom, remote),
         onLocalStream: (local) => rendererRegistry.set(localStreamAtom, local),
+        // The element alone is muted, never the stream: the meter reads the
+        // stream, and is what tells the call when the silenced utterance ends.
+        onOutputSilenced: (silenced) => {
+          if (remoteAudio.current) remoteAudio.current.muted = silenced;
+        },
         services: rendererServicesNow(),
         // The development trace's tap, checked at each event rather than at
         // construction because a session outlives any one version of the

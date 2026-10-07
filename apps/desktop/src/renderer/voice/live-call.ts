@@ -93,6 +93,12 @@ export interface LiveCallOptions {
   openMicrophone: () => Promise<MediaStream>;
   onRemoteStream: (stream: MediaStream | undefined) => void;
   onLocalStream: (stream: MediaStream | undefined) => void;
+  /**
+   * Whether the element Luke's voice plays through is silenced, so the stop
+   * is heard at once rather than when the model obeys; a surface with no stop
+   * key, like the spoken introduction, wires none.
+   */
+  onOutputSilenced?: (silenced: boolean) => void;
   /** The development trace's tap, handed each event as it crossed the channel. */
   onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
   /**
@@ -134,8 +140,8 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
  * is released then — or when the fiber is interrupted — exactly once, because
  * a scope closes once. Every bound the call keeps is an `Effect.sleep` forked
  * into that same scope, so nothing is left armed behind a session that ended.
- * The four verbs {@link LiveVoiceCall} declares answer Effects rather than
- * Promises: the orchestrator above the peer runs each on the fiber it already
+ * The verbs {@link LiveVoiceCall} declares answer Effects rather than
+ * Promises, all but the output's silence, which waits on nothing: the orchestrator above the peer runs each on the fiber it already
  * holds, so nothing here converts one to the other.
  */
 export class LiveCall implements LiveVoiceCall {
@@ -158,6 +164,8 @@ export class LiveCall implements LiveVoiceCall {
   #closing = false;
   #micLive = false;
   #lukeSpeaking = false;
+  /** Whether Luke's playback is silenced by a stop, until the utterance it was pressed in ends. */
+  #outputSilenced = false;
   /**
    * The pair last handed to the policy. The status alone cannot stand in for
    * it: the microphone opening under Luke's own sentence moves a speaker and
@@ -253,6 +261,22 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   /**
+   * The stop's silence, per the server-controls guide: playback is muted at
+   * the element, not the track, so the meter still hears the utterance the
+   * stop was pressed in and can tell when it ends. A WebRTC track has no
+   * queue of its own to discard, since what the element did not play while
+   * muted is dropped rather than held, so playback resumes on live audio.
+   * The recovery is the speaking hangover running out: Luke's track quiet
+   * for that long is the silenced utterance over, and whatever he says
+   * after it is heard from its first word.
+   */
+  silenceOutput(): void {
+    if (!this.standing || !this.#lukeSpeaking || this.#outputSilenced) return;
+    this.#outputSilenced = true;
+    this.#options.onOutputSilenced?.(true);
+  }
+
+  /**
    * The graceful hang-up the conversations guide prescribes: the closed
    * handler already stands, `session.close` goes, and everything stays open
    * until `session.closed` arrives or the bound passes.
@@ -283,6 +307,7 @@ export class LiveCall implements LiveVoiceCall {
     this.#speakingHangover = this.#arm(SPEAKING_HANGOVER_MS, () => {
       this.#speakingHangover = undefined;
       this.#lukeSpeaking = false;
+      this.#restoreOutput();
       this.#refreshStatus();
     });
   }
@@ -657,10 +682,20 @@ export class LiveCall implements LiveVoiceCall {
     }
     this.#micLive = false;
     this.#lukeSpeaking = false;
+    // Note that the element outlives the call, so a silence left standing
+    // would mute the next call's first words.
+    this.#restoreOutput();
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
     this.#setStatus(status);
     Deferred.doneUnsafe(this.#ending, Exit.void);
+  }
+
+  /** Lifts a stop's silence, where one stands. */
+  #restoreOutput(): void {
+    if (!this.#outputSilenced) return;
+    this.#outputSilenced = false;
+    this.#options.onOutputSilenced?.(false);
   }
 
   /** Takes the device off the sending line, silence in its place, and stops it, so the system's indicator goes out with the key. */
