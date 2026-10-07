@@ -25,6 +25,14 @@ export const LIVE_BRAIN_RUN_EVENT = {
    * the developer's own Mac and spoken by nobody.
    */
   ACTIVITY: "activity",
+  /**
+   * More of the run's calls settled since it was last told: how many have
+   * settled in all, and the kind of step the latest was, in the brain's
+   * slow-step vocabulary or nothing where it is none of them. It carries
+   * neither a call's input nor its output, so the service words it from the
+   * build.
+   */
+  STEP_SETTLED: "step_settled",
 } as const;
 
 /** How a run ended, as the service tells a reply from a refusal. */
@@ -69,6 +77,14 @@ export type LiveBrainRunEvent =
       readonly runId: string;
       /** The pending call's command, or its tool's name where it runs none; absent while no call is pending. */
       readonly action: string | undefined;
+    }
+  | {
+      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.STEP_SETTLED;
+      readonly runId: string;
+      /** Which kind of step settled latest, in the brain's own vocabulary; absent for a step of no named kind. */
+      readonly step: string | undefined;
+      /** How many of the run's steps have settled so far. */
+      readonly settled: number;
     };
 
 export interface LiveBrainAsk {

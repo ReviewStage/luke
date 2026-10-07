@@ -17,6 +17,7 @@ import {
   ASK_ORIGIN,
   isSettledToolPartState,
   isStoredToolPart,
+  SLOW_STEP_KIND,
   type StoredUIMessage,
   storedToolName,
   TURN_END,
@@ -38,6 +39,7 @@ import {
   stopAsk,
 } from "../hosted/brain-ask.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
+import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
@@ -141,9 +143,10 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
   }
 }
 
-/** What a follow has told of its turn so far: the activity last said. */
+/** What a follow has told of its turn so far: the activity last said, and how many of its calls were told settled. */
 interface FollowTold {
   action: string | undefined;
+  settled: number;
 }
 
 /** No recovered run: the session's revisions start from nothing, and nothing is followed. */
@@ -176,6 +179,26 @@ function pendingActionOf(journal: StoredUIMessage | undefined): string | undefin
     : storedToolName(pending);
   if (action.length <= PLAN_ACTIVITY_ACTION_MAX_CHARS) return action;
   return `${action.slice(0, PLAN_ACTIVITY_ACTION_MAX_CHARS - 1)}…`;
+}
+
+/**
+ * The turn's settled calls, oldest first, as the kind of step each was: a
+ * repository command as a repository read, and every other call as no named
+ * kind. A queued question is the plan's next question and no step of the
+ * work, so it is not counted. Note that we read which tool was called and
+ * nothing of its input or output, so a settled step tells the voice no
+ * command and no line the repository holds.
+ */
+function settledStepsOf(journal: StoredUIMessage | undefined): readonly (string | undefined)[] {
+  return (journal?.parts ?? [])
+    .filter(isStoredToolPart)
+    .filter((part) => isSettledToolPartState(part.state))
+    .filter((part) => storedToolName(part) !== QUEUE_QUESTION_TOOL.name)
+    .map((part) =>
+      storedToolName(part) === RUN_IN_REPOSITORY_TOOL.name
+        ? SLOW_STEP_KIND.REPOSITORY_READ
+        : undefined,
+    );
 }
 
 /**
@@ -392,6 +415,17 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     }
     const last = events.at(-1);
     const ended = last?.kind === TURN_EVENT_KIND.ENDED;
+    // Calls settled since the last look are told as one step event, while the turn runs and only by its teller.
+    const steps = telling && !ended ? settledStepsOf(message) : [];
+    if (steps.length > told.settled) {
+      told.settled = steps.length;
+      emit({
+        kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+        runId: askId,
+        step: steps.at(-1),
+        settled: steps.length,
+      });
+    }
     if (!telling) {
       if (ended) yield* tell(askId, { seq: 0, ended }, [runEventOf(last, askId)]);
       return ended;
@@ -426,7 +460,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   function follow(askId: string, revision: number) {
     if (followed.has(askId)) return Effect.void;
     followed.set(askId, revision);
-    const told: FollowTold = { action: undefined };
+    const told: FollowTold = { action: undefined, settled: 0 };
     const cadence = Schedule.spaced(bounds.POLL).pipe(
       Schedule.setInputType<boolean>(),
       Schedule.while(({ input }) => !input),

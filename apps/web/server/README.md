@@ -1170,8 +1170,15 @@ never said twice. A turn that
 does not end inside the follow bound, or an ask the record no longer holds,
 is told as a failed end so the exchange settles rather than waiting forever. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
-mid-turn is the slow step, each question a planning turn queued, and the
-actions settling. eve folds asks that waited together into one turn, so
+mid-turn is the slow step, each question a planning turn queued, the
+actions settling, and, as the live brain's own and no event of the stream,
+each look's count of the turn's settled calls with the kind of the latest
+(`STEP_SETTLED`), never a call's input or output, which the service words as
+a build-fixed quiet progress note no sooner than `PROGRESS_NOTE_BOUNDS.GAP_MS`
+after the exchange's last and at most `PER_EXCHANGE` times. A reply's
+commentary the voice session refused is sent once more under a fresh id and,
+refused again, reported; one left unanswered is reported and never resent,
+since a pending append may still reach the timeline. eve folds asks that waited together into one turn, so
 several follows can project one turn: the newest ask tells it, since the
 service speaks only the newest request's reply, and the rest tell only its
 end, so a reply is never said once per folded ask. Each delegation is an

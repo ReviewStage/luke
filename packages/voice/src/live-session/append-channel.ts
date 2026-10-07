@@ -15,9 +15,28 @@ import type { LiveSideband } from "../live-socket.js";
 /** How long an append waits for its acknowledgment or error before it is counted as not taken. */
 const APPEND_ACK_TIMEOUT_MS = 10_000;
 
-type Acknowledgment = { ok: true; endMs: number } | { ok: false };
+/**
+ * What became of one append: taken, refused by an error naming it, never
+ * answered inside the timeout, or never sent because the channel is closed.
+ * A refusal is the one outcome that says the session did not take the words;
+ * an append left unanswered may still reach the timeline once it moves again,
+ * as the conversations guide has it, so the two are told apart.
+ */
+export const APPEND_OUTCOME = {
+  TAKEN: "taken",
+  REFUSED: "refused",
+  UNANSWERED: "unanswered",
+  CLOSED: "closed",
+} as const;
 
-const NOT_TAKEN: Acknowledgment = { ok: false };
+export type AppendOutcome = (typeof APPEND_OUTCOME)[keyof typeof APPEND_OUTCOME];
+
+type Acknowledgment =
+  | { outcome: typeof APPEND_OUTCOME.TAKEN; endMs: number }
+  | { outcome: typeof APPEND_OUTCOME.REFUSED | typeof APPEND_OUTCOME.CLOSED };
+
+const REFUSED: Acknowledgment = { outcome: APPEND_OUTCOME.REFUSED };
+const CLOSED: Acknowledgment = { outcome: APPEND_OUTCOME.CLOSED };
 
 /** A commentary append acknowledged and not yet heard: settled by the first output transcript past its end. */
 interface AwaitingSpeech {
@@ -102,8 +121,13 @@ export class AppendChannel {
 
   /** Sends one append and answers whether the session took it. */
   send(event: LiveAppendEvent, options: SendOptions = {}): Effect.Effect<boolean> {
+    return Effect.map(this.deliver(event, options), (outcome) => outcome === APPEND_OUTCOME.TAKEN);
+  }
+
+  /** Sends one append and answers what became of it. */
+  deliver(event: LiveAppendEvent, options: SendOptions = {}): Effect.Effect<AppendOutcome> {
     return Effect.gen({ self: this }, function* () {
-      if (this.#shut) return false;
+      if (this.#shut) return APPEND_OUTCOME.CLOSED;
       const { onSpoken, countsForIdle = true } = options;
       const speech =
         event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND
@@ -120,19 +144,22 @@ export class AppendChannel {
         Deferred.await(acknowledged),
         Duration.millis(APPEND_ACK_TIMEOUT_MS),
       );
-      if (Option.isNone(settled)) this.#pending.delete(event.event_id);
-      return Option.getOrElse(settled, () => NOT_TAKEN).ok;
+      if (Option.isNone(settled)) {
+        this.#pending.delete(event.event_id);
+        return APPEND_OUTCOME.UNANSWERED;
+      }
+      return settled.value.outcome;
     });
   }
 
   /** The `*.appended` acknowledgment naming one of this channel's appends. */
   acknowledge(eventId: string, endMs: number): void {
-    this.#settle(eventId, { ok: true, endMs });
+    this.#settle(eventId, { outcome: APPEND_OUTCOME.TAKEN, endMs });
   }
 
   /** An error naming one of this channel's appends. */
   refuse(eventId: string): void {
-    this.#settle(eventId, NOT_TAKEN);
+    this.#settle(eventId, REFUSED);
   }
 
   /** Output transcript reached this instant: every commentary whose injection ended before it has been heard. */
@@ -148,7 +175,7 @@ export class AppendChannel {
     this.#shut = true;
     for (const [eventId, pending] of [...this.#pending]) {
       this.#pending.delete(eventId);
-      Deferred.doneUnsafe(pending.acknowledged, Effect.succeed(NOT_TAKEN));
+      Deferred.doneUnsafe(pending.acknowledged, Effect.succeed(CLOSED));
     }
     this.#awaiting = [];
     Deferred.doneUnsafe(this.#closed, Exit.void);
@@ -186,7 +213,7 @@ export class AppendChannel {
     const pending = this.#pending.get(eventId);
     if (!pending) return;
     this.#pending.delete(eventId);
-    if (acknowledgment.ok && pending.onSpoken) {
+    if (acknowledgment.outcome === APPEND_OUTCOME.TAKEN && pending.onSpoken) {
       this.#awaiting.push({ endMs: acknowledgment.endMs, onSpoken: pending.onSpoken });
     }
     Deferred.doneUnsafe(pending.acknowledged, Effect.succeed(acknowledgment));
