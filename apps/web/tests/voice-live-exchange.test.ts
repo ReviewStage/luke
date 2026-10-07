@@ -550,13 +550,18 @@ it.live(
       const lost = yield* Effect.promise(() => stand(target, undefined, { planning: true }));
       lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
       lost.socket.receive(delegated("dl_1", 2500));
-      yield* settled(() => lost.eve.opened.length === 1, "the ask to reach eve");
-      // The function reached its duration bound: the device's socket goes, the session stands.
-      yield* Effect.promise(() => detach(lost));
+      // The ask's dispatch is written in a transaction that ends after eve answers, so the detach
+      // waits for the record to hold eve's session rather than for eve alone.
+      yield* settled(
+        async () => (await asks.latestSession(target.userId, target.conversationId)) !== undefined,
+        "the ask's dispatch to be on record",
+      );
       const recorded = yield* Effect.promise(() =>
         asks.latestSession(target.userId, target.conversationId),
       );
       assert.ok(recorded);
+      // The function reached its duration bound: the device's socket goes, the session stands.
+      yield* Effect.promise(() => detach(lost));
       yield* Effect.promise(() =>
         play(spokenTurn(FIRST_EVE_TURN, NOW), {
           sessionId: recorded,
@@ -605,7 +610,10 @@ it.live(
       const lost = yield* Effect.promise(() => stand(target, undefined, { planning: true }));
       lost.socket.receive(heard("Plan the invitations flow.", 1000, 2400));
       lost.socket.receive(delegated("dl_1", 2500));
-      yield* settled(() => lost.eve.opened.length === 1, "the ask to reach eve");
+      yield* settled(
+        async () => (await asks.latestSession(target.userId, target.conversationId)) !== undefined,
+        "the ask's dispatch to be on record",
+      );
       const recorded = yield* Effect.promise(() =>
         asks.latestSession(target.userId, target.conversationId),
       );
