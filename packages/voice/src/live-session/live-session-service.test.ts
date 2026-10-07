@@ -908,6 +908,44 @@ it.effect(
 );
 
 it.effect(
+  "an exchange superseded after a sentence it released while its run went on says no later sentence and no note when that run then fails",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What is failing?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Two." });
+      yield* settle();
+      sideband.acknowledge(0, 1000, 1100);
+      yield* settle();
+      sideband.input("No, the API repo.", 1500, 2300);
+      sideband.delegation("item_2", 2400);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Both in the web repo.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.FAILED,
+      });
+      yield* advanceClock(1000);
+      assert.deepEqual(
+        appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) =>
+          "content" in event ? event.content : undefined,
+        ),
+        ["Two."],
+      );
+    }),
+);
+
+it.effect(
   "an older reply already queued behind an unacknowledged append is dropped when a newer delegation is accepted before it leaves",
   () =>
     Effect.gen(function* () {
@@ -2069,6 +2107,39 @@ it.effect(
       sideband.acknowledge(0, 1000, 1100);
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
+    }),
+);
+
+it.effect(
+  "a run that fails after a sentence it released while it ran keeps that sentence said and is still spoken as the standing note",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What does the repository hold?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Looked.",
+      });
+      yield* settle();
+      sideband.acknowledge(0, 1000, 1100);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.FAILED,
+      });
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(
+        commentary.map((event) => ("content" in event ? event.content : undefined)),
+        ["Looked.", RUN_END_NOTE[LIVE_BRAIN_RUN_END.FAILED]],
+      );
     }),
 );
 

@@ -6,10 +6,12 @@ import {
   BRAIN_TURN_TRIGGER,
   type BrainTurnTrigger,
   encodeTurnEventFrame,
+  isSettledToolPartState,
   isStoredToolPart,
   READ_QUERY,
   replySentences,
   SLOW_STEP_KIND,
+  type StoredToolPart,
   type StoredUIMessage,
   slowStepOf,
   storedToolName,
@@ -51,8 +53,11 @@ import type { HostedStore, StoredTurnRecord } from "./store/index.js";
  * same calls the journal held, so the events a client heard stay where they
  * were numbered and the ones it has not heard come after: a client that
  * attaches again with the number of the last event it took hears the rest
- * exactly once. The end is the last event of every turn, and the stream
- * closes after it; a client attached after the end hears the terminal events
+ * exactly once. A turn that did not complete numbers its end past every
+ * event it could have told, since the sentences it released while it ran
+ * leave the journal with its words as it ends, so a client attached from a
+ * cursor past what the shortened projection holds still hears the end. The
+ * end is the last event of every turn, and the stream closes after it; a client attached after the end hears the terminal events
  * and the stream closes at once, and one that already took the end hears
  * nothing and closes.
  *
@@ -126,67 +131,111 @@ export type ProjectedTurn = Pick<StoredTurnRecord, "id" | "origin" | "status">;
 type JournalParts = StoredUIMessage["parts"];
 
 /**
- * What the journal's calls tell before the turn ends, in the order the calls
- * were written: the first slow step, once, as the desktop tells one per run,
- * and every question a planning call queued. Note that a planning call's
- * repository command is named before the policy is asked, because it is a
- * planning tool and no catalog policy offers it, so the brain's own
- * `slowStepOf` would never count it. A queued question is told once its
- * input is whole, never while it streams, so a question is never told twice.
+ * The number a turn that did not complete ends at: past any number the turn
+ * could have told before it ended, because the sentences it released while
+ * it ran leave the journal with the rest of its words, so its end can no
+ * longer be counted from what the journal still holds.
  */
-function midTurnEventsOf(parts: JournalParts, trigger: BrainTurnTrigger): TurnEventBody[] {
-  const policy = hostedTurnPolicy(trigger);
-  const bodies: TurnEventBody[] = [];
-  let slowStepTold = false;
+export const UNANSWERED_TURN_END_SEQ = Number.MAX_SAFE_INTEGER;
+
+type JournalPart = JournalParts[number];
+
+/** The journal cut at its step boundaries, each step's parts in the order they were journaled; what precedes the first boundary stands as a step of its own. */
+function stepsOf(parts: JournalParts): readonly (readonly JournalPart[])[] {
+  const steps: JournalPart[][] = [[]];
   for (const part of parts) {
-    if (!isStoredToolPart(part)) continue;
-    const name = storedToolName(part);
-    if (name === QUEUE_QUESTION_TOOL.name) {
-      const queued = queuedQuestionOf(part);
-      if (queued !== undefined) bodies.push({ kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued });
-      continue;
-    }
-    const step =
-      name === RUN_IN_REPOSITORY_TOOL.name
-        ? SLOW_STEP_KIND.REPOSITORY_READ
-        : slowStepOf(policy, name);
-    if (step === undefined || slowStepTold) continue;
-    slowStepTold = true;
-    bodies.push({ kind: TURN_EVENT_KIND.SLOW_STEP, step });
+    if (part.type === UI_PART_TYPE.STEP_START) steps.push([]);
+    else steps.at(-1)?.push(part);
   }
-  return bodies;
+  return steps;
 }
 
-/** The reply's text: every text part of the answer, in order; the words the voice speaks. */
-function replyTextOf(parts: JournalParts): string {
+/** A step's words: every text part of it, in order; the words the voice speaks. */
+function replyTextOf(parts: readonly JournalPart[]): string {
   return parts.flatMap((part) => (part.type === UI_PART_TYPE.TEXT ? [part.text] : [])).join("\n");
 }
 
 /**
- * The turn's events as the record now stands, numbered from one. A slow step
- * and a queued question are told the moment their call is on the journal,
- * whose calls only grow, so the numbering only grows; the settled mark, the
- * reply's sentences, and the end follow the turn's own end, since the reply
- * is spoken only once everything the turn did is on record, exactly as the
- * desktop's own run stream orders them. A cancelled or failed turn ends
- * without a settled mark or a sentence, because nothing of it is spoken as a
- * reply.
+ * What one call tells while the turn runs: a question a planning call queued,
+ * or the kind of slow step it is. Note that a planning call's repository
+ * command is named before the policy is asked, because it is a planning tool
+ * and no catalog policy offers it, so the brain's own `slowStepOf` would
+ * never count it. A queued question is told once its input is whole, never
+ * while it streams, so a question is never told twice.
+ */
+function callEventOf(
+  part: StoredToolPart,
+  policy: ReturnType<typeof hostedTurnPolicy>,
+): TurnEventBody | undefined {
+  const name = storedToolName(part);
+  if (name === QUEUE_QUESTION_TOOL.name) {
+    const queued = queuedQuestionOf(part);
+    return queued === undefined ? undefined : { kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued };
+  }
+  const slow =
+    name === RUN_IN_REPOSITORY_TOOL.name
+      ? SLOW_STEP_KIND.REPOSITORY_READ
+      : slowStepOf(policy, name);
+  return slow === undefined ? undefined : { kind: TURN_EVENT_KIND.SLOW_STEP, step: slow };
+}
+
+/**
+ * The turn's events as the record now stands, numbered from one, walked
+ * step by step: a step's sentences, then what its calls tell. A slow step,
+ * once, as the desktop tells one per run, and every question a planning call
+ * queued, are told the moment their call is on the journal. A sentence is
+ * told while the turn still runs once every call journaled ahead of its step
+ * has settled, behind one settled mark, so nothing is said ahead of an action
+ * whose result is not on record; the first sentence held back holds back
+ * everything after it, so the numbering only grows. Note that a step's words
+ * go ahead of its own calls, because eve tells a step's words before the
+ * calls it requests and the journal only gains words at a sentence's end.
+ * A completed turn tells every sentence and then its end, the settled mark
+ * standing ahead of them even where it said nothing. A cancelled or failed
+ * turn tells no sentence, since its words leave the journal at its end; what
+ * it released while it ran was said, and its end is numbered past it.
  */
 export function projectTurnEvents(
   turn: ProjectedTurn,
   journal: StoredUIMessage | undefined,
 ): readonly TurnEvent[] {
-  const parts = journal?.parts ?? [];
-  const bodies = midTurnEventsOf(parts, TRIGGER_OF_TURN_ORIGIN[turn.origin]);
+  const policy = hostedTurnPolicy(TRIGGER_OF_TURN_ORIGIN[turn.origin]);
   const end = TURN_END_OF_STATUS[turn.status];
-  if (end === TURN_END.COMPLETED) {
-    bodies.push({ kind: TURN_EVENT_KIND.ACTIONS_SETTLED });
-    for (const sentence of replySentences(replyTextOf(parts))) {
+  const speaks = end === undefined || end === TURN_END.COMPLETED;
+  const bodies: TurnEventBody[] = [];
+  let slowStepTold = false;
+  let settledTold = false;
+  let unsettled = false;
+  for (const step of stepsOf(journal?.parts ?? [])) {
+    const sentences = speaks ? replySentences(replyTextOf(step)) : [];
+    // A turn that completed has everything it did on record, whatever its calls' parts say.
+    if (sentences.length > 0 && unsettled && end === undefined) break;
+    if (sentences.length > 0 && !settledTold) {
+      settledTold = true;
+      bodies.push({ kind: TURN_EVENT_KIND.ACTIONS_SETTLED });
+    }
+    for (const sentence of sentences)
       bodies.push({ kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence });
+    for (const part of step) {
+      if (!isStoredToolPart(part)) continue;
+      if (!isSettledToolPartState(part.state)) unsettled = true;
+      const told = callEventOf(part, policy);
+      if (told === undefined || (told.kind === TURN_EVENT_KIND.SLOW_STEP && slowStepTold)) continue;
+      slowStepTold ||= told.kind === TURN_EVENT_KIND.SLOW_STEP;
+      bodies.push(told);
     }
   }
-  if (end !== undefined) bodies.push({ kind: TURN_EVENT_KIND.ENDED, end });
-  return bodies.map((body, index) => ({ ...body, turnId: turn.id, seq: index + 1 }));
+  if (end === TURN_END.COMPLETED && !settledTold) {
+    bodies.push({ kind: TURN_EVENT_KIND.ACTIONS_SETTLED });
+  }
+  const events: TurnEvent[] = bodies.map((body, index) => ({
+    ...body,
+    turnId: turn.id,
+    seq: index + 1,
+  }));
+  if (end === undefined) return events;
+  const seq = end === TURN_END.COMPLETED ? events.length + 1 : UNANSWERED_TURN_END_SEQ;
+  return [...events, { kind: TURN_EVENT_KIND.ENDED, end, turnId: turn.id, seq }];
 }
 
 export interface TurnEventStreamOptions {
@@ -304,7 +353,7 @@ export const handleTurnEventStream = /* @__PURE__ */ Effect.fn("web/handleTurnEv
           const events = yield* lookAtTurn(store, userId, turn.id);
           if (events === undefined || gone()) return none;
           const now = yield* Clock.currentTimeMillis;
-          const fresh = events.slice(attachment.told);
+          const fresh = events.filter((event) => event.seq > attachment.told);
           const told = fresh.at(-1)?.seq ?? attachment.told;
           const quietSince = fresh.length > 0 ? now : attachment.quietSince;
           const written = fresh.map((event) => encodeTurnEventFrame(event));

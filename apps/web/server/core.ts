@@ -46,6 +46,7 @@ export {
   CHILD_COMPLETION_STATUS,
   childCompletionInputText,
   childTaskInputText,
+  finishedSentencesOf,
   maximumRecentBriefings,
   OBSERVED_MESSAGES_CUT,
   type ObservedMessagesEnvelope,

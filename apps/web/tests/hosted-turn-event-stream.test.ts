@@ -56,6 +56,7 @@ import {
   TURN_EVENT_STREAM_BOUNDS,
   TURN_EVENT_STREAM_PATH,
   type TurnEventStreamOptions,
+  UNANSWERED_TURN_END_SEQ,
 } from "../server/hosted/turn-event-stream";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -163,6 +164,46 @@ function spokenTurn(turnId: string): readonly MessageStreamEvent[] {
     }),
     stamped({ type: "turn.completed", data: { turnId, sequence } }),
   ];
+}
+
+/**
+ * The same turn with its answer streamed as eve streams one, a delta at a
+ * time behind the settled read: up to `deltas` of them, the first sentence
+ * finished inside the second and the last left forming.
+ */
+function streamedTurn(turnId: string, deltas = 3): readonly MessageStreamEvent[] {
+  const events = spokenTurn(turnId);
+  const answer = events.findIndex((event) => event.type === "message.completed");
+  const appended = ["One agent fin", "ished. Another is ", "waiting on you."]
+    .slice(0, deltas)
+    .map((messageDelta) =>
+      stamped({
+        type: "message.appended",
+        data: { turnId, sequence: 0, stepIndex: 1, messageDelta },
+      }),
+    );
+  return [...events.slice(0, answer), ...appended, ...events.slice(answer)];
+}
+
+/** The eve events before the answer's first delta that finished a sentence, and that delta: the read settled, the next step's words forming. */
+function untilFirstSentence(events: readonly MessageStreamEvent[]): number {
+  return events.findIndex((event) => event.type === "message.appended") + 2;
+}
+
+/** The text the turn's journal holds now, as a device reading the conversation sees it. */
+async function journalText(target: ConversationTarget, turnId: string): Promise<readonly string[]> {
+  const read = await database.run(
+    database.store.messages.byClientId(
+      target.userId,
+      target.conversationId,
+      CATALOG_TOOL_SET,
+      turnId,
+    ),
+  );
+  assert.ok(read.ok);
+  return (read.value[0]?.message.parts ?? []).flatMap((part) =>
+    part.type === UI_PART_TYPE.TEXT ? [part.text] : [],
+  );
 }
 
 function standingFor(target: ConversationTarget): RelayStanding {
@@ -372,6 +413,62 @@ test("a client that disconnects stops the polling", async () => {
   assert.ok(polls <= seen + 1);
 });
 
+test("a sentence that follows only settled calls is heard while the turn still runs, the one still forming waits, and the rest follow with the end", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  const events = streamedTurn(EVE_TURN);
+  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
+  await play(events.slice(0, untilFirstSentence(events) - 1), standing);
+  assert.deepEqual(await journalText(target, turnId), []);
+  await play(events.slice(untilFirstSentence(events) - 1, untilFirstSentence(events)), standing);
+  assert.deepEqual(await journalText(target, turnId), ["One agent finished."]);
+
+  const running = await readStream(
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
+  );
+  assert.deepEqual(running.events, [
+    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
+    { turnId, seq: 2, kind: TURN_EVENT_KIND.ACTIONS_SETTLED },
+    { turnId, seq: 3, kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence: "One agent finished." },
+  ]);
+
+  await play(events.slice(untilFirstSentence(events)), standing);
+  const rest = await readStream(
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 3)))),
+  );
+  assert.deepEqual(rest.events, [
+    {
+      turnId,
+      seq: 4,
+      kind: TURN_EVENT_KIND.REPLY_SENTENCE,
+      sentence: "Another is waiting on you.",
+    },
+    { turnId, seq: 5, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED },
+  ]);
+});
+
+test("a turn cancelled after a sentence it released keeps none of its words, and a client past that sentence still hears the end", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  const events = streamedTurn(EVE_TURN, 2);
+  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
+  await play(events.slice(0, untilFirstSentence(events)), standing);
+  await database.run(
+    relay.handle(
+      stamped({ type: "turn.cancelled", data: { turnId: EVE_TURN, sequence: 0 } }),
+      standing,
+    ),
+  );
+
+  assert.deepEqual(await journalText(target, turnId), []);
+  const heard = await readStream(
+    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 3)))),
+  );
+  assert.deepEqual(heard.events, [
+    { turnId, seq: UNANSWERED_TURN_END_SEQ, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.CANCELLED },
+  ]);
+});
+
 test("a cancelled turn and a failed one end without a settled mark or a sentence", async () => {
   for (const [end, ending] of [
     [TURN_END.CANCELLED, { type: "turn.cancelled", data: { turnId: EVE_TURN, sequence: 0 } }],
@@ -395,7 +492,7 @@ test("a cancelled turn and a failed one end without a settled mark or a sentence
     );
     assert.deepEqual(heard.events, [
       { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
-      { turnId, seq: 2, kind: TURN_EVENT_KIND.ENDED, end },
+      { turnId, seq: UNANSWERED_TURN_END_SEQ, kind: TURN_EVENT_KIND.ENDED, end },
     ]);
   }
 });
@@ -606,6 +703,56 @@ test("the projection: a reply written in Markdown is spoken without its syntax, 
     ["The plan is complete.", "Invites expire after 7 days.", "See the spec."],
   );
   assert.deepEqual(record.parts, [{ type: UI_PART_TYPE.TEXT, text, state: UI_PART_STATE.DONE }]);
+});
+
+test("the projection: a running turn's words wait behind a call not yet settled, and everything after them waits too", () => {
+  const step = { type: UI_PART_TYPE.STEP_START } as const;
+  const words = { type: UI_PART_TYPE.TEXT, text: "Found it.", state: UI_PART_STATE.DONE } as const;
+  const question = { question: "Keep the old name?", recommendation: "No." };
+  assert.deepEqual(
+    kinds(
+      projectTurnEvents(
+        TURN,
+        journal([
+          step,
+          toolPart(BRAIN_TOOL.READ_TRANSCRIPT, "c1"),
+          step,
+          words,
+          toolPart(QUEUE_QUESTION_TOOL.name, "c2", question),
+        ]),
+      ),
+    ),
+    [TURN_EVENT_KIND.SLOW_STEP],
+  );
+  assert.deepEqual(
+    kinds(
+      projectTurnEvents(
+        TURN,
+        journal([
+          step,
+          toolPart(BRAIN_TOOL.READ_TRANSCRIPT, "c1", {}, "output-available"),
+          step,
+          words,
+          toolPart(QUEUE_QUESTION_TOOL.name, "c2", question),
+        ]),
+      ),
+    ),
+    [
+      TURN_EVENT_KIND.SLOW_STEP,
+      TURN_EVENT_KIND.ACTIONS_SETTLED,
+      TURN_EVENT_KIND.REPLY_SENTENCE,
+      TURN_EVENT_KIND.QUESTION_QUEUED,
+    ],
+  );
+});
+
+test("the projection: a turn that did not complete tells none of the words its journal still holds", () => {
+  const words = { type: UI_PART_TYPE.TEXT, text: "Done.", state: UI_PART_STATE.DONE } as const;
+  for (const status of [TURN_STATUS.CANCELLED, TURN_STATUS.FAILED]) {
+    assert.deepEqual(kinds(projectTurnEvents({ ...TURN, status }, journal([words]))), [
+      TURN_EVENT_KIND.ENDED,
+    ]);
+  }
 });
 
 test("the stream's words are the brain's own: the event kinds are members of the run stream's set, and the slow step kinds are its", () => {
