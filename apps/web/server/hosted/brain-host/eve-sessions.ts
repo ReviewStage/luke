@@ -17,20 +17,16 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * The host's own calls into eve's HTTP API, made from a web function on the
  * developer's behalf: open the conversation's session with a first message,
  * follow up on the session it runs in, and cancel one turn by eve's own id
- * for it. eve's
- * `Client` would make the same three requests, but its session handle keeps
- * the delivery id an accepted follow-up answers to itself, and that id is
- * what ties an ask to the turn eve later starts, so the requests are made
- * here as eve's own routes document them. Who is calling is one of two typed
- * callers, never a bare header value: an account's own bearer, which travels
- * unchanged so eve's door admits the same account against the same
- * conversation this route already admitted, or the deployment acting for an
- * account it names — the scheduled observation, which holds no bearer — under
- * the deployment's own secret, with the account beside it in the header the
- * door reads it from. Either way nothing dispatches that the door refuses.
- * The conversation and the kind of turn ride as the headers the door reads
- * them from, and the kinds a client may name are its type parameter, so a
- * client composed for the tick cannot be handed an ask to send. eve answers a follow-up to an unknown, terminal, or
+ * for it. eve's `Client` would make the same requests, but its session handle keeps the delivery id an accepted
+ * follow-up answers to itself, and that id is what ties an ask to the turn
+ * eve later starts, so the requests are made here as eve's own routes
+ * document them. The caller is the deployment acting for an account it
+ * names — the voice function, which holds no bearer of the account's by the
+ * time a delegation arrives — under the deployment's own secret, with the
+ * account beside it in the header the door reads it from, so nothing
+ * dispatches that the door refuses. The conversation and the kind of turn
+ * ride as the headers the door reads them from, and the kinds a client may
+ * name are its type parameter. eve answers a follow-up to an unknown, terminal, or
  * not-yet-active session with one 409, so the code alone cannot tell a
  * session whose command inbox is still starting from one eve has retired;
  * the SDK's own client tries three more times, at 250, 500, and 1,000
@@ -45,9 +41,8 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * Every call is an effect on the `HttpClient` the web runtime builds once
  * per instance, read here once at composition rather than on each call, so
  * the client a caller holds answers `Effect<Outcome, EveUnreachable>` and
- * requires nothing: the seams that take a constructor (the children, the
- * child opener, the child completion) stay synchronous, and the tests that
- * hand a fake eve stand on no client at all. A call eve answered, whatever
+ * requires nothing, and the tests that hand a fake eve stand on no client
+ * at all. A call eve answered, whatever
  * the status, is an outcome; a call that never reached eve or was never
  * answered whole — no address, a refused connection, a failed handshake, a
  * redirect, a dropped body — is `EveUnreachable`, typed so each caller
@@ -80,9 +75,9 @@ const SESSION_NOT_ACTIVE_RETRY = delayLadder([
 ]);
 
 const ACCEPTED_STATUS = 202;
-const CONFLICT_STATUS = 409;
 /** The statuses `Response.ok` names, which is what a cancel's answer was read under. */
 const OK_STATUS = { FIRST: 200, LAST: 299 } as const;
+const CONFLICT_STATUS = 409;
 const JSON_CONTENT_TYPE = "application/json";
 
 /**
@@ -108,7 +103,6 @@ const acceptedDelivery = EffectSchema.Struct({
   deliveryId: trimmedText,
 });
 const refusedSend = EffectSchema.Struct({ code: trimmedText });
-
 const EVE_CANCEL_STATUS = { ACCEPTED: "accepted", NO_ACTIVE_TURN: "no_active_turn" } as const;
 const cancelAnswer = EffectSchema.Struct({
   status: EffectSchema.Literals(Object.values(EVE_CANCEL_STATUS)),
@@ -200,25 +194,13 @@ interface EvePostBody {
   readonly turnId?: string;
 }
 
-/** Who is calling eve: a person by their own bearer, or the deployment for an account it names. */
-export const EVE_CALLER = {
-  ACCOUNT: "account",
-  DEPLOYMENT: "deployment",
-} as const;
-
-export type EveCaller =
-  | {
-      readonly kind: typeof EVE_CALLER.ACCOUNT;
-      /** The caller's own `Authorization` value, forwarded so eve's door admits the same account. */
-      readonly authorization: string;
-    }
-  | {
-      readonly kind: typeof EVE_CALLER.DEPLOYMENT;
-      /** The deployment's own secret, the one the door's deployment actor was composed with; revealed onto the bearer alone. */
-      readonly secret: Redacted.Redacted;
-      /** The account acted for: one the caller already established, never one a request named. */
-      readonly account: string;
-    };
+/** The deployment acting for an account it names. */
+export interface EveCaller {
+  /** The deployment's own secret, the one the door's deployment actor was composed with; revealed onto the bearer alone. */
+  readonly secret: Redacted.Redacted;
+  /** The account acted for: one the caller already established, never one a request named. */
+  readonly account: string;
+}
 
 export interface EveSessionsOptions {
   /** The origin eve answers on; the deployment's own, where its rewrites carry `/eve/v1/*` into the eve service. */
@@ -231,17 +213,12 @@ export type EveSessionsComposer = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: EveSessionsOptions,
 ) => EveSessions<Turn>;
 
-/** The headers a caller's identity travels as: the bearer, and for the deployment the account beside it. */
+/** The headers the caller's identity travels as: the bearer, and the account beside it. */
 function callerHeaders(caller: EveCaller) {
-  switch (caller.kind) {
-    case EVE_CALLER.ACCOUNT:
-      return { authorization: caller.authorization };
-    case EVE_CALLER.DEPLOYMENT:
-      return {
-        authorization: `Bearer ${Redacted.value(caller.secret)}`,
-        [BRAIN_HOST_HEADER.ACCOUNT]: caller.account,
-      };
-  }
+  return {
+    authorization: `Bearer ${Redacted.value(caller.secret)}`,
+    [BRAIN_HOST_HEADER.ACCOUNT]: caller.account,
+  };
 }
 
 /** The whole body as eve wrote it, or nothing for one that is not JSON or was not read whole. */

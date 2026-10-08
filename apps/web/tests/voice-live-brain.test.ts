@@ -15,7 +15,6 @@ import { Deferred, Duration, Effect, Exit, Option, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { ASK_REFUSAL, askStanding } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -104,8 +103,6 @@ const relay = new StreamRelay({
   writer,
   asks: askEffects,
   stopTurn: () => Effect.void,
-  offer: () => Effect.succeed(false),
-  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -316,7 +313,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
         target,
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -343,7 +339,7 @@ it.live(
       const [slow, , first, second, end] = f.events;
       assert.equal(
         slow?.kind === LIVE_BRAIN_RUN_EVENT.SLOW_STEP && slow.step,
-        TURN_SLOW_STEP.TRANSCRIPT_READ,
+        TURN_SLOW_STEP.REPOSITORY_READ,
       );
       assert.equal(
         first?.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE && first.sentence,
@@ -374,7 +370,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
         target,
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -488,7 +483,6 @@ it.live(
         play(spokenTurn(FIRST_EVE_TURN, NOW), {
           sessionId,
           target,
-          kind: CONVERSATION_KIND.MAIN,
           turn: BRAIN_HOST_TURN.SPOKEN,
           model: "scripted-model",
           state: memoryRelayState(),
@@ -533,7 +527,6 @@ it.live("stop ends every follow: a turn that completes after it reaches no liste
       play(spokenTurn(FIRST_EVE_TURN, NOW), {
         sessionId,
         target,
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -583,7 +576,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, first.runId)),
         target,
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -641,7 +633,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, first.runId)),
         target,
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -683,7 +674,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId,
         target,
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -831,7 +821,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
         target: { userId: target.userId, conversationId: planConversation },
-        kind: CONVERSATION_KIND.PLAN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -879,7 +868,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
         target: { userId: target.userId, conversationId: planConversation },
-        kind: CONVERSATION_KIND.PLAN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -933,7 +921,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
         target: { userId: target.userId, conversationId: planConversation },
-        kind: CONVERSATION_KIND.PLAN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -980,7 +967,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
         target: { userId: target.userId, conversationId: planConversation },
-        kind: CONVERSATION_KIND.PLAN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -1022,8 +1008,6 @@ const pastRelay = new StreamRelay({
   writer,
   asks: askEffects,
   stopTurn: () => Effect.void,
-  offer: () => Effect.succeed(false),
-  deliverCompletion: () => Effect.void,
   now: () => LONG_AGO,
   report: () => undefined,
 });
@@ -1033,7 +1017,6 @@ async function spokenStanding(target: ConversationTarget, askId: string): Promis
   return {
     sessionId: await sessionOf(target, askId),
     target,
-    kind: CONVERSATION_KIND.MAIN,
     turn: BRAIN_HOST_TURN.SPOKEN,
     model: "scripted-model",
     state: memoryRelayState(),

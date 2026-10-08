@@ -4,31 +4,13 @@ export {
   type ActionResultStatus,
   isActionResult,
   UNKNOWN_ACTION_STATUS,
-  UNSUPPORTED_BY_OBSERVATION,
   type UnknownActionResult,
 } from "./action-result.js";
-export { type Admitted, reshapeAdmitted } from "./admitted.js";
 export {
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
-  isSpeechEventKind,
-  MESSAGE_RATING,
-  type MessageRating,
-  maximumRatingNoteLength,
-  RATING_EVENT_PAYLOAD,
   RATING_WORD,
-  type RatingEventPayload,
   type RatingWord,
-  RatingWordSchema,
-  SPEECH_EXPIRY_REASON,
-  SPEECH_OFFERED_EVENT_PAYLOAD,
-  type SpeechEventKind,
-  type SpeechExpiredEventPayload,
-  type SpeechOfferedEventPayload,
-  type SpeechSpokenEventPayload,
-  STANDING_RATING,
-  type StandingRating,
-  standingRating,
 } from "./conversation-event.js";
 export {
   HTTP_METHOD,
@@ -68,7 +50,6 @@ export {
   type SchemaRead,
   type SchemaRefusal,
 } from "./schema-vocabulary.js";
-export { TRANSCRIPT_KIND, type TranscriptKind } from "./transcript.js";
 export {
   TURN_ORIGIN,
   TURN_STATUS,

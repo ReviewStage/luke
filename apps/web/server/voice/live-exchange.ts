@@ -13,7 +13,6 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { askRecord } from "../hosted/store/asks.js";
-import type { HostedStoreContext } from "../hosted/store/database.js";
 import {
   type HostedStore,
   hostedStore,
@@ -32,9 +31,9 @@ import { type PlanDraft, planScribe } from "./plan-scribe.js";
  * one planning call: the brain answered in process through the ask door under
  * the eve client the caller composed for the account, and the record over the
  * voice writer with the sideband observed so the writer sees each event once
- * ahead of the service. Everything of the store arrives as one context — the
- * database, the runner, and the key ring — so the writers, the ask record,
- * and the reads hold one client over one database. The session itself is
+ * ahead of the service. The writers, the ask record, and the reads all stand
+ * on the ambient client, so they hold one client over one database. The
+ * session itself is
  * still the caller's: the voice service hands in a session it already
  * created for the device and the exchange adopts it, seeding nothing,
  * through `adopt`.
@@ -68,13 +67,11 @@ export interface HostedLiveExchangeOptions {
     /** Where each draft of the plan goes as the notetaker writes it; nowhere where the service sends nothing. */
     readonly onDraft?: ((draft: PlanDraft) => void) | undefined;
   };
-  readonly context: HostedStoreContext;
   /** The store writer, which the voice writer writes through. */
   readonly writer: StoreWriter;
   /**
-   * eve as the deployment reaches it for this account: `eveSessions` under
-   * `EVE_CALLER.DEPLOYMENT` with the deployment's secret and this account,
-   * composed by the caller, so neither the secret nor eve's origin enters
+   * eve as the deployment reaches it for this account: `eveSessions` with
+   * the deployment's secret and this account, composed by the caller, so neither the secret nor eve's origin enters
    * here and a test hands in a fake.
    */
   readonly eve: EveSessions;
@@ -169,8 +166,8 @@ function writeReport(
 export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExchange")(function* (
   options: HostedLiveExchangeOptions,
 ): Effect.fn.Return<HostedLiveExchange, never, Scope.Scope | SqlClient.SqlClient> {
-  const { userId, liveSessionId, conversationId, context, writer, report } = options;
-  const store = hostedStore(context);
+  const { userId, liveSessionId, conversationId, writer, report } = options;
+  const store = hostedStore();
   const target: VoiceTarget = {
     userId,
     liveSessionId,

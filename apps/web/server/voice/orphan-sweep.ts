@@ -19,7 +19,7 @@ import type { DetachedVoiceSession, VoiceSessionRecord } from "./session-record.
  * for the device's re-attach and stamps the row detached; a device that does
  * not come back within the grace leaves a session running on Luke's key with
  * no connection to end it, since nothing else will send `session.close`. The
- * scheduled tick ends each one the way a connection would: it attaches a
+ * scheduled sweep ends each one the way a connection would: it attaches a
  * fresh sideband through the same upstream, sends `session.close` through the
  * same graceful close the exchange runs, and on `session.closed` writes the
  * close and the seconds exactly as the service does, the seconds once
@@ -28,18 +28,18 @@ import type { DetachedVoiceSession, VoiceSessionRecord } from "./session-record.
  * lost connection with the last unconfirmed snapshot standing, so no row is
  * swept twice.
  *
- * Each tick takes at most `MAX_SESSIONS` of the oldest, `CONCURRENCY` at a
+ * Each sweep takes at most `MAX_SESSIONS` of the oldest, `CONCURRENCY` at a
  * time, each bounded by the attach's own wait and the close's, so the sweep
- * takes at most two rounds of both out of the tick's budget.
+ * takes at most two rounds of both out of the function's duration.
  */
 
-/** How long a detached session waits for its device before the tick ends it: past the Mac's own re-attach of some ten seconds. */
+/** How long a detached session waits for its device before the sweep ends it: past the Mac's own re-attach of some ten seconds. */
 export const VOICE_DETACH_GRACE_MS = 60_000;
 
 export const VOICE_ORPHAN_SWEEP = {
   MAX_SESSIONS: 20,
   CONCURRENCY: 10,
-  /** How long the fresh sideband is given to stand, which the tick's upstream is built with. */
+  /** How long the fresh sideband is given to stand, which the sweep's upstream is built with. */
   ATTACH_TIMEOUT_MS: 5_000,
   /** How long `session.closed` is waited on once `session.close` went up. */
   CLOSE_TIMEOUT_MS: 5_000,
@@ -53,7 +53,7 @@ const ORPHAN_ENDING = {
 
 type OrphanEnding = (typeof ORPHAN_ENDING)[keyof typeof ORPHAN_ENDING];
 
-/** What one tick's sweep came to: sessions closed with their seconds, sessions closed as lost, and sessions whose write failed and stand for the next tick. */
+/** What one sweep came to: sessions closed with their seconds, sessions closed as lost, and sessions whose write failed and stand for the next sweep. */
 export interface VoiceOrphanSweepOutcome {
   closed: number;
   lost: number;

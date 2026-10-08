@@ -608,7 +608,7 @@ export class VoiceService {
       // write already started, so no line begun before the settle is cut. A
       // relay that settled detached left the session standing for the
       // device's re-attach, so the exchange lets go of it with nothing said,
-      // and the row is stamped so the tick ends it if no device comes back.
+      // and the row is stamped so the sweep ends it if no device comes back.
       const detached = summary.finalization === FINALIZATION.DETACHED;
       yield* stopExchange(detached ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
       if (detached) yield* this.#written(this.#record.detach({ sessionId }));

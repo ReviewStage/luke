@@ -1,5 +1,5 @@
 import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
-import { OBSERVATION_TICK, OBSERVATION_TICK_PATH } from "./hosted/observation-bounds.js";
+import { MAINTENANCE_SWEEP, MAINTENANCE_SWEEP_PATH } from "./hosted/maintenance-bounds.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
@@ -26,7 +26,7 @@ export function routeKeyOf(path: string): string {
  */
 const FUNCTION_GROUP = {
   DEFAULT: "default",
-  OBSERVATION_TICK: "observation-tick",
+  MAINTENANCE_SWEEP: "maintenance-sweep",
 } as const;
 type FunctionGroup = (typeof FUNCTION_GROUP)[keyof typeof FUNCTION_GROUP];
 
@@ -54,9 +54,9 @@ interface GroupDefinition {
 
 const GROUPS: readonly GroupDefinition[] = [
   {
-    file: FUNCTION_GROUP.OBSERVATION_TICK,
-    maxDuration: OBSERVATION_TICK.MAX_DURATION_SECONDS,
-    routes: [routeKeyOf(OBSERVATION_TICK_PATH)],
+    file: FUNCTION_GROUP.MAINTENANCE_SWEEP,
+    maxDuration: MAINTENANCE_SWEEP.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(MAINTENANCE_SWEEP_PATH)],
   },
 ];
 

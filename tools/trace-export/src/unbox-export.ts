@@ -16,7 +16,6 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { BRAIN_OPENAI_DEFAULTS, hostedBrainToolCatalog } from "@sidecar/brain";
 import {
   TRACE_DIRECTION,
   TRACE_ENTRY_KIND,
@@ -30,14 +29,11 @@ import {
   type TranscriptSpeaker,
 } from "@sidecar/live";
 import {
-  isRecord,
   isWireNumber,
   isWireString,
-  jsonRoundTrip,
   recordFromJsonLine,
   text,
   type WireRecord,
-  type WireValue,
   wholeNumber,
   wireRecord,
 } from "@sidecar/wire";
@@ -55,7 +51,6 @@ const readsTraceEntryKind = Schema.is(TraceEntryKindSchema);
 
 /** The exchange before any delegation has no id of its own; a segment that closes with the session is named for it. */
 const SESSION_GENERATION_NAME = "session";
-const BRAIN_GENERATION_NAME = "brain-turn";
 const MESSAGE_ROLE = {
   USER: "user",
   ASSISTANT: "assistant",
@@ -79,19 +74,6 @@ const APPEND_ROLE = {
   [TRACE_LIVE_EVENT.INSTRUCTIONS_APPEND]: MESSAGE_ROLE.DEVELOPER,
   [TRACE_LIVE_EVENT.THINKING_APPEND]: MESSAGE_ROLE.DEVELOPER,
 } as const;
-
-function recordItems(value: WireValue | undefined): readonly WireRecord[] {
-  return Array.isArray(value) ? value.filter(isRecord) : [];
-}
-
-function toolDefinitions(tools: WireValue | undefined): readonly WireRecord[] {
-  return recordItems(tools).map((tool) => ({
-    type: text(tool.type) ?? "function",
-    name: text(tool.name) ?? "",
-    ...(text(tool.description) ? { description: text(tool.description) ?? "" } : undefined),
-    ...(isRecord(tool.parameters) ? { inputSchema: tool.parameters } : undefined),
-  }));
-}
 
 /** Utterances sort ahead of appends placed at the same instant, since the append answered what was said. */
 const PLACEMENT_RANK = {
@@ -142,7 +124,6 @@ interface ExportState {
   session: LiveSession;
   segment: OpenSegment;
   events: WireRecord[];
-  totalInput: number;
   sessionSeconds: number;
   firstAt: string | undefined;
 }
@@ -318,87 +299,6 @@ function applyWireEntry(state: ExportState, entry: WireRecord, atMs: number | un
   }
 }
 
-/**
- * The tools the turn was offered, in the viewer's shape: the names the trace
- * recorded, each resolved against the catalog the build fixes. They are
- * already the Responses API's function-tool form, so the JSON round trip lets
- * the same reader render them. A name the catalog no longer holds is left
- * out rather than invented.
- */
-function brainAvailableTools(entry: WireRecord): readonly WireRecord[] {
-  const catalog = hostedBrainToolCatalog();
-  const definitions = Array.isArray(entry.tools)
-    ? entry.tools.flatMap((name) => {
-        const tool = catalog.get(text(name) ?? "");
-        return tool ? [tool] : [];
-      })
-    : [];
-  return toolDefinitions(jsonRoundTrip(definitions));
-}
-
-/**
- * The turn's input as the trace kept it: what woke it, the kinds of items it
- * carried, and how many transcript bytes it read. The items' text was never
- * recorded, so none is shown.
- */
-function brainInputText(entry: WireRecord): string {
-  const itemKinds = Array.isArray(entry.inputItemKinds)
-    ? entry.inputItemKinds.map((kind) => text(kind)).filter((kind) => kind !== undefined)
-    : [];
-  return [
-    `trigger: ${text(entry.trigger) ?? "unknown"}`,
-    `input items: ${itemKinds.length > 0 ? itemKinds.join(", ") : "none"}`,
-    `transcript bytes: ${wholeNumber(entry.transcriptBytes) ?? 0}`,
-  ].join("\n");
-}
-
-/**
- * The turn's produce: the text it ended on, one line per tool call with how
- * the action came out, and one line per briefing it handed the voice, as counts.
- * A turn that ended in an error shows the error where its text would be.
- */
-function brainOutputText(entry: WireRecord): string {
-  const toolCalls = recordItems(entry.toolCalls).map(
-    (call) =>
-      `tool call: ${text(call.name) ?? "unknown"} -> ${text(call.outcomeStatus) ?? "unknown"}`,
-  );
-  const deliveries = recordItems(entry.deliveries).map(
-    (delivery) => `delivery: ${wholeNumber(delivery.briefingChars) ?? 0} chars`,
-  );
-  const outputText = text(entry.outputText);
-  const error = text(entry.error);
-  const lines = [
-    ...(outputText ? [outputText] : []),
-    ...toolCalls,
-    ...deliveries,
-    ...(error ? [`error: ${error}`] : []),
-  ];
-  return lines.length > 0 ? lines.join("\n") : "no output";
-}
-
-function applyBrainEntry(state: ExportState, entry: WireRecord): void {
-  const inputTokens = wholeNumber(entry.inputTokens) ?? 0;
-  state.events.push({
-    type: "generation",
-    name: BRAIN_GENERATION_NAME,
-    // A hosted brain turn records no model; every turn runs on the brain's one model.
-    model: BRAIN_OPENAI_DEFAULTS.MODEL,
-    provider: "openai",
-    metrics: {
-      // The viewer reads latency in seconds; the trace stamps milliseconds.
-      latency: (wholeNumber(entry.elapsedMs) ?? 0) / 1_000,
-      tokens: { input: inputTokens, output: 0 },
-      cost: 0,
-    },
-    available_tools: brainAvailableTools(entry),
-    messages: [
-      { role: MESSAGE_ROLE.USER, content: brainInputText(entry) },
-      { role: MESSAGE_ROLE.ASSISTANT, content: brainOutputText(entry) },
-    ],
-  });
-  state.totalInput += inputTokens;
-}
-
 /** Reads one trace, already split into lines, into unbox-ai's gateway document. */
 export function unboxTraceFromLines(
   lines: readonly string[],
@@ -411,7 +311,6 @@ export function unboxTraceFromLines(
     session: newSession(),
     segment: openSegment(SESSION_GENERATION_NAME, undefined, JSON.stringify([])),
     events: [],
-    totalInput: 0,
     sessionSeconds: 0,
     firstAt: undefined,
   };
@@ -424,9 +323,6 @@ export function unboxTraceFromLines(
     const atMs = Number.isFinite(parsedAt) ? parsedAt : undefined;
     if (!readsTraceEntryKind(entry.kind)) continue;
     if (entry.kind === TRACE_ENTRY_KIND.WIRE) applyWireEntry(state, entry, atMs);
-    // A brain-request entry is the raw JSONL's own record of one model call;
-    // the turn entry already stands for it in the viewer.
-    if (entry.kind === TRACE_ENTRY_KIND.BRAIN) applyBrainEntry(state, entry);
   }
   // A trace cut before the session closed still shows what was said in it.
   foldSession(state);
@@ -435,7 +331,7 @@ export function unboxTraceFromLines(
     trace_id: name,
     timestamp: state.firstAt ?? "",
     name,
-    total_tokens: { input: state.totalInput, output: 0 },
+    total_tokens: { input: 0, output: 0 },
     total_cost: 0,
     session_seconds: state.sessionSeconds,
     events: state.events,

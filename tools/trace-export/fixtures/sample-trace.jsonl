@@ -6,4 +6,3 @@ not json
 {"at":"2026-01-01T00:00:04.000Z","kind":"wire","direction":"client","event":{"type":"session.commentary.append","event_id":"evt_sample","delegation_id":"dlg_sample","content":"The sample workspace is ready."}}
 {"at":"2026-01-01T00:00:05.000Z","kind":"wire","direction":"server","event":{"type":"session.usage.updated","usage":{"seconds":5}}}
 {"at":"2026-01-01T00:00:06.000Z","kind":"wire","direction":"server","event":{"type":"session.closed","reason":"close_requested","usage":{"seconds":6}}}
-{"at":"2026-01-01T00:00:07.000Z","kind":"brain","trigger":"ask","tools":[],"inputItemKinds":["message"],"inputTokens":128,"transcriptBytes":256,"toolCalls":[],"outputText":"The sample workspace is ready.","deliveries":[],"elapsedMs":42,"iterations":1}

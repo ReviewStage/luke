@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 7 October 2026
+Last updated: 8 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -11,15 +11,13 @@ what we collect, who we send it to, and how to turn it off.
 on it reads message history, file contents, or command output, beyond the
 read-only commands the planning model asks for in a plan's folder, described
 under "How the planning model reads your folder" below. The Mac app lists no
-coding agent sessions; what our service still does with a Conductor key an
-earlier version synced is described under "Scheduled observation of your
-Conductor sessions" below, and none of it runs here. No part of Luke's
+coding agent sessions, and our service reads none either. No part of Luke's
 judgment runs on this Mac, so no transcript, working memory, or inbox of his
 is held here, in memory or on disk.
 
 **Your conversation with Luke.** Nothing on your Mac holds your conversation
 with Luke: no part of his judgment runs here, so no record of what you said,
-what he spoke or announced, or what he did at your ask is kept on this
+what he spoke, or what he did at your ask is kept on this
 machine, in memory or on disk, and the Mac app does not read that record
 back.
 A voice session on this Mac is a call about one plan, and it opens with
@@ -29,47 +27,6 @@ reads on our service, from the plan and the record described under "Your
 account" below. What our servers keep
 of a conversation is the record described under "Your account" below; a
 fixture or evidence run keeps no conversation at all.
-
-**Conversations Luke opens for himself.** In a turn of his own on our
-service — in his conversation with you, or in the conversation of his that
-follows one of your sessions — Luke may hand part of the work to a helper: a
-child conversation opened beside the one he is working in, run by the same
-judgment under your account, and never on your Mac. The child can read what
-its parent can read — your Conductor sessions as our service last observed
-them, and a chat's conversation, your own messages and the agent's replies,
-not its tool activity, under the same synced key — and do what its parent can
-do: the actions on your coding agent sessions, the writes to his workspace
-files and the dated notes, and the search and reading of his notebook. It
-cannot speak to you or announce anything, and it cannot open a child of its
-own. When it finishes, its final reply is handed back to the parent as one
-turn there, unless the parent asked for none, and the parent decides what, if
-anything, you hear of it. What
-the child said and each tool it called, with its input and its result, is
-stored as a conversation of your account, in the same rows described under
-"Your account" below and on the same terms: stored as written and readable by
-our own operators, and removed at once when you delete your account. A child
-stands as long as the conversation it was opened from and is removed with
-it. Each of its turns
-counts against your daily review
-allowance like any turn of Luke's own.
-
-**Luke's workspace.** Luke's workspace is a small set of Markdown files — his
-operating instructions, his identity, stable facts about you, curated notes,
-first-run setup notes, and dated notes — kept as rows in our database, one row
-per file per account: seeded with the same defaults the first time a turn runs
-for you, composed into the standing instructions every turn runs under (each
-cut to 20,000 characters, the stable facts about you and the curated notes to
-4,000 each, and the set to 60,000), and edited only through Luke's own
-workspace tools there, in his turns and in the one housekeeping call described
-under "How Luke keeps his notebook" below, which refuse a file past its bound
-rather than cut it, so the file he reads is the file that exists. The file's name and its
-contents are stored as written, bound to your account and readable by our own
-operators, the same way the conversation described below is. Those
-rows are removed when you delete your account. Earlier versions of Luke kept the same files on your Mac,
-under his application data (`agents/main/workspace`), and read them into the
-calls they made from here; this version makes no such call, seeds nothing
-there, and reads nothing from it. Files an earlier version left are yours to
-keep or delete, and nothing on your Mac reads or writes them.
 
 **Feature plans.** When you start a named plan, our service stores it under
 your account: its name and the plan's one document, a Markdown body and a list of
@@ -139,68 +96,6 @@ what was running and writes down what did not finish rather than finishing it
 on paper. The one thing the app still does on this machine at the runtime's
 ask is opening an address you asked to open.
 
-**Things Luke remembers about you.** When Luke runs a turn for you on our
-service, he may record a concise preference, personal fact, goal, or recurring
-constraint that looks useful later, as a dated line in `USER.md`, one of the
-workspace files described above. He skips temporary details and uncertain
-guesses, never records credentials, and records sensitive facts only when you
-explicitly ask. `USER.md` is a workspace row like the others: stored as
-written, bound to your account, edited only by Luke's own workspace tool in his
-turns there, and removed when you delete your account. A line a newer one replaces is marked superseded rather
-than silently dropped, so what he knew and since when is on the page for you
-to read. Nothing on your Mac saves or reads one: an earlier version kept them
-as lines of a `USER.md` in the workspace it held here, and a `USER.md` that
-version left is neither read nor written by this one; a version between kept
-them as database rows of their own, and this one keeps no such rows. You can ask Luke what he remembers,
-correct something, or tell him to forget it. The file travels with the rest of
-Luke's working memory when he thinks on our service, so he can personalize
-replies, on the same terms as the rest of that call — one model call per
-request, and nothing of it stored or logged by our service beyond the row
-itself. It is never sent to a coding-agent provider or a tracker, and it is
-never used to decide anything on your behalf.
-
-**Luke's notebook index.** Luke keeps no standing search index over his
-workspace files. When Luke, thinking on our service, searches his notebook
-(his `memory_search` tool), the service reads your workspace rows there —
-`MEMORY.md`, `USER.md`, and the notes under `memory/` — cuts them into
-passages, and asks OpenAI's embeddings model, under Luke's own key, for a
-numeric embedding of each passage it has not embedded before and of the search
-itself; it ranks the passages in that same request and keeps only a hash of
-each passage and its embedding, never the passage's words, dropping the
-embeddings of passages your files no longer hold. A deployment without that
-key searches by keywords alone, and Luke says so when it did. His `memory_get`
-tool reads an excerpt of one of those same files by line range and nothing
-outside them. Nothing on your Mac makes an embedding, and Luke's own
-conversations are never embedded or indexed.
-
-**How Luke keeps his notebook.** Nothing on your Mac writes Luke's notebook:
-no housekeeping turn runs here, no nightly job reads your conversations to
-learn from them, and no model call on this machine rewrites `MEMORY.md`. The
-notebook Luke keeps is the workspace rows on our service, described above,
-written through his own workspace tools in his turns there, and by one more
-call beside those turns: before Luke's working memory of a conversation is
-folded into its summary (described under "Luke's working memory" above), one
-bounded housekeeping call on our service reads a private copy of that
-conversation as data and may append what is durable in it — a decision, a
-result, something learned — to the dated note for the day, `memory/YYYY-MM-DD.md`,
-in the same workspace rows, through the same append his turns use; it can
-write nothing else, and appends rather than rewrites. It runs only while you
-are asking Luke something yourself, never in a turn the
-scheduled observation opened; at most once each time the
-memory folds; on the same model and under the same daily allowance as his
-turns; and within a minute, or not at all. Nothing it reads or says appears
-in the conversation, on any device, or in a notification: what the
-conversation's row keeps is that the call ran, when, and how it ended (it
-stored something, found nothing to store, was skipped, was cut short, or
-failed), never a word of it. A call that fails changes nothing and Luke's
-answer to you proceeds as if it had not been asked. An earlier
-version of Luke wrote a dated note under `memory/` and promoted lines into
-`MEMORY.md` behind HTML markers on your Mac, and wrote a `DREAMS.md` beside
-it; each is left exactly where it is, for you to keep or delete, and nothing
-reads any of them. Asking Luke to forget removes the line you name from his
-`USER.md` on our service; a thing he never wrote down he says so about rather
-than claiming it erased. Forgetting does not delete the conversation itself.
-
 **How the plan is written during a planning call.** While you talk a plan
 through with Luke on a planning call, a notetaker on our service writes the
 plan document; Luke's own judgment no longer does. Once you have been quiet
@@ -228,24 +123,17 @@ administrator can open; nothing you type, say, or run in a session appears on
 it. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
 turn writes rows to our database: your ask as it was given; Luke's reply, the
 summaries of his reasoning, and each tool he called with its input and its
-result, the briefing he offered you among them; the words an observation
-turn opened with, which for a Conductor session include the messages that
-chat gained since he last looked; the turn's model, token counts, and the
-ids of OpenAI's responses; and the events about each message — that a
-briefing was offered, pushed, or expired — naming the device a briefing was
-pushed to. When you speak with Luke through
+result; and the turn's model, token counts, and the ids of OpenAI's
+responses. When you speak with Luke through
 your account, what you said is kept as your line and what his voice said as
 his — an answer he gave without running a turn, what he said before and after
 one, a reply he read aloud — each written once it has settled,
 so the record holds the words you actually heard beside the turns he
 ran and the messages he read from.
-Like his workspace files, the things he
-remembers about you among them, these rows are not sealed: they are stored as
-written, and our own operators can read them. They stand until you delete
-your account, which removes them at once; the conversation of a plan you
-delete, and that of a session Luke no longer follows (described under
-"Scheduled observation of your Conductor sessions"), are marked deleted and
-removed thirty days later.
+These rows are not sealed: they are stored as written, and our own operators
+can read them. They stand until you delete your account, which removes them at
+once; the conversation of a plan you delete is marked deleted and removed
+thirty days later.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
@@ -285,92 +173,25 @@ identity, and does not enable PII collection, tracing, Sentry Replay,
 screenshots, profiling, or manual reports of handled errors. Fixture and
 evidence runs send no crash reports.
 
-**Provider API keys (server-side vault).** Earlier versions of the Mac app let
-you enter a Conductor key, which they sent to our vault under your signed-in
-account; this version neither asks for one nor shows one, and sends no key
-anywhere. A key or a calendar grant an earlier version kept encrypted on this
-Mac stays in its settings file as that version left it, still encrypted: this
-version neither reads nor sends it.
-Our service no longer accepts, lists, or deletes a key, and keeps a key an
-earlier version synced encrypted in our own database using
-AES-256-GCM with a server-only secret. It is never returned to any caller:
-there is no endpoint that reads it back, and no code path that decrypts it
-for any purpose other than observing your sessions or carrying the actions
-Luke takes on them through that provider. Every key is deleted alongside
-your account if you delete that. Voice holds no key of yours at all: it runs
-through our service on your account, and a key of your own that an earlier
-version of Luke stored for it is removed from your Mac the next time Luke
+**What earlier versions left on our service.** Earlier versions of Luke
+followed your coding agent sessions, kept a notebook, and pushed briefings to
+a phone; this version does none of that, and our service no longer reads,
+decrypts, or uses anything those versions stored. What they left stays in our
+database, unread, until we remove it: a Conductor key an earlier version
+synced, encrypted with AES-256-GCM under a server-only secret; the latest
+roster of your Conductor sessions it observed, encrypted the same way; Luke's
+workspace files — his operating instructions, the things he remembered about
+you in `USER.md`, his curated and dated notes — and a cache of numeric
+embeddings of their passages; the device rows an earlier Mac app, iOS app, or
+Apple Watch app registered, each with its platform, when it was last seen, an
+optional push token, and the presence and quiet instants it reported; and the
+conversations Luke kept for the sessions he followed and for the helpers he
+delegated to. Every one of them is deleted alongside your account if you
+delete that. A key or a calendar grant an earlier version kept encrypted on
+this Mac stays in its settings file as that version left it, still
+encrypted: this version neither reads nor sends it. A key of your own an
+earlier version stored for voice is removed from your Mac the next time Luke
 opens, without being read.
-
-**Scheduled observation of your Conductor sessions.** While you hold a synced
-Conductor key and a device an earlier version of Luke registered for you was
-last seen within the last 7 days, our service reads
-your Conductor sessions on its own schedule, about once a minute, in a
-read-only pass: your open workspaces,
-their chats, each chat's status, the agent kind running it, and the error
-line it stopped on. It never reads a chat's messages. Beside that pass, and
-only for the chats it listed, our service works out which of those chats
-changed since it last asked from the last-updated instant that same pass read
-of each chat's status; nothing further is asked of Conductor for it, and it
-carries no message either. A chat that gained messages wakes Luke's judgment for that
-chat, on our service; that turn reads what the chat's conversation gained
-since he last looked — your own messages and the agent's replies, not its
-tool activity, cut from the front to 20,000 characters — under the same
-synced key, and hands them to Luke as one line per message under the speaker's
-name, alongside the chat's title, workspace, and provider from the stored
-roster. A chat that gained only tool activity wakes nothing. We keep the latest
-roster the pass read, encrypted at rest with the same server-only secret as
-your keys, so Luke's judgment can read it without asking Conductor again;
-beside it we keep one instant per account, the point up to which Luke
-has been told of your chats' changes, and one position per chat marking where
-his last read of it ended. The roster is replaced on every pass; nothing older
-is kept. The conversation Luke keeps for a chat he has been told about stands
-while Conductor lists that chat; once a pass no longer lists it, because you
-archived or deleted the chat or its workspace, that conversation is retired,
-skipped by every read from then on, and deleted 30 days later by the same purge
-that removes a deleted plan's conversation. A chat listed again gets a fresh conversation.
-Observation stops, and the stored roster, the instant, and the positions are
-deleted, once no such device has been seen for 7 days, and alongside your
-account if you delete that. No version of Luke registers a device or reports
-one seen any more (described under "Devices" below), so observation stops on
-its own within 7 days of the last report an earlier version made.
-
-**Devices.** No version of Luke registers a device or reports its presence
-any more, and our service no longer accepts either. When you signed in on an
-earlier version of the Mac app, the iOS app, or the Apple Watch app, that
-installation registered itself with our service as one device row, and the
-rows those versions left stand until Apple reports a row's push token gone or
-you delete your account. Each holds which platform it is, when it was last
-seen, an optional push token, and the last presence instant and quiet-until
-instant that installation reported: an earlier Mac app set presence only
-while your Mac had seen input in the last two minutes and its screen was
-unlocked, and quiet-until as an instant that held Luke quiet while its own
-meeting or announcement switches held him. Each is an instant and nothing
-else — not what you typed, not which app you were in, not the meeting's
-title — and the service decides nothing from them beyond holding a briefing
-while a quiet instant stands (a briefing already on offer is not pushed until
-it lapses, and a scheduled turn that starts under it is not given the tool
-that decides a briefing, so none is made to wait) and, for a Mac alone,
-waiting before it pushes a briefing, as described next. The installation is
-named by an id the app made up once for itself; it is not a credential, and
-neither is a push token, which only our own Apple key can address.
-
-**Briefing notifications.** When Luke decides to tell you something about your
-sessions and no Mac of yours is reported active, or two minutes have passed
-since he offered it, our service sends the briefing to the device of yours
-most recently seen holding a push token, as a push notification through
-Apple's push notification service, addressed to the push token an earlier
-version of Luke's iOS app registered. No device of yours says a briefing
-aloud any more. The notification carries Luke's own
-words, the briefing exactly as he chose to say it, and one identifier of
-our own: the briefing's message id, an opaque identifier unique to that
-one message. It carries nothing else: no session
-title, branch, path, or error line beyond what those words themselves
-contain, and the id names none of them and means nothing to anyone but
-Luke. It is shown on the lock screen, so it is readable on a locked phone
-without unlocking it, and Apple carries it under its own terms on the way.
-A briefing is pushed at most once, and while any of your devices reports a
-quiet-until instant, nothing is pushed until it lifts.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached; they reach us
@@ -403,11 +224,9 @@ only when you press Send.
   your own. No session opens on its own: a call opens only when you press
   the talk key or the microphone on a plan.
   Luke's judgment is a separate call to OpenAI's Responses API, made from our
-  service when a scheduled pass wakes the conversation following that session
-  and when you ask him something: it carries that conversation's working
-  memory — the bounded transcript excerpts described above, the session
-  fields, the conversation so far, and his workspace files, the things he
-  remembers about you among them — on our key. No such call is made from your
+  service when you ask him something on a call: it carries the plan's
+  conversation's working memory — the plan's saved document, the conversation
+  so far, and what the planning model read for it — on our key. No such call is made from your
   Mac: it composes no instructions, offers no tools, and holds no record the
   reply joins; the record is
   the conversation our service keeps, described under "Your account" above.
@@ -426,33 +245,15 @@ only when you press Send.
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no
   such switch and writes none.
-- Coding agent providers you connected in an earlier version (Conductor),
-  using the key you supplied. The vault holds Conductor keys only.
-  With a Conductor key in the vault, our service reads your Conductor sessions
-  about once a minute on the schedule described above, under that key.
-  The observation turn our service runs when a chat's status changes reads
-  what that chat gained from Conductor, under the synced key, as described under "Scheduled observation of
-  your Conductor sessions"; nothing on your Mac reads a Conductor chat's
-  messages. A message or a workspace Luke sends to a Conductor session in a
-  turn of his own travels the same way, admitted by our service against the
-  sessions it last observed.
 - PostHog, for usage data and screen recordings, from the Mac app. The
   counts go through our own service; the recordings go from Luke to PostHog
   directly.
-- Apple, for briefing notifications. When no device of yours is placed to
-  say a briefing, our service hands Luke's words to Apple's push notification
-  service, addressed to the push token an earlier version of the app
-  registered, and Apple
-  delivers them to the lock screen, where they are readable without
-  unlocking. The notification carries those words and the briefing's own
-  opaque message id, and nothing else about you or your sessions.
 - Sentry, for the anonymous exception, process-session, and native crash reports
   described above.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 
-We do not sell your information or use it for advertising. If you connect
-nothing, Luke sends nothing to any provider.
+We do not sell your information or use it for advertising.
 
 ## Our website
 
@@ -468,28 +269,18 @@ encrypted under a key held in the macOS Keychain, beside whatever settings,
 keys, or calendar grants an earlier version kept there, which stay as they
 were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
-Mac. A Conductor key you synced, and the latest roster of your
-Conductor sessions with what changed since the pass before, are stored
-encrypted in our own database and nowhere on your Mac, as described above. When Luke runs a turn for
-you on our service, the workspace files that turn reads and writes, the things
-he remembers about you among them, and the conversation it writes are stored
-unsealed in the same database, each as described above.
+Mac. When Luke runs a turn for you on our service, the conversation it
+writes is stored unsealed in our own database, as described above, beside
+what earlier versions left there.
 Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices
 
 - Sign out of your Luke account to turn voice off.
-- A Conductor key you synced from an earlier version is deleted from our
-  vault when you delete your account.
-- Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Delete any workspace file an earlier version of Luke left on your Mac;
-  nothing reads it now. Luke's workspace rows on our service are edited
-  through Luke alone, and go with your account.
-- Luke may act on his own judgment in a turn you did not open — answering a
-  coding agent, keeping his notes, on a look
-  — within the tool policy his configuration sets; his conversation records
-  such an action as his own, never as your request.
+  nothing reads it now. What earlier versions left on our service goes with
+  your account.
 - What you say to Luke on a call goes to that plan's conversation, fixed
   when the call opens and never moved afterwards.
 - Luke does not listen through your microphone except while you hold the
@@ -500,10 +291,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   presses alone, so one press opens the microphone and the next closes it,
   and the Keyboard shortcuts page says so.
 - Delete your account from the Account section in Settings. This erases your
-  account, your sign-in records, your usage counts, any provider API keys
-  you synced to the hosted service, your device rows, the conversation our
-  service kept with its workspace files, and the stored
-  roster of your sessions, and asks PostHog to erase your usage data
+  account, your sign-in records, your usage counts, your plans, the
+  conversation our service kept, and everything earlier versions left there
+  (described under "What earlier versions left on our service"), and asks PostHog to erase your usage data
   and recordings. It does not reach a recording that was never attached to your
   account, as described above. Luke stops recording for the rest of the
   session, and starts again the next time you open it or sign in. Sentry

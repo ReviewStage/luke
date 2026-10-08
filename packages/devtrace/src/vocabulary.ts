@@ -21,10 +21,6 @@ import { Schema } from "effect";
  */
 export const TRACE_ENTRY_KIND = {
   WIRE: "wire",
-  BRAIN: "brain",
-  BRAIN_REQUEST: "brain-request",
-  /** One moment of the read prefetch: an anticipation's outcome or a turn's take, as counts and kinds. */
-  BRAIN_PREFETCH: "brain-prefetch",
   SPEECH: "speech",
 } as const;
 

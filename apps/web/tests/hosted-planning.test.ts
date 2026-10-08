@@ -30,7 +30,6 @@ import {
 } from "../eve/scripted-model";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { readBoard, writeScene } from "../server/hosted/board-store";
 import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
 import {
@@ -43,11 +42,9 @@ import {
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
-import { documentTextOf } from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { payloadKeyRing } from "../server/hosted/encryption";
 import {
   createPlan,
   deletePlan,
@@ -59,7 +56,7 @@ import {
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
-import { hostedStore, storeWriter } from "../server/hosted/store";
+import { storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { noNetwork } from "./support/no-network";
 import { testSqlClient } from "./support/sql-client";
@@ -156,9 +153,6 @@ const planningHost = (
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
     const seams: BrainHostSeams = {
-      eveOrigin: () => undefined,
-      store: () =>
-        Effect.succeed(hostedStore({ keys: payloadKeyRing(Redacted.make("c".repeat(64))) })),
       writer: () => Effect.succeed(writer),
       userInfo: () => Effect.succeed(undefined),
       ownership: {
@@ -166,17 +160,13 @@ const planningHost = (
         ownsConversation: unreached("ownsConversation"),
       },
       openAi,
-      embedder: () => undefined,
       deploymentSecret: () => undefined,
+      eveOrigin: () => undefined,
       scriptedModel: () => true,
       spend,
-      vaultRows: () => Effect.succeed([]),
-      vaultSecret: unreached("vaultSecret"),
-      providerKey: unreached("providerKey"),
-      executeAction: unreached("executeAction"),
       now: () => NOW,
     };
-    return yield* brainHost(seams);
+    return brainHost(seams);
   });
 
 const openUser = Effect.gen(function* () {
@@ -290,10 +280,10 @@ const planningTurn = (
         )
         .pipe(Effect.provide(noNetwork));
 
-    const prompt = yield* host.prompt(standing);
+    const prompt = host.prompt();
     const seed = yield* host.seed(standing);
     const context = yield* host.standingContext(standing);
-    const declarations = yield* host.toolDeclarations(standing, turn);
+    const declarations = host.toolDeclarations();
     const tools: ToolSet = Object.fromEntries(
       declarations.map((declared) => [
         declared.name,
@@ -414,12 +404,16 @@ const planningTurn = (
 
 const readDocument = Schema.decodeUnknownSync(Schema.fromJsonString(planDocumentSchema));
 
-/** The document a standing context hands the model, failing the test where it carries none. */
+/** The line the saved document follows in a standing context, as the model reads it. */
+const DOCUMENT_MARKER = "[saved document]";
+
+/** The document a standing context hands the model, on the line after its marker, failing the test where it carries none. */
 function handedDocument(context: string): PlanDocument {
-  const text = documentTextOf(context);
-  return text === undefined
+  const lines = context.split("\n");
+  const at = lines.indexOf(DOCUMENT_MARKER);
+  return at === -1
     ? assert.fail("the standing context carries no document")
-    : readDocument(text);
+    : readDocument(lines[at + 1]);
 }
 
 /** The document the Plans tab opens, failing the test where the plan does not open. */
@@ -461,19 +455,12 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered the question queue, the repository and research reads, no write to the plan, and none of the brain's catalog",
+    "a planning turn is offered the question queue and the repository and research reads, and no write to the plan",
     () =>
       Effect.gen(function* () {
-        const { host, userId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId);
-        const standing = yield* admitted(host, session);
-        assert.equal(standing.kind, CONVERSATION_KIND.PLAN);
+        const { host } = yield* savedPlanWithConversation();
 
-        const offered = yield* host.toolDeclarations(standing, {
-          kind: BRAIN_HOST_TURN.TYPED,
-          trigger: BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED].trigger,
-          turnId: hostTurnId(session.id, "turn_0"),
-        });
+        const offered = host.toolDeclarations();
 
         assert.deepEqual(
           offered.map((declared) => declared.name),
@@ -515,7 +502,6 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
         yield* savePlanDocument(userId, planId, SAVED);
         const standing = yield* admitted(host, session);
-        assert.equal(standing.kind, CONVERSATION_KIND.PLAN);
         assert.deepEqual(handedDocument(yield* host.standingContext(standing)), SAVED);
 
         // The question as the voice composes it: the recent words as context, and the latest line as the ask.

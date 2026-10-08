@@ -22,7 +22,7 @@ import { readSocket, sendText, startFakeOpenAi } from "./support/voice-fakes";
 
 /**
  * The bound on a detached voice session, over the real record on PGlite and
- * a fake OpenAI: the tick's sweep ends only an open session detached longer
+ * a fake OpenAI: the scheduled sweep ends only an open session detached longer
  * ago than the grace and never re-attached, through a fresh sideband and the
  * docs' graceful close, recording its seconds once; and closes a session
  * OpenAI will no longer attach to as a lost connection, so it is not swept
@@ -132,7 +132,7 @@ it.effect(
       }
       assert.deepEqual(await usageRows(orphan), [{ seconds: 42 }]);
 
-      // A tick later, with the recent one still inside its grace, the closed session is swept no more.
+      // A sweep later, with the recent one still inside its grace, the closed session is swept no more.
       assert.deepEqual(await database.run(sweepVoiceOrphans(seams, { now: NOW + 1_000 })), {
         closed: 0,
         lost: 0,

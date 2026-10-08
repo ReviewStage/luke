@@ -5,7 +5,6 @@ import {
   isAccountProvider,
 } from "@sidecar/credentials/snapshot";
 import { LIVE_DEFAULTS } from "@sidecar/live";
-import { PROVIDER_ID } from "@sidecar/session";
 import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
   ACTION_RESULT_STATUS,
@@ -55,9 +54,12 @@ const STORED_API_KEYS_FIELD = "apiKeys";
  * The providers whose stored key an earlier build could still use: the set
  * its credential provider list last named. A ciphertext under any other id
  * (the developer's own OpenAI key, until LUKE-205) is dropped by
- * `retireStoredApiKeys`; these are carried.
+ * `retireStoredApiKeys`; these are carried. Spelled out here, since the
+ * vocabulary that named them is gone with them.
  */
-const KEPT_API_KEY_PROVIDERS: ReadonlySet<string> = new Set([PROVIDER_ID.CONDUCTOR]);
+const KEPT_API_KEY_PROVIDER = { CONDUCTOR: "conductor" } as const;
+
+const KEPT_API_KEY_PROVIDERS: ReadonlySet<string> = new Set(Object.values(KEPT_API_KEY_PROVIDER));
 
 /**
  * A credential is only ever written through OS-provided encryption. Electron's

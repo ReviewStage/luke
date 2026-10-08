@@ -1,52 +1,12 @@
 /**
- * The runtime's vocabulary: the identities it keeps apart, the storage
- * contracts a durable owner of conversation state satisfies, the execution
- * seams a host composes over, the memory provider contract, the records
- * delegation keeps, and the one scheduler handle. A re-export door and
- * nothing else, Node-free by construction, because packages below the
- * runtime — live, hosted, voice, devtrace, memory — import this door and
- * not the barrel, so a Node-reaching name the barrel takes on cannot follow
- * a string constant into a renderer bundle.
+ * The runtime's vocabulary: the identities it keeps apart, what one inference
+ * reports about itself, the compaction sources a transcript records, and the
+ * day. A re-export door and nothing else, Node-free by construction, because
+ * packages below the runtime import this door, so a Node-reaching name cannot
+ * follow a string constant into a renderer bundle.
  */
 
-export { CHILD_RUN_STATUS, type ChildRunRecord, type ChildSpawnReceipt } from "./child-records.js";
-export {
-  type ModelUsage,
-  type ReasoningSummary,
-  type ToolExecutionContext,
-  ToolHostUnavailable,
-  type ToolInvocation,
-  type ToolSchema,
-} from "./execution.js";
-export {
-  type AgentId,
-  CONVERSATION_KIND,
-  childSessionKey,
-  DEFAULT_AGENT_ID,
-  MAIN_SESSION_KEY,
-  RUN_ORIGIN,
-  type RunOrigin,
-  type SessionKey,
-  sessionKey,
-} from "./identifiers.js";
-export {
-  MEMORY_CAPTURE_OUTCOME,
-  MEMORY_SCOPE_KIND,
-  type MemoryCaptureResult,
-  type MemoryCaptureTurn,
-  type MemoryProvider,
-  type MemoryRecallHistory,
-  type MemoryRecallMessage,
-  type MemoryRecallResult,
-  type MemoryScope,
-  type MemoryTool,
-  type MemoryToolContext,
-  memoryToolNamed,
-  sameMemoryScope,
-} from "./memory.js";
-export {
-  COMPACTION_SOURCE,
-  type CompactionSource,
-  type ConversationRecord,
-} from "./storage.js";
+export type { ModelUsage, ReasoningSummary, ToolInvocation } from "./execution.js";
+export { type AgentId, DEFAULT_AGENT_ID, type SessionKey, sessionKey } from "./identifiers.js";
+export { COMPACTION_SOURCE, type CompactionSource } from "./storage.js";
 export { DAY_MS } from "./timers.js";

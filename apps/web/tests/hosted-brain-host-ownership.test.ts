@@ -1,13 +1,11 @@
 import assert from "node:assert/strict";
-import { fakeHttpClient } from "@sidecar/wire/testing";
-import { Effect, Redacted, Result, Schema } from "effect";
-import * as HttpClient from "effect/unstable/http/HttpClient";
+import { Effect, Option, Result, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import { ACTION_RESULT_STATUS, BRAIN_TOOL, BRAIN_TURN_TRIGGER } from "../server/core";
+import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "../server/core";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_HEADER,
@@ -25,7 +23,9 @@ import {
 import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -48,7 +48,6 @@ import {
  */
 
 const NOW = 1_800_000_000_000;
-const TEST_VAULT_SECRET = Redacted.make("v".repeat(64));
 
 let minted = 0;
 
@@ -66,7 +65,7 @@ afterAll(() => database.close());
 
 const writer = await database.run(
   storeWriter({
-    tools: CATALOG_TOOL_SET,
+    tools: HOSTED_TOOL_SET,
   }),
 );
 
@@ -86,34 +85,21 @@ function unreached(name: string): () => never {
 
 interface TestHost {
   readonly host: BrainHost;
-  /** How many times a call reached the store past admission. */
-  storeReads(): number;
 }
 
 function hostOverTestDatabase(): TestHost {
-  let storeReads = 0;
   const seams: BrainHostSeams = {
-    store: () =>
-      Effect.sync(() => {
-        storeReads += 1;
-        return database.store;
-      }),
     writer: () => Effect.succeed(writer),
     userInfo: () => Effect.succeed(undefined),
     ownership,
-    eveOrigin: () => undefined,
     deploymentSecret: () => undefined,
+    eveOrigin: () => undefined,
     openAi: () => undefined,
-    embedder: () => undefined,
     scriptedModel: () => false,
     spend: unreached("spend"),
-    vaultRows: () => Effect.succeed([]),
-    vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
-    providerKey: unreached("providerKey"),
-    executeAction: unreached("executeAction"),
     now: () => NOW,
   };
-  return { host: Effect.runSync(brainHost(seams)), storeReads: () => storeReads };
+  return { host: brainHost(seams) };
 }
 
 function principal(
@@ -213,7 +199,7 @@ function toolContext(sessionId: string, auth: SessionAuth): EveToolContext {
     session: { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
     abortSignal: new AbortController().signal,
     callId: "call-1",
-    toolName: BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+    toolName: QUEUE_QUESTION_TOOL.name,
     getToken: unreachable,
     requireAuth: unreachable,
     getSandbox: unreachable,
@@ -439,37 +425,35 @@ test("a conversation cleared while its session runs admits nobody at the door an
   assert.equal(await recordedSession(target.conversationId), SESSION.OLDER);
 });
 
-test("a tool call is admitted again as it runs: the current session's lands, and a rotated-away session's, another account's seat, and a cleared conversation's are each refused before any seam is reached", async () => {
+test("a tool call is admitted again as it runs: the current session's lands, and a rotated-away session's, another account's seat, and a cleared conversation's are each refused for the admission's reason, not the tool's", async () => {
   const SESSION = sessions();
   const userA = await database.createUser();
   const userB = await database.createUser();
-  const target = await ownedConversation(userA);
-  const seat = ownSeat(userA, target.conversationId);
-  const { host, storeReads } = hostOverTestDatabase();
-  const directive = "# USER.md\n\n- 2026-09-15: prefers short replies\n";
+  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
+  const conversationId = Option.getOrThrow(
+    await database.run(openPlanConversation(userA, started.id)),
+  );
+  const target = { userId: userA, conversationId };
+  const seat = ownSeat(userA, conversationId);
+  const { host } = hostOverTestDatabase();
+  const question = {
+    question: "Should a withdrawn invite tell the invitee who withdrew it?",
+    recommendation: "No: just say the invite is no longer valid.",
+  };
   const call = (sessionId: string, auth: SessionAuth) =>
     database.run(
-      Effect.provideService(
-        host.runTool(
-          BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+      host
+        .runTool(
+          QUEUE_QUESTION_TOOL.name,
           binding(target, sessionId),
-          { name: "USER.md", content: directive },
+          question,
           toolContext(sessionId, auth),
-        ),
-        HttpClient.HttpClient,
-        // No call here reaches the network: the one tool that would is not the one called.
-        fakeHttpClient(unreached("the HTTP client")),
-      ),
+        )
+        .pipe(Effect.provide(noNetwork)),
     );
 
   assert.equal(await start(host, seat, SESSION.OLDER), true);
-  const landed = await call(SESSION.OLDER, seat);
-  assert.equal(landed.status, ACTION_RESULT_STATUS.ACCEPTED);
-  const remembered = await database.run(database.store.workspace.read(userA, "USER.md"));
-  assert.equal(remembered?.content, directive);
-  assert.equal(await database.run(database.store.workspace.read(userB, "USER.md")), undefined);
-  const readsOnceAdmitted = storeReads();
-  assert.ok(readsOnceAdmitted > 0);
+  assert.deepEqual(await call(SESSION.OLDER, seat), { status: ACTION_RESULT_STATUS.ACCEPTED });
 
   assert.equal(await start(host, seat, SESSION.NEWER), true);
   assert.deepEqual(await call(SESSION.OLDER, seat), {
@@ -477,7 +461,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
     reason: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION,
   });
 
-  const seatB = principal(userB, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId });
+  const seatB = principal(userB, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId });
   assert.deepEqual(await call(SESSION.NEWER, { current: seatB, initiator: seat.initiator }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: BRAIN_HOST_REFUSAL.NOT_INITIATOR,
@@ -487,12 +471,9 @@ test("a tool call is admitted again as it runs: the current session's lands, and
     reason: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });
 
-  await setConversationDeletedAt(database.run, target.conversationId, new Date(NOW));
+  await setConversationDeletedAt(database.run, conversationId, new Date(NOW));
   assert.deepEqual(await call(SESSION.NEWER, seat), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
   });
-
-  assert.equal(storeReads(), readsOnceAdmitted);
-  assert.deepEqual(await database.run(database.store.workspace.read(userA, "USER.md")), remembered);
 });

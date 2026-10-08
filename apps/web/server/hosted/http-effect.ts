@@ -119,6 +119,46 @@ export const hostedNotFoundRoute: Layer.Layer<never, never, HttpRouter.HttpRoute
   hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND),
 );
 
+const HTTP_METHOD = { HEAD: "HEAD" } as const;
+
+/**
+ * A HEAD answer's status and headers, carried on the `HttpServerResponse`
+ * because the platform's web handler builds a HEAD response from those alone
+ * rather than from the raw answer beneath them — the same reason
+ * `auth-app.ts`'s passthrough carries a HEAD this way.
+ */
+function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse {
+  return HttpServerResponse.empty({
+    status: answer.status,
+    statusText: answer.statusText,
+    headers: [...answer.headers],
+  });
+}
+
+/**
+ * A handler's answer, carried to the `HttpApp` a group composes: the handler
+ * already answers the hosted vocabulary's own bytes, so nothing here reads or
+ * rewrites the response beside forwarding it, except a HEAD, whose status and
+ * headers the web handler reads off the `HttpServerResponse` rather than the
+ * raw answer it wraps. The handler runs on the group's own fiber rather than
+ * through a runner of its own, so a failed statement it reads is a defect
+ * here.
+ */
+export const effectPassthrough = /* @__PURE__ */ Effect.fn("web/effectPassthrough")(function* <R>(
+  handle: (request: Request) => Effect.Effect<Response, unknown, R>,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  R | HttpServerRequest.HttpServerRequest
+> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const answer = yield* Effect.orDie(handle(request));
+  return incoming.method === HTTP_METHOD.HEAD
+    ? bodylessAnswer(answer)
+    : HttpServerResponse.raw(answer);
+});
+
 /** An answer as the response, the way `jsonResponse` answers one today. */
 export function hostedJsonResponse<Body extends object>(
   status: number,

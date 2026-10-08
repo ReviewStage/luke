@@ -1,19 +1,24 @@
 import type { MessageStreamEvent } from "eve/client";
-import { BRAIN_TOOL } from "../../server/core";
+import {
+  REPOSITORY_SHELL_STATUS,
+  RUN_IN_REPOSITORY_TOOL,
+} from "../../server/hosted/repository-shell";
 import { stampedEveEvent } from "./eve-events";
 
 /**
  * Whole turns as eve emits them, for the tests that drive one through the
- * relay into the store: a spoken ask's turn that reads a transcript and
- * answers in two sentences, and an observation's turn that announces a
- * briefing. Synthetic throughout; one spelling shared by every suite that
- * plays a turn rather than a copy per file.
+ * relay into the store: a spoken ask's turn that reads the repository and
+ * answers in two sentences. Synthetic throughout; one spelling shared by
+ * every suite that plays a turn rather than a copy per file.
  */
 
 /** eve's id for a session's first turn. */
 export const FIRST_EVE_TURN = "turn_0";
 
-/** One spoken ask's turn: a transcript read, then a two-sentence answer. */
+/** The command the turn runs in the repository. */
+const REPOSITORY_COMMAND = "git log --oneline -5";
+
+/** One spoken ask's turn: a repository read, which is a slow step, then a two-sentence answer. */
 export function spokenTurn(
   turnId: string,
   now: number,
@@ -36,8 +41,8 @@ export function spokenTurn(
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: BRAIN_TOOL.READ_TRANSCRIPT,
-            input: { provider_id: "conductor", provider_session_id: "s-1" },
+            toolName: RUN_IN_REPOSITORY_TOOL.name,
+            input: { command: REPOSITORY_COMMAND },
           },
         ],
       },
@@ -52,8 +57,8 @@ export function spokenTurn(
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: BRAIN_TOOL.READ_TRANSCRIPT,
-          output: { lines: ["a"] },
+          toolName: RUN_IN_REPOSITORY_TOOL.name,
+          output: { status: REPOSITORY_SHELL_STATUS.NOT_RUN, reason: "No sandbox." },
         },
       },
     }),

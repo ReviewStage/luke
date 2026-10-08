@@ -12,15 +12,6 @@ export const ACTION_RESULT_STATUS = {
 export type ActionResultStatus = (typeof ACTION_RESULT_STATUS)[keyof typeof ACTION_RESULT_STATUS];
 
 /**
- * The one sentence an adapter answers an action its target's latest observation
- * did not advertise. It is written once because it is one refusal: the latest
- * read is what says which acts a provider documents for a session or an issue
- * now, and an action that outran that read is refused the same way whoever was
- * asked.
- */
-export const UNSUPPORTED_BY_OBSERVATION = "That action is not supported by the latest observation.";
-
-/**
  * The one status outside the three above an action can end in: dispatched, and
  * its answer lost before it was recorded. It is neither a refusal nor a
  * result; the effect may have happened, so nothing that reads it may retry

@@ -29,7 +29,7 @@ const SSO =
 const SECRET = Redacted.make("bypass-secret-value");
 const PATHS = {
   callers: ["/api/plans", "/api/events", "/api/auth/", "/api/plans/probe"],
-  crons: ["/api/observation/tick", "/api/events"],
+  crons: ["/api/maintenance/sweep", "/api/events"],
 };
 
 const get = (path: string, expected?: number): PlannedRequest => ({
@@ -77,7 +77,7 @@ test("the bypass door plans a GET for the page, every caller and cron path once,
       [PROBE_METHOD.GET, SITE_ROOT_PATH, PROBE_STATUS.OK],
       [PROBE_METHOD.GET, "/api/auth/", undefined],
       [PROBE_METHOD.GET, "/api/events", PROBE_STATUS.METHOD_NOT_ALLOWED],
-      [PROBE_METHOD.GET, "/api/observation/tick", PROBE_STATUS.UNAUTHORIZED],
+      [PROBE_METHOD.GET, "/api/maintenance/sweep", PROBE_STATUS.UNAUTHORIZED],
       [PROBE_METHOD.GET, "/api/plans", PROBE_STATUS.UNAUTHORIZED],
       [PROBE_METHOD.GET, "/api/plans/probe", undefined],
       [PROBE_METHOD.GET, EVE_HEALTH_PATH, PROBE_STATUS.OK],
@@ -97,7 +97,7 @@ test("the OPTIONS door plans an OPTIONS for the same paths without the page, eve
     [
       ["/api/auth/", undefined],
       ["/api/events", PROBE_STATUS.METHOD_NOT_ALLOWED],
-      ["/api/observation/tick", PROBE_STATUS.METHOD_NOT_ALLOWED],
+      ["/api/maintenance/sweep", PROBE_STATUS.METHOD_NOT_ALLOWED],
       ["/api/plans", PROBE_STATUS.METHOD_NOT_ALLOWED],
       ["/api/plans/probe", undefined],
       [EVE_HEALTH_PATH, undefined],
@@ -118,7 +118,7 @@ it.effect(
       // `/api/auth` is the base better-auth's client appends to, resolved as a prefix; the base alone is no route.
       assert.equal(paths.callers.includes("/api/auth"), false);
       assert.equal(paths.callers.includes("/api/auth/probe"), true);
-      assert.equal(paths.crons.includes("/api/observation/tick"), true);
+      assert.equal(paths.crons.includes("/api/maintenance/sweep"), true);
       assert.notEqual(paths.callers.length, 0);
     }),
 );
@@ -146,7 +146,7 @@ function deployment(seen: Seen[], protectedFrom: (init: RequestInit) => boolean 
       case "/":
         return new Response("<html></html>", { status: 200 });
       case "/api/plans":
-      case "/api/observation/tick":
+      case "/api/maintenance/sweep":
         return new Response("{}", { status: 401, headers: { "x-vercel-cache": "MISS" } });
       case "/api/events":
         return new Response("{}", { status: 405, headers: { "x-vercel-cache": "MISS" } });
@@ -180,7 +180,7 @@ it.effect(
           [SITE_ROOT_PATH, 200, undefined, VERDICT.OK],
           ["/api/auth/", 404, undefined, VERDICT.OK],
           ["/api/events", 405, undefined, VERDICT.OK],
-          ["/api/observation/tick", 401, undefined, VERDICT.OK],
+          ["/api/maintenance/sweep", 401, undefined, VERDICT.OK],
           ["/api/plans", 401, undefined, VERDICT.OK],
           ["/api/plans/probe", 404, "NOT_FOUND", VERDICT.PLATFORM_ERROR],
           [EVE_HEALTH_PATH, 200, undefined, VERDICT.OK],

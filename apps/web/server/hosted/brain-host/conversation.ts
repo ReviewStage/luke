@@ -6,7 +6,6 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionAuth } from "eve/context";
 import { db } from "../../db/query.js";
 import { conversations } from "../../db/storage-schema.js";
-import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
@@ -31,11 +30,8 @@ export { claimRuntimeSession, conversationOwnedBy } from "./recorded-session.js"
  * session finds a newer one recorded and claims nothing.
  */
 
-type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
-
 export interface AdmittedConversation {
   readonly target: ConversationTarget;
-  readonly kind: ConversationKind;
   /** The eve session id the conversation row last recorded, where one has been. */
   readonly runtimeSessionId: string | undefined;
 }
@@ -56,7 +52,6 @@ type SessionStanding = (typeof SESSION_STANDING)[keyof typeof SESSION_STANDING];
 
 const ConversationRowSchema = Schema.Struct({
   userId: Schema.String,
-  kind: Schema.Literals(Object.values(CONVERSATION_KIND)),
   runtimeSessionId: Schema.NullOr(Schema.String),
 });
 
@@ -69,7 +64,6 @@ const findConversation = SqlSchema.findOneOption({
     db
       .select({
         userId: conversations.userId,
-        kind: conversations.kind,
         runtimeSessionId: conversations.runtimeSessionId,
       })
       .from(conversations)
@@ -114,7 +108,6 @@ export function admitConversation(
     }
     return Result.succeed({
       target: { userId: row.userId, conversationId },
-      kind: row.kind,
       runtimeSessionId: row.runtimeSessionId ?? undefined,
     });
   });

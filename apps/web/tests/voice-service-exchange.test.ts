@@ -10,8 +10,6 @@ import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
@@ -19,7 +17,7 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   createPlan,
   openPlanConversation,
@@ -54,7 +52,7 @@ import {
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
-import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
+import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   appended,
   delegated,
@@ -83,7 +81,7 @@ import {
  * PGlite, a fake OpenAI at the far end of the sideband, and a fake eve behind
  * the ask door. The exchange is offered as the route itself offers it: through
  * `deploymentExchange`, the composition `voice/function.ts` passes, over this
- * suite's database and secret rather than the deployment's, with eve alone
+ * suite's database rather than the deployment's, with eve alone
  * handed in as a fake. What these tests hold to is the production case: the
  * exchange stands before the desktop is answered, seeds nothing a second
  * time, reads the developer's words off the same sideband the relay pipes,
@@ -141,7 +139,7 @@ const SEED = [
 
 const writer = await database.run(
   storeWriter({
-    tools: CATALOG_TOOL_SET,
+    tools: HOSTED_TOOL_SET,
   }),
 );
 const askEffects = askRecord();
@@ -153,8 +151,6 @@ const relay = new StreamRelay({
   writer,
   asks: askEffects,
   stopTurn: () => Effect.void,
-  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
-  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -295,9 +291,8 @@ async function stand(offer: Offer): Promise<Stand> {
       : offer === OFFER.FAILING
         ? () => Effect.fail(new Error("the store is not reachable"))
         : deploymentExchange({
-            encryptionSecret: () =>
-              offer === OFFER.UNCONFIGURED ? undefined : TEST_PAYLOAD_SECRET,
-            deploymentSecret: () => Redacted.make("deployment-secret"),
+            deploymentSecret: () =>
+              offer === OFFER.UNCONFIGURED ? undefined : Redacted.make("deployment-secret"),
             eveOrigin: () => "https://eve.test",
             openAiKey: () => undefined,
             eve: () => eve,
@@ -494,7 +489,6 @@ it.effect(
       const standing = {
         sessionId: eveSession,
         target: context.target,
-        kind: CONVERSATION_KIND.PLAN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -581,7 +575,7 @@ it.effect(
 );
 
 it.effect(
-  "a deployment missing the payload secret composes no exchange and refuses every session as unavailable, logged as the exchange failing",
+  "a deployment missing its own secret composes no exchange and refuses every session as unavailable, logged as the exchange failing",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.UNCONFIGURED);
@@ -1089,7 +1083,6 @@ it.effect(
       const standing = {
         sessionId: eveSession,
         target: { userId: context.target.userId, conversationId: planned },
-        kind: CONVERSATION_KIND.PLAN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
