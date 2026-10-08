@@ -20,7 +20,6 @@ const PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  openedAt: 3,
   document: {
     body: "# Teammate invitations\n\n## Goal\nInvite a teammate by email.",
     assumptions: [

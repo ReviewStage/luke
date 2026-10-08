@@ -23,7 +23,6 @@ const PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  openedAt: 3,
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 

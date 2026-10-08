@@ -104,13 +104,15 @@ closes the panel. Escape on the Settings tab's front page comes back to Plans.
 - Nothing polls. Every change to a plan happens during its call, and the
   notetaker's drafts reach the open plan on the call's own socket as they
   are written. The list and the open plan are read when a panel shows the
-  Plans tab, when a plan opens, and when one starts; leaving the tab leaves
-  the plan and its call standing, and coming back reads everything again.
+  Plans tab; the open plan again when a plan opens, and the list again when
+  one starts or is deleted. Leaving the tab leaves the plan and its call
+  standing, and coming back reads everything again.
 
 ### Plan list
 
-- Every named plan the account owns, most recently opened first. Each row
-  shows the plan's name and its `owner/repository`.
+- Every named plan the account owns, newest started first. Opening a plan
+  moves no row, so a new plan stands at the head and nothing else moves.
+  Each row shows the plan's name and its `owner/repository`.
 - Clicking a row opens that plan on the document page (see "Leaving and
   resuming").
 - `New plan` at the head of the list opens the new-plan page.

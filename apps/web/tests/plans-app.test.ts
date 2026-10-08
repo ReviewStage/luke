@@ -10,6 +10,7 @@ import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Result, type Schema } from "effect";
+import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { user } from "../server/db/auth-schema";
@@ -55,6 +56,10 @@ const COMMAND = "/api/plans/commands/command";
 
 const RELAY = {
   name: "Teammate invitations",
+} as const;
+
+const LEDGER = {
+  name: "Billing export",
 } as const;
 
 interface Answer {
@@ -211,6 +216,42 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.document,
         saved.status === PLAN_SAVE_STATUS.SAVED ? saved.document : undefined,
       );
+    }),
+  );
+
+  it.effect("opening a plan leaves the list newest started first", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const relayId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+      yield* TestClock.adjust("1 minute");
+      const ledgerId = startedId(
+        yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })),
+      );
+      yield* TestClock.adjust("1 minute");
+
+      const opened = yield* ask(request(ONE_PLAN, owner, { id: relayId }));
+      const listed = yield* ask(request(PLANS, owner));
+
+      assert.equal(opened.status, HOSTED_HTTP_STATUS.OK);
+      assert.deepEqual(
+        readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
+          (plan) => plan.id,
+        ),
+        [ledgerId, relayId],
+      );
+    }),
+  );
+
+  it.effect("a listed plan still carries the openedAt a desktop through v0.7.1 requires", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      yield* ask(request(PLANS, owner, { method: "POST", body: RELAY }));
+
+      const listed = yield* ask(request(PLANS, owner));
+
+      const [plan] = readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans;
+      assert.ok(plan);
+      assert.equal(plan.openedAt, plan.createdAt);
     }),
   );
 

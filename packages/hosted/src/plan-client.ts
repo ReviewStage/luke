@@ -123,7 +123,7 @@ export class HostedPlanClient {
     );
   }
 
-  /** Every plan the account owns, most recently opened first. */
+  /** Every plan the account owns, newest started first. */
   list(): Effect.Effect<
     PlanCallResult<readonly PlanSummary[], typeof PLAN_CALL_FAILURE.UNANSWERED>,
     never,
@@ -138,7 +138,7 @@ export class HostedPlanClient {
     );
   }
 
-  /** One plan with its saved document; the service moves it to the head of the list. */
+  /** One plan with its saved document; opening it moves no row of the list. */
   open(
     planId: string,
   ): Effect.Effect<PlanCallResult<Plan, PlanCallFailure>, never, HttpClient.HttpClient> {

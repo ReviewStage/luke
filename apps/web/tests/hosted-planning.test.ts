@@ -48,7 +48,6 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   createPlan,
   deletePlan,
-  openPlan,
   openPlanConversation,
   readPlan,
   savePlanDocument,
@@ -69,7 +68,7 @@ import { testSqlClient } from "./support/sql-client";
  * as its standing context, and the planning tools, and each of its steps
  * carried as eve carries them, the tool calls through the host's `runTool`
  * and every event through the relay into the store. What a caller reads
- * afterwards (the window's `openPlan`, the next turn's standing context, a
+ * afterwards (the window's `readPlan`, the next turn's standing context, a
  * resumed session's seed) is what must show the model's save and the words
  * that were said. The model is scripted, so nothing here claims to prove how
  * a real model reads agreement; it proves the model is handed the document
@@ -419,10 +418,10 @@ function handedDocument(context: string): PlanDocument {
 
 /** The document the Plans tab opens, failing the test where the plan does not open. */
 const windowDocument = (userId: string, planId: string) =>
-  Effect.map(openPlan(userId, planId), (opened) =>
+  Effect.map(readPlan(userId, planId), (opened) =>
     Option.match(opened, {
       onNone: () => assert.fail("the plan did not open"),
-      onSome: (found) => found.document,
+      onSome: (found) => found.plan.document,
     }),
   );
 

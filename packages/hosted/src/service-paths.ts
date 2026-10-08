@@ -14,7 +14,7 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
   /**
-   * The account's named feature plans: list them, most recently opened first
+   * The account's named feature plans: list them, newest started first
    * (GET), or start one (POST) with its name and the folder on the Mac it
    * reads. `plan-wire.ts` declares both.
    */

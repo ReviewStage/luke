@@ -64,7 +64,6 @@
         "name",
         "createdAt",
         "updatedAt",
-        "openedAt",
         "document"
       ],
       "additionalProperties": false

@@ -38,7 +38,6 @@ function plan(id: string, name: string, body: string, updatedAt: number): Plan {
     name,
     createdAt: 1_000,
     updatedAt,
-    openedAt: updatedAt,
     document: {
       body,
       assumptions: [{ text: "An invite expires after 7 days." }],
@@ -230,6 +229,23 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
     yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
     assert.equal(last()?.activePlanId, BILLING);
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: billing });
+  }),
+);
+
+it.effect("opening a plan moves no row of the list already drawn", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+    const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+    const service = fakeService([billing, invites]);
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    // A service that still moved an opened plan to the head would answer this.
+    service.plans = [invites, billing];
+
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    assert.equal(last()?.activePlanId, INVITES);
+    assert.deepEqual(last()?.plans, [summary(billing), summary(invites)]);
   }),
 );
 

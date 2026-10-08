@@ -46,7 +46,7 @@ const NOTETAKER_WRITING = "Notetaker · Writing notes";
 /** The stop's name for a reader and its hover. */
 const STOP_CALL_LABEL = "End the call";
 
-/** The list page: every plan the account owns, most recently opened first, under New plan. */
+/** The list page: every plan the account owns, newest started first, under New plan. */
 export function PlanList({
   plans,
   folders,

@@ -68,8 +68,12 @@ const planSummaryFields = {
   createdAt: countedNumber,
   /** Epoch milliseconds the document was last saved; the start, before any save. */
   updatedAt: countedNumber,
-  /** Epoch milliseconds the plan was last opened, which is what the list is ordered by. */
-  openedAt: countedNumber,
+  /**
+   * The start again, answered only for a desktop through v0.7.1, which
+   * refuses a summary without it; the list once ordered by the last open.
+   * Optional here so no later build needs it, and nothing reads it.
+   */
+  openedAt: EffectSchema.optionalKey(countedNumber),
 };
 
 /** One row of the plan list: everything but the document. */
@@ -85,7 +89,7 @@ export const planSchema = EffectSchema.Struct({
 
 export type Plan = typeof planSchema.Type;
 
-/** The plan list (GET): every plan the account owns, most recently opened first. */
+/** The plan list (GET): every plan the account owns, newest started first. */
 export const planListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(planSummarySchema),
 });

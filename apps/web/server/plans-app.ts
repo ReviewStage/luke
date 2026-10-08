@@ -22,7 +22,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import { createPlan, deletePlan, listPlans, openPlan } from "./hosted/plan-store.js";
+import { createPlan, deletePlan, listPlans, readPlan } from "./hosted/plan-store.js";
 import { claimPlanCommand, settlePlanCommand } from "./hosted/repository-shell.js";
 import { readTranscript } from "./hosted/transcript-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
@@ -35,8 +35,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * owns answers exactly as one that names nothing, so nothing is learned
  * about plans the caller does not hold. Nothing here writes a document; the
  * planning call's notetaker is the one writer (`hosted/plan-notes.ts`).
- * `GET /api/plans/{id}` is the window opening a plan, so it also moves the
- * plan to the head of the list.
+ * `GET /api/plans/{id}` is the window opening a plan, a read that moves
+ * nothing: the list stands newest started first whatever is opened.
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
@@ -156,9 +156,9 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/planEndpoint")(function* (
   const planId = yield* idOf(request, PLAN_ID_QUERY);
   const userId = yield* resolvedUserId(seams, request);
   if (incoming.method === HTTP_METHOD.GET) {
-    const opened = yield* hostedStoreOrUnavailable(openPlan(userId, planId));
+    const opened = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
     if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: opened.value });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: opened.value.plan });
   }
   const deleted = yield* hostedStoreOrUnavailable(deletePlan(userId, planId));
   if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

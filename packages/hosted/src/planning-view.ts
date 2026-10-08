@@ -145,7 +145,7 @@ const planCodeSchema = EffectSchema.Struct({
 export type PlanCode = typeof planCodeSchema.Type;
 
 export const planningViewSchema = EffectSchema.Struct({
-  /** The account's plans, most recently opened first, as the last list read answered. */
+  /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
   listStatus: planningReadSchema,
   /** The one active plan, absent while the window has none open. */

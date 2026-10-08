@@ -81,7 +81,6 @@ const FIXTURE_PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  openedAt: 3,
   document: {
     body: planBody({ name: "Teammate invitations" }, FIXTURE_FIELDS),
     assumptions: [
@@ -98,7 +97,6 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
     name: "Billing export",
     createdAt: 1,
     updatedAt: 1,
-    openedAt: 2,
   },
 ];
 
@@ -109,7 +107,6 @@ const FIXTURE_PLAN_LIST: PlanningView = {
       name: FIXTURE_PLAN.name,
       createdAt: FIXTURE_PLAN.createdAt,
       updatedAt: FIXTURE_PLAN.updatedAt,
-      openedAt: FIXTURE_PLAN.openedAt,
     },
     ...FIXTURE_OTHER_PLANS,
   ],

@@ -405,8 +405,6 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             yield* readDocument(planId);
             yield* readBoard(planId);
             yield* readTranscript(planId);
-            // Opening moved the plan to the head of the list.
-            yield* readList;
           }),
         );
         return { opened: true };
