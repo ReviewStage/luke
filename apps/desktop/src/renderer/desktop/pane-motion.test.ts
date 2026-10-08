@@ -34,6 +34,7 @@ const ignore = () => undefined;
 interface Running {
   element: Element;
   animation: Animation;
+  keyframes: Keyframe[];
 }
 
 /** What the stand-in engine hands back for an animation. */
@@ -48,8 +49,10 @@ const running: Running[] = [];
 
 /** Puts the Web Animations API in jsdom's place: each animation runs until the test finishes it. */
 function installAnimations(): void {
-  Element.prototype.animate = function (this: Element) {
-    const stop = () => running.splice(running.indexOf(entry), 1);
+  Element.prototype.animate = function (this: Element, keyframes: Keyframe[]) {
+    const stop = () => {
+      if (running.includes(entry)) running.splice(running.indexOf(entry), 1);
+    };
     const fake: FakeAnimation = {
       onfinish: null,
       cancel: stop,
@@ -60,7 +63,7 @@ function installAnimations(): void {
     };
     // SAFETY: the panes set `onfinish` and call `cancel` and nothing else of an
     // animation, which the stand-in has; a test calls `finish`.
-    const entry: Running = { element: this, animation: fake as unknown as Animation };
+    const entry: Running = { element: this, animation: fake as unknown as Animation, keyframes };
     running.push(entry);
     return entry.animation;
   };
@@ -96,6 +99,22 @@ function layOutTitle(): void {
     );
     return DOMRect.fromRect({ x: folded ? 124 : sidebar + 32, width: 400, height: 20 });
   });
+}
+
+/** Lays the side panel out at the window's right, or part way out past it while it slides away. */
+function layOutPanel(): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (!this.classList.contains("side-panel")) return DOMRect.fromRect();
+    const leaving = this.hasAttribute("data-leaving");
+    return DOMRect.fromRect({ x: leaving ? 1000 : 880, width: 400, height: 800 });
+  });
+}
+
+/** Where the motion now playing on `element` starts it. */
+function startOf(element: Element): Keyframe | undefined {
+  return running.find((each) => each.element === element)?.keyframes[0];
 }
 
 /** The window as `App` stands it, with a plan open. */
@@ -228,6 +247,33 @@ test("a panel on its way out offers none of the panel's shortcuts", () => {
   finishAll();
   press(page, '[aria-label="Show panel"]');
   assert.equal(find(page, ".side-panel").dataset.fullScreen, "false");
+});
+
+test("hiding a full-screen panel gives the document its whole room at once, while the panel slides out over it", () => {
+  motion(MOTION.ON);
+  const page = show();
+  press(page, '[aria-label="Show panel"]');
+  press(page, '[aria-label="Expand panel"]');
+  finishAll();
+
+  press(page, '[aria-label="Hide panel"]');
+  assert.ok(animating(find(page, ".side-panel[data-leaving]")));
+  assert.ok(page.querySelector(".side-panel-room") === null, "the document has its room back");
+  assert.ok(documentShown(page));
+});
+
+test("a panel shown again part way through its exit comes back from where it had reached", () => {
+  motion(MOTION.ON);
+  layOutPanel();
+  const page = show();
+  press(page, '[aria-label="Show panel"]');
+  finishAll();
+
+  press(page, '[aria-label="Hide panel"]');
+  press(page, '[aria-label="Show panel"]');
+  const panel = find(page, ".side-panel");
+  assert.equal(panel.hasAttribute("data-leaving"), false);
+  assert.deepEqual(startOf(panel), { transform: "translateX(120px)" });
 });
 
 test("leaving full screen keeps the panel over the document until it has gone back, the document shown beneath it", () => {

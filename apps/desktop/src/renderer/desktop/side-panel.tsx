@@ -359,7 +359,8 @@ export function SidePanel({
 
   return (
     <>
-      {panel.fullScreen ? (
+      {/* Shut, it gives the document its room back at once, to glide into. */}
+      {panel.fullScreen && leaving !== PANEL_LEAVING.CLOSE ? (
         <div ref={room} className="side-panel-room" style={{ width: panel.width }} />
       ) : null}
       <aside

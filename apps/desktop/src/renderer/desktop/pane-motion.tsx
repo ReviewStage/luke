@@ -30,8 +30,11 @@ const GLIDERS = [
   ".desktop-compose > *",
 ].join(", ");
 
+/** The pane, read before a change whether or not it is leaving, so one brought back mid-exit carries on from where it was. */
+const PANE = ".side-panel";
+
 /** The pane that arrives and grows; one leaving runs its own exit and is left to it. */
-const PANE = ".side-panel:not([data-leaving])";
+const ARRIVING_PANE = ".side-panel:not([data-leaving])";
 
 /** Less than this, in CSS pixels, is not a move worth playing. */
 const STILL = 0.5;
@@ -43,8 +46,14 @@ interface PaneLayout {
   panelFullScreen: boolean;
 }
 
+/** Where an element was drawn, and how much of it its clip showed. */
+interface Drawn {
+  rect: DOMRect;
+  clip: string;
+}
+
 /** Where each glider and the pane stood before a change. */
-type Snapshot = Map<Element, DOMRect>;
+type Snapshot = Map<Element, Drawn>;
 
 interface PaneGlideProps {
   root: RefObject<HTMLElement | null>;
@@ -86,11 +95,12 @@ function sameLayout(a: PaneLayout, b: PaneLayout): boolean {
 
 /** Where each glider and the pane are drawn now, motion under way included. */
 function measure(root: HTMLElement): Snapshot {
-  const rects: Snapshot = new Map();
+  const drawn: Snapshot = new Map();
   for (const element of root.querySelectorAll(`${GLIDERS}, ${PANE}`)) {
-    rects.set(element, element.getBoundingClientRect());
+    const clip = element.matches(PANE) ? getComputedStyle(element).clipPath : "none";
+    drawn.set(element, { rect: element.getBoundingClientRect(), clip });
   }
-  return rects;
+  return drawn;
 }
 
 /** Plays a translation from `dx` back to where the element stands. */
@@ -103,12 +113,13 @@ function glide(element: Element, dx: number, timing: KeyframeAnimationOptions): 
  * The side panel's part: in from the window's right where it was not drawn
  * before, uncovered from its old left edge where it grew (into full screen,
  * or as the window gave it back room), and moved like any glider where only
- * its place changed, which is what brings it back from part way through an
- * exit.
+ * its place changed. A pane brought back part way through its exit carries
+ * on from there: uncovered again from the clip it had reached, or moved back
+ * from where its slide had taken it.
  */
 function playPane(
   pane: Element,
-  was: DOMRect | undefined,
+  was: Drawn | undefined,
   now: DOMRect,
   timing: KeyframeAnimationOptions,
 ): void {
@@ -116,8 +127,11 @@ function playPane(
     pane.animate([{ transform: "translateX(100%)" }, { transform: "none" }], timing);
     return;
   }
-  const grown = was.left - now.left;
-  if (Math.abs(was.width - now.width) < STILL) glide(pane, grown, timing);
+  const grown = was.rect.left - now.left;
+  const sameWidth = Math.abs(was.rect.width - now.width) < STILL;
+  if (sameWidth && was.clip.startsWith("inset(")) {
+    pane.animate([{ clipPath: was.clip }, { clipPath: "inset(0)" }], timing);
+  } else if (sameWidth) glide(pane, grown, timing);
   // Note that a pane the change narrowed lands at once: moving it would part
   // it from the window's edge, and clipping cannot draw what it no longer is.
   else if (grown >= STILL) {
@@ -129,7 +143,7 @@ function playPane(
 function play(root: HTMLElement, before: Snapshot): void {
   const timing = paneTiming(root);
   if (timing === undefined) return;
-  const moved = [...root.querySelectorAll(`${GLIDERS}, ${PANE}`)];
+  const moved = [...root.querySelectorAll(`${GLIDERS}, ${ARRIVING_PANE}`)];
   // Note that a motion still under way is stopped before anything is
   // measured, so each element is read where the new layout stands it, and
   // read all at once, so the layout is worked out once rather than per element.
@@ -140,7 +154,7 @@ function play(root: HTMLElement, before: Snapshot): void {
   for (const { element, now } of after) {
     const was = before.get(element);
     if (element.matches(PANE)) playPane(element, was, now, timing);
-    else if (was !== undefined) glide(element, was.left - now.left, timing);
+    else if (was !== undefined) glide(element, was.rect.left - now.left, timing);
   }
 }
 
