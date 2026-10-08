@@ -414,6 +414,13 @@
       "when": 1790600000000,
       "tag": "0059_plan_list_by_start",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1790625000000,
+      "tag": "0060_plan_drop_opened_at",
+      "breakpoints": true
     }
   ]
 }
