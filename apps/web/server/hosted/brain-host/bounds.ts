@@ -22,6 +22,9 @@ export const BRAIN_HOST = {
   SEED_MESSAGES: 60,
   /** The longest the seed grows, in characters, cut from the front. */
   SEED_CHARS: 40_000,
+  /** Each worker session's own token budget, so one runaway worker costs a bounded amount. */
+  WORKER_INPUT_TOKENS: 600_000,
+  WORKER_OUTPUT_TOKENS: 40_000,
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */

@@ -309,7 +309,7 @@ it.effect(
                 {
                   kind: "tool-call",
                   callId: "call-1",
-                  toolName: EVE_DELEGATION_TOOL.RESEARCHER,
+                  toolName: EVE_DELEGATION_TOOL.WORKER,
                   input: { message: "Compare the two queue libraries." },
                 },
               ],
@@ -325,7 +325,7 @@ it.effect(
               result: {
                 kind: "tool-result",
                 callId: "call-1",
-                toolName: EVE_DELEGATION_TOOL.RESEARCHER,
+                toolName: EVE_DELEGATION_TOOL.WORKER,
                 output: { status: "working", taskId: "task-1", agentId: "agent-1" },
               },
             },
@@ -343,7 +343,7 @@ it.effect(
       const answer = messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
       const call = answer?.parts.find((part) => isToolUIPart(part));
       assert.ok(call);
-      assert.equal(call.type, `tool-${EVE_DELEGATION_TOOL.RESEARCHER}`);
+      assert.equal(call.type, `tool-${EVE_DELEGATION_TOOL.WORKER}`);
       assert.equal(call.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.deepEqual(refusals, []);
     }),
