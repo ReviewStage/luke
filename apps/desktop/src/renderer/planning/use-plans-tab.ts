@@ -33,7 +33,8 @@ import {
   type TranscriptRegion,
   transcriptRegion,
 } from "./transcript-model";
-import { type SidePanelControl, useSidePanel } from "./use-side-panel";
+import { usePanelArrivals } from "./use-panel-arrivals";
+import { type SidePanelControl, type SidePanelTab, useSidePanel } from "./use-side-panel";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -70,6 +71,8 @@ export interface PlansControl {
   live: boolean;
   /** The side panel beside the open plan's document: shown or not, its tab, and its width. */
   sidePanel: SidePanelControl;
+  /** The side panel's tabs holding something that arrived while the panel showed another, each until it is shown. */
+  unreadTabs: readonly SidePanelTab[];
   /** The open plan's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
   /** The code Luke has on screen, drawn only while the open plan's call is in progress. */
@@ -204,6 +207,14 @@ export function usePlansTab(input: {
 
   // The code pane stands for the call alone; a fixture's for its drawn call.
   const codeShown = live || fixture !== undefined;
+  const code = codeShown ? planning.code : undefined;
+  // A fixture's staged plan has nothing arriving on it.
+  const unreadTabs = usePanelArrivals({
+    planId: fixture === undefined ? planning.activePlanId : undefined,
+    board: planning.board,
+    code,
+    panel: sidePanel,
+  });
 
   // A cancelled picker keeps whatever folder the plan had.
   const chooseFolder = (planId: string) => {
@@ -277,8 +288,9 @@ export function usePlansTab(input: {
     status: callStatus(reported, planning),
     live,
     sidePanel,
+    unreadTabs,
     board: planning.board,
-    code: codeShown ? planning.code : undefined,
+    code,
     transcript: {
       region: transcriptRegion({ transcript: planning.transcript, heard }),
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),

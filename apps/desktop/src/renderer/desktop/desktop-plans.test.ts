@@ -258,6 +258,25 @@ test("the Code tab draws the code Luke has on screen", () => {
   assert.match(markup, /<aside class="side-panel"[\s\S]*class="code-pane"[\s\S]*src\/invite\.ts/u);
 });
 
+test("a tab with something new on it carries a dot, and the tab shown carries none", () => {
+  const page = document.createElement("div");
+  page.innerHTML = renderToStaticMarkup(
+    createElement(DesktopPlans, {
+      plans: plansControl({
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT },
+        unreadTabs: [SIDE_PANEL_TAB.BOARD],
+      }),
+    }),
+  );
+
+  assert.ok(tabNamed(page, "Board").querySelector(".tab-note"));
+  assert.equal(tabNamed(page, "Code").querySelector(".tab-note"), null);
+  assert.equal(tabNamed(page, "Transcript").querySelector(".tab-note"), null);
+});
+
 test("the Transcript tab draws each call's turns under their speakers, left out of the screen recording", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {

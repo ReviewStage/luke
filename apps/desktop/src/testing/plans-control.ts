@@ -32,6 +32,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onChoose: ignore,
       onResize: ignore,
     },
+    unreadTabs: [],
     board: undefined,
     code: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
