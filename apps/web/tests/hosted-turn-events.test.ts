@@ -5,9 +5,7 @@ import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
-  ACTION_TOOL,
   BRAIN_RUN_EVENT,
-  BRAIN_TOOL,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   SLOW_STEP_KIND,
@@ -17,8 +15,6 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
@@ -26,9 +22,10 @@ import {
   type RelayStanding,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
-import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
+import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { projectTurnEvents, UNANSWERED_TURN_END_SEQ } from "../server/hosted/turn-events";
@@ -51,17 +48,11 @@ const NOW = 1_800_000_000_000;
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await database.run(
-  storeWriter({
-    tools: CATALOG_TOOL_SET,
-  }),
-);
+const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 const relay = new StreamRelay({
   writer,
   asks: askRecord(),
   stopTurn: () => Effect.void,
-  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
-  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -77,7 +68,7 @@ const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =
 
 const EVE_TURN = "turn_0";
 
-/** One spoken ask's turn as eve emits it: a transcript read, then a two-sentence answer. */
+/** One spoken ask's turn as eve emits it: a repository command, then a two-sentence answer. */
 function spokenTurn(turnId: string): readonly MessageStreamEvent[] {
   const sequence = 0;
   return [
@@ -94,8 +85,8 @@ function spokenTurn(turnId: string): readonly MessageStreamEvent[] {
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: BRAIN_TOOL.READ_TRANSCRIPT,
-            input: { provider_id: "conductor", provider_session_id: "s-1" },
+            toolName: RUN_IN_REPOSITORY_TOOL.name,
+            input: { command: "ls" },
           },
         ],
       },
@@ -110,8 +101,13 @@ function spokenTurn(turnId: string): readonly MessageStreamEvent[] {
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: BRAIN_TOOL.READ_TRANSCRIPT,
-          output: { lines: ["a"] },
+          toolName: RUN_IN_REPOSITORY_TOOL.name,
+          output: {
+            status: REPOSITORY_SHELL_STATUS.RAN,
+            exitCode: 0,
+            stdout: "README.md\n",
+            stderr: "",
+          },
         },
       },
     }),
@@ -168,7 +164,7 @@ async function journalText(target: ConversationTarget, turnId: string): Promise<
     database.store.messages.byClientId(
       target.userId,
       target.conversationId,
-      CATALOG_TOOL_SET,
+      HOSTED_TOOL_SET,
       turnId,
     ),
   );
@@ -182,7 +178,6 @@ function standingFor(target: ConversationTarget): RelayStanding {
   return {
     sessionId: `wrun_${randomUUID()}`,
     target,
-    kind: CONVERSATION_KIND.MAIN,
     turn: BRAIN_HOST_TURN.SPOKEN,
     model: "scripted-model",
     state: memoryRelayState(),
@@ -193,7 +188,7 @@ async function play(events: readonly MessageStreamEvent[], standing: RelayStandi
   for (const event of events) await database.run(relay.handle(event, standing));
 }
 
-/** The eve events up to and including the transcript read's request: the turn is running with one slow call on its journal. */
+/** The eve events up to and including the repository command's request: the turn is running with one slow call on its journal. */
 function untilRequested(events: readonly MessageStreamEvent[]): number {
   return events.findIndex((event) => event.type === "actions.requested") + 1;
 }
@@ -203,7 +198,7 @@ async function projected(userId: string, turnId: string): Promise<readonly TurnE
   const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.ok(turn);
   const journal = await database.run(
-    database.store.messages.byClientId(userId, turn.conversationId, CATALOG_TOOL_SET, turn.id),
+    database.store.messages.byClientId(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id),
   );
   assert.ok(journal.ok);
   return projectTurnEvents(turn, journal.value[0]?.message);
@@ -222,7 +217,7 @@ test("mid-turn the slow step is told at once, then the settled mark, the sentenc
 
   const midTurn = await projected(target.userId, turnId);
   assert.deepEqual(midTurn, [
-    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
+    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.REPOSITORY_READ },
   ]);
 
   await play(events.slice(untilRequested(events)), standing);
@@ -264,7 +259,7 @@ test("a sentence that follows only settled calls is heard while the turn still r
 
   const running = await projected(target.userId, turnId);
   assert.deepEqual(running, [
-    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
+    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.REPOSITORY_READ },
     { turnId, seq: 2, kind: TURN_EVENT_KIND.ACTIONS_SETTLED },
     { turnId, seq: 3, kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence: "One agent finished." },
   ]);
@@ -310,7 +305,7 @@ test("a turn cancelled after a sentence it released keeps none of its words, and
   );
   assert.deepEqual(
     heard.filter((event) => event.seq <= 3),
-    [{ turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ }],
+    [{ turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.REPOSITORY_READ }],
   );
 });
 
@@ -333,7 +328,7 @@ test("a cancelled turn and a failed one end without a settled mark or a sentence
     await database.run(relay.handle(stamped(ending), standing));
 
     assert.deepEqual(await projected(target.userId, turnId), [
-      { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
+      { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.REPOSITORY_READ },
       { turnId, seq: UNANSWERED_TURN_END_SEQ, kind: TURN_EVENT_KIND.ENDED, end },
     ]);
   }
@@ -369,39 +364,17 @@ function toolPart(
   } as unknown as StoredUIMessage["parts"][number];
 }
 
-test("the projection: a turn with no journal or no slow call tells no slow step, a provider write is the other slow kind, and one slow step is told however many slow calls follow", () => {
+test("the projection: a turn with no journal or no repository command tells no slow step, and one slow step is told however many commands follow", () => {
   assert.deepEqual(projectTurnEvents(TURN, undefined), []);
-  assert.deepEqual(projectTurnEvents(TURN, journal([toolPart(ACTION_TOOL.RENAME_SESSION, "c1")])), [
-    {
-      turnId: TURN.id,
-      seq: 1,
-      kind: TURN_EVENT_KIND.SLOW_STEP,
-      step: TURN_SLOW_STEP.PROVIDER_WRITE,
-    },
-  ]);
+  assert.deepEqual(projectTurnEvents(TURN, journal([toolPart(SEARCH_WEB_TOOL.name, "c1")])), []);
   assert.deepEqual(
     projectTurnEvents(
       TURN,
       journal([
-        toolPart(BRAIN_TOOL.READ_TRANSCRIPT, "c1"),
-        toolPart(ACTION_TOOL.SEND_SESSION_MESSAGE, "c2"),
+        toolPart(RUN_IN_REPOSITORY_TOOL.name, "c1", { command: "ls" }),
+        toolPart(RUN_IN_REPOSITORY_TOOL.name, "c2", { command: "cat package.json" }),
       ]),
     ),
-    [
-      {
-        turnId: TURN.id,
-        seq: 1,
-        kind: TURN_EVENT_KIND.SLOW_STEP,
-        step: TURN_SLOW_STEP.TRANSCRIPT_READ,
-      },
-    ],
-  );
-  assert.deepEqual(projectTurnEvents({ ...TURN, status: TURN_STATUS.QUEUED }, undefined), []);
-});
-
-test("the projection: a planning call's repository command is a slow step of its own, though no catalog policy offers the tool", () => {
-  assert.deepEqual(
-    projectTurnEvents(TURN, journal([toolPart(RUN_IN_REPOSITORY_TOOL.name, "c1")])),
     [
       {
         turnId: TURN.id,
@@ -411,6 +384,7 @@ test("the projection: a planning call's repository command is a slow step of its
       },
     ],
   );
+  assert.deepEqual(projectTurnEvents({ ...TURN, status: TURN_STATUS.QUEUED }, undefined), []);
 });
 
 test("the projection: every question a planning call queued is told before the turn ends, in the order queued, around the one slow step", () => {
@@ -509,7 +483,7 @@ test("the projection: a running turn's words wait behind a call not yet settled,
         TURN,
         journal([
           step,
-          toolPart(BRAIN_TOOL.READ_TRANSCRIPT, "c1"),
+          toolPart(RUN_IN_REPOSITORY_TOOL.name, "c1", { command: "ls" }),
           step,
           words,
           toolPart(QUEUE_QUESTION_TOOL.name, "c2", question),
@@ -524,7 +498,7 @@ test("the projection: a running turn's words wait behind a call not yet settled,
         TURN,
         journal([
           step,
-          toolPart(BRAIN_TOOL.READ_TRANSCRIPT, "c1", {}, "output-available"),
+          toolPart(RUN_IN_REPOSITORY_TOOL.name, "c1", { command: "ls" }, "output-available"),
           step,
           words,
           toolPart(QUEUE_QUESTION_TOOL.name, "c2", question),

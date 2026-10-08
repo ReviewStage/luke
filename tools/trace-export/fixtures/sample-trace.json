@@ -3,7 +3,7 @@
   "timestamp": "2026-01-01T00:00:00.000Z",
   "name": "sample-trace",
   "total_tokens": {
-    "input": 128,
+    "input": 0,
     "output": 0
   },
   "total_cost": 0,
@@ -48,31 +48,6 @@
         {
           "role": "user",
           "content": "Is the sample workspace ready?"
-        },
-        {
-          "role": "assistant",
-          "content": "The sample workspace is ready."
-        }
-      ]
-    },
-    {
-      "type": "generation",
-      "name": "brain-turn",
-      "model": "gpt-6.1-sol",
-      "provider": "openai",
-      "metrics": {
-        "latency": 0.042,
-        "tokens": {
-          "input": 128,
-          "output": 0
-        },
-        "cost": 0
-      },
-      "available_tools": [],
-      "messages": [
-        {
-          "role": "user",
-          "content": "trigger: ask\ninput items: message\ntranscript bytes: 256"
         },
         {
           "role": "assistant",

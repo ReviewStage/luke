@@ -7,6 +7,7 @@ import type { ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
+import type { ToolDefinition } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../board-tool.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
@@ -20,7 +21,6 @@ import {
 } from "../public-research.js";
 import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL, runInRepository } from "../repository-shell.js";
-import type { HostedToolDeclaration } from "./tools.js";
 
 /**
  * planning.ts -- what a plan conversation's turns run under: the planning model's instructions, its document, and its tools.
@@ -192,15 +192,17 @@ export function planningStandingContext(
 }
 
 /**
- * The saved document the standing context carries, read back from its text;
- * nothing where the text carries none. The scripted fixture model reads its
- * document this way, which is the only reader: the service never parses the
- * text it composed.
+ * One tool as eve is told of it: the name, words, and wire schema as JSON.
+ * Nothing but data, because eve keeps what a dynamic tool resolver returns
+ * across its durable steps and admits no closure that captures anything
+ * else; the execution is bound in the eve project's own file, over these
+ * declarations and the host it imports.
  */
-export function documentTextOf(standingContext: string): string | undefined {
-  const lines = standingContext.split("\n");
-  const at = lines.indexOf(DOCUMENT_MARKER);
-  return at === -1 ? undefined : lines[at + 1];
+export interface HostedToolDeclaration {
+  readonly name: string;
+  readonly description: string;
+  /** The wire schema's JSON, as eve takes a plain JSON Schema input. */
+  readonly inputSchema: ToolDefinition["inputSchema"];
 }
 
 /** What one planning call runs under: the plan the conversation belongs to and the turn's research bounds. */
@@ -263,7 +265,7 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
 
 const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, tool]));
 
-/** The declarations every planning turn is offered, whatever kind of turn opened it. */
+/** The declarations every turn is offered, whatever kind of turn opened it. */
 export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
   return PLANNING_TOOLS.map((tool) => ({
     name: tool.name,

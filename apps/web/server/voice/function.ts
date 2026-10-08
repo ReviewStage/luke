@@ -1,8 +1,7 @@
 import { Effect, Redacted } from "effect";
 import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
 import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";
-import { VAULT_ENCRYPTION_ENVIRONMENT } from "../hosted/encryption.js";
-import { OBSERVATION_ENVIRONMENT } from "../hosted/observation-bounds.js";
+import { CRON_ENVIRONMENT } from "../hosted/maintenance-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { recordVoiceSeconds, spendHostedMeter } from "../hosted/quota.js";
 import { runWeb } from "../runtime.js";
@@ -76,8 +75,7 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
     accounts: deploymentAccounts,
     record: voiceSessionRecord(),
     exchange: deploymentExchange({
-      encryptionSecret: () => configured(VAULT_ENCRYPTION_ENVIRONMENT.SECRET),
-      deploymentSecret: () => configured(OBSERVATION_ENVIRONMENT.CRON_SECRET),
+      deploymentSecret: () => configured(CRON_ENVIRONMENT.CRON_SECRET),
       eveOrigin: deploymentEveOrigin,
       openAiKey: () => configured(VOICE_FUNCTION_ENVIRONMENT.API_KEY),
       report: (message) =>

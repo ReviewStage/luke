@@ -78,7 +78,7 @@ export const voiceSessions = pgTable(
      * When the device's socket last went without a hang-up, leaving the
      * WebRTC session standing for a re-attach; null while a connection holds
      * the session, and cleared by the re-attach. An open row stamped longer
-     * ago than the grace is an orphan the scheduled tick closes.
+     * ago than the grace is an orphan the scheduled sweep closes.
      */
     detachedAt: instant("detached_at"),
   },

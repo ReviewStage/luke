@@ -56,7 +56,7 @@
     "dest": "/api/default.js?route=plans"
   },
   {
-    "src": "/api/observation/tick",
-    "dest": "/api/observation-tick.js?route=observation/tick"
+    "src": "/api/maintenance/sweep",
+    "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
   }
 ]

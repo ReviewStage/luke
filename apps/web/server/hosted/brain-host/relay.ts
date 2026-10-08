@@ -1,5 +1,4 @@
-import { catchAllButInterrupt } from "@sidecar/runtime/effect";
-import { Cause, Effect, Option, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
@@ -11,7 +10,6 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
-  BRAIN_TOOL,
   type BrainRequestFailure,
   type BrainRequestStatus,
   type BrainRunEvent,
@@ -31,10 +29,8 @@ import {
   userMessage,
   userMetadataOf,
 } from "../../core.js";
-import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import type { AskDeliveryBinding } from "../store/asks.js";
-import type { ConversationTarget } from "../store/index.js";
-import type { StoreWriter } from "./announce.js";
+import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
@@ -155,14 +151,10 @@ export function memoryRelayState(initial: RelayState = EMPTY_RELAY_STATE): Relay
   };
 }
 
-type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
-
 /** The session an event belongs to and the conversation the host admitted it for. */
 export interface RelayStanding {
   readonly sessionId: string;
   readonly target: ConversationTarget;
-  /** The kind of conversation admitted, as its row says; a child's turn end owes its parent a completion. */
-  readonly kind: ConversationKind;
   /** The kind of turn the request that opened the current turn named; nothing when it named none. */
   readonly turn: BrainHostTurn | undefined;
   /** The model eve resolved the session's turns to, as the turn row records it; nothing where none is known. */
@@ -194,10 +186,6 @@ interface StreamRelaySeams {
     eveTurnId: string,
     turnId: string,
   ) => RelayEffect<void>;
-  /** Puts a turn's briefing on offer, once its announce call is on the journal; answers whether the offer landed. */
-  readonly offer: (target: ConversationTarget, turnId: string) => RelayEffect<boolean>;
-  /** Delivers a child's completion to its parent once the child's turn is sealed: the mark on the child's row, then the one turn into the parent. */
-  readonly deliverCompletion: (child: ConversationTarget) => RelayEffect<void>;
   readonly now: () => number;
   /** Where a write the writer refused is said; the relay never throws into eve's turn. */
   readonly report: (message: string) => void;
@@ -207,9 +195,6 @@ interface StreamRelaySeams {
 const TURN_ORIGIN_OF_HOST_TURN = {
   [BRAIN_HOST_TURN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_HOST_TURN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-  [BRAIN_HOST_TURN.OBSERVATION]: TURN_ORIGIN.TRANSCRIPT_CHANGE,
-  [BRAIN_HOST_TURN.CHILD_TASK]: TURN_ORIGIN.CHILD,
-  [BRAIN_HOST_TURN.CHILD_COMPLETION]: TURN_ORIGIN.CHILD_COMPLETION,
 } as const satisfies Record<BrainHostTurn, TurnOrigin>;
 
 const TOOL_CALL_KIND = "tool-call";
@@ -697,7 +682,7 @@ export class StreamRelay {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
-      // A result eve emits again finds its call already settled and does nothing more, offer included.
+      // A result eve emits again finds its call already settled and does nothing more.
       if (
         Object.values(turn.steps).some((step) =>
           step.parts.some(
@@ -720,22 +705,6 @@ export class StreamRelay {
       standing.state.update((state) =>
         withTurn(state, eveTurnId, (held) => withSettlement(held, callId, settlement)),
       );
-      // A briefing is on offer the moment its call is settled on the record:
-      // the relay has just written the part the words ride on, so the offer
-      // cannot race the journal the way a lookup from inside the tool would.
-      if (
-        name === BRAIN_TOOL.ANNOUNCE &&
-        settlement.state === TOOL_CALL_SETTLEMENT.OUTPUT_AVAILABLE &&
-        settlement.status === ACTION_RESULT_STATUS.ACCEPTED
-      ) {
-        const offered = yield* this.#seams.offer(
-          standing.target,
-          hostTurnId(standing.sessionId, eveTurnId),
-        );
-        if (!offered) {
-          this.#seams.report(`The briefing of turn ${eveTurnId} could not be put on offer.`);
-        }
-      }
     });
   }
 
@@ -875,19 +844,6 @@ export class StreamRelay {
       // that settles it, which a dropped turn would answer with nothing.
       if (!sealed) return;
       standing.state.update((state) => this.#without(state, eveTurnId));
-      // A child's sealed turn is a completion owed to its parent, delivered
-      // from here so the parent hears of it the moment it is on record; the
-      // seam claims the child's row before it sends, so an end eve re-emits
-      // or the sweep a minute later delivers nothing twice. A delivery that
-      // fails is said and left to the sweep: the seal stands, and a hook that
-      // failed here would only have eve tell the same end again.
-      if (standing.kind !== CONVERSATION_KIND.CHILD) return;
-      yield* catchAllButInterrupt(this.#seams.deliverCompletion(standing.target), (cause) => {
-        this.#seams.report(
-          `The completion of child ${standing.target.conversationId} could not be delivered from turn ${eveTurnId}: ${Cause.pretty(cause)}`,
-        );
-        return Effect.void;
-      });
     });
   }
 

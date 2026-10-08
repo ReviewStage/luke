@@ -5,7 +5,6 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { openPlanConversation } from "../hosted/plan-store.js";
-import type { HostedStoreContext } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
 import {
   type ExchangeAttachment,
@@ -17,8 +16,7 @@ import { upstreamSideband } from "./live-sideband.js";
 /**
  * The hosted exchange as the voice service is offered it, one per signed-in
  * session: the conversation of the plan the session is bound to resolved at
- * the session's start, the store context and the writer the function already
- * holds, eve reached as the deployment for that account, and a notetaker
+ * the session's start, the writer the function already holds, eve reached as the deployment for that account, and a notetaker
  * writing the plan as the call goes. This is the whole of what
  * `VoiceServiceOptions.exchange` takes, kept apart from the function's
  * composition, which passes it composed over the deployment's seams
@@ -33,7 +31,6 @@ import { upstreamSideband } from "./live-sideband.js";
  */
 
 interface ExchangeAttachmentDeps {
-  readonly context: HostedStoreContext;
   readonly writer: StoreWriter;
   /** eve as the deployment reaches it for one account, composed by the caller so no secret enters here. */
   readonly eve: (accountId: string) => EveSessions;
@@ -91,7 +88,6 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
                 ...(session.onPlanDraft ? { onDraft: session.onPlanDraft } : undefined),
               },
             }),
-        context: deps.context,
         writer: deps.writer,
         eve: deps.eve(session.accountId),
         createId: deps.createId,

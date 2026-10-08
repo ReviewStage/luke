@@ -83,7 +83,6 @@ export const VOICE_WRITE_REFUSAL = {
   /** No `voice_sessions` row stands for this account and live session. */
   NO_SESSION: "no_session",
   NO_CONVERSATION: STORE_WRITE_REFUSAL.NO_CONVERSATION,
-  NO_MESSAGE: STORE_WRITE_REFUSAL.NO_MESSAGE,
   MESSAGE_REFUSED: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
 } as const;
 

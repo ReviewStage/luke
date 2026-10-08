@@ -1,5 +1,4 @@
 import type { BrainRunUsage } from "@sidecar/brain";
-import type { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   CONVERSATION_EVENT_KIND,
@@ -51,9 +50,19 @@ import { CONVERSATION_KIND } from "./storage-vocabulary.js";
  * Postgres instant needs no second clock beside it.
  */
 
-/** How a conversation's last memory flush ended, as the housekeeping vocabulary names it. */
-type MemoryFlushOutcome =
-  (typeof MEMORY_HOUSEKEEPING_OUTCOME)[keyof typeof MEMORY_HOUSEKEEPING_OUTCOME];
+/**
+ * How a conversation's last memory flush ended, as the housekeeping vocabulary
+ * that wrote the column named it; nothing writes the column now.
+ */
+const MEMORY_FLUSH_OUTCOME = {
+  COMPLETED: "completed",
+  NOTHING_TO_STORE: "nothing-to-store",
+  SKIPPED: "skipped",
+  INTERRUPTED: "interrupted",
+  FAILED: "failed",
+} as const;
+
+type MemoryFlushOutcome = (typeof MEMORY_FLUSH_OUTCOME)[keyof typeof MEMORY_FLUSH_OUTCOME];
 
 type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 

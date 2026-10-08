@@ -31,13 +31,12 @@ import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 export const TURN_ABANDON = {
   /**
    * How long a turn may stand running before the sweep settles it. Far past
-   * any deadline a turn runs under: a scheduled turn has its account's
-   * 25-second share of the tick, and eve's own step retries end well inside
+   * any deadline a turn runs under: eve's own step retries end well inside
    * the hour, so a row still running this long is one whose end is not
    * coming.
    */
   AFTER_MS: 60 * 60 * 1000,
-  /** The most turns one tick settles; the rest wait for the next minute. */
+  /** The most turns one sweep settles; the rest wait for the next minute. */
   LIMIT: 50,
 } as const;
 

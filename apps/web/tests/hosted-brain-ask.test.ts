@@ -20,11 +20,7 @@ import {
   stopAsk,
 } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import {
-  deploymentEveOrigin,
-  eveOrigin,
-  tickEveOrigin,
-} from "../server/hosted/brain-host/eve-origin";
+import { deploymentEveOrigin } from "../server/hosted/brain-host/eve-origin";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
@@ -37,7 +33,7 @@ import {
   conversationOwnedBy,
   recordedRuntimeSession,
 } from "../server/hosted/brain-host/recorded-session";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import {
   ASK_DISPATCH_REFUSAL,
@@ -64,7 +60,7 @@ afterAll(() => database.close());
 /** The store writer over the test database, for the one write a Stop makes on a turn's row. */
 const writer = await database.run(
   storeWriter({
-    tools: CATALOG_TOOL_SET,
+    tools: HOSTED_TOOL_SET,
   }),
 );
 
@@ -345,21 +341,6 @@ function stampConversationDeletedAt(conversationId: string, deletedAt: Date) {
   );
 }
 
-test("eve's origin is the environment's where it names one and the caller's own otherwise, a blank name counting as none", async () => {
-  const before = process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN];
-  try {
-    delete process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN];
-    assert.equal(eveOrigin("https://luke.test"), "https://luke.test");
-    process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN] = "  ";
-    assert.equal(eveOrigin("https://luke.test"), "https://luke.test");
-    process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN] = "https://eve.luke.test";
-    assert.equal(eveOrigin("https://luke.test"), "https://eve.luke.test");
-  } finally {
-    if (before === undefined) delete process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN];
-    else process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN] = before;
-  }
-});
-
 /** The variables a deployment with no request in hand reads its own origin from. */
 const DEPLOYMENT_VARIABLES = {
   EVE_ORIGIN: BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN,
@@ -402,6 +383,17 @@ test("a deployment with no request in hand dials the origin the environment name
     },
     () => assert.equal(deploymentEveOrigin(), "https://eve.luke.test"),
   );
+  withDeployment({ EVE_ORIGIN: "https://eve.luke.test" }, () =>
+    assert.equal(deploymentEveOrigin(), "https://eve.luke.test"),
+  );
+});
+
+test("a blank origin in the environment counts as none named", () => {
+  withDeployment(
+    { EVE_ORIGIN: "  ", ENVIRONMENT: "preview", URL: "luke-abc123-luke.vercel.app" },
+    () => assert.equal(deploymentEveOrigin(), "https://luke-abc123-luke.vercel.app"),
+  );
+  withDeployment({ EVE_ORIGIN: "  " }, () => assert.equal(deploymentEveOrigin(), undefined));
 });
 
 test("production dials the project's production domain, not the host its authentication protects", () => {
@@ -431,38 +423,6 @@ test("a preview dials itself, and so does a production deployment naming no doma
 
 test("a machine that is neither configured nor deployed dials nothing", () => {
   withDeployment({}, () => assert.equal(deploymentEveOrigin(), undefined));
-});
-
-/** The tick as Vercel's cron invokes it: on the generated host the project's authentication protects. */
-const CRON_REQUEST = new Request("https://luke-abc123-luke.vercel.app/api/observation/tick");
-
-test("the tick dials the production domain, never the protected host its request arrived on", () => {
-  withDeployment(
-    {
-      ENVIRONMENT: "production",
-      URL: "luke-abc123-luke.vercel.app",
-      PRODUCTION_URL: "tryluke.dev",
-    },
-    () => assert.equal(tickEveOrigin(CRON_REQUEST), "https://tryluke.dev"),
-  );
-  withDeployment(
-    {
-      EVE_ORIGIN: "https://eve.luke.test",
-      ENVIRONMENT: "production",
-      URL: "luke-abc123-luke.vercel.app",
-      PRODUCTION_URL: "tryluke.dev",
-    },
-    () => assert.equal(tickEveOrigin(CRON_REQUEST), "https://eve.luke.test"),
-  );
-});
-
-test("a tick on a machine that is neither configured nor deployed dials the origin it was called on", () => {
-  withDeployment({}, () =>
-    assert.equal(
-      tickEveOrigin(new Request("http://localhost:3000/api/observation/tick")),
-      "http://localhost:3000",
-    ),
-  );
 });
 
 test("an ask naming another account's conversation is refused as not found before eve is reached, and nothing is recorded", async () => {

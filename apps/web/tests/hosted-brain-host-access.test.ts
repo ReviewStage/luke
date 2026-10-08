@@ -3,7 +3,6 @@ import { Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   actedForAccount,
   conversationIdOf,
@@ -70,12 +69,12 @@ test("the request's conversation and turn kind become attributes only when well 
   const good = requestAttributes(
     new Headers({
       [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID,
-      [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.OBSERVATION,
+      [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.SPOKEN,
     }),
   );
   assert.deepEqual(good, {
     [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: CONVERSATION_ID,
-    [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.OBSERVATION,
+    [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.SPOKEN,
   });
   const bad = requestAttributes(
     new Headers({
@@ -112,7 +111,6 @@ test("account A is admitted for its own conversation and the target names its ro
   assert.ok(Result.isSuccess(admitted));
   if (!Result.isSuccess(admitted)) return;
   assert.deepEqual(admitted.success.target, { userId: userA, conversationId: id });
-  assert.equal(admitted.success.kind, CONVERSATION_KIND.MAIN);
   assert.equal(admitted.success.runtimeSessionId, undefined);
 });
 
@@ -266,7 +264,7 @@ test("a session opened for the caller's own conversation but no kind of turn is 
   const admitted = await auth(
     opening("user-a", {
       [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION_ID,
-      [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.OBSERVATION,
+      [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.SPOKEN,
     }),
   );
   assert.equal(admitted?.principalId, "user-a");
@@ -408,55 +406,39 @@ async function refusal(run: () => ReturnType<AuthFn<Request>>): Promise<string> 
   assert.fail("the door admitted what it should have refused");
 }
 
-test("the deployment is a principal of its own type acting for the named account, minted only for a message naming a turn kind its table admits", async () => {
+test("the deployment is a principal of its own type acting for the named account, minted only for a message naming a turn kind its table admits: a spoken turn, because the voice function resolved that account at its handshake and holds no bearer by the time a delegation arrives, and never a typed one, which is only ever a developer's own", async () => {
   const actor = deploymentActor(DEPLOYMENT);
-  const opening = await actor(scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION));
+  const opening = await actor(scheduled("user-a", BRAIN_HOST_TURN.SPOKEN));
   assert.ok(opening);
   assert.equal(opening.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
   assert.equal(opening.principalType, BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT);
   assert.equal(opening.authenticator, BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT);
   assert.deepEqual(opening.attributes, {
     [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: CONVERSATION_ID,
-    [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.OBSERVATION,
+    [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.SPOKEN,
     [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: "user-a",
   });
   assert.equal(actedForAccount(opening), "user-a");
   const followUp = await actor(
-    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}`),
+    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`),
   );
   assert.equal(actedForAccount(followUp ?? null), "user-a");
-  // A child's task and a child's completion are the deployment's to open, for the named account, as an observation is.
-  for (const turn of [BRAIN_HOST_TURN.CHILD_TASK, BRAIN_HOST_TURN.CHILD_COMPLETION]) {
-    const child = await actor(scheduled("user-a", turn));
-    assert.ok(child);
-    assert.equal(child.principalType, BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT);
-    assert.equal(child.attributes[BRAIN_HOST_ATTRIBUTE.TURN], turn);
-    assert.equal(actedForAccount(child), "user-a");
-  }
 
   assert.equal(await actor(request("/eve/v1/session", "user-a")), null);
   assert.equal(
     await deploymentActor({ ...DEPLOYMENT, secret: undefined })(
-      scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION),
+      scheduled("user-a", BRAIN_HOST_TURN.SPOKEN),
     ),
     null,
   );
   assert.equal(
-    await refusal(() => actor(scheduled(undefined, BRAIN_HOST_TURN.OBSERVATION))),
+    await refusal(() => actor(scheduled(undefined, BRAIN_HOST_TURN.SPOKEN))),
     BRAIN_HOST_REFUSAL.NO_ACCOUNT,
   );
   assert.equal(
-    await refusal(() => actor(scheduled("not an account", BRAIN_HOST_TURN.OBSERVATION))),
+    await refusal(() => actor(scheduled("not an account", BRAIN_HOST_TURN.SPOKEN))),
     BRAIN_HOST_REFUSAL.NO_ACCOUNT,
   );
-  // The cancel of one turn is admitted for the account, with no kind of turn to name: the honour of
-  // a waiting ask's Stop runs in the deployment's hook, which holds no bearer of the account's.
-  const cancel = await actor(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`));
-  assert.equal(actedForAccount(cancel ?? null), "user-a");
-  assert.deepEqual(cancel?.attributes, {
-    [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: CONVERSATION_ID,
-    [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: "user-a",
-  });
   assert.equal(
     await refusal(() =>
       actor(scheduled(undefined, undefined, `/eve/v1/session/${SESSION_A}/cancel`)),
@@ -466,41 +448,14 @@ test("the deployment is a principal of its own type acting for the named account
   for (const forbidden of [
     scheduled("user-a", BRAIN_HOST_TURN.TYPED),
     scheduled("user-a", undefined),
-    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`, "GET"),
+    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`),
+    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}/cancel`),
     scheduled("user-a", undefined, "/eve/v1/session/cancel"),
-    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
-    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, "/eve/v1/info", "GET"),
+    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
+    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, "/eve/v1/info", "GET"),
   ]) {
     assert.equal(await refusal(() => actor(forbidden)), BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT);
   }
-});
-
-test("the spoken row is the one the voice function's asks admit: a spoken turn under the secret is minted for the named account in the spoken role, because the voice function resolved that account at its handshake and holds no bearer by the time a delegation arrives; the typed row stays refused, since a typed ask is only ever a developer's own", async () => {
-  const actor = deploymentActor(DEPLOYMENT);
-  assert.deepEqual(
-    Object.entries(DEPLOYMENT_TURNS)
-      .filter(([, admitted]) => admitted)
-      .map(([turn]) => turn),
-    [
-      BRAIN_HOST_TURN.SPOKEN,
-      BRAIN_HOST_TURN.OBSERVATION,
-      BRAIN_HOST_TURN.CHILD_TASK,
-      BRAIN_HOST_TURN.CHILD_COMPLETION,
-    ],
-  );
-  const spoken = await actor(scheduled("user-a", BRAIN_HOST_TURN.SPOKEN));
-  assert.ok(spoken);
-  assert.equal(spoken.principalType, BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT);
-  assert.equal(spoken.attributes[BRAIN_HOST_ATTRIBUTE.TURN], BRAIN_HOST_TURN.SPOKEN);
-  assert.equal(actedForAccount(spoken), "user-a");
-  const followUp = await actor(
-    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`),
-  );
-  assert.equal(actedForAccount(followUp ?? null), "user-a");
-  assert.equal(
-    await refusal(() => actor(scheduled("user-a", BRAIN_HOST_TURN.TYPED))),
-    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
-  );
 });
 
 test("the account a principal acts for is its own for a person and the named one for the deployment, and a request's account header reaches no person's attributes", () => {
@@ -527,15 +482,15 @@ test("at the door the deployment is admitted for the named account's own convers
     [deploymentActor(DEPLOYMENT), bearerOf("user-a")],
     ownershipOf({ [SESSION_A]: "user-a" }, { [CONVERSATION_ID]: "user-a" }),
   );
-  const opened = await auth(scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION));
+  const opened = await auth(scheduled("user-a", BRAIN_HOST_TURN.SPOKEN));
   assert.equal(opened?.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
   assert.equal(actedForAccount(opened ?? null), "user-a");
   const followed = await auth(
-    scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}`),
+    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`),
   );
   assert.equal(actedForAccount(followed ?? null), "user-a");
   assert.equal(
-    await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.OBSERVATION))),
+    await refusal(() => auth(scheduled("user-b", BRAIN_HOST_TURN.SPOKEN))),
     BRAIN_HOST_REFUSAL.NOT_OWNER,
   );
   // The authenticator's own refusal reaches the caller through the door with its reason, not as nobody signed in.
@@ -545,7 +500,7 @@ test("at the door the deployment is admitted for the named account's own convers
   );
   assert.equal(
     await refusal(() =>
-      auth(scheduled("user-b", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}`)),
+      auth(scheduled("user-b", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`)),
     ),
     BRAIN_HOST_REFUSAL.NOT_OWNER,
   );

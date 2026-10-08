@@ -41,7 +41,7 @@ const AUTH_DEPLOYMENT_ENVIRONMENT = {
 } as const;
 
 /** The variables the auth service's own secrets are read from; a blank value is absent. */
-export const AUTH_SECRET_ENVIRONMENT = {
+const AUTH_SECRET_ENVIRONMENT = {
   SESSION_SECRET: "BETTER_AUTH_SECRET",
   GOOGLE_CLIENT_ID: "GOOGLE_CLIENT_ID",
   GOOGLE_CLIENT_SECRET: "GOOGLE_CLIENT_SECRET",

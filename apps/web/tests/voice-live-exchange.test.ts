@@ -9,8 +9,6 @@ import { Deferred, Effect, Exit, Fiber, Option, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
@@ -23,8 +21,7 @@ import {
   type RelayStanding,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { payloadKeyRing } from "../server/hosted/encryption";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   createPlan,
   deletePlan,
@@ -46,7 +43,7 @@ import type { PlanDraft } from "../server/voice/plan-scribe";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
-import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
+import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted } from "./support/live-events";
 import { added } from "./support/plan-contents";
 import { scriptedScribeModel } from "./support/scribe-model";
@@ -79,7 +76,6 @@ const DelegatedMetadataSchema = Schema.Struct({ delegation_id: Schema.String });
 function delegationOf(row: { readonly metadata: unknown }): string | undefined {
   return Schema.is(DelegatedMetadataSchema)(row.metadata) ? row.metadata.delegation_id : undefined;
 }
-const KEYS = payloadKeyRing(TEST_PAYLOAD_SECRET);
 /** Where every acknowledged append ends on the session's clock; the voice that follows begins past it. */
 const APPEND_END_MS = 1_000;
 
@@ -92,7 +88,7 @@ const ACKNOWLEDGMENT_OF: ReadonlyMap<LiveClientEvent["type"], LiveServerEventTyp
 
 const writer = await database.run(
   storeWriter({
-    tools: CATALOG_TOOL_SET,
+    tools: HOSTED_TOOL_SET,
   }),
 );
 const askEffects = askRecord();
@@ -107,21 +103,16 @@ const asks = {
     id: string,
     dispatch: Parameters<typeof askEffects.dispatchOnce>[2],
   ) => database.run(askEffects.dispatchOnce(target, id, dispatch)),
-  cancelRequested: (id: string, at: Date) => database.run(askEffects.cancelRequested(id, at)),
   bindDeliveries: (
     target: Parameters<typeof askEffects.bindDeliveries>[0],
     deliveryIds: Parameters<typeof askEffects.bindDeliveries>[1],
     turnId: string,
   ) => database.run(askEffects.bindDeliveries(target, deliveryIds, turnId)),
-  stoppedOn: (target: Parameters<typeof askEffects.stoppedOn>[0], turnId: string) =>
-    database.run(askEffects.stoppedOn(target, turnId)),
 };
 const relay = new StreamRelay({
   writer,
   asks: askEffects,
   stopTurn: () => Effect.void,
-  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
-  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -257,7 +248,6 @@ async function stand(
         userId: target.userId,
         liveSessionId,
         conversationId: target.conversationId,
-        context: { keys: KEYS },
         writer,
         eve,
         createId: () => randomUUID(),
@@ -319,7 +309,6 @@ it.live(
         play(spokenTurn(FIRST_EVE_TURN, NOW), {
           sessionId: recorded,
           target,
-          kind: CONVERSATION_KIND.PLAN,
           turn: BRAIN_HOST_TURN.SPOKEN,
           model: "scripted-model",
           state: memoryRelayState(),
@@ -472,7 +461,6 @@ it.live(
         play(spokenTurn(FIRST_EVE_TURN, NOW), {
           sessionId: recorded,
           target,
-          kind: CONVERSATION_KIND.MAIN,
           turn: BRAIN_HOST_TURN.SPOKEN,
           model: "scripted-model",
           state: memoryRelayState(),
@@ -523,7 +511,6 @@ it.live(
       const standing: RelayStanding = {
         sessionId: recorded,
         target,
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -592,7 +579,6 @@ it.live(
         play(spokenTurn(FIRST_EVE_TURN, NOW), {
           sessionId: opened,
           target,
-          kind: CONVERSATION_KIND.MAIN,
           turn: BRAIN_HOST_TURN.SPOKEN,
           model: "scripted-model",
           state: memoryRelayState(),

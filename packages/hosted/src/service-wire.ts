@@ -8,9 +8,8 @@ import { Schema as EffectSchema, SchemaTransformation } from "effect";
  * wire module beside this one.
  *
  * Every declaration below is composed directly as an Effect `Schema` and
- * exported under its own name, the way `brain-contract.ts` states its
- * declarations: a caller reads one through `readEither` and shows it through
- * `emitJsonSchema`, both from `@sidecar/wire/effect`.
+ * exported under its own name: a caller reads one through `readEither` and
+ * shows it through `emitJsonSchema`, both from `@sidecar/wire/effect`.
  */
 
 /** Every refusal a hosted endpoint answers with, by its reason. */

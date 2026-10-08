@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { type ToolSet, tool } from "ai";
 import { Effect, Result, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
-import { z } from "zod";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -12,6 +10,7 @@ import {
   type UserMessageMetadata,
 } from "../server/core";
 import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
@@ -28,7 +27,6 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { appended, delegated, heard, liveEventId, said } from "./support/live-events";
 import {
   insertConversation,
-  readEventsByConversation,
   readMessagesByConversationTyped,
   readVoiceSessionByLiveSessionId,
   readVoiceTranscriptSegmentsBySession,
@@ -48,15 +46,7 @@ const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const database = await openHostedStoreTestDatabase({ at: NOW });
 afterAll(() => database.close());
 
-const TOOLS: ToolSet = {
-  announce: tool({
-    description: "Says a briefing aloud.",
-    inputSchema: z.object({ briefing: z.string() }),
-    outputSchema: z.object({}),
-  }),
-};
-
-const store = await database.run(storeWriter({ tools: TOOLS }));
+const store = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 const record = voiceSessionRecord(() => NOW);
 
 let liveSessions = 0;
@@ -110,11 +100,6 @@ function lukeRow(rowId: string, startMs: number, endMs: number): SpokenRowWrite 
   return { rowId, speaker: TRANSCRIPT_SPEAKER.ASSISTANT, startMs, endMs };
 }
 
-async function speechEvents(conversation: ConversationTarget) {
-  const rows = await readEventsByConversation(database.run, conversation.conversationId);
-  return rows.map((row) => ({ kind: row.kind, messageId: row.messageId, payload: row.payload }));
-}
-
 test("transcript deltas become segments with their timings and roles, in the order they arrived, overlap included", async () => {
   const live = await target();
   const voice = writer();
@@ -149,7 +134,6 @@ test("transcript deltas become segments with their timings and roles, in the ord
       endMs: 5600,
     },
   ]);
-  assert.deepEqual(await speechEvents(live.conversation), []);
 });
 
 test("segments after a gap land on the same open row, from a fresh writer, with closed_at still null", async () => {
@@ -221,7 +205,6 @@ test("events the writer does not keep are ignored, and nothing is written for th
     );
   }
   assert.deepEqual(await segments(live.liveSessionId), []);
-  assert.deepEqual(await speechEvents(live.conversation), []);
 });
 
 async function spokenAsks(conversation: ConversationTarget) {
@@ -526,7 +509,7 @@ test("Luke's later words are his rows too, and so is the brain's reply read alou
     ],
   );
 
-  // The brain's reply read aloud after a delegated ask: the appends mark nothing spoken, and each
+  // The brain's reply read aloud after a delegated ask: the appends write nothing, and each
   // settled utterance of the reading is Luke's own row like any other — the
   // words the developer heard, beside the turn's journal the brain wrote.
   const reading = await target();
@@ -572,7 +555,6 @@ test("Luke's later words are his rows too, and so is the brain's reply read alou
       ],
     ],
   );
-  assert.deepEqual(await speechEvents(reading.conversation), []);
 });
 
 /**

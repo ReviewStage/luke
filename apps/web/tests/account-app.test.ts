@@ -41,12 +41,9 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   posthogPersonalApiKey: Redacted.make("posthog-personal-key"),
   posthogProjectId: "posthog-project-1",
   posthogApiHost: undefined,
-  providerKeyEncryptionSecret: undefined,
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
-  authSecret: undefined,
-  apnsCredentials: undefined,
 };
 
 interface Backing {

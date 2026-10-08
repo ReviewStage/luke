@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
-    "@sidecar/brain": "workspace:*",
     "@sidecar/devtrace": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/wire": "workspace:*",

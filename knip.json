@@ -43,8 +43,7 @@
         "scripts/*.ts",
         "server/feedback.mjs"
       ],
-      "project": ["src/**", "server/**", "scripts/**", "tests/**"],
-      "ignoreDependencies": ["@sidecar/providers"]
+      "project": ["src/**", "server/**", "scripts/**", "tests/**"]
     },
     "packages/*": {
       "entry": ["src/ui-messages/index.ts", "src/testing/index.ts", "src/effect/index.ts"],

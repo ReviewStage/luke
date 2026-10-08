@@ -1,21 +1,17 @@
-import type { BrainTurnTrigger } from "../../core.js";
 import {
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
   type BrainTurnOrigin,
-  DAY_MS,
-  maximumRecentBriefings,
+  type BrainTurnTrigger,
 } from "../../core.js";
 
 /**
  * The bounds and names the hosted brain host runs under: how a request names
  * the conversation and the kind of turn it opens, how long the runtime keeps
- * one session, and the workspace's label in the prompt. Every one is a
+ * one session, and what a rotated session is seeded with. Every one is a
  * product knob as much as an implementation detail.
  */
 export const BRAIN_HOST = {
-  /** The name the prompt's workspace section gives the row-backed workspace; a label, never a path anything reads. */
-  WORKSPACE_NAME: "workspace",
   /** The model's context window as the runtime is told it; the compaction threshold is a fraction of this. */
   MODEL_CONTEXT_WINDOW_TOKENS: 400_000,
   /** The fraction of the window at which eve folds the session's context. */
@@ -26,14 +22,6 @@ export const BRAIN_HOST = {
   SEED_MESSAGES: 60,
   /** The longest the seed grows, in characters, cut from the front. */
   SEED_CHARS: 40_000,
-  /** The most characters one observation turn's transcript delta carries per session. */
-  TRANSCRIPT_DELTA_CHARS: 20_000,
-  /** The most cloud plugins the host keeps built, one per account, provider, and sealed key; the least recently reached goes first. */
-  PLUGIN_CACHE_CAPACITY: 1024,
-  /** How far back main's standing context recalls the briefings observed conversations gave; older ones are history the roster and the transcript reads cover. */
-  RECENT_BRIEFINGS_WINDOW_MS: DAY_MS,
-  /** How many of them at most, the newest kept; the same bound the text renders under. */
-  RECENT_BRIEFINGS: maximumRecentBriefings,
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */
@@ -71,8 +59,7 @@ export const BRAIN_HOST_ATTRIBUTE = {
  * The authenticator names the door admits a principal under: an account's
  * own bearer, or the deployment acting for an account it names under the
  * deployment's one secret. The deployment's name is one name whatever role
- * it acts in — the scheduled observation today, the voice service next —
- * because one secret proves no more than that something holding it acted;
+ * it acts in — today the voice service's — because one secret proves no more than that something holding it acted;
  * which role is the turn kind on the principal, recorded as such, and never
  * a name the credential cannot support.
  */
@@ -100,11 +87,6 @@ export const BRAIN_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
 export const BRAIN_HOST_TURN = {
   TYPED: "typed",
   SPOKEN: "spoken",
-  OBSERVATION: "observation",
-  /** A child's own turn: the task its requester delegated, handed to the child conversation as its words. */
-  CHILD_TASK: "child-task",
-  /** A requester's turn opened by a child's completion, with the child's result as its words. */
-  CHILD_COMPLETION: "child-completion",
 } as const;
 
 export type BrainHostTurn = (typeof BRAIN_HOST_TURN)[keyof typeof BRAIN_HOST_TURN];
@@ -118,9 +100,8 @@ export function isBrainHostTurn(value: string): value is BrainHostTurn {
 /**
  * Where the developer's line of a turn stands on the record. Eve's received
  * message is the brain's input: for a typed ask it is the developer's own
- * words and the relay writes it as the user row; for an observation it is
- * the host's own notice and is written the same way. A
- * spoken ask is the exception: the developer's line is the voice session's
+ * words and the relay writes it as the user row. A spoken ask is the
+ * exception: the developer's line is the voice session's
  * transcript, cut at the delegation and written by the voice writer under the
  * delegation's id, while eve's input is the question the service composed
  * around it, already on record on the ask. Writing that input as a user row
@@ -148,21 +129,6 @@ export const BRAIN_HOST_TURN_KIND = {
     origin: BRAIN_TURN_ORIGIN.SPOKEN,
     trigger: BRAIN_TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
-  },
-  [BRAIN_HOST_TURN.OBSERVATION]: {
-    origin: BRAIN_TURN_ORIGIN.OBSERVATION,
-    trigger: BRAIN_TURN_TRIGGER.ROSTER,
-    receivedLine: RECEIVED_LINE.RELAY,
-  },
-  [BRAIN_HOST_TURN.CHILD_TASK]: {
-    origin: BRAIN_TURN_ORIGIN.CHILD,
-    trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
-    receivedLine: RECEIVED_LINE.RELAY,
-  },
-  [BRAIN_HOST_TURN.CHILD_COMPLETION]: {
-    origin: BRAIN_TURN_ORIGIN.CHILD_COMPLETION,
-    trigger: BRAIN_TURN_TRIGGER.CHILD_COMPLETION,
-    receivedLine: RECEIVED_LINE.RELAY,
   },
 } as const satisfies Record<
   BrainHostTurn,

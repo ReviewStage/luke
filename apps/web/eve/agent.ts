@@ -8,9 +8,8 @@ import { scriptedModel } from "./scripted-model.js";
 /**
  * Luke's judgment on the hosted tier, as an eve agent. eve ships a default
  * tool set that reads and writes files and runs a shell; none of it is
- * offered here, because the brain's workspace tools are the one place the
- * brain writes a file at all and every other tool it has is one the catalog
- * declares and the policy admits. A session has no lifetime of eve's own:
+ * offered here, because every tool the brain has is one the planning model
+ * declares. A session has no lifetime of eve's own:
  * the conversation's rows are the record, and a session rotates when the
  * host decides, never when a clock runs out. The model is chosen per
  * inference, so the account's daily meter is spent once for each.

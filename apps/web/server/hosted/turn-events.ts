@@ -1,26 +1,20 @@
 import {
-  BRAIN_TURN_TRIGGER,
-  type BrainTurnTrigger,
   isSettledToolPartState,
   isStoredToolPart,
   replySentences,
   SLOW_STEP_KIND,
   type StoredToolPart,
   type StoredUIMessage,
-  slowStepOf,
   storedToolName,
   TURN_END,
   TURN_EVENT_KIND,
-  TURN_ORIGIN,
   TURN_STATUS,
   type TurnEnd,
   type TurnEvent,
   type TurnEventBody,
-  type TurnOrigin,
   type TurnStatus,
   UI_PART_TYPE,
 } from "../core.js";
-import { hostedTurnPolicy } from "./brain-host/tools.js";
 import { QUEUE_QUESTION_TOOL, queuedQuestionOf } from "./queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import type { StoredTurnRecord } from "./store/index.js";
@@ -42,15 +36,6 @@ import type { StoredTurnRecord } from "./store/index.js";
  * end is the last event of every turn.
  */
 
-/** The trigger a turn ran under, read back from the origin its row records, for the tool policy that classifies its slow steps. */
-const TRIGGER_OF_TURN_ORIGIN = {
-  [TURN_ORIGIN.TYPED]: BRAIN_TURN_TRIGGER.ASK,
-  [TURN_ORIGIN.SPOKEN]: BRAIN_TURN_TRIGGER.ASK,
-  [TURN_ORIGIN.TRANSCRIPT_CHANGE]: BRAIN_TURN_TRIGGER.ROSTER,
-  [TURN_ORIGIN.CHILD]: BRAIN_TURN_TRIGGER.CHILD_TASK,
-  [TURN_ORIGIN.CHILD_COMPLETION]: BRAIN_TURN_TRIGGER.CHILD_COMPLETION,
-} as const satisfies Record<TurnOrigin, BrainTurnTrigger>;
-
 /** How a terminal turn status reads to a client telling a reply from a refusal; nothing for a turn still under way. */
 const TURN_END_OF_STATUS = {
   [TURN_STATUS.SETTLED]: TURN_END.COMPLETED,
@@ -60,8 +45,8 @@ const TURN_END_OF_STATUS = {
   [TURN_STATUS.RUNNING]: undefined,
 } as const satisfies Record<TurnStatus, TurnEnd | undefined>;
 
-/** The turn as the projection reads it: what opened it and where it stands. */
-type ProjectedTurn = Pick<StoredTurnRecord, "id" | "origin" | "status">;
+/** The turn as the projection reads it: which it is and where it stands. */
+type ProjectedTurn = Pick<StoredTurnRecord, "id" | "status">;
 
 type JournalParts = StoredUIMessage["parts"];
 
@@ -92,33 +77,26 @@ function replyTextOf(parts: readonly JournalPart[]): string {
 
 /**
  * What one call tells while the turn runs: a question a planning call queued,
- * or the kind of slow step it is. Note that a planning call's repository
- * command is named before the policy is asked, because it is a planning tool
- * and no catalog policy offers it, so the brain's own `slowStepOf` would
- * never count it. A queued question is told once its input is whole, never
- * while it streams, so a question is never told twice.
+ * or a repository command, the one slow step. A queued question is told once
+ * its input is whole, never while it streams, so a question is never told
+ * twice.
  */
-function callEventOf(
-  part: StoredToolPart,
-  policy: ReturnType<typeof hostedTurnPolicy>,
-): TurnEventBody | undefined {
+function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   const name = storedToolName(part);
   if (name === QUEUE_QUESTION_TOOL.name) {
     const queued = queuedQuestionOf(part);
     return queued === undefined ? undefined : { kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued };
   }
-  const slow =
-    name === RUN_IN_REPOSITORY_TOOL.name
-      ? SLOW_STEP_KIND.REPOSITORY_READ
-      : slowStepOf(policy, name);
-  return slow === undefined ? undefined : { kind: TURN_EVENT_KIND.SLOW_STEP, step: slow };
+  return name === RUN_IN_REPOSITORY_TOOL.name
+    ? { kind: TURN_EVENT_KIND.SLOW_STEP, step: SLOW_STEP_KIND.REPOSITORY_READ }
+    : undefined;
 }
 
 /**
  * The turn's events as the record now stands, numbered from one, walked
- * step by step: a step's sentences, then what its calls tell. A slow step,
- * once, as the desktop tells one per run, and every question a planning call
- * queued, are told the moment their call is on the journal. A sentence is
+ * step by step: a step's sentences, then what its calls tell. The slow step,
+ * once per run, and every question a planning call queued, are told the
+ * moment their call is on the journal. A sentence is
  * told while the turn still runs once every call journaled ahead of its step
  * has settled, behind one settled mark, so nothing is said ahead of an action
  * whose result is not on record; the first sentence held back holds back
@@ -134,7 +112,6 @@ export function projectTurnEvents(
   turn: ProjectedTurn,
   journal: StoredUIMessage | undefined,
 ): readonly TurnEvent[] {
-  const policy = hostedTurnPolicy(TRIGGER_OF_TURN_ORIGIN[turn.origin]);
   const end = TURN_END_OF_STATUS[turn.status];
   const speaks = end === undefined || end === TURN_END.COMPLETED;
   const bodies: TurnEventBody[] = [];
@@ -154,7 +131,7 @@ export function projectTurnEvents(
     for (const part of step) {
       if (!isStoredToolPart(part)) continue;
       if (!isSettledToolPartState(part.state)) unsettled = true;
-      const told = callEventOf(part, policy);
+      const told = callEventOf(part);
       if (told === undefined || (told.kind === TURN_EVENT_KIND.SLOW_STEP && slowStepTold)) continue;
       slowStepTold ||= told.kind === TURN_EVENT_KIND.SLOW_STEP;
       bodies.push(told);

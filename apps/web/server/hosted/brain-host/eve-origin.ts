@@ -2,11 +2,9 @@ import { BRAIN_HOST_ENVIRONMENT } from "./bounds.js";
 
 /**
  * The origin eve answers on: the one the environment names, or the caller's
- * own, since eve answers behind this deployment's `/eve/v1/*` rewrite. The
- * ask route hands in its request's origin; the voice function hands in the
- * origin of the socket's upgrade, so both spell this once and drift never.
+ * own, since eve answers behind this deployment's `/eve/v1/*` rewrite.
  */
-export function eveOrigin(callerOrigin: string): string {
+function eveOrigin(callerOrigin: string): string {
   return process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN]?.trim() || callerOrigin;
 }
 
@@ -41,16 +39,4 @@ export function deploymentEveOrigin(): string | undefined {
       : undefined;
   const own = production || process.env[VERCEL_ENVIRONMENT.URL]?.trim();
   return eveOrigin(own ? `https://${own}` : "") || undefined;
-}
-
-/**
- * The origin eve answers on for the scheduled tick, which holds a request but
- * cannot dial its origin: Vercel's cron invokes the function on the generated
- * `*.vercel.app` host, whose authentication the cron call bypasses and the
- * opener's own POST to `/eve/v1/session` does not. So the tick dials what a
- * caller with no request in hand would, and the request's origin only on a
- * machine that is neither configured nor deployed, which is a local run.
- */
-export function tickEveOrigin(request: Request): string {
-  return deploymentEveOrigin() ?? new URL(request.url).origin;
 }
