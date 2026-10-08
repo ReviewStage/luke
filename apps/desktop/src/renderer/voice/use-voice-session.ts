@@ -18,7 +18,7 @@ import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
-import { LiveCall } from "./live-call";
+import { LiveCall, type LiveStreamSlot } from "./live-call";
 import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { startVoiceLevelMeter } from "./voice-level-meter";
@@ -44,6 +44,14 @@ const remoteStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<Media
 const localStreamAtom: Atom.Writable<MediaStream | undefined> = Atom.make<MediaStream | undefined>(
   undefined,
 );
+
+/** One of the two atoms as the slot a call shows its stream in and reads back before clearing it. */
+function atomSlot(atom: Atom.Writable<MediaStream | undefined>): LiveStreamSlot {
+  return {
+    current: () => rendererRegistry.get(atom),
+    show: (stream) => rendererRegistry.set(atom, stream),
+  };
+}
 
 /**
  * The spoken conversation, held in the hidden voice window so no panel does.
@@ -86,7 +94,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         events,
         acts: {
           createSession: (sdp, planId) => act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, planId }),
-          endSession: () => tell(ACT_KIND.VOICE_END_LIVE_SESSION),
+          endSession: (request) => tell(ACT_KIND.VOICE_END_LIVE_SESSION, request),
           reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
         },
@@ -106,8 +114,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
             enumerate: () => navigator.mediaDevices.enumerateDevices(),
             open: (audio) => navigator.mediaDevices.getUserMedia({ audio, video: false }),
           }),
-        onRemoteStream: (remote) => rendererRegistry.set(remoteStreamAtom, remote),
-        onLocalStream: (local) => rendererRegistry.set(localStreamAtom, local),
+        remoteStream: atomSlot(remoteStreamAtom),
+        localStream: atomSlot(localStreamAtom),
         // The element alone is muted, never the stream: the meter reads the
         // stream, and is what tells the call when the silenced utterance ends.
         onOutputSilenced: (silenced) => {

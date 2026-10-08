@@ -62,10 +62,13 @@ export const ONE_ACT_OF_EACH_KIND = {
       planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
     },
   },
-  [ACT_KIND.VOICE_END_LIVE_SESSION]: { kind: ACT_KIND.VOICE_END_LIVE_SESSION },
+  [ACT_KIND.VOICE_END_LIVE_SESSION]: {
+    kind: ACT_KIND.VOICE_END_LIVE_SESSION,
+    payload: { sessionId: "sess_1" },
+  },
   [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: {
     kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
-    payload: { state: "connected" },
+    payload: { sessionId: "sess_1", state: "connected" },
   },
   [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: {
     kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,

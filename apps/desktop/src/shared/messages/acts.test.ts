@@ -69,17 +69,28 @@ test("the live session acts carry the peer's offer verbatim about its plan, a tr
   );
   assert.equal(parsedAct({ kind: ACT_KIND.VOICE_CREATE_LIVE_SESSION }), undefined);
   const transport = (state: WireValue) =>
-    parsedAct({ kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, payload: { state } });
+    parsedAct({
+      kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
+      payload: { sessionId: "sess_1", state },
+    });
   for (const state of ["connecting", "connected", "disconnected", "failed", "closed"]) {
     assert.ok(transport(state), state);
   }
   assert.equal(transport("new"), undefined);
   assert.equal(transport(1), undefined);
+  // A report naming no session could end any call, so it reaches none.
+  assert.equal(
+    parsedAct({ kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, payload: { state: "closed" } }),
+    undefined,
+  );
   const activity = (idle: WireValue) =>
     parsedAct({ kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, payload: { idle } });
   assert.ok(activity(true));
   assert.ok(activity(false));
   assert.equal(activity("yes"), undefined);
+  // A hang-up names the session it hangs up, so an old call's hang-up ends nothing newer.
+  assert.ok(parsedAct({ kind: ACT_KIND.VOICE_END_LIVE_SESSION, payload: { sessionId: "sess_1" } }));
+  assert.equal(parsedAct({ kind: ACT_KIND.VOICE_END_LIVE_SESSION }), undefined);
   assert.equal(parsedAct({ kind: ACT_KIND.VOICE_END_LIVE_SESSION, payload: {} }), undefined);
   assert.deepEqual(parsedAct({ kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
     kind: ACT_KIND.VOICE_STOP_SPEAKING,

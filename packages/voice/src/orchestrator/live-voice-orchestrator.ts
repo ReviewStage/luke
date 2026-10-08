@@ -136,6 +136,12 @@ export class LiveVoiceOrchestrator {
   /** Completed once the standing call should end, which is what lets its lifecycle fiber close the scope and release it. */
   #ending: Deferred.Deferred<void> | undefined;
   /**
+   * Completed once a call told to end while still held is let go of. A
+   * closing call hears nothing more, so a press landing during its close
+   * waits on this and is heard on the next call instead.
+   */
+  #closing: Deferred.Deferred<void> | undefined;
+  /**
    * Whether the talk key is down. A press's unmute follows the session it
    * opened only while this still stands, so a key let go of, or a stop
    * pressed, during the opening leaves the session muted rather than
@@ -199,6 +205,9 @@ export class LiveVoiceOrchestrator {
         // Note that a key let go of while the old call closed opens nothing.
         if (!this.#keyDown) return;
       }
+      // A press naming no plan spoke into the call that stood; once that call
+      // has gone there is none, and the press opens nothing.
+      if ((yield* this.#outlastClosing()) && (!this.#keyDown || planId === undefined)) return;
       yield* this.#talk(plan);
     });
   }
@@ -229,6 +238,7 @@ export class LiveVoiceOrchestrator {
         return;
       }
       if (call !== undefined && this.#callPlan !== planId) yield* this.#hangUp();
+      yield* this.#outlastClosing();
       yield* this.#talk(planId);
     });
   }
@@ -349,7 +359,10 @@ export class LiveVoiceOrchestrator {
     return Effect.sync(() => {
       switch (change.phase) {
         case LIVE_SESSION_PHASE.CLOSING:
-          if (this.#aboutThisCall(change)) this.#endCall();
+          if (!this.#aboutThisCall(change)) return;
+          // A press that stood for this call ends with it, so the next press opens a new one.
+          this.#releasePress();
+          this.#endCall();
           return;
         case LIVE_SESSION_PHASE.CLOSED: {
           // A call still standing that the word is not about is left alone.
@@ -359,11 +372,11 @@ export class LiveVoiceOrchestrator {
           // finishes its own hang-up behind.
           this.#releasePress();
           if (this.#call) {
-            this.#call = undefined;
             this.#status = LIVE_STATUS.IDLE;
             this.#speakers = SILENT;
             this.#rows = [];
             this.#endCall();
+            this.#letGo();
             this.#recomposeCaptions();
             this.#touch();
           }
@@ -397,7 +410,7 @@ export class LiveVoiceOrchestrator {
       this.#stopped = true;
       const fiber = this.#lifecycle;
       this.#lifecycle = undefined;
-      this.#call = undefined;
+      this.#letGo();
       return fiber ? Effect.asVoid(Fiber.interrupt(fiber)) : Effect.void;
     });
   }
@@ -411,13 +424,13 @@ export class LiveVoiceOrchestrator {
     return Effect.suspend(() => {
       const fiber = this.#lifecycle;
       this.#lifecycle = undefined;
-      this.#call = undefined;
       this.#opening = undefined;
       this.#ending = undefined;
       this.#status = LIVE_STATUS.IDLE;
       this.#speakers = SILENT;
       this.#rows = [];
       this.#talkOpening = false;
+      this.#letGo();
       this.#recomposeCaptions();
       this.#touch();
       return fiber ? Effect.asVoid(Fiber.interrupt(fiber)) : Effect.void;
@@ -433,20 +446,55 @@ export class LiveVoiceOrchestrator {
     this.#pressHeld = false;
   }
 
-  /** Signals the standing call's lifecycle fiber to end, which releases it by closing it exactly once. */
+  /**
+   * Signals the standing call's lifecycle fiber to end, which releases it by
+   * closing it exactly once. A call still held through its close is marked
+   * closing, so a press meanwhile waits for it to be let go of.
+   */
   #endCall(): void {
     const ending = this.#ending;
     this.#ending = undefined;
-    if (ending) Deferred.doneUnsafe(ending, Exit.void);
+    if (!ending) return;
+    if (this.#call !== undefined) this.#closing ??= Deferred.makeUnsafe<void>();
+    Deferred.doneUnsafe(ending, Exit.void);
+  }
+
+  /**
+   * Waits out a call the host is closing, answering whether there was one.
+   * A press waits here, before it marks itself held, because the closing
+   * call's end releases whatever press stood when it went.
+   */
+  #outlastClosing(): Effect.Effect<boolean> {
+    return Effect.suspend(() => {
+      const closing = this.#closing;
+      return closing ? Effect.as(Deferred.await(closing), true) : Effect.succeed(false);
+    });
+  }
+
+  /**
+   * Lets go of the held call, so the next press opens a new one, and frees a
+   * press waiting on its close. Note that the freed press resumes on this
+   * very stack, so a caller lets go last, once its own state is settled.
+   */
+  #letGo(): void {
+    this.#call = undefined;
+    const closing = this.#closing;
+    this.#closing = undefined;
+    if (closing) Deferred.doneUnsafe(closing, Exit.void);
   }
 
   /**
    * The session standing or coming up, or a new one opened now. One opening
    * at a time: a second ask while the first is still negotiating waits for
-   * it rather than offering the host a second peer.
+   * it rather than offering the host a second peer. A call the host is
+   * closing is no session to speak into: the ask waits until it is let go
+   * of, then opens the next.
    */
   #ensureSession(planId: string): Effect.Effect<LiveVoiceCall | undefined> {
     return Effect.gen({ self: this }, function* () {
+      yield* this.#outlastClosing();
+      // A stop frees a press waiting on a closing call, and a stopped orchestrator opens nothing.
+      if (this.#stopped) return undefined;
       if (this.#call?.standing) return this.#call;
       const negotiating = this.#opening;
       if (negotiating) return yield* Deferred.await(negotiating);
@@ -495,7 +543,7 @@ export class LiveVoiceOrchestrator {
       if (this.#opening === opened) this.#opening = undefined;
       if (!standing) {
         this.#talkOpening = false;
-        if (this.#call === call) this.#call = undefined;
+        if (this.#call === call) this.#letGo();
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
         this.#touch();
@@ -515,10 +563,10 @@ export class LiveVoiceOrchestrator {
     this.#status = status;
     this.#speakers = speakers;
     if (status === LIVE_STATUS.IDLE || status === LIVE_STATUS.FAILED) {
-      this.#call = undefined;
       this.#rows = [];
       this.#releasePress();
       this.#endCall();
+      this.#letGo();
     }
     this.#recomposeCaptions();
     this.#touch();

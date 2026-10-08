@@ -3,6 +3,7 @@ import {
   LIVE_PEER_END_REASON,
   LIVE_TRANSPORT_STATE,
   type LivePeerEndReason,
+  type VoiceEndLiveSessionParams,
   type VoiceReportLiveTransportParams,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
@@ -77,10 +78,22 @@ const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
 interface LiveCallActs {
   createSession: (sdp: string, planId: string) => Promise<VoiceCreateLiveSessionResult | undefined>;
-  endSession: () => void;
-  /** The peer connection's state as it changed, and at the peer's end, why it ended. */
+  /** The hang-up, naming the call's own session so it can end no other. */
+  endSession: (request: VoiceEndLiveSessionParams) => void;
+  /** The peer connection's state as it changed, and at the peer's end, why it ended, about the call's own session. */
   reportTransport: (report: VoiceReportLiveTransportParams) => void;
   reportActivity: (idle: boolean) => void;
+}
+
+/**
+ * A stream the window shows, shared by every call it ever holds: the element
+ * plays the remote one and the meters hear both. A call closing behind a
+ * newer one must not take the newer call's stream down, so a call clears a
+ * slot only while it still shows a stream of its own.
+ */
+export interface LiveStreamSlot {
+  current(): MediaStream | undefined;
+  show(stream: MediaStream | undefined): void;
 }
 
 export interface LiveCallOptions {
@@ -90,8 +103,10 @@ export interface LiveCallOptions {
   /** The silence the sending line carries between presses, so the model's input timeline never stalls. */
   createSilence: () => LiveSilence;
   openMicrophone: () => Promise<MediaStream>;
-  onRemoteStream: (stream: MediaStream | undefined) => void;
-  onLocalStream: (stream: MediaStream | undefined) => void;
+  /** Luke's track, as the element plays it and his meter hears it. */
+  remoteStream: LiveStreamSlot;
+  /** The press's device, as the developer's meter hears it. */
+  localStream: LiveStreamSlot;
   /**
    * Whether the element Luke's voice plays through is silenced, so the stop
    * is heard at once rather than when the model obeys.
@@ -160,6 +175,8 @@ export class LiveCall implements LiveVoiceCall {
   readonly #announcedStart = Deferred.makeUnsafe<boolean>();
   readonly #announcedClose = Deferred.makeUnsafe<void>();
   #peer: LivePeer | undefined;
+  /** Luke's track as this call's peer received it, which is all of the remote slot this call may clear. */
+  #remoteStream: MediaStream | undefined;
   #status: LiveStatus = LIVE_STATUS.IDLE;
   #started = false;
   #ended = false;
@@ -408,7 +425,10 @@ export class LiveCall implements LiveVoiceCall {
         createSilence: this.#options.createSilence,
         openMicrophone: this.#options.openMicrophone,
         createSession: (sdp) => this.#options.acts.createSession(sdp, opening.planId),
-        onRemoteStream: (stream) => this.#options.onRemoteStream(stream),
+        onRemoteStream: (stream) => {
+          this.#remoteStream = stream;
+          this.#options.remoteStream.show(stream);
+        },
       });
       if (opened.outcome !== LIVE_PEER_OUTCOME.OPENED) {
         this.#options.events.onError(opened.message);
@@ -417,7 +437,7 @@ export class LiveCall implements LiveVoiceCall {
       }
       const peer = opened.peer;
       this.#peer = peer;
-      this.#options.onLocalStream(peer.microphoneStream);
+      this.#options.localStream.show(peer.microphoneStream);
       peer.connection.onconnectionstatechange = () => this.#onTransport(peer);
       peer.channel.onmessage = (message) => this.#onMessage(message);
       peer.channel.onclose = () => this.#onChannelClosed();
@@ -470,7 +490,7 @@ export class LiveCall implements LiveVoiceCall {
         }
         peer.microphone = track;
         peer.microphoneStream = stream;
-        this.#options.onLocalStream(stream);
+        this.#options.localStream.show(stream);
       }
       if (this.#micLive) return true;
       const acknowledged = yield* this.#switchMicrophone(unmuteEvent);
@@ -503,7 +523,7 @@ export class LiveCall implements LiveVoiceCall {
       this.#closing = true;
       const dropped = this.#dropMicrophone(peer);
       this.#setStatus(LIVE_STATUS.CLOSING);
-      this.#options.acts.endSession();
+      this.#options.acts.endSession({ sessionId: peer.sessionId });
       // The silence goes back on the line, so the timeline the close drains on keeps running.
       if (dropped) yield* this.#takeOffLine(peer, dropped);
       // A channel that cannot carry the session's `session.closed` waits for nothing.
@@ -581,13 +601,15 @@ export class LiveCall implements LiveVoiceCall {
   // The peer connection's own state names are the transport report's; the
   // report's schema is what says which of them the host is told.
   #onTransport(peer: LivePeer): void {
-    const state = Result.getOrUndefined(
+    const report = Result.getOrUndefined(
       readEither(voiceReportLiveTransportParamsSchema)({
+        sessionId: peer.sessionId,
         state: peer.connection.connectionState,
       }),
-    )?.state;
-    if (state === undefined) return;
-    this.#options.acts.reportTransport({ state });
+    );
+    if (report === undefined) return;
+    const { state } = report;
+    this.#options.acts.reportTransport(report);
     if (state === LIVE_TRANSPORT_STATE.FAILED && !this.#ended) {
       Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
       this.#tearDown(LIVE_STATUS.FAILED, LIVE_PEER_END_REASON.TRANSPORT_FAILED);
@@ -691,15 +713,21 @@ export class LiveCall implements LiveVoiceCall {
       peer.channel.onclose = null;
       peer.connection.onconnectionstatechange = null;
       stopDevice(peer.microphoneStream);
-      this.#options.acts.reportTransport({ state: LIVE_TRANSPORT_STATE.CLOSED, reason });
+      this.#options.acts.reportTransport({
+        sessionId: peer.sessionId,
+        state: LIVE_TRANSPORT_STATE.CLOSED,
+        reason,
+      });
     }
     this.#micLive = false;
     this.#lukeSpeaking = false;
     // Note that the element outlives the call, so a silence left standing
     // would mute the next call's first words.
     this.#restoreOutput();
-    this.#options.onLocalStream(undefined);
-    this.#options.onRemoteStream(undefined);
+    // Note that a newer call may already be showing its own streams, since
+    // this one can end long after it was let go of.
+    this.#withdraw(this.#options.localStream, peer?.microphoneStream);
+    this.#withdraw(this.#options.remoteStream, this.#remoteStream);
     this.#setStatus(status);
     Deferred.doneUnsafe(this.#ending, Exit.void);
   }
@@ -726,8 +754,13 @@ export class LiveCall implements LiveVoiceCall {
     stopDevice(stream);
     peer.microphone = undefined;
     peer.microphoneStream = undefined;
-    this.#options.onLocalStream(undefined);
+    this.#withdraw(this.#options.localStream, stream);
     return stream;
+  }
+
+  /** Takes a stream of this call's down from a slot every call shares, and leaves another call's showing. */
+  #withdraw(slot: LiveStreamSlot, stream: MediaStream | undefined): void {
+    if (stream !== undefined && slot.current() === stream) slot.show(undefined);
   }
 
   /** Takes the device off the sending line, silence in its place, and stops it, so the system's indicator goes out with the key. */
@@ -738,7 +771,7 @@ export class LiveCall implements LiveVoiceCall {
       peer.microphone = undefined;
       peer.microphoneStream = undefined;
       return this.#takeOffLine(peer, stream).pipe(
-        Effect.andThen(Effect.sync(() => this.#options.onLocalStream(undefined))),
+        Effect.andThen(Effect.sync(() => this.#withdraw(this.#options.localStream, stream))),
       );
     });
   }

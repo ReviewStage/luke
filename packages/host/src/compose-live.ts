@@ -8,12 +8,13 @@ import {
   invalid,
   RefusedRefusal,
   voiceCreateLiveSessionParamsSchema,
+  voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
 import type { PlanActivityFrame, PlanCodeFrame, PlanDraftFrame } from "@sidecar/hosted";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
-import { LIVE_SESSION_END_CAUSE, LiveSessionHolder } from "@sidecar/voice/live-session";
+import { LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result, type Scope } from "effect";
 import type { AccountComposer } from "./compose-account.js";
@@ -104,16 +105,20 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
           );
         return carried(created);
       }),
-    [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () =>
-      Effect.as(service.endSession(LIVE_SESSION_END_CAUSE.HANG_UP), {}),
+    // The peer's hang-up names its session, so an old call's ask ends nothing newer.
+    [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: (params) => {
+      const request = Result.getOrUndefined(readEither(voiceEndLiveSessionParamsSchema)(params));
+      if (!request) return invalid("sessionId must name the session to end");
+      return Effect.as(service.hangUp(request.sessionId), {});
+    },
     // The peer's transport is acted on here, where the transport is: a
     // failure is the session lost, a close is the graceful end.
     [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
       const report = Result.getOrUndefined(
         readEither(voiceReportLiveTransportParamsSchema)(params),
       );
-      if (!report) return invalid("state is not one the peer connection reports");
-      service.reportTransport(report.state, report.reason);
+      if (!report) return invalid("the report must name a session and a state the peer reports");
+      service.reportTransport(report);
       return Effect.succeed({});
     },
     // The peer's idle is carried to the service, whose exchange alone knows

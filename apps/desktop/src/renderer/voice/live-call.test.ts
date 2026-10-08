@@ -20,6 +20,7 @@ import { type Context, Deferred, Duration, Effect, Exit, Fiber, Logger, Scope } 
 import { TestClock } from "effect/testing";
 import {
   LiveCall,
+  type LiveStreamSlot,
   MICROPHONE_ACK_TIMEOUT_MS,
   SESSION_CLOSE_TIMEOUT_MS,
   SESSION_START_TIMEOUT_MS,
@@ -188,10 +189,35 @@ class FakePeerConnection implements LivePeerConnection {
   }
 }
 
+/** A slot as the window's atom holds it, keeping every stream shown in it in order. */
+class StreamSlot implements LiveStreamSlot {
+  readonly shown: (MediaStream | undefined)[] = [];
+  #current: MediaStream | undefined;
+
+  current(): MediaStream | undefined {
+    return this.#current;
+  }
+
+  show(stream: MediaStream | undefined): void {
+    this.#current = stream;
+    this.shown.push(stream);
+  }
+}
+
+/** The two slots the window shows streams in, which every call it holds shares. */
+interface WindowStreams {
+  remote: StreamSlot;
+  local: StreamSlot;
+}
+
 interface FixtureOptions {
   microphone?: boolean;
   sessionCreated?: boolean;
+  /** The session the host creates for this call's offer. */
+  sessionId?: string;
   voiceSessionId?: string;
+  /** The window's slots, shared with another call; a call of its own otherwise. */
+  streams?: WindowStreams;
 }
 
 function build(services: Context.Context<never>, options: FixtureOptions) {
@@ -213,8 +239,10 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
   const endReasons: LivePeerEndReason[] = [];
   const activity: boolean[] = [];
   let ends = 0;
-  const remote: (MediaStream | undefined)[] = [];
-  const local: (MediaStream | undefined)[] = [];
+  /** The session each hang-up and transport report named, in order. */
+  const namedSessions: string[] = [];
+  const streams = options.streams ?? { remote: new StreamSlot(), local: new StreamSlot() };
+  const sessionId = options.sessionId ?? "sess_1";
   /** The element Luke plays through, as far as its `muted` goes. */
   let outputSilenced = false;
   const wire: string[] = [];
@@ -233,19 +261,21 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
         return options.sessionCreated === false
           ? undefined
           : {
-              sessionId: "sess_1",
+              sessionId,
               sdpAnswer: "v=0\r\nanswer\r\n",
               ...(options.voiceSessionId === undefined
                 ? undefined
                 : { voiceSessionId: options.voiceSessionId }),
             };
       },
-      endSession: () => {
+      endSession: (request) => {
         ends += 1;
+        namedSessions.push(request.sessionId);
       },
-      reportTransport: ({ state, reason }) => {
-        transports.push(state);
-        if (reason !== undefined) endReasons.push(reason);
+      reportTransport: (report) => {
+        transports.push(report.state);
+        namedSessions.push(report.sessionId);
+        if (report.reason !== undefined) endReasons.push(report.reason);
       },
       reportActivity: (idle) => activity.push(idle),
     },
@@ -262,8 +292,8 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
       // SAFETY: the call reads only the audio tracks and their `enabled` and `stop` off the stream.
       return new FakeStream([track]) as unknown as MediaStream;
     },
-    onRemoteStream: (value) => remote.push(value),
-    onLocalStream: (value) => local.push(value),
+    remoteStream: streams.remote,
+    localStream: streams.local,
     onOutputSilenced: (silenced) => {
       outputSilenced = silenced;
     },
@@ -280,7 +310,7 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
     channel().receive({
       type: LIVE_SERVER_EVENT.SESSION_STARTED,
       event_id: "started",
-      session: { id: "sess_1" },
+      session: { id: sessionId },
     });
   };
   const acknowledge = (type: string) => {
@@ -321,8 +351,10 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
     endReasons,
     activity,
     ends: () => ends,
-    remote,
-    local,
+    namedSessions,
+    streams,
+    remote: streams.remote.shown,
+    local: streams.local.shown,
     outputSilenced: () => outputSilenced,
     wire,
     channel,
@@ -1117,6 +1149,54 @@ it.effect(
       // Each end names itself: the answered hang-up, and the one that gave up.
       assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.HUNG_UP]);
       assert.deepEqual(g.endReasons, [LIVE_PEER_END_REASON.CLOSE_TIMED_OUT]);
+    }),
+);
+
+it.effect(
+  "an old call that gives up on its close after a newer call opened ends only its own session and leaves the newer call's streams showing",
+  () =>
+    Effect.gen(function* () {
+      const streams = { remote: new StreamSlot(), local: new StreamSlot() };
+      /** Luke's track arriving on a call's peer, as the connection hands it up. */
+      const remoteTrack = (connection: FakePeerConnection): MediaStream => {
+        // SAFETY: the call keeps the stream by identity and reads nothing off it.
+        const stream = new FakeStream([new FakeTrack()]) as unknown as MediaStream;
+        // SAFETY: the peer reads only `streams` off the track event.
+        connection.ontrack?.({ streams: [stream] } as unknown as RTCTrackEvent);
+        return stream;
+      };
+      const old = yield* fixture({ streams, sessionId: "sess_old" });
+      const oldOpening = yield* Effect.forkChild(old.call.open(OPENING));
+      yield* settle;
+      old.peer.gathered();
+      yield* settle;
+      remoteTrack(old.peer);
+      old.started();
+      yield* Fiber.join(oldOpening);
+      // The old call hangs up, and its `session.closed` never reaches its channel.
+      const closing = yield* Effect.forkChild(old.call.close());
+      yield* settle;
+
+      const next = yield* fixture({ streams, sessionId: "sess_next" });
+      const nextOpening = yield* Effect.forkChild(next.call.open(OPENING));
+      yield* settle;
+      next.peer.gathered();
+      yield* settle;
+      const nextRemote = remoteTrack(next.peer);
+      next.started();
+      yield* Fiber.join(nextOpening);
+      const nextLocal = streams.local.current();
+      assert.ok(nextLocal);
+
+      yield* advance(SESSION_CLOSE_TIMEOUT_MS);
+      yield* Fiber.join(closing);
+      assert.deepEqual(old.endReasons, [LIVE_PEER_END_REASON.CLOSE_TIMED_OUT]);
+      // Everything the old call told the host named its own session.
+      assert.ok(old.namedSessions.length > 0);
+      assert.ok(old.namedSessions.every((named) => named === "sess_old"));
+      assert.equal(next.call.standing, true);
+      assert.equal(streams.remote.current(), nextRemote);
+      assert.equal(streams.local.current(), nextLocal);
     }),
 );
 

@@ -21,7 +21,7 @@ import { holdSocket, type SocketHold } from "../held-socket.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
-import { LIVE_SESSION_END_CAUSE, LiveSessionHolder } from "./live-session-holder.js";
+import { LiveSessionHolder } from "./live-session-holder.js";
 
 /**
  * The peer's holder of one hosted planning call, over a scripted source and
@@ -395,7 +395,7 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
-      const fiber = yield* Effect.forkChild(f.holder.endSession(LIVE_SESSION_END_CAUSE.HANG_UP));
+      const fiber = yield* Effect.forkChild(f.holder.hangUp("sess-1"));
       yield* settle();
       assert.deepEqual(sideband.sent, []);
       assert.equal(sideband.hangUps, 1);
@@ -410,7 +410,7 @@ it.effect(
       });
       assert.equal(f.holder.sessionStands(), false);
       // A second ask to end finds nothing standing and asks nothing more.
-      yield* f.holder.endSession(LIVE_SESSION_END_CAUSE.HANG_UP);
+      yield* f.holder.hangUp("sess-1");
       assert.equal(sideband.hangUps, 1);
     }),
 );
@@ -419,7 +419,7 @@ it.effect("a graceful close nobody answers is released at the timeout as a lost 
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
-    const fiber = yield* Effect.forkChild(f.holder.endSession(LIVE_SESSION_END_CAUSE.HANG_UP));
+    const fiber = yield* Effect.forkChild(f.holder.hangUp("sess-1"));
     yield* settle();
     yield* TestClock.adjust(Duration.millis(SIDEBAND_CLOSE_TIMEOUT_MS));
     yield* Fiber.join(fiber);
@@ -438,12 +438,12 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       const first = yield* f.open();
-      f.holder.reportTransport(LIVE_TRANSPORT_STATE.CONNECTING);
-      f.holder.reportTransport(LIVE_TRANSPORT_STATE.CONNECTED);
-      f.holder.reportTransport(LIVE_TRANSPORT_STATE.DISCONNECTED);
+      f.holder.reportTransport({ sessionId: "sess-1", state: LIVE_TRANSPORT_STATE.CONNECTING });
+      f.holder.reportTransport({ sessionId: "sess-1", state: LIVE_TRANSPORT_STATE.CONNECTED });
+      f.holder.reportTransport({ sessionId: "sess-1", state: LIVE_TRANSPORT_STATE.DISCONNECTED });
       yield* settle();
       assert.equal(f.holder.sessionStands(), true);
-      f.holder.reportTransport(LIVE_TRANSPORT_STATE.FAILED);
+      f.holder.reportTransport({ sessionId: "sess-1", state: LIVE_TRANSPORT_STATE.FAILED });
       yield* settle();
       assert.equal(first.closed, true);
       assert.deepEqual(first.sent, []);
@@ -456,7 +456,7 @@ it.effect(
       assert.deepEqual(f.reports, []);
 
       const second = yield* f.open();
-      f.holder.reportTransport(LIVE_TRANSPORT_STATE.CLOSED);
+      f.holder.reportTransport({ sessionId: "sess-2", state: LIVE_TRANSPORT_STATE.CLOSED });
       yield* settle();
       assert.deepEqual(second.sent, []);
       assert.equal(second.hangUps, 1);
@@ -464,6 +464,44 @@ it.effect(
       yield* settle();
       assert.equal(f.holder.sessionStands(), false);
       assert.equal(second.closed, true);
+    }),
+);
+
+it.effect(
+  "an old peer's late close and hang-up, naming its own session, leave the session created after it standing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const old = yield* f.open();
+      // The host ends the old call; its peer is still closing gracefully behind it.
+      const ending = yield* Effect.forkChild(f.holder.endPlanCall(undefined));
+      yield* settle();
+      old.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 20);
+      yield* Fiber.join(ending);
+      const next = yield* f.open();
+      const changes = f.changes.length;
+
+      // The old peer gives up waiting for its close, and says so about its own session.
+      f.holder.reportTransport({
+        sessionId: "sess-1",
+        state: LIVE_TRANSPORT_STATE.CLOSED,
+        reason: LIVE_PEER_END_REASON.CLOSE_TIMED_OUT,
+      });
+      f.holder.reportTransport({ sessionId: "sess-1", state: LIVE_TRANSPORT_STATE.FAILED });
+      yield* f.holder.hangUp("sess-1");
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), true);
+      assert.equal(next.hangUps, 0);
+      assert.equal(next.closed, false);
+      assert.equal(f.changes.length, changes);
+
+      // The new peer's own word still reaches its session.
+      const hangingUp = yield* Effect.forkChild(f.holder.hangUp("sess-2"));
+      yield* settle();
+      assert.equal(next.hangUps, 1);
+      next.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 4);
+      yield* Fiber.join(hangingUp);
+      assert.equal(f.holder.sessionStands(), false);
     }),
 );
 
@@ -757,7 +795,11 @@ it.effect("an ended call is logged with the hand that ended it and how long it s
 
       const peer = yield* f.open(BILLING_PLAN);
       yield* TestClock.adjust(Duration.seconds(3));
-      f.holder.reportTransport(LIVE_TRANSPORT_STATE.CLOSED, LIVE_PEER_END_REASON.CHANNEL_CLOSED);
+      f.holder.reportTransport({
+        sessionId: "sess-2",
+        state: LIVE_TRANSPORT_STATE.CLOSED,
+        reason: LIVE_PEER_END_REASON.CHANNEL_CLOSED,
+      });
       yield* settle();
       peer.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
       yield* settle();

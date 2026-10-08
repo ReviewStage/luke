@@ -4,6 +4,7 @@ import {
   type LivePeerEndReason,
   type LiveTransportState,
   type VoiceLiveSessionChanged,
+  type VoiceReportLiveTransportParams,
 } from "@sidecar/gateway";
 import {
   type LiveSessionCreated,
@@ -158,10 +159,10 @@ function sessionFields(session: HeldSession | undefined): string {
 function transportLine(
   state: LiveTransportState,
   peerReason: LivePeerEndReason | undefined,
-  session: HeldSession | undefined,
+  sessionId: string,
 ): string {
   const reason = peerReason === undefined ? "" : ` peer_reason=${peerReason}`;
-  return `voice transport: state=${state}${reason} ${sessionFields(session)}`;
+  return `voice transport: state=${state}${reason} session=${sessionId}`;
 }
 
 function endedLine(session: HeldSession, reason: string, seconds: number): string {
@@ -413,11 +414,12 @@ export class LiveSessionHolder {
   }
 
   /**
-   * The renderer's hang-up, the peer's closed transport, and the drain all
-   * end the session the same way: whichever stands when the ask is run, or,
-   * where one was declared over a turn ago and is still being released, that
-   * release, so the drain answers with the socket closed. `cause` is the
-   * hand asking, named in the line the end is logged under.
+   * The host's own ends of the session (the drain, a changed voice, a
+   * replacement) name no session, because each means whichever stands when
+   * the ask is run, or, where one was declared over a turn ago and is still
+   * being released, that release, so the drain answers with the socket
+   * closed. `cause` is the hand asking, named in the line the end is logged
+   * under.
    */
   endSession(cause: LiveSessionEndCause): Effect.Effect<void> {
     return Effect.suspend(() => {
@@ -466,18 +468,34 @@ export class LiveSessionHolder {
   }
 
   /**
+   * The peer's hang-up of the session it names. A peer still closing a call
+   * the host has already let go of names that call's session, so its ask
+   * ends nothing standing after it.
+   */
+  hangUp(sessionId: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const session = this.#held;
+      if (session === undefined || session.sessionId !== sessionId) return Effect.void;
+      return this.#end(session, LIVE_SESSION_END_CAUSE.HANG_UP);
+    });
+  }
+
+  /**
    * The peer's transport as it saw it change, acted on here where the
    * transport is: a failed transport is a lost connection whatever the
    * sideband still shows, and a peer closed without a hang-up asked of the
    * host ends the session gracefully from here. Neither is told to the
    * service; both reach it as the close they cause. Every report is logged,
    * with the peer's reason where it gave one, since the peer's own view of
-   * its connection is what a dropped call is read back from.
+   * its connection is what a dropped call is read back from. A report about
+   * any session but the one held is an old peer's late word and acts on
+   * nothing.
    */
-  reportTransport(state: LiveTransportState, peerReason?: LivePeerEndReason): void {
+  reportTransport(report: VoiceReportLiveTransportParams): void {
+    const { sessionId, state, reason: peerReason } = report;
+    this.#start(Effect.logInfo(transportLine(state, peerReason, sessionId)));
     const session = this.#held;
-    this.#start(Effect.logInfo(transportLine(state, peerReason, session)));
-    if (!session || session.ended) return;
+    if (!session || session.ended || session.sessionId !== sessionId) return;
     session.peerReason ??= peerReason;
     if (state === LIVE_TRANSPORT_STATE.FAILED) {
       this.#start(this.#lost(session, "peer transport failed", LIVE_SESSION_END_CAUSE.PEER_FAILED));
