@@ -38,6 +38,11 @@ export interface DialogQuestion {
 
 const FOCUSABLE = "button:not([disabled])";
 
+/** One confirming act as a dialog holds it: the confirm, and whether its subject and surface still stand. */
+export interface DialogConfirm extends HeldConfirm {
+  standing: boolean;
+}
+
 /**
  * One confirming act held for a dialog. A refusal is drawn in the dialog
  * itself, so it is as much a question still standing as the ask was, and it
@@ -47,13 +52,13 @@ const FOCUSABLE = "button:not([disabled])";
 export function useConfirmDialog(
   surroundings: ConfirmSurroundings,
   action: () => Promise<ActionResult>,
-): HeldConfirm {
+): DialogConfirm {
   const held = useConfirm(surroundings, action);
   const standing = surroundings.subject && surroundings.surfaceOpen;
   if (!standing && held.rejection !== undefined && held.stage !== CONFIRM_STAGE.ACTING) {
     held.clear();
   }
-  return held;
+  return { ...held, standing };
 }
 
 /** The move Tab makes from the focused element, kept to the card's own buttons. */
@@ -78,11 +83,14 @@ export function ConfirmDialog({
   confirm,
   question,
 }: {
-  confirm: HeldConfirm;
+  confirm: DialogConfirm;
   question: DialogQuestion;
 }): React.JSX.Element | null {
   const { stage, rejection } = confirm;
-  const open = confirmAsked(stage) || rejection !== undefined;
+  // Note that an answer under way is hidden with its surface rather than
+  // drawn over whatever stands in its place, because the window then
+  // presents something else; the act itself finishes all the same.
+  const open = confirm.standing && (confirmAsked(stage) || rejection !== undefined);
   const acting = stage === CONFIRM_STAGE.ACTING;
   const card = useRef<HTMLDivElement | null>(null);
   const cancel = useRef<HTMLButtonElement | null>(null);
@@ -126,6 +134,11 @@ export function ConfirmDialog({
     confirm.run();
   };
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    // Note that no key pressed in the dialog goes on to the window, because
+    // a window chord (Command-comma, Command-B) would change what stands
+    // behind a question nobody has answered. A button's own Enter and Space
+    // are its default action, which this leaves alone.
+    event.stopPropagation();
     if (event.key === "Tab") {
       trappedTab(event);
       return;
@@ -134,7 +147,6 @@ export function ConfirmDialog({
     // leaves the window behind it as it was.
     if (event.key !== "Escape") return;
     event.preventDefault();
-    event.stopPropagation();
     dismiss();
   };
 

@@ -338,6 +338,55 @@ test("a delete under way stills both answers, and a refusal stays in the dialog 
   assert.equal(document.activeElement, more);
 });
 
+test("no key pressed in the dialog reaches the window's own chords", () => {
+  const { plans } = openTab();
+  openMenu(mountToolbar(plans));
+  choose("Delete plan");
+  const heard: string[] = [];
+  const listen = (event: KeyboardEvent) => heard.push(event.key);
+  window.addEventListener("keydown", listen);
+
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: ",", metaKey: true, bubbles: true }),
+    );
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "b", metaKey: true, bubbles: true }),
+    );
+  });
+  window.removeEventListener("keydown", listen);
+
+  assert.deepEqual(heard, []);
+  assert.equal(asking(), true);
+});
+
+test("a delete under way hides with the tab and still finishes, and its refusal does not come back with the tab", async () => {
+  let settle: (result: ActionResult) => void = () => undefined;
+  const pending = new Promise<ActionResult>((resolve) => {
+    settle = resolve;
+  });
+  const { plans, asked } = openTab({}, () => pending);
+  const row = mountSidebarPlan(plans, OTHER, asked);
+  const root = roots.at(-1);
+  assert.ok(root);
+  const restand = (shown: boolean) => {
+    act(() => root.render(sidebarPlan({ ...plans, shown }, OTHER, asked)));
+  };
+
+  rightClick(row, 40, 60);
+  choose("Delete plan");
+  act(() => answer("Delete").click());
+  restand(false);
+  assert.equal(asking(), false, "nothing is drawn over the surface standing in the tab's place");
+  await act(async () => {
+    settle({ status: ACTION_RESULT_STATUS.REJECTED, reason: "The plan could not be deleted." });
+  });
+  restand(true);
+
+  assert.equal(asking(), false);
+  assert.deepEqual(asked.deleted, [OTHER.id]);
+});
+
 test("the dialog withdraws when its plan is deleted elsewhere, and the plan coming back does not bring it back", () => {
   const { plans, asked } = openTab();
   const row = mountSidebarPlan(plans, OTHER, asked);
