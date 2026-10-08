@@ -32,6 +32,7 @@ function mount(
   act(() => {
     root.render(
       createElement(DesktopSidebar, {
+        collapsed: false,
         identity: {
           speakers: { listening: false, lukeSpeaking: false },
           voiceActive: { developer: false, luke: false },
