@@ -67,13 +67,13 @@ function fixture() {
           liveCalls.push(`create:${sdp}`);
           return Option.some({ sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" });
         }),
-      endLiveSession: () =>
+      endLiveSession: ({ sessionId }: { sessionId: string }) =>
         Effect.sync(() => {
-          liveCalls.push("end");
+          liveCalls.push(`end:${sessionId}`);
         }),
-      reportLiveTransport: ({ state }: { state: string }) =>
+      reportLiveTransport: ({ sessionId, state }: { sessionId: string; state: string }) =>
         Effect.sync(() => {
-          liveCalls.push(`transport:${state}`);
+          liveCalls.push(`transport:${sessionId}:${state}`);
         }),
       reportLiveActivity: (idle: boolean) =>
         Effect.sync(() => {
@@ -132,7 +132,7 @@ it.effect("the five live session acts reach the host from the voice window alone
     );
     yield* f.perform(f.voiceSender, {
       kind: ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT,
-      payload: { state: "connected" },
+      payload: { sessionId: "sess_1", state: "connected" },
     });
     yield* f.perform(f.voiceSender, {
       kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
@@ -142,13 +142,17 @@ it.effect("the five live session acts reach the host from the voice window alone
       status: "done",
       value: true,
     });
-    yield* f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
+    yield* f.perform(f.voiceSender, {
+      kind: ACT_KIND.VOICE_END_LIVE_SESSION,
+      payload: { sessionId: "sess_1" },
+    });
+    // The hang-up and the transport reach the host naming the session they are about.
     assert.deepEqual(f.liveCalls, [
       `create:${offer}`,
-      "transport:connected",
+      "transport:sess_1:connected",
       "activity:true",
       "stop",
-      "end",
+      "end:sess_1",
     ]);
     // A panel offering an SDP or reporting a transport it does not hold reaches nothing.
     assert.deepEqual(
@@ -166,7 +170,10 @@ it.effect("the five live session acts reach the host from the voice window alone
       status: "done",
       value: false,
     });
-    yield* f.perform(f.panelSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
+    yield* f.perform(f.panelSender, {
+      kind: ACT_KIND.VOICE_END_LIVE_SESSION,
+      payload: { sessionId: "sess_1" },
+    });
     assert.equal(f.liveCalls.length, 5);
   }),
 );

@@ -8,6 +8,7 @@ import {
   GATEWAY_METHOD,
   gatewayEventReader,
   type VoiceCreateLiveSessionResult,
+  type VoiceEndLiveSessionParams,
   type VoiceLiveSessionChanged,
   type VoiceReportLiveTransportParams,
   voiceCreateLiveSessionResultSchema,
@@ -92,7 +93,8 @@ export interface HostOperator {
     sdp: string,
     planId: string,
   ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
-  endLiveSession(): Effect.Effect<void>;
+  /** The peer's hang-up of the session it names; one the host no longer holds is left alone. */
+  endLiveSession(request: VoiceEndLiveSessionParams): Effect.Effect<void>;
   reportLiveTransport(report: VoiceReportLiveTransportParams): Effect.Effect<void>;
   /** The peer's own idle decision, from its local signals alone; the host decides the close. */
   reportLiveActivity(idle: boolean): Effect.Effect<void>;
@@ -250,7 +252,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : Option.none(),
       ),
-    endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
+    endLiveSession: (request) => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION, request)),
     reportLiveTransport: (report) =>
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, report)),
     reportLiveActivity: (idle) =>

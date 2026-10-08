@@ -9,6 +9,7 @@ import {
   LIVE_TRANSPORT_STATE,
   voiceCreateLiveSessionParamsSchema,
   voiceCreateLiveSessionResultSchema,
+  voiceEndLiveSessionParamsSchema,
   voiceLiveSessionChangedSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
@@ -95,12 +96,38 @@ test("a create answer names the session and the SDP answer, tolerating what a ne
   );
 });
 
-test("a transport report names one of the declared states", () => {
+test("a transport report names its session and one of the declared states", () => {
   for (const state of Object.values(LIVE_TRANSPORT_STATE)) {
-    assert.deepEqual(parse(voiceReportLiveTransportParamsSchema, { state }), { state });
+    assert.deepEqual(parse(voiceReportLiveTransportParamsSchema, { sessionId: "sess_1", state }), {
+      sessionId: "sess_1",
+      state,
+    });
   }
-  assert.equal(parse(voiceReportLiveTransportParamsSchema, { state: "new" }), undefined);
+  assert.equal(
+    parse(voiceReportLiveTransportParamsSchema, { sessionId: "sess_1", state: "new" }),
+    undefined,
+  );
+  // A report naming no session could be about any call, so it is about none.
+  assert.equal(
+    parse(voiceReportLiveTransportParamsSchema, { state: LIVE_TRANSPORT_STATE.CLOSED }),
+    undefined,
+  );
+  assert.equal(
+    parse(voiceReportLiveTransportParamsSchema, {
+      sessionId: " ",
+      state: LIVE_TRANSPORT_STATE.CLOSED,
+    }),
+    undefined,
+  );
   assert.equal(parse(voiceReportLiveTransportParamsSchema, {}), undefined);
+});
+
+test("a hang-up names the session it hangs up", () => {
+  assert.deepEqual(parse(voiceEndLiveSessionParamsSchema, { sessionId: "sess_1" }), {
+    sessionId: "sess_1",
+  });
+  assert.equal(parse(voiceEndLiveSessionParamsSchema, {}), undefined);
+  assert.equal(parse(voiceEndLiveSessionParamsSchema, { sessionId: "" }), undefined);
 });
 
 test("an activity report is one boolean", () => {

@@ -67,8 +67,8 @@ export function voiceRuntimeActRows(
       voice
         ? Effect.map(liveSession.createLiveSession(sdp, planId), Option.getOrUndefined)
         : Effect.succeed(undefined),
-    [ACT_KIND.VOICE_END_LIVE_SESSION]: (_payload, { voice }) =>
-      voice ? Effect.as(liveSession.endLiveSession(), undefined) : Effect.succeed(undefined),
+    [ACT_KIND.VOICE_END_LIVE_SESSION]: (request, { voice }) =>
+      voice ? Effect.as(liveSession.endLiveSession(request), undefined) : Effect.succeed(undefined),
     [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: (report, { voice }) =>
       voice
         ? Effect.as(liveSession.reportLiveTransport(report), undefined)

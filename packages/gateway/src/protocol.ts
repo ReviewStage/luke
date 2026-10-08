@@ -179,8 +179,22 @@ export const voiceCreateLiveSessionResultSchema = Schema.Struct({
 
 export type VoiceCreateLiveSessionResult = typeof voiceCreateLiveSessionResultSchema.Type;
 
-/** `voice.reportLiveTransport`: the peer connection's state as the peer saw it change, and why the peer ended where it did. */
+/**
+ * `voice.endLiveSession`: the peer's hang-up, naming the session it hangs up,
+ * so an old call still closing behind a newer one ends nothing but its own.
+ */
+export const voiceEndLiveSessionParamsSchema = Schema.Struct({ sessionId: text });
+
+export type VoiceEndLiveSessionParams = typeof voiceEndLiveSessionParamsSchema.Type;
+
+/**
+ * `voice.reportLiveTransport`: the peer connection's state as the peer saw it
+ * change, the session that peer was created for, and why the peer ended where
+ * it did. The session is named for the same reason the hang-up names it: an
+ * old peer's late close is about its own session and never the next one.
+ */
 export const voiceReportLiveTransportParamsSchema = Schema.Struct({
+  sessionId: text,
   state: Schema.Literals(LIVE_TRANSPORT_STATES),
   reason: Schema.optionalKey(Schema.Literals(LIVE_PEER_END_REASONS)),
 });

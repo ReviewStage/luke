@@ -9,6 +9,7 @@ import {
   type VoiceCreateLiveSessionResult,
   voiceCreateLiveSessionParamsSchema,
   voiceCreateLiveSessionResultSchema,
+  voiceEndLiveSessionParamsSchema,
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
@@ -384,7 +385,11 @@ export const ACT = {
     ),
     refusal: "Could not open a voice session on this system.",
   },
-  [ACT_KIND.VOICE_END_LIVE_SESSION]: press("Could not end the voice session on this system."),
+  [ACT_KIND.VOICE_END_LIVE_SESSION]: {
+    payload: actSchema(voiceEndLiveSessionParamsSchema),
+    result: wireResult<undefined>((value) => value === undefined),
+    refusal: "Could not end the voice session on this system.",
+  },
   [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: {
     payload: actSchema(voiceReportLiveTransportParamsSchema),
     result: wireResult<undefined>((value) => value === undefined),

@@ -47,12 +47,17 @@ class FakeCall implements LiveVoiceCall {
 
   constructor(readonly events: LiveVoiceCallEvents) {}
 
-  /** As the real call answers it: no peer stands until the session is answered, so a connecting call is not standing. */
+  /**
+   * As the real call answers it: no peer stands until the session is
+   * answered, so a connecting call is not standing, and the peer stands
+   * through its close until the close is done.
+   */
   get standing(): boolean {
     return (
       this.status === LIVE_STATUS.MUTED ||
       this.status === LIVE_STATUS.LISTENING ||
-      this.status === LIVE_STATUS.SPEAKING
+      this.status === LIVE_STATUS.SPEAKING ||
+      this.status === LIVE_STATUS.CLOSING
     );
   }
 
@@ -76,7 +81,9 @@ class FakeCall implements LiveVoiceCall {
     this.#release = undefined;
   }
 
+  /** As the real call answers it: a call closing hears nothing more. */
   unmute(): Effect.Effect<boolean> {
+    if (this.status === LIVE_STATUS.CLOSING) return Effect.succeed(false);
     this.unmutes += 1;
     this.settle(LIVE_STATUS.LISTENING);
     return Effect.succeed(true);
@@ -92,10 +99,14 @@ class FakeCall implements LiveVoiceCall {
     this.silences += 1;
   }
 
+  /** Closing until `closing` is done, as a real peer's close is, then idle. */
   close(): Effect.Effect<void> {
     this.closes += 1;
-    this.settle(LIVE_STATUS.IDLE);
-    return this.closing;
+    this.settle(LIVE_STATUS.CLOSING);
+    return Effect.andThen(
+      this.closing,
+      Effect.sync(() => this.settle(LIVE_STATUS.IDLE)),
+    );
   }
 
   /** A status and the speakers it implies, which is every edge but a full-duplex one. */
@@ -687,6 +698,94 @@ it.effect(
       yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: sessionIdOf(call) });
       yield* settleFibers();
       assert.equal(call.closes, 1);
+    }),
+);
+
+it.effect(
+  "a press while the host is closing the call waits for it to go, then is heard on a new call",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const closingCall = f.latest();
+      assert.ok(closingCall);
+      closingCall.started();
+      yield* Fiber.join(pressed);
+      yield* f.endTalk();
+      // The host decides the end, and the peer's close is slow to finish.
+      const closed = yield* Deferred.make<void>();
+      closingCall.closing = Deferred.await(closed);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: sessionIdOf(closingCall) });
+      yield* settleFibers();
+      assert.equal(closingCall.status, LIVE_STATUS.CLOSING);
+
+      const again = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      yield* settleFibers();
+      // Nothing is spoken into the call going away, and nothing new opens before it has gone.
+      assert.equal(f.calls.length, 1);
+      assert.equal(closingCall.unmutes, 1);
+      yield* Deferred.succeed(closed, undefined);
+      yield* settleFibers();
+      const next = f.latest();
+      assert.ok(next);
+      assert.notEqual(next, closingCall);
+      assert.deepEqual(next.openings, [{ planId: INVITES_PLAN }]);
+      next.started();
+      yield* Fiber.join(again);
+      assert.equal(next.unmutes, 1);
+      assert.equal(next.status, LIVE_STATUS.LISTENING);
+    }),
+);
+
+it.effect(
+  "a call the host closed while its peer is still hanging up leaves the call opened meanwhile standing when that hang-up finally ends",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const old = f.latest();
+      assert.ok(old);
+      old.started();
+      yield* Fiber.join(pressed);
+      yield* f.endTalk();
+      const torn = yield* Deferred.make<void>();
+      old.closing = Deferred.await(torn);
+      const oldSession = sessionIdOf(old);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: oldSession });
+      yield* settleFibers();
+      const again = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      yield* settleFibers();
+      // The host's own close lands before the peer's slow one does.
+      yield* f.obey({
+        phase: LIVE_SESSION_PHASE.CLOSED,
+        sessionId: oldSession,
+        reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+      });
+      yield* settleFibers();
+      const next = f.latest();
+      assert.ok(next);
+      assert.notEqual(next, old);
+      next.started();
+      yield* Fiber.join(again);
+      assert.equal(next.status, LIVE_STATUS.LISTENING);
+
+      // The old peer's teardown, long after, is no word about the call standing now.
+      yield* Deferred.succeed(torn, undefined);
+      yield* settleFibers();
+      assert.equal(old.status, LIVE_STATUS.IDLE);
+      assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.LISTENING);
+      assert.equal(f.views.at(-1)?.callPlanId, INVITES_PLAN);
+      yield* f.endTalk();
+      assert.equal(next.mutes, 1);
+      assert.equal(next.closes, 0);
     }),
 );
 
