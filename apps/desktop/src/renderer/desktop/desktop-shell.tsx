@@ -126,7 +126,6 @@ export function DesktopShell({
   }
   return (
     <div className="desktop-shell" data-sidebar-collapsed={String(sidebar.collapsed)}>
-      <SidebarToggle sidebar={sidebar} />
       <DesktopSidebar
         collapsed={sidebar.collapsed}
         identity={identity}
@@ -139,6 +138,8 @@ export function DesktopShell({
       <main className="desktop-main">
         <DesktopPlans plans={plans} />
       </main>
+      {/* Note that it follows the drag strips it covers, because a later drag region wins. */}
+      <SidebarToggle sidebar={sidebar} />
     </div>
   );
 }
