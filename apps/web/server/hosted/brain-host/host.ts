@@ -257,11 +257,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           plan === undefined
             ? undefined
             : {
-                plan: {
-                  userId: target.userId,
-                  planId: plan.plan.id,
-                  header: { name: plan.plan.name },
-                },
+                plan: { userId: target.userId, planId: plan.plan.id },
                 research: {
                   turnId: binding.turn.turnId,
                   budget: research,

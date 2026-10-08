@@ -74,7 +74,8 @@ export function PlanNameField({
  * held for the plan they were about, so a surface that moves on to another
  * plan draws neither over it. Note that the field closes as soon as it ends,
  * because the new name is drawn at once and a refusal puts the old one back
- * by itself.
+ * by itself. Each edit is counted, so the refusal of one an edit since has
+ * replaced says nothing about the name drawn now.
  */
 export function usePlanRename(
   planId: string | undefined,
@@ -82,14 +83,19 @@ export function usePlanRename(
 ) {
   const [editing, setEditing] = useState<string | undefined>(undefined);
   const [refused, setRefused] = useState<string | undefined>(undefined);
+  const edits = useRef(0);
   const begin = () => {
+    edits.current += 1;
     setRefused(undefined);
     setEditing(planId);
   };
   const end = ({ name }: NameEdit) => {
     setEditing(undefined);
     if (planId === undefined || name === undefined) return;
-    const refuse = () => setRefused(planId);
+    const edit = edits.current;
+    const refuse = () => {
+      if (edit === edits.current) setRefused(planId);
+    };
     onRename(planId, name).then((renamed) => (renamed ? undefined : refuse()), refuse);
   };
   const shown = planId !== undefined;

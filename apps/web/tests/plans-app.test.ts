@@ -196,10 +196,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      const saved = yield* saveNotes(
-        { userId: owner, planId, header: { name: RELAY.name } },
-        notesFor(INVITATIONS_DRAFT),
-      );
+      const saved = yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
       assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
 
       const listed = yield* ask(request(PLANS, owner));

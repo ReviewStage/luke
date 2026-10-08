@@ -335,6 +335,33 @@ test("a rename the service refused says so quietly beside the name until the nex
   assert.deepEqual(asked.renamed, [[PLAN.id, "Team invites"]]);
 });
 
+test("the refusal of a rename a newer edit replaced leaves no note beside the newer name", async () => {
+  const settles: ((renamed: boolean) => void)[] = [];
+  const pending = () =>
+    new Promise<boolean>((resolve) => {
+      settles.push(resolve);
+    });
+  const { plans } = openTab({}, undefined, pending);
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const title = () =>
+    container.querySelector<HTMLButtonElement>(".desktop-toolbar-title button") ??
+    assert.fail("the title stands");
+  const rename = (name: string) => {
+    act(() => title().click());
+    type(name);
+    key("Enter");
+  };
+
+  rename("First");
+  rename("Second");
+  const [first, second] = settles;
+  assert.ok(first && second);
+  await act(async () => second(true));
+  await act(async () => first(false));
+
+  assert.equal(container.querySelector('.desktop-toolbar [role="alert"]')?.textContent, undefined);
+});
+
 test("Delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {
   const { plans, asked } = openTab();
 

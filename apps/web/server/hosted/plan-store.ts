@@ -5,6 +5,7 @@ import {
   planFieldsSchema,
 } from "@sidecar/hosted/plan-template";
 import {
+  PLAN_BOUNDS,
   type Plan,
   type PlanDocument,
   type PlanSummary,
@@ -177,7 +178,7 @@ const replaceDocument = SqlSchema.findOneOption({
       .returning(PLAN_COLUMNS),
 });
 
-/** The plan row under its own lock, so a rename re-titles the body a save cannot replace meanwhile. */
+/** The plan row under its own lock, so a rename and a save of notes each format the body the other cannot replace meanwhile. */
 const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: PlanRowSchema,
@@ -346,6 +347,18 @@ export function readPlan(
 }
 
 /**
+ * The plan as `readPlan` reads it, held under the row's lock until the
+ * enclosing transaction ends, so a save formatted from it is not crossed by
+ * a rename.
+ */
+export function readPlanForUpdate(
+  userId: string,
+  planId: string,
+): PlanStoreEffect<Option.Option<StoredPlan>> {
+  return Effect.map(lockPlan({ userId, planId }), Option.map(storedPlanOf));
+}
+
+/**
  * Replaces the plan's document whole, with the fields its body was formatted
  * from where they are handed, and answers it as saved, or nothing where the
  * account owns no such plan; nothing is ever created here.
@@ -374,12 +387,15 @@ export function savePlanDocument(
  * The body a renamed plan keeps. Note that only a body formatted from the
  * stored fields under the old name is formatted again under the new one,
  * because its heading is the name; an empty body already reads as the
- * template under whatever name stands, and any other body is left as saved.
+ * template under whatever name stands, and any other body, or one the longer
+ * heading would carry past the body's bound, is left as saved until the next
+ * save of notes formats it.
  */
 function retitledBody(row: PlanRow, name: string): string {
   if (row.body === "" || row.fields === null) return row.body;
   if (row.body !== planBody({ name: row.name }, row.fields)) return row.body;
-  return planBody({ name }, row.fields);
+  const retitled = planBody({ name }, row.fields);
+  return retitled.length > PLAN_BOUNDS.MAX_BODY_CHARS ? row.body : retitled;
 }
 
 /**
