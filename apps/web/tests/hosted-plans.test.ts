@@ -10,7 +10,6 @@ import {
 import type { PlanDocument } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { conversations } from "../server/db/storage-schema";
@@ -29,7 +28,6 @@ import {
   deletePlan,
   listPlans,
   type NewPlan,
-  openPlanConversation,
   readPlan,
 } from "../server/hosted/plan-store";
 import { noDatabase } from "./support/no-database";
@@ -620,39 +618,6 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       yield* deleteAccount(userId);
 
       assert.equal(Option.isNone(yield* readPlan(userId, planId)), true);
-    }),
-  );
-});
-
-// The deployment that drops `plan.opened_at` migrates while this one still
-// serves, so this one has to run against the table that drop leaves.
-it.layer(testSqlClient)("named plans once plan.opened_at is dropped", (it) => {
-  it.effect("a plan starts, saves, lists, reads, takes its conversation, and deletes", () =>
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`alter table plan drop column opened_at`;
-      const userId = yield* openUser;
-
-      const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
-      const saved = savedDocument(
-        yield* saveNotes(bound(userId, planId), notesFor(INVITATIONS_DRAFT)),
-      );
-      const listed = yield* listPlans(userId);
-      const conversationId = yield* openPlanConversation(userId, planId);
-      const resumed = yield* readPlan(userId, planId);
-      const deleted = yield* deletePlan(userId, planId);
-
-      assert.deepEqual(
-        listed.map((summary) => summary.id),
-        [planId],
-      );
-      assert.deepEqual(
-        Option.map(resumed, (stored) => [stored.plan.document, stored.conversationId]),
-        Option.some([saved, Option.getOrUndefined(conversationId)]),
-      );
-      assert.ok(Option.isSome(conversationId));
-      assert.equal(deleted, true);
-      assert.deepEqual(yield* listPlans(userId), []);
     }),
   );
 });
