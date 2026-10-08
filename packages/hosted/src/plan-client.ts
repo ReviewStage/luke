@@ -9,6 +9,7 @@ import {
   callAnswered,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
+import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
 import {
   type GitHubRepositoryListAnswer,
   githubFailureAnswerSchema,
@@ -34,6 +35,7 @@ import {
 } from "./planning-view.js";
 import {
   HOSTED_SERVICE_PATH,
+  planBoardPath,
   planCommandClaimPath,
   planCommandPath,
   planPath,
@@ -163,6 +165,33 @@ export class HostedPlanClient {
         ? { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND }
         : UNANSWERED;
     });
+  }
+
+  /** One plan's whiteboard as it stands; nothing where the service did not answer one. */
+  readBoard(planId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask({ method: HTTP_METHOD.GET, path: planBoardPath(planId) }, boardAnswerSchema),
+      (answer) => answer?.board,
+    );
+  }
+
+  /** The board's scene written whole, with the number of Luke's drawing it holds; the board as written, or nothing where the service did not answer. */
+  saveBoard(
+    planId: string,
+    elements: readonly BoardElement[],
+    appliedDrawing: number,
+  ): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        {
+          method: HTTP_METHOD.PUT,
+          path: planBoardPath(planId),
+          body: JSON.stringify({ elements, appliedDrawing }),
+        },
+        boardAnswerSchema,
+      ),
+      (answer) => answer?.board,
+    );
   }
 
   /** Deletes one plan with its document and its conversation; whether the service deleted it. */

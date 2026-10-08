@@ -81,6 +81,10 @@ capture_evidence duplex --profile duplex --compact --peek --capture-evidence "$S
 # saved document with its assumption checklist, scrolled inside the panel's
 # own ceiling, and the idle microphone row under it.
 capture_evidence planning --profile planning --expanded --capture-evidence "$SIDECAR_PLANNING_EVIDENCE_PATH"
+# The same plan on its whiteboard: Excalidraw's own bundle loaded over the
+# fixture's board, drawn in the bundled hand-drawn font with nothing fetched
+# from the network.
+capture_evidence planning-board --profile planning-board --expanded --capture-evidence "$SIDECAR_PLANNING_BOARD_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -129,7 +133,8 @@ for evidence_path in \
     "$SIDECAR_SPEAKING_EVIDENCE_PATH" \
     "$SIDECAR_MUTED_EVIDENCE_PATH" \
     "$SIDECAR_DUPLEX_EVIDENCE_PATH" \
-    "$SIDECAR_PLANNING_EVIDENCE_PATH"; do
+    "$SIDECAR_PLANNING_EVIDENCE_PATH" \
+    "$SIDECAR_PLANNING_BOARD_EVIDENCE_PATH"; do
     validate_evidence "$evidence_path" 1280 840
 done
 
@@ -141,3 +146,4 @@ printf 'Speaking visual evidence: %s\n' "$SIDECAR_SPEAKING_EVIDENCE_PATH"
 printf 'Muted visual evidence: %s\n' "$SIDECAR_MUTED_EVIDENCE_PATH"
 printf 'Duplex visual evidence: %s\n' "$SIDECAR_DUPLEX_EVIDENCE_PATH"
 printf 'Planning visual evidence: %s\n' "$SIDECAR_PLANNING_EVIDENCE_PATH"
+printf 'Planning board visual evidence: %s\n' "$SIDECAR_PLANNING_BOARD_EVIDENCE_PATH"
