@@ -35,6 +35,13 @@ export const LIVE_BRAIN_RUN_EVENT = {
    * build.
    */
   STEP_SETTLED: "step_settled",
+  /**
+   * A run the backend opened of its own, no ask of the service's behind it:
+   * the turn that hands a finished subagent's result back. It is told once,
+   * ahead of the run's own events, so the service can stand an exchange for
+   * a run it never asked for.
+   */
+  WOKEN: "woken",
 } as const;
 
 /** How a run ended, as the service tells a reply from a refusal. */
@@ -86,6 +93,7 @@ export type LiveBrainRunEvent =
       /** The pending call's command, or its tool's name where it runs none; absent while no call is pending. */
       readonly action: string | undefined;
     }
+  | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.WOKEN; readonly runId: string }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.STEP_SETTLED;
       readonly runId: string;

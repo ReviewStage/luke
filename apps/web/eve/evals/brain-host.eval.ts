@@ -10,6 +10,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
@@ -29,7 +30,7 @@ import {
 } from "../../server/hosted/plan-store";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
-import { SCRIPTED_PLANNING_REPLY } from "../scripted-model";
+import { SCRIPTED_DELEGATE, SCRIPTED_PLANNING_REPLY } from "../scripted-model";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask in a
@@ -202,6 +203,35 @@ export default defineEval({
       );
       const runtimeSessionId = await readConversationRuntimeSessionId(run, planConversationId);
       assert.equal(runtimeSessionId, planning.sessionId);
+
+      // Research handed to the researcher subagent returns at once, and the
+      // researcher's result wakes the planning session in a turn of its own,
+      // recorded as a child completion with the result as the brain's line.
+      const researchPlan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+      const researchConversationId = await planConversation(run, researchPlan.id);
+      const research = await openSession(
+        researchConversationId,
+        `${SCRIPTED_DELEGATE}invite links`,
+      );
+      const researchSession = await t.target.attachSession(research.sessionId);
+      researchSession.succeeded();
+      let woken: Awaited<ReturnType<typeof readTurnById>> | undefined;
+      for (let waited = 0; waited < 120 && woken?.status !== TURN_STATUS.SETTLED; waited += 1) {
+        woken = await readTurnById(run, hostTurnId(research.sessionId, "turn_1"));
+        await t.sleep(500);
+      }
+      assert.ok(woken);
+      assert.equal(woken.origin, TURN_ORIGIN.CHILD_COMPLETION);
+      assert.equal(woken.status, TURN_STATUS.SETTLED);
+      const wokenRows = await readMessagesByTurn(run, researchConversationId, woken.id);
+      assert.deepEqual(wokenRows[0]?.metadata, {
+        author: MESSAGE_AUTHOR.BRAIN,
+        source: OBSERVATION_SOURCE.CHILD_COMPLETION,
+      });
+      // The researcher ran to its end on its own model and tools, rather than failing for want of them.
+      const notification = wokenRows[0]?.parts.find((part) => isTextUIPart(part));
+      assert.ok(notification && isTextUIPart(notification));
+      assert.match(notification.text, /\(researcher\) is completed\./);
     } finally {
       await runtime.dispose();
     }

@@ -9,6 +9,7 @@ import {
 } from "eve/evals";
 import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool.js";
 import { BRAIN_HOST_MODEL_FIXTURE } from "../server/hosted/brain-host/bounds.js";
+import { EVE_DELEGATION_TOOL } from "../server/hosted/brain-host/planning.js";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
 
 /**
@@ -19,7 +20,9 @@ import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
  * notetaker writes the document; told to look something up, it searches the
  * public web for it instead and answers with the first source the search
  * found, or says it found none; told to draw something, it draws it on the
- * plan's board as one labelled box and says so. It is selected only by the
+ * plan's board as one labelled box and says so; told to research something,
+ * it hands it to the researcher subagent and says so, and the researcher,
+ * running on the same model, looks it up. It is selected only by the
  * fixture's own environment variable and a deployment never names it.
  */
 
@@ -28,6 +31,9 @@ export const SCRIPTED_PLANNING_REPLY = "Who should be able to do that?";
 export const SCRIPTED_LOOK_UP = "Look up: ";
 export const SCRIPTED_RESEARCH_REPLY = "The first source I found:";
 export const SCRIPTED_NO_SOURCE_REPLY = "I found no source for that, so it stays an open question.";
+/** What a developer's words start with when they ask the scripted planner to hand the rest to the researcher. */
+export const SCRIPTED_DELEGATE = "Research: ";
+const SCRIPTED_DELEGATED_REPLY = "The researcher is on it.";
 /** What a developer's words start with when they ask the scripted planner to draw the rest as one box. */
 export const SCRIPTED_DRAW = "Draw: ";
 /** The id the scripted planner gives the box it draws. */
@@ -52,6 +58,20 @@ function scriptedResponse(request: MockModelRequest): MockModelResponse {
   if (searched) return researchReply(searched);
   if (request.toolResults.some((result) => result.name === DRAW_ON_BOARD_TOOL.name)) {
     return { text: SCRIPTED_DRAWN_REPLY };
+  }
+  if (request.toolResults.some((result) => result.name === EVE_DELEGATION_TOOL.RESEARCHER)) {
+    return { text: SCRIPTED_DELEGATED_REPLY };
+  }
+  if (request.lastUserMessage?.startsWith(SCRIPTED_DELEGATE)) {
+    const question = request.lastUserMessage.slice(SCRIPTED_DELEGATE.length);
+    return {
+      toolCalls: [
+        {
+          name: EVE_DELEGATION_TOOL.RESEARCHER,
+          input: { message: `${SCRIPTED_LOOK_UP}${question}` },
+        },
+      ],
+    };
   }
   if (request.lastUserMessage?.startsWith(SCRIPTED_DRAW)) {
     const label = request.lastUserMessage.slice(SCRIPTED_DRAW.length);
