@@ -9,8 +9,11 @@ import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 /**
  * The account's face: the provider's photo when one travelled and loads,
  * otherwise the first letter of who it is, otherwise a person glyph while no
- * one is signed in. A photo that fails is remembered by its address, so a new
- * address gets its own chance and the broken one never flashes back.
+ * one is signed in. A photo that fails is remembered by its address for as
+ * long as the sidebar stands, so a new address gets its own chance. Note that
+ * we let a remount try the address again, because a failure is as often a
+ * launch with no network as a dead link, and the empty `alt` means a retry
+ * that fails again draws no broken-image glyph.
  */
 function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
   const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
