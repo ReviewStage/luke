@@ -44,8 +44,9 @@ export function useSidebarCollapse(available: boolean): SidebarCollapse {
     if (!available) return;
     const handleKey = (event: KeyboardEvent) => {
       // The lowercase key is deliberate, as for Command-F: with Shift held
-      // this is some other chord. A held key toggles once, not per repeat.
-      if (event.key !== "b" || !(event.metaKey || event.ctrlKey) || event.altKey) return;
+      // this is some other chord. Command alone, because Control-B is the
+      // text field's own caret-back. A held key toggles once, not per repeat.
+      if (event.key !== "b" || !event.metaKey || event.ctrlKey || event.altKey) return;
       event.preventDefault();
       if (!event.repeat) onToggle();
     };

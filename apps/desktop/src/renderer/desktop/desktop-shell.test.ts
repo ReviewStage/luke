@@ -64,9 +64,9 @@ function press(): void {
   act(() => button.click());
 }
 
-/** Command-B from anywhere in the window, answering whether the window claimed it. */
-function chord(): boolean {
-  const event = new KeyboardEvent("keydown", { key: "b", metaKey: true, cancelable: true });
+/** Command-B (or another B chord) from anywhere in the window, answering whether the window claimed it. */
+function chord(modifiers: KeyboardEventInit = { metaKey: true }): boolean {
+  const event = new KeyboardEvent("keydown", { key: "b", ...modifiers, cancelable: true });
   act(() => {
     window.dispatchEvent(event);
   });
@@ -105,8 +105,10 @@ test("the toggle folds the sidebar away and brings it back, and the fold outlive
   assert.equal(toggle()?.getAttribute("aria-label"), "Hide sidebar");
 });
 
-test("Command-B folds and unfolds the sidebar on Plans", () => {
+test("Command-B folds and unfolds the sidebar on Plans, and Control-B is left to the text field", () => {
   show(PANEL_TAB.PLANS);
+  assert.equal(chord({ ctrlKey: true }), false);
+  assert.equal(sidebar().hasAttribute("inert"), false);
   assert.equal(chord(), true);
   assert.equal(sidebar().hasAttribute("inert"), true);
   assert.equal(chord(), true);
