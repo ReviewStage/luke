@@ -334,7 +334,7 @@ it.effect("the talk key's release mutes and never tells the host to stop", () =>
 it.effect("the talk key's release while Luke answers leaves his voice playing", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     const call = f.latest();
     assert.ok(call);
     call.started();
