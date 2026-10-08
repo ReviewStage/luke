@@ -45,8 +45,8 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * (MIT License, Copyright (c) 2026 Matt Pocock). Note that we leave out his
  * written round template and his sub-agent sentences, because the call is
  * spoken and the planning model reads the repository through its own tools;
- * what it dispatches is research, to the `researcher` subagent, in our own
- * words under "Working in parallel". His rounds become one standing queue,
+ * what it dispatches is wider reading, to the `researcher` and `explorer`
+ * subagents, in our own words under "Working in parallel". His rounds become one standing queue,
  * because the voice read "ask the whole frontier in one round" as its own
  * rule and asked a round all at once. Each question is queued through
  * `queue_question` the moment it is ready, which reaches the voice mid-turn,
@@ -120,9 +120,9 @@ The board as it stands is handed to you every turn under [board], with every ele
 
 ### Working in parallel
 
-You can hand research to the researcher, a subagent that searches the web while you keep working. A call returns at once and its findings arrive later as a message of their own, so the call never holds up your answer or the questions you queue. Use it when a question needs more than one search or page, and answer from what you already know until its findings arrive. Never wait on it and never guess what it will find.
+You have two subagents that work while you keep working: the researcher searches the public Internet, and the explorer reads the plan's folder. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand one a question that needs more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a subagent and never guess what it will find.
 
-Each call starts a researcher that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources), and what is out of scope. Run at most three at once, and never two on the same question. To redirect one, call the researcher again with its agentId and the new message; to stop one whose question no longer matters, use task_cancel.
+Each call starts a subagent that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give two subagents running at once different questions, and run at most three at once. To redirect one, call it again with its agentId and the new message; to stop one whose question no longer matters, use task_cancel.
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
@@ -132,8 +132,10 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 - show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
+- run_in_repository is for a fact your answer needs now; hand wider reading to the explorer.
 - researcher researches a question on the Internet in the background, as above.
-- task_cancel stops a researcher you no longer need.
+- explorer reads the plan's folder in the background, as above.
+- task_cancel stops a subagent you no longer need.
 - draw_on_board draws a diagram of shapes, arrows, and text on the plan's whiteboard, replacing your previous one.
 
 ## Return the result
@@ -291,6 +293,7 @@ const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, 
  */
 export const EVE_DELEGATION_TOOL = {
   RESEARCHER: "researcher",
+  EXPLORER: "explorer",
   TASK_CANCEL: "task_cancel",
 } as const;
 
@@ -310,6 +313,7 @@ const TASK_CANCEL_INPUT = Schema.Struct({ taskIds: Schema.Array(Schema.String) }
 
 const EVE_DELEGATION_INPUT = {
   [EVE_DELEGATION_TOOL.RESEARCHER]: SUBAGENT_CALL_INPUT,
+  [EVE_DELEGATION_TOOL.EXPLORER]: SUBAGENT_CALL_INPUT,
   [EVE_DELEGATION_TOOL.TASK_CANCEL]: TASK_CANCEL_INPUT,
 } as const;
 
@@ -318,6 +322,21 @@ export const RESEARCHER_TOOL_NAMES: ReadonlySet<string> = new Set([
   SEARCH_WEB_TOOL.name,
   READ_WEB_PAGE_TOOL.name,
 ]);
+
+/** The planning tools the `explorer` subagent is offered: the folder read, and nothing that speaks, shows, or writes. */
+export const EXPLORER_TOOL_NAMES: ReadonlySet<string> = new Set([RUN_IN_REPOSITORY_TOOL.name]);
+
+/**
+ * The instructions the `explorer` subagent runs under, on the researcher's
+ * terms: nobody's voice, and a summary the parent reads whole.
+ */
+export const EXPLORER_INSTRUCTIONS = `
+You read one plan's code folder for a planning assistant, who hands you a question about the code and reads what you return. You never speak to the developer, and you ask nobody anything: if the question is unclear, answer the most likely reading and say which one you took.
+
+Explore with run_in_repository: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. Start broad, then read the files that matter. Stop when you can answer.
+
+Return a short summary that answers the question, then the files you relied on as paths, with line numbers where they matter. Say plainly what you could not find. Keep it under 300 words.
+`;
 
 /**
  * The instructions the `researcher` subagent runs under. Note that it is told
