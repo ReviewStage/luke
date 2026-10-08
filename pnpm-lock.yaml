@@ -109,15 +109,9 @@ importers:
       '@sentry/esbuild-plugin':
         specifier: 5.4.0
         version: 5.4.0(rollup@4.62.4)
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../../packages/actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
-      '@sidecar/brain':
-        specifier: workspace:*
-        version: link:../../packages/brain
       '@sidecar/calendar':
         specifier: workspace:*
         version: link:../../packages/calendar
@@ -145,9 +139,6 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../../packages/live
-      '@sidecar/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
       '@sidecar/panel':
         specifier: workspace:*
         version: link:../../packages/panel
@@ -638,15 +629,9 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../analytics
-      '@sidecar/brain':
-        specifier: workspace:*
-        version: link:../brain
       '@sidecar/calendar':
         specifier: workspace:*
         version: link:../calendar
@@ -674,9 +659,6 @@ importers:
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings
-      '@sidecar/surface':
-        specifier: workspace:*
-        version: link:../surface
       '@sidecar/voice':
         specifier: workspace:*
         version: link:../voice
@@ -922,9 +904,6 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
-      '@sidecar/surface':
-        specifier: workspace:*
-        version: link:../surface
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -947,12 +926,6 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

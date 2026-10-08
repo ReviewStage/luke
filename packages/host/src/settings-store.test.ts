@@ -36,7 +36,6 @@ import {
   type SettingsResetScope,
   type SettingsUpdateResult,
 } from "@sidecar/settings/wire";
-import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACTION_RESULT_STATUS,
   type UnparsedWireValue,
@@ -380,8 +379,6 @@ const SAMPLE_VALUE = {
   preferBuiltInMicrophone: false,
   announceSessions: false,
   quietDuringMeetings: false,
-  showOnAllDisplays: true,
-  formFactor: PANEL_FORM_FACTOR.NOTCH,
   sessionFilters: [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX],
   sessionSearchQuery: "review",
   defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
@@ -395,10 +392,7 @@ const SAMPLE_VALUE = {
  * do, so only their own tests below can state it. What the file holds for them
  * is still the table's business.
  */
-const RESOLVED_FIELDS = new Set<AppSettingField>([
-  APP_SETTING_SCHEMA.voice.field,
-  APP_SETTING_SCHEMA.formFactor.field,
-]);
+const RESOLVED_FIELDS = new Set<AppSettingField>([APP_SETTING_SCHEMA.voice.field]);
 
 /** A number is no setting's shape, so one file corrupts every field at once. */
 const CORRUPT_VALUE = 7;
@@ -1284,20 +1278,6 @@ test("a stored key and a chosen preference survive each other's writes", async (
   }
 });
 
-test("ignores a stored form this build does not draw", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  await fs.writeFile(
-    path.join(directory, SETTINGS_FILE_NAME),
-    JSON.stringify({ version: 2, apiKeys: {}, formFactor: "hexagon" }),
-  );
-
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
-  assert.equal(
-    appSettingsView(await storeIn(directory).snapshot()).formFactor,
-    PANEL_FORM_FACTOR.BUBBLE,
-  );
-});
-
 test("ignores a stored default provider this build does not know", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   await fs.writeFile(
@@ -1596,17 +1576,15 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
-  await store.set(APP_SETTING_SCHEMA.showOnAllDisplays.field, true);
-  await store.set(APP_SETTING_SCHEMA.formFactor.field, PANEL_FORM_FACTOR.NOTCH);
+  await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
 
   assert.equal(reason, undefined);
   assert.equal(appSettingsView(settings).showInDock, false);
-  assert.equal(appSettingsView(settings).showOnAllDisplays, false);
-  assert.equal(appSettingsView(settings).formFactor, PANEL_FORM_FACTOR.BUBBLE);
-  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.formFactor.field), undefined);
+  assert.equal(appSettingsView(settings).openAtLogin, true);
+  assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.openAtLogin.field), true);
   // One scope's reset is that scope's alone.
   assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);
 });
@@ -1683,7 +1661,6 @@ test("a reset leaves a stored key standing", async (t) => {
       duckOtherMedia: true,
       preferBuiltInMicrophone: true,
       showInDock: false,
-      showOnAllDisplays: false,
     }),
   );
   const store = storeIn(directory);

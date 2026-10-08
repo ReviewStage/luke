@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { matchRanges } from "./session-model";
 
 const SAFE_LINK = /^https?:\/\//i;
 
@@ -14,59 +13,6 @@ type HastParent = NonNullable<Parameters<AllowElement>[2]>;
 type HastNode = HastParent["children"][number];
 type HastChild = Parameters<AllowElement>[0]["children"][number];
 type HastText = Extract<HastNode, { type: "text" }>;
-
-/** The class a marked stretch wears: the session rows' own, so a match reads the same everywhere. */
-const MARK_CLASS = "row-match";
-
-/**
- * One run of text with the query's words marked where they landed, as the
- * session rows mark theirs — the same ranges, so the two cannot disagree —
- * or the run as it was when none did.
- */
-function markedText(text: HastText, tokens: readonly string[]): readonly HastChild[] {
-  const ranges = matchRanges(text.value, tokens);
-  if (ranges.length === 0) return [text];
-  const parts: HastChild[] = [];
-  let from = 0;
-  for (const range of ranges) {
-    if (range.start > from) {
-      parts.push({ type: "text", value: text.value.slice(from, range.start) });
-    }
-    parts.push({
-      type: "element",
-      tagName: "mark",
-      properties: { className: [MARK_CLASS] },
-      children: [{ type: "text", value: text.value.slice(range.start, range.end) }],
-    });
-    from = range.end;
-  }
-  if (from < text.value.length) parts.push({ type: "text", value: text.value.slice(from) });
-  return parts;
-}
-
-/**
- * Marks the query's words in every run of text under a node, code and
- * captions included, because a find that skipped a block would hide a match
- * the words say is there. Walked from the end so a run split into several
- * never moves the runs still to be read. A match spanning two runs — a word
- * in emphasis and the one after it — is not marked, since no single run
- * holds it.
- */
-function markChildren(children: HastNode[], tokens: readonly string[]): void {
-  for (let index = children.length - 1; index >= 0; index -= 1) {
-    const child = children[index];
-    if (child === undefined) continue;
-    if (child.type === "element") markChildren(child.children, tokens);
-    else if (child.type === "text") children.splice(index, 1, ...markedText(child, tokens));
-  }
-}
-
-/** The rehype step that marks a search's words in the drawn tree, run only while a search stands. */
-const markMatches =
-  (tokens: readonly string[]) =>
-  (tree: HastParent): void => {
-    markChildren(tree.children, tokens);
-  };
 
 /** A stretch of the words, from one offset up to another. */
 interface MarkdownSpan {
@@ -285,24 +231,20 @@ function safeUrl(url: string): string {
  * links inside the paragraph, and the blocks a paragraph cannot hold —
  * headings, lists, quotes, fenced code, tables, rules — composed around it.
  * Raw HTML in the words is text. Every size in the stylesheet is in `em`, so
- * the same component reads at the caption's ten pixels and the thread's
- * twelve and a half.
+ * the same component reads at the caption's ten pixels and the plan's own
+ * size.
  */
 export function MarkdownMessage({
   words,
   className,
-  highlight,
   edit,
 }: {
   words: string;
   className?: string;
-  /** A search's words, marked wherever they land in the drawn text; nothing marks without one. */
-  highlight?: readonly string[] | undefined;
   /** The edit the words are drawn partway through; drawn whole without one. */
   edit?: MarkdownEdit | undefined;
 }): React.JSX.Element {
   const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
-  if (highlight !== undefined && highlight.length > 0) rehypePlugins.push([markMatches, highlight]);
   if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words.length]);
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>

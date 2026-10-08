@@ -253,9 +253,8 @@ export function FeedbackSlot({
         <label className="settings-label" htmlFor={MESSAGE_FIELD_ID}>
           {copy.label}
         </label>
-        {/* The note may open prefilled with the conversation's own words — the
-            one category Luke blocks from the recording by his own posture
-            rather than the library's input masking — so the field carries the
+        {/* The note is blocked from the recording by Luke's own posture
+            rather than the library's input masking, so the field carries the
             library's fixed blocking class itself, and nothing else of the
             composer changes what it records. */}
         <textarea

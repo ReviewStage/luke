@@ -1,16 +1,11 @@
 import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import {
-  CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_PROVIDER_LIST,
-  CREDENTIAL_SOURCE,
-} from "@sidecar/credentials/vocabulary";
+import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
-import { MOTION_DURATION_MS } from "@sidecar/surface";
 import {
   cssCustomProperties,
   SURFACE_PROPERTY,
@@ -21,55 +16,37 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import type { DisplayDiagnostic } from "#shared/messages/session";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
-import {
-  CONVERSATION_PAGE,
-  type ConversationPage,
-  conversationSearchable,
-  transcriptListed,
-} from "./agents-panel";
 import type { CalendarGateControl } from "./calendar-gate";
 import type { ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
-import { CONVERSATION_SEARCH_INPUT_ID } from "./conversation-search";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
-import {
-  collapseMarkAfter,
-  HIT_REGION,
-  PANEL_PRESENTATION,
-  type PanelPresentation,
-} from "./panel-state";
-import { PANEL_TAB, type PanelTab, type ShownPanelTab } from "./panel-tabs";
+import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
+import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
+import { focusSearchField } from "./search-field";
+import { displaySessions, sessionTally } from "./session-model";
 import { applySessionReplay } from "./session-replay";
-import { focusSearchField } from "./session-search";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { KeySlot } from "./settings/key-slot";
+import { workspaceProviderOptions } from "./settings/workspace-rows";
 import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
-import {
-  credentialSettingsPage,
-  PANEL_STAND_DOWN,
-  SETTINGS_VIEW,
-  type SettingsView,
-} from "./settings-views";
+import { PANEL_STAND_DOWN, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { useConnections } from "./use-connections";
-import { useConversationPage } from "./use-conversation-page";
 import { useFeedbackComposer } from "./use-feedback-composer";
 import { useMeasuredHeight } from "./use-measured-height";
 import type { PanelEntrySurface } from "./use-panel-entry";
 import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
-import { useSessionList } from "./use-session-list";
 import { useStateWithRef } from "./use-state-with-ref";
 import { fixtureVoice, useVoiceView } from "./use-voice-view";
 import {
@@ -78,13 +55,6 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
-
-function notchStyle(display: DisplayDiagnostic): CSSProperties {
-  return cssCustomProperties({
-    [SURFACE_PROPERTY.NOTCH_TOP_INSET]: `${display.notch.topInset}px`,
-    [SURFACE_PROPERTY.NOTCH_HOUSING_WIDTH]: `${display.notch.housingWidth}px`,
-  });
-}
 
 function surfaceHeightStyle(
   slotHeight: number | undefined,
@@ -98,38 +68,11 @@ function surfaceHeightStyle(
   return cssCustomProperties(properties);
 }
 
-const COLLAPSE_ANIMATION_MS = MOTION_DURATION_MS.EXIT + MOTION_DURATION_MS.SURFACE;
-
 /**
  * What the calendars slice reads as before the first snapshot lands. Held as
  * a constant so a render before it redraws nothing that was already drawn.
  */
 const EMPTY_CALENDARS: readonly ObservedAccountCalendars[] = [];
-
-/**
- * True from the render that leaves the panel for a compact shape until the
- * collapse has settled — the window's own collapse clock, exit plus shape.
- * The stylesheet spends it to hold the surface behind the content it is
- * still carrying: the panel's rows fading out, and a caption block riding
- * down from the panel's foot. Derived during render
- * rather than in an effect, because the surface's transition reads its
- * delay on the same style change that retargets it — an attribute landing
- * one commit later finds the shape already moving.
- */
-function useLeavingPanel(presentation: PanelPresentation): boolean {
-  const [leaving, setLeaving] = useState(false);
-  const [previous, setPrevious] = useState(presentation);
-  if (previous !== presentation) {
-    setPrevious(presentation);
-    setLeaving(collapseMarkAfter(previous, presentation, leaving));
-  }
-  useEffect(() => {
-    if (!leaving) return;
-    const timer = window.setTimeout(() => setLeaving(false), COLLAPSE_ANIMATION_MS);
-    return () => window.clearTimeout(timer);
-  }, [leaving]);
-  return leaving;
-}
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -144,75 +87,27 @@ export function App(): React.JSX.Element {
   const calendarOnboardingOwed = state?.onboarding.calendarOwed === true;
   const conductorKeyOnboardingOwed = state?.onboarding.conductorKeyOwed === true;
   const outputAudio = state?.audio.outputAudio;
-  const display = state?.window.display;
-  // Held as any tab the body can draw, so the hidden tabs' branches below
-  // still read as they will once the tabs return; only `changeTab` writes it,
-  // and that takes a shown tab alone, so a hidden one is never the value.
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
   // Whether the Plans tab is on its new-plan form; an open plan is the host's
   // and outlasts the tab, but a half-filled form is this panel's alone.
   const [plansComposing, setPlansComposing] = useState(false);
-  const { conversationPage, transcriptOpen, changeConversationPage } = useConversationPage(tell);
-  // The host closes an open transcript its list no longer names, stamped by
-  // a Clear on any Mac or fallen past the list's bound; the page follows it
-  // back to the list rather than standing over a transcript nothing fills.
-  const subagents = state?.children;
-  const agents = state?.agents;
-  useEffect(() => {
-    if (transcriptOpen === undefined || subagents === undefined || agents === undefined) return;
-    if (transcriptListed(transcriptOpen, subagents, agents) !== false) return;
-    changeConversationPage(CONVERSATION_PAGE.AGENTS);
-  }, [agents, changeConversationPage, subagents, transcriptOpen]);
-  // The settings search's field, on the sessions search's own terms: the
-  // magnifier beside the tab bar answers for it, and its query lives with the
-  // field in the settings panel — closing here is what lets that query go.
+  // The settings search's field: the magnifier in the settings header answers
+  // for it, and its query lives with the field in the settings panel —
+  // closing here is what lets that query go.
   const [settingsSearchOpen, setSettingsSearchOpen] = useState(false);
-  // The conversation search's field, on the same terms: the magnifier beside
-  // the tab bar answers for it, and its query lives with the field in the
-  // page that draws it, the thread's panel or a transcript's. It is held as
-  // the page it was opened over, and offered exactly while that page shows
-  // with words to search — the thread with turns in it, or a transcript whose
-  // own read has landed with turns — so turning to another page closes it,
-  // even the turn from the thread straight to a transcript a chip opens; the
-  // tab is not part of the closing rule, so a search held while another tab
-  // shows waits where the developer left it. Emptying the page closes it too,
-  // by the sessions search's own rule that a field nobody can see must not
-  // hold a query.
-  const [conversationSearchPage, setConversationSearchPage] = useState<
-    ConversationPage | undefined
-  >(undefined);
-  const conversationPageSearchable = conversationSearchable(
-    conversationPage,
-    state?.conversation,
-    transcriptOpen,
-    state?.childTranscript,
-  );
-  const conversationSearchOpen =
-    conversationSearchPage === conversationPage && conversationPageSearchable;
-  const offerConversationSearch = tab === PANEL_TAB.CONVERSATION && conversationPageSearchable;
-  if (conversationSearchPage !== undefined && !conversationSearchOpen) {
-    setConversationSearchPage(undefined);
-  }
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
     [state?.settings],
   );
-  const sessions = useSessionList({
-    state,
-    settings,
-    tab,
-    // The panel's own two acts, declared below: the list only ever reaches
-    // them from a press, which is long after this render has closed.
-    dismissPanel: () => {
-      cancelHover();
-      void changeMode(false);
-    },
-  });
-  // Counts for nothing except having changed: each tick re-renders the rows so
-  // their "how long ago" labels stay honest while they are on screen.
-  const [, setClock] = useState(0);
+  // What the sidebar's face reacts to: every session Luke is watching.
+  const tally = useMemo(() => sessionTally(state ? displaySessions(state) : []), [state]);
+  const workspaceProjects = state?.sessions.workspaceProjects;
+  const workspaceProviders = useMemo(
+    () => workspaceProviderOptions(workspaceProjects ?? [], settings),
+    [workspaceProjects, settings],
+  );
   const [slotElement, slotHeight] = useMeasuredHeight();
   const [signInSlotElement, signInSlotHeight] = useMeasuredHeight();
   const [connectElement, connectHeight] = useMeasuredHeight();
@@ -226,9 +121,8 @@ export function App(): React.JSX.Element {
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
   /**
-   * Whether a composer is held, mirrored for the presentation cluster: a
-   * capsule close keeps the settings tab for a half-written key or note, and
-   * the pointer holds the panel open for a credential still on screen.
+   * Whether a composer is held, mirrored for the presentation cluster: the
+   * pointer holds the panel open for a credential still on screen.
    */
   const credentialHeld = useRef(false);
   /**
@@ -239,13 +133,12 @@ export function App(): React.JSX.Element {
    * fact about what was begun rather than about what was begun last: one page
    * remembered for all three landed a cancelled note on Connections, wherever
    * the note had actually been started — and the tab is written on the same
-   * terms, so a note offered by a thumbs down comes back to the Conversation
-   * rather than to whichever tab the last key entry remembered. A ref rather
+   * terms. A ref rather
    * than state: it is read only when the panel is restored, by a callback
    * that has to stay stable.
    */
   const standDownPage = useRef<SettingsView>(SETTINGS_VIEW.ROOT);
-  const standDownTab = useRef<ShownPanelTab>(PANEL_TAB.SETTINGS);
+  const standDownTab = useRef<PanelTab>(PANEL_TAB.SETTINGS);
   const feedbackHeld = useRef(false);
   /** Whether a calendar sign-in holds the slot, mirrored like the other two. */
   const consentConnectHeld = useRef(false);
@@ -266,34 +159,25 @@ export function App(): React.JSX.Element {
     applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
   const changeTab = useCallback(
-    (next: ShownPanelTab) => {
+    (next: PanelTab) => {
       setTab(next);
-      // The sheet belongs to the session list, and it is drawn over the list it
-      // belongs to, so leaving for Settings has to take it along.
-      sessions.closeOptions();
       // Arriving at the tab is arriving at its front page: a page left open
       // behind a tab switch would greet the next visit with a corner of the
       // settings rather than the settings. The flows that need a deeper page —
       // a credential entry returning from the key slot, the evidence run that
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
-      changeConversationPage(CONVERSATION_PAGE.THREAD);
       setPlansComposing(false);
-      // `ShownPanelTab` and the counted tab are the same union: both are the
-      // guide's own set, which `ShownPanelTab` aliases.
+      // `PanelTab` and the counted tab are the same union: both are the
+      // guide's own set, which `PanelTab` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
         panel_tab: next,
       });
     },
-    [changeConversationPage, sessions.closeOptions, setSettingsView, setTab],
+    [setSettingsView, setTab],
   );
 
-  /**
-   * True while sign-in stands between Luke and anything to watch. The gate is
-   * then what the panel shows, the wings hide the face and the count, and the
-   * badge's place wears a quiet "Sign in" instead — the honest word for why
-   * Luke is idle, at capsule scale.
-   */
+  /** True while sign-in stands between Luke and anything to watch: the gate is then what the window shows. */
   const accountGated =
     state?.run.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
 
@@ -302,9 +186,8 @@ export function App(): React.JSX.Element {
 
   /**
    * The one signed-out Luke's introduction cycle — sway, pirouette, double
-   * blink, curious tilt, nod — walking whichever pose the face is drawn at:
-   * large over the gate, small in the peek's strip. Still while signed in, so
-   * the timer is not left running under the roster.
+   * blink, curious tilt, nod — walked over the sign-in gate. Still while
+   * signed in, so the timer is not left running under the plans.
    */
   const signInFace = useSignInFaceCycle(usePrefersReducedMotion() || !accountGated);
 
@@ -325,34 +208,13 @@ export function App(): React.JSX.Element {
     // True while a field someone could be part-way through is actually on
     // screen. An entry outlives the tab it was started on, so holding the
     // panel open for one that is not drawn would leave the pointer unable to
-    // close a panel showing nothing but sessions.
+    // close a panel showing nothing but plans.
     entryDrawn: () => credentialHeld.current && tabNow() === PANEL_TAB.SETTINGS,
     planningHeld: () => planningHeld.current,
-    composerHeld: () =>
-      credentialHeld.current || feedbackHeld.current || consentConnectHeld.current,
-    onNotPanel: () => {
-      sessions.closeOptions();
-      // The settings and conversation searches close with the shape they
-      // were opened on, taking their queries with them: no search survives
-      // the panel closing.
-      setSettingsSearchOpen(false);
-      setConversationSearchPage(undefined);
-    },
-    onCapsuleList: () => {
-      // The order goes back when the panel does, so the top row keeps
-      // matching the mark the capsule kept. The filter chips and the search
-      // stay: each is a standing way of viewing the list, and the capsule
-      // stays honest over both because its tally is taken before the list is
-      // narrowed. The search field stays open with its query — a session the
-      // query hides is admitted by the field on screen and the count it
-      // carries — waiting where the developer left it, like a search held
-      // while Settings shows.
-      sessions.resetSort();
-    },
-    onCapsuleTab: () => changeTab(PANEL_TAB.PLANS),
+    // The settings search closes with the shape it was opened on, taking its
+    // query with it: no search survives the panel closing.
+    onNotPanel: () => setSettingsSearchOpen(false),
   });
-
-  const leavingPanel = useLeavingPanel(presentation);
 
   /**
    * Brings the panel back around the line the entry belongs to, and leaves it
@@ -364,8 +226,7 @@ export function App(): React.JSX.Element {
     // The row this shape was begun from lives on one page, and changeTab has
     // just reset the tab to its front page: without this, the answer to what
     // was just done — the check beside a provider, the thank-you where the
-    // note was written — would land on a page nobody is looking at. An entry
-    // begun where the roster would be comes back to the roster instead.
+    // note was written — would land on a page nobody is looking at.
     if (standDownTab.current === PANEL_TAB.SETTINGS) setSettingsView(standDownPage.current);
     expand();
   }, [changeTab, expand, setSettingsView]);
@@ -440,11 +301,11 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * The settings search summons, from its magnifier beside the tab bar. The
-   * field opens at the head of whichever settings page is showing — the
+   * The settings search summons, from its magnifier in the settings header.
+   * The field opens at the head of whichever settings page is showing — the
    * search reads across every page wherever it is opened from, so there is
-   * no reason to take anyone away from the page they were on — and the
-   * caret follows the same frame-by-frame seek the session search needs.
+   * no reason to take anyone away from the page they were on — and the caret
+   * follows a frame-by-frame seek, since the field mounts on the same press.
    */
   const openSettingsSearch = useCallback(() => {
     setSettingsSearchOpen(true);
@@ -455,31 +316,11 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * Closing the settings search lets go of its query on the session search's
-   * own terms: the query lives with the field in the settings panel, which
-   * clears it the render it finds the field closed.
+   * Closing the settings search lets go of its query: the query lives with
+   * the field in the settings panel, which clears it the render it finds the
+   * field closed.
    */
   const closeSettingsSearch = useCallback(() => setSettingsSearchOpen(false), []);
-
-  /**
-   * The conversation search summons, from its magnifier beside the tab bar or
-   * Command-F over the thread or a transcript: the field opens at the head of
-   * the page showing and the caret follows the same frame-by-frame seek the
-   * other two need. The two pages are counted apart, never the query.
-   */
-  const openConversationSearch = useCallback(() => {
-    setConversationSearchPage(conversationPage);
-    focusSearchField(CONVERSATION_SEARCH_INPUT_ID);
-    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
-      search_surface:
-        conversationPage === CONVERSATION_PAGE.TRANSCRIPT
-          ? PRODUCT_SEARCH_SURFACE.TRANSCRIPT
-          : PRODUCT_SEARCH_SURFACE.CONVERSATION,
-    });
-  }, [conversationPage]);
-
-  /** Closing it lets go of its query on the settings search's own terms: the page's panel clears the field the render it finds it closed. */
-  const closeConversationSearch = useCallback(() => setConversationSearchPage(undefined), []);
 
   // A capture run stages its conversation from the launch profile, since no
   // voice window stands in one: who is heard, and for the muted run the hint
@@ -546,7 +387,6 @@ export function App(): React.JSX.Element {
     speakers,
     fixtureSpeaking,
     volumeHint,
-    leavingPanel,
   });
 
   // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
@@ -574,44 +414,19 @@ export function App(): React.JSX.Element {
 
   /**
    * What the panel performs once with the state it opened on: the mode main
-   * decided, the two shapes an evidence run has no press to reach, and the
-   * report that it has painted. Once, on the first snapshot that carries
-   * settings. The mode needs no guard against a developer who moved it
-   * meanwhile: the snapshot carries the mode main holds as it publishes, so
-   * it is the same word the lifecycle relay would carry for whatever moved
-   * it. The stored way of viewing the list is not here — restoring it is a
-   * state derivation and happens in the render above.
+   * decided and the report that it has painted. Once, on the first snapshot
+   * that carries settings. The mode needs no guard against a developer who
+   * moved it meanwhile: the snapshot carries the mode main holds as it
+   * publishes, so it is the same word the lifecycle relay would carry for
+   * whatever moved it.
    */
   const opened = useRef(false);
   useEffect(() => {
     if (opened.current || !state?.settings) return;
     opened.current = true;
-    const { run, window: pane } = state;
-    applyAuthoritativeMode(pane.mode);
-    if (run.startPeeked && pane.mode === "compact") {
-      applyPresentation(PANEL_PRESENTATION.PEEK);
-    }
-    // Evidence only, and the same trick the peek uses: the slot is reached
-    // by pressing Connect, which a capture run has no way to do, so the
-    // entry the press would have begun is asked for directly. It carries
-    // the shape with it, as it does anywhere else.
-    const [firstProvider] = CREDENTIAL_PROVIDER_LIST;
-    if (run.startInSlot && pane.mode === "expanded" && firstProvider) {
-      // The tab and page an entry begins on, so pressing the capsule from
-      // here lands where it would have in the flow this is standing in for.
-      changeTab(PANEL_TAB.SETTINGS);
-      setSettingsView(credentialSettingsPage(firstProvider.id));
-      connections.beginEntry(firstProvider.id);
-    }
+    applyAuthoritativeMode(state.window.mode);
     window.sidecar.notifyReady();
-  }, [
-    state,
-    applyAuthoritativeMode,
-    applyPresentation,
-    connections.beginEntry,
-    changeTab,
-    setSettingsView,
-  ]);
+  }, [state, applyAuthoritativeMode]);
 
   // The mode and the tab main decided for this window.
   useEffect(() => {
@@ -628,11 +443,9 @@ export function App(): React.JSX.Element {
 
   // The one greeting an unauthed launch gets: the panel opens on the sign-in
   // gate exactly once, then behaves like any panel — Escape, the pointer, and
-  // the capsule all close it, and it stays a hover away. Locking it open would
-  // fight what a sidecar is; after the greeting leaves, the peek's face and
-  // "Sign in" label are what keep the reason Luke is idle on screen. Signing
-  // out later opens no new greeting — the panel is already forward, showing
-  // the gate the sign-out left behind.
+  // the window's own close all close it. Signing out later opens no new
+  // greeting — the panel is already forward, showing the gate the sign-out
+  // left behind.
   useEffect(() => {
     if (!accountGated || greeted.current) return;
     greeted.current = true;
@@ -671,16 +484,13 @@ export function App(): React.JSX.Element {
       // Find, the way every macOS list answers it. Claimed on the same terms
       // as Command-comma: only while the panel has the keyboard. The lowercase
       // key is deliberate — with Shift held this is some other app's chord.
-      // The key answers for whichever tab is showing: each tab has a search
-      // of its own, and a chord that turned the tab under the press would
-      // search something other than what was being looked at.
+      // Only Settings has a search, so the chord answers there alone rather
+      // than turning the tab under the press.
       if (event.key === "f" && (event.metaKey || event.ctrlKey)) {
         if (presentation !== PANEL_PRESENTATION.PANEL) return;
+        if (tab !== PANEL_TAB.SETTINGS) return;
         event.preventDefault();
-        if (tab === PANEL_TAB.SETTINGS) openSettingsSearch();
-        else if (tab === PANEL_TAB.SESSIONS) sessions.openSearch();
-        // The thread and a transcript each have a search; the Agents list takes the chord as nothing.
-        else if (offerConversationSearch) openConversationSearch();
+        openSettingsSearch();
         return;
       }
       if (event.key !== "Escape") return;
@@ -720,56 +530,32 @@ export function App(): React.JSX.Element {
       }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: the options sheet, then the search field, then a settings page
-      // back to the front page, then the settings tab back to Plans, then an
-      // open plan back to the list, then the panel itself.
+      // time: the search field, then a settings page back to the front page,
+      // then the settings tab back to Plans, then an open plan back to the
+      // list, then the panel itself.
       // The search field answers its own Escapes while the caret is in it —
       // clearing before closing — so the press that lands here is one made
-      // from elsewhere in the panel, and it closes the field outright.
-      if (sessions.optionsOpen) sessions.closeOptions();
-      else if (tab === PANEL_TAB.SESSIONS && sessions.searchOpen) sessions.closeSearch();
-      // The search field stands on whichever page it was opened over, so it
-      // is the nearer layer than the page itself.
-      else if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
+      // from elsewhere in the panel, and it closes the field outright. It
+      // stands on whichever page it was opened over, so it is the nearer
+      // layer than the page itself.
+      if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.PLANS);
-      // The page's search field is the nearer layer than the page itself, on the thread and on a transcript alike.
-      else if (tab === PANEL_TAB.CONVERSATION && conversationSearchOpen) closeConversationSearch();
-      // A transcript unwinds to the list it was opened from, and the list to the thread.
-      else if (
-        tab === PANEL_TAB.CONVERSATION &&
-        conversationPage === CONVERSATION_PAGE.TRANSCRIPT
-      ) {
-        changeConversationPage(CONVERSATION_PAGE.AGENTS);
-      } else if (tab === PANEL_TAB.CONVERSATION && conversationPage !== CONVERSATION_PAGE.THREAD) {
-        changeConversationPage(CONVERSATION_PAGE.THREAD);
-      } else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.PLANS);
       // An open plan unwinds to the list, which leaves it and ends its call,
-      // and the form to the list too. The list is the home tab while Sessions
-      // is hidden, so the press past it closes the panel.
-      else if (tab !== PANEL_TAB.PLANS || !plans.back()) void changeMode(false);
+      // and the form to the list too. The list is the home tab, so the press
+      // past it closes the panel.
+      else if (!plans.back()) void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
-    changeConversationPage,
     changeMode,
     changeTab,
-    closeConversationSearch,
     closeSettingsSearch,
-    conversationPage,
-    conversationSearchOpen,
     feedback.control.dismiss,
-    offerConversationSearch,
-    openConversationSearch,
     openSettingsSearch,
     presentation,
-    sessions.closeOptions,
-    sessions.closeSearch,
-    sessions.openSearch,
-    sessions.optionsOpen,
-    sessions.searchOpen,
     settingsSearchOpen,
     setSettingsView,
     settingsView,
@@ -785,23 +571,9 @@ export function App(): React.JSX.Element {
     tab,
   ]);
 
-  // The rows say how long ago each session was seen, and a label left alone
-  // goes stale the moment a minute passes with no session changing — the very
-  // sessions worth noticing are the ones nothing is updating. A slow tick keeps
-  // the labels honest, and only while they are on screen: the labels are
-  // minute-grained, so half a minute is as fine as the answer gets. Fixture
-  // rows are read against a fixed epoch, so for them a tick could only change
-  // nothing — and a capture run must not risk a re-render mid-shutter.
-  useEffect(() => {
-    if (presentation !== PANEL_PRESENTATION.PANEL) return;
-    if (state?.run.fixtureMode !== false) return;
-    const timer = window.setInterval(() => setClock((tick) => tick + 1), 30_000);
-    return () => window.clearInterval(timer);
-  }, [presentation, state?.run.fixtureMode]);
-
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.
-  if (!state || !settings || !display) return <div />;
+  if (!state || !settings) return <div />;
 
   const shownStopHotkey = state.hotkeys.stop;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
@@ -910,8 +682,7 @@ export function App(): React.JSX.Element {
   return (
     <div
       className="app-stage"
-      // Who is being heard, so the capsule can make room for Luke's meter
-      // beside his face.
+      // Who is being heard.
       data-luke-speaking={String(speakers.lukeSpeaking)}
       data-listening={String(speakers.listening)}
       // Whether there are words to draw under the shape — a caption or a
@@ -922,21 +693,14 @@ export function App(): React.JSX.Element {
       // a band of its own below the caption block.
       data-volume-hint={String(volumeHint)}
       data-presentation={presentation}
-      // Whether the shape is still on its way down from the panel, so the
-      // surface waits for the content it is carrying instead of leading it.
-      data-leaving-panel={String(leavingPanel)}
-      // No housing to blend into: the slot and the composer draw as
-      // free-standing cards, the way they do on a display without a notch.
-      data-notch="false"
       // Whether sign-in still stands between Luke and anything to watch, so the
       // stylesheet knows the strip holds nothing while a popup is drawn.
       data-gated={String(accountGated)}
       data-capture={String(state.run.captureMode)}
-      // The panel is drawn as an ordinary app window's content rather than a
-      // shape at the notch; desktop.css lays it out.
+      // The panel is drawn as an ordinary app window's content; desktop.css
+      // lays it out.
       data-surface="desktop"
       style={{
-        ...notchStyle(display),
         // One slot shape, three possible occupants: the surface follows the
         // height of whichever is actually drawn.
         ...surfaceHeightStyle(
@@ -965,7 +729,7 @@ export function App(): React.JSX.Element {
             signInFace,
           }}
           identity={{
-            tally: sessions.tally,
+            tally,
             levels: voiceLevels,
             speakers,
             voiceActive,
@@ -1008,7 +772,7 @@ export function App(): React.JSX.Element {
             credentials: connections.credentials,
             feedback: feedback.control,
             panelOpen,
-            workspaceProviders: sessions.workspaceProviders,
+            workspaceProviders,
             calendar: connections.calendar,
             appleCalendar: connections.appleCalendar,
             onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
@@ -1023,8 +787,8 @@ export function App(): React.JSX.Element {
       </div>
       <span className="desktop-scrim" aria-hidden="true" />
 
-      {/* The panel stood down to its field. It shares the expanded window, so
-          standing down to it costs no more than the peek does. */}
+      {/* The panel stood down to its field, drawn as a sheet in the same
+          window. */}
       {/* The three shapes that borrow the slot never draw together: the
           gate's sign-in wait suppresses the settings tab's two entries
           outright — the two are never on screen at once — and the key and
@@ -1069,12 +833,9 @@ export function App(): React.JSX.Element {
         still={stillMotion}
       />
 
-      {/* Luke's words while he says them: one element in every state, under
-          the housing while the shape is compact and carried to the panel's
-          foot when it opens, so the words travel with the morph instead of
-          jumping between two copies. Not in a wing — the wings clip at the
-          capsule's height — and always mounted, like the count's caption, so
-          both edges of its fade can run. The inner stack is what is measured —
+      {/* Luke's words while he says them: one element in every state, always
+          mounted so both edges of its fade can run. The inner stack is what is
+          measured —
           responses spoken back-to-back are one block each in it, oldest
           first, the settled words above the ones still arriving — and its
           wrapped height is the only honest answer to how much room the words

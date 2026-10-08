@@ -18,8 +18,8 @@ import { Fragment, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { drawnVisibly, focusSeek } from "./focus-seek";
+import { Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./session-model";
-import { Highlighted } from "./session-search";
 import { type ConnectionVisibility, offeredConnections } from "./settings/connection-schema";
 import {
   defaultProjectRowId,
@@ -62,9 +62,9 @@ import {
 const SEARCH_PLACEHOLDER = "Search settings…";
 
 /**
- * How the search field is found from outside the component, the way the
- * session list's is: the magnifier is answered at the app level, where the
- * page it may have to turn lives, and the field it lands in is here.
+ * How the search field is found from outside the component: the magnifier is
+ * answered at the app level, where the page it may have to turn lives, and
+ * the field it lands in is here.
  */
 export const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 
@@ -285,9 +285,7 @@ export interface SettingsSearchOutcome {
 
 /**
  * The query read over the corpus: every word must land somewhere in an
- * entry's haystack, on the same reading the session list gives a query, so
- * the two searches cannot disagree about what a word is. A blank query is no
- * search at all. The kept rows come back grouped by page, because that is
+ * entry's haystack. A blank query is no search at all. The kept rows come back grouped by page, because that is
  * how the results are drawn.
  */
 export function searchSettings(
@@ -333,40 +331,9 @@ export function landOnSettingsRow(id: string): () => void {
 }
 
 /**
- * The button that opens the search field, beside the tab bar the way the
- * session list's is beside the options button: the same magnifier, answering
- * for the other tab. It stays lit while the field is open, so the control
- * and its effect cannot be read apart.
- */
-export function SettingsSearchButton({
-  open,
-  onToggle,
-}: {
-  open: boolean;
-  onToggle: () => void;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className="search-button"
-      data-active={String(open)}
-      aria-expanded={open}
-      aria-label="Search settings"
-      aria-keyshortcuts="Meta+F"
-      title="Search settings (⌘F)"
-      onClick={onToggle}
-    >
-      <SearchIcon />
-    </button>
-  );
-}
-
-/**
- * The search field: the sessions list's own pill, worn by class rather than
- * copied, pinned at the head of whichever page it was opened over so a
- * scrolled page keeps the field in hand — the same standing the session
- * list's pill has above its scroller. The count is the pill's honesty about
- * how far the query narrowed what the pages offer.
+ * The search field: a pill pinned at the head of whichever page it was
+ * opened over, so a scrolled page keeps the field in hand. The count is the
+ * pill's honesty about how far the query narrowed what the pages offer.
  *
  * Escape unwinds one layer at a time, the way it does everywhere else in the
  * panel: a held query is cleared first, and only an empty field closes the
@@ -398,7 +365,7 @@ export function SettingsSearch({
     <div className="settings-search-stand">
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only places the caret. */}
       <search
-        className="session-search settings-search"
+        className="search-pill"
         // The whole pill is the field: a press on its padding or its count is
         // someone reaching for the caret, so the caret is what they get.
         onClick={() => field.current?.focus()}
@@ -407,7 +374,7 @@ export function SettingsSearch({
         <input
           ref={field}
           id={SETTINGS_SEARCH_INPUT_ID}
-          className="session-search-input"
+          className="search-pill-input"
           aria-label="Search settings"
           placeholder={SEARCH_PLACEHOLDER}
           autoComplete="off"
@@ -429,14 +396,14 @@ export function SettingsSearch({
           }}
         />
         {search ? (
-          <span className="session-search-count" aria-live="polite">
+          <span className="search-pill-count" aria-live="polite">
             {search.matched === 0 ? "No matches" : `${search.matched} of ${search.searched}`}
           </span>
         ) : null}
         {search ? (
           <button
             type="button"
-            className="session-search-clear"
+            className="search-pill-clear"
             aria-label="Clear search"
             title="Clear search"
             onClick={(event) => {

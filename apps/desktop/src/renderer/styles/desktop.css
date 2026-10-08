@@ -20,6 +20,10 @@ body,
 }
 
 .app-stage[data-surface="desktop"] {
+  /* No housing to blend into: the slot and the composer draw as the
+     free-standing cards a display without a notch gets. */
+  --notch-top-inset: 0px;
+  --notch-housing-width: 0px;
   /* The entry sheets hang this far below the window's top edge. The bubble
      rules spend `--shape-top` for that drop, and the strip they reserve above
      their first row is nothing here. */

@@ -10,6 +10,4 @@ export {
   type AppGuideSetting,
   type AppPanelTab,
   appToggleText,
-  SESSION_LIST_SORT,
-  type SessionListSort,
 } from "./guide.js";

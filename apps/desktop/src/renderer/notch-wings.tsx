@@ -247,8 +247,7 @@ export function NotchWings({
   // decides the same thing from the presentation; the strip carries it so the
   // reorder measurement reads the layout actually drawn rather than inferring
   // it a second way.
-  const spread =
-    presentation === PANEL_PRESENTATION.PEEK || presentation === PANEL_PRESENTATION.PANEL;
+  const spread = presentation === PANEL_PRESENTATION.PANEL;
 
   // The label's text, measured in layout pixels: `offsetWidth` never sees the
   // transform about to draw it, so the fit below can divide by the scale the

@@ -8,10 +8,6 @@ import {
   feedbackSubmission,
 } from "@sidecar/feedback";
 import {
-  type ConversationRateMessageResult,
-  conversationOpenChildTranscriptParamsSchema,
-  conversationRateMessageParamsSchema,
-  conversationRateMessageResultSchema,
   LIVE_SDP_MAX_CHARACTERS,
   type NotebookReadResult,
   notebookReadResultSchema,
@@ -22,23 +18,13 @@ import {
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
 import {
-  type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
   planningBoardSaveParamsSchema,
-  planningRepositoriesAnswerSchema,
   planningSetFolderParamsSchema,
   planningStartAnswerSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
 import { INTRODUCTION_SEED_BOUNDS, type LiveDiagnostics } from "@sidecar/live";
-import {
-  isSessionApplicationId,
-  isSessionWriteResult,
-  maximumSessionMessageLength,
-  type SessionApplicationId,
-  type SessionIdentity,
-  type SessionWriteResult,
-} from "@sidecar/session";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -67,9 +53,8 @@ import { readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { PLAN_MARKDOWN_MAX_CHARS } from "../plan-markdown";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
-import { isSessionIdentity, type SessionOpenResult } from "./session";
 import type { UpdateSnapshot } from "./update";
-import { isVoiceCommandOutcome, VOICE_COMMAND, type VoiceCommandOutcome } from "./voice-view";
+import { VOICE_COMMAND } from "./voice-view";
 import { isWireValue, type WireGuard, type WireGuardValue, wireResult } from "./wire-guard";
 
 /**
@@ -111,42 +96,6 @@ export const ACT_KIND = {
   UPDATE_INSTALL: "update.install",
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
-  SESSION_OPEN: "session.open",
-  SESSION_OPEN_APPLICATION: "session.openApplication",
-  SESSION_OPEN_CHANGE: "session.openChange",
-  /**
-   * The two writes a session's own row mints — the follow-up typed into its
-   * composer and the press of a control its provider advertised — carried to
-   * the host, where `admitEffect()` decides them against the roster it reads for
-   * itself before any provider sees them.
-   */
-  SESSION_SEND_MESSAGE: "session.sendMessage",
-  SESSION_EXECUTE_CONTROL: "session.executeControl",
-  /**
-   * The developer's thumb on one of Luke's messages in the Conversation tab,
-   * or the press on the filled thumb that takes the verdict back, carried to
-   * the host, which writes it to the service as a rating event on
-   * that message and shows the verdict back through the view it publishes.
-   * The one write the tab makes about a message, and the panel's alone.
-   */
-  CONVERSATION_RATE_MESSAGE: "conversation.rateMessage",
-  /**
-   * The thread's reader reaching the top of what this Mac holds: the panel
-   * asks the host for one page of older turns, which arrives on the document
-   * rather than as the answer; the answer says whether a page landed, so the
-   * panel knows the ask is spent and may ask again as the reader scrolls on.
-   */
-  CONVERSATION_LOAD_OLDER: "conversation.loadOlder",
-  /**
-   * One transcript held open on this Mac, a child's or an observed session's:
-   * the panel asks the host to read it to its end and again whenever its
-   * list's head moves, and to stop when it lets go of it. One at a time, and
-   * the transcript arrives on the document rather than as the answer; the
-   * open answers whether the host took it.
-   */
-  // Named for the child's transcript still, an agent's opening through the same act; kept so the protocol goldens stay put.
-  CONVERSATION_OPEN_CHILD_TRANSCRIPT: "conversation.openChildTranscript",
-  CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",
   /**
    * The Settings tab's Memory page asking what Luke has saved: his notebook
    * as the service holds it, carried through the host's one read of it and
@@ -156,8 +105,7 @@ export const ACT_KIND = {
   /**
    * The panel's Plans tab asking the host: the plan list and the active
    * document read as the tab shows, one plan made the active one, the open
-   * plan left, a plan started on a repository, a plan deleted, the repositories the
-   * account's GitHub connection reads, and the connection itself. The view
+   * plan left, a plan started on a folder, and a plan deleted. The view
    * arrives on the document rather than as an answer; nothing here writes a
    * plan's document, which the plan's notetaker alone saves.
    */
@@ -166,8 +114,6 @@ export const ACT_KIND = {
   PLANNING_CLOSE: "planning.close",
   PLANNING_START: "planning.start",
   PLANNING_DELETE: "planning.delete",
-  PLANNING_REPOSITORIES: "planning.repositories",
-  PLANNING_CONNECT_GITHUB: "planning.connectGitHub",
   /** The new-plan form's Choose folder press: the folder picker, answering the chosen path or null. */
   PLANNING_CHOOSE_FOLDER: "planning.chooseFolder",
   /** A plan's folder on this Mac, chosen again for a plan this Mac holds none for. */
@@ -342,29 +288,14 @@ function oneLineText(max?: number): EffectSchema.Codec<string, string> {
 }
 
 /**
- * An identifier that has to match the one it names elsewhere — a session, a
- * run, a delivery, an account, a calendar — so its ends are admitted as
- * written rather than trimmed into a value the roster would not hold.
+ * An identifier that has to match the one it names elsewhere — a plan, an
+ * account, a calendar — so its ends are admitted as written rather than
+ * trimmed into a value the host would not hold.
  */
 const exactId = exactText(512);
 
 /** Every credential provider this build registered, which is what its record is keyed by. */
 const CREDENTIAL_PROVIDER_IDS = Object.keys(CREDENTIAL_PROVIDERS).filter(isCredentialProviderId);
-
-/** The three opens that name one session and nothing else. */
-const oneSession = fields<{ identity: SessionIdentity }>({ identity: isSessionIdentity });
-
-/**
- * The words a row's composer sends, admitted at their ends: admission trims
- * and bounds them again in the host, so this only refuses what no bound could
- * admit — nothing at all, or more than the message bound allows.
- */
-const isComposedMessage = (value: UnparsedWireValue): boolean =>
-  isWireString(value) && value.trim().length > 0 && value.length <= maximumSessionMessageLength;
-
-/** A control's id as the roster advertised it, admitted as written so it matches the advertisement. */
-const isControlId = (value: UnparsedWireValue): boolean =>
-  Result.isSuccess(readEither(exactId)(value));
 
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
@@ -425,8 +356,6 @@ const settingEntryPayload: ActSchema<SettingEntryPayload> = {
 const answersNothing = wireResult<void>();
 const answersSettings = wireResult<SettingsUpdateResult>();
 const answersAccount = wireResult<AccountSnapshot>();
-const answersSessionOpen = wireResult<SessionOpenResult>();
-const answersSessionWrite = wireResult<SessionWriteResult>(isSessionWriteResult);
 
 /**
  * A press: a kind that carries nothing and answers nothing, which is what
@@ -557,60 +486,6 @@ export const ACT = {
   [ACT_KIND.UPDATE_INSTALL]: press("Could not install that update on this system."),
   [ACT_KIND.UPDATE_OPEN_RELEASE]: press("Could not open the releases page."),
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: press("Could not open the changelog."),
-  [ACT_KIND.SESSION_OPEN]: {
-    payload: oneSession,
-    result: answersSessionOpen,
-    refusal: "Could not open that session on this system.",
-  },
-  [ACT_KIND.SESSION_OPEN_APPLICATION]: {
-    payload: fields<{ identity: SessionIdentity; applicationId: SessionApplicationId }>({
-      identity: isSessionIdentity,
-      applicationId: (value) => isWireString(value) && isSessionApplicationId(value),
-    }),
-    result: answersSessionOpen,
-    refusal: "Could not open that session in that app on this system.",
-  },
-  [ACT_KIND.SESSION_OPEN_CHANGE]: {
-    payload: oneSession,
-    result: answersSessionOpen,
-    refusal: "Could not open that pull request on this system.",
-  },
-  [ACT_KIND.SESSION_SEND_MESSAGE]: {
-    payload: fields<{ identity: SessionIdentity; text: string }>({
-      identity: isSessionIdentity,
-      text: isComposedMessage,
-    }),
-    result: answersSessionWrite,
-    refusal: "Could not send that message on this system.",
-  },
-  [ACT_KIND.SESSION_EXECUTE_CONTROL]: {
-    payload: fields<{ identity: SessionIdentity; controlId: string }>({
-      identity: isSessionIdentity,
-      controlId: isControlId,
-    }),
-    result: answersSessionWrite,
-    refusal: "Could not run that control on this system.",
-  },
-  [ACT_KIND.CONVERSATION_RATE_MESSAGE]: {
-    payload: actSchema(conversationRateMessageParamsSchema),
-    result: wireResult<ConversationRateMessageResult>(
-      isReadable(conversationRateMessageResultSchema),
-    ),
-    refusal: "Could not record that rating on this system.",
-  },
-  [ACT_KIND.CONVERSATION_LOAD_OLDER]: {
-    payload: noPayload,
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not read earlier messages on this system.",
-  },
-  [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: {
-    payload: actSchema(conversationOpenChildTranscriptParamsSchema),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not open that transcript on this system.",
-  },
-  [ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: press(
-    "Could not close that transcript on this system.",
-  ),
   [ACT_KIND.NOTEBOOK_READ]: {
     payload: noPayload,
     result: wireResult<NotebookReadResult | undefined>(
@@ -635,12 +510,6 @@ export const ACT = {
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not delete that plan on this system.",
   },
-  [ACT_KIND.PLANNING_REPOSITORIES]: {
-    payload: noPayload,
-    result: wireResult<PlanningRepositoriesAnswer>(isReadable(planningRepositoriesAnswerSchema)),
-    refusal: "Could not read your GitHub repositories on this system.",
-  },
-  [ACT_KIND.PLANNING_CONNECT_GITHUB]: press("Could not connect GitHub on this system."),
   [ACT_KIND.PLANNING_CHOOSE_FOLDER]: {
     payload: noPayload,
     result: wireResult<string | null>(
@@ -663,9 +532,7 @@ export const ACT = {
     payload: record({
       command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),
     }),
-    result: wireResult<VoiceCommandOutcome | undefined>(
-      (value) => value === undefined || isVoiceCommandOutcome(value),
-    ),
+    result: answersNothing,
     refusal: "Could not carry that command on this system.",
   },
   [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: {

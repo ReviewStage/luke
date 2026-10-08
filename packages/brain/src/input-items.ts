@@ -95,7 +95,7 @@ export type ChildCompletionStatus =
   (typeof CHILD_COMPLETION_STATUS)[keyof typeof CHILD_COMPLETION_STATUS];
 
 /** The one field of a completion's data a reader of the thread needs by name: the child it answered for. */
-export const CHILD_COMPLETION_FIELD = { CHILD_ID: "child_id" } as const;
+const CHILD_COMPLETION_FIELD = { CHILD_ID: "child_id" } as const;
 
 /** What a child's end hands the conversation that delegated it: which child, how it ended, and its final words. */
 export interface ChildCompletion {

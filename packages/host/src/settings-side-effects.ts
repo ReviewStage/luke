@@ -49,8 +49,6 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.NONE]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.DOCK]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.DISPLAYS]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.FORM_FACTOR]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.TALK_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,

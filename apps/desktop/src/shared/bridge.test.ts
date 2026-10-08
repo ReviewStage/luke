@@ -78,16 +78,6 @@ const VOICE_VIEW = {
   talkOpening: false,
   lukeCaptions: ["Claude Code finished checkout."],
   developerCaptions: undefined,
-  liveConversationLines: [
-    {
-      rowId: "row-1",
-      entry: { kind: "reply", words: "Checkout is green.", recordedAt: 12 },
-      startMs: 0,
-      endMs: 1_200,
-      settled: false,
-    },
-  ],
-  spokenAskPending: false,
 };
 
 test("a voice view carries both speakers beside its status and nothing malformed", () => {
@@ -96,7 +86,7 @@ test("a voice view carries both speakers beside its status and nothing malformed
   assert.equal(BRIDGE.reportVoiceView.args([VOICE_VIEW, VOICE_VIEW]), false);
   assert.equal(BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, voiceStatus: 1 }, undefined]), false);
   assert.equal(
-    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, spokenAskPending: "yes" }, undefined]),
+    BRIDGE.reportVoiceView.args([{ ...VOICE_VIEW, talkOpening: "yes" }, undefined]),
     false,
   );
   assert.equal(

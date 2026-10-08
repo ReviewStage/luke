@@ -58,17 +58,11 @@ Read it first. What it does not cover is the Electron window under the surface:
 - **The window never animates its own frame.** An animated `setBounds` re-lays out
   the whole renderer every frame, because the panel is anchored to the viewport's
   centre.
-- Every window holds the width of the widest shape any mode can draw, so a mode
-  change never moves the window. macOS lands a window's move and its content's
-  relayout on different frames, and a recentred narrower window flashed the
-  capsule against the old origin.
 - The shape's depth is the menu bar's *painted* depth, not the safe-area inset.
   macOS may paint the bar deeper than the inset, and a shape built on the inset
   stops short of the strip it has to pass for.
 - `backdrop-filter` is not an option: a transparent window has no backdrop to
   sample, so it buys a render surface and returns nothing.
-- Anything the shape does not cover must stay click-through, so hit regions track
-  the shape rather than the window.
 
 ## Confirms
 

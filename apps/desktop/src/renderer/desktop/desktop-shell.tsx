@@ -3,7 +3,7 @@ import { WingFace } from "@sidecar/panel";
 import type { FaceMotion } from "@sidecar/surface";
 import { CalendarGate, type CalendarGateControl } from "../calendar-gate";
 import { ConductorKeyGate, type ConductorKeyGateControl } from "../conductor-key-gate";
-import { PANEL_TAB, type PanelTab, type ShownPanelTab } from "../panel-tabs";
+import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { CalendarGateReview } from "../settings/calendar-gate-review";
 import type { SettingsPanelProps } from "../settings/settings-panel";
@@ -68,7 +68,7 @@ export function DesktopShell({
   gates: DesktopGates;
   identity: LukeIdentityProps;
   tab: PanelTab;
-  onTabChange: (tab: ShownPanelTab) => void;
+  onTabChange: (tab: PanelTab) => void;
   plans: PlansControl;
   settings: SettingsPanelProps;
   settingsSearchOpen: boolean;

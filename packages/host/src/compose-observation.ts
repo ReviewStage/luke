@@ -1,37 +1,26 @@
 import { PRODUCT_EVENT, productSessionCountBucket } from "@sidecar/analytics";
-import {
-  carried,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayMethodTable,
-  invalid,
-} from "@sidecar/gateway";
-import { HostedActionClient, HostedRosterClient } from "@sidecar/hosted";
+import { carried, GATEWAY_EVENT, GATEWAY_METHOD, type GatewayMethodTable } from "@sidecar/gateway";
+import { HostedRosterClient } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   isProviderId,
-  isSessionApplicationId,
   normalizeObservedWorkspaceProjects,
   type ObservedWorkspaceProject,
   PROVIDER_IDENTITY_BY_ID,
   rosterRelevantSessions,
   type Session,
-  type SessionIdentity,
   SessionRoster,
   staleWorkspaceProjectDefaults,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { Effect, Result, type Scope } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag } from "./effect/kernel.js";
-import { createSessionOpens } from "./session-opens.js";
-import { createSessionRowActions } from "./session-row-actions.js";
 import { drawSnapshotProjects, drawSnapshotRoster } from "./snapshot-roster.js";
 
 /**
@@ -41,20 +30,9 @@ import { drawSnapshotProjects, drawSnapshotRoster } from "./snapshot-roster.js";
  */
 const SESSION_REFRESH_INTERVAL_MS = 60_000;
 
-function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity & WireRecord {
-  return (
-    isRecord(value) &&
-    isWireString(value.providerId) &&
-    isWireString(value.providerSessionId) &&
-    value.providerSessionId.length > 0
-  );
-}
-
 export interface ObservationComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
-  /** Starts one fresh observation pass and answers at once, so callers can catch the roster up. */
-  readonly refreshRoster: Effect.Effect<void>;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
   rosterSettled: () => boolean;
@@ -93,16 +71,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("host/composeObserva
     serviceBaseUrl: kernel.hostedServiceBaseUrl,
     ...account.token,
   });
-  const actionClient = new HostedActionClient({
-    serviceBaseUrl: kernel.hostedServiceBaseUrl,
-    ...account.token,
-  });
-  /**
-   * The redraw a landed write earns. A row's press settles on its own
-   * fiber, so the poke is a fork from there rather than a run: the write's
-   * answer goes back the moment the pass is started.
-   */
-  const pokeRefresh = Effect.asVoid(Effect.forkDetach(Effect.suspend(() => loop.refresh)));
 
   let unsubscribeSessions: (() => void) | undefined;
   let lastWorkspaceProjects: string | undefined;
@@ -171,24 +139,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("host/composeObserva
     kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: carried(projects) });
   });
 
-  const sessionOpens = createSessionOpens({
-    sessionRegistry,
-    openExternal: (url) => kernel.openExternalThroughNode(url),
-    recordProductEvent: settings.recordProductEvent,
-  });
-
-  // A row's own send or press is admitted where its roster is: the service
-  // admits it against the stored snapshot the row was drawn from, the same
-  // observation and not a second one read here, so a control the provider
-  // withdrew since the last pass is refused there rather than carried on the
-  // row's stale picture of it.
-  const rowActions = createSessionRowActions({
-    drawn: actableSessions,
-    client: actionClient,
-    refresh: pokeRefresh,
-    recordProductEvent: settings.recordProductEvent,
-  });
-
   const loop = new ObservationLoop({
     gate: observationGate,
     intervalMs: SESSION_REFRESH_INTERVAL_MS,
@@ -224,9 +174,9 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("host/composeObserva
   /**
    * The roster keeps every observation whole, and the adapters age out and cap
    * nothing, so this one gate is where a session that settled long ago stops
-   * being a row. Every client-facing read passes through it: the broadcast,
-   * the bootstrap and roster method, and the sessions an action may name, so
-   * the panel, the voice, and admission see one roster. The pass announces
+   * being a row. Every client-facing read passes through it: the broadcast
+   * and the bootstrap and roster method, so the panel and the voice see one
+   * roster. The pass announces
    * every run whether or not anything moved, so a session that crosses its
    * horizon between observations leaves on the next broadcast.
    */
@@ -287,12 +237,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("host/composeObserva
     heldWorkspaceProjects = [];
   }
 
-  function actableSessions(): readonly Session[] {
-    return relevantSessions(sessionRegistry.list()).filter(
-      (session) => session.realtimeVoice !== true,
-    );
-  }
-
   function rosterForClients(): readonly Session[] {
     return runMode.observesProviders && account.capabilitiesActive()
       ? relevantSessions(sessionRegistry.list())
@@ -305,43 +249,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("host/composeObserva
         sessions: carried(rosterForClients()),
         settled: !runMode.observesProviders || rosterBroadcast,
       })),
-    [GATEWAY_METHOD.SESSION_OPEN]: (params) => {
-      const identity = params.identity;
-      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-      return Effect.map(sessionOpens.openSession(identity), (answer) => carried(answer));
-    },
-    [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: (params) => {
-      const identity = params.identity;
-      const applicationId = params.applicationId;
-      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-      if (!isWireString(applicationId) || !isSessionApplicationId(applicationId)) {
-        return invalid("applicationId is not one this build knows");
-      }
-      return Effect.map(sessionOpens.openSessionApplication(identity, applicationId), (answer) =>
-        carried(answer),
-      );
-    },
-    [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: (params) => {
-      const identity = params.identity;
-      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-      return Effect.map(sessionOpens.openSessionChange(identity), (answer) => carried(answer));
-    },
-    [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: (params) => {
-      const identity = params.identity;
-      const text = params.text;
-      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-      if (!isWireString(text)) return invalid("text must be a string");
-      return Effect.map(rowActions.sendMessage(identity, text), (answer) => carried(answer));
-    },
-    [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: (params) => {
-      const identity = params.identity;
-      const controlId = params.controlId;
-      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-      if (!isWireString(controlId)) return invalid("controlId must be a string");
-      return Effect.map(rowActions.executeControl(identity, controlId), (answer) =>
-        carried(answer),
-      );
-    },
     [GATEWAY_METHOD.WORKSPACE_PROJECTS]: () =>
       Effect.gen(function* () {
         if (!account.capabilitiesActive()) return { projects: carried([]) };
@@ -359,7 +266,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("host/composeObserva
   return {
     methods,
     loop,
-    refreshRoster: pokeRefresh,
     rosterForClients,
     rosterSettled: () => !runMode.observesProviders || rosterBroadcast,
     offeredWorkspaceProjects,

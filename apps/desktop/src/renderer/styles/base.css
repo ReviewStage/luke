@@ -453,7 +453,6 @@ button:disabled {
    housing: a shape that has left the housing's footprint needs the depth, and
    one still inside it must stay indistinguishable from the hardware. */
 .app-stage[data-presentation="capsule"][data-caption="true"] .panel-surface,
-.app-stage[data-presentation="peek"] .panel-surface,
 .app-stage[data-presentation="slot"] .panel-surface,
 .app-stage[data-presentation="feedback"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
@@ -501,11 +500,6 @@ button:disabled {
   transition-delay: 0s;
 }
 
-.app-stage[data-presentation="capsule"][data-luke-speaking="true"] .compact-hover-target {
-  width: var(--capsule-voice-width);
-  transform: translateX(calc(-50% - var(--capsule-voice-shift)));
-}
-
 /* Luke's meter follows the room being made for it, the way the marks spread
    into the peek. The capsule grows 26px, and a meter drawn 60ms in is drawn
    past an edge that is still 300ms away from it. So it crosses over the last
@@ -548,8 +542,7 @@ button:disabled {
    reply starts and a shape grown around nothing reads as a twitch. The bands
    carry the inset above themselves, so the growth adds the one below the
    last of them. */
-.app-stage[data-presentation="capsule"][data-caption="true"],
-.app-stage[data-presentation="peek"][data-caption="true"] {
+.app-stage[data-presentation="capsule"][data-caption="true"] {
   --caption-growth: calc(
     var(--caption-size, 20px) +
     var(--volume-hint-size) +
@@ -573,36 +566,6 @@ button:disabled {
   transition-delay: 0s;
 }
 
-.app-stage[data-presentation="capsule"][data-caption="true"] .compact-hover-target {
-  width: var(--peek-width);
-  transform: translateX(-50%);
-}
-
-/* The press target covers the caption block as well as the strip: the words
-   are drawn on the shape, and a shape the pointer is over must keep taking
-   the pointer. Without this the block belongs to the stage around the strip,
-   which carries no hit region, so resting on the words read as leaving the
-   shape — collapsing the peek under the cursor. Like every hover-target rule
-   it snaps rather than animating, and the strip's height already carries the
-   pill's lift, so the target ends where the shape ends. */
-.app-stage[data-presentation="capsule"][data-caption="true"] .compact-hover-target,
-.app-stage[data-presentation="peek"][data-caption="true"] .compact-hover-target {
-  height: calc(var(--strip-height) + var(--caption-growth));
-}
-
-/* Under the pointer: wide enough to spread the marks out flat. */
-.app-stage[data-presentation="peek"] .panel-surface {
-  width: var(--peek-width);
-  transition-duration: var(--duration-shape);
-  transition-timing-function:
-    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
-    var(--spring);
-  /* The peek's shadow rides with the shape. It is a small, short move over a
-     small surface, so the extra paint per frame is affordable here in a way it
-     is not across the panel's 620px. */
-  transition-delay: 0s;
-}
-
 .app-stage[data-presentation="panel"] .panel-surface {
   width: var(--panel-width);
   height: var(--panel-height, var(--panel-height-max));
@@ -612,70 +575,6 @@ button:disabled {
     var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
     var(--spring);
   transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
-}
-
-/* Tracks the drawn shape rather than the window, which is always larger than
-   the capsule: everything the shape does not cover has to stay click-through.
-   It snaps rather than animating, so the wider peek is live from the first
-   frame and the pointer cannot fall out of a region that is still growing. */
-.compact-hover-target {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: var(--capsule-width);
-  height: var(--strip-height);
-  padding: 0;
-  border: 0;
-  /* The same corner the capsule is drawn with, for the same reason the panel
-     body carries the panel's: the press target is the shape, not its box. */
-  border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
-  background: none;
-  /* Each state below names the hand; the capsule is the one that does not, and
-     that is what makes the hand appear at all. A window passing the pointer
-     through is not the window the pointer is over, so a hand computed for a
-     capsule the pointer has only just landed on is drawn and then immediately
-     overridden by whatever is behind Luke — and a cursor is only reported when
-     it changes, so nothing asks for it again while the pointer stays where it
-     is. That is the arrow left over a peek for as long as anyone hovers it.
-     Every state that does name the hand is one this window has already begun
-     taking the pointer for, and each is reached by a resize, so the hand is
-     asked for afresh at a moment it can hold. */
-  cursor: default;
-  transform: translateX(-50%);
-  /* Pressing the capsule is a gesture, not a focus change: a ring drawn around
-     the notch strip by a mouse press is the one thing on screen that cannot
-     look intentional. */
-  outline: none;
-  -webkit-app-region: no-drag;
-  -webkit-tap-highlight-color: transparent;
-}
-
-/* A keyboard can reach this control, and focus it cannot see is worse than a
-   ring — but the ring belongs to the keyboard alone. `:focus-visible` is not
-   enough on its own: it is a guess about how focus arrived, and the panel takes
-   focus programmatically when it opens, which the engine reads as keyboard
-   modality and rings a plain press. The flag on the root says the keyboard was
-   actually used. The ring is inset, because an outline outside this box would
-   be drawn on the desktop above the shape. */
-html[data-keyboard="true"] .compact-hover-target:focus-visible {
-  outline: 2px solid var(--state-working);
-  outline-offset: -4px;
-}
-
-.app-stage[data-presentation="peek"] .compact-hover-target {
-  width: var(--peek-width);
-  cursor: pointer;
-}
-
-/* The strip keeps taking clicks over an open panel: pressing it is how the panel
-   closes again. It spans the shape rather than the capsule it grew from, because
-   the band the housing sits in is empty for the whole width of an open panel —
-   the wings are drawn in it but take no pointer, and the body starts below it —
-   so every part of that band means the same thing and answers the same way. */
-.app-stage[data-presentation="panel"] .compact-hover-target {
-  width: var(--panel-width);
-  cursor: pointer;
-  pointer-events: auto;
 }
 
 /* Notch wings ------------------------------------------------------------ */
@@ -798,7 +697,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 /* The marks spread across the last of the shape's travel and finish as it
    settles, inside the black rather than ahead of it. */
-.app-stage[data-presentation="peek"] .wing-mark,
 .app-stage[data-presentation="panel"] .wing-mark {
   opacity: 1;
   transform: none;
@@ -926,22 +824,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* The viewBox already carries the cloud's proportions, so a place that shows a
    badge sets a width and the height follows from the shape. */
 .cloud-badge svg {
-  height: auto;
-}
-
-/* The realtime voice badge uses the same out-of-flow corner treatment as the
-   cloud badge, so it cannot become a second grid item under the provider mark. */
-.audio-badge {
-  position: absolute;
-  display: grid;
-  border-radius: 50%;
-  background: var(--surface-fill);
-  box-shadow: inset 0 0 0 1px var(--hairline);
-  color: var(--text-secondary);
-  place-items: center;
-}
-
-.audio-badge svg {
   height: auto;
 }
 
@@ -1133,7 +1015,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    disagree — and it is derived rather than chosen: the pill matches the
    menu bar it floats beside, 24pt tall on a display without a housing. 32px
    strip minus 4px each side is exactly that 24. */
-.app-stage[data-notch="false"] {
+.app-stage:not([data-notch="true"]) {
   --shape-top: var(--bubble-lift);
   --strip-height: calc(var(--capsule-height) - var(--shape-top) * 2);
 }
@@ -1147,11 +1029,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    row one gap under the pill's edge, and the strip's press target gone with
    the strip rather than left over the row. The open panel keeps its strip
    even signed out, because pressing it is how the panel closes. */
-.app-stage[data-notch="false"][data-gated="true"][data-presentation="slot"] {
+.app-stage:not([data-notch="true"])[data-gated="true"][data-presentation="slot"] {
   --strip-height: 0px;
 }
 
-.app-stage[data-notch="false"] .panel-surface {
+.app-stage:not([data-notch="true"]) .panel-surface {
   /* Half the resting strip, stated as that number rather than an overlarge
      one: at rest the two draw the same pill, but an overlarge radius scales
      with whatever box it is given, so a shape grown for captions curved its
@@ -1169,84 +1051,35 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    is grown by it so the lifted panel's shadow still fades out inside the
    stage — and every corner rounds, because an edge nothing meets is an edge
    with no reason to be square. */
-.app-stage[data-notch="false"][data-presentation="panel"] .panel-surface {
+.app-stage:not([data-notch="true"])[data-presentation="panel"] .panel-surface {
   height: var(--panel-height, var(--panel-height-max));
   border-radius: var(--panel-radius);
 }
 
-.app-stage[data-notch="false"][data-presentation="slot"] .panel-surface {
+.app-stage:not([data-notch="true"])[data-presentation="slot"] .panel-surface {
   height: var(--slot-height, 96px);
   border-radius: var(--slot-radius);
 }
 
-/* The content rides the lift the chrome takes, arriving and leaving on the
-   same motion it always had — the offsets below are the stages' own resting
-   and drawn transforms with the lift added, so the spring covers the same
-   distance and only the destination moves. */
-.app-stage[data-notch="false"] .expanded-stage {
-  transform: translateX(-50%) translateY(calc(var(--shape-top) - 10px));
-}
-
-.app-stage[data-notch="false"][data-presentation="panel"] .expanded-stage {
-  transform: translateX(-50%) translateY(var(--shape-top));
-}
-
-.app-stage[data-notch="false"] .slot-stage {
+.app-stage:not([data-notch="true"]) .slot-stage {
   transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
 }
 
-.app-stage[data-notch="false"][data-presentation="slot"] .slot-stage[data-drawn="true"] {
+.app-stage:not([data-notch="true"])[data-presentation="slot"] .slot-stage[data-drawn="true"] {
   transform: translateX(-50%) translateY(var(--shape-top));
 }
 
-.app-stage[data-notch="false"][data-presentation="feedback"] .panel-surface {
+.app-stage:not([data-notch="true"])[data-presentation="feedback"] .panel-surface {
   height: var(--feedback-height, 220px);
   border-radius: var(--slot-radius);
 }
 
-.app-stage[data-notch="false"] .feedback-stage {
+.app-stage:not([data-notch="true"]) .feedback-stage {
   transform: translateX(-50%) translateY(calc(var(--shape-top) - 6px));
 }
 
-.app-stage[data-notch="false"][data-presentation="feedback"] .feedback-stage {
+.app-stage:not([data-notch="true"])[data-presentation="feedback"] .feedback-stage {
   transform: translateX(-50%) translateY(var(--shape-top));
-}
-
-.app-stage[data-notch="false"] .compact-hover-target {
-  top: var(--shape-top);
-  /* The surface's own radius above, for the surface's reason: the captioned
-     target grows with the shape, and an overlarge radius would round its hit
-     region past the corners the shape actually draws. */
-  border-radius: calc(var(--strip-height) / 2);
-}
-
-/* Inside an open panel the strip is surrounded by the shape rather than
-   bounding it, so it has no corner of its own to follow. This has to follow
-   the non-notch pill: the two are equal specificity. */
-.app-stage[data-presentation="panel"] .compact-hover-target {
-  border-radius: 0;
-}
-
-.compact-stage {
-  position: absolute;
-  z-index: 4;
-  inset: 0;
-}
-
-/* The strip sits above everything, so wherever the shape holds something else
-   to press, the stage around the strip has to stop taking the pointer. */
-.app-stage[data-presentation="panel"] .compact-stage,
-.app-stage[data-presentation="slot"] .compact-stage,
-.app-stage[data-presentation="feedback"] .compact-stage {
-  pointer-events: none;
-}
-
-/* Pressing the strip while the slot or the composer is drawn brings the whole
-   panel back, with the entry still in it. */
-.app-stage[data-presentation="slot"] .compact-hover-target,
-.app-stage[data-presentation="feedback"] .compact-hover-target {
-  cursor: pointer;
-  pointer-events: auto;
 }
 
 /* Sign-in label ---------------------------------------------------------- */
@@ -1278,8 +1111,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   will-change: transform;
 }
 
-.app-stage[data-presentation="capsule"] .sign-in-label,
-.app-stage[data-presentation="peek"] .sign-in-label {
+.app-stage[data-presentation="capsule"] .sign-in-label {
   opacity: 1;
 }
 
@@ -1343,8 +1175,7 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    shape's travel, so they land inside the black rather than ahead of the edge
    still springing toward them. The clip alone takes no delay while the
    caption is up: it is the shape's twin, not content following it. */
-.app-stage[data-presentation="capsule"][data-caption="true"] .voice-caption,
-.app-stage[data-presentation="peek"][data-caption="true"] .voice-caption {
+.app-stage[data-presentation="capsule"][data-caption="true"] .voice-caption {
   opacity: 1;
   transition:
     opacity var(--duration-quick) var(--motion-exit)
@@ -1375,20 +1206,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     calc(var(--duration-shape) - var(--duration-quick)),
     transform var(--duration-shape) var(--spring),
     clip-path var(--duration-shape) var(--spring);
-}
-
-/* The words are drawn on the shape, not in the panel's flow, so the body
-   reserves the block's height under its own padding and the rows never
-   collide with it. Reserved whenever there are words rather than only while
-   the panel is up, so the height the panel reports is already right when a
-   captioned expand begins. */
-.app-stage[data-caption="true"] .expanded-panel {
-  padding-bottom: calc(
-    18px +
-    var(--caption-size, 20px) +
-    var(--volume-hint-size) +
-    var(--voice-band-inset)
-  );
 }
 
 /* The stack holds one block per response, oldest first, so responses spoken
@@ -1495,7 +1312,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    shape's travel — and takes the pointer only while it is drawn: a hidden
    button must stay click-through, because everything it covers is desktop. */
 .app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="capsule"] .volume-hint,
-.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="peek"] .volume-hint,
 .app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="panel"] .volume-hint {
   opacity: 1;
   pointer-events: auto;
@@ -1535,27 +1351,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
 .volume-hint-dismiss:hover {
   background: var(--raised-strong);
-}
-
-/* Leaving the panel is the one way into the compact states by a shrink, and
-   the grow-leads rules above would let the shape abandon its content: the
-   panel's rows are still fading over `--duration-exit`, and the caption
-   block waits out the same delay before riding down from the panel's foot —
-   a surface moving at once shrinks out from under both. The renderer marks
-   the collapse for the window's own collapse clock, exit plus shape, so the
-   shape waits here and nowhere else: a caption growing at rest keeps
-   leading. */
-.app-stage[data-leaving-panel="true"][data-presentation="capsule"] .panel-surface,
-.app-stage[data-leaving-panel="true"][data-presentation="peek"] .panel-surface {
-  transition-delay: var(--duration-exit);
-}
-
-/* The hint rides undelayed everywhere else — expanding, it leads with the
-   panel — so the collapse holds it back with the caption block it explains,
-   or it would leave the block behind and arrive at the housing alone. The
-   opacity keeps the arrival crossing it rides in every state. */
-.app-stage[data-leaving-panel="true"][data-volume-hint="true"][data-caption="true"] .volume-hint {
-  transition-delay: calc(var(--duration-shape) - var(--duration-quick)), var(--duration-exit);
 }
 
 /* Opening the panel is the one move that changes `--voice-band-width`, and
@@ -1657,91 +1452,12 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   --bar-height: 23px;
 }
 
-/* Expanded panel --------------------------------------------------------- */
-
-.expanded-stage {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  left: 50%;
-  width: var(--panel-width);
-  max-height: var(--panel-height-max);
-  opacity: 0;
-  /* Hidden outright the moment it finishes fading, so a collapsing panel cannot
-     be left as raster the compositor might re-present while the window resizes.
-     The stage spans the whole window; only the panel inside it is a target, so
-     the transparent area below a short panel stays click-through. */
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateX(-50%) translateY(-10px);
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring),
-    visibility 0s linear var(--duration-exit);
-  will-change: opacity, transform;
-}
-
-.app-stage[data-presentation="panel"] .expanded-stage {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-  transition:
-    opacity var(--duration-quick) var(--motion-exit) var(--expand-delay),
-    transform var(--duration-shape) var(--spring) var(--expand-delay),
-    visibility 0s linear var(--expand-delay);
-}
-
-/* Rounded like the surface it sits on, because hit testing follows the corner:
-   the sliver a rectangle would cover past the shape's own corner is desktop,
-   and a click there belongs to whatever is behind Luke. */
-.expanded-panel {
-  display: flex;
-  max-height: var(--panel-height-max);
-  flex-direction: column;
-  padding: calc(var(--strip-height) + 14px) var(--panel-inset) 18px;
-  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
-  /* A page lands in layout at once, while the black surface takes one spring
-     to its new height. The panel follows that same edge so newly mounted rows
-     cannot paint onto the transparent window below it. */
-  clip-path: inset(
-    0 0 calc(100% - var(--panel-height, var(--panel-height-max))) 0 round 0 0 var(--panel-radius)
-  );
-  transition: clip-path var(--duration-shape) var(--spring);
-}
-
-.app-stage[data-presentation="panel"] .expanded-panel {
-  pointer-events: auto;
-}
-
 .body {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
   gap: 14px;
-}
-
-/* Tabs ------------------------------------------------------------------- */
-
-.tab-bar {
-  position: relative;
-  display: flex;
-  width: calc(var(--tab-count) * 92px);
-  flex: 0 0 auto;
-  padding: 3px;
-  border-radius: 11px;
-  background: var(--raised);
-}
-
-.tab-thumb {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  width: calc((100% - 6px) / var(--tab-count));
-  border-radius: 8px;
-  background: var(--raised-strong);
-  transform: translateX(calc(var(--tab-index) * 100%));
 }
 
 /* The radius is the thumb's, not a shape of its own: the tab draws no
@@ -1818,27 +1534,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   font-size: 10px;
 }
 
-/* The way out of an emptied search whose matches sit behind the filter: one
-   quiet chip in the same voice the filter chips speak, because pressing it is
-   pressing All. */
-.empty-state-action {
-  margin-top: 6px;
-  padding: 5px 11px;
-  border-radius: 999px;
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 620;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.empty-state-action:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
 /* Content arrives behind the surface, never in front of it, and it arrives on
    the same spring the surface is riding. Each row starts further up than the
    one above it, so the stack is compressed and the gaps spring open — the
@@ -1857,14 +1552,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
  * `--row-delay` is what makes it directional: zero here, so leaving is
  * immediate, and the stagger below, so arriving fans out. A transition reads
  * its timing from the state being entered, which is what keeps the two apart. */
-.session-row,
-.workspace-tray,
 .settings-section,
 .settings-header,
-.agents-header,
 .quit-button,
-.empty-state,
-.panel-header {
+.empty-state {
   --row-delay: 0s;
 
   opacity: 0;
@@ -1876,26 +1567,10 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
     transform var(--duration-shape) var(--spring) var(--row-delay);
 }
 
-/* The row is one of the two members of that stack that is also a control, so
-   its transition carries the pointer's answer as well as its arrival. The
-   answer takes no delay, which is the whole reason the stagger is declared per
-   property above. */
-.session-row {
-  transition:
-    opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
-    transform var(--duration-shape) var(--spring) var(--row-delay),
-    border-color var(--duration-hover) ease,
-    background-color var(--duration-hover) ease;
-}
-
-.app-stage[data-presentation="panel"] .session-row,
-.app-stage[data-presentation="panel"] .workspace-tray,
 .app-stage[data-presentation="panel"] .settings-section,
 .app-stage[data-presentation="panel"] .settings-header,
-.app-stage[data-presentation="panel"] .agents-header,
 .app-stage[data-presentation="panel"] .quit-button,
-.app-stage[data-presentation="panel"] .empty-state,
-.app-stage[data-presentation="panel"] .panel-header {
+.app-stage[data-presentation="panel"] .empty-state {
   --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *
@@ -1904,19 +1579,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 
   opacity: 1;
   transform: none;
-}
-
-/* Rows inside a workspace tray ride the tray's arrival. The tray is the
-   member of the stack in their stead — it fans in at its lead row's turn — so
-   a row inside it must not fan a second time within the card, which would
-   read as the chats sliding around inside their own tray. The hover pair
-   stays, because the tray answers nothing and its rows still do. */
-.workspace-tray .session-row {
-  opacity: 1;
-  transform: none;
-  transition:
-    border-color var(--duration-hover) ease,
-    background-color var(--duration-hover) ease;
 }
 
 /* A departing session's fade is drawn by session-motion rather than here: the
@@ -2559,13 +2221,11 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   }
 
   .panel-surface,
-  .expanded-stage,
   .slot-stage,
   .feedback-stage,
   .key-slot-confirm,
   .wing-mark,
-  .sign-in-label,
-  .session-row {
+  .sign-in-label {
     transition-duration: 1ms;
     transition-delay: 0ms;
   }

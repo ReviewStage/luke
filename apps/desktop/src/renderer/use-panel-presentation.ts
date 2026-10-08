@@ -18,14 +18,8 @@ export interface PanelPresentationOptions {
   entryDrawn: () => boolean;
   /** A planning call in progress, which holds the panel open against the pointer too. */
   planningHeld: () => boolean;
-  /** A key or note being written, which keeps the settings tab through a close. */
-  composerHeld: () => boolean;
-  /** The sheet is only ever drawn inside the panel. */
+  /** A search is only ever drawn inside the panel. */
   onNotPanel: () => void;
-  /** Closing to the capsule resets the list: a filter is not something anyone is in the middle of. */
-  onCapsuleList: () => void;
-  /** And the tab, unless a composer is what they were in the middle of. */
-  onCapsuleTab: () => void;
 }
 
 export interface PanelPresentationApi {
@@ -89,27 +83,9 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     presentationRef.current = next;
     setPresentation(next);
     if (next !== PANEL_PRESENTATION.PANEL) recededAt.current = undefined;
-    const host = optionsRef.current;
-    // The sheet is only ever drawn inside the panel, so any other shape puts
-    // it away. Left set behind a shape that cannot draw it, it would be over
-    // the list again the next time the panel came forward with nothing having
-    // been pressed — and a key half-entered is the one thing that survives a
-    // close, which the sheet is not.
-    if (next !== PANEL_PRESENTATION.PANEL) host.onNotPanel();
-    // A panel that has closed reopens on the session list, showing every
-    // session with whatever needs a person first: settings are somewhere you
-    // go, not a state the capsule remembers, and a filter left in place would
-    // let the panel hide a session the capsule is still counting.
-    //
-    // Something half-written is the one exception, and only to the tab — a
-    // key being entered or a note to the founders alike: it is what someone
-    // is in the middle of, so however the panel closed, it opens again where
-    // they left it. The list is not something anyone is in the middle of, so
-    // it resets either way.
-    if (next === PANEL_PRESENTATION.CAPSULE) {
-      host.onCapsuleList();
-      if (!host.composerHeld()) host.onCapsuleTab();
-    }
+    // A search is only ever drawn inside the panel, so any other shape puts
+    // it away; a key half-entered is the one thing that survives a close.
+    if (next !== PANEL_PRESENTATION.PANEL) optionsRef.current.onNotPanel();
   }, []);
 
   const applyAuthoritativeMode = useCallback(
@@ -122,11 +98,7 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     [applyPresentation],
   );
 
-  /**
-   * Only the panel needs the main process. The capsule and the peek share a
-   * window, so hovering never leaves the renderer — which is what lets the peek
-   * answer the pointer immediately.
-   */
+  /** The mode is the main process's to confirm: it answers every request with the panel. */
   const changeMode = useCallback(
     async (expanded: boolean) => {
       const previous = presentationRef.current;
@@ -183,14 +155,12 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       }
       hoverTimer.current = window.setTimeout(() => {
         hoverTimer.current = undefined;
-        const fired = presentationRef.current;
-        if (fired === PANEL_PRESENTATION.PEEK) applyPresentation(PANEL_PRESENTATION.CAPSULE);
-        else if (fired === PANEL_PRESENTATION.PANEL && !heldAgainstPointer()) {
+        if (presentationRef.current === PANEL_PRESENTATION.PANEL && !heldAgainstPointer()) {
           void changeMode(false);
         }
       }, LEAVE_DELAY_MS);
     },
-    [applyPresentation, cancelHover, changeMode, heldAgainstPointer],
+    [cancelHover, changeMode, heldAgainstPointer],
   );
 
   const changeAskEngagement = useCallback(

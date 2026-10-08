@@ -1,8 +1,5 @@
-import { GITHUB_FAILURE, type GitHubRepository } from "@sidecar/hosted/github-wire";
 import type { Plan, PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
-  type GitHubCallFailure,
-  PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanningView,
   VOICE_PHASE,
@@ -19,8 +16,8 @@ import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
  *
  * Every decision the tab makes is here and pure, so the components only lay
  * it out: which page shows, which state the document region is in, how the
- * plan's folder reads in the header, what a refusal tells
- * the developer to do, what Copy shows, and the word beside the microphone.
+ * plan's folder reads in the header, what Copy shows, and the word beside the
+ * microphone.
  */
 
 /** What the assumptions' section says while the list is empty, the words Copy writes there. */
@@ -148,71 +145,8 @@ export function copyShown(outcome: CopyOutcome | undefined, document: PlanDocume
     : COPY_SHOWN.IDLE;
 }
 
-/**
- * A run of reads where only the newest one's answer is applied: an answer
- * from a read that another read has since replaced is dropped, whenever it
- * lands. A read that fails applies nothing.
- */
-export function newestReadOnly<A>(): (read: Promise<A>, apply: (answer: A) => void) => void {
-  let newest = 0;
-  return (read, apply) => {
-    newest += 1;
-    const mine = newest;
-    read.then(
-      (answer) => {
-        if (mine === newest) apply(answer);
-      },
-      () => undefined,
-    );
-  };
-}
-
-/**
- * Runs `returned` each time the panel takes focus again, which is the
- * developer coming back from the Connect GitHub page in the browser, perhaps
- * before the link finished. Answers the cancel, for a wait that ended.
- */
-export function onEachReturn(window: EventTarget, returned: () => void): () => void {
-  window.addEventListener("focus", returned);
-  return () => window.removeEventListener("focus", returned);
-}
-
-/** Whether the new-plan form should offer to connect GitHub rather than a list. */
-export function offersGitHubConnect(failure: GitHubCallFailure): boolean {
-  return failure === GITHUB_FAILURE.NOT_CONNECTED || failure === GITHUB_FAILURE.ACCESS_DENIED;
-}
-
-/** What a GitHub refusal tells the developer, in the new-plan form's words. */
-export function githubFailureNote(failure: GitHubCallFailure): string {
-  switch (failure) {
-    case GITHUB_FAILURE.NOT_CONNECTED:
-      return "Connect GitHub to choose a repository.";
-    case GITHUB_FAILURE.ACCESS_DENIED:
-      return "GitHub no longer accepts Luke's connection. Connect GitHub again.";
-    case GITHUB_FAILURE.NOT_FOUND:
-      return "That repository could not be read. It may be gone, or the connection cannot see it.";
-    case GITHUB_FAILURE.EMPTY_REPOSITORY:
-      return "That repository has no commits on its default branch to plan against.";
-    case GITHUB_FAILURE.RATE_LIMITED:
-      return "GitHub is limiting requests right now. Try again in a minute.";
-    case GITHUB_FAILURE.FAILED:
-      return "GitHub could not be reached. Try again.";
-    case PLAN_CALL_FAILURE.UNANSWERED:
-      return "Luke's service could not be reached. Try again.";
-  }
-}
-
-/** The repositories whose `owner/name` holds the filter, case-blind; the filter narrows and nothing else. */
-export function repositoriesMatching(
-  repositories: readonly GitHubRepository[],
-  filter: string,
-): readonly GitHubRepository[] {
-  const needle = filter.trim().toLowerCase();
-  if (needle.length === 0) return repositories;
-  return repositories.filter((repository) =>
-    `${repository.owner}/${repository.name}`.toLowerCase().includes(needle),
-  );
-}
+/** What the new-plan form says when the service answered no plan. */
+export const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
 
 /** The status word beside the microphone for a call, or nothing where none stands. */
 const STATUS_WORD = {

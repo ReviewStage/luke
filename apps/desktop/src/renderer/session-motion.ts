@@ -2,19 +2,16 @@ import type { RefObject } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
- * How the surfaces that draw the session set move when their order changes
- * under a reader. Two of them do: the panel's list of rows, and the wing's
- * strip of provider marks — one summary, drawn at two sizes, re-sorted by the
- * same poll.
+ * How the wing's strip of provider marks moves when its order changes under a
+ * reader.
  *
  * Every poll re-sorts the set, and React answers a new order by moving DOM
  * nodes — which repaints each element at its new position in one frame. A
- * session finishing its turn would teleport from the top of the list to the
- * middle, its provider's mark would hop across the wing, and the reader loses
- * both. So each list is measured on every commit, and an element found
- * somewhere new is started back where the reader last saw it and released —
- * on `--spring-fast`, because an element hopping a slot is a small thing
- * moving, not the surface resizing.
+ * provider's mark would hop across the wing, and the reader loses it. So the
+ * strip is measured on every commit, and an element found somewhere new is
+ * started back where the reader last saw it and released — on `--spring-fast`,
+ * because an element hopping a slot is a small thing moving, not the surface
+ * resizing.
  *
  * Reorders come and go on the panel's own two-beat rule: content leaves before
  * the shape moves, and the shape moves before content arrives. A departing
@@ -38,32 +35,14 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * knowing it exists.
  */
 
-/**
- * How each row names its session to the measurement pass. An attribute rather
- * than a React ref, so the list can be read in document order in one query and
- * the rows need no plumbing beyond carrying their own id.
- */
-export const SESSION_ROW_ID_ATTRIBUTE = "data-session-id";
-
 /** How each slot in the wing's strip names itself: by its provider. */
 export const WING_SLOT_ID_ATTRIBUTE = "data-slot-id";
 
 /**
- * How a workspace tray names itself to the measurement pass. A tray is a slot
- * of the list in its own right: when a re-sort moves the whole group, the
- * tray travels and its rows ride it — measured rows inside a measured tray
- * are translated only by their movement within it, which is usually nothing.
- * Without this the card would teleport to its new seat while its rows sprang
- * from their old one, clipped invisible outside the box they had not yet
- * caught up with.
- */
-export const WORKSPACE_TRAY_ID_ATTRIBUTE = "data-tray-id";
-
-/**
- * How an element says it is on its way out, in either list. The fade it
- * announces is drawn here rather than in the stylesheet, because the element's
- * own opacity transition carries an entrance of its own — the row's
- * panel-arrival stagger, the mark's unfold — and a return mid-fade would wait
+ * How an element says it is on its way out. The fade it announces is drawn
+ * here rather than in the stylesheet, because the element's own opacity
+ * transition carries an entrance of its own — the mark's unfold — and a
+ * return mid-fade would wait
  * out that entrance's delay before resuming. An animation never touches the
  * property underneath, so cancelling it is all a return takes — the element is
  * simply alive again, at once.
@@ -76,71 +55,31 @@ const MOTION_TOKEN = {
   EXIT_DURATION: "--duration-exit",
   EXIT_EASING: "--motion-exit",
   QUICK_DURATION: "--duration-quick",
-  ROW_FAN: "--row-fan",
 } as const;
 
 type MotionToken = (typeof MOTION_TOKEN)[keyof typeof MOTION_TOKEN];
 
 /**
- * One list this module watches: which attribute its elements carry, which way
- * they stack, and how an arrival enters. Everything else — the springs, the
- * beats, the additive travels — is the same gesture in either direction.
+ * The list this module watches: which attribute its elements carry, and how
+ * an element's position and travel are read along the axis it stacks in.
  */
 interface ReorderList {
   /** The attribute each element of this list names itself with. */
   idAttribute: string;
-  /**
-   * The attribute a group of this list's elements travels as one under, when
-   * the list has such groups at all. A grouped element's own travel is only
-   * its movement within the group; the group's element carries the rest.
-   */
-  groupAttribute?: string;
   /** The element's layout position along the axis the list stacks in. */
   offset: (element: HTMLElement, container: HTMLElement) => number;
   /** A transform moving an element by so many pixels along that axis. */
   translate: (px: number) => string;
   /**
-   * The container's own seat along that axis, when the list wants a shove of
-   * the whole box run as one travel. Content arriving above the session list —
-   * the search field — moves the container out from under every row at once;
-   * rows measured within the container read that as stillness, and the
-   * container itself makes the one move. Rows translated one by one would
-   * cross the scrollport's top edge and be clipped mid-flight, which is why
-   * the box travels rather than its contents.
+   * The basis the offsets are read in. The wing's strip reads its marks
+   * stacked or spread, and a measurement in one basis says nothing about the
+   * last one taken in the other: the flip moves no mark a reader saw — the
+   * stylesheet's own transition carries each to its seat — so a travel planned
+   * across it would replay that journey on top. A changed basis re-baselines
+   * the list instead of planning against it.
    */
-  origin?: (container: HTMLElement) => number;
-  /**
-   * The basis the offsets are read in, when a list has more than one. The
-   * wing's strip reads its marks stacked or spread, and a measurement in one
-   * basis says nothing about the last one taken in the other: the flip moves
-   * no mark a reader saw — the stylesheet's own transition carries each to
-   * its seat — so a travel planned across it would replay that journey on top.
-   * A changed basis re-baselines the list instead of planning against it.
-   */
-  basis?: (container: HTMLElement) => string;
-  /**
-   * Whether an arrival also travels in from one `--row-fan` step back, the way
-   * the row stack arrives. The wing's marks do not: an arriving mark already
-   * slides in on the stylesheet's own mount animation — the same unfold the
-   * whole wing makes — so the hook only holds its fade to the beat.
-   */
-  arrivesFromFan: boolean;
+  basis: (container: HTMLElement) => string;
 }
-
-/**
- * The session list: rows stacked top to bottom, arriving the way the stack
- * arrives. Rows are measured within their scroll container rather than from
- * the shared offset parent, so the search field standing the container aside
- * is the container's travel and never the rows'.
- */
-const SESSION_LIST: ReorderList = {
-  idAttribute: SESSION_ROW_ID_ATTRIBUTE,
-  groupAttribute: WORKSPACE_TRAY_ID_ATTRIBUTE,
-  offset: (element, container) => element.offsetTop - container.offsetTop,
-  translate: (px) => `translateY(${px}px)`,
-  origin: (container) => container.offsetTop,
-  arrivesFromFan: true,
-};
 
 /**
  * How the wing's strip says whether it is laid out flat or stacked on its
@@ -175,7 +114,6 @@ const WING_STRIP: ReorderList = {
   offset: (element, container) => (wingSpread(container) ? element.offsetLeft : 0),
   translate: (px) => `translateX(${px}px)`,
   basis: (container) => String(wingSpread(container)),
-  arrivesFromFan: false,
 };
 
 /** Movement smaller than a hairline is measurement noise, not a reorder. */
@@ -252,16 +190,14 @@ function elementVisible(element: HTMLElement): boolean {
 /**
  * Watches one list across commits and turns every reorder into motion.
  * Returns the ref the list container must carry; a commit that unmounts the
- * container (the settings tab, the slot, the wing yielding to the meter) drops
+ * container (the wing yielding to the meter) drops
  * the baseline, so the next list built starts still instead of animating
  * against positions from another life.
  */
 function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T | null> {
   const listRef = useRef<T | null>(null);
   const baseline = useRef<Map<string, number> | undefined>(undefined);
-  const groupBaseline = useRef<Map<string, number> | undefined>(undefined);
   const baselineBasis = useRef<string | undefined>(undefined);
-  const baselineOrigin = useRef<number | undefined>(undefined);
   const wasLeaving = useRef<Set<string>>(new Set());
   const exitFades = useRef<Map<string, Animation>>(new Map());
 
@@ -272,9 +208,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     const container = listRef.current;
     if (container === null) {
       baseline.current = undefined;
-      groupBaseline.current = undefined;
       baselineBasis.current = undefined;
-      baselineOrigin.current = undefined;
       wasLeaving.current = new Set();
       exitFades.current.clear();
       return;
@@ -290,21 +224,6 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       if (id === null) continue;
       elements.set(id, element);
       positions.set(id, list.offset(element, container));
-    }
-
-    // The groups are slots too, measured in their own namespace: a group's
-    // travel is applied to the group's element, and the elements inside it
-    // are translated only by their movement within it — riding the group is
-    // the usual case, and it is a travel of nothing.
-    const groupElements = new Map<string, HTMLElement>();
-    const groupPositions = new Map<string, number>();
-    if (list.groupAttribute !== undefined) {
-      for (const element of container.querySelectorAll<HTMLElement>(`[${list.groupAttribute}]`)) {
-        const id = element.getAttribute(list.groupAttribute);
-        if (id === null) continue;
-        groupElements.set(id, element);
-        groupPositions.set(id, list.offset(element, container));
-      }
     }
 
     // Elements whose leaving mark changed this commit: the newly departed
@@ -325,7 +244,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
       if (!elements.has(id)) exitFades.current.delete(id);
     }
 
-    const basis = list.basis?.(container);
+    const basis = list.basis(container);
     // Compared against the last positions taken, unless they were taken in
     // another basis, in which case there is nothing to compare and the list
     // is simply where it is.
@@ -335,27 +254,11 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     );
     baseline.current = positions;
     baselineBasis.current = basis;
-    // A group with no baseline is chrome that just appeared — its rows carry
-    // their own entrances — so only its travels are ever animated.
-    const groupPlan = planReorder(groupBaseline.current ?? new Map(), groupPositions);
-    groupBaseline.current = groupPositions;
-    // The container's own seat, for a list that asked to ride its shoves as
-    // one object. The first measurement is a baseline like every other: a
-    // freshly built list simply is where it is.
-    const origin = list.origin?.(container);
-    const originTravel =
-      origin !== undefined && baselineOrigin.current !== undefined
-        ? baselineOrigin.current - origin
-        : 0;
-    baselineOrigin.current = origin;
-    const containerShoved = Math.abs(originTravel) > TRAVEL_EPSILON;
     if (
       plan.travels.size === 0 &&
-      groupPlan.travels.size === 0 &&
       plan.arrivals.length === 0 &&
       departed.length === 0 &&
-      returned.length === 0 &&
-      !containerShoved
+      returned.length === 0
     ) {
       return;
     }
@@ -368,13 +271,11 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
     const exitDuration = parseMilliseconds(token(MOTION_TOKEN.EXIT_DURATION));
     const quickDuration = parseMilliseconds(token(MOTION_TOKEN.QUICK_DURATION));
     const exitEasing = token(MOTION_TOKEN.EXIT_EASING).trim() || "ease";
-    const fan = parsePixels(token(MOTION_TOKEN.ROW_FAN));
 
-    const travel = (element: HTMLElement, from: number, delay: number) => {
+    const travel = (element: HTMLElement, from: number) => {
       element.animate([{ transform: list.translate(from) }, { transform: list.translate(0) }], {
         duration: fastDuration,
         easing: springFast,
-        delay,
         fill: "backwards",
         composite: "add",
       });
@@ -411,32 +312,9 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
           });
         }
       }
-      // The shove itself: the box makes the one move its contents were
-      // spared, springing from where it sat to where it now is. Rows and
-      // trays ride it — any travel of their own below is movement within it —
-      // and nothing is ever drawn past the box's own edges, because the
-      // scrollport clips in the box's coordinates and moves with it.
-      if (containerShoved && elementVisible(container)) travel(container, originTravel, 0);
-      for (const [id, from] of groupPlan.travels) {
-        const element = groupElements.get(id);
-        if (element !== undefined && elementVisible(element)) travel(element, from, 0);
-      }
-      // How far the group an element rides in is already travelling. Its own
-      // travel is what remains: usually nothing, because a group's elements
-      // move with it, and the remainder when they also reordered inside it.
-      const groupTravelOf = (element: HTMLElement): number => {
-        if (list.groupAttribute === undefined) return 0;
-        const group = element.closest<HTMLElement>(`[${list.groupAttribute}]`);
-        const groupId = group?.getAttribute(list.groupAttribute);
-        return groupId === null || groupId === undefined
-          ? 0
-          : (groupPlan.travels.get(groupId) ?? 0);
-      };
       for (const [id, from] of plan.travels) {
         const element = elements.get(id);
-        if (element === undefined || !elementVisible(element)) continue;
-        const within = from - groupTravelOf(element);
-        if (Math.abs(within) > TRAVEL_EPSILON) travel(element, within, 0);
+        if (element !== undefined && elementVisible(element)) travel(element, from);
       }
       // The entrance waits only when it has something to wait for. The beat
       // exists so an arrival is never seen crossing a neighbour still leaving
@@ -449,10 +327,7 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
         if (element === undefined || !elementVisible(element)) continue;
         // The gap is already opening — the neighbours started travelling the
         // moment this element took up space — so the element itself waits out
-        // the beat and then arrives the way its own list arrives: the rows
-        // from one fan step above, on the same spring, becoming opaque as
-        // they drop; the marks on the slide the stylesheet already gives a
-        // late mount.
+        // the beat and then fades in, sliding on the stylesheet's own mount.
         if (quickDuration >= STILL_MS) {
           element.animate([{ opacity: 0 }, { opacity: 1 }], {
             duration: quickDuration,
@@ -461,7 +336,6 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
             fill: "backwards",
           });
         }
-        if (list.arrivesFromFan && fan > 0) travel(element, -fan, beat);
       }
     } catch {
       // Nothing to unwind: additive travels decay to zero on their own.
@@ -469,11 +343,6 @@ function useReorderMotion<T extends HTMLElement>(list: ReorderList): RefObject<T
   });
 
   return listRef;
-}
-
-/** The session list's reorder motion; the ref belongs on `.session-list`. */
-export function useSessionReorderMotion(): RefObject<HTMLDivElement | null> {
-  return useReorderMotion<HTMLDivElement>(SESSION_LIST);
 }
 
 /** The wing strip's reorder motion; the ref belongs on `.wing-marks`. */

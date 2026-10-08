@@ -5,7 +5,6 @@ import { PRODUCT_EVENT } from "@sidecar/analytics";
 import { INTRODUCTION_HANDOFF_READY_MS, openSocketOverWs } from "@sidecar/host";
 import { hostedVoiceServiceOrigin } from "@sidecar/hosted";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { IntroductionLiveSessionSource } from "@sidecar/voice";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { Effect } from "effect";
@@ -518,8 +517,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
           settings?.stored.duckOtherMedia ?? APP_SETTING_SCHEMA.duckOtherMedia.default,
         );
       }
-      panels.setShowOnAllDisplays(settings?.stored.showOnAllDisplays === true);
-      panels.setFormFactor(settings?.stored.formFactor ?? DEFAULT_PANEL_FORM_FACTOR);
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       // The standing is written before the first window opens, so the panel's
@@ -563,7 +560,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       pendingWaits.clear();
       hotkeys.release();
       voiceWindow.closeForGood();
-      panels.clearCollapseTimers();
     },
   };
 }

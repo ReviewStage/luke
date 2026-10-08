@@ -59,33 +59,13 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
     report,
   });
 
-  // What the host tells its clients: the Conversation as its reads of the
-  // service compose it, the children and agents beside it, the one
-  // transcript held open, and the panel's plans, each written to the document every window is told
-  // from. The subscriptions are the scope's, so the close that ends one ends
-  // them all.
-  const heard = [
-    host.onConversationViewChanged((view) => {
-      state.update({ conversation: view });
-    }),
-    host.onChildrenChanged((children) => {
-      state.update({ children });
-    }),
-    host.onAgentsChanged((agents) => {
-      state.update({ agents });
-    }),
-    host.onChildTranscriptChanged(({ transcript }) => {
-      state.update({ childTranscript: transcript });
-    }),
-    host.onPlanningChanged((planning) => {
-      state.update({ planning });
-    }),
-  ];
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      for (const stop of heard) stop();
-    }),
-  );
+  // What the host tells its clients of the panel's plans, written to the
+  // document every window is told from. The subscription is the scope's, so
+  // the close that ends the wiring ends it.
+  const stopPlanning = host.onPlanningChanged((planning) => {
+    state.update({ planning });
+  });
+  yield* Effect.addFinalizer(() => Effect.sync(stopPlanning));
 
   /**
    * The capabilities this process performs at the host's ask. Each is

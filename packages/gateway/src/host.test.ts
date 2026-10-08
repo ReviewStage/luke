@@ -33,7 +33,7 @@ function host() {
         },
         [GATEWAY_METHOD.SETTINGS_UPDATE]: () =>
           Effect.fail(new RefusedRefusal({ message: "nothing settable" })),
-        [GATEWAY_METHOD.CONVERSATION_REFRESH]: () => Effect.succeed(undefined),
+        [GATEWAY_METHOD.PLANNING_REFRESH]: () => Effect.succeed(undefined),
       },
     }),
   };
@@ -45,7 +45,7 @@ it.effect("a call runs its handler under the host's one client and answers what 
     const answer = yield* h.gateway.call(GATEWAY_METHOD.SESSION_ROSTER, { echo: 1 });
     assert.deepEqual(answer, { ok: true, result: { sessions: [], echoed: 1 } });
     assert.deepEqual(h.asked, [OPERATOR]);
-    const nothing = yield* h.gateway.call(GATEWAY_METHOD.CONVERSATION_REFRESH);
+    const nothing = yield* h.gateway.call(GATEWAY_METHOD.PLANNING_REFRESH);
     assert.deepEqual(nothing, { ok: true, result: undefined });
   }),
 );
