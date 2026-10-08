@@ -57,11 +57,11 @@ function paeth(left, up, upLeft) {
 }
 
 /**
- * The alpha channel of an 8-bit RGBA PNG, one row per array, for reading the
+ * The pixels of an 8-bit RGBA PNG as rows of `[r, g, b, a]`, for reading the
  * committed icon artwork without a decoder dependency. Note that this reads
  * only what the brand rasterizer writes: non-interlaced RGBA at depth 8.
  */
-function readPngAlpha(pngPath) {
+function readPngPixels(pngPath) {
   const png = fs.readFileSync(pngPath);
   const width = png.readUInt32BE(16);
   const height = png.readUInt32BE(20);
@@ -88,7 +88,7 @@ function readPngAlpha(pngPath) {
       const predictor = [0, left, up, (left + up) >> 1, paeth(left, up, upLeft)][filter];
       row[x] = (row[x] + predictor) & 0xff;
     }
-    rows.push(Array.from({ length: width }, (_, x) => row[x * 4 + 3]));
+    rows.push(Array.from({ length: width }, (_, x) => [...row.subarray(x * 4, x * 4 + 4)]));
     previous = row;
   }
   return rows;
@@ -275,7 +275,9 @@ test("every Dock icon draws its tile on Apple's 824-of-1024 macOS grid", () => {
   const sources = [...new Set(Object.values(ICONSET_SOURCES)), "luke-icon-light-512.png"];
 
   for (const sourceName of sources.filter((name) => !/-(16|32|64)\.png$/.test(name))) {
-    const alpha = readPngAlpha(path.join(brandIconDirectory, sourceName));
+    const alpha = readPngPixels(path.join(brandIconDirectory, sourceName)).map((row) =>
+      row.map((pixel) => pixel[3]),
+    );
     const side = alpha.length;
     const middle = Math.floor(side / 2);
     const [left, right] = coveredSpan(alpha[middle]);
@@ -289,6 +291,27 @@ test("every Dock icon draws its tile on Apple's 824-of-1024 macOS grid", () => {
       Math.abs(right - left + 1 - expected.tile) <= tolerance,
       `${sourceName} tile width ${right - left + 1}`,
     );
+  }
+});
+
+test("every Dock icon's tile gradient steps one level at a time, without banding", () => {
+  const brandIconDirectory = path.join(repoRoot, "design", "brand", "icon");
+
+  for (const sourceName of ["luke-icon-dark-1024.png", "luke-icon-light-512.png"]) {
+    const pixels = readPngPixels(path.join(brandIconDirectory, sourceName));
+    const side = pixels.length;
+    // A row below the glyph, inside the tile's straight sides, holds only gradient.
+    const row = pixels[Math.floor(side * 0.8)].slice(
+      Math.floor(side * 0.3),
+      Math.floor(side * 0.7),
+    );
+
+    for (let x = 1; x < row.length; x++) {
+      const step = Math.max(
+        ...[0, 1, 2].map((channel) => Math.abs(row[x][channel] - row[x - 1][channel])),
+      );
+      assert.ok(step <= 1, `${sourceName} jumps ${step} levels at x ${x}`);
+    }
   }
 });
 
