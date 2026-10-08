@@ -7,11 +7,12 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { plansControl } from "#testing/plans-control";
-import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import { useAppKeymap, useMenuCommands } from "../app-commands";
+import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import {
-  isSidePanelChord,
   SIDE_PANEL_TAB,
   SIDE_PANEL_WIDTH,
   type SidePanelState,
@@ -37,17 +38,37 @@ const CODE: PlanCode = {
 
 const roots: Root[] = [];
 
-/** The open plan's page over the real side panel, staged where a fixture run would stage it. */
+/** What the toolbar's Copy was asked to do, across the presses and the chord. */
+let copies = 0;
+
+/** The open plan's page over the real side panel, staged where a fixture run would stage it, with the window's keymap. */
 function Page({ staged }: { staged: SidePanelState | undefined }) {
   const sidePanel = useSidePanel(staged);
+  useAppKeymap(true);
+  useMenuCommands(true);
   return createElement(DesktopPlans, {
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN.id,
       region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
       sidePanel,
+      copy: {
+        shown: COPY_SHOWN.IDLE,
+        onPress: () => {
+          copies += 1;
+        },
+      },
     }),
   });
+}
+
+/** A key pressed anywhere in the window, answering whether the window claimed it. */
+function keydown(init: KeyboardEventInit): boolean {
+  const event = new KeyboardEvent("keydown", { cancelable: true, bubbles: true, ...init });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+  return event.defaultPrevented;
 }
 
 function mountOpenPlan(options: { staged?: SidePanelState } = {}): HTMLElement {
@@ -136,7 +157,21 @@ function panelShown(page: HTMLElement): boolean {
   return page.querySelector(".side-panel") !== null;
 }
 
+/** The menu bar's one listener, as the bridge hands it to the window. */
+let menuListener: ((command: AppCommand) => void) | undefined;
+
 beforeEach(() => {
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      onMenuCommand: (listener: (command: AppCommand) => void) => {
+        menuListener = listener;
+        return () => {
+          menuListener = undefined;
+        };
+      },
+    },
+  });
   // The whiteboard bundle already loaded, as it is once a board has been shown in this window.
   window.lukeWhiteboard = { mount: () => ({ show: () => undefined, unmount: () => undefined }) };
   // jsdom captures no pointer; the drag's own events are dispatched at the edge.
@@ -146,6 +181,7 @@ beforeEach(() => {
 afterEach(() => {
   unmountAll();
   Reflect.deleteProperty(HTMLElement.prototype, "setPointerCapture");
+  copies = 0;
   vi.restoreAllMocks();
   window.localStorage.clear();
 });
@@ -496,14 +532,56 @@ test("Home and End take the edge to its bounds and Enter back to the default", (
   assert.equal(edge.getAttribute("aria-valuenow"), String(SIDE_PANEL_WIDTH.DEFAULT));
 });
 
-test("the panel's chord is Option-Command-B by its key, though Option makes the character another", () => {
+test("Option-Command-B shows and hides the panel by its key, though Option makes the character another", () => {
+  const page = mountOpenPlan();
   const chord = { code: "KeyB", key: "∫", metaKey: true, altKey: true };
 
-  assert.equal(isSidePanelChord(new KeyboardEvent("keydown", chord)), true);
-  assert.equal(isSidePanelChord(new KeyboardEvent("keydown", { ...chord, altKey: false })), false);
-  assert.equal(isSidePanelChord(new KeyboardEvent("keydown", { ...chord, shiftKey: true })), false);
+  assert.equal(keydown(chord), true);
+  assert.ok(panelShown(page));
   // Holding the chord is one press, not one per repeat.
-  assert.equal(isSidePanelChord(new KeyboardEvent("keydown", { ...chord, repeat: true })), false);
+  assert.equal(keydown({ ...chord, repeat: true }), true);
+  assert.ok(panelShown(page));
+  assert.equal(keydown({ ...chord, shiftKey: true }), false);
+  assert.ok(panelShown(page));
+
+  assert.equal(keydown(chord), true);
+  assert.equal(panelShown(page), false);
+});
+
+test("Option-Command-1, 2, and 3 open the panel on its tabs in their order", () => {
+  const page = mountOpenPlan();
+
+  keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
+  assert.equal(tabNamed(page, "Code").getAttribute("aria-selected"), "true");
+  keydown({ code: "Digit3", key: "£", metaKey: true, altKey: true });
+  assert.equal(tabNamed(page, "Transcript").getAttribute("aria-selected"), "true");
+  keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
+  assert.equal(tabNamed(page, "Board").getAttribute("aria-selected"), "true");
+});
+
+test("Shift-Command-C copies the open plan as its toolbar button does", () => {
+  mountOpenPlan();
+
+  assert.equal(keydown({ code: "KeyC", key: "c", metaKey: true, shiftKey: true }), true);
+  assert.equal(copies, 1);
+  // Command-C alone is the system's own Copy.
+  assert.equal(keydown({ code: "KeyC", key: "c", metaKey: true }), false);
+  assert.equal(copies, 1);
+});
+
+test("with no plan open the plan's chords are left to the rest of the window", () => {
+  function Home() {
+    useAppKeymap(true);
+    return createElement(DesktopPlans, { plans: plansControl({ page: PLANS_PAGE.NEW }) });
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(Home)));
+
+  assert.equal(keydown({ code: "KeyB", key: "∫", metaKey: true, altKey: true }), false);
+  assert.equal(keydown({ code: "KeyC", key: "c", metaKey: true, shiftKey: true }), false);
 });
 
 test("with no plan open the work column is the new-plan page, with nothing to go back to", () => {
@@ -514,4 +592,36 @@ test("with no plan open the work column is the new-plan page, with nothing to go
   assert.match(markup, /<h1 [^>]*>What are we planning\?<\/h1>/u);
   assert.match(markup, /aria-label="Plan name"/u);
   assert.doesNotMatch(markup, /desktop-toolbar|Back|Cancel/u);
+});
+
+test("Shift-Command-Return fills the window with the open panel and brings it back, and the keymap leaves Escape to the window", () => {
+  const page = mountOpenPlan();
+  const chord = { key: "Enter", code: "Enter", metaKey: true, shiftKey: true };
+  assert.equal(keydown(chord), false, "no panel to fill the window with yet");
+
+  press(page, '[aria-label="Show panel"]');
+  assert.equal(keydown(chord), true);
+  assert.equal(documentShown(page), false);
+  // Escape steps back one layer at a time in the window's own handler, which
+  // this page does not stand; the keymap claims none of it.
+  assert.equal(keydown({ key: "Escape", code: "Escape" }), false);
+  assert.equal(documentShown(page), false);
+
+  assert.equal(keydown(chord), true);
+  assert.ok(documentShown(page));
+});
+
+test("the menu bar's Exit Full Screen steps out of full screen, and does nothing beside the document", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  assert.ok(menuListener, "the window listens to the menu bar");
+
+  act(() => menuListener?.(APP_COMMAND.EXIT_FULL_SCREEN));
+  assert.ok(documentShown(page));
+  assert.ok(panelShown(page));
+
+  press(page, '[aria-label="Expand panel"]');
+  act(() => menuListener?.(APP_COMMAND.EXIT_FULL_SCREEN));
+  assert.ok(documentShown(page));
+  assert.ok(page.querySelector('.side-panel [aria-label="Expand panel"]'));
 });

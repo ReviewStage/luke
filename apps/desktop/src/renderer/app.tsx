@@ -15,19 +15,17 @@ import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state"
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
+import { useAppKeymap, useMenuCommands } from "./app-commands";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
 import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { PLANS_PAGE, planningCallHoldsPanel } from "./planning/planning-model";
+import { planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
-import { isSidePanelChord } from "./planning/use-side-panel";
-import { focusSearchField } from "./search-field";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
-import { SETTINGS_SEARCH_INPUT_ID } from "./settings-search";
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
@@ -276,10 +274,7 @@ export function App(): React.JSX.Element {
   });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all.
-  const sidebar = useSidebarCollapse(
-    presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS && !accountGated,
-    state?.run.fixtureMode === true,
-  );
+  const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
 
   const caption = useCaptionPresentation({
     lukeCaptions,
@@ -373,38 +368,6 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      // Command-comma is claimed here rather than globally, because it belongs
-      // to whichever app is frontmost and Luke is only that while its panel has
-      // the keyboard.
-      if (event.key === "," && (event.metaKey || event.ctrlKey)) {
-        if (presentation !== PANEL_PRESENTATION.PANEL) return;
-        event.preventDefault();
-        changeTab(PANEL_TAB.SETTINGS);
-        return;
-      }
-      // Find, the way every macOS list answers it. Claimed on the same terms
-      // as Command-comma: only while the panel has the keyboard. The lowercase
-      // key is deliberate — with Shift held this is some other app's chord.
-      // Only Settings has a search, so the chord answers there alone rather
-      // than turning the tab under the press. The field stands in the
-      // settings sidebar for as long as Settings does, so the chord only
-      // puts the caret in it.
-      if (event.key === "f" && (event.metaKey || event.ctrlKey)) {
-        if (presentation !== PANEL_PRESENTATION.PANEL) return;
-        if (tab !== PANEL_TAB.SETTINGS) return;
-        event.preventDefault();
-        focusSearchField(SETTINGS_SEARCH_INPUT_ID);
-        return;
-      }
-      // The side panel's chord, claimed on the same terms, and only where
-      // there is a panel to show: beside an open plan.
-      if (isSidePanelChord(event)) {
-        if (presentation !== PANEL_PRESENTATION.PANEL) return;
-        if (tab !== PANEL_TAB.PLANS || plans.page !== PLANS_PAGE.DOCUMENT) return;
-        event.preventDefault();
-        plans.sidePanel.onToggle();
-        return;
-      }
       if (event.key !== "Escape") return;
       // Muting an open microphone comes before any of it. Closing the panel
       // or a sheet mid-sentence would strand the microphone open, and the
@@ -462,12 +425,16 @@ export function App(): React.JSX.Element {
     signIn.cancelSignIn,
     listening,
     plans.back,
-    plans.page,
-    plans.sidePanel.onToggle,
     speaking,
     stopSpeaking,
     tab,
   ]);
+
+  // The window's shortcuts, from the keys and from the menu bar alike, are
+  // claimed only while its content has the keyboard: Luke is the frontmost
+  // app then, and no sheet stands over the controls that offer them.
+  useAppKeymap(presentation === PANEL_PRESENTATION.PANEL);
+  useMenuCommands(presentation === PANEL_PRESENTATION.PANEL);
 
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.

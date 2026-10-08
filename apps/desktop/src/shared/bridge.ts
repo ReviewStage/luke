@@ -29,6 +29,7 @@ import {
   type VoiceView,
 } from "./messages/voice-view";
 import { wireResult as result, type WireGuard } from "./messages/wire-guard";
+import { type AppCommand, isAppCommand } from "./shortcuts";
 
 type BridgeArguments = readonly unknown[];
 type BridgeKind = "invoke" | "send" | "subscribe";
@@ -188,6 +189,13 @@ export const BRIDGE = {
     channel: "app:lifecycle",
     args: noArgs,
     result: result<string>(isWireString),
+  }),
+  /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
+  onMenuCommand: entry({
+    kind: "subscribe",
+    channel: "app:menu-command",
+    args: noArgs,
+    result: result<AppCommand>(isAppCommand),
   }),
   /**
    * The talk key going down, carrying the panel's open plan while one is open

@@ -1,18 +1,20 @@
 import type { Board } from "@sidecar/hosted/board-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
+import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { useAppCommand } from "../app-commands";
 import { CodePane } from "../planning/code-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import type { TranscriptRegion } from "../planning/transcript-model";
 import {
-  SIDE_PANEL_SHORTCUT_LABEL,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelControl,
   type SidePanelTab,
 } from "../planning/use-side-panel";
+import { Tooltip } from "../tooltip";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
@@ -38,6 +40,13 @@ const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
  */
 const DOCUMENT_RESERVE = 360;
 
+/** The shortcut that shows each tab. */
+const TAB_COMMAND = {
+  [SIDE_PANEL_TAB.BOARD]: APP_COMMAND.SHOW_BOARD,
+  [SIDE_PANEL_TAB.CODE]: APP_COMMAND.SHOW_CODE,
+  [SIDE_PANEL_TAB.TRANSCRIPT]: APP_COMMAND.SHOW_TRANSCRIPT,
+} as const satisfies Record<SidePanelTab, AppCommand>;
+
 /**
  * The panel's left edge, dragged to resize it, past its least width to close
  * it, and past its greatest to fill the window; double-clicked, it goes back
@@ -58,16 +67,17 @@ function TabStrip({
   return (
     <div className="side-panel-tabs" role="tablist" aria-label="Panel">
       {SIDE_PANEL_TABS.map((entry) => (
-        <button
-          type="button"
-          role="tab"
-          key={entry.tab}
-          className="side-panel-tab"
-          aria-selected={entry.tab === tab}
-          onClick={() => onChoose(entry.tab)}
-        >
-          {entry.label}
-        </button>
+        <Tooltip key={entry.tab} label={entry.label} command={TAB_COMMAND[entry.tab]}>
+          <button
+            type="button"
+            role="tab"
+            className="side-panel-tab"
+            aria-selected={entry.tab === tab}
+            onClick={() => onChoose(entry.tab)}
+          >
+            {entry.label}
+          </button>
+        </Tooltip>
       ))}
     </div>
   );
@@ -107,31 +117,40 @@ function TabContent({
   }
 }
 
-/** The last button of whichever top row it stands in, which shows and hides the panel. */
-export function SidePanelToggle({
-  open,
-  onToggle,
-}: {
-  open: boolean;
-  onToggle: () => void;
-}): React.JSX.Element {
-  const label = open ? "Hide panel" : "Show panel";
+/**
+ * The last button of whichever top row it stands in, which shows and hides
+ * the panel. Exactly one stands beside an open plan, the plan's toolbar's or
+ * the panel's own, so it is also what offers the panel's shortcuts: its own,
+ * and one to open the panel on each tab.
+ */
+export function SidePanelToggle({ panel }: { panel: SidePanelControl }): React.JSX.Element {
+  const label = panel.open ? "Hide panel" : "Show panel";
+  useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, panel.onToggle);
+  useAppCommand(APP_COMMAND.SHOW_BOARD, () => panel.onChoose(SIDE_PANEL_TAB.BOARD));
+  useAppCommand(APP_COMMAND.SHOW_CODE, () => panel.onChoose(SIDE_PANEL_TAB.CODE));
+  useAppCommand(APP_COMMAND.SHOW_TRANSCRIPT, () => panel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
   return (
-    <button
-      type="button"
-      className="toolbar-button toolbar-icon-button side-panel-toggle"
-      aria-label={label}
-      aria-expanded={open}
-      title={`${label} (${SIDE_PANEL_SHORTCUT_LABEL})`}
-      data-open={String(open)}
-      onClick={onToggle}
-    >
-      <SidePanelIcon />
-    </button>
+    <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
+      <button
+        type="button"
+        className="toolbar-button toolbar-icon-button side-panel-toggle"
+        aria-label={label}
+        aria-expanded={panel.open}
+        data-open={String(panel.open)}
+        onClick={panel.onToggle}
+      >
+        <SidePanelIcon />
+      </button>
+    </Tooltip>
   );
 }
 
-/** Grows the panel over the document, or brings it back beside it. */
+/**
+ * Grows the panel over the document, or brings it back beside it. It stands
+ * while the panel is open, so it offers the full-screen chord, and the menu
+ * bar's way out while the panel fills the window. Escape's own way out is the
+ * window's Escape, which steps back one layer at a time.
+ */
 function FullScreenToggle({
   fullScreen,
   onToggle,
@@ -140,17 +159,20 @@ function FullScreenToggle({
   onToggle: () => void;
 }): React.JSX.Element {
   const label = fullScreen ? "Exit full screen" : "Expand panel";
+  useAppCommand(APP_COMMAND.TOGGLE_FULL_SCREEN, onToggle);
+  useAppCommand(APP_COMMAND.EXIT_FULL_SCREEN, fullScreen ? onToggle : undefined);
   return (
-    <button
-      type="button"
-      className="toolbar-button toolbar-icon-button side-panel-full-screen"
-      aria-label={label}
-      aria-pressed={fullScreen}
-      title={label}
-      onClick={onToggle}
-    >
-      {fullScreen ? <CollapseIcon /> : <ExpandIcon />}
-    </button>
+    <Tooltip label={label} command={APP_COMMAND.TOGGLE_FULL_SCREEN}>
+      <button
+        type="button"
+        className="toolbar-button toolbar-icon-button side-panel-full-screen"
+        aria-label={label}
+        aria-pressed={fullScreen}
+        onClick={onToggle}
+      >
+        {fullScreen ? <CollapseIcon /> : <ExpandIcon />}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -193,7 +215,7 @@ export function SidePanel({
         <TabStrip tab={panel.tab} onChoose={panel.onChoose} />
         <div className="side-panel-bar-actions">
           <FullScreenToggle fullScreen={panel.fullScreen} onToggle={panel.onToggleFullScreen} />
-          <SidePanelToggle open onToggle={panel.onToggle} />
+          <SidePanelToggle panel={panel} />
         </div>
       </div>
       <div className="side-panel-content" role="tabpanel" aria-label={label}>

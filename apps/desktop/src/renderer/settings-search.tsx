@@ -9,12 +9,15 @@ import {
 } from "@sidecar/settings";
 import { useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
+import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
 import { useAct } from "./act";
+import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
-import { Highlighted } from "./search-field";
+import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "./settings-views";
+import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "./tooltip";
 
 /**
  * Searching the Settings tab.
@@ -40,12 +43,8 @@ import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "./setti
  * fixed — a query narrows what is offered and never widens what can be done.
  */
 
-/**
- * How the search field is found from outside the component: Command-F is
- * answered at the app level, where the panel's keys are, and the field it
- * lands in is here.
- */
-export const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
+/** How the search field is found by the seek that lands Command-F's caret in it. */
+const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 
 /** One row a query can find, and where pressing it leads. */
 export interface SettingsSearchEntry {
@@ -87,6 +86,9 @@ const PAGE_ORDER: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUB
 
 /** The words every shortcut row can be found by, beside its own name. */
 const SHORTCUT_WORDS = "keyboard shortcut hotkey key chord record remove delete none";
+
+/** The words every window shortcut answers to, which change nothing and so offer no removal. */
+const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 
 /**
  * The rows that are not stored settings, each gated by the condition that
@@ -158,13 +160,15 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.SHORTCUTS,
       haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
     },
-    // The window's own chord, fixed rather than chosen, drawn beside them.
-    {
-      id: SETTINGS_SEARCH_ROW.SIDEBAR_KEY,
-      label: "Show or hide the sidebar",
-      page: SETTINGS_VIEW.SHORTCUTS,
-      haystack: ["Show or hide the sidebar", "keyboard shortcut key chord sidebar collapse fold"],
-    },
+    // The window's own chords, fixed rather than chosen, listed below them.
+    ...APP_SHORTCUT_GROUPS.flatMap((group) =>
+      group.commands.map((command) => ({
+        id: command,
+        label: APP_SHORTCUTS[command].label,
+        page: SETTINGS_VIEW.SHORTCUTS,
+        haystack: [APP_SHORTCUTS[command].label, WINDOW_SHORTCUT_WORDS, group.title],
+      })),
+    ),
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);
 }
@@ -307,6 +311,7 @@ export function SettingsSearchField({
 }): React.JSX.Element {
   const { tell } = useAct();
   const field = useRef<HTMLInputElement | null>(null);
+  useAppCommand(APP_COMMAND.FIND, () => focusSearchField(SETTINGS_SEARCH_INPUT_ID));
   return (
     <search className="settings-search">
       {/* The label is the whole well, so a press on the magnifier or the
@@ -318,6 +323,7 @@ export function SettingsSearchField({
           id={SETTINGS_SEARCH_INPUT_ID}
           className="settings-search-input"
           aria-label="Search settings"
+          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.FIND)}
           placeholder="Search"
           autoComplete="off"
           spellCheck={false}
@@ -348,21 +354,26 @@ export function SettingsSearchField({
             else field.current?.blur();
           }}
         />
+        {/* The chord that lands here is printed in the empty field, the way
+            a Mac search field says it, and gives way to the caret. */}
         {query.length > 0 ? (
-          <button
-            type="button"
-            className="settings-search-clear"
-            aria-label="Clear search"
-            title="Clear search"
-            onClick={() => {
-              // A cleared field keeps the caret, ready for the next question.
-              onQueryChange("");
-              field.current?.focus();
-            }}
-          >
-            <CloseIcon />
-          </button>
-        ) : null}
+          <Tooltip label="Clear search">
+            <button
+              type="button"
+              className="settings-search-clear"
+              aria-label="Clear search"
+              onClick={() => {
+                // A cleared field keeps the caret, ready for the next question.
+                onQueryChange("");
+                field.current?.focus();
+              }}
+            >
+              <CloseIcon />
+            </button>
+          </Tooltip>
+        ) : (
+          <ShortcutGlyphs command={APP_COMMAND.FIND} className="settings-search-shortcut" />
+        )}
       </label>
     </search>
   );

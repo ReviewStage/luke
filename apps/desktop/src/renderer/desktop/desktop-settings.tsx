@@ -2,6 +2,8 @@ import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { BackIcon, LaptopIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useState } from "react";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { useAppCommand } from "../app-commands";
 import { SETTINGS_PAGE } from "../settings/pages";
 import {
   SettingsPanel,
@@ -17,6 +19,7 @@ import {
   settingsSearchEntries,
 } from "../settings-search";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
+import { commandKeyshortcuts, ShortcutGlyphs } from "../tooltip";
 import { SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -59,6 +62,7 @@ export function DesktopSettings({
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
+  useAppCommand(APP_COMMAND.BACK, onBack);
   const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
   const shown = pageOf(settings.view);
   const rows = settingsRowsInput(settings);
@@ -94,9 +98,15 @@ export function DesktopSettings({
     <div className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages">
         <div className="desktop-drag-strip" />
-        <button type="button" className="sidebar-item settings-pages-back" onClick={onBack}>
+        <button
+          type="button"
+          className="sidebar-item settings-pages-back"
+          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.BACK)}
+          onClick={onBack}
+        >
           <BackIcon />
           Back to plans
+          <ShortcutGlyphs command={APP_COMMAND.BACK} className="row-shortcut" />
         </button>
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField

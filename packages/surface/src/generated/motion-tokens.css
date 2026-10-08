@@ -73,6 +73,7 @@
   --expand-delay: 200ms;
   --peek-delay: 60ms;
   --row-stagger: 32ms;
+  --hint-delay: 500ms;
   --row-fan: 7px;
   --row-fan-limit: 5;
   --slot-delay: calc(var(--duration-exit) + var(--peek-delay));

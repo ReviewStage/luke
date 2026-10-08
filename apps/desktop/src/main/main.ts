@@ -1,5 +1,6 @@
 import { Duration, Effect, Fiber, ManagedRuntime, Option } from "effect";
 import { app, Menu, shell } from "electron";
+import { appMenuTemplate } from "./app-menu";
 import { bootstrapDesktop } from "./bootstrap";
 import { composeDesktop, DesktopTag } from "./services/compose-desktop";
 import { desktopQuit, QUIT_STAGE } from "./services/quit";
@@ -85,12 +86,10 @@ if (app.requestSingleInstanceLock()) {
 async function main(): Promise<void> {
   await app.whenReady();
   // Luke is an ordinary app with a window of its own: a Dock tile, a place
-  // in Command-Tab, and the menus that give its fields Copy and Paste and
-  // its window Close, Minimize, and Quit.
+  // in Command-Tab, and the menus that give its fields Copy and Paste, its
+  // window Close, Minimize, and Quit, and its own commands their shortcuts.
   if (process.platform === "darwin") app.setActivationPolicy("regular");
-  Menu.setApplicationMenu(
-    Menu.buildFromTemplate([{ role: "appMenu" }, { role: "editMenu" }, { role: "windowMenu" }]),
-  );
+  Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(app.name)));
 
   const runtime = ManagedRuntime.make(composeDesktop(config, quit));
   quit.closesThrough(() => Effect.runPromise(closeRuntime(runtime)));
