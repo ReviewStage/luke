@@ -150,7 +150,13 @@ function midTurnEventsOf(parts: JournalParts, trigger: BrainTurnTrigger): TurnEv
     }
     if (name === SHOW_PSEUDOCODE_TOOL.name) {
       const shown = shownPseudocodeOf(part);
-      if (shown !== undefined) bodies.push({ kind: TURN_EVENT_KIND.PSEUDOCODE_SHOWN, ...shown });
+      if (shown !== undefined) {
+        bodies.push({
+          kind: TURN_EVENT_KIND.PSEUDOCODE_SHOWN,
+          title: shown.title,
+          body: shown.code,
+        });
+      }
       continue;
     }
     const step =

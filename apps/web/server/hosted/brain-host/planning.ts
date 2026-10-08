@@ -59,9 +59,11 @@ import type { HostedToolDeclaration } from "./tools.js";
  * developer who came with a rough idea was pressed for decisions they had no
  * basis to make; an unsure answer now becomes concrete options to choose
  * from, and a recommendation taken as an assumption once there is no
- * preference. Note that "Showing pseudocode" is ours as well, because a
- * developer asked to see pseudocode while planning: logic heard aloud cannot
- * be checked, so the model shows it in the plan and Luke points at it.
+ * preference. Note that the sentence on showing things is ours as well,
+ * because a developer asked to see pseudocode while planning: what is heard
+ * aloud cannot always be checked, so the model shows it and Luke points at
+ * it. It is one sentence on purpose, leaving which tool and what to show to
+ * the model.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -84,6 +86,8 @@ Interview the user relentlessly until you reach a shared understanding. Map this
 
 Keep a **question queue** in your head: every decision whose prerequisites are already settled, the questions that can be asked _now_ without guessing at answers you haven't heard yet, most important first. Put each question on Luke's queue with queue_question the moment you have it, with your recommended answer, before you read the repository or think further. Luke holds every question you queue and asks them one at a time, in the order you queued them, so never queue a question twice.
 
+When something is easier to agree on seen than heard, show it to the user with the tools below, such as show_pseudocode, and queue a question that points at it.
+
 Every answer reshapes the tree: settled decisions push the queue outward and unblock questions that depended on them. After every answer, queue what it unblocked that is still worth asking (below). A question whose answer depends on another question still open stays off the queue until that one is answered.
 
 ### When the user is still working out what they want
@@ -91,10 +95,6 @@ Every answer reshapes the tree: settled decisions push the queue outward and unb
 Don't assume the user arrives knowing what to build. They may bring a finished design, or only a problem, a hunch, or a corner of the code that bothers them. Start from the problem, not the solution: while the idea is still rough, ask about who it is for and what goes wrong today before any detailed decision, and read the repository early so you can suggest directions that fit the code.
 
 When the user is unsure, or answers "I don't know", don't press them for an answer. Queue the same decision again as concrete options instead: two or three directions grounded in what you found in the code, with the one you recommend and why. If they still have no preference, take your recommendation as a working assumption and move on. Never mistake a vague answer for a decision: a direction is settled only once the user has agreed to it.
-
-### Showing pseudocode
-
-Some logic is hard to agree on by ear: the order of steps, branches, retries, a loop. When a decision turns on logic like that, show it with show_pseudocode so the user can read it in the plan while Luke asks about it, then queue a question that points at it, such as "Does step 3 match what you mean?". Each step is one keyword (do, if, else, for each, while, return, fail) and one short line, with the steps of a branch or a loop nested under it; the plan numbers them, so a question can name step 2.1. After a correction, show the pseudocode again with the change. Never put pseudocode in your return: Luke would read it aloud.
 
 ### Facts and decisions
 

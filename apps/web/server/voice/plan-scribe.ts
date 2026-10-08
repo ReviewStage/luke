@@ -370,7 +370,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
     observeRun: (event) => {
       if (event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE) notes.push(event.sentence);
       if (event.kind === LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN) {
-        Queue.offerUnsafe(shown, { title: event.title, body: event.body });
+        Queue.offerUnsafe(shown, { title: event.title, code: event.body });
       }
     },
   };

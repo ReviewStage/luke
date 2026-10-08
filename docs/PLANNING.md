@@ -284,38 +284,28 @@ evaluations are outside this work.
 
 ### Pseudocode
 
-Some logic can't be checked by ear: the order of steps, a branch, a retry, a
-loop. When a decision turns on logic like that, the planning model calls
-`show_pseudocode` (`apps/web/server/hosted/show-pseudocode.ts`) and queues a
-question that points at it. The steps are typed, not free text: each is one
-keyword from a fixed set (`DO`, `IF`, `ELSE`, `FOR EACH`, `WHILE`, `RETURN`,
-`FAIL`) and one line of at most 100 characters, with the steps of a branch or
-a loop nested under it at most three levels deep. A call carrying prose, a
-line break, or another keyword fails to read and is refused, which is what
-keeps the field pseudocode. The steps are drawn numbered within their parent:
-
-```
-1. DO find the membership by the link's token
-2. IF it is not pending, or older than 7 days
-  2.1. FAIL "This invite is no longer valid"
-3. DO set its state to active
-```
+The planning model's instructions say one thing about showing: when
+something is easier to agree on seen than heard, show it with the tools it
+has and queue a question that points at it. Which tool and what to show are
+its judgment. `show_pseudocode` (`apps/web/server/hosted/show-pseudocode.ts`)
+is one such tool: a title and a quick sketch in whatever style reads best,
+bounded only in size. An earlier version typed every step against a fixed
+keyword grammar, and the result read as a form filled in rather than an
+idea, so the sketch is free text.
 
 The call does nothing when it runs: like `queue_question`, its journaled
-input is told mid-turn as a `pseudocode_shown` event carrying the title and
-the numbered lines, and two things follow from it.
+input is told mid-turn as a `pseudocode_shown` event, and two things follow.
 
 - **The notetaker writes it into the plan** at once, without waiting for the
-  quiet, as `implementation.pseudocode`: the title, then the lines in one
-  fence longer than any run of backticks inside them. A new call replaces
-  what the field holds. The save goes out as a `plan.draft`, so the Mac needs
+  quiet, as `implementation.pseudocode`: the title, then the sketch in one
+  fence longer than any run of backticks inside it. A new call replaces what
+  the field holds. The save goes out as a `plan.draft`, so the Mac needs
   nothing new to draw it.
-- **The voice points at it.** Luke is told the title, never the steps, and
-  asks whether it matches what the developer means, naming steps by number.
+- **The voice points at it.** Luke is told the title, never the sketch, and
+  asks whether it matches what the developer means.
 
 The field is not in `update_plan`'s schema, so the notetaker's own runs can't
-write it: a correction by voice gets a new `show_pseudocode` call, and the
-planning model is the field's only author.
+write it, and the planning model is its only author.
 
 ### Microphone row and the panel's voice
 

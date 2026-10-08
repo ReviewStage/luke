@@ -63,12 +63,13 @@ const FIXTURE_UPDATE: FullPlanUpdate = {
       "- `src/members/invite.ts`: new, sending and accepting an invite.",
     pseudocode:
       "Accepting an invite\n\n" +
-      "```text\n" +
-      "1. DO find the membership by the link's token\n" +
-      "2. IF it is not pending, or older than 7 days\n" +
-      '  2.1. FAIL "This invite is no longer valid"\n' +
-      "3. DO set its state to active\n" +
-      "4. DO sign the teammate in to the workspace\n" +
+      "```\n" +
+      "membership = find_by_token(link.token)\n" +
+      "if membership.state != pending or membership.age > 7 days:\n" +
+      '    show "This invite is no longer valid"\n' +
+      "    stop\n" +
+      "membership.state = active\n" +
+      "sign_in(teammate, workspace)\n" +
       "```",
   },
   decisions:

@@ -7,115 +7,16 @@
       "maxLength": 120,
       "description": "What the pseudocode shows, in a few words, such as \"Accepting an invite\"."
     },
-    "steps": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "do",
-              "if",
-              "else",
-              "for_each",
-              "while",
-              "return",
-              "fail"
-            ],
-            "description": "What the step does: do an action, branch (if, else), loop (for_each, while), return a result, or fail."
-          },
-          "text": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100,
-            "description": "The step after its keyword, one short line in plain words, such as \"the invite is older than 7 days\" for an if. Not code and not a sentence of explanation."
-          },
-          "steps": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "do",
-                    "if",
-                    "else",
-                    "for_each",
-                    "while",
-                    "return",
-                    "fail"
-                  ],
-                  "description": "What the step does: do an action, branch (if, else), loop (for_each, while), return a result, or fail."
-                },
-                "text": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 100,
-                  "description": "The step after its keyword, one short line in plain words, such as \"the invite is older than 7 days\" for an if. Not code and not a sentence of explanation."
-                },
-                "steps": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "kind": {
-                        "type": "string",
-                        "enum": [
-                          "do",
-                          "if",
-                          "else",
-                          "for_each",
-                          "while",
-                          "return",
-                          "fail"
-                        ],
-                        "description": "What the step does: do an action, branch (if, else), loop (for_each, while), return a result, or fail."
-                      },
-                      "text": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 100,
-                        "description": "The step after its keyword, one short line in plain words, such as \"the invite is older than 7 days\" for an if. Not code and not a sentence of explanation."
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "text"
-                    ],
-                    "additionalProperties": false
-                  },
-                  "minItems": 1,
-                  "maxItems": 10,
-                  "description": "The steps inside a branch or a loop."
-                }
-              },
-              "required": [
-                "kind",
-                "text"
-              ],
-              "additionalProperties": false
-            },
-            "minItems": 1,
-            "maxItems": 10,
-            "description": "The steps inside a branch or a loop."
-          }
-        },
-        "required": [
-          "kind",
-          "text"
-        ],
-        "additionalProperties": false
-      },
-      "minItems": 1,
-      "maxItems": 20,
-      "description": "The steps in order. Nest the steps of a branch or a loop under it, at most three levels."
+    "code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The pseudocode, in whatever style reads best, without a fence."
     }
   },
   "required": [
     "title",
-    "steps"
+    "code"
   ],
   "additionalProperties": false
 }

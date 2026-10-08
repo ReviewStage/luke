@@ -713,13 +713,7 @@ it.live(
         model: "scripted-model",
         state: memoryRelayState(),
       };
-      const shown = {
-        title: "Accepting an invite",
-        steps: [
-          { kind: "do", text: "find the invite" },
-          { kind: "do", text: "accept it" },
-        ],
-      };
+      const shown = { title: "Accepting an invite", code: "find the invite\naccept it" };
       const events = planningTurn(FIRST_EVE_TURN, NOW, {
         toolName: SHOW_PSEUDOCODE_TOOL.name,
         input: shown,
@@ -733,7 +727,7 @@ it.live(
           kind: LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN,
           runId: accepted.runId,
           title: "Accepting an invite",
-          body: "1. DO find the invite\n2. DO accept it",
+          body: "find the invite\naccept it",
         },
       ]);
       yield* Effect.promise(() => play(events.slice(requested), standing));

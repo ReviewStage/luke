@@ -591,7 +591,7 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
         const userId = yield* openUser;
         const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
         const binding = bound(userId, planId);
-        const shown = "Accepting an invite\n\n```text\n1. DO find the invite\n```";
+        const shown = "Accepting an invite\n\n```\ninvite = find(token)\n```";
         yield* savePseudocode(binding, shown);
 
         const refused = yield* updatePlan(binding, {

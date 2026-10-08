@@ -369,7 +369,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           assert.ok(
             body.includes(
-              `### Pseudocode\n\nAccepting an invite\n\n\`\`\`text\n${ACCEPT_STEPS}\n\`\`\`\n`,
+              `### Pseudocode\n\nAccepting an invite\n\n\`\`\`\n${ACCEPT_STEPS}\n\`\`\`\n`,
             ),
           );
           assert.equal(drafts.at(-1)?.document.body, body);
@@ -398,7 +398,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           // The fence is a backtick longer than the steps' own run, and the real section follows it.
           assert.ok(
             body.includes(
-              `### Pseudocode\n\nSecond try\n\n\`\`\`\`text\n${steps}\n\`\`\`\`\n\n## Decisions\n`,
+              `### Pseudocode\n\nSecond try\n\n\`\`\`\`\n${steps}\n\`\`\`\`\n\n## Decisions\n`,
             ),
           );
         }),
