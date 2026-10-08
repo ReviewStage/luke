@@ -66,7 +66,7 @@ test("the page asks what to plan, focuses the name field, and offers Choose fold
   const page = mount();
 
   assert.equal(page.find("h1").textContent, "What are we planning?");
-  assert.equal(document.activeElement, page.nameField());
+  assert.ok(document.activeElement === page.nameField(), "the name field holds focus");
   assert.equal(page.chip().textContent, "Choose folder");
   assert.equal(page.startButton().disabled, true);
 });
@@ -120,7 +120,7 @@ test("the folder starts on the last one used, and the chip's menu offers the oth
   assert.equal(page.chip().textContent, "billing");
 });
 
-test("Escape closes the folder menu and goes no further than it", () => {
+test("Escape closes the folder menu, goes no further than it, and hands focus back to the chip", () => {
   const page = mount({ recentFolders: [RELAY] });
   const reachedWindow: string[] = [];
   const listen = (event: KeyboardEvent) => reachedWindow.push(event.key);
@@ -136,6 +136,7 @@ test("Escape closes the folder menu and goes no further than it", () => {
 
   assert.equal(page.container.querySelector("[role=menu]"), null);
   assert.deepEqual(reachedWindow, []);
+  assert.ok(document.activeElement === page.chip(), "focus is back on the chip");
 });
 
 test("a refused start keeps the page, with the reason under the composer", async () => {
@@ -157,9 +158,9 @@ test("a refused start keeps the page, with the reason under the composer", async
 test("each press of New plan brings focus back to the name field", () => {
   const page = mount();
   page.chip().focus();
-  assert.notEqual(document.activeElement, page.nameField());
+  assert.ok(document.activeElement !== page.nameField(), "focus starts elsewhere");
 
   page.restand({ presses: 1 });
 
-  assert.equal(document.activeElement, page.nameField());
+  assert.ok(document.activeElement === page.nameField(), "the name field holds focus");
 });

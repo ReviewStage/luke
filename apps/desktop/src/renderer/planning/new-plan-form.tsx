@@ -52,10 +52,17 @@ function FolderChip(props: {
   const [open, setOpen] = useState(false);
   const menuId = useId();
   const chip = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  // Note that we hand focus back to the chip, as a native menu returns it to
+  // its trigger, because closing takes the focused row away with it.
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
   const hasMenu = props.recentFolders.length > 0;
   const choose = (pick: () => void) => {
-    setOpen(false);
+    close();
     pick();
   };
 
@@ -68,7 +75,7 @@ function FolderChip(props: {
   const onMenuKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.stopPropagation();
-      setOpen(false);
+      close();
       return;
     }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -83,6 +90,7 @@ function FolderChip(props: {
   return (
     <div className="plan-compose-folder" ref={chip}>
       <button
+        ref={trigger}
         type="button"
         className="plan-compose-chip"
         aria-haspopup={hasMenu ? "menu" : undefined}
