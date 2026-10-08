@@ -1141,10 +1141,20 @@ body,
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 28px 40px 60px;
+  padding: 0 40px 60px;
   /* A landed search result scrolls to the top of this column, clear of the
      page's pinned reset line and with the column's own top margin above it. */
   scroll-padding-top: 56px;
+}
+
+/* The column's top margin, drawn as a spacer rather than as padding. Note that
+   we keep it out of the padding, because a sticky header pins inside the
+   scroller's padding: a page's pinned head would stand 28px below the toolbar,
+   with rows scrolling past in the gap above it. */
+.settings-page-scroll::before {
+  display: block;
+  height: 28px;
+  content: "";
 }
 
 /* The page scrolls with the column rather than inside a scroller of its own. */
@@ -1166,6 +1176,12 @@ body,
 
 .settings-page-scroll .settings-header {
   justify-content: flex-end;
+}
+
+/* The toolbar's hairline already edges the column, so a passing row slides
+   under the pinned head without the panel's dissolve band below it. */
+.settings-page-scroll .settings-header::after {
+  content: none;
 }
 
 /* A section names itself in sentence case, as the sidebar's own heading does;
