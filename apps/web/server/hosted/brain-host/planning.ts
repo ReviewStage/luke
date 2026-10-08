@@ -63,7 +63,9 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * developer who came with a rough idea was pressed for decisions they had no
  * basis to make; an unsure answer now becomes concrete options to choose
  * from, and a recommendation taken as an assumption once there is no
- * preference.
+ * preference. Note that his "interview relentlessly" is gone, because a
+ * developer who asked Luke to investigate something got the next question
+ * rather than the investigation; the goal stands in its place.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -82,7 +84,7 @@ A notetaker listens to the call and writes the document as the conversation goes
 
 ## How to plan
 
-Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
+Help the user turn what is in their head into a plan an agent can build. Map this as a **design tree**: every decision branches into the decisions that hang off it.
 
 Keep a **question queue** in your head: every decision whose prerequisites are already settled, the questions that can be asked _now_ without guessing at answers you haven't heard yet, most important first. Put each question on Luke's queue with queue_question the moment you have it, with your recommended answer, before you read the repository or think further. Luke holds every question you queue and asks them one at a time, in the order you queued them, so never queue a question twice.
 

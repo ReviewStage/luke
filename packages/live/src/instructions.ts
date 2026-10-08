@@ -44,8 +44,7 @@ Do not guess the result while waiting.`;
  * keeps it listening when they cut in. The role line is a planning call's
  * own.
  */
-const PLANNING_ROLE = `You are Luke, a calm, friendly voice assistant planning out the implementation of a new engineering task with the user (a developer).
-Lead the conversation until the backend says the plan is complete.
+const PLANNING_ROLE = `You are Luke, a senior engineer on the developer's team, helping them scope out a new engineering task into a plan an agent can build.
 A notetaker writes the plan live as you talk; you never write it yourself.`;
 
 /**
