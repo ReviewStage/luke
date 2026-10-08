@@ -23,7 +23,6 @@ import {
 import {
   decodeLivePayload,
   developerSeedItem,
-  ESTIMATED_CHARS_PER_TOKEN,
   type InitialItem,
   LIVE_INPUT_BOUNDS,
   LIVE_SCENE,
@@ -35,6 +34,8 @@ import {
   RENDERER_SERVER_EVENTS,
   SEED_ROLE,
   seedItemTokens,
+  startupPrefix,
+  withinStartupBound,
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { type SignedInRoute, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
@@ -175,13 +176,20 @@ function introductionInputAdmitted(frame: SessionCreateFrame): boolean {
   );
 }
 
-function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
-  return (
+/**
+ * A signed-in device's input as the session is created with it: refused
+ * past the message and part bounds, and held under the API's token bound by
+ * dropping its oldest conversation lines, since a device seeding under an
+ * older or looser estimate than this service's is owed a session that opens
+ * on its newest lines rather than OpenAI's refusal of the whole creation.
+ */
+function sessionsInput(frame: SessionCreateFrame): readonly InitialItem[] | undefined {
+  const admitted =
     frame.input.length <= SESSIONS_INPUT_BOUNDS.MESSAGES &&
     frame.input.every((item) =>
       item.content.every((part) => part.text.length <= SESSIONS_INPUT_BOUNDS.CHARS),
-    )
-  );
+    );
+  return admitted ? withinStartupBound(frame.input) : undefined;
 }
 
 /** What the plan seed opens with, so the voice reads it as the service's note rather than the developer's words. */
@@ -232,9 +240,9 @@ function withPlanSeed(
   plan: Plan | undefined,
 ): readonly InitialItem[] {
   if (plan === undefined || input.length >= LIVE_INPUT_BOUNDS.MESSAGES) return input;
-  const room = (LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input)) * ESTIMATED_CHARS_PER_TOKEN;
-  if (room <= PLAN_SEED_MARKER.length) return input;
-  return [developerSeedItem(planSeedText(plan).slice(0, room)), ...input];
+  const seed = startupPrefix(planSeedText(plan), LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input));
+  if (seed.length <= PLAN_SEED_MARKER.length) return input;
+  return [developerSeedItem(seed), ...input];
 }
 
 /** The scene a WebRTC session is created under: the introduction's, a planning call's, or the desktop's. */
@@ -384,9 +392,9 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         }
         const introduction = yield* accounts.spendIntroduction();
         if (!introduction.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-      } else if (!sessionsInputAdmitted(frame)) {
-        return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       }
+      const input = route === VOICE_ROUTE.INTRODUCTION ? frame.input : sessionsInput(frame);
+      if (input === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const account =
         admission.route === VOICE_ROUTE.INTRODUCTION
           ? undefined
@@ -396,7 +404,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         scene: sceneOf(route, frame.planId),
         model: options.model,
         voice: frame.voice,
-        input: withPlanSeed(frame.input, account?.plan),
+        input: withPlanSeed(input, account?.plan),
         clientEvents: RENDERER_CLIENT_EVENTS,
         serverEvents: RENDERER_SERVER_EVENTS,
       });

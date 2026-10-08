@@ -256,8 +256,9 @@ call does.
   no level off his track yet, so the status follows the captions rather than
   the audio.
 - **The hang-up.** Leaving the screen or changing the voice sends
-  `session.close` over the sessions socket, the one Live client event the
-  route forwards from a device, and the peer tears itself down on the
+  `session.close` over the sessions socket, which the route reads as an ask
+  for the close the service's exchange sends itself (the service owns every
+  sessions-route close), and the peer tears itself down on the
   `session.closed` the session answers on the data channel. The channel
   carries only the microphone switch, and the peer's own close where the
   service's never came back inside the guide's bound or no socket stands to
@@ -311,7 +312,7 @@ phone's `HostedLiveSessionSource`
   equal to its TypeScript set by `tools/ios-parity`; it writes the four frames
   the phone may send (`session.create` with an empty seed, `session.attach`,
   `session.activity`, `session.stop`) and the one Live client event the route
-  forwards (`session.close`), and reads `session.created`,
+  admits (`session.close`, read as an ask for the service's own close), and reads `session.created`,
   `session.attached`, `session.spoken`, and the hosted refusal document, handing
   everything else naming a type up as a relayed Live event. Every frame is
   checked against the JSON Schema goldens

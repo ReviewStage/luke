@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { diffHunks, type Hunk, heldWords, MOVE_HALF } from "./plan-diff";
+import { diffHunks, type Hunk } from "./plan-diff";
 
 /** The old words with every change made, from the last so the earlier offsets still hold. */
 function applied(old: string, hunks: readonly Hunk[]): string {
@@ -45,29 +45,13 @@ test("a lone shared word between two changes is one change, but a shared line br
   assert.equal(lines.length, 2);
 });
 
-test("a line that moved unchanged is one cut and one paste", () => {
-  const old = "- Only an admin can invite.\n- Invites go by email.\n- Links expire in a week.";
-  const next = "- Invites go by email.\n- Links expire in a week.\n- Only an admin can invite.";
-  const hunks = diffHunks(old, next);
-  const cut = hunks.find((hunk) => hunk.move === MOVE_HALF.CUT);
-  const paste = hunks.find((hunk) => hunk.move === MOVE_HALF.PASTE);
-  assert.equal(old.slice(cut?.from, cut?.to).trim(), "- Only an admin can invite.");
-  assert.equal(paste?.insert.trim(), "- Only an admin can invite.");
-  assert.equal(hunks.length, 2);
-});
-
-test("a field still streaming is followed while it grows, and held as shown while it rewrites", () => {
-  const shown = "### Problem\n\n- Only an admin can invite.";
-  // Carrying on from everything shown: followed.
-  const grown = `${shown}\n- Invites go by`;
-  assert.equal(heldWords(shown, grown), grown);
-  // Re-emitting what is shown, not past it yet: nothing to do.
-  assert.equal(heldWords(shown, "### Problem\n\n- Only an ad"), shown);
-  // A rewrite cut off partway: held until the whole change can be read.
-  assert.equal(heldWords(shown, "### Problem\n\n- Only an owner"), shown);
-  // A placeholder is never held: the first streamed words replace it.
-  assert.equal(
-    heldWords("### Problem\n\n_Unanswered_", "### Problem\n\n- Members"),
-    "### Problem\n\n- Members",
-  );
+test("a bullet added or struck is one change of whole lines, wherever the comparison cut it", () => {
+  const old = "- Only an admin can invite.\n- Invites go by email.";
+  const added = `${old}\n- Links expire in a week.`;
+  assert.deepEqual(diffHunks(old, added), [
+    { from: old.length, to: old.length, insert: "\n- Links expire in a week." },
+  ]);
+  const struck = diffHunks(added, "- Only an admin can invite.\n- Links expire in a week.");
+  assert.equal(struck.length, 1);
+  assert.equal(added.slice(struck[0]?.from, struck[0]?.to).trim(), "- Invites go by email.");
 });

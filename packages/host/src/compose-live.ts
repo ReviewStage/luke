@@ -169,7 +169,6 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     conversationEntries: () => [],
     roster: () => voiceRoster(observation.rosterForClients()),
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
-    createId: kernel.createId,
     // Luke speaks only on a planning call for now: no desk call, beat, or briefing.
     deskVoice: false,
     onSessionCreated: () => {

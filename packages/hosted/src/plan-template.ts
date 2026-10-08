@@ -1,24 +1,31 @@
-import { describeWire } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Struct } from "effect";
-import { PLAN_BOUNDS, planDocumentSchema } from "./plan-wire.js";
+import {
+  EXCESS_KEYS,
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  unparsedWire,
+} from "@sidecar/wire";
+import { describeWire, readEither } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Result } from "effect";
+import { PLAN_BOUNDS, type PlanAssumption } from "./plan-wire.js";
 
 /**
- * plan-template.ts -- the one fixed template every feature plan is written in: the typed update the planning model sends, and the canonical Markdown body it becomes.
+ * plan-template.ts -- the one fixed template every feature plan is written in: the notes the notetaker takes, the fields they land in, and the canonical Markdown body those become.
  *
  * Every plan has the same sections in the same order (`docs/PLANNING.md`,
  * "The fixed template"). The service keeps the plan's fields as they stand,
- * and an `update_plan` call names only what it changes: a key left out or
- * sent `null` keeps its value, and a list sent is the whole list. Nothing in
- * an update erases an answer; a correction rewrites it. Note that `null` is
- * read as no change rather than as a clear, because the notetaker's model
- * sends `null` for every field it has no words for whenever it writes a
- * section whole, and a plan written that way lost each answer the moment
- * the next one was written. A core field reads "Unanswered" while it has
- * never been answered; an optional field is left out of the body until it
- * holds something. The merged fields are formatted here into the document's
- * Markdown `body`, and the document the window and the model read stays
- * `{ body, assumptions }` (`plan-wire.ts`). No code reads the body back into
- * fields.
+ * and the notetaker changes them only by taking notes: a point added under a
+ * field, an example added to a rule, a phrase corrected, or a line struck.
+ * Each note lands in one place and touches nothing else, so a plan is written
+ * the way a person takes notes on a call, and a draft drawn while the notes
+ * stream differs from the one before only where the newest note lands
+ * (`notesInProgress`). A note naming a phrase the field does not hold is
+ * passed over rather than guessed into another. A core field reads
+ * "Unanswered" while it holds nothing; an optional field is left out of the
+ * body until it holds something. The fields are formatted here into the
+ * document's Markdown `body`, and the document the window and the model read
+ * stays `{ body, assumptions }` (`plan-wire.ts`). No code reads the body back
+ * into fields.
  *
  * The template holds what a coding agent cannot read from the repository:
  * what was decided, the rules and their examples, and the contracts the
@@ -29,11 +36,11 @@ import { PLAN_BOUNDS, planDocumentSchema } from "./plan-wire.js";
  * model wrote, contained where it stands: a line that would open a heading or
  * an HTML block is escaped, and a code fence left open is closed at the end of
  * its field, so no answer can impersonate a section or swallow the ones after
- * it. The schema guarantees shape only; whether an answer is understood or
+ * it. The schema guarantees shape only; whether a note is understood or
  * agreed is the model's judgment.
  */
 
-/** Bounds on the typed update; the formatted body is held to `PLAN_BOUNDS.MAX_BODY_CHARS` after formatting. */
+/** Bounds on the fields and the notes; the formatted body is held to `PLAN_BOUNDS.MAX_BODY_CHARS` after formatting. */
 const PLAN_TEMPLATE_BOUNDS = {
   /** One answer may be at most the whole body; the formatted total is what is held to the body bound. */
   MAX_ANSWER_CHARS: PLAN_BOUNDS.MAX_BODY_CHARS,
@@ -100,128 +107,54 @@ function nonEmptyList<S extends EffectSchema.Top>(item: S) {
 /** An ordinary answer: null while unanswered, otherwise nonblank text. */
 const ANSWER = EffectSchema.NullOr(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS));
 
-/** One field of the template, described to the model in the words of what it must establish, and told to leave it out while it has nothing to write. */
-function answer(description: string) {
-  return describeWire(ANSWER, `${description} Leave out unless the latest lines change it.`);
-}
-
 /** One clause of an example, null while unknown. */
-function examplePart(description: string) {
-  return describeWire(
-    EffectSchema.NullOr(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_EXAMPLE_PART_CHARS)),
-    `${description} One line. Null while unknown.`,
-  );
-}
+const EXAMPLE_PART = EffectSchema.NullOr(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_EXAMPLE_PART_CHARS));
 
 const exampleSchema = EffectSchema.Struct({
-  given: examplePart("The starting situation."),
-  when: examplePart("The action."),
+  given: EXAMPLE_PART,
+  when: EXAMPLE_PART,
   // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: examplePart("The observable result."), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+  then: EXAMPLE_PART, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
 });
 
 const ruleSchema = EffectSchema.Struct({
-  statement: describeWire(
-    trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_RULE_CHARS),
-    "The rule as one sentence that holds in every case, failure, cancellation, and retry included.",
-  ),
-  examples: describeWire(
-    EffectSchema.NullOr(nonEmptyList(exampleSchema)),
-    "Concrete examples that pin the rule, each exactly given, when, and then; more of them " +
-      "where the rule is ambiguous or two implementations could read it differently. Null " +
-      "until one is agreed.",
-  ),
+  statement: trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_RULE_CHARS),
+  examples: EffectSchema.NullOr(nonEmptyList(exampleSchema)),
 });
 
 /** Every section and field of the template, in its order: what the service keeps for a plan. */
 export const planFieldsSchema = EffectSchema.Struct({
-  goal: EffectSchema.Struct({
-    problem: answer("The current problem, and who it affects."),
-    outcome: answer("The observable improvement once the change ships."),
-  }),
-  scope: EffectSchema.Struct({
-    included: answer("What the change includes."),
-    excluded: answer("What is explicitly out of scope."),
-    constraints: answer(
-      "Limits the change must respect: permissions, privacy, performance, compatibility. " +
-        "Only those that apply, cited or agreed, never invented.",
-    ),
-  }),
-  rules: describeWire(
-    EffectSchema.NullOr(nonEmptyList(ruleSchema)),
-    "The behavioral rules, each with the examples that pin it. Null until one is agreed.",
-  ),
+  goal: EffectSchema.Struct({ problem: ANSWER, outcome: ANSWER }),
+  scope: EffectSchema.Struct({ included: ANSWER, excluded: ANSWER, constraints: ANSWER }),
+  rules: EffectSchema.NullOr(nonEmptyList(ruleSchema)),
   implementation: EffectSchema.Struct({
-    changeMap: answer(
-      "Each repository-relative path the change touches or adds, and what it gets there.",
-    ),
-    contracts: answer(
-      "New or changed types, schema, and signatures at module boundaries, written as code in " +
-        "fenced blocks against the plan's commit. Signatures only, never function bodies.",
-    ),
-    patterns: answer("Existing code to follow, by path, and what to copy from it."),
-    order: answer(
-      "Only where one step must land before another: the steps in order and why. Left out of " +
-        "the document while null.",
-    ),
+    changeMap: ANSWER,
+    contracts: ANSWER,
+    patterns: ANSWER,
+    order: ANSWER,
   }),
-  decisions: answer("Each consequential choice: the decision, why, and the alternative rejected."),
-  verification: answer(
-    "The end-to-end check that proves the change works, beyond the examples passing.",
+  decisions: ANSWER,
+  verification: ANSWER,
+  leftToAgent: ANSWER,
+  openQuestions: EffectSchema.Array(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS)).check(
+    EffectSchema.isMaxLength(PLAN_TEMPLATE_BOUNDS.MAX_ITEMS),
   ),
-  leftToAgent: answer(
-    "Exactly which choices the implementing agent may make itself; everything else is fixed.",
-  ),
-  openQuestions: describeWire(
-    EffectSchema.Array(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS)).check(
-      EffectSchema.isMaxLength(PLAN_TEMPLATE_BOUNDS.MAX_ITEMS),
-    ),
-    "Unresolved questions, contradictions, or facts no source could settle; empty when none.",
-  ),
-  dataAndMigration: answer(
-    "Only when stored data changes: what is stored, how existing data moves, and how the " +
-      "change is undone. Left out of the document while null.",
-  ),
-});
-
-/** A section whose every field may be left out, and which may itself be left out. */
-function partialSection<Fields extends EffectSchema.Struct.Fields>(
-  section: EffectSchema.Struct<Fields>,
-) {
-  return EffectSchema.optionalKey(section.mapFields(Struct.map(EffectSchema.optionalKey)));
-}
-
-/**
- * The whole of an `update_plan` call: any section, any field within it, and
- * the assumptions, each left out to keep what stands. A key the template does
- * not name is refused at every level.
- */
-export const planUpdateSchema = EffectSchema.Struct({
-  goal: partialSection(planFieldsSchema.fields.goal),
-  scope: partialSection(planFieldsSchema.fields.scope),
-  rules: EffectSchema.optionalKey(planFieldsSchema.fields.rules),
-  implementation: partialSection(planFieldsSchema.fields.implementation),
-  decisions: EffectSchema.optionalKey(planFieldsSchema.fields.decisions),
-  verification: EffectSchema.optionalKey(planFieldsSchema.fields.verification),
-  leftToAgent: EffectSchema.optionalKey(planFieldsSchema.fields.leftToAgent),
-  openQuestions: EffectSchema.optionalKey(planFieldsSchema.fields.openQuestions),
-  dataAndMigration: EffectSchema.optionalKey(planFieldsSchema.fields.dataAndMigration),
-  assumptions: EffectSchema.optionalKey(
-    describeWire(
-      planDocumentSchema.fields.assumptions,
-      "Every assumption the plan holds, in order, each its text. Sent whole when any changes.",
-    ),
-  ),
+  dataAndMigration: ANSWER,
 });
 
 export type PlanFields = typeof planFieldsSchema.Type;
-export type PlanUpdate = typeof planUpdateSchema.Type;
 type Rule = typeof ruleSchema.Type;
 type Example = typeof exampleSchema.Type;
 
 /** What the document's header names: the plan, the service's and never the model's. */
 export interface PlanHeader {
   readonly name: string;
+}
+
+/** A plan's whole content as the notetaker writes it: the template's fields and the assumptions beside them. */
+export interface PlanContent {
+  readonly fields: PlanFields;
+  readonly assumptions: readonly PlanAssumption[];
 }
 
 /** A new plan's fields: every answer unanswered and no questions. */
@@ -237,37 +170,8 @@ export const EMPTY_PLAN_FIELDS: PlanFields = {
   dataAndMigration: null,
 };
 
-/** An update that names every field and the assumptions: the whole template at once. */
-export type FullPlanUpdate = PlanFields & Required<Pick<PlanUpdate, "assumptions">>;
-
-/** The whole template as one update, every field unanswered and no assumptions. */
-export const EMPTY_PLAN_UPDATE: FullPlanUpdate = { ...EMPTY_PLAN_FIELDS, assumptions: [] };
-
-/** The fields of one section an update settles: those sent with something in them, since `null` and a key left out alike keep what stands. */
-function settledFields<Section extends object>(section: Section | undefined): Partial<Section> {
-  if (section === undefined) return {};
-  // SAFETY: dropping entries of a struct leaves a subset of its own keys and values.
-  return Object.fromEntries(
-    Object.entries(section).filter(([, value]) => value !== null),
-  ) as Partial<Section>;
-}
-
-/**
- * The fields an update leaves standing: each section's fields merged over
- * what stood, and a top-level field or list replaced where it was sent with
- * something in it. A field sent `null` is a field the update has nothing to
- * say about, and keeps what stood.
- */
-export function mergePlanFields(stored: PlanFields, update: PlanUpdate): PlanFields {
-  const { goal, scope, implementation, assumptions: _assumptions, ...whole } = update;
-  return {
-    ...stored,
-    ...settledFields(whole),
-    goal: { ...stored.goal, ...settledFields(goal) },
-    scope: { ...stored.scope, ...settledFields(scope) },
-    implementation: { ...stored.implementation, ...settledFields(implementation) },
-  };
-}
+/** A new plan's content: every answer unanswered, no questions, and no assumptions. */
+export const EMPTY_PLAN_CONTENT: PlanContent = { fields: EMPTY_PLAN_FIELDS, assumptions: [] };
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})(.*)$/u;
@@ -447,4 +351,575 @@ export function planBody(header: PlanHeader, fields: PlanFields): string {
     ...optionalSection(PLAN_HEADING.DATA_AND_MIGRATION, fields.dataAndMigration),
   ];
   return `${blocks.join("\n\n")}\n`;
+}
+
+/** Every field a note may be taken under, in the template's order. */
+export const PLAN_FIELD = {
+  PROBLEM: "problem",
+  OUTCOME: "outcome",
+  INCLUDED: "included",
+  EXCLUDED: "excluded",
+  CONSTRAINTS: "constraints",
+  RULES: "rules",
+  CHANGE_MAP: "changeMap",
+  CONTRACTS: "contracts",
+  PATTERNS: "patterns",
+  ORDER: "order",
+  DECISIONS: "decisions",
+  VERIFICATION: "verification",
+  LEFT_TO_AGENT: "leftToAgent",
+  OPEN_QUESTIONS: "openQuestions",
+  DATA_AND_MIGRATION: "dataAndMigration",
+  ASSUMPTIONS: "assumptions",
+} as const;
+
+export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
+
+/** The fields that hold one Markdown answer, as against the rules and the two lists. */
+type TextField = Exclude<
+  PlanField,
+  typeof PLAN_FIELD.RULES | typeof PLAN_FIELD.OPEN_QUESTIONS | typeof PLAN_FIELD.ASSUMPTIONS
+>;
+
+/** What each field holds, in the words the notetaker is told. */
+export const PLAN_FIELD_PURPOSE = {
+  problem: "The current problem, and who it affects.",
+  outcome: "The observable improvement once the change ships.",
+  included: "What the change includes.",
+  excluded: "What is explicitly out of scope.",
+  constraints:
+    "Limits the change must respect: permissions, privacy, performance, compatibility. Only " +
+    "those that apply, cited or agreed, never invented.",
+  rules:
+    "The behavioral rules, each one sentence that holds in every case, failure, cancellation, " +
+    "and retry included, with concrete examples that pin it.",
+  changeMap: "Each repository-relative path the change touches or adds, and what it gets there.",
+  contracts:
+    "New or changed types, schema, and signatures at module boundaries, written as code in " +
+    "fenced blocks. Signatures only, never function bodies.",
+  patterns: "Existing code to follow, by path, and what to copy from it.",
+  order: "Only where one step must land before another: the steps in order and why.",
+  decisions: "Each consequential choice: the decision, why, and the alternative rejected.",
+  verification: "The end-to-end check that proves the change works, beyond the examples passing.",
+  leftToAgent:
+    "Exactly which choices the implementing agent may make itself; everything else is fixed.",
+  openQuestions:
+    "Unresolved questions, contradictions, or facts no source could settle, one per note.",
+  dataAndMigration:
+    "Only when stored data changes: what is stored, how existing data moves, and how the " +
+    "change is undone.",
+  assumptions: "What the plan assumes without the developer having said it, one per note.",
+} as const satisfies Record<PlanField, string>;
+
+/** The kinds of note the notetaker takes. */
+export const NOTE_KIND = {
+  ADD: "add",
+  ADD_EXAMPLE: "addExample",
+  REPLACE: "replace",
+  REMOVE: "remove",
+} as const;
+
+/** The most notes one answer may take. */
+const MAX_NOTES = 40;
+
+/** The longest phrase a note may name to correct or strike. */
+const MAX_FIND_CHARS = 500;
+
+const NOTE_FIELD = describeWire(
+  EffectSchema.Literals(Object.values(PLAN_FIELD)),
+  "The field the note is taken under.",
+);
+
+const FIND = describeWire(
+  trimmedText(MAX_FIND_CHARS),
+  "A phrase copied exactly from the field's saved text, long enough to name one place.",
+);
+
+const addNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.ADD),
+  field: NOTE_FIELD,
+  text: describeWire(
+    trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS),
+    "The new point, added after what the field holds: a Markdown bullet in a text field, " +
+      "one item in a list, one rule's statement in the rules.",
+  ),
+});
+
+const addExampleNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.ADD_EXAMPLE),
+  rule: describeWire(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+    "The rule's number as the document shows it.",
+  ),
+  given: describeWire(EXAMPLE_PART, "The starting situation. One line. Null while unknown."),
+  when: describeWire(EXAMPLE_PART, "The action. One line. Null while unknown."),
+  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+  then: describeWire(EXAMPLE_PART, "The observable result. One line. Null while unknown."), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+});
+
+const replaceNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
+  field: NOTE_FIELD,
+  find: FIND,
+  text: describeWire(
+    trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS),
+    "What the phrase becomes.",
+  ),
+});
+
+const removeNoteSchema = EffectSchema.Struct({
+  kind: EffectSchema.Literal(NOTE_KIND.REMOVE),
+  field: NOTE_FIELD,
+  find: describeWire(
+    trimmedText(MAX_FIND_CHARS),
+    "A phrase copied exactly from the line, item, rule, or example to strike.",
+  ),
+});
+
+const planNoteSchema = EffectSchema.Union([
+  addNoteSchema,
+  addExampleNoteSchema,
+  replaceNoteSchema,
+  removeNoteSchema,
+]);
+
+/** One note: a point added, an example added to a rule, a phrase corrected, or a line struck. */
+export type PlanNote = typeof planNoteSchema.Type;
+
+/** What the notetaker answers each run with: the notes the latest lines call for, in the order taken. */
+export const planNotesSchema = EffectSchema.Struct({
+  notes: describeWire(
+    EffectSchema.Array(planNoteSchema).check(EffectSchema.isMaxLength(MAX_NOTES)),
+    "The notes the latest lines call for, in order; empty when nothing new was said.",
+  ),
+});
+
+/** How one text field is read from the fields and written back. */
+interface TextFieldLens {
+  readonly read: (fields: PlanFields) => string | null;
+  readonly write: (fields: PlanFields, value: string | null) => PlanFields;
+}
+
+/** Every field holding one Markdown answer, read and written in place. */
+const TEXT_FIELD = {
+  problem: {
+    read: (fields) => fields.goal.problem,
+    write: (fields, problem) => ({ ...fields, goal: { ...fields.goal, problem } }),
+  },
+  outcome: {
+    read: (fields) => fields.goal.outcome,
+    write: (fields, outcome) => ({ ...fields, goal: { ...fields.goal, outcome } }),
+  },
+  included: {
+    read: (fields) => fields.scope.included,
+    write: (fields, included) => ({ ...fields, scope: { ...fields.scope, included } }),
+  },
+  excluded: {
+    read: (fields) => fields.scope.excluded,
+    write: (fields, excluded) => ({ ...fields, scope: { ...fields.scope, excluded } }),
+  },
+  constraints: {
+    read: (fields) => fields.scope.constraints,
+    write: (fields, constraints) => ({ ...fields, scope: { ...fields.scope, constraints } }),
+  },
+  changeMap: {
+    read: (fields) => fields.implementation.changeMap,
+    write: (fields, changeMap) => ({
+      ...fields,
+      implementation: { ...fields.implementation, changeMap },
+    }),
+  },
+  contracts: {
+    read: (fields) => fields.implementation.contracts,
+    write: (fields, contracts) => ({
+      ...fields,
+      implementation: { ...fields.implementation, contracts },
+    }),
+  },
+  patterns: {
+    read: (fields) => fields.implementation.patterns,
+    write: (fields, patterns) => ({
+      ...fields,
+      implementation: { ...fields.implementation, patterns },
+    }),
+  },
+  order: {
+    read: (fields) => fields.implementation.order,
+    write: (fields, order) => ({ ...fields, implementation: { ...fields.implementation, order } }),
+  },
+  decisions: {
+    read: (fields) => fields.decisions,
+    write: (fields, decisions) => ({ ...fields, decisions }),
+  },
+  verification: {
+    read: (fields) => fields.verification,
+    write: (fields, verification) => ({ ...fields, verification }),
+  },
+  leftToAgent: {
+    read: (fields) => fields.leftToAgent,
+    write: (fields, leftToAgent) => ({ ...fields, leftToAgent }),
+  },
+  dataAndMigration: {
+    read: (fields) => fields.dataAndMigration,
+    write: (fields, dataAndMigration) => ({ ...fields, dataAndMigration }),
+  },
+} as const satisfies Record<TextField, TextFieldLens>;
+
+/** A line that opens a Markdown list item. */
+const LIST_ITEM_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s/u;
+
+/** A trailing line still being written that holds nothing but Markdown markers, whose escaping would change as it grows. */
+const MARKER_ONLY_LINE = /^[\s#>*+=`~<\-\d.)]+$/u;
+
+function isTextField(field: PlanField): field is TextField {
+  return Object.hasOwn(TEXT_FIELD, field);
+}
+
+function escapedPattern(word: string): string {
+  return word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/** A stretch of a text, from one offset to another. */
+interface Span {
+  readonly from: number;
+  readonly to: number;
+}
+
+/**
+ * Every place a phrase stands in a text: exactly, or failing that with any
+ * run of whitespace standing for any other, since the model copies a phrase
+ * that wrapped as one that did not.
+ */
+function spansOf(text: string, find: string): readonly Span[] {
+  const exact: Span[] = [];
+  for (let at = text.indexOf(find); at !== -1; at = text.indexOf(find, at + find.length)) {
+    exact.push({ from: at, to: at + find.length });
+  }
+  if (exact.length > 0) return exact;
+  const words = find.split(/\s+/u).filter((word) => word.length > 0);
+  if (words.length === 0) return [];
+  const pattern = new RegExp(words.map(escapedPattern).join("\\s+"), "gu");
+  return [...text.matchAll(pattern)].map((match) => ({
+    from: match.index,
+    to: match.index + match[0].length,
+  }));
+}
+
+/**
+ * The one place a phrase stands in a text, or nothing where it stands
+ * nowhere or more than once. Note that a phrase standing twice is never read
+ * as its first place, because a correction landing on the wrong line is the
+ * edit a note must never make.
+ */
+function located(text: string, find: string): Span | undefined {
+  const spans = spansOf(text, find);
+  return spans.length === 1 ? spans[0] : undefined;
+}
+
+/** Which one item of a list holds a phrase, where exactly one place in the whole list does; -1 otherwise. */
+function soleHolder<Item>(
+  items: readonly Item[],
+  textsOf: (item: Item) => readonly string[],
+  find: string,
+): number {
+  const counts = items.map((item) =>
+    textsOf(item).reduce((total, text) => total + spansOf(text, find).length, 0),
+  );
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  return total === 1 ? counts.indexOf(1) : -1;
+}
+
+/** A field's text with nothing left in it read as unanswered. */
+function answered(text: string): string | null {
+  const trimmed = text.replace(/\n{3,}/gu, "\n\n").trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/** Text added after a field's answer: on the next line within a list, and as a new paragraph otherwise. */
+function appended(current: string | null, text: string): string {
+  if (current === null) return text;
+  const lastLine = current.slice(current.lastIndexOf("\n") + 1);
+  const joiner = LIST_ITEM_LINE.test(lastLine) && LIST_ITEM_LINE.test(text) ? "\n" : "\n\n";
+  return `${current}${joiner}${text}`;
+}
+
+/** The text with every line the phrase touches struck out. */
+function struck(text: string, at: Span): string {
+  const start = text.lastIndexOf("\n", at.from - 1) + 1;
+  const newline = text.indexOf("\n", at.to);
+  const end = newline === -1 ? text.length : newline + 1;
+  return text.slice(0, start) + text.slice(end);
+}
+
+/** The text with the phrase replaced, or nothing where the phrase is not in it. */
+function replacedIn(text: string, find: string, replacement: string): string | undefined {
+  const at = located(text, find);
+  return at === undefined ? undefined : text.slice(0, at.from) + replacement + text.slice(at.to);
+}
+
+/** A list with the one item holding the phrase changed, or nothing where no item, or more than one place, holds it. */
+function replacedItem<Item>(
+  items: readonly Item[],
+  textsOf: (item: Item) => readonly string[],
+  change: (item: Item) => Item | undefined,
+  find: string,
+): readonly Item[] | undefined {
+  const index = soleHolder(items, textsOf, find);
+  const item = items[index];
+  if (item === undefined) return undefined;
+  const changed = change(item);
+  if (changed === undefined) return undefined;
+  return items.map((standing, at) => (at === index ? changed : standing));
+}
+
+function mapDefined<A, B>(value: A | undefined, map: (value: A) => B): B | undefined {
+  return value === undefined ? undefined : map(value);
+}
+
+/** One example's clauses, in the order the document draws them. */
+function clausesOf(example: Example): readonly (string | null)[] {
+  return [example.given, example.when, example.then];
+}
+
+/** A rule with the phrase replaced in its statement or in one of its examples' clauses. */
+function correctedRule(rule: Rule, find: string, text: string): Rule | undefined {
+  const statement = replacedIn(rule.statement, find, text);
+  if (statement !== undefined) {
+    return statement.length > PLAN_TEMPLATE_BOUNDS.MAX_RULE_CHARS
+      ? undefined
+      : { ...rule, statement };
+  }
+  const examples = rule.examples;
+  if (examples === null) return undefined;
+  for (const [index, example] of examples.entries()) {
+    const [given = null, when = null, then = null] = clausesOf(example).map((clause) =>
+      clause === null ? null : (replacedIn(clause, find, text) ?? clause),
+    );
+    const corrected = { given, when, then }; // oxlint-disable-line unicorn/no-thenable -- `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+    if (clausesOf(corrected).some((clause, at) => clause !== clausesOf(example)[at])) {
+      return {
+        ...rule,
+        examples: examples.map((standing, at) => (at === index ? corrected : standing)),
+      };
+    }
+  }
+  return undefined;
+}
+
+/** Every text of a rule a phrase may stand in: its statement, then each example's clauses. */
+function ruleTexts(rule: Rule): readonly string[] {
+  return [rule.statement, ...(rule.examples ?? []).flatMap(exampleTexts)];
+}
+
+function exampleTexts(example: Example): readonly string[] {
+  return clausesOf(example).filter((clause) => clause !== null);
+}
+
+/**
+ * The rules with the one place the phrase names struck: the rule where it
+ * stands in a statement, the example where it stands in a clause, or
+ * nothing where it stands nowhere or more than once.
+ */
+function rulesStruck(rules: readonly Rule[], find: string): readonly Rule[] | undefined {
+  const index = soleHolder(rules, ruleTexts, find);
+  const rule = rules[index];
+  if (rule === undefined) return undefined;
+  if (located(rule.statement, find) !== undefined) return rules.filter((_, at) => at !== index);
+  const examples = rule.examples ?? [];
+  const exampleAt = soleHolder(examples, exampleTexts, find);
+  const kept = examples.filter((_, at) => at !== exampleAt);
+  const struckRule = { ...rule, examples: kept.length === 0 ? null : kept };
+  return rules.map((standing, at) => (at === index ? struckRule : standing));
+}
+
+/** The rules with a note applied, or nothing where the note names no rule or no phrase in them. */
+function rulesNoted(rules: readonly Rule[], note: PlanNote): readonly Rule[] | undefined {
+  switch (note.kind) {
+    case NOTE_KIND.ADD:
+      if (note.text.length > PLAN_TEMPLATE_BOUNDS.MAX_RULE_CHARS) return undefined;
+      return [...rules, { statement: note.text, examples: null }];
+    case NOTE_KIND.ADD_EXAMPLE: {
+      const rule = rules[note.rule - 1];
+      if (rule === undefined) return undefined;
+      // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+      const example = { given: note.given, when: note.when, then: note.then }; // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+      const examples = [...(rule.examples ?? []), example];
+      return rules.map((standing, at) => (at === note.rule - 1 ? { ...rule, examples } : standing));
+    }
+    case NOTE_KIND.REPLACE:
+      return replacedItem(
+        rules,
+        ruleTexts,
+        (rule) => correctedRule(rule, note.find, note.text),
+        note.find,
+      );
+    case NOTE_KIND.REMOVE:
+      return rulesStruck(rules, note.find);
+  }
+}
+
+/** A list of plain items with a note applied, or nothing where the note names no item. */
+function itemsNoted<Item>(
+  items: readonly Item[],
+  note: PlanNote,
+  textOf: (item: Item) => string,
+  itemOf: (text: string) => Item,
+): readonly Item[] | undefined {
+  switch (note.kind) {
+    case NOTE_KIND.ADD:
+      return [...items, itemOf(note.text)];
+    case NOTE_KIND.REPLACE:
+      return replacedItem(
+        items,
+        (item) => [textOf(item)],
+        (item) =>
+          mapDefined(replacedIn(textOf(item), note.find, note.text), (text) => itemOf(text.trim())),
+        note.find,
+      );
+    case NOTE_KIND.REMOVE: {
+      const index = soleHolder(items, (item) => [textOf(item)], note.find);
+      return index === -1 ? undefined : items.filter((_, at) => at !== index);
+    }
+    case NOTE_KIND.ADD_EXAMPLE:
+      return undefined;
+  }
+}
+
+/** One text field with a note applied, or nothing where the note names no phrase in it. */
+function textNoted(current: string | null, note: PlanNote): string | null | undefined {
+  switch (note.kind) {
+    case NOTE_KIND.ADD:
+      return appended(current, note.text);
+    case NOTE_KIND.REPLACE:
+      return current === null
+        ? undefined
+        : mapDefined(replacedIn(current, note.find, note.text), answered);
+    case NOTE_KIND.REMOVE: {
+      const at = current === null ? undefined : located(current, note.find);
+      return current === null || at === undefined ? undefined : answered(struck(current, at));
+    }
+    case NOTE_KIND.ADD_EXAMPLE:
+      return undefined;
+  }
+}
+
+/** Whether a list is still within the template's bound on items. */
+function withinItems(items: readonly unknown[]): boolean {
+  return items.length <= PLAN_TEMPLATE_BOUNDS.MAX_ITEMS;
+}
+
+/**
+ * The content with one note taken, or nothing where the note cannot be: a
+ * phrase it names that the field does not hold, a rule number the plan does
+ * not have, or a list grown past its bound. Note that a note that cannot be
+ * taken is never guessed into another, because an append standing in for a
+ * correction would write the point twice.
+ */
+export function applyNote(content: PlanContent, note: PlanNote): PlanContent | undefined {
+  const { fields, assumptions } = content;
+  const field = note.kind === NOTE_KIND.ADD_EXAMPLE ? PLAN_FIELD.RULES : note.field;
+  if (field === PLAN_FIELD.RULES) {
+    const rules = rulesNoted(fields.rules ?? [], note);
+    if (rules === undefined || !withinItems(rules)) return undefined;
+    return { fields: { ...fields, rules: rules.length === 0 ? null : rules }, assumptions };
+  }
+  if (field === PLAN_FIELD.OPEN_QUESTIONS) {
+    const questions = itemsNoted(
+      fields.openQuestions,
+      note,
+      (text) => text,
+      (text) => text,
+    );
+    if (questions === undefined || !withinItems(questions)) return undefined;
+    return { fields: { ...fields, openQuestions: questions }, assumptions };
+  }
+  if (field === PLAN_FIELD.ASSUMPTIONS) {
+    const noted = itemsNoted(
+      assumptions,
+      note,
+      (item) => item.text,
+      (text) => ({ text }),
+    );
+    if (noted === undefined || !withinItems(noted)) return undefined;
+    return { fields, assumptions: noted };
+  }
+  if (!isTextField(field)) return undefined;
+  const lens = TEXT_FIELD[field];
+  const text = textNoted(lens.read(fields), note);
+  return text === undefined ? undefined : { fields: lens.write(fields, text), assumptions };
+}
+
+/** Notes taken over a plan's content: the content after, and the notes that could not be taken. */
+export interface NotesTaken {
+  readonly content: PlanContent;
+  readonly missed: readonly PlanNote[];
+}
+
+/** Every note taken in order, and the notes that could not be. */
+export function applyNotes(content: PlanContent, notes: readonly PlanNote[]): NotesTaken {
+  let taken = content;
+  const missed: PlanNote[] = [];
+  for (const note of notes) {
+    const next = applyNote(taken, note);
+    if (next === undefined) missed.push(note);
+    else taken = next;
+  }
+  return { content: taken, missed };
+}
+
+const readNote = readEither(planNoteSchema, { excess: EXCESS_KEYS.DROP });
+
+/** Text still being written, cut back to its last line that cannot change how it is escaped. */
+function settledText(text: string): string {
+  const lastBreak = text.lastIndexOf("\n");
+  const lastLine = text.slice(lastBreak + 1);
+  return MARKER_ONLY_LINE.test(lastLine) ? text.slice(0, Math.max(0, lastBreak)) : text;
+}
+
+/** The note still being written, read as an addition whose text so far can be shown, or nothing. */
+function growingAddition(value: UnparsedWireValue): PlanNote | undefined {
+  if (!isRecord(value) || value.kind !== NOTE_KIND.ADD || !isWireString(value.text)) {
+    return undefined;
+  }
+  const text = settledText(value.text).trim();
+  if (text.length === 0) return undefined;
+  const read = readNote(unparsedWire({ ...value, text }));
+  return Result.isSuccess(read) ? read.success : undefined;
+}
+
+/** An answer's notes as read, and how many of its notes did not read. */
+export interface NotesRead {
+  readonly notes: readonly PlanNote[];
+  readonly unread: number;
+}
+
+/**
+ * The notes of an answer, each read on its own so a note that does not read
+ * is passed over alone rather than costing the rest, and how many were.
+ */
+export function readNotes(answer: UnparsedWireValue): NotesRead {
+  const values = isRecord(answer) && Array.isArray(answer.notes) ? answer.notes : [];
+  const notes = values.flatMap((value: UnparsedWireValue) => {
+    const read = readNote(value);
+    return Result.isSuccess(read) ? [read.success] : [];
+  });
+  return { notes: notes.slice(0, MAX_NOTES), unread: values.length - notes.length };
+}
+
+/**
+ * The content as the notetaker's answer so far leaves it, for a draft drawn
+ * while the answer streams. The answer arrives as the JSON emitted so far,
+ * so every note before the last is whole, and each is taken in order; one
+ * that does not read or cannot be taken is passed over alone. The last note
+ * may be cut off partway, so it is drawn only when it adds a point, as the
+ * text written so far, held back at a trailing line of nothing but Markdown
+ * markers. Each draft therefore differs from the one before only where the
+ * newest note lands, and nothing a draft showed is taken back until the
+ * answer is saved.
+ */
+export function notesInProgress(content: PlanContent, partial: UnparsedWireValue): PlanContent {
+  const values = isRecord(partial) && Array.isArray(partial.notes) ? partial.notes : [];
+  const { notes: whole } = readNotes(unparsedWire({ notes: values.slice(0, -1) }));
+  const growing = growingAddition(values.at(-1));
+  return applyNotes(content, growing === undefined ? whole : [...whole, growing]).content;
 }

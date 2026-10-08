@@ -142,6 +142,15 @@ export const VOICE_SERVICE_FRAME = {
    */
   SESSION_BEAT: "session.beat",
   /**
+   * The fourth: the hang-up. The service owns a session's `session.close`,
+   * as the server-controls guide asks one owner per action, so the desktop
+   * asks for the close rather than sending it, and the service's exchange
+   * sends the one close and records what `session.closed` reports. The
+   * relay reads it by its type, as it reads a device's own `session.close`
+   * on the same route, so it is no report and nothing past its type is read.
+   */
+  SESSION_HANG_UP: "session.hangup",
+  /**
    * The one frame the service sends the desktop after the handshake in this
    * vocabulary: a proactive turn was spoken to its end, by kind. The
    * decision and the record of what was spoken are the desktop's, so the
@@ -360,6 +369,13 @@ export const sessionStopFrameSchema = Schema.Struct({
 });
 
 export type SessionStopFrame = typeof sessionStopFrameSchema.Type;
+
+/** The hang-up: the type alone, since the close it asks for is the service's to send. */
+export const sessionHangUpFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_HANG_UP),
+});
+
+export type SessionHangUpFrame = typeof sessionHangUpFrameSchema.Type;
 
 /** An observed value a beat may mention, bounded here as the append that will carry it is bounded. */
 const beatValue = Schema.optional(text(OBSERVED_VALUE_LENGTH));

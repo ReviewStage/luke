@@ -14,12 +14,14 @@ import {
 } from "@sidecar/hosted";
 import {
   conversationSeedItems,
+  generalLiveError,
   type InitialItem,
   LIVE_CLOSE_REASON,
   LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   type LiveServerEvent,
   type LiveSessionClosed,
+  liveErrorFields,
   PROACTIVE_SPEECH_KIND,
   type ProactiveSpeechKind,
   type RosterSeedSession,
@@ -38,7 +40,7 @@ import {
 } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import {
-  closeGracefully,
+  requestClose,
   SIDEBAND_CLOSE_OUTCOME,
   type SidebandCloseResult,
 } from "./graceful-close.js";
@@ -49,10 +51,10 @@ import type { BeatKind } from "./proactive-queue.js";
  * still holds of a session once the exchange is the service's. It creates
  * the session for the renderer's offer, seeded from the recent Conversation
  * and the desk as the Mac sees them, and holds the sideband the service
- * answered on for exactly four things: the graceful close, which sends
- * `session.close` and waits for `session.closed` as the conversations guide
- * prescribes; and the stop key, the idle report, and the onboarding beats,
- * each told to the service in its own vocabulary through the door the source
+ * answered on for exactly four things: the graceful close, which asks the
+ * service for the `session.close` it owns and waits for `session.closed` as
+ * the conversations guide prescribes; and the stop key, the idle report, and
+ * the onboarding beats, each told to the service in its own vocabulary through the door the source
  * opened, because the instruction the stop appends, the idle decision, and
  * the words of every beat belong to the exchange the service holds. Nothing
  * else leaves this side, and no append at all: the desktop never appends to
@@ -85,7 +87,6 @@ export interface LiveSessionHolderOptions {
   /** The desk as the voice may be told it, read when a session is seeded; absent seeds from the conversation alone. */
   roster?: () => readonly RosterSeedSession[];
   emit: (change: VoiceLiveSessionChanged) => void;
-  createId: () => string;
   /**
    * Whether Luke speaks outside a planning call: a desk session the talk key
    * opens, and the muted one a beat or a briefing wants. Off, only a planning
@@ -482,6 +483,12 @@ export class LiveSessionHolder {
         return Effect.void;
       case LIVE_SERVER_EVENT.SESSION_CLOSED:
         return this.#onClosed(session, event);
+      case LIVE_SERVER_EVENT.ERROR:
+        // The holder sends no command an error could name, so the general
+        // handler is the only one an error reaches here.
+        return generalLiveError(event)
+          ? Effect.logWarning(`voice error: ${liveErrorFields(event)} ${sessionFields(session)}`)
+          : Effect.void;
       default:
         return Effect.void;
     }
@@ -518,10 +525,14 @@ export class LiveSessionHolder {
   #close(session: HeldSession): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSING });
-      const result = yield* closeGracefully(session.sideband, {
-        eventId: this.#options.createId(),
-        settled: Deferred.await(session.settled),
-      });
+      // Note that we ask rather than send, because the session's one
+      // `session.close` is the service's: its `session.closed` still reaches
+      // this reader, which stood before the ask went.
+      const result = yield* requestClose(
+        session.sideband,
+        Effect.sync(() => session.opened.hangUp()),
+        { settled: Deferred.await(session.settled) },
+      );
       if (result.outcome === SIDEBAND_CLOSE_OUTCOME.CLOSED) {
         return yield* this.#onClosed(session, result.closed);
       }

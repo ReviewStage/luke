@@ -13,12 +13,11 @@ The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
 
 - **One saved document per named plan**, a Markdown `body` and an `assumptions`
-  list of `{ text }`, written only by the plan's notetaker through
-  `update_plan` ("The notetaker" below). The body is always the one fixed
-  template (LUKE-352, "The fixed template" below): the notetaker sends the
-  fields it changes, and the
-  service merges them over the plan's stored fields and formats the result
-  into the body. There are no versions, no
+  list of `{ text }`, written only by the plan's notetaker, which takes
+  notes into it ("The notetaker" below). The body is always the one fixed
+  template (LUKE-352, "The fixed template" below): the service takes each
+  note into the plan's stored fields and formats the result into the body.
+  There are no versions, no
   stale-revision rejection, no approval state, and no export record.
 - **The model drives the workflow.** Question choice, agreement, corrections,
   and the final review live in the planning model's instructions, and the
@@ -177,35 +176,52 @@ A planning call's plan is written by a notetaker beside the call
 react to the transcript on a small model while speech goes on. It keeps both
 speakers' words from the call's sideband and the planning model's replies as
 research notes. Once the developer has been quiet for about a second, it makes
-one `gpt-5.6-luna` call over the saved document and what was said since its
-last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves the
-answer through `update_plan`. Its runs never overlap, so it is the plan's only writer, and a
-run that fails moves nothing forward.
+one `gpt-5.6-luna` call over the plan's saved fields and what was said since
+its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
+the answer through `saveNotes` (`apps/web/server/hosted/plan-notes.ts`). Its
+runs never overlap, so it is the plan's only writer, and a run that fails
+moves nothing forward.
+
+The answer is notes, the way a person takes notes on a call, never a field
+written out again:
+
+- `add` puts a new point under a field: a bullet after what a text field
+  holds, an item at the end of open questions or assumptions, or a rule at
+  the end of the rules.
+- `addExample` adds a Given/When/Then example to a rule by its number.
+- `replace` corrects a phrase copied exactly from the field, and `remove`
+  strikes the line, item, rule, or example holding one.
+
+A note naming a phrase the plan does not hold is passed over, reported, and
+never guessed into another; a note that does not read under the schema is
+passed over alone. The rest save.
 
 The notes type in while they are written. The call streams its answer, and
-each partial answer that reads under the template is merged and formatted
-exactly as a save would be and sent to the Mac on the call's own socket as a
-`plan.draft` frame, at most every 150 ms, then once more as saved. The host
-draws each draft in place of the open plan's document, and the Plans tab's
-chase types the difference in. A run that breaks off sends the saved document
-back, so no half-written draft is left standing.
+the notes so far are taken over the saved fields and formatted exactly as a
+save would be (`notesInProgress` in `packages/hosted/src/plan-template.ts`):
+every note before the last is whole, and the last is drawn only when it adds
+a point, as its text so far. Each draft is sent to the Mac on the call's own
+socket as a `plan.draft` frame, at most every 150 ms, then once more as saved,
+so each differs from the one before only where the newest note lands. The
+host draws each draft in place of the open plan's document, and the Plans
+tab's caret types that difference in where it stands: a point typed at the
+end of its field, a correction selected and retyped, a struck line or rule
+selected and erased. A unit of the document is known by its heading, and a
+rule by its statement, so a rule joining or leaving moves no other words. A
+run that breaks off sends the saved document back, so no half-written draft
+is left standing.
 
 ### The fixed template
 
 Every plan uses one fixed template (LUKE-352). There is no configurable
-template, no sections map, and no freeform body argument: `update_plan`
-names only the sections and fields below that change. A field left out or
-sent `null` keeps its stored value, so nothing in a call erases an answer and
-a correction rewrites it, and a list (rules with their examples,
-open questions, assumptions) is sent whole when any of it changes. A call
-naming a field the template does not, sending a freeform `body`, or carrying
-a blank answer is refused with the offending field's path and saves nothing.
-The service keeps the plan's fields in the row's `fields` column, merges the
-call over them, formats the result into the canonical Markdown `body`
+template, no sections map, and no freeform body: a note names one of the
+fields below (`PLAN_FIELD`) and nothing else. The service keeps the plan's
+fields in the row's `fields` column, takes the notes over them, formats the
+result into the canonical Markdown `body`
 (`packages/hosted/src/plan-template.ts`), checks the formatted body against
 its bound, and saves the fields, the body, and the assumptions together; no
-code parses the body back, and the model reads the canonical Markdown on its
-next turn.
+code parses the body back. The notetaker reads the fields on its next run,
+and the planning model reads the canonical Markdown on its next turn.
 
 | Section | Fields | What Luke establishes |
 | --- | --- | --- |
@@ -220,9 +236,9 @@ next turn.
 | Data and migration | `dataAndMigration` | Only when stored data changes: what is stored, how existing data moves, and how the change is undone. |
 | Assumptions | `assumptions` | The existing `{ text }` list. |
 
-- **Types.** An ordinary field is `null` or nonblank text; it is `null` only
-  until it is first answered, since an update never clears it, and a core
-  field renders it as "Unanswered" until then.
+- **Types.** An ordinary field is `null` or nonblank text; it is `null` until
+  a note first answers it, or again once every line of it is struck, and a
+  core field renders it as "Unanswered" while it is.
   `implementation.order` and `dataAndMigration` are optional: the body leaves
   them out while null. A rule is exactly its one-sentence `statement` and its
   `examples`, null until one is agreed and rendering "No examples yet"; an
@@ -230,8 +246,7 @@ next turn.
   null until one is agreed. `openQuestions` is always a list, rendering "No
   additional questions recorded" while empty.
 - **Order and containment.** The formatter owns every heading and its order,
-  so the body's order is the template's whatever order a call's keys arrive
-  in. Field text is contained where it stands: a line that would open a
+  so the body's order is the template's whatever order notes arrive in. Field text is contained where it stands: a line that would open a
   heading or an HTML block is escaped, and a code fence left open is closed
   at the end of its field, so no answer can impersonate a section or swallow
   the ones after it.
@@ -325,7 +340,7 @@ evaluations are outside this work.
 
 The reference plan is "Teammate invitations" on a private repository,
 `acme/relay`. Each step shows what the developer does, what Luke says (in
-brief), and the document after the notetaker's `update_plan`. Luke's lines are
+brief), and the document after the notetaker's notes. Luke's lines are
 illustrations of tone and order, not prompt text: LUKE-336 writes the
 instructions.
 
@@ -570,7 +585,7 @@ the exact shape.
 | Captions, levels, errors | The panel's caption strip (`useCaptionPresentation`, `caption-layout.ts`) and the wings' waveform (`notch-wings.tsx`), unchanged | None. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
-| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and `update_plan` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
+| Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
 

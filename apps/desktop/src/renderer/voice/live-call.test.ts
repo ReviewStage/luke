@@ -16,10 +16,12 @@ import {
 } from "@sidecar/live";
 import type { LiveCaptionRow, LiveVoiceSpeakers } from "@sidecar/voice/orchestrator";
 import type { WireRecord } from "@sidecar/wire";
-import { type Context, Deferred, Duration, Effect, Exit, Fiber, Scope } from "effect";
+import { type Context, Deferred, Duration, Effect, Exit, Fiber, Logger, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import {
+  LIVE_CLOSE_OWNER,
   LiveCall,
+  type LiveCloseOwner,
   MICROPHONE_ACK_TIMEOUT_MS,
   SESSION_CLOSE_TIMEOUT_MS,
   SESSION_START_TIMEOUT_MS,
@@ -185,10 +187,15 @@ class FakePeerConnection implements LivePeerConnection {
   }
 }
 
-function build(
-  services: Context.Context<never>,
-  options: { microphone?: boolean; sessionCreated?: boolean; voiceSessionId?: string },
-) {
+interface FixtureOptions {
+  microphone?: boolean;
+  sessionCreated?: boolean;
+  voiceSessionId?: string;
+  /** The sessions route's service by default; the introduction's own channel where named. */
+  closeOwner?: LiveCloseOwner;
+}
+
+function build(services: Context.Context<never>, options: FixtureOptions) {
   let microphoneGranted = options.microphone !== false;
   const peer = new FakePeerConnection();
   const silence = new FakeSilence();
@@ -209,6 +216,8 @@ function build(
   let ends = 0;
   const remote: (MediaStream | undefined)[] = [];
   const local: (MediaStream | undefined)[] = [];
+  /** The element Luke plays through, as far as its `muted` goes. */
+  let outputSilenced = false;
   const wire: string[] = [];
   const call = new LiveCall({
     events: {
@@ -241,6 +250,7 @@ function build(
       },
       reportActivity: (idle) => activity.push(idle),
     },
+    closeOwner: options.closeOwner ?? LIVE_CLOSE_OWNER.SERVICE,
     createPeerConnection: () => peer,
     createSilence: () => silence,
     openMicrophone: async () => {
@@ -256,6 +266,9 @@ function build(
     },
     onRemoteStream: (value) => remote.push(value),
     onLocalStream: (value) => local.push(value),
+    onOutputSilenced: (silenced) => {
+      outputSilenced = silenced;
+    },
     onWireEvent: (direction, event) => wire.push(`${direction}:${String(event.type)}`),
     services,
   });
@@ -312,6 +325,7 @@ function build(
     ends: () => ends,
     remote,
     local,
+    outputSilenced: () => outputSilenced,
     wire,
     channel,
     started,
@@ -324,9 +338,7 @@ function build(
 }
 
 /** One call over its own fake peer, under the test's own services, so its bounds are this test's clock. */
-const fixture = (
-  options: { microphone?: boolean; sessionCreated?: boolean; voiceSessionId?: string } = {},
-): Effect.Effect<ReturnType<typeof build>> =>
+const fixture = (options: FixtureOptions = {}): Effect.Effect<ReturnType<typeof build>> =>
   Effect.map(Effect.context<never>(), (services) => build(services, options));
 
 it.effect(
@@ -720,6 +732,73 @@ it.effect(
     }),
 );
 
+/** A call opened for Luke's own speech and started, with nothing pressed. */
+const startedCall = Effect.gen(function* () {
+  const f = yield* fixture();
+  const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+  yield* settle;
+  f.peer.gathered();
+  yield* settle;
+  f.started();
+  yield* Fiber.join(opening);
+  return f;
+});
+
+it.effect(
+  "a stop silences Luke at once and holds the silence through his pauses until the utterance ends, then his next one plays",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* startedCall;
+      f.call.reportRemoteAudioLevel(true);
+      f.call.silenceOutput();
+      assert.equal(f.outputSilenced(), true);
+      // The model still talking while it gets to the stop is not heard, pauses within the hangover included.
+      yield* advance(10_000);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(SPEAKING_HANGOVER_MS - 1);
+      f.call.reportRemoteAudioLevel(true);
+      assert.equal(f.outputSilenced(), true);
+      f.call.reportRemoteAudioLevel(false);
+      yield* advance(SPEAKING_HANGOVER_MS - 1);
+      assert.equal(f.outputSilenced(), true);
+      yield* advance(1);
+      assert.equal(f.outputSilenced(), false);
+      // What he says next is heard from its first word.
+      f.call.reportRemoteAudioLevel(true);
+      assert.equal(f.outputSilenced(), false);
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
+    }),
+);
+
+it.effect("a stop while Luke is quiet silences nothing, so his next words are heard", () =>
+  Effect.gen(function* () {
+    const f = yield* startedCall;
+    f.call.silenceOutput();
+    f.call.reportRemoteAudioLevel(true);
+    assert.equal(f.outputSilenced(), false);
+  }),
+);
+
+it.effect(
+  "a call that ends while Luke is silenced lifts the silence, so the next call is heard",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* startedCall;
+      f.call.reportRemoteAudioLevel(true);
+      f.call.silenceOutput();
+      assert.equal(f.outputSilenced(), true);
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+        event_id: "closed",
+        reason: "expired",
+        usage: { seconds: 42 },
+      });
+      yield* settle;
+      assert.equal(f.call.standing, false);
+      assert.equal(f.outputSilenced(), false);
+    }),
+);
+
 it.effect(
   "the sending line always carries a track: across presses and releases the sender is handed the device or the silence, never nothing",
   () =>
@@ -967,7 +1046,7 @@ it.effect(
 );
 
 it.effect(
-  "the hang-up registers closed, sends close, holds everything open until closed arrives, and gives up at the bound",
+  "the hang-up asks the service for the close, stops the microphone at once, holds the peer open until closed arrives, and gives up at the bound",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -977,9 +1056,99 @@ it.effect(
       yield* settle;
       f.started();
       yield* Fiber.join(opening);
+      const unmuting = yield* Effect.forkChild(f.call.unmute());
+      yield* settle;
+      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+      yield* Fiber.join(unmuting);
+      assert.equal(f.track.stopped, false);
+      const sentBefore = f.sentTypes();
+      const closing = yield* Effect.forkChild(f.call.close());
+      yield* settle;
+      // The service owns the close: the host is asked once and nothing goes
+      // on the channel, while the device is stopped and off the line before
+      // any answer, so waiting on the service leaves no live microphone.
+      assert.deepEqual(f.sentTypes(), sentBefore);
+      assert.equal(f.ends(), 1);
+      assert.equal(f.track.stopped, true);
+      assert.equal(f.peer.replaced.at(-1), f.silence.track);
+      assert.equal(f.speakers.at(-1)?.listening, false);
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.CLOSING);
+      assert.equal(f.peer.steps.includes("close"), false);
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+        event_id: "closed",
+        reason: "close_requested",
+        usage: { seconds: 42 },
+      });
+      yield* Fiber.join(closing);
+      yield* settle;
+      assert.deepEqual(
+        f.peer.steps.filter((step) => step === "close"),
+        ["close"],
+      );
+      assert.equal(f.statuses.at(-1), LIVE_STATUS.IDLE);
+      assert.deepEqual(f.remote.at(-1), undefined);
+      // A second call with no closed event closes its peer at the bound, which
+      // is what ends a session whose service could not be reached.
+      const g = yield* fixture();
+      const opened = yield* Effect.forkChild(g.call.open({ byPress: true }));
+      yield* settle;
+      g.peer.gathered();
+      yield* settle;
+      g.started();
+      yield* Fiber.join(opened);
+      const abandoned = yield* Effect.forkChild(g.call.close());
+      yield* settle;
+      yield* advance(SESSION_CLOSE_TIMEOUT_MS - 1);
+      assert.equal(g.peer.steps.includes("close"), false);
+      yield* advance(1);
+      yield* Fiber.join(abandoned);
+      yield* settle;
+      assert.equal(g.peer.steps.at(-1), "close");
+      assert.equal(g.statuses.at(-1), LIVE_STATUS.IDLE);
+      assert.deepEqual(g.sentTypes(), []);
+      // The host hears the transport close on every teardown, so a session whose
+      // peer gave up is one it ends rather than one left standing.
+      assert.equal(g.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
+      assert.equal(f.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
+      // Each end names itself: the answered hang-up, and the one that gave up.
+      assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.HUNG_UP]);
+      assert.deepEqual(g.endReasons, [LIVE_PEER_END_REASON.CLOSE_TIMED_OUT]);
+    }),
+);
+
+it.effect("a press landing after the hang-up opens no microphone on a closing call", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+    yield* settle;
+    f.peer.gathered();
+    yield* settle;
+    f.started();
+    yield* Fiber.join(opening);
+    yield* Effect.forkChild(f.call.close());
+    yield* settle;
+    assert.equal(yield* f.call.unmute(), false);
+    assert.equal(f.microphoneOpens(), 0);
+    assert.deepEqual(f.sentTypes(), []);
+  }),
+);
+
+it.effect(
+  "the introduction's hang-up sends its own close and holds everything open until closed arrives",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture({ closeOwner: LIVE_CLOSE_OWNER.CHANNEL });
+      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      yield* settle;
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* Fiber.join(opening);
       const closing = yield* Effect.forkChild(f.call.close());
       yield* settle;
       assert.deepEqual(f.sentTypes(), [LIVE_CLIENT_EVENT.CLOSE]);
+      assert.equal(f.ends(), 0);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.CLOSING);
       assert.equal(f.peer.steps.includes("close"), false);
       f.channel().receive({
@@ -995,30 +1164,7 @@ it.effect(
         ["close"],
       );
       assert.equal(f.track.stopped, true);
-      assert.equal(f.statuses.at(-1), LIVE_STATUS.IDLE);
-      assert.deepEqual(f.remote.at(-1), undefined);
-      // A second call with no closed event gives up at the bound.
-      const g = yield* fixture();
-      const opened = yield* Effect.forkChild(g.call.open({ byPress: true }));
-      yield* settle;
-      g.peer.gathered();
-      yield* settle;
-      g.started();
-      yield* Fiber.join(opened);
-      const abandoned = yield* Effect.forkChild(g.call.close());
-      yield* settle;
-      yield* advance(SESSION_CLOSE_TIMEOUT_MS);
-      yield* Fiber.join(abandoned);
-      yield* settle;
-      assert.equal(g.peer.steps.at(-1), "close");
-      assert.equal(g.statuses.at(-1), LIVE_STATUS.IDLE);
-      // The host hears the transport close on every teardown, so a session whose
-      // peer gave up is one it ends rather than one left standing.
-      assert.equal(g.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
-      assert.equal(f.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
-      // Each end names itself: the answered hang-up, and the one that gave up.
       assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.HUNG_UP]);
-      assert.deepEqual(g.endReasons, [LIVE_PEER_END_REASON.CLOSE_TIMED_OUT]);
     }),
 );
 
@@ -1052,46 +1198,44 @@ it.effect(
     }),
 );
 
-it.effect(
-  "the only records the call sends are the two switches and the close, in the channel's own order",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
-      yield* settle;
-      f.peer.gathered();
-      yield* settle;
-      f.started();
-      yield* Fiber.join(opening);
-      const unmuting = yield* Effect.forkChild(f.call.unmute());
-      yield* settle;
-      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      yield* Fiber.join(unmuting);
-      const muting = yield* Effect.forkChild(f.call.mute());
-      yield* settle;
-      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      yield* Fiber.join(muting);
-      const closing = yield* Effect.forkChild(f.call.close());
-      yield* settle;
-      f.channel().receive({
-        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
-        event_id: "closed",
-        reason: "close_requested",
-        usage: { seconds: 1 },
-      });
-      yield* Fiber.join(closing);
-      // The window's whole outbound vocabulary: no session configuration, no
-      // tool list, no instructions, and nothing that could carry an append.
-      assert.deepEqual(f.channel().sent, [
-        { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
-        { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
-        { type: LIVE_CLIENT_EVENT.CLOSE, event_id: "peer-3" },
-      ]);
-    }),
+it.effect("the only records the call sends are the two switches, in the channel's own order", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+    yield* settle;
+    f.peer.gathered();
+    yield* settle;
+    f.started();
+    yield* Fiber.join(opening);
+    const unmuting = yield* Effect.forkChild(f.call.unmute());
+    yield* settle;
+    f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+    yield* Fiber.join(unmuting);
+    const muting = yield* Effect.forkChild(f.call.mute());
+    yield* settle;
+    f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+    yield* Fiber.join(muting);
+    const closing = yield* Effect.forkChild(f.call.close());
+    yield* settle;
+    f.channel().receive({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "closed",
+      reason: "close_requested",
+      usage: { seconds: 1 },
+    });
+    yield* Fiber.join(closing);
+    // The window's whole outbound vocabulary: no session configuration, no
+    // tool list, no instructions, nothing that could carry an append, and
+    // no close, which is the service's to send.
+    assert.deepEqual(f.channel().sent, [
+      { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
+      { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
+    ]);
+  }),
 );
 
 it.effect(
-  "a session opened for Luke's own speech sends nothing until pressed, then the same switches and close a press sends",
+  "a session opened for Luke's own speech sends nothing until pressed, then the same switches a press sends",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1125,7 +1269,6 @@ it.effect(
       assert.deepEqual(f.channel().sent, [
         { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
         { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
-        { type: LIVE_CLIENT_EVENT.CLOSE, event_id: "peer-3" },
       ]);
     }),
 );
@@ -1263,4 +1406,59 @@ it.effect(
       assert.equal(f.statuses.at(-1), LIVE_STATUS.MUTED);
       assert.deepEqual(f.speakers.at(-1), { listening: false, lukeSpeaking: false });
     }),
+);
+
+it.effect(
+  "an error naming no command, or naming one with no code, is logged by its type and code alone",
+  () => {
+    const lines: string[] = [];
+    return Effect.gen(function* () {
+      const f = yield* fixture();
+      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      yield* settle;
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* Fiber.join(opening);
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-1",
+        error: { type: "server_error", code: null, message: "said: the words" },
+      });
+      const unmuting = yield* Effect.forkChild(f.call.unmute());
+      yield* settle;
+      const sent = f.channel().sent.at(-1);
+      assert.ok(sent);
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-2",
+        error: {
+          type: "invalid_request_error",
+          code: "Not A Code: the words",
+          message: "the words",
+        },
+      });
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-3",
+        client_event_id: String(sent.event_id),
+        error: { type: "invalid_request_error", code: "invalid_value", message: "the words" },
+      });
+      assert.equal(yield* Fiber.join(unmuting), false);
+      yield* settle;
+      // The switch's own error answered the switch and nothing else.
+      assert.deepEqual(lines, [
+        "voice error: type=server_error code=none",
+        "voice error: type=invalid_request_error code=other",
+      ]);
+    }).pipe(
+      Effect.provide(
+        Logger.layer([
+          Logger.make((options) => {
+            lines.push(String(options.message));
+          }),
+        ]),
+      ),
+    );
+  },
 );

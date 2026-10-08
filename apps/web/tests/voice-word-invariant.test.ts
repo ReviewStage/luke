@@ -3,9 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
+  LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
   type LiveBrainAsk,
+  type LiveBrainCancel,
+  type LiveBrainRecovery,
   type LiveBrainSubmission,
   LiveSessionService,
   ROW_WRITE_DEBOUNCE_MS,
@@ -169,6 +172,14 @@ class TurnOpeningBrain implements LiveBrain {
       this.turns.set(ask.submissionId, turnId);
       return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: recorded.id };
     }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient), Effect.orDie);
+  }
+
+  cancelRun(): Effect.Effect<LiveBrainCancel> {
+    return Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING);
+  }
+
+  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+    return Effect.succeed({ revision: 0, runs: [], follow: Effect.void });
   }
 
   onRunEvent(): () => void {

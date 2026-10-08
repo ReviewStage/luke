@@ -10,12 +10,15 @@ import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
 import {
   closeEvent,
   decodeLivePayload,
+  generalLiveError,
   LIVE_IDLE_WINDOW_MS,
   LIVE_SERVER_EVENT,
   LIVE_STATUS,
   type LiveClientEvent,
   type LiveServerEvent,
   type LiveStatus,
+  liveErrorCommand,
+  liveErrorFields,
   muteEvent,
   parseLiveServerEvent,
   TRANSCRIPT_SPEAKER,
@@ -73,6 +76,21 @@ const CAPTION_SETTLE_TICK_MS = 500;
 
 const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
+/**
+ * Who sends a session's `session.close`, which the server-controls guide asks
+ * be one owner per action. On the sessions route it is the voice service,
+ * whose exchange holds the sideband and records the final usage, so the
+ * peer asks the host for the close and sends none of its own; the
+ * introduction has no exchange behind it, so its peer closes over its own
+ * data channel and asks the host only when that channel cannot carry it.
+ */
+export const LIVE_CLOSE_OWNER = {
+  SERVICE: "service",
+  CHANNEL: "channel",
+} as const;
+
+export type LiveCloseOwner = (typeof LIVE_CLOSE_OWNER)[keyof typeof LIVE_CLOSE_OWNER];
+
 interface LiveCallActs {
   createSession: (
     sdp: string,
@@ -93,6 +111,14 @@ export interface LiveCallOptions {
   openMicrophone: () => Promise<MediaStream>;
   onRemoteStream: (stream: MediaStream | undefined) => void;
   onLocalStream: (stream: MediaStream | undefined) => void;
+  /**
+   * Whether the element Luke's voice plays through is silenced, so the stop
+   * is heard at once rather than when the model obeys; a surface with no stop
+   * key, like the spoken introduction, wires none.
+   */
+  onOutputSilenced?: (silenced: boolean) => void;
+  /** Who sends the hang-up's `session.close`: the service behind the host, or this peer's own channel. */
+  closeOwner: LiveCloseOwner;
   /** The development trace's tap, handed each event as it crossed the channel. */
   onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
   /**
@@ -118,8 +144,9 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
 
 /**
  * The voice window's one session as a GPT Live peer. The renderer owns the
- * microphone switch and the hang-up and nothing else: it sends the mute,
- * unmute, and close events the data channel permissions allow it, opens the
+ * microphone switch and the hang-up and nothing else: it sends the mute and
+ * unmute events the data channel permissions allow it, and the close only
+ * where the close is its own to send (see {@link LIVE_CLOSE_OWNER}), opens the
  * capture device for the unmute and releases it after the mute so the device
  * is open exactly while the talk key is held, leaves the peer's silent track
  * on the line in the device's place so the model's input timeline keeps
@@ -134,9 +161,10 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
  * is released then — or when the fiber is interrupted — exactly once, because
  * a scope closes once. Every bound the call keeps is an `Effect.sleep` forked
  * into that same scope, so nothing is left armed behind a session that ended.
- * The four verbs {@link LiveVoiceCall} declares answer Effects rather than
- * Promises: the orchestrator above the peer runs each on the fiber it already
- * holds, so nothing here converts one to the other.
+ * The verbs {@link LiveVoiceCall} declares answer Effects rather than
+ * Promises, all but the output's silence, which waits on nothing: the
+ * orchestrator above the peer runs each on the fiber it already holds, so
+ * nothing here converts one to the other.
  */
 export class LiveCall implements LiveVoiceCall {
   readonly #options: LiveCallOptions;
@@ -158,6 +186,8 @@ export class LiveCall implements LiveVoiceCall {
   #closing = false;
   #micLive = false;
   #lukeSpeaking = false;
+  /** Whether Luke's playback is silenced by a stop, until the utterance it was pressed in ends. */
+  #outputSilenced = false;
   /**
    * The pair last handed to the policy. The status alone cannot stand in for
    * it: the microphone opening under Luke's own sentence moves a speaker and
@@ -253,9 +283,28 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   /**
+   * The stop's silence, per the server-controls guide: playback is muted at
+   * the element, not the track, so the meter still hears the utterance the
+   * stop was pressed in and can tell when it ends. A WebRTC track has no
+   * queue of its own to discard, since what the element did not play while
+   * muted is dropped rather than held, so playback resumes on live audio.
+   * The recovery is the speaking hangover running out: Luke's track quiet
+   * for that long is the silenced utterance over, and whatever he says
+   * after it is heard from its first word.
+   */
+  silenceOutput(): void {
+    if (!this.standing || !this.#lukeSpeaking || this.#outputSilenced) return;
+    this.#outputSilenced = true;
+    this.#options.onOutputSilenced?.(true);
+  }
+
+  /**
    * The graceful hang-up the conversations guide prescribes: the closed
-   * handler already stands, `session.close` goes, and everything stays open
-   * until `session.closed` arrives or the bound passes.
+   * handler already stands, `session.close` goes from its one owner, and
+   * everything stays open until `session.closed` arrives or the bound
+   * passes. Where the service owns the close the microphone goes at the
+   * hang-up itself, since the wait is the service's and no word the
+   * developer says after hanging up is theirs to have heard.
    */
   close(): Effect.Effect<void> {
     return this.#closeEffect();
@@ -283,6 +332,7 @@ export class LiveCall implements LiveVoiceCall {
     this.#speakingHangover = this.#arm(SPEAKING_HANGOVER_MS, () => {
       this.#speakingHangover = undefined;
       this.#lukeSpeaking = false;
+      this.#restoreOutput();
       this.#refreshStatus();
     });
   }
@@ -329,8 +379,15 @@ export class LiveCall implements LiveVoiceCall {
         event.end_ms,
       ),
     [LIVE_SERVER_EVENT.ERROR]: (event) => {
-      const about = event.client_event_id ?? event.error.client_event_id;
+      const about = liveErrorCommand(event);
       if (about !== undefined && this.#pendingSwitch?.eventId === about) this.#settleSwitch(false);
+      // An error no command answers for is still written down, as its kind
+      // and code alone; a session it ends is said through its close.
+      if (generalLiveError(event)) {
+        Effect.runForkWith(this.#services)(
+          Effect.logWarning(`voice error: ${liveErrorFields(event)}`),
+        );
+      }
     },
   };
 
@@ -406,7 +463,7 @@ export class LiveCall implements LiveVoiceCall {
     return Effect.gen({ self: this }, function* () {
       for (let muting = this.#muting; muting; muting = this.#muting) yield* Deferred.await(muting);
       const peer = this.#peer;
-      if (!peer || !this.#started || this.#ended) return false;
+      if (!peer || !this.#started || this.#ended || this.#closing) return false;
       if (!peer.microphoneStream) {
         const epoch = this.#muteEpoch;
         const stream = yield* Effect.tryPromise(() => this.#options.openMicrophone()).pipe(
@@ -464,15 +521,20 @@ export class LiveCall implements LiveVoiceCall {
       const peer = this.#peer;
       if (!peer || this.#ended || this.#closing) return;
       this.#closing = true;
+      const byService = this.#options.closeOwner === LIVE_CLOSE_OWNER.SERVICE;
+      const dropped = byService ? this.#dropMicrophone(peer) : undefined;
       this.#setStatus(LIVE_STATUS.CLOSING);
-      // A channel that cannot carry the close leaves the hang-up to the host,
-      // whose sideband can still close the session gracefully.
+      if (byService) this.#options.acts.endSession();
+      // The silence goes back on the line, so the timeline the close drains on keeps running.
+      if (dropped) yield* this.#takeOffLine(peer, dropped);
+      // A channel that cannot carry the close, or its `session.closed`, leaves
+      // the hang-up to the host, whose sideband can still close the session.
       if (!this.#started || peer.channel.readyState !== "open") {
-        this.#options.acts.endSession();
+        if (!byService) this.#options.acts.endSession();
         this.#tearDown(LIVE_STATUS.IDLE, LIVE_PEER_END_REASON.HUNG_UP);
         return;
       }
-      this.#send(closeEvent(this.#nextId()));
+      if (!byService) this.#send(closeEvent(this.#nextId()));
       const answered = yield* Effect.timeoutOption(
         Deferred.await(this.#announcedClose),
         Duration.millis(SESSION_CLOSE_TIMEOUT_MS),
@@ -657,10 +719,39 @@ export class LiveCall implements LiveVoiceCall {
     }
     this.#micLive = false;
     this.#lukeSpeaking = false;
+    // Note that the element outlives the call, so a silence left standing
+    // would mute the next call's first words.
+    this.#restoreOutput();
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
     this.#setStatus(status);
     Deferred.doneUnsafe(this.#ending, Exit.void);
+  }
+
+  /** Lifts a stop's silence, where one stands. */
+  #restoreOutput(): void {
+    if (!this.#outputSilenced) return;
+    this.#outputSilenced = false;
+    this.#options.onOutputSilenced?.(false);
+  }
+
+  /**
+   * The hang-up's own release of the microphone, stopped in this turn rather
+   * than after a swap: an unmute still waiting is given up, and a device
+   * still opening learns of it from the epoch. Answers the stopped device,
+   * for the caller to put the silence back on the line in its place.
+   */
+  #dropMicrophone(peer: LivePeer): MediaStream | undefined {
+    this.#muteEpoch += 1;
+    this.#settleSwitch(false);
+    this.#micLive = false;
+    const stream = peer.microphoneStream;
+    if (!stream) return undefined;
+    stopDevice(stream);
+    peer.microphone = undefined;
+    peer.microphoneStream = undefined;
+    this.#options.onLocalStream(undefined);
+    return stream;
   }
 
   /** Takes the device off the sending line, silence in its place, and stops it, so the system's indicator goes out with the key. */

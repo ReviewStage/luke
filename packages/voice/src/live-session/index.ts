@@ -6,11 +6,15 @@ export {
   type SidebandCloseResult,
 } from "./graceful-close.js";
 export {
+  LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
   type LiveBrainAsk,
+  type LiveBrainCancel,
+  type LiveBrainRecoveredRun,
+  type LiveBrainRecovery,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,

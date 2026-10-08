@@ -619,13 +619,18 @@ endpoint resolves the bearer first, and every statement in
 `server/hosted/plan-store.ts` names the account beside the plan, so another
 account's plan answers exactly as none does.
 
-Nothing in the group writes a document. The one writer is the planning
-model's `update_plan({ body, assumptions })` (`server/hosted/update-plan-tool.ts`),
-run under a binding of account and plan the service built rather than
-anything the model sends, and answering the document as saved or why nothing
-was: a malformed call, a plan deleted meanwhile, which a save never
-recreates because it is an `update` over the row that stands, and a store
-that could not be reached, each leaving the prior document in place.
+Nothing in the group writes a document. The one writer is a planning call's
+notetaker (`server/voice/plan-scribe.ts`), whose model answers with notes on
+the fixed template (`packages/hosted/src/plan-template.ts`): a point added
+under a field, an example added to a rule, a phrase corrected, or a line
+struck. `saveNotes` (`server/hosted/plan-notes.ts`) takes them in order over
+the fields the plan holds, passing over a note that names a phrase the plan
+does not hold, formats the body, and saves it under a binding of account and
+plan the service built rather than anything the model sends, answering the
+document as saved or why nothing was: a body past its bound once formatted,
+a plan deleted meanwhile, which a save never recreates because it is an
+`update` over the row that stands, and a store that could not be reached,
+each leaving the prior document in place.
 `readPlan` is the read the planning model starts and resumes from, with the
 conversation `attachPlanConversation` associated, and it moves nothing.
 `tests/hosted-plans.test.ts` and `tests/plans-app.test.ts` hold both halves
@@ -638,16 +643,15 @@ relay, and the store are unchanged, and for a plan conversation the host
 swaps three things (`server/hosted/brain-host/planning.ts`): the prompt is the
 authored planning instructions, the standing context each turn opens with is
 the plan's repository, commit, and saved document read again from the row,
-and the tools are the planning list alone, `update_plan` bound to the plan
-the conversation belongs to (`readPlanOfConversation`), and
-`run_in_repository` under the same binding, with the two public research
-reads beside them, and `queue_question` (`server/hosted/queue-question.ts`),
+and the tools are the planning list alone: `run_in_repository` bound to the
+plan the conversation belongs to (`readPlanOfConversation`), with the two
+public research reads beside it, and `queue_question` (`server/hosted/queue-question.ts`),
 which runs nothing: its journaled call is how a question reaches the voice
 while the turn still runs. A resumed session is seeded with the
 conversation so far like any other. A plan conversation primes and flushes no
 notebook, and never reaches the panel's reads, which name their kinds. The
 writer holds rows to `HOSTED_TOOL_SET`, the catalog and the planning tools,
-so a turn's `update_plan` calls are written and read back like any tool's.
+so a turn's planning calls are written and read back like any tool's.
 Question choice, agreement, assumption flags, and corrections are the
 instructions' alone: no code reads the document for meaning.
 
@@ -951,13 +955,18 @@ Conversation from another session's. From then on the relay is a pipe: OpenAI fr
 device untouched except `session.input_audio.append` and
 `session.output_audio.delta`, dropped by type so on this route and the
 introduction's the developer's voice and Luke's never transit the service (the
-audio route below is the one place they do); and from the device exactly four frames
-(`frames.ts`, `SESSIONS_CLIENT_EVENTS` and `SESSIONS_REPORT_FRAMES`): the
-graceful hang-up's `session.close`, forwarded untouched, and three in the
-service's own vocabulary, read here and handed to the exchange rather than
-forwarded: `session.activity`, the peer's idle report; `session.stop`, the
+audio route below is the one place they do); and from the device nothing
+forwarded at all (`frames.ts`): the hang-up (`SESSIONS_HANG_UP_FRAMES`), a
+Mac's `session.hangup` or a phone's own `session.close`, is read as an ask for
+the close the exchange sends itself (below), and three frames in the
+service's own vocabulary (`SESSIONS_REPORT_FRAMES`) are read here and handed
+to the exchange rather than forwarded: `session.activity`, the peer's idle report; `session.stop`, the
 stop key, which the exchange answers with the one instruction it appends
-itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone); and
+itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone) and by
+blocking every exchange of the session: no reply delegated before the press
+is spoken, and each run still under way is cancelled through `stopAsk`, the
+typed Stop's own path, the voice told silently (`STOPPED_RUN_NOTE`) only once
+the cancel was taken; and
 `session.beat`, an onboarding beat or the launch greeting the device decided
 is owed, carrying the kind and the bounded observed values its script may
 mention (one working session's title, the talk key's label, the account's
@@ -1148,14 +1157,40 @@ turn only once it starts; the brain follows the ask through `askStanding` on
 a schedule, projects its turn's events with the same `projectTurnEvents` C7's
 stream serves, and translates each back to the ask's id. There is no HTTP hop
 and so no second function ceiling to re-attach across. Each follow is a fiber of the socket's own scope, so
-the socket detaching interrupts it and nothing is emitted after. A turn that
+the socket detaching interrupts it and nothing is emitted after. What the
+detach cut short is not lost with it: a spoken ask's row carries the voice
+session it was delegated in and its revision there, how far its turn was told
+(`told_seq`, short of the end), and when its end was told (`end_told_at`), each
+written before the voice hears it. A connection that re-attaches to the session
+adopts it as started and asks the brain to recover it (`recoverRuns`): every
+ask of that session whose end was not told comes back as its exchange, under
+its own delegation and revision, and is followed again from the event after
+the last one told. The session's revisions go on from the newest recorded, so
+an older run stays superseded; a run whose turn carries a Stop comes back
+silenced; and so does one whose turn settled more than `VOICE_DETACH_GRACE_MS`
+before the re-attach, past which the reply is no longer news. Written before it
+is told, a telling the detach cut between the write and the voice is lost and
+never said twice. A turn that
 does not end inside the follow bound, or an ask the record no longer holds,
 is told as a failed end so the exchange settles rather than waiting forever. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
-mid-turn is the slow step, each question a planning turn queued, and the
-actions settling. eve folds asks that waited together into one turn, so
-several follows can project one turn: the first to reach it tells it, and
-the rest tell only its end, so a reply is never said once per folded ask. A refusal at the door is
+mid-turn is the slow step, each question a planning turn queued, the
+actions settling, and, as the live brain's own and no event of the stream,
+each look's count of the turn's settled calls with the kind of the latest
+(`STEP_SETTLED`), never a call's input or output, which the service words as
+a build-fixed quiet progress note no sooner than `PROGRESS_NOTE_BOUNDS.GAP_MS`
+after the exchange's last and at most `PER_EXCHANGE` times. A reply's
+commentary the voice session refused is sent once more under a fresh id and,
+refused again, reported; one left unanswered is reported and never resent,
+since a pending append may still reach the timeline. eve folds asks that waited together into one turn, so
+several follows can project one turn: the newest ask tells it, since the
+service speaks only the newest request's reply, and the rest tell only its
+end, so a reply is never said once per folded ask. Each delegation is an
+exchange of its own in the service, a revision of the request: a newer one
+silences the older exchange's reply, slow-step note, and end note, and leaves
+its run to finish rather than cancelling it, because a planning call
+delegates every answer while the exploration it began still runs; the
+questions a silenced run queues are still handed on. A refusal at the door is
 spoken as the build's own note for it, never composed with the ask. One
 spoken ask leaves one developer line: the transcript's row, cut at the
 delegation by the voice writer under the delegation's id. Eve's received
@@ -1344,11 +1379,19 @@ it, writes the row's `closed_at`, `close_reason`, and
 `recordVoiceSeconds` in `server/hosted/quota.ts`
 — the session row is the idempotency ledger: the seconds land only where none
 stand yet, so a report seen by two connections adds nothing — and closes both
-ends. A device hangs up by sending `session.close` itself, which the relay
-forwards and then holds the sideband for `session.closed` for 15 seconds, the
-docs' close sequence; a device socket that goes after that, or after a refused
-frame, or on the audio or introduction route, has `session.close` sent on its
-behalf on the same terms. A sessions-route socket that goes with neither is a
+ends. On this route the session's one `session.close` is the exchange's, as
+the server-controls guide asks one owner per action ("Assign one owner for
+each action"): a device hangs up by asking for it, and the relay hands the ask
+to the exchange's graceful close, the same one its idle decision runs, which
+registers for `session.closed` before it sends and holds the sideband for it
+for 15 seconds, the docs' close sequence. Neither the Mac's voice window, nor
+its host, nor the relay sends a close of its own; the window stops its
+microphone at the hang-up and keeps its peer up for `session.closed` under
+the same bound, then closes the peer, which OpenAI ends as `remote_hangup`
+where no close reached it. A device socket that goes after a hang-up, or
+after a refused frame, asks the same owner once more, which sends nothing
+twice. The audio and introduction routes, with no such owner, have
+`session.close` sent on the device's behalf by the relay on the same terms. A sessions-route socket that goes with neither is a
 detach (above): nothing is sent, nothing is recorded, and the unconfirmed
 snapshot stands until a re-attached connection reads `session.closed`. A
 detached session is bounded all the same, since a caller can drop the socket

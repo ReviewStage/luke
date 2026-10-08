@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { EMPTY_PLAN_UPDATE, planBody } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
 import { ACT_KIND, parsedAct } from "./messages/acts";
@@ -55,7 +55,7 @@ test("a draft of the fixed template copies every section in order, its unanswere
       name: "Teammate invitations",
     },
     {
-      ...EMPTY_PLAN_UPDATE,
+      ...EMPTY_PLAN_FIELDS,
       rules: [{ statement: "An accepted invite is never reused.", examples: null }],
     },
   );

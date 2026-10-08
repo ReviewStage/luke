@@ -11,6 +11,7 @@ import {
 } from "@sidecar/wire";
 import type { UIMessage } from "ai";
 import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
+import { spokenProse } from "./spoken-prose.js";
 import { BRAIN_TOOL } from "./tools.js";
 import type { BrainTurnTrigger } from "./turn.js";
 
@@ -58,6 +59,8 @@ export const BRAIN_RUN_EVENT = {
   REASONING_COMPLETED: "reasoning_completed",
   /** A message of the turn is complete: the words the turn opened with, words steered in, or the model's finished answer. */
   MESSAGE_COMPLETED: "message_completed",
+  /** A step's words so far, cut at their last finished sentence, while the turn still runs; the completed answer carries them whole. */
+  TEXT_DRAFTED: "text_drafted",
   /** The context was folded, before the turn's first inference or inside the run. */
   COMPACTION_COMPLETED: "compaction_completed",
   /** The turn's execution is over, however it ended. */
@@ -227,6 +230,13 @@ export type BrainRunEventBody =
     }
   | { readonly kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED; readonly message: UIMessage }
   | {
+      readonly kind: typeof BRAIN_RUN_EVENT.TEXT_DRAFTED;
+      /** The step the words belong to, numbered from one as `STEP_STARTED` numbers it. */
+      readonly step: number;
+      /** Every word the step has formed so far, through its last finished sentence; it only grows. */
+      readonly text: string;
+    }
+  | {
       readonly kind: typeof BRAIN_RUN_EVENT.COMPACTION_COMPLETED;
       readonly compaction: TurnCompaction;
     }
@@ -277,10 +287,48 @@ export function slowStepOf(policy: EffectiveToolPolicy, name: string): SlowStepK
 }
 
 const SENTENCE_BOUNDARY = /(?<=[.!?…]["'”’)\]]*)\s+|\n+/;
+const SENTENCE_BOUNDARIES = new RegExp(SENTENCE_BOUNDARY.source, "g");
 
-/** A reply as the sentences it is spoken in: split at sentence ends and line breaks, each trimmed, none empty. */
+/**
+ * A delimiter left on a line once its Markdown is taken out that a later
+ * delimiter could still close: a star or underscore run opening on a word, a
+ * strikethrough, a tick, or a link's bracket. Note that this errs toward
+ * waiting, since a sentence held to its line's end is only later, while one
+ * said before its span closed is said with the syntax in it.
+ */
+const OPEN_SPAN = /\*+(?=[^\s*])|(?<![\w_])_+(?=[^\s_])|~~(?=\S)|`|\[/u;
+
+/**
+ * Words still forming, cut where their last finished sentence ends, so the
+ * sentences of the cut are the first sentences of every text the words can
+ * grow into. A finished line is always finished. Inside the line still
+ * forming, a sentence end counts only where the words up to it read aloud
+ * as the start of what the line reads now and leave no span open, because a
+ * list marker or emphasis closed later changes how the line before it is
+ * read. Empty while no sentence has finished.
+ */
+export function finishedSentencesOf(forming: string): string {
+  const lineStart = forming.lastIndexOf("\n") + 1;
+  const spoken = spokenProse(forming);
+  const ends = [...forming.slice(lineStart).matchAll(SENTENCE_BOUNDARIES)].map(
+    (boundary) => lineStart + boundary.index,
+  );
+  for (const end of ends.reverse()) {
+    const said = spokenProse(forming.slice(0, end));
+    const line = said.slice(said.lastIndexOf("\n") + 1);
+    if (spoken.startsWith(said) && !OPEN_SPAN.test(line)) return forming.slice(0, end);
+  }
+  return forming.slice(0, Math.max(lineStart - 1, 0));
+}
+
+/**
+ * A reply as the sentences it is spoken in: its Markdown taken out, split at
+ * sentence ends and line breaks, each trimmed, none empty. The syntax goes
+ * before the split, so emphasis that spans a sentence end is still read as a
+ * pair and a list item is still a line of its own.
+ */
 export function replySentences(text: string): readonly string[] {
-  return text
+  return spokenProse(text)
     .split(SENTENCE_BOUNDARY)
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 0);

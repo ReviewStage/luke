@@ -26,13 +26,11 @@ import { NO_ASSUMPTIONS_LINE } from "./planning-model";
  * the scrolled document and never the surface.
  */
 
-/** The document the chase was last aimed at, the save and call it was aimed under, and where its typing stands. */
+/** The document the chase was last aimed at, and where its typing stands. */
 interface Chase {
   readonly planId: string;
   readonly body: string;
   readonly assumptions: readonly string[];
-  readonly updatedAt: number;
-  readonly live: boolean;
   readonly state: ChaseState;
 }
 
@@ -65,35 +63,21 @@ function sameTexts(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((text, index) => text === right[index]);
 }
 
-function opened(plan: Plan, live: boolean): Chase {
+function opened(plan: Plan): Chase {
   const { body, assumptions } = plan.document;
-  const { id: planId, updatedAt } = plan;
-  return {
-    planId,
-    body,
-    assumptions: textsOf(assumptions),
-    updatedAt,
-    live,
-    state: chaseOpened(body),
-  };
+  return { planId: plan.id, body, assumptions: textsOf(assumptions), state: chaseOpened(body) };
 }
 
-/**
- * The chase aimed at the plan as handed over now: a new target for the same
- * plan, a fresh start for another. A save, which moves the plan's
- * `updatedAt`, or the call ending settles every unit, since nothing is
- * streaming any more.
- */
-function aimed(chase: Chase, plan: Plan, live: boolean): Chase {
-  if (chase.planId !== plan.id) return opened(plan, live);
+/** The chase aimed at the plan as handed over now: a new target for the same plan, a fresh start for another. */
+function aimed(chase: Chase, plan: Plan): Chase {
+  if (chase.planId !== plan.id) return opened(plan);
   const { body } = plan.document;
   const assumptions = textsOf(plan.document.assumptions);
   const added = { before: chase.assumptions, after: assumptions };
-  const settle = plan.updatedAt !== chase.updatedAt || !live;
   // Read at the retarget rather than held, since it is the one moment it decides anything.
-  const aim = { reduced: prefersReducedMotion(), settle };
+  const aim = { reduced: prefersReducedMotion() };
   const state = chaseRetargeted(chase.state, body, added, aim);
-  return { planId: plan.id, body, assumptions, updatedAt: plan.updatedAt, live, state };
+  return { planId: plan.id, body, assumptions, state };
 }
 
 /**
@@ -102,16 +86,14 @@ function aimed(chase: Chase, plan: Plan, live: boolean): Chase {
  * the typing carries on toward it without a jump.
  */
 function usePlanChase(plan: Plan, live: boolean): PlanChase {
-  const [chase, setChase] = useState(() => opened(plan, live));
+  const [chase, setChase] = useState(() => opened(plan));
   let current = chase;
   const moved =
     chase.planId !== plan.id ||
     chase.body !== plan.document.body ||
-    chase.updatedAt !== plan.updatedAt ||
-    chase.live !== live ||
     !sameTexts(chase.assumptions, textsOf(plan.document.assumptions));
   if (moved) {
-    current = aimed(chase, plan, live);
+    current = aimed(chase, plan);
     setChase(current);
   }
   const behind = chaseBehind(current.state);
@@ -203,11 +185,9 @@ export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.J
   return (
     <div ref={scroller} className="plan-document-scroll">
       <div className="plan-body">
-        {views.map((view, index) => (
+        {views.map((view) => (
           <MarkdownMessage
-            // The template's order is fixed, so a unit's position is its identity from one document to the next.
-            // oxlint-disable-next-line react/no-array-index-key -- the template's order is the unit's identity.
-            key={index}
+            key={view.id}
             words={view.words}
             className={unitClass(view)}
             edit={view.edit}

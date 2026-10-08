@@ -1350,13 +1350,17 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     usage: nullable(event.usage),
     responseIds: event.responseIds,
   });
+  // A journal still open here belongs to a turn that answered nothing, so
+  // the words its steps formed while it ran leave it, and what it keeps is
+  // what it did.
   const open = yield* messageByClientId(context, event.turnId);
   if (Option.isSome(open) && open.value.finishedAt === null) {
-    const parts = open.value.parts.map((part) =>
-      isStoredToolPart(part) && !isSettledToolPartState(part.state)
-        ? unansweredToolPart(part, event.status)
-        : part,
-    );
+    const parts = open.value.parts.flatMap((part) => {
+      if (part.type === UI_PART_TYPE.TEXT) return [];
+      return isStoredToolPart(part) && !isSettledToolPartState(part.state)
+        ? [unansweredToolPart(part, event.status)]
+        : [part];
+    });
     yield* finishMessage({
       id: open.value.id,
       conversationId: context.target.conversationId,
@@ -1456,6 +1460,41 @@ const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
+ * A step's words so far join the journal as the one text part of that step,
+ * written in place as they grow, so the voice can say a finished sentence
+ * while the turn still runs. The words only grow: what the part already
+ * holds, or more, is a repeat. A step the journal holds no boundary for is
+ * not the journal's, and its words are left to the completed answer.
+ */
+const textDrafted = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TEXT_DRAFTED }>,
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const opened = yield* journal(context, event.turnId);
+  if (Result.isFailure(opened)) return Result.fail(opened.failure);
+  const row = opened.success;
+  if (row.finishedAt !== null) return Result.fail({ refusal: STORE_WRITE_REFUSAL.FINISHED });
+  const boundaries = row.parts.flatMap((part, index) =>
+    part.type === UI_PART_TYPE.STEP_START ? [index] : [],
+  );
+  const start = boundaries[event.step - 1];
+  if (start === undefined) return Result.succeed(STORE_WRITE_EFFECT.IGNORED);
+  const end = boundaries[event.step] ?? row.parts.length;
+  const at = row.parts.findIndex(
+    (part, index) => index > start && index < end && part.type === UI_PART_TYPE.TEXT,
+  );
+  const held = row.parts[at];
+  if (held?.type === UI_PART_TYPE.TEXT && held.text.length >= event.text.length) {
+    return Result.succeed(STORE_WRITE_EFFECT.REPEATED);
+  }
+  const part = { type: UI_PART_TYPE.TEXT, text: event.text, state: UI_PART_STATE.DONE } as const;
+  const parts = [...row.parts];
+  if (at === -1) parts.splice(end, 0, part);
+  else parts[at] = part;
+  return yield* amendJournal(context, row, parts);
+});
+
+/**
  * A completed message: a user message lands as its own row by its id; the
  * turn's answer closes the turn's journal, its parts replaced whole by the
  * projection the turn told, since the projection is the message as the
@@ -1541,6 +1580,8 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
       return reasoningCompleted(context, event);
     case BRAIN_RUN_EVENT.MESSAGE_COMPLETED:
       return messageCompleted(context, event);
+    case BRAIN_RUN_EVENT.TEXT_DRAFTED:
+      return textDrafted(context, event);
     // The rest of the stream is the relay's, about a run's moments rather
     // than the record.
     case BRAIN_RUN_EVENT.COMPACTION_COMPLETED:

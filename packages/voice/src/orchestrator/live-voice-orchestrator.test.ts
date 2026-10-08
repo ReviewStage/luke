@@ -39,6 +39,8 @@ class FakeCall implements LiveVoiceCall {
   openings: LiveVoiceCallOpening[] = [];
   unmutes = 0;
   mutes = 0;
+  /** How many times Luke's playback was silenced on this device. */
+  silences = 0;
   closes = 0;
   opensSucceed = true;
   /** Where closing waits before it is done, as a real peer's close does. */
@@ -88,6 +90,10 @@ class FakeCall implements LiveVoiceCall {
     return Effect.succeed(true);
   }
 
+  silenceOutput(): void {
+    this.silences += 1;
+  }
+
   close(): Effect.Effect<void> {
     this.closes += 1;
     this.settle(LIVE_STATUS.IDLE);
@@ -127,6 +133,7 @@ function fixture(
   let microphoneAsks = 0;
   let microphoneAsk: (() => Effect.Effect<boolean>) | undefined;
   const stops: number[] = [];
+  const silencedAtStops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
     ...options,
     services: Context.empty(),
@@ -144,6 +151,7 @@ function fixture(
       stopSpeaking: () =>
         Effect.sync(() => {
           stops.push(calls[calls.length - 1]?.mutes ?? 0);
+          silencedAtStops.push(calls[calls.length - 1]?.silences ?? 0);
           return true;
         }),
     },
@@ -180,6 +188,8 @@ function fixture(
     microphoneAsks: () => microphoneAsks,
     /** The call's mute count at each moment the host was told to stop: what was sent first. */
     stops,
+    /** The call's silence count at each moment the host was told to stop: whether Luke went quiet first. */
+    silencedAtStops,
     latest: () => calls[calls.length - 1],
   };
 }
@@ -320,10 +330,13 @@ it.effect(
       assert.equal(yield* f.stopSpeaking(), true);
       assert.deepEqual(f.stops, []);
       assert.equal(call.mutes, 1);
+      assert.equal(call.silences, 0);
       call.settle(LIVE_STATUS.SPEAKING);
       assert.equal(yield* f.stopSpeaking(), true);
       assert.deepEqual(f.stops, [1]);
       assert.equal(call.mutes, 2);
+      // Luke is silenced on the Mac before the model is even told.
+      assert.deepEqual(f.silencedAtStops, [1]);
     }),
 );
 
@@ -336,6 +349,21 @@ it.effect("the talk key's release mutes and never tells the host to stop", () =>
     yield* f.endTalk();
     assert.equal(f.latest()?.mutes, 1);
     assert.deepEqual(f.stops, []);
+  }),
+);
+
+it.effect("the talk key's release while Luke answers leaves his voice playing", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const call = f.latest();
+    assert.ok(call);
+    call.started();
+    yield* Fiber.join(pressed);
+    call.report(LIVE_STATUS.SPEAKING, { listening: true, lukeSpeaking: true });
+    yield* f.endTalk();
+    assert.equal(call.mutes, 1);
+    assert.equal(call.silences, 0);
   }),
 );
 
@@ -852,6 +880,7 @@ it.effect(
 
       yield* f.stopCall();
       assert.deepEqual(f.stops, [0]);
+      assert.deepEqual(f.silencedAtStops, [1]);
       assert.equal(call.mutes, 1);
       assert.equal(call.status, LIVE_STATUS.IDLE);
       yield* settleFibers();

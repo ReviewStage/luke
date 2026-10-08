@@ -35,7 +35,6 @@ import { createPlan, readPlan, savePlanDocument } from "../server/hosted/plan-st
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
-  ESTIMATED_CHARS_PER_TOKEN,
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_AUDIO_APPEND,
   LIVE_INPUT_BOUNDS,
@@ -48,6 +47,7 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
   sessionInstructions,
+  startupTokens,
 } from "../server/live";
 import { deploymentExchange } from "../server/voice/deployment-exchange";
 import { VOICE_ROUTE } from "../server/voice/frames";
@@ -784,8 +784,79 @@ it.effect(
       const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
       assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
       assert.equal(ended.reportsRead, 2);
-      // The hang-up's own `session.close` is the one device frame that went up.
-      assert.equal(ended.framesToUpstream, 1);
+      // The hang-up is an ask, never forwarded: the close that went up was the exchange's own.
+      assert.equal(ended.framesToUpstream, 0);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "the session's one close is the exchange's: a Mac's hang-up, a phone's session.close, and the socket going after them put exactly one session.close up, and its session.closed is recorded",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context);
+      const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await sendText(session.attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
+      assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_STARTED);
+
+      await send(session.desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_HANG_UP });
+      const closing = clientEvent(await session.upstream.next(5_000));
+      assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+      // A phone's own close, and the socket going, ask again and send nothing more.
+      await hangUpDevice(session.desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+      await sendText(
+        session.attach.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+          event_id: "closed",
+          reason: "close_requested",
+          usage: { seconds: 9 },
+        }),
+      );
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+      assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
+      assert.equal(ended.framesToUpstream, 0);
+      assert.equal(ended.finalization, FINALIZATION.CONFIRMED);
+      assert.equal(ended.seconds, 9);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a phone's own session.close and its socket going after it are one ask: the exchange's close is the only one that goes up",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context);
+      const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await sendText(session.attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
+      assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_STARTED);
+      const phoneClose = { type: LIVE_CLIENT_EVENT.CLOSE, event_id: "phone-close" } as const;
+      await send(session.desktop.socket, phoneClose);
+      session.desktop.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+      const closing = clientEvent(await session.upstream.next(5_000));
+      assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+      assert.notEqual(closing.event_id, phoneClose.event_id);
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+      await sendText(
+        session.attach.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+          event_id: "closed",
+          reason: "close_requested",
+          usage: { seconds: 3 },
+        }),
+      );
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
       await context.stop();
     }),
 );
@@ -1323,7 +1394,7 @@ function seededTexts(context: Stand, index: number): Array<{ role: unknown; text
 }
 
 it.effect(
-  "a planning call opens knowing its saved plan: the name, the document, and its assumptions, and a document past the startup bound is cut from its end",
+  "a planning call opens knowing its saved plan: the name, the document, and its assumptions, and a document past the startup bound, alone or in any script, is cut from its end and never refused",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
@@ -1363,11 +1434,33 @@ it.effect(
       const longText = String(longSeed?.text);
       assert.ok(longText.includes("Billing export"));
       assert.ok(!longText.includes(tail));
-      assert.ok(longText.length <= LIVE_INPUT_BOUNDS.TOKENS * ESTIMATED_CHARS_PER_TOKEN);
+      assert.ok(startupTokens(longText) <= LIVE_INPUT_BOUNDS.TOKENS);
       await hangUpConnection(cut.desktop, cut.attach, cut.upstream);
+
+      // A body past the bound on its own is still cut and never refused: a
+      // CJK character is a token of its own, so twenty thousand of them are
+      // more than twice the room, where four characters to a token let all of
+      // them through.
+      const wide = await database.run(
+        createPlan(context.target.userId, { ...PLAN, name: "請求書の書き出し" }),
+      );
+      await database.run(
+        savePlanDocument(context.target.userId, wide.id, {
+          body: `# 請求書の書き出し\n\n${"請求書を書き出す。".repeat(2_500)}\n${tail}\n`,
+          assumptions: [],
+        }),
+      );
+      const wideCall = await openSession(context, wide.id);
+      const [wideSeed, ...wideRest] = seededTexts(context, 2);
+      assert.deepEqual(wideRest, []);
+      const wideText = String(wideSeed?.text);
+      assert.ok(wideText.includes("請求書の書き出し"));
+      assert.ok(!wideText.includes(tail));
+      assert.ok(startupTokens(wideText) <= LIVE_INPUT_BOUNDS.TOKENS);
+      await hangUpConnection(wideCall.desktop, wideCall.attach, wideCall.upstream);
       await until(
-        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
-        () => `both calls to be reported ended; log ${JSON.stringify(context.log)}`,
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 3,
+        () => `all three calls to be reported ended; log ${JSON.stringify(context.log)}`,
       );
       await context.stop();
     }),

@@ -1,3 +1,4 @@
+import { PLAN_FIELD, PLAN_FIELD_PURPOSE } from "@sidecar/hosted/plan-template";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
@@ -5,6 +6,7 @@ import { Effect, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
+import type { PlanDocumentBinding } from "../plan-notes.js";
 import type { StoredPlan } from "../plan-store.js";
 import {
   READ_WEB_PAGE_TOOL,
@@ -15,7 +17,6 @@ import {
 } from "../public-research.js";
 import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL, runInRepository } from "../repository-shell.js";
-import type { PlanDocumentBinding } from "../update-plan-tool.js";
 import type { HostedToolDeclaration } from "./tools.js";
 
 /**
@@ -124,26 +125,37 @@ Once it is, queue nothing more: any question Luke still holds is moot. Open your
 Return the relevant facts, any sketch, view, or explanation for Luke, the task's current status, and any queued question an answer has made moot, so Luke drops it. Don't repeat the questions you queued: Luke already holds them. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
 `;
 
+/** Each field a note may be taken under, and what it holds, one line apiece for the notetaker. */
+const SCRIBE_FIELDS = Object.values(PLAN_FIELD)
+  .map((field) => `- ${field}: ${PLAN_FIELD_PURPOSE[field]}`)
+  .join("\n");
+
 /**
  * The instructions the plan's notetaker runs under: the scribe that listens
- * to a planning call and writes the document while Luke and the developer
- * talk (`apps/web/server/voice/plan-scribe.ts`). It decides nothing of the
- * conversation; it records what was said, in the template's fields.
+ * to a planning call and takes notes into the plan while Luke and the
+ * developer talk (`apps/web/server/voice/plan-scribe.ts`). It decides nothing
+ * of the conversation; it records what was said, one note at a time.
  */
 export const SCRIBE_INSTRUCTIONS = `
-You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You write the plan document while they talk.
+You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You take notes into the plan while they talk, the way a person takes notes on a call: each new point written under the heading it belongs to, a correction made where the old words stand, and a retracted point struck.
 
 The goal is a plan detailed enough that a separate agent could implement it without having heard the call, and two different agents would implement it the same way.
 
-You are handed the saved document, the call's latest lines, and Luke's research notes. Answer with the fields of the fixed template that the latest lines change:
+You are handed the saved plan as its fields, the call's latest lines, and Luke's research notes. Answer with the notes the latest lines call for, in the order they were said:
+
+- add: a new point under a field. In a text field it is one Markdown bullet, a line or two, added after what the field holds. In openQuestions or assumptions it is one item. In rules it is one rule's statement, one sentence that holds in every case.
+- addExample: a concrete example pinning a rule, given, when, and then, the rule named by its number.
+- replace: a correction, where the developer corrected something the plan holds. find is a phrase copied exactly from the saved field, as short as names one place; text is what it becomes.
+- remove: a point the developer retracted. find is a phrase copied exactly from the line, item, rule, or example to strike.
 
 - Write only what the developer stated, agreed to, or clearly implied. Luke's proposals and research count once the developer has agreed to them. Never write a guess.
-- Send only the fields that change. A field left out keeps its saved value, and so does a field sent null: nothing you send erases an answer, and a correction rewrites the field. A list (rules, open questions, assumptions) is sent whole when any of it changes, each rule with all its examples.
-- When you send a field, copy every line and bullet you are not changing exactly as it stands in the saved document, in the same order, so only what changed differs.
+- Never restate or reword a point the plan already holds. A note is only what is new or what changed.
 - Keep exact names from Luke's research notes: file paths, functions, tables, commands.
-- Write each answer as a Markdown bullet list, one point per bullet and a line or two each, so the plan can be skimmed. Use a sentence of prose only where the whole answer is one short point.
-- Keep each field's words as tight as a good design document's.
-- When the latest lines change nothing, answer an empty object.
+- Keep each note as tight as a good design document's line.
+- When the latest lines change nothing, answer with no notes.
+
+The fields:
+${SCRIBE_FIELDS}
 
 Transcripts can contain mistakes, unfinished phrases, and later corrections. Follow the latest correction.
 `;

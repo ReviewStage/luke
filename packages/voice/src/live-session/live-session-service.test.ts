@@ -24,11 +24,15 @@ import { holdSocket, type SocketHold } from "../held-socket.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import {
+  LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
   type LiveBrainAsk,
+  type LiveBrainCancel,
+  type LiveBrainRecoveredRun,
+  type LiveBrainRecovery,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
@@ -36,9 +40,11 @@ import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record
 import {
   LiveSessionService,
   type LiveSessionStatus,
+  PROGRESS_NOTE_BOUNDS,
   ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
+  STOPPED_RUN_NOTE,
 } from "./live-session-service.js";
 
 /** The acknowledgment each append type earns, as the API names them. */
@@ -153,11 +159,29 @@ class FakeSideband implements LiveSideband {
   }
 }
 
+/** A recovery as the fake answers it: the session's newest revision, the runs taken up, and what their follow tells at once. */
+interface ScriptedRecovery {
+  readonly revision: number;
+  readonly runs: readonly LiveBrainRecoveredRun[];
+  readonly told: readonly LiveBrainRunEvent[];
+}
+
 class FakeBrain implements LiveBrain {
   readonly asks: LiveBrainAsk[] = [];
   refuse: string | undefined;
   /** While set, each ask is taken at once and answered only when this settles, as a brain across the network answers. */
   answerWhen: Deferred.Deferred<void> | undefined;
+  /** Every run the service asked to cancel, in order. */
+  readonly cancels: string[] = [];
+  /** What the backend says of a cancel, answered only once `cancelWhen` settles where it is set. */
+  cancel: LiveBrainCancel = LIVE_BRAIN_CANCEL.CANCELLED;
+  cancelWhen: Deferred.Deferred<void> | undefined;
+  /** What a re-attached session takes up, and the events its follow tells the moment it runs; none by default. */
+  recovery: ScriptedRecovery = {
+    revision: 0,
+    runs: [],
+    told: [],
+  };
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
@@ -170,6 +194,27 @@ class FakeBrain implements LiveBrain {
       }
       this.#runs += 1;
       return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
+    });
+  }
+
+  cancelRun(runId: string): Effect.Effect<LiveBrainCancel> {
+    return Effect.gen({ self: this }, function* () {
+      this.cancels.push(runId);
+      if (this.cancelWhen !== undefined) yield* Deferred.await(this.cancelWhen);
+      return this.cancel;
+    });
+  }
+
+  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+    return Effect.sync(() => {
+      const { revision, runs, told } = this.recovery;
+      return {
+        revision,
+        runs,
+        follow: Effect.sync(() => {
+          for (const event of told) this.fire(event);
+        }),
+      };
     });
   }
 
@@ -298,6 +343,8 @@ interface Fixture {
   /** Every sideband adopted so far, in order; the session adopted over the nth is `sess-n`. */
   sidebands: FakeSideband[];
   spoken: string[];
+  /** Every line the service reported, in order. */
+  reports: string[];
   /** Every status `onStatus` was told, in order. */
   statuses: LiveSessionStatus[];
   service: LiveSessionService;
@@ -313,12 +360,13 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const record = new FakeRecord();
     const sidebands: FakeSideband[] = [];
     const spoken: string[] = [];
+    const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
         createId: () => `id-${++ids}`,
-        report: () => undefined,
+        report: (message) => reports.push(message),
         onProactiveSpoken: (kind) => spoken.push(kind),
         onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
         onStatus: (status) => statuses.push(status),
@@ -331,6 +379,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       record,
       sidebands,
       spoken,
+      reports,
       statuses,
       service,
       open: () =>
@@ -824,7 +873,7 @@ it.effect(
 );
 
 it.effect(
-  "a delegation while the run is in flight steers it: one exchange, both runs, the reply under the newest id",
+  "a delegation while a run is in flight supersedes it: the older reply and its notes are never spoken, its queued questions still are, and the newest reply is said under its own id",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -837,32 +886,125 @@ it.effect(
       sideband.delegation("item_2", 2400);
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
+        runId: "run-1",
+        step: "provider_write",
+      });
       f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
         runId: "run-1",
-        sentence: "Two tests.",
+        sentence: "Two tests in the web repo.",
       });
-      yield* settle();
-      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(commentary.length, 1);
-      assert.equal(
-        commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
-        "item_2",
-      );
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-1",
+        question: "Fix both?",
+        recommendation: "Yes.",
+      });
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.ENDED,
         runId: "run-1",
-        end: LIVE_BRAIN_RUN_END.COMPLETED,
+        end: LIVE_BRAIN_RUN_END.FAILED,
+      });
+      yield* advanceClock(1000);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 0);
+      sideband.acknowledge(0, 2500, 2600);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-2" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-2",
+        sentence: "One test in the API repo.",
       });
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.ENDED,
         runId: "run-2",
         end: LIVE_BRAIN_RUN_END.COMPLETED,
       });
-      sideband.acknowledge(0, 2500, 2600);
       yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(commentary.length, 2);
+      const [question, reply] = commentary;
+      assert.ok(question && "content" in question && question.content.includes("Fix both?"));
+      assert.equal(question.delegation_id, "item_1");
+      assert.ok(reply && "content" in reply);
+      assert.equal(reply.content, "One test in the API repo.");
+      assert.equal(reply.delegation_id, "item_2");
+      // Superseding discards the older reply and leaves its run to finish: nothing is cancelled.
+      assert.deepEqual(f.brain.cancels, []);
+    }),
+);
+
+it.effect(
+  "an exchange superseded after a sentence it released while its run went on says no later sentence and no note when that run then fails",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What is failing?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Two." });
+      yield* settle();
+      sideband.acknowledge(0, 1000, 1100);
+      yield* settle();
+      sideband.input("No, the API repo.", 1500, 2300);
+      sideband.delegation("item_2", 2400);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Both in the web repo.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.FAILED,
+      });
+      yield* advanceClock(1000);
+      assert.deepEqual(
+        appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) =>
+          "content" in event ? event.content : undefined,
+        ),
+        ["Two."],
+      );
+    }),
+);
+
+it.effect(
+  "an older reply already queued behind an unacknowledged append is dropped when a newer delegation is accepted before it leaves",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What is failing?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Two." });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Both in the web repo.",
+      });
+      yield* settle();
+      // The first sentence is out and awaits its ack; the second waits behind it.
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      sideband.input("No, the API repo.", 1500, 2300);
+      sideband.delegation("item_2", 2400);
+      yield* settle();
+      sideband.acknowledge(0, 2500, 2600);
+      yield* settle();
+      assert.deepEqual(
+        appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) =>
+          "content" in event ? event.content : undefined,
+        ),
+        ["Two."],
+      );
     }),
 );
 
@@ -1069,6 +1211,40 @@ it.effect("an error naming an append refuses that append and never counts as suc
     sideband.output("One", 100, 200);
     assert.deepEqual(f.spoken, []);
   }),
+);
+
+it.effect(
+  "an error naming no command, or naming one with no code, is reported by its type and code alone",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.service.deliverBriefing({ briefing: "One.", decidedAt: f.clock.now });
+      yield* settle();
+      const first = sideband.sent[0];
+      assert.ok(first);
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-1",
+        error: { type: "server_error", code: "internal", message: "the words" },
+      });
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-2",
+        error: { code: null, client_event_id: first.event_id, message: "the words" },
+      });
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err-3",
+        error: { type: "invalid_request_error", code: "invalid_value", event_id: "other-1" },
+      });
+      yield* settle();
+      assert.deepEqual(f.reports, [
+        "A live error reached the general handler, type=server_error code=internal",
+        "A live error reached the general handler, type=none code=none",
+      ]);
+    }),
 );
 
 it.effect(
@@ -1485,6 +1661,126 @@ it.effect(
     }),
 );
 
+/** The contents of the appends of one type, in the order sent. */
+function contents(sideband: FakeSideband, type: string) {
+  return appends(sideband, type).map((event) => ("content" in event ? event.content : undefined));
+}
+
+it.effect(
+  "the stop key blocks the running exchange: its late reply and end note are never spoken, its run is cancelled, and the voice is told silently once the cancel is confirmed",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.brain.cancelWhen = yield* Deferred.make<void>();
+      sideband.input("Explore the repository.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      sideband.output("Looking now", 1000, 1400);
+      assert.equal(f.service.stopSpeaking(), true);
+      yield* settle();
+      assert.deepEqual(f.brain.cancels, ["run-1"]);
+      sideband.acknowledge(0, 1500, 1500);
+      yield* settle();
+      // Nothing is told of the cancel before the brain confirms it.
+      assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), []);
+      yield* Deferred.succeed(f.brain.cancelWhen, undefined);
+      yield* settle();
+      const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+      assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), [STOPPED_RUN_NOTE]);
+      assert.equal(
+        thinking[0] && "delegation_id" in thinking[0] && thinking[0].delegation_id,
+        "item_1",
+      );
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
+        runId: "run-1",
+        step: "provider_write",
+      });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "The repository has two apps.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-1",
+        question: "Which app is this for?",
+        recommendation: "The web app.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.CANCELLED,
+      });
+      yield* advanceClock(1000);
+      // The queued question is the plan's, so it is still handed on; the reply and the note are not.
+      const commentary = contents(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(commentary.length, 1);
+      assert.ok(commentary[0]?.includes("Which app is this for?"));
+      assert.equal(contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length, 1);
+    }),
+);
+
+it.effect("a cancel the backend did not take tells the voice nothing of a cancel", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.brain.cancel = LIVE_BRAIN_CANCEL.FAILED;
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Explore the repository.", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    assert.equal(f.service.stopSpeaking(), true);
+    yield* settle();
+    sideband.acknowledge(0, 1500, 1500);
+    yield* settle();
+    assert.deepEqual(f.brain.cancels, ["run-1"]);
+    assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), []);
+  }),
+);
+
+it.effect(
+  "an ask delegated before the stop key and accepted after it is blocked and cancelled too, and one delegated after the press is spoken",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.brain.answerWhen = yield* Deferred.make<void>();
+      sideband.input("Explore the repository.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      assert.equal(f.service.stopSpeaking(), true);
+      yield* Deferred.succeed(f.brain.answerWhen, undefined);
+      f.brain.answerWhen = undefined;
+      yield* settle();
+      assert.deepEqual(f.brain.cancels, ["run-1"]);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Two apps.",
+      });
+      sideband.acknowledge(0, 1500, 1500);
+      yield* settle();
+      sideband.input("Just the web app.", 2000, 2800);
+      sideband.delegation("item_2", 2900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-2" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-2",
+        sentence: "Noted.",
+      });
+      yield* settle();
+      assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), ["Noted."]);
+      assert.deepEqual(f.brain.cancels, ["run-1"]);
+    }),
+);
+
 it.effect(
   "both speakers' rows reach the record behind the debounce, each grouped by the ledger under an id of its own, and a socket closing mid-sentence leaves the words said so far on the row",
   () =>
@@ -1844,6 +2140,39 @@ it.effect(
 );
 
 it.effect(
+  "a run that fails after a sentence it released while it ran keeps that sentence said and is still spoken as the standing note",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What does the repository hold?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Looked.",
+      });
+      yield* settle();
+      sideband.acknowledge(0, 1000, 1100);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.FAILED,
+      });
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(
+        commentary.map((event) => ("content" in event ? event.content : undefined)),
+        ["Looked.", RUN_END_NOTE[LIVE_BRAIN_RUN_END.FAILED]],
+      );
+    }),
+);
+
+it.effect(
   "a run that ends during the ask's record write is finalized once the write lands, its end spoken as the standing note",
   () =>
     Effect.gen(function* () {
@@ -1908,7 +2237,7 @@ it.effect(
 );
 
 it.effect(
-  "a follow-up delegated seconds after an ask, its words on the first ask's row, attaches nothing of its own and is spoken to as the sibling it is: no note, the exchange's reply said once",
+  "a follow-up delegated seconds after an ask, its words on the first ask's row, attaches nothing of its own, and its reply waits on the first ask's attach and is said once under its own id",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1924,7 +2253,7 @@ it.effect(
       sideband.delegation("item_2", 3900);
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
-      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-2" });
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
         runId: "run-2",
@@ -1956,5 +2285,326 @@ it.effect(
       sideband.delegation("item_3", 5000);
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
+    }),
+);
+
+/** A session an earlier connection held, adopted again as the device's re-attach hands it in: already started. */
+function reattach(f: Fixture, sessionId: string) {
+  return Effect.gen(function* () {
+    const sideband = new FakeSideband();
+    const adopted = yield* f.service.adoptSession({
+      sessionId,
+      attach: () => Effect.succeed(sideband),
+      started: true,
+    });
+    assert.ok(adopted);
+    return sideband;
+  });
+}
+
+/** A run a re-attach takes up, neither stopped nor stale unless the test says so. */
+function recoveredRun(
+  runId: string,
+  delegationId: string,
+  revision: number,
+  held: { stopped?: boolean; stale?: boolean } = {},
+): LiveBrainRecoveredRun {
+  return {
+    runId,
+    delegationId,
+    revision,
+    stopped: held.stopped ?? false,
+    stale: held.stale ?? false,
+  };
+}
+
+/** A run's whole reply as its follow tells it: the settle, one sentence, and a completed end. */
+function wholeReply(runId: string, sentence: string): LiveBrainRunEvent[] {
+  return [
+    { kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId },
+    { kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence },
+    { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId, end: LIVE_BRAIN_RUN_END.COMPLETED },
+  ];
+}
+
+it.effect(
+  "a re-attached session takes up the runs the lost connection accepted: the newest one's reply, finished in the gap, is spoken once under its own delegation, and an older one stays superseded",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.recovery = {
+        revision: 2,
+        runs: [recoveredRun("run-a", "item_a", 1), recoveredRun("run-b", "item_b", 2)],
+        // The follow tells what it finds the moment it runs, so an exchange not yet standing would miss it.
+        told: [
+          ...wholeReply("run-a", "The outdated answer."),
+          ...wholeReply("run-b", "The answer that stands."),
+        ],
+      };
+      const sideband = yield* reattach(f, "sess-live");
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(commentary.length, 1);
+      const [reply] = commentary;
+      assert.ok(reply && "content" in reply);
+      assert.equal(reply.content, "The answer that stands.");
+      assert.equal(reply.delegation_id, "item_b");
+    }),
+);
+
+it.effect(
+  "the newest run taken up, ended too long ago to be news, is silenced: nothing of its reply is said",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.recovery = {
+        revision: 1,
+        runs: [recoveredRun("run-a", "item_a", 1, { stale: true })],
+        told: wholeReply("run-a", "An answer from long ago."),
+      };
+      const sideband = yield* reattach(f, "sess-live");
+      yield* advanceClock(1000);
+      assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), []);
+    }),
+);
+
+it.effect(
+  "the newest run taken up, stopped by the developer on the lost connection, is silenced, and the stop key does not cancel it again",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.recovery = {
+        revision: 1,
+        runs: [recoveredRun("run-a", "item_a", 1, { stopped: true })],
+        told: [],
+      };
+      const sideband = yield* reattach(f, "sess-live");
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
+        runId: "run-a",
+        step: "repository_read",
+      });
+      yield* settle();
+      assert.deepEqual(sideband.sent, []);
+      // The connection that heard the stop key asked the cancel, so a press now tells of no second one.
+      assert.equal(f.service.stopSpeaking(), true);
+      yield* settle();
+      sideband.acknowledge(0, 1500, 1500);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-a",
+        end: LIVE_BRAIN_RUN_END.CANCELLED,
+      });
+      yield* advanceClock(1000);
+      assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), []);
+      assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), []);
+    }),
+);
+
+it.effect(
+  "a delegation heard after a re-attach goes on from the newest revision recorded, under the session's id, and supersedes a run taken up that is still under way",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.recovery = { revision: 3, runs: [recoveredRun("run-c", "item_c", 3)], told: [] };
+      const sideband = yield* reattach(f, "sess-live");
+      yield* settle();
+      sideband.input("Actually, plan it for the API.", 0, 800);
+      sideband.delegation("item_d", 900);
+      yield* settle();
+      assert.deepEqual(
+        f.brain.asks.map((ask) => [ask.submissionId, ask.sessionId, ask.revision]),
+        [["item_d", "sess-live", 4]],
+      );
+      for (const event of wholeReply("run-c", "The plan for the web app.")) f.brain.fire(event);
+      for (const event of wholeReply("run-1", "The plan for the API.")) f.brain.fire(event);
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(
+        commentary.map((event) => [
+          "content" in event && event.content,
+          "delegation_id" in event && event.delegation_id,
+        ]),
+        [["The plan for the API.", "item_d"]],
+      );
+    }),
+);
+
+/** Fires that `settled` of run-1's steps have settled, the latest a repository read. */
+function stepSettled(f: Fixture, settled: number) {
+  f.brain.fire({
+    kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+    runId: "run-1",
+    step: "repository_read",
+    settled,
+  });
+}
+
+it.effect(
+  "a running ask's settled steps reach the voice as quiet progress under its delegation, no sooner than the gap apart and no more than the bound, and none once the run has ended",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("How do invites work today?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      stepSettled(f, 1);
+      // A step settled inside the gap is not told on its own, but counted in the next note.
+      stepSettled(f, 2);
+      yield* settle();
+      assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), [
+        "Luke finished a read of the repository; 1 step of this ask done so far.",
+      ]);
+      assert.deepEqual(
+        appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
+          "delegation_id" in event ? event.delegation_id : undefined,
+        ),
+        ["item_1"],
+      );
+      yield* advanceClock(PROGRESS_NOTE_BOUNDS.GAP_MS);
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+        runId: "run-1",
+        step: undefined,
+        settled: 3,
+      });
+      yield* settle();
+      assert.equal(
+        contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).at(-1),
+        "Luke finished a step; 3 steps of this ask done so far.",
+      );
+      for (let settled = 4; settled < 20; settled += 1) {
+        yield* advanceClock(PROGRESS_NOTE_BOUNDS.GAP_MS);
+        stepSettled(f, settled);
+      }
+      yield* settle();
+      assert.equal(
+        appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).length,
+        PROGRESS_NOTE_BOUNDS.PER_EXCHANGE,
+      );
+      // Nothing the voice is to say came of any of it.
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+    }),
+);
+
+it.effect("a settled step tells nothing once its run has ended or a newer ask silenced it", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("How do invites work today?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+      runId: "run-1",
+      end: LIVE_BRAIN_RUN_END.FAILED,
+    });
+    stepSettled(f, 1);
+    sideband.input("And who can send them?", 1000, 1800);
+    sideband.delegation("item_2", 1900);
+    yield* settle();
+    yield* advanceClock(PROGRESS_NOTE_BOUNDS.GAP_MS);
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.STEP_SETTLED,
+      runId: "run-1",
+      step: "repository_read",
+      settled: 2,
+    });
+    yield* settle();
+    assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND), []);
+  }),
+);
+
+/** Answers run-1's reply with one sentence, its actions settled. */
+function replyWith(f: Fixture, sentence: string) {
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+  f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence });
+}
+
+/** Refuses the append sent at the given index with an error naming it. */
+function refuseAt(sideband: FakeSideband, index: number) {
+  const sent = sideband.sent[index];
+  assert.ok(sent, `append ${index} was sent`);
+  sideband.receive({
+    type: LIVE_SERVER_EVENT.ERROR,
+    event_id: `err-${index}`,
+    error: { code: null, client_event_id: sent.event_id },
+  });
+}
+
+it.effect(
+  "a reply chunk the session refused is sent once more under a fresh id, and the reply is said rather than lost",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Is the fix in?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      replyWith(f, "It landed.");
+      yield* settle();
+      refuseAt(sideband, sideband.sent.length - 1);
+      yield* settle();
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), [
+        "It landed.",
+        "It landed.",
+      ]);
+      assert.notEqual(commentary[0]?.event_id, commentary[1]?.event_id);
+      assert.deepEqual(
+        commentary.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
+        ["item_1", "item_1"],
+      );
+      sideband.acknowledge(sideband.sent.length - 1, 1000, 1100);
+      yield* settle();
+      assert.deepEqual(
+        f.reports.filter((report) => report.includes("commentary")),
+        [],
+      );
+    }),
+);
+
+it.effect("a reply chunk refused on its retry too is reported and not sent a third time", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Is the fix in?", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    replyWith(f, "It landed.");
+    yield* settle();
+    refuseAt(sideband, sideband.sent.length - 1);
+    yield* settle();
+    refuseAt(sideband, sideband.sent.length - 1);
+    yield* settle();
+    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
+    assert.deepEqual(
+      f.reports.filter((report) => report.includes("commentary")),
+      ["A reply's commentary was refused twice and is not said"],
+    );
+  }),
+);
+
+it.effect(
+  "a reply chunk left unanswered is reported and never sent again, since it may still reach the timeline",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Is the fix in?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      replyWith(f, "It landed.");
+      yield* advanceClock(60_000);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      assert.ok(f.reports.includes("A reply's commentary went unanswered and is not sent again"));
     }),
 );

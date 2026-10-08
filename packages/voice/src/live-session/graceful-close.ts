@@ -53,9 +53,22 @@ export function closeGracefully(
   sideband: LiveSideband,
   options: GracefulCloseOptions,
 ): Effect.Effect<SidebandCloseResult> {
+  return requestClose(sideband, sideband.send(closeEvent(options.eventId)), options);
+}
+
+/**
+ * The same close where `session.close` is another's to send: the session's
+ * owner is asked for it, and the sideband is held for the last word on the
+ * same terms, so a holder that only asks still reads the final usage.
+ */
+export function requestClose(
+  sideband: LiveSideband,
+  ask: Effect.Effect<void>,
+  options: Omit<GracefulCloseOptions, "eventId">,
+): Effect.Effect<SidebandCloseResult> {
   return Effect.ensuring(
     Effect.andThen(
-      sideband.send(closeEvent(options.eventId)),
+      ask,
       Effect.timeoutOrElse(options.settled, {
         duration: Duration.millis(options.timeoutMs ?? SIDEBAND_CLOSE_TIMEOUT_MS),
         orElse: (): Effect.Effect<SidebandCloseResult> =>

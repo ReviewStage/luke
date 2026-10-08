@@ -1,5 +1,5 @@
 // scribe-model.ts -- a scripted stand-in for the model a planning call's notetaker streams its answer from.
-import type { PlanUpdate } from "@sidecar/hosted/plan-template";
+import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 
@@ -12,27 +12,32 @@ const USAGE = {
 const DELTA_CHARS = 12;
 
 /**
- * What the scripted model answers one call with: an update, a failure of the
- * call, an update whose stream breaks off with an error halfway through, or a
+ * What the scripted model answers one call with: notes, a failure of the
+ * call, notes whose stream breaks off with an error halfway through, or a
  * stream that opens and never says another word.
  */
 export type ScribeAnswer =
-  | PlanUpdate
+  | ScribeNotes
   | Error
-  | { readonly brokenAfter: PlanUpdate }
+  | { readonly brokenAfter: ScribeNotes }
   | { readonly stalls: true };
+
+/** The notes one answer takes, as the model emits them. */
+interface ScribeNotes {
+  readonly notes: readonly PlanNote[];
+}
 
 /**
  * A model answering each call with the next scripted answer, streamed as the
  * provider would stream it, a few characters of JSON at a time, and keeping
- * what each call was handed. A call past the script answers an empty update.
+ * what each call was handed. A call past the script answers no notes.
  */
 export function scriptedScribeModel(answers: readonly ScribeAnswer[]) {
   const asked: string[] = [];
   const model = new MockLanguageModelV4({
     doStream: async (options) => {
       asked.push(JSON.stringify(options.prompt));
-      const answer = answers[asked.length - 1] ?? {};
+      const answer: ScribeAnswer = answers[asked.length - 1] ?? { notes: [] };
       if (answer instanceof Error) throw answer;
       if ("stalls" in answer) return { stream: new ReadableStream() };
       const broken = "brokenAfter" in answer;

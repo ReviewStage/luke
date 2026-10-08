@@ -20,7 +20,7 @@ import { sessionTally } from "../session-model";
 import { parseMilliseconds } from "../session-motion";
 import { appStateNow } from "../use-app-state";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
-import { LiveCall } from "../voice/live-call";
+import { LIVE_CLOSE_OWNER, LiveCall } from "../voice/live-call";
 import { createBrowserSilence } from "../voice/live-peer";
 import { openPreferredMicrophone } from "../voice/microphone-choice";
 import { startVoiceLevelMeter } from "../voice/voice-level-meter";
@@ -434,6 +434,8 @@ function IntroductionFlight({
         },
         reportActivity: () => undefined,
       },
+      // No exchange stands behind the introduction, so its peer sends its own close.
+      closeOwner: LIVE_CLOSE_OWNER.CHANNEL,
       createPeerConnection: () => new RTCPeerConnection(),
       createSilence: createBrowserSilence,
       openMicrophone: () =>

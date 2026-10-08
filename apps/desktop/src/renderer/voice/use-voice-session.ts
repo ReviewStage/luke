@@ -22,7 +22,7 @@ import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
-import { LiveCall } from "./live-call";
+import { LIVE_CLOSE_OWNER, LiveCall } from "./live-call";
 import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { startVoiceLevelMeter } from "./voice-level-meter";
@@ -99,6 +99,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
         },
+        // The sessions route's close is the service's to send; the hang-up asks for it.
+        closeOwner: LIVE_CLOSE_OWNER.SERVICE,
         createPeerConnection: () => new RTCPeerConnection(),
         createSilence: createBrowserSilence,
         // The press's device, chosen by facts read natively: the Mac's own
@@ -117,6 +119,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           }),
         onRemoteStream: (remote) => rendererRegistry.set(remoteStreamAtom, remote),
         onLocalStream: (local) => rendererRegistry.set(localStreamAtom, local),
+        // The element alone is muted, never the stream: the meter reads the
+        // stream, and is what tells the call when the silenced utterance ends.
+        onOutputSilenced: (silenced) => {
+          if (remoteAudio.current) remoteAudio.current.muted = silenced;
+        },
         services: rendererServicesNow(),
         // The development trace's tap, checked at each event rather than at
         // construction because a session outlives any one version of the

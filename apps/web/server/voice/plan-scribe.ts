@@ -1,8 +1,12 @@
 import {
-  mergePlanFields,
-  type PlanUpdate,
+  applyNotes,
+  NOTE_KIND,
+  notesInProgress,
+  type PlanContent,
+  type PlanNote,
   planBody,
-  planUpdateSchema,
+  planNotesSchema,
+  readNotes,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
@@ -20,25 +24,14 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@sidecar/wire";
-import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
+import { emitJsonSchema } from "@sidecar/wire/effect";
 import { jsonSchema, type LanguageModel, Output, streamText } from "ai";
-import {
-  Cause,
-  Clock,
-  Data,
-  Duration,
-  Effect,
-  Option,
-  Queue,
-  Result,
-  type Scope,
-  Stream,
-} from "effect";
+import { Cause, Clock, Data, Duration, Effect, Option, Queue, type Scope, Stream } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { SCRIBE_INSTRUCTIONS } from "../hosted/brain-host/planning.js";
+import { PLAN_SAVE_STATUS, saveNotes } from "../hosted/plan-notes.js";
 import { readPlan } from "../hosted/plan-store.js";
 import { spendHostedMeter } from "../hosted/quota.js";
-import { saveUpdate, UPDATE_PLAN_STATUS } from "../hosted/update-plan-tool.js";
 
 /**
  * plan-scribe.ts -- a planning call's notetaker: it listens to the call and writes the plan while Luke and the developer talk.
@@ -48,10 +41,12 @@ import { saveUpdate, UPDATE_PLAN_STATUS } from "../hosted/update-plan-tool.js";
  * The scribe keeps its own ledger of both speakers' words from the sideband
  * and the brain's reply sentences as Luke's research notes, and once the
  * call has been quiet for a beat, whoever spoke last, it makes one model call
- * over what was said since its cursor and saves the fields that call
- * changed through `saveUpdate`, the plan's one write; while the model writes, its partial
- * answer goes to the device as a draft of the plan, so the Plans tab types
- * the notes in as they are written. It is the plan's only writer and its
+ * over what was said since its cursor, which answers with notes: a point
+ * added under a field, an example added to a rule, a phrase corrected, or a
+ * line struck. They are saved through `saveNotes`, the plan's one write.
+ * While the model writes, the notes so far go to the device as a draft of the
+ * plan (`notesInProgress`), each draft differing from the last only where the
+ * newest note lands, so the Plans tab types each note in as it is taken. It is the plan's only writer and its
  * runs never overlap, one fiber reading the debounced stream in turn, so no
  * save races another. A run that fails, is refused, or saves nothing moves no
  * cursor, and the next run is handed those lines again. The scribe decides
@@ -79,15 +74,15 @@ export const PLAN_SCRIBE = {
 
 /** The markers each part of the scribe's ask rides behind, so the model reads what follows as data. */
 const ASK_MARKER = {
-  DOCUMENT: "[saved document]",
+  PLAN: "[saved plan]",
   EARLIER: "[earlier lines]",
   LATEST: "[latest lines]",
   NOTES: "[Luke's research notes]",
 } as const;
 
-/** The update's schema as the model is shown it: the template's own, in the plain-object form the SDK takes. */
-const UPDATE_OUTPUT = Output.object({
-  schema: jsonSchema<unknown>(jsonRoundTrip(emitJsonSchema(planUpdateSchema))),
+/** The notes' schema as the model is shown it: the template's own, in the plain-object form the SDK takes. */
+const NOTES_OUTPUT = Output.object({
+  schema: jsonSchema<unknown>(jsonRoundTrip(emitJsonSchema(planNotesSchema))),
 });
 
 export interface PlanScribeOptions {
@@ -121,14 +116,14 @@ class ScribeModelError extends Data.TaggedError("ScribeModelError")<{
   readonly reason: string;
 }> {}
 
-/** What one run hands the model: the saved document, the lines around the cursor, and the notes since it. */
+/** What one run hands the model: the saved plan's fields, the lines around the cursor, and the notes since it. */
 function askText(input: {
-  readonly document: string;
+  readonly plan: string;
   readonly earlier: readonly TranscriptUtterance[];
   readonly latest: readonly TranscriptUtterance[];
   readonly notes: readonly string[];
 }): string {
-  const parts = [ASK_MARKER.DOCUMENT, input.document];
+  const parts = [ASK_MARKER.PLAN, input.plan];
   if (input.earlier.length > 0) {
     parts.push(ASK_MARKER.EARLIER, renderAskContext({ turns: input.earlier, ask: undefined }));
   }
@@ -137,8 +132,12 @@ function askText(input: {
   return parts.join("\n");
 }
 
-/** The model's answer read under the template's own schema, or where it went wrong. */
-const readUpdate = readEither(planUpdateSchema);
+/** A note passed over, in words for the report: its kind and field, and never its text. */
+function missedNote(note: PlanNote): string {
+  return note.kind === NOTE_KIND.ADD_EXAMPLE
+    ? `${note.kind} rule ${note.rule}`
+    : `${note.kind} ${note.field}`;
+}
 
 export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* (
   options: PlanScribeOptions,
@@ -160,11 +159,11 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
    * One run over what was said since the cursor. The lines and the notes are
    * read before the model is asked, so words heard during the call are left
    * past the cursor for the next run rather than skipped. While the model
-   * writes, each partial answer that reads under the template is merged over
-   * the stored fields and formatted exactly as a save would be, and sent to
-   * the device as a draft at most once a beat; the save's own document
-   * follows it, and a run that saves nothing sends the stored document back so
-   * no half-written draft is left standing.
+   * writes, the notes so far are taken over the stored fields and formatted
+   * exactly as a save would be, and sent to the device as a draft at most
+   * once a beat; the save's own document follows it, and a run that saves
+   * nothing sends the stored document back so no half-written draft is left
+   * standing.
    */
   const run = Effect.gen(function* () {
     const latest = ledger.utterances(undefined, { sinceMs: cursor.heardThrough });
@@ -187,23 +186,21 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       .slice(-PLAN_SCRIBE.CONTEXT_LINES);
     const { plan, fields } = stored.value;
     const header = { name: plan.name };
+    const content: PlanContent = { fields, assumptions: plan.document.assumptions };
     const drafted = { at: Number.NEGATIVE_INFINITY, landed: false };
 
-    /** The document an update would save, formatted as the save formats it; nothing past the body's bound. */
-    const documentOf = (update: PlanUpdate): PlanDocument | undefined => {
-      const body = planBody(header, mergePlanFields(fields, update));
+    /** The document content would save, formatted as the save formats it; nothing past the body's bound. */
+    const documentOf = (noted: PlanContent): PlanDocument | undefined => {
+      const body = planBody(header, noted.fields);
       if (body.length > PLAN_BOUNDS.MAX_BODY_CHARS) return undefined;
-      return { body, assumptions: update.assumptions ?? plan.document.assumptions };
+      return { body, assumptions: noted.assumptions };
     };
 
     const draft = (partial: UnparsedWireValue) =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
         if (now - drafted.at < PLAN_SCRIBE.DRAFT_EVERY_MS) return;
-        // A field still half-written reads as nothing yet and waits for the next partial.
-        const read = readUpdate(partial);
-        if (Result.isFailure(read)) return;
-        const document = documentOf(read.success);
+        const document = documentOf(notesInProgress(content, partial));
         if (document === undefined) return;
         drafted.at = now;
         options.onDraft?.({ document });
@@ -216,16 +213,16 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
             model: options.model,
             system: SCRIBE_INSTRUCTIONS,
             prompt: askText({
-              document: JSON.stringify(plan.document),
+              plan: JSON.stringify(content),
               earlier,
               latest,
               notes: notes.slice(cursor.notesRead),
             }),
-            output: UPDATE_OUTPUT,
+            output: NOTES_OUTPUT,
             maxOutputTokens: PLAN_SCRIBE.MAXIMUM_OUTPUT_TOKENS,
-            // Note that the template's schema leaves every field optional, which
-            // OpenAI's strict structured outputs refuse, so the schema is sent loose
-            // and every answer is read under the schema itself.
+            // Note that a note's kinds carry different keys, which OpenAI's strict
+            // structured outputs refuse, so the schema is sent loose and every note
+            // is read under the schema itself.
             providerOptions: { openai: { strictJsonSchema: false, reasoningEffort: "low" } },
           }),
         catch: (error) => modelError(error instanceof Error ? error : String(error)),
@@ -233,7 +230,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       yield* Stream.fromAsyncIterable(streamed.partialOutputStream, (error) =>
         modelError(error instanceof Error ? error : String(error)),
       ).pipe(
-        // SAFETY: the SDK hands back the partial JSON the model has emitted so far; it is read under the schema in the draft.
+        // SAFETY: the SDK hands back the partial JSON the model has emitted so far; each note is read under the schema in the draft.
         Stream.map((partial) => unparsedWire(partial as WireBoundaryInput)),
         Stream.runForEach(draft),
       );
@@ -241,8 +238,8 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         try: async () => await streamed.output,
         catch: (error) => modelError(error instanceof Error ? error : String(error)),
       });
-      // SAFETY: the SDK hands back the JSON object the model emitted; it is read under the schema at once.
-      return readUpdate(unparsedWire(output as WireBoundaryInput));
+      // SAFETY: the SDK hands back the JSON object the model emitted; each note is read under the schema at once.
+      return readNotes(unparsedWire(output as WireBoundaryInput));
     }).pipe(Effect.timeout(Duration.millis(PLAN_SCRIBE.TIMEOUT_MS)));
 
     const landed = Effect.gen(function* () {
@@ -251,19 +248,21 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         written,
         Effect.sync(() => options.onWriting?.(false)),
       );
-      if (Result.isFailure(output)) {
-        options.report(
-          `The plan's notetaker answered outside the template: ${output.failure.path.join(".")}`,
-        );
-        return;
+      if (output.unread > 0) {
+        options.report(`The plan's notetaker took ${output.unread} notes outside the template`);
       }
-      // An answer naming no field is the model saying nothing new was said.
-      if (Object.keys(output.success).length > 0) {
-        const saved = yield* saveUpdate(
+      const taken = applyNotes(content, output.notes);
+      if (taken.missed.length > 0) {
+        const missed = taken.missed.map(missedNote).join(", ");
+        options.report(`The plan's notetaker named what the plan does not hold: ${missed}`);
+      }
+      // Notes that change nothing are the model saying nothing new was said, and need no save.
+      if (taken.content !== content) {
+        const saved = yield* saveNotes(
           { userId: options.userId, planId: options.planId, header },
-          output.success,
+          output.notes,
         );
-        if (saved.status !== UPDATE_PLAN_STATUS.SAVED) {
+        if (saved.status !== PLAN_SAVE_STATUS.SAVED) {
           options.report(`The plan's notetaker could not save: ${saved.reason}`);
           return;
         }

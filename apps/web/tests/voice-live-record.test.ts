@@ -3,11 +3,14 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
+  LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
   type LiveBrainAsk,
+  type LiveBrainCancel,
+  type LiveBrainRecovery,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
   LiveSessionService,
@@ -130,6 +133,14 @@ class FakeBrain implements LiveBrain {
       this.#runs += 1;
       return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
     });
+  }
+
+  cancelRun(): Effect.Effect<LiveBrainCancel> {
+    return Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING);
+  }
+
+  recoverRuns(): Effect.Effect<LiveBrainRecovery> {
+    return Effect.succeed({ revision: 0, runs: [], follow: Effect.void });
   }
 
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void {

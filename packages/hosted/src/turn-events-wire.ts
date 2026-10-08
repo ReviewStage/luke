@@ -37,7 +37,7 @@ export const TURN_EVENT_KIND = {
   SLOW_STEP: "slow_step",
   /** A planning turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
   QUESTION_QUEUED: "question_queued",
-  /** Every action the turn dispatched has its result on the record; the reply's sentences follow. */
+  /** Every action the turn has journaled by now has its result on the record; the reply's sentences follow, the first while the turn may still run. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the reply, in order, after the actions settled. */
   REPLY_SENTENCE: "reply_sentence",
