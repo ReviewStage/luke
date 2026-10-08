@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { EMPTY_PLAN_UPDATE, planBody } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
 import { test } from "vitest";
 import {
   CHASE_CHARS_PER_SECOND,
@@ -27,10 +27,27 @@ const PROBLEM = 2;
 const FRAME_MS = 16;
 
 function body(problem: string | null, outcome: string | null = null): string {
+  return planBody(HEADER, { ...EMPTY_PLAN_FIELDS, goal: { problem, outcome } });
+}
+
+/** A body holding a problem, the rules stated, and a change map: the units a joining or leaving rule sits among. */
+function ruled(statements: readonly string[], fields: Partial<PlanFields> = {}): string {
   return planBody(HEADER, {
-    ...EMPTY_PLAN_UPDATE,
-    goal: { problem, outcome },
+    ...EMPTY_PLAN_FIELDS,
+    goal: { problem: "Only an admin can invite.", outcome: null },
+    rules:
+      statements.length === 0
+        ? null
+        : statements.map((statement) => ({ statement, examples: null })),
+    implementation: { ...EMPTY_PLAN_FIELDS.implementation, changeMap: "- `invites.ts` sends it." },
+    ...fields,
   });
+}
+
+/** What the unit opening with a heading puts on screen, if one does. */
+function drawnUnder(views: readonly UnitView[], heading: string): string | undefined {
+  const view = views.find((candidate) => visible(candidate).startsWith(heading));
+  return view === undefined ? undefined : visible(view);
 }
 
 /** What a unit's view puts on screen: its words without the stretch left undrawn. */
@@ -45,8 +62,8 @@ function drawn(state: ChaseState): readonly string[] {
   return chaseView(state, false).map(visible);
 }
 
-function retarget(state: ChaseState, words: string, settle = false): ChaseState {
-  return chaseRetargeted(state, words, NO_ASSUMPTIONS, { reduced: false, settle });
+function retarget(state: ChaseState, words: string): ChaseState {
+  return chaseRetargeted(state, words, NO_ASSUMPTIONS, { reduced: false });
 }
 
 /** Every frame's views until the caret has nothing left, and the state it ends in. */
@@ -115,7 +132,7 @@ test("a newer document mid-typing carries on from what is shown, with no jump an
 test("a word changed mid-sentence is reached, erased, and typed over, and the words around it are never retyped", () => {
   const before = body("Only an admin can invite members.");
   const { frames, end } = played(
-    retarget(chaseOpened(before), body("Only an owner can invite members."), true),
+    retarget(chaseOpened(before), body("Only an owner can invite members.")),
   );
   const problem = frames.map((views) => visible(views[PROBLEM]));
   assert.ok(problem.includes("### Problem\n\nOnly an ad can invite members."));
@@ -126,9 +143,7 @@ test("a word changed mid-sentence is reached, erased, and typed over, and the wo
 
 test("a longer stretch is selected, held a beat, and erased at once", () => {
   const before = body("Members invite by email or by a shared link.");
-  const { frames, end } = played(
-    retarget(chaseOpened(before), body("Members invite by email."), true),
-  );
+  const { frames, end } = played(retarget(chaseOpened(before), body("Members invite by email.")));
   const selections = frames
     .map((views) => views[PROBLEM]?.edit?.selection)
     .filter((selection) => selection !== undefined);
@@ -137,34 +152,6 @@ test("a longer stretch is selected, held a beat, and erased at once", () => {
   assert.equal(words.slice(widest?.from, widest?.to), " or by a shared link");
   assert.ok(frames.every((views) => views[PROBLEM]?.edit?.hidden === undefined));
   assert.equal(drawn(end)[PROBLEM], "### Problem\n\nMembers invite by email.");
-});
-
-test("a bullet moved elsewhere is cut and pasted, never typed again", () => {
-  const before = body(
-    "- Only an admin can invite.\n- Invites go by email.\n- Links expire in a week.",
-  );
-  const after = body(
-    "- Invites go by email.\n- Links expire in a week.\n- Only an admin can invite.",
-  );
-  const { frames, end } = played(retarget(chaseOpened(before), after, true));
-  assert.ok(frames.some((views) => views[PROBLEM]?.edit?.selection !== undefined));
-  assert.ok(frames.every((views) => views[PROBLEM]?.edit?.hidden === undefined));
-  assert.deepEqual(drawn(end), planUnits(after));
-});
-
-test("a field rewritten mid-stream is held as shown until it settles, then edited in place", () => {
-  const before = body("- Only an admin can invite.\n- Invites go by email.");
-  const streaming = retarget(chaseOpened(before), body("- Only an owner"));
-  const partway = chaseStepped(streaming, CHASE_PACE.SETTLE_MS - FRAME_MS);
-  assert.equal(drawn(partway)[PROBLEM], planUnits(before)[PROBLEM]);
-  // Nothing newer for the settling time: the change is read whole and made.
-  assert.equal(drawn(played(partway).end)[PROBLEM], "### Problem\n\n- Only an owner");
-  // A later document leaving the unit unchanged, as when the notetaker moves to the next field, settles it at once.
-  const movedOn = retarget(partway, body("- Only an owner", "Members"));
-  assert.equal(drawn(chaseStepped(movedOn, 1_000))[PROBLEM], "### Problem\n\n- Only an owner");
-  // So does a save or the call ending.
-  const saved = retarget(partway, body("- Only an owner"), true);
-  assert.equal(drawn(chaseStepped(saved, 1_000))[PROBLEM], "### Problem\n\n- Only an owner");
 });
 
 test("a field growing mid-stream is typed as it arrives", () => {
@@ -177,13 +164,8 @@ test("a field growing mid-stream is typed as it arrives", () => {
   assert.equal(drawn(typed)[PROBLEM], "### Problem\n\n- Only an admin can invite.\n- Invites go");
 });
 
-test("a placeholder is never held: the first streamed words replace it", () => {
-  const streaming = retarget(chaseOpened(body(null)), body("- Members"));
-  assert.equal(drawn(chaseStepped(streaming, 1_000))[PROBLEM], "### Problem\n\n- Members");
-});
-
 test("one caret works through the document in order, and only one unit is written at a time", () => {
-  const typing = retarget(chaseOpened(body(null)), body("Only an admin.", "Members."), true);
+  const typing = retarget(chaseOpened(body(null)), body("Only an admin.", "Members."));
   const { frames, end } = played(typing);
   for (const views of frames) {
     assert.ok(views.filter((view) => view.writing).length <= 1);
@@ -198,7 +180,7 @@ test("one caret works through the document in order, and only one unit is writte
 });
 
 test("a hand pauses at the end of a sentence", () => {
-  const typing = retarget(chaseOpened(body("One")), body("One. Two."), true);
+  const typing = retarget(chaseOpened(body("One")), body("One. Two."));
   // The travel, six letters, and a sentence's pause after each full stop.
   const total =
     CHASE_PACE.TRAVEL_MS + (6 * 1_000) / CHASE_CHARS_PER_SECOND + 2 * CHASE_PACE.SENTENCE_PAUSE_MS;
@@ -208,7 +190,7 @@ test("a hand pauses at the end of a sentence", () => {
 
 test("far behind, the pace speeds up so a long document lands in seconds", () => {
   const long = "word ".repeat(2_000).trim();
-  const typing = retarget(chaseOpened(body(null)), body(long), true);
+  const typing = retarget(chaseOpened(body(null)), body(long));
   let state = typing;
   let elapsed = 0;
   while (chaseBehind(state) && elapsed < 60_000) {
@@ -222,13 +204,12 @@ test("far behind, the pace speeds up so a long document lands in seconds", () =>
 
 test("a unit is lit as it catches up, and reduced motion shows and lights a change at once", () => {
   const before = chaseOpened(body(null));
-  const settled = played(retarget(before, body("Only an admin."), true)).end;
+  const settled = played(retarget(before, body("Only an admin."))).end;
   assert.equal(chaseView(settled, false)[PROBLEM]?.fresh, true);
   assert.equal(chaseView(settled, false)[PROBLEM + 1]?.fresh, false);
 
   const reduced = chaseRetargeted(before, body("Only an admin."), NO_ASSUMPTIONS, {
     reduced: true,
-    settle: false,
   });
   assert.equal(chaseBehind(reduced), false);
   assert.equal(chaseView(reduced, false)[PROBLEM]?.fresh, true);
@@ -240,15 +221,13 @@ test("only an assumption the newer document added is lit", () => {
     chaseOpened(body(null)),
     body(null),
     { before: ["Members can invite."], after: ["Members can invite.", "Invites expire."] },
-    { reduced: false, settle: false },
+    { reduced: false },
   );
   assert.deepEqual([...state.freshAssumptions], [1]);
 });
 
 test("once the work catches up on a live call, the caret waits where the last edit ended", () => {
-  const caught = played(
-    retarget(chaseOpened(body(null)), body("Only an admin.", "Members."), true),
-  ).end;
+  const caught = played(retarget(chaseOpened(body(null)), body("Only an admin.", "Members."))).end;
   const waiting = chaseView(caught, true);
   assert.deepEqual(
     waiting.map((view) => view.resting),
@@ -259,4 +238,81 @@ test("once the work catches up on a live call, the caret waits where the last ed
   // Off the call, or before anything has been edited, no caret waits anywhere.
   assert.ok(chaseView(caught, false).every((view) => view.edit === undefined));
   assert.ok(chaseView(chaseOpened(body("Only an admin.")), true).every((view) => !view.resting));
+});
+
+test("a placeholder gives way to the first words of a note", () => {
+  const streaming = retarget(chaseOpened(body(null)), body("- Members"));
+  assert.equal(drawn(chaseStepped(streaming, 1_000))[PROBLEM], "### Problem\n\n- Members");
+});
+
+test("a rule joining the document types in where it stands, and no other unit is touched", () => {
+  const before = ruled(["Any member may invite."]);
+  const after = ruled(["Any member may invite.", "A withdrawn invite never grants access."]);
+  const { frames, end } = played(retarget(chaseOpened(before), after));
+  for (const views of frames) {
+    assert.equal(drawnUnder(views, "### Problem"), "### Problem\n\nOnly an admin can invite.");
+    assert.equal(drawnUnder(views, "### Change map"), "### Change map\n\n- `invites.ts` sends it.");
+    assert.equal(
+      drawnUnder(views, "### Rule 1"),
+      "### Rule 1: Any member may invite.\n\n_No examples yet_",
+    );
+  }
+  assert.ok(
+    frames.some((views) =>
+      views.some((view) => view.writing && view.words.startsWith("### Rule 2")),
+    ),
+  );
+  assert.deepEqual(drawn(end), planUnits(after));
+});
+
+test("a struck rule is erased where it stands, and the rules after it keep their words", () => {
+  const before = ruled([
+    "Any member may invite.",
+    "Invites go by email.",
+    "Links expire in a week.",
+  ]);
+  const after = ruled(["Any member may invite.", "Links expire in a week."]);
+  const { frames, end } = played(retarget(chaseOpened(before), after));
+  const leaving = "### Rule 2: Invites go by email.";
+  // The struck rule is selected before it goes, rather than vanishing.
+  assert.ok(
+    frames.some((views) =>
+      views.some((view) => view.words.startsWith(leaving) && view.edit?.selection !== undefined),
+    ),
+  );
+  for (const views of frames) {
+    const last = views.find((view) => view.words.includes("Links expire in a week."));
+    assert.ok(
+      last !== undefined && visible(last).endsWith("Links expire in a week.\n\n_No examples yet_"),
+    );
+  }
+  assert.deepEqual(drawn(end), planUnits(after));
+});
+
+test("a corrected rule statement is edited in place, its words around the change never retyped", () => {
+  const before = ruled(["Any member may invite by email."]);
+  const after = ruled(["Any member may invite by link."]);
+  const { frames, end } = played(retarget(chaseOpened(before), after));
+  const rule = frames.map((views) => drawnUnder(views, "### Rule 1"));
+  assert.ok(rule.every((words) => words?.startsWith("### Rule 1: Any member may invite by")));
+  assert.deepEqual(drawn(end), planUnits(after));
+});
+
+test("two rules with the same statement stay two units", () => {
+  const twice = ruled(["Invites go by email.", "Invites go by email."]);
+  const views = chaseView(chaseOpened(twice), false);
+  const ids = views.map((view) => view.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(views.map(visible), planUnits(twice));
+});
+
+test("a selection the newer words no longer erase is dropped rather than finished", () => {
+  const words = "Members invite by email or by a shared link.";
+  let state = retarget(chaseOpened(body(words)), body("Members invite by email."));
+  while (chaseView(state, false)[PROBLEM]?.edit?.selection === undefined) {
+    state = chaseStepped(state, FRAME_MS);
+  }
+  const { frames, end } = played(retarget(state, body(words)));
+  assert.ok(frames.every((views) => visible(views[PROBLEM]).endsWith(words)));
+  assert.equal(drawn(end)[PROBLEM], `### Problem\n\n${words}`);
 });

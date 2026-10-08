@@ -1,20 +1,28 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import {
+  NOTE_KIND,
+  PLAN_EMPTY_TEXT,
+  PLAN_FIELD,
+  type PlanNote,
+} from "@sidecar/hosted/plan-template";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
+import { saveNotes } from "../server/hosted/plan-notes";
 import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
+import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
 import { testSqlClient } from "./support/sql-client";
 
 /**
  * The planning call's notetaker over a real plan row: a scripted model stands
- * in for OpenAI and answers each run with the update the test names, and the
+ * in for OpenAI and answers each run with the notes the test names, and the
  * live events are synthetic. What a test reads is what the Plans tab would:
  * the plan's saved document.
  */
@@ -68,6 +76,39 @@ const settledRead = <A, E, R>(read: Effect.Effect<A, E, R>, expected: (value: A)
 const savedBodyOnce = (userId: string, planId: string, expected: (body: string) => boolean) =>
   settledRead(savedBody(userId, planId), expected);
 
+/** A plan already holding the invitations draft, as an earlier run of the call left it. */
+const openDraftedPlan = Effect.gen(function* () {
+  const opened = yield* openPlan;
+  yield* saveNotes({ ...opened, header: RELAY_PLAN }, notesFor(INVITATIONS_DRAFT));
+  return opened;
+});
+
+/** The prompt text one model call was handed, read back from what the scripted model kept. */
+function promptText(asked: string | undefined): string {
+  const messages: readonly { role: string; content: readonly { text?: string }[] }[] = JSON.parse(
+    asked ?? assert.fail("the model was not asked"),
+  );
+  const ask = messages.find((message) => message.role === "user");
+  return ask?.content.map((part) => part.text ?? "").join("") ?? assert.fail("no user message");
+}
+
+/** A body's lines that carry words, leaving out the placeholders that give way to an answer's first words. */
+function wordLinesOf(body: string): readonly string[] {
+  const placeholders = Object.values(PLAN_EMPTY_TEXT);
+  return body
+    .split("\n")
+    .filter(
+      (line) =>
+        line.trim().length > 0 && !placeholders.some((placeholder) => line.includes(placeholder)),
+    );
+}
+
+/** The lines of an earlier body a later one no longer shows, where a line still growing counts as shown. */
+function linesLost(earlier: string, later: string): readonly string[] {
+  const kept = wordLinesOf(later);
+  return wordLinesOf(earlier).filter((line) => !kept.some((standing) => standing.startsWith(line)));
+}
+
 const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
     const { model, asked } = scriptedScribeModel(answers);
@@ -93,7 +134,9 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.scoped(
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
-          const { scribe } = yield* scribeFor(userId, planId, [{ goal: { problem: PROBLEM } }]);
+          const { scribe } = yield* scribeFor(userId, planId, [
+            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+          ]);
 
           scribe.observe(said("What's the problem today?", 0, 1_200));
           scribe.observe(heard("Only admins can add people.", 1_500, 3_000));
@@ -111,7 +154,9 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
     Effect.scoped(
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
-        const { scribe } = yield* scribeFor(userId, planId, [{ goal: { problem: PROBLEM } }]);
+        const { scribe } = yield* scribeFor(userId, planId, [
+          { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+        ]);
 
         scribe.observe(said("So the problem is that only an admin can add someone.", 0, 2_000));
         yield* quiet;
@@ -126,7 +171,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
     Effect.scoped(
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
-        const { scribe, asked } = yield* scribeFor(userId, planId, [{}]);
+        const { scribe, asked } = yield* scribeFor(userId, planId, [{ notes: [] }]);
 
         scribe.observeRun({
           kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
@@ -153,8 +198,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const { scribe } = yield* scribeFor(userId, planId, [
-          { goal: { problem: PROBLEM } },
-          { goal: { outcome: OUTCOME } },
+          { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+          { notes: [added(PLAN_FIELD.OUTCOME, OUTCOME)] },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -174,14 +219,25 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
   );
 
   it.effect(
-    "a run that writes a section whole, null where it has no words, erases nothing the run before it wrote",
+    "a run that corrects a phrase changes only that phrase, and what the run before wrote stands",
     () =>
       Effect.scoped(
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
+          const corrected = "Only an owner can add someone to a workspace.";
           const { scribe } = yield* scribeFor(userId, planId, [
-            { goal: { problem: PROBLEM, outcome: null } },
-            { goal: { problem: null, outcome: OUTCOME }, rules: null },
+            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+            {
+              notes: [
+                {
+                  kind: NOTE_KIND.REPLACE,
+                  field: PLAN_FIELD.PROBLEM,
+                  find: "an admin",
+                  text: "an owner",
+                },
+                added(PLAN_FIELD.OUTCOME, OUTCOME),
+              ],
+            },
           ]);
 
           scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -189,12 +245,12 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const first = yield* savedBodyOnce(userId, planId, (body) => body.includes(PROBLEM));
           assert.ok(first.includes(PROBLEM));
 
-          scribe.observe(heard("Members should invite by email.", 5_000, 6_000));
+          scribe.observe(heard("Sorry, owners, not admins. Members should invite.", 5_000, 6_000));
           yield* quiet;
 
           const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
           assert.ok(body.includes(OUTCOME));
-          assert.ok(body.includes(PROBLEM));
+          assert.ok(body.includes(`### Problem\n\n${corrected}\n`));
         }),
       ),
   );
@@ -207,7 +263,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const { userId, planId } = yield* openPlan;
           const { scribe, asked, reports } = yield* scribeFor(userId, planId, [
             new Error("the provider is unavailable"),
-            { goal: { problem: PROBLEM } },
+            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
           ]);
 
           scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -238,7 +294,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         Effect.gen(function* () {
           const { userId, planId } = yield* openPlan;
           const { scribe, drafts, writing } = yield* scribeFor(userId, planId, [
-            { goal: { problem: PROBLEM, outcome: OUTCOME } },
+            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM), added(PLAN_FIELD.OUTCOME, OUTCOME)] },
           ]);
 
           scribe.observe(heard("Only admins can add people, and it hits members.", 0, 1_000));
@@ -273,7 +329,11 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         const { userId, planId } = yield* openPlan;
         const before = yield* savedBody(userId, planId);
         const { scribe, drafts, reports } = yield* scribeFor(userId, planId, [
-          { brokenAfter: { goal: { problem: PROBLEM, outcome: OUTCOME } } },
+          {
+            brokenAfter: {
+              notes: [added(PLAN_FIELD.PROBLEM, PROBLEM), added(PLAN_FIELD.OUTCOME, OUTCOME)],
+            },
+          },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -295,7 +355,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         const { scribe, writing } = yield* scribeFor(userId, planId, [
-          { goal: { problem: PROBLEM } },
+          { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
         ]);
 
         scribe.observe(heard("Only admins can add people.", 0, 1_000));
@@ -344,6 +404,125 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         );
         assert.deepEqual(writing, [true, false]);
         assert.equal(reports.length, 1);
+      }),
+    ),
+  );
+
+  it.effect(
+    "while the notes stream, no draft loses words an earlier draft showed but the phrase a correction names",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openDraftedPlan;
+          const stored = yield* savedBody(userId, planId);
+          const find = "an admin";
+          const notes: readonly PlanNote[] = [
+            added(PLAN_FIELD.PROBLEM, "- Invites sent by hand are lost in email threads."),
+            { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find, text: "an owner" },
+            added(
+              PLAN_FIELD.OUTCOME,
+              "Members invite teammates themselves, and each invite is tracked until accepted.",
+            ),
+            {
+              kind: NOTE_KIND.ADD_EXAMPLE,
+              rule: 2,
+              given: "An invite withdrawn by its sender",
+              when: "the teammate opens its link",
+              // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+              then: "the link says the invite is no longer valid", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+            },
+            added(PLAN_FIELD.OPEN_QUESTIONS, "How long does an invite link stay valid?"),
+          ];
+          const { scribe, drafts, writing } = yield* scribeFor(userId, planId, [{ notes }]);
+
+          scribe.observe(heard("Invites get lost, and owners add people, not admins.", 0, 1_000));
+          yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
+          yield* settledRead(
+            Effect.sync(() => writing.length),
+            (count) => count > 0,
+          );
+          // The model streams its answer across drafts spaced a beat apart.
+          for (let beat = 0; beat < 60; beat += 1) {
+            yield* Effect.andThen(
+              TestClock.adjust(Duration.millis(PLAN_SCRIBE.DRAFT_EVERY_MS)),
+              settle,
+            );
+          }
+          yield* settledRead(
+            Effect.sync(() => drafts.at(-1)),
+            (draft) => draft?.savedAt !== undefined,
+          );
+
+          const bodies = [stored, ...drafts.map((draft) => draft.document.body)];
+          const saved = yield* savedBody(userId, planId);
+          assert.equal(bodies.at(-1), saved);
+          assert.ok(
+            bodies.some((body) => body !== stored && body !== saved),
+            "a draft was drawn mid-answer",
+          );
+          for (const [index, body] of bodies.slice(1).entries()) {
+            const lost = linesLost(bodies[index] ?? stored, body).filter(
+              (line) => !line.includes(find),
+            );
+            assert.deepEqual(lost, [], `draft ${index + 1} lost words`);
+          }
+        }),
+      ),
+  );
+
+  it.effect(
+    "a note naming what the plan does not hold is reported, and the notes beside it save",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openDraftedPlan;
+          const { scribe, reports } = yield* scribeFor(userId, planId, [
+            {
+              notes: [
+                {
+                  kind: NOTE_KIND.REPLACE,
+                  field: PLAN_FIELD.PROBLEM,
+                  find: "a phrase nobody said",
+                  text: "Everything.",
+                },
+                added(PLAN_FIELD.OUTCOME, OUTCOME),
+              ],
+            },
+          ]);
+
+          scribe.observe(heard("A member should invite by email.", 0, 1_000));
+          yield* quiet;
+
+          const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
+          assert.ok(body.includes(OUTCOME));
+          assert.ok(body.includes(INVITATIONS_DRAFT.fields.goal.problem ?? "?"));
+          assert.ok(!body.includes("Everything."));
+          assert.deepEqual(reports, [
+            "The plan's notetaker named what the plan does not hold: replace problem",
+          ]);
+        }),
+      ),
+  );
+
+  it.effect("the model is handed the saved plan's fields and assumptions as JSON", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openDraftedPlan;
+        const { scribe, asked } = yield* scribeFor(userId, planId, [{ notes: [] }]);
+
+        scribe.observe(heard("Let's keep going.", 0, 1_000));
+        yield* quiet;
+        yield* settledRead(
+          Effect.sync(() => asked.length),
+          (count) => count > 0,
+        );
+
+        const lines = promptText(asked[0]).split("\n");
+        const plan = lines[lines.indexOf("[saved plan]") + 1];
+        assert.deepEqual(JSON.parse(plan ?? assert.fail("no plan after its marker")), {
+          fields: INVITATIONS_DRAFT.fields,
+          assumptions: INVITATIONS_DRAFT.assumptions,
+        });
       }),
     ),
   );

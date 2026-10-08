@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { EMPTY_PLAN_UPDATE, planBody } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -95,7 +95,7 @@ test("the document offers no way to write, confirm, or approve anything", () => 
 });
 
 test("a new plan draws its whole template unanswered, and an assumptions section that says none is recorded", () => {
-  const body = planBody(PLAN, EMPTY_PLAN_UPDATE);
+  const body = planBody(PLAN, EMPTY_PLAN_FIELDS);
   const markup = documentMarkup({ ...PLAN, document: { body, assumptions: [] } });
 
   const sections = [

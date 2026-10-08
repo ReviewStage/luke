@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import type { LanguageModel } from "ai";
@@ -41,6 +42,7 @@ import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted } from "./support/live-events";
+import { added } from "./support/plan-contents";
 import { scriptedScribeModel } from "./support/scribe-model";
 import { settled } from "./support/settle";
 import {
@@ -504,7 +506,7 @@ it.live(
           planning: true,
           scribe: {
             planId: plan.id,
-            model: scriptedScribeModel([{ goal: { problem } }]).model,
+            model: scriptedScribeModel([{ notes: [added(PLAN_FIELD.PROBLEM, problem)] }]).model,
             onDraft: (draft) => drafts.push(draft),
           },
         }),
