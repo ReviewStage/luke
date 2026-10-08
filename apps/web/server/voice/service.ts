@@ -445,6 +445,19 @@ export class VoiceService {
     );
   }
 
+  /**
+   * Hands a session this connection can no longer end to the sweep: the row
+   * stamped detached where this connection still holds it, so a device that
+   * comes back within the grace re-attaches, and a session no one comes back
+   * for is ended on Luke's key with its seconds recorded.
+   */
+  #leaveToSweep(session: {
+    sessionId: string;
+    attachId: string;
+  }): Effect.Effect<void, never, SqlClient.SqlClient> {
+    return this.#written(this.#record.detach(session));
+  }
+
   /** Who an upgrade admits before any socket stands, or the status it is refused with. */
   #admit(request: IncomingMessage, known: boolean): UpgradeDecision {
     if (this.#upstream === undefined) {
@@ -480,13 +493,18 @@ export class VoiceService {
 
       const opened = yield* this.#opener.open(upstream, admission, device);
       // A socket opened for a device that has gone is the scope's to
-      // release, which it does on the way out of this effect.
-      if (!(yield* device.isOpen)) return;
+      // release, which it does on the way out of this effect; a session it
+      // opened is left to the device's re-attach or to the sweep.
       if ("refusal" in opened) {
-        yield* refuse(opened.refusal);
+        if (yield* device.isOpen) yield* refuse(opened.refusal);
         return;
       }
-      const { sessionId, accountId, sideband } = opened;
+      const { sessionId, accountId, attachId, sideband } = opened;
+      const leaveToSweep = this.#leaveToSweep({ sessionId, attachId });
+      if (!(yield* device.isOpen)) {
+        yield* leaveToSweep;
+        return;
+      }
       // The exchange stands before the device is answered, on the same socket
       // the relay is about to pipe. The socket is paused since the attach, so a
       // frame the session spoke while the exchange stood is read once both
@@ -533,6 +551,7 @@ export class VoiceService {
         },
       });
       if ("refused" in standing) {
+        yield* leaveToSweep;
         yield* refuse(HOSTED_API_ERROR.UNAVAILABLE);
         return;
       }
@@ -544,12 +563,12 @@ export class VoiceService {
       // paused socket would never deliver. A re-attach the device dropped is a
       // detach, as the relay reads one: the session is still the device's to
       // attach to again. A session created for a device that never heard its
-      // answer is no one's, and is closed.
+      // answer is no one's, and is closed. Either is stamped, since no
+      // connection here reads the `session.closed` that records its seconds.
       if (!(yield* device.isOpen)) {
         yield* Effect.sync(() => sideband.resume());
-        const detached = opened.started;
-        yield* stopExchange(detached ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
-        if (detached) yield* this.#written(this.#record.detach({ sessionId }));
+        yield* stopExchange(opened.started ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
+        yield* leaveToSweep;
         return;
       }
       yield* device.send({ text: JSON.stringify(opened.answer) });
@@ -619,11 +638,14 @@ export class VoiceService {
       // its sideband reports as the close it held), and waits for every record
       // write already started, so no line begun before the settle is cut. A
       // relay that settled detached left the session standing for the
-      // device's re-attach, so the exchange lets go of it with nothing said,
-      // and the row is stamped so the sweep ends it if no device comes back.
+      // device's re-attach, so the exchange lets go of it with nothing said.
+      // Any ending but a confirmed one leaves the row stamped, so the sweep
+      // ends the session and records its seconds if no device comes back: a
+      // close OpenAI never confirmed, or a sideband that went first, may
+      // still be a session running on Luke's key.
       const detached = summary.finalization === FINALIZATION.DETACHED;
       yield* stopExchange(detached ? EXCHANGE_ENDING.DETACH : EXCHANGE_ENDING.CLOSE);
-      if (detached) yield* this.#written(this.#record.detach({ sessionId }));
+      if (summary.finalization !== FINALIZATION.CONFIRMED) yield* leaveToSweep;
       this.#log({ event: LOG_EVENT.SESSION_ENDED, ...summary });
     });
   }

@@ -81,6 +81,13 @@ export const voiceSessions = pgTable(
      * ago than the grace is an orphan the scheduled sweep closes.
      */
     detachedAt: instant("detached_at"),
+    /**
+     * Which connection holds the session now: minted by the connection that
+     * created it or last re-attached to it, so a detach the connection it
+     * replaced writes late cannot stamp a session a newer connection holds;
+     * null only for a row an earlier build wrote.
+     */
+    attachId: text("attach_id"),
   },
   (table) => [
     index("voice_sessions_by_owner").on(table.userId, table.liveSessionId),

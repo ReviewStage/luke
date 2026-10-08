@@ -400,6 +400,13 @@
       "when": 1790550000000,
       "tag": "0057_plan_board",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1790575000000,
+      "tag": "0058_voice_session_attach",
+      "breakpoints": true
     }
   ]
 }

@@ -18,7 +18,7 @@ import { noDatabase } from "./support/no-database";
 const CRON_SECRET = Redacted.make("cron-secret-1");
 const SWEEP_TIME = Date.parse("2026-08-12T02:45:00.000Z");
 /** What the sweep over the detached voice sessions answers. */
-const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, failed: 0 };
+const VOICED: VoiceOrphanSweepOutcome = { closed: 2, lost: 1, pending: 1, failed: 0 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
 function sweepRequest(

@@ -548,7 +548,7 @@ it.effect(
 );
 
 it.effect(
-  "an exchange offered that cannot stand refuses the session as unavailable, with the sideband released and the refusal logged, rather than running it with no one to answer",
+  "an exchange offered that cannot stand refuses the session as unavailable, with the sideband released, the refusal logged, and the session left stamped for the sweep, rather than running it with no one to answer",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.FAILING);
@@ -572,6 +572,10 @@ it.effect(
         context.log.map((entry) => entry.event),
         [LOG_EVENT.EXCHANGE_FAILED, LOG_EVENT.SESSION_REFUSED],
       );
+      // The session stands at OpenAI with no connection to close it: open, and stamped.
+      const row = await sessionRowOf(context.target.userId, attach.sessionId);
+      assert.equal(row?.closedAt, null);
+      assert.notEqual(row?.detachedAt ?? null, null);
       await context.stop();
     }),
 );

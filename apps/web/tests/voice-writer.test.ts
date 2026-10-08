@@ -62,7 +62,14 @@ async function target(): Promise<VoiceTarget> {
   const conversationId = await insertConversation(database.run, { userId });
   liveSessions += 1;
   const liveSessionId = `sess_fixture_${liveSessions}`;
-  await database.run(record.register({ userId, sessionId: liveSessionId, planId: randomUUID() }));
+  await database.run(
+    record.register({
+      userId,
+      sessionId: liveSessionId,
+      planId: randomUUID(),
+      attachId: randomUUID(),
+    }),
+  );
   return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
 const SessionIdRowSchema = Schema.Struct({ id: Schema.String });
@@ -148,6 +155,7 @@ test("segments after a gap land on the same open row, from a fresh writer, with 
       userId: live.userId,
       sessionId: live.liveSessionId,
       planId: randomUUID(),
+      attachId: randomUUID(),
     }),
   );
   assert.deepEqual(

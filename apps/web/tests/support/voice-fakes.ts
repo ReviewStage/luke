@@ -5,7 +5,7 @@ import type { Plan } from "@sidecar/hosted/plan-wire";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import { VOICE_CLOSE_REASON, type VoiceCloseReason } from "../../server/db/voice-vocabulary";
+import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
 import type { HostedSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
@@ -229,8 +229,17 @@ interface RecordedClose {
   reason: VoiceCloseReason;
 }
 
+/** A session's row as the record holds it: open or closed, stamped for the sweep or held by a connection. */
+interface FakeSessionRow {
+  closed: boolean;
+  /** Stamped detached and still open: the sweep ends it if no device comes back. */
+  detached: boolean;
+}
+
 export interface FakeSessionRecord extends VoiceSessionRecord {
   registered: Array<{ userId: string; sessionId: string; planId: string }>;
+  /** Each live session's row as the writes that landed left it, by live session id. */
+  rows: Map<string, FakeSessionRow>;
   /** The store id the fake minted for each live session's row, by live session id, as `register` answered it. */
   voiceSessionIds: Map<string, string>;
   /** The plans the fake holds, by the account that holds each. */
@@ -238,7 +247,7 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
   /** Every usage snapshot, in order. */
   usage: Array<{ sessionId: string; seconds: number }>;
   closes: RecordedClose[];
-  /** Every detach and re-attach the service wrote, in order, by the live session named. */
+  /** Every detach and re-attach that landed, in order, by the live session named. */
   detachments: Array<{ sessionId: string; detached: boolean }>;
 }
 
@@ -246,12 +255,20 @@ export interface FakeSessionRecord extends VoiceSessionRecord {
  * A session record that keeps one owner per live session, as the unique column
  * does, and answers the same effects the real one does, so a test's service
  * composes it exactly as the function's does and nothing here reaches a
- * database.
+ * database. Its writes land where the real one's do: a close and a stamp only
+ * on an open row, and a detach only from the connection that holds the row.
  */
 export function fakeSessionRecord(): FakeSessionRecord {
   const owners = new Map<string, { userId: string; planId: string }>();
+  /** Which connection holds each open row, by live session id. */
+  const holders = new Map<string, string>();
+  const openRow = (sessionId: string) => {
+    const row = fake.rows.get(sessionId);
+    return row === undefined || row.closed ? undefined : row;
+  };
   const fake: FakeSessionRecord = {
     registered: [],
+    rows: new Map(),
     voiceSessionIds: new Map(),
     plans: [],
     usage: [],
@@ -259,10 +276,16 @@ export function fakeSessionRecord(): FakeSessionRecord {
     detachments: [],
     register: (input) =>
       Effect.sync(() => {
-        fake.registered.push(input);
+        fake.registered.push({
+          userId: input.userId,
+          sessionId: input.sessionId,
+          planId: input.planId,
+        });
         if (!owners.has(input.sessionId)) {
           owners.set(input.sessionId, { userId: input.userId, planId: input.planId });
           fake.voiceSessionIds.set(input.sessionId, randomUUID());
+          fake.rows.set(input.sessionId, { closed: false, detached: false });
+          holders.set(input.sessionId, input.attachId);
         }
         return owners.get(input.sessionId)?.userId === input.userId
           ? fake.voiceSessionIds.get(input.sessionId)
@@ -286,24 +309,34 @@ export function fakeSessionRecord(): FakeSessionRecord {
       }),
     close: (input) =>
       Effect.sync(() => {
+        const row = openRow(input.sessionId);
+        if (row === undefined) return;
+        row.closed = true;
         fake.closes.push(input);
       }),
     detach: (input) =>
       Effect.sync(() => {
+        const row = openRow(input.sessionId);
+        if (row === undefined || holders.get(input.sessionId) !== input.attachId) return;
+        row.detached = true;
         fake.detachments.push({ sessionId: input.sessionId, detached: true });
       }),
     attached: (input) =>
       Effect.sync(() => {
+        const row = openRow(input.sessionId);
+        if (row === undefined) return;
+        row.detached = false;
+        holders.set(input.sessionId, input.attachId);
         fake.detachments.push({ sessionId: input.sessionId, detached: false });
       }),
     detached: () => Effect.succeed([]),
+    sweepLater: () => Effect.void,
     closeLost: (input) =>
       Effect.sync(() => {
-        fake.closes.push({
-          sessionId: input.sessionId,
-          seconds: 0,
-          reason: VOICE_CLOSE_REASON.CONNECTION_LOST,
-        });
+        const row = openRow(input.sessionId);
+        if (row === undefined) return;
+        row.closed = true;
+        fake.closes.push({ sessionId: input.sessionId, seconds: 0, reason: input.reason });
       }),
   };
   return fake;

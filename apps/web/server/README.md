@@ -1092,7 +1092,14 @@ sideband, records no close, and the exchange lets go of the session with
 nothing said to it. The row is stamped `detached_at` (migration 0052) where it
 is still open, and a re-attach clears the stamp, so a session no device came
 back for is visible as an open row stamped longer ago than the grace, which
-the scheduled sweep ends (below). So a socket may also open with `session.attach` naming
+the scheduled sweep ends (below). Each connection names itself on the row
+with an `attach_id` (migration 0058), written at creation and at every
+re-attach, and a stamp lands only where the row still names the connection
+writing it: the Mac re-attaches within seconds, so the connection it replaced
+can write its detach after the new one attached, and that late stamp would
+otherwise hand a live call to the sweep. A device that goes while its session
+is being created or re-attached leaves the session stamped the same way, since
+no connection is left to end it. So a socket may also open with `session.attach` naming
 a session id. The function resolves the bearer, checks that this account is
 the one the session was created for (the `voice_sessions` row written at
 creation, indexed over the owner and the live session id for this lookup),
@@ -1137,13 +1144,23 @@ ago, oldest first and ten at a time, attaches a fresh sideband to each through
 the same upstream, sends `session.close` through the same graceful close the
 exchange runs, and on `session.closed` writes the close and records the
 seconds through the same ledger; each attach and each wait for the final event
-is bounded at five seconds. A session OpenAI will not attach to is already
-gone, and one that never answers is let go of: both are closed as
-`connection_lost` with the last unconfirmed snapshot standing, so no row is
-swept twice. A deployment without the voice key sweeps nothing. A sideband that ends first closes the device's socket
-with code 1001 and reason `upstream-closed` and records nothing: the last
-unconfirmed snapshot standing with `closed_at` null is the honest record, and
-a re-attached connection's `session.closed` later confirms it. Only the voice
+is bounded at five seconds. A session OpenAI refuses the attach for as gone
+(404 or 410) is closed as `connection_lost` with the last unconfirmed snapshot
+standing, so no row is swept twice. Anything less conclusive — an attach that
+timed out, was throttled, or failed at OpenAI, or a close never confirmed —
+says nothing of whether the call still runs, so the row is left stamped for
+the next sweep, unless the session started more than
+`VOICE_SESSION_LIMIT_MS` (60 minutes, OpenAI's own duration limit) ago, when it
+is closed as `expired`. The sweep answers how many it `closed`, how many were
+`lost`, how many stand `pending` for the next sweep, and how many `failed` a
+write. A deployment without the voice key sweeps nothing. Every connection
+that ends without `session.closed` stamps the row the way a detach does, so
+the sweep closes the session and records its seconds unless a device comes
+back: a hang-up whose close OpenAI never confirmed within the 15 seconds, a
+sideband that ended first (which also closes the device's socket with code
+1001 and reason `upstream-closed`), and a session refused after it was
+created — its sideband not attached, or its exchange unable to stand. A close
+writes only an open row, so a second `session.closed` changes nothing. Only the voice
 function and the maintenance sweep write `voice_sessions`; the seconds ledger and it both cascade with
 the user row. The seconds ledger meters nothing on its own: a session still
 spends one call when it opens, until the seconds are what the allowance is

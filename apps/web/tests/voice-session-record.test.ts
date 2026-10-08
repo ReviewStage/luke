@@ -68,6 +68,7 @@ const callWith = (
       userId: input.userId,
       sessionId: liveSessionId,
       planId: input.planId,
+      attachId: randomUUID(),
     });
     assert.ok(voiceSessionId);
     yield* db
@@ -95,11 +96,13 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
           userId: owner,
           sessionId: liveSessionId,
           planId,
+          attachId: randomUUID(),
         });
         const taken = yield* record.register({
           userId: other,
           sessionId: liveSessionId,
           planId: randomUUID(),
+          attachId: randomUUID(),
         });
 
         // The owner is answered the store's id for the row, and another account nothing.
@@ -141,7 +144,12 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
 
         assert.equal((yield* record.heldPlan({ userId: owner, planId: plan.id }))?.id, plan.id);
         assert.equal(yield* record.heldPlan({ userId: other, planId: plan.id }), undefined);
-        yield* record.register({ userId: owner, sessionId: liveSessionId, planId: plan.id });
+        yield* record.register({
+          userId: owner,
+          sessionId: liveSessionId,
+          planId: plan.id,
+          attachId: randomUUID(),
+        });
         assert.deepEqual(yield* record.owned({ userId: owner, sessionId: liveSessionId }), {
           planId: plan.id,
         });
@@ -193,7 +201,12 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
       Effect.gen(function* () {
         const owner = yield* openUser;
         const liveSessionId = `live_u_${randomUUID()}`;
-        yield* record.register({ userId: owner, sessionId: liveSessionId, planId: randomUUID() });
+        yield* record.register({
+          userId: owner,
+          sessionId: liveSessionId,
+          planId: randomUUID(),
+          attachId: randomUUID(),
+        });
         yield* record.noteUsage({ sessionId: liveSessionId, seconds: 10 });
         yield* record.noteUsage({ sessionId: liveSessionId, seconds: 25 });
         const read = Effect.map(readVoiceSession(liveSessionId), (rows) =>
@@ -227,6 +240,73 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         );
         yield* record.noteUsage({ sessionId: "live_unknown", seconds: 1 });
         assert.equal((yield* readVoiceSession("live_unknown")).length, 0);
+      }),
+  );
+
+  it.effect("a second close leaves the first close standing", () =>
+    Effect.gen(function* () {
+      const owner = yield* openUser;
+      const liveSessionId = `live_c_${randomUUID()}`;
+      yield* record.register({
+        userId: owner,
+        sessionId: liveSessionId,
+        planId: randomUUID(),
+        attachId: randomUUID(),
+      });
+      yield* record.close({
+        sessionId: liveSessionId,
+        seconds: 42,
+        reason: VOICE_CLOSE_REASON.CLOSE_REQUESTED,
+      });
+      yield* voiceSessionRecord(() => NOW + 60_000).close({
+        sessionId: liveSessionId,
+        seconds: 7,
+        reason: VOICE_CLOSE_REASON.REMOTE_HANGUP,
+      });
+
+      assert.deepEqual(
+        (yield* readVoiceSession(liveSessionId)).map((row) => ({
+          closedAt: row.closedAt,
+          closeReason: row.closeReason,
+          usage: row.usage,
+        })),
+        [
+          {
+            closedAt: new Date(NOW),
+            closeReason: VOICE_CLOSE_REASON.CLOSE_REQUESTED,
+            usage: { seconds: 42, confirmed: true },
+          },
+        ],
+      );
+    }),
+  );
+
+  it.effect(
+    "a detach stamps the session for the sweep only from the connection that holds it, so a replaced connection's late detach leaves a re-attached call alone",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const liveSessionId = `live_d_${randomUUID()}`;
+        const first = randomUUID();
+        const second = randomUUID();
+        const stamped = Effect.map(
+          record.detached({ detachedBefore: NOW + 1, limit: 10_000 }),
+          (rows) => rows.some((row) => row.sessionId === liveSessionId),
+        );
+        yield* record.register({
+          userId: owner,
+          sessionId: liveSessionId,
+          planId: randomUUID(),
+          attachId: first,
+        });
+        yield* record.attached({ sessionId: liveSessionId, attachId: second });
+
+        // The first connection's detach lands after the second attached: it holds the session no more.
+        yield* record.detach({ sessionId: liveSessionId, attachId: first });
+        assert.equal(yield* stamped, false);
+
+        yield* record.detach({ sessionId: liveSessionId, attachId: second });
+        assert.equal(yield* stamped, true);
       }),
   );
 });

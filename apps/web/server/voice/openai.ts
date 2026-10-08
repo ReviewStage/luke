@@ -48,8 +48,15 @@ type LiveCreateResult =
   | { outcome: typeof LIVE_SESSION_OUTCOME.NETWORK_ERROR; errorName: string | undefined }
   | { outcome: typeof LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };
 
-/** The sideband did not stand: the handshake was refused, failed, or ran past its wait. */
-class SidebandNotAttached extends Data.TaggedError("SidebandNotAttached") {}
+/**
+ * The sideband did not stand: the handshake was refused, failed, or ran past
+ * its wait. A refusal carries the HTTP status OpenAI answered it with, which
+ * is how a session that is gone tells itself apart from a transient failure;
+ * a failure with no answer carries none.
+ */
+class SidebandNotAttached extends Data.TaggedError("SidebandNotAttached")<{
+  readonly status: number | undefined;
+}> {}
 
 export interface LiveUpstreamOptions {
   apiKey: string;
@@ -158,12 +165,16 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
             socket.pause();
             resume(Effect.void);
           });
-          socket.once("error", () => resume(Effect.fail(new SidebandNotAttached())));
-          socket.once("unexpected-response", () => resume(Effect.fail(new SidebandNotAttached())));
+          socket.once("error", () =>
+            resume(Effect.fail(new SidebandNotAttached({ status: undefined }))),
+          );
+          socket.once("unexpected-response", (_request, response) =>
+            resume(Effect.fail(new SidebandNotAttached({ status: response.statusCode }))),
+          );
         }).pipe(
           Effect.timeoutOrElse({
             duration: attachTimeoutMs,
-            orElse: () => Effect.fail(new SidebandNotAttached()),
+            orElse: () => Effect.fail(new SidebandNotAttached({ status: undefined })),
           }),
         );
         return socket;
