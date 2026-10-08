@@ -741,6 +741,36 @@ it.effect(
     }),
 );
 
+it.effect("a press waiting on a closing call opens nothing once the voice is stopped", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+      startImmediately: true,
+    });
+    const closingCall = f.latest();
+    assert.ok(closingCall);
+    closingCall.started();
+    yield* Fiber.join(pressed);
+    yield* f.endTalk();
+    const closed = yield* Deferred.make<void>();
+    closingCall.closing = Deferred.await(closed);
+    yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: sessionIdOf(closingCall) });
+    yield* settleFibers();
+    const again = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+      startImmediately: true,
+    });
+    yield* settleFibers();
+
+    // The stop waits out the closing call's own release, so it runs beside the close.
+    const stopped = yield* Effect.forkChild(f.stop(), { startImmediately: true });
+    yield* Deferred.succeed(closed, undefined);
+    yield* settleFibers();
+    yield* Fiber.join(stopped);
+    yield* Fiber.join(again);
+    assert.equal(f.calls.length, 1);
+  }),
+);
+
 it.effect(
   "a call the host closed while its peer is still hanging up leaves the call opened meanwhile standing when that hang-up finally ends",
   () =>

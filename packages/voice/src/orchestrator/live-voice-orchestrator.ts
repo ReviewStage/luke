@@ -491,6 +491,8 @@ export class LiveVoiceOrchestrator {
   #ensureSession(planId: string): Effect.Effect<LiveVoiceCall | undefined> {
     return Effect.gen({ self: this }, function* () {
       yield* this.#outlastClosing();
+      // A stop frees a press waiting on a closing call, and a stopped orchestrator opens nothing.
+      if (this.#stopped) return undefined;
       if (this.#call?.standing) return this.#call;
       const negotiating = this.#opening;
       if (negotiating) return yield* Deferred.await(negotiating);
