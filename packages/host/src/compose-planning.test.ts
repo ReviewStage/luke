@@ -1000,25 +1000,31 @@ it.effect(
 );
 
 it.effect(
-  "a call's end about the open plan reads its transcript again, with the call's words",
+  "a call's end about the open plan reads its transcript again, and once more for words written after it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
         service.transcripts[INVITES] = transcriptSaying("Invites should expire.");
-        const { call, planning, viewWhere } = yield* subject(service);
+        const { call, planning, last, told } = yield* subject(service);
         yield* planning.lifetime;
         yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
-        const said = transcriptSaying("Seven days.");
-        service.transcripts[INVITES] = said;
-        const read = viewWhere((view) => isDeepStrictEqual(view.transcript?.transcript, said));
+        // The read at the end lands before the call's last words reach the record.
+        const partway = transcriptSaying("Seven");
+        const whole = transcriptSaying("Seven days.");
+        const answers = [partway, whole];
+        service.readTranscript = () => Effect.sync(() => answers.shift() ?? whole);
         planning.callEnded(INVITES);
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+        yield* TestClock.adjust(Duration.seconds(5));
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
 
-        assert.deepEqual((yield* read).transcript, {
+        assert.deepEqual(last()?.transcript, {
           status: PLANNING_READ.READY,
-          transcript: said,
+          transcript: whole,
         });
+        assert.ok(told.some((view) => isDeepStrictEqual(view.transcript?.transcript, partway)));
       }),
     ),
 );

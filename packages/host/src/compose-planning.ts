@@ -23,7 +23,7 @@ import {
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, Queue, Result, Schema, type Scope, Semaphore } from "effect";
+import { Duration, Effect, Option, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -47,13 +47,23 @@ import type { RunMode } from "./run-mode.js";
  * a draw happens only inside its turn; the panel saves the board's scene
  * through here and the view takes the board as the service answered it. What
  * was said on the open plan's calls is read with its document, and again
- * whenever a call about it ends, which is when the call's words are all on
- * record; while a call stands, its words are the voice window's to report.
+ * whenever a call about it ends, once at the end and once more when the
+ * call's last words have had time to reach the record; while a call stands,
+ * its words are the voice window's to report.
  * The loops here are the open plan's folder commands
  * (`planning-commands.ts`), which the planning model asks this Mac to run,
  * those board and transcript reads, and the code Luke puts on screen during
  * a call (`plan-code.ts`), read from the plan's folder.
  */
+
+/**
+ * How long after a call's end its transcript is read a second time. Note
+ * that the first read can land before the service has written the call's
+ * last words, because the service closes the device's socket first and only
+ * then waits on the writes it already started, and says nothing once they
+ * land; this is that wait's margin.
+ */
+const TRANSCRIPT_SETTLE = Duration.seconds(5);
 
 /** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
@@ -540,9 +550,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       );
       yield* Effect.forkScoped(
         Effect.forever(
-          Effect.flatMap(Queue.take(transcriptReads), (planId) =>
-            gate() ? serial(readTranscript(planId)) : Effect.void,
-          ),
+          Effect.flatMap(Queue.take(transcriptReads), (planId) => {
+            const read = Effect.suspend(() =>
+              gate() && view.activePlanId === planId ? serial(readTranscript(planId)) : Effect.void,
+            );
+            return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
+          }),
         ),
       );
     }),
