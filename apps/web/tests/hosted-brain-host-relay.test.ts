@@ -20,6 +20,7 @@ import {
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { hostTurnId, reasoningItemId } from "../server/hosted/brain-host/ids";
+import { EVE_DELEGATION_TOOL } from "../server/hosted/brain-host/planning";
 import {
   FAILURE_DETAIL_BOUNDS,
   memoryRelayState,
@@ -274,6 +275,76 @@ it.effect(
       assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.equal(toolPart.toolCallId, "call-1");
       assert.deepEqual(standing.state.get(), { turns: {} });
+      assert.deepEqual(refusals, []);
+    }),
+);
+
+it.effect(
+  "a turn that delegates to a subagent keeps the call on its journal like any planning call, with eve's receipt as its result",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const turnId = "turn_0";
+      const sequence = 0;
+      refusals.length = 0;
+      await play(
+        [
+          stamped({ type: "turn.started", data: { turnId, sequence } }),
+          stamped({
+            type: "message.received",
+            data: { turnId, sequence, message: "compare the two queue libraries" },
+          }),
+          stamped({
+            type: "step.started",
+            data: { turnId, sequence, stepIndex: 0, modelId: "m" },
+          }),
+          stamped({
+            type: "actions.requested",
+            data: {
+              turnId,
+              sequence,
+              stepIndex: 0,
+              actions: [
+                {
+                  kind: "tool-call",
+                  callId: "call-1",
+                  toolName: EVE_DELEGATION_TOOL.RESEARCHER,
+                  input: { message: "Compare the two queue libraries." },
+                },
+              ],
+            },
+          }),
+          stamped({
+            type: "action.result",
+            data: {
+              turnId,
+              sequence,
+              stepIndex: 0,
+              status: "completed",
+              result: {
+                kind: "tool-result",
+                callId: "call-1",
+                toolName: EVE_DELEGATION_TOOL.RESEARCHER,
+                output: { status: "working", taskId: "task-1", agentId: "agent-1" },
+              },
+            },
+          }),
+          stamped({
+            type: "step.completed",
+            data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
+          }),
+          stamped({ type: "turn.completed", data: { turnId, sequence } }),
+        ],
+        standing,
+      );
+
+      const { messageRows } = await rows(target);
+      const answer = messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
+      const call = answer?.parts.find((part) => isToolUIPart(part));
+      assert.ok(call);
+      assert.equal(call.type, `tool-${EVE_DELEGATION_TOOL.RESEARCHER}`);
+      assert.equal(call.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.deepEqual(refusals, []);
     }),
 );
