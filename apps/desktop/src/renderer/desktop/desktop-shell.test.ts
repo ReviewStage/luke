@@ -13,8 +13,8 @@ import { useSidebarCollapse } from "./sidebar-collapse";
 const ignore = () => undefined;
 
 /** The window as `App` stands it: the shell over the collapse, whose chord answers on Plans alone. */
-function Window({ tab }: { tab: PanelTab }): React.JSX.Element {
-  const sidebar = useSidebarCollapse(tab === PANEL_TAB.PLANS);
+function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JSX.Element {
+  const sidebar = useSidebarCollapse(tab === PANEL_TAB.PLANS, fixture);
   return createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
     identity: {
@@ -35,10 +35,10 @@ function Window({ tab }: { tab: PanelTab }): React.JSX.Element {
 
 let root: Root | undefined;
 
-function show(tab: PanelTab): void {
+function show(tab: PanelTab, fixture = false): void {
   act(() => {
     root ??= createRoot(document.body.appendChild(document.createElement("div")));
-    root.render(createElement(Window, { tab }));
+    root.render(createElement(Window, { tab, fixture }));
   });
 }
 
@@ -128,4 +128,20 @@ test("Settings keeps its page list whatever the fold, and hands the plans back a
 
   show(PANEL_TAB.PLANS);
   assert.equal(sidebar().hasAttribute("inert"), true, "the plans come back still folded");
+});
+
+test("a fixture run starts open over a kept fold and keeps none of its own", () => {
+  show(PANEL_TAB.PLANS);
+  press();
+  quit();
+
+  // The run is known only once the first state arrives, a render in.
+  show(PANEL_TAB.PLANS);
+  show(PANEL_TAB.PLANS, true);
+  assert.equal(sidebar().hasAttribute("inert"), false, "the developer's fold is not drawn");
+  press();
+  quit();
+
+  show(PANEL_TAB.PLANS);
+  assert.equal(sidebar().hasAttribute("inert"), true, "the developer's fold still stands");
 });

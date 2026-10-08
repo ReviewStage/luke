@@ -313,6 +313,7 @@ export function App(): React.JSX.Element {
   // and the sign-in gate draws no sidebar at all.
   const sidebar = useSidebarCollapse(
     presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS && !accountGated,
+    state?.run.fixtureMode === true,
   );
 
   const caption = useCaptionPresentation({

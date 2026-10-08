@@ -18,6 +18,15 @@ export const SIDEBAR_HOTKEY = "Command+B";
 /** The same chord as `aria-keyshortcuts` spells it. */
 export const SIDEBAR_HOTKEY_ARIA = "Meta+B";
 
+/** The kept choice, or open when there is none or storage refuses the read. */
+function readCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 export interface SidebarCollapse {
   collapsed: boolean;
   onToggle: () => void;
@@ -28,17 +37,30 @@ export interface SidebarCollapse {
  * screen to fold — the Plans tab, the panel holding the keyboard — and the
  * chord answers only then, so Command-B in Settings or under a sheet is left
  * to whatever else wants it. The choice itself outlives an absence: Settings
- * hands back the sidebar the way it was left.
+ * hands back the sidebar the way it was left. A fixture run starts open and
+ * keeps nothing, so its frames never wear a developer's own fold.
  */
-export function useSidebarCollapse(available: boolean): SidebarCollapse {
-  const [collapsed, setCollapsed] = useState(
-    () => window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true",
+export function useSidebarCollapse(available: boolean, fixtureMode: boolean): SidebarCollapse {
+  // Note that the fixture run's fold is a state of its own rather than the
+  // kept one reset, because the run is only known once the first state
+  // arrives, a render after the kept fold was read.
+  const [kept, setKept] = useState(readCollapsed);
+  const [staged, setStaged] = useState(false);
+  const collapsed = fixtureMode ? staged : kept;
+  const onToggle = useCallback(
+    () => (fixtureMode ? setStaged : setKept)((was) => !was),
+    [fixtureMode],
   );
-  const onToggle = useCallback(() => setCollapsed((was) => !was), []);
 
+  // A write that fails costs only the preference, so it is not worth a word
+  // on screen.
   useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
-  }, [collapsed]);
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(kept));
+    } catch {
+      // The sidebar keeps working on the state it holds.
+    }
+  }, [kept]);
 
   useEffect(() => {
     if (!available) return;
