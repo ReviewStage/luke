@@ -671,7 +671,7 @@ it.live(
 );
 
 it.live(
-  "a run is cancelled through the typed Stop's own path: eve's cancel scoped to the turn and the row stamped, a refused cancel answered as failed, and an ended turn as nothing to cancel",
+  "a run is cancelled through `stopAsk`: eve's cancel scoped to the turn and the row stamped, a refused cancel answered as failed, and an ended turn as nothing to cancel",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());

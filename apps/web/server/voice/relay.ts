@@ -4,7 +4,6 @@ import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js"
 import {
   closeEvent,
   decodeLivePayload,
-  LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
   type LiveServerEvent,

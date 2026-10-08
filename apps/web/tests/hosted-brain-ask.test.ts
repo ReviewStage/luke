@@ -138,7 +138,7 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
         assert.ok(row);
         put({ ...row, cancelRequestedAt: at });
       }),
-    // The ask routes take no spoken ask, so no voice session's asks are ever read back or told.
+    // These asks are typed, so no voice session's asks are ever read back or told.
     spokenIn: () => Effect.succeed([]),
     told: () => Effect.void,
   };

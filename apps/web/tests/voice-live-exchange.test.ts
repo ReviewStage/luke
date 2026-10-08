@@ -479,9 +479,7 @@ it.live(
         }),
       );
 
-      const back = yield* Effect.promise(() =>
-        stand(target, { reattach: lost.liveSessionId }),
-      );
+      const back = yield* Effect.promise(() => stand(target, { reattach: lost.liveSessionId }));
       yield* settled(
         () => back.commentary().length >= 2,
         "the reply to be spoken on the re-attach",
@@ -498,9 +496,7 @@ it.live(
       );
       yield* Effect.promise(() => detach(back));
 
-      const again = yield* Effect.promise(() =>
-        stand(target, { reattach: lost.liveSessionId }),
-      );
+      const again = yield* Effect.promise(() => stand(target, { reattach: lost.liveSessionId }));
       yield* Effect.sleep(QUIET_MS * 4);
       assert.deepEqual(again.commentary(), []);
       assert.deepEqual([...lost.reports, ...back.reports, ...again.reports], []);
@@ -552,9 +548,7 @@ it.live(
       yield* Effect.promise(() => detach(lost));
       yield* Effect.promise(() => play(events.slice(answer), standing));
 
-      const back = yield* Effect.promise(() =>
-        stand(target, { reattach: lost.liveSessionId }),
-      );
+      const back = yield* Effect.promise(() => stand(target, { reattach: lost.liveSessionId }));
       yield* settled(
         () => back.commentary().length >= 1,
         "the rest of the reply to be spoken on the re-attach",
@@ -591,9 +585,7 @@ it.live(
       yield* Effect.sleep(QUIET_MS * 4);
       yield* Deferred.succeed(answer, undefined);
       yield* Fiber.join(detaching);
-      const back = yield* Effect.promise(() =>
-        stand(target, { reattach: lost.liveSessionId }),
-      );
+      const back = yield* Effect.promise(() => stand(target, { reattach: lost.liveSessionId }));
       const [opened] = lost.eve.sessions;
       assert.ok(opened);
       yield* Effect.promise(() =>
