@@ -10,7 +10,7 @@ set -euo pipefail
 #                                       one name per line; none by default
 #
 # Unarmed, it polls until the ruleset's required contexts (and any extra checks
-# named below) have passed on the head and no review thread stands unresolved,
+# named above) have passed on the head and no review thread stands unresolved,
 # prints READY with the head oid, and exits without touching the queue: a
 # watcher is not armed until someone says to press. With --press it enqueues at
 # that moment, dequeues if a thread appears while the entry stands, and reports
