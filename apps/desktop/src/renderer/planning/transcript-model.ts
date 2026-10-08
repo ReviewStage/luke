@@ -10,9 +10,10 @@ import type { VoiceView } from "#shared/messages/voice-view";
  * ends; the call standing now is not on record yet, so its words come from
  * the voice window's report as they are said. The two are told apart by the
  * store's id for the call's session, which both carry: a call the record
- * already holds is drawn from the record, so the live call and its stored
- * copy are never drawn twice. The live words outlast the call itself until
- * the record's copy lands, so hanging up never blanks the words just said.
+ * already holds is drawn from the record once the record has caught up with
+ * what was heard, so the live call and its stored copy are never drawn
+ * twice. The heard words outlast the call itself until then, so hanging up,
+ * or calling again at once, never blanks the words just said.
  */
 
 /** Who each speaker is on the tab. */
@@ -66,8 +67,8 @@ export type TranscriptRegion =
     };
 
 /**
- * The call whose words the voice window reported last, as the tab holds it:
- * kept past the call's end until the record's copy of it lands.
+ * A call whose words the voice window reported, as the tab holds it: kept
+ * past the call's end until the record's copy of it has caught up.
  */
 export interface HeardCall {
   readonly planId: string;
@@ -83,60 +84,77 @@ function settledText(text: string): string {
   return text.replace(/\s+/gu, " ").trim();
 }
 
+/** How many words a call's lines hold, which is how far its copy has got. */
+function wordCount(texts: readonly string[]): number {
+  return texts.reduce((count, text) => count + (text === "" ? 0 : text.split(" ").length), 0);
+}
+
 /**
- * The call heard now, from the voice window's report and what was held
- * before: a new call replaces the held one, the same call grows it, and a
- * report naming no call leaves the held one standing, no longer live. A call
- * about another plan than the one open is not this tab's.
+ * The calls heard on the open plan, from the voice window's report and what
+ * was held before: the call reported is live and grows in place, every other
+ * is held no longer live, so a call ended just before the next began keeps
+ * its words until the record has them. Another plan opening drops them all,
+ * and a call about another plan than the one open is not this tab's.
  */
-export function heardCall(input: {
-  held: HeardCall | undefined;
+export function heardCalls(input: {
+  held: readonly HeardCall[];
   voice: Pick<VoiceView, "callPlanId" | "callTranscript">;
   planId: string | undefined;
   now: number;
-}): HeardCall | undefined {
-  const { held, voice, planId, now } = input;
-  if (planId === undefined) return undefined;
+}): readonly HeardCall[] {
+  const { voice, planId, now } = input;
+  if (planId === undefined) return [];
+  const held = input.held.filter((call) => call.planId === planId);
   const reported = voice.callPlanId === planId ? voice.callTranscript : undefined;
-  if (reported === undefined) {
-    if (held === undefined || held.planId !== planId) return undefined;
-    return held.live ? { ...held, live: false } : held;
-  }
-  const same =
-    held !== undefined &&
-    held.planId === planId &&
-    held.live &&
-    held.transcript.voiceSessionId === reported.voiceSessionId;
-  return { planId, transcript: reported, heardAt: same ? held.heardAt : now, live: true };
+  const ended = (call: HeardCall): HeardCall => (call.live ? { ...call, live: false } : call);
+  if (reported === undefined) return held.map(ended);
+  // Note that a call reported again keeps its place and when it was first heard.
+  const standing = held.find(
+    (call) => call.live && call.transcript.voiceSessionId === reported.voiceSessionId,
+  );
+  const live = { planId, transcript: reported, heardAt: standing?.heardAt ?? now, live: true };
+  const kept = held.map((call) => (call === standing ? live : ended(call)));
+  return standing === undefined ? [...kept, live] : kept;
 }
 
-/** The heard call as a row of the list, or nothing when the record already holds it or nothing was said. */
-function heardRow(heard: HeardCall, recorded: ReadonlySet<string>): TranscriptCallRow | undefined {
-  const { voiceSessionId, lines } = heard.transcript;
-  if (voiceSessionId !== undefined && recorded.has(voiceSessionId)) return undefined;
-  const rows = lines
+/** A heard call as a row of the list, or nothing where nothing was said on it. */
+function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
+  const lines = heard.transcript.lines
     .map((line) => ({ key: line.rowId, speaker: line.speaker, text: settledText(line.words) }))
     .filter((line) => line.text !== "");
-  if (rows.length === 0) return undefined;
+  const [first] = lines;
+  if (first === undefined) return undefined;
   return {
-    key: voiceSessionId ?? "heard",
+    key: heard.transcript.voiceSessionId ?? first.key,
     startedAt: heard.heardAt,
     live: heard.live,
-    lines: rows,
+    lines,
   };
 }
 
 /**
  * The tab's state. A transcript held is drawn whatever a later read came to,
- * with the call heard now after it; with none held, the call heard is drawn
- * alone, and failing that the read's own state is.
+ * and the calls heard beside it: a heard call the record holds is drawn from
+ * the record once the record's copy has as many words, and from what was
+ * heard until then, in the record's place; one the record does not hold yet
+ * follows the record's calls. With nothing held and nothing heard, the read's
+ * own state is drawn.
  */
 export function transcriptRegion(input: {
   transcript: PlanningView["transcript"];
-  heard: HeardCall | undefined;
+  heard: readonly HeardCall[];
 }): TranscriptRegion {
   const stored = input.transcript?.transcript;
-  const recorded = new Set(stored?.calls.map((call) => call.id));
+  const heard = new Map<string, TranscriptCallRow>();
+  const unrecorded: TranscriptCallRow[] = [];
+  for (const call of input.heard) {
+    const row = heardRow(call);
+    if (row === undefined) continue;
+    const id = call.transcript.voiceSessionId;
+    const recorded = id !== undefined && stored?.calls.some((each) => each.id === id) === true;
+    if (recorded) heard.set(id, row);
+    else unrecorded.push(row);
+  }
   const calls: TranscriptCallRow[] = (stored?.calls ?? []).flatMap((call) => {
     const lines = call.lines
       .map((line, index) => ({
@@ -145,12 +163,18 @@ export function transcriptRegion(input: {
         text: settledText(line.text),
       }))
       .filter((line) => line.text !== "");
+    const ahead = heard.get(call.id);
+    const behind =
+      ahead !== undefined &&
+      (ahead.live ||
+        wordCount(lines.map((line) => line.text)) <
+          wordCount(ahead.lines.map((line) => line.text)));
+    if (ahead !== undefined && behind) return [{ ...ahead, startedAt: call.startedAt }];
     return lines.length === 0
       ? []
       : [{ key: call.id, startedAt: call.startedAt, live: false, lines }];
   });
-  const heard = input.heard === undefined ? undefined : heardRow(input.heard, recorded);
-  if (heard !== undefined) calls.push(heard);
+  calls.push(...unrecorded);
   if (calls.length > 0) {
     return {
       kind: TRANSCRIPT_REGION.READY,

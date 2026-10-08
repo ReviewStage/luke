@@ -27,7 +27,7 @@ import {
 } from "./planning-model";
 import {
   type HeardCall,
-  heardCall,
+  heardCalls,
   type TranscriptRegion,
   transcriptRegion,
 } from "./transcript-model";
@@ -202,13 +202,14 @@ export function usePlansTab(input: {
     );
   };
 
-  // The call heard now, held past its end until the record's copy lands; a
-  // fixture's open plan is drawn with its own call's words.
+  // The calls heard on the open plan, each held past its end until the
+  // record's copy catches up; a fixture's open plan is drawn with its own
+  // call's words.
   const reported = fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL;
-  const [heard, setHeard] = useState<HeardCall | undefined>(undefined);
+  const [heard, setHeard] = useState<readonly HeardCall[]>([]);
   useEffect(() => {
     setHeard((held) =>
-      heardCall({
+      heardCalls({
         held,
         voice: { callPlanId: reported.callPlanId, callTranscript: reported.callTranscript },
         planId: planning.activePlanId,

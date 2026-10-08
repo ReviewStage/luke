@@ -7,7 +7,7 @@ import {
   callHeading,
   followsNewest,
   type HeardCall,
-  heardCall,
+  heardCalls,
   TRANSCRIPT_REGION,
   transcriptRegion,
 } from "./transcript-model";
@@ -16,6 +16,7 @@ import {
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const EARLIER_CALL = "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81";
 const LIVE_CALL = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
+const NEXT_CALL = "2a4c6e8f-0b1d-4f3a-a5c7-9e1b3d5f7a9c";
 
 const STORED: PlanTranscript = {
   calls: [
@@ -47,7 +48,7 @@ const NO_CALL = { callPlanId: undefined, callTranscript: undefined };
 test("the stored calls are drawn oldest first with their words settled, and blank lines left out", () => {
   const region = transcriptRegion({
     transcript: { status: PLANNING_READ.READY, transcript: STORED },
-    heard: undefined,
+    heard: [],
   });
 
   assert.equal(region.kind, TRANSCRIPT_REGION.READY);
@@ -69,86 +70,74 @@ test("a plan with nothing said is empty, a read out is reading, and a read that 
   assert.deepEqual(
     transcriptRegion({
       transcript: { status: PLANNING_READ.READY, transcript: empty },
-      heard: undefined,
+      heard: [],
     }),
     { kind: TRANSCRIPT_REGION.EMPTY },
   );
-  assert.deepEqual(
-    transcriptRegion({ transcript: { status: PLANNING_READ.READING }, heard: undefined }),
-    { kind: TRANSCRIPT_REGION.READING },
-  );
-  assert.deepEqual(
-    transcriptRegion({ transcript: { status: PLANNING_READ.FAILED }, heard: undefined }),
-    { kind: TRANSCRIPT_REGION.FAILED },
-  );
+  assert.deepEqual(transcriptRegion({ transcript: { status: PLANNING_READ.READING }, heard: [] }), {
+    kind: TRANSCRIPT_REGION.READING,
+  });
+  assert.deepEqual(transcriptRegion({ transcript: { status: PLANNING_READ.FAILED }, heard: [] }), {
+    kind: TRANSCRIPT_REGION.FAILED,
+  });
 });
 
-test("the live call follows the stored calls, and its words outlast the call until the record holds it", () => {
-  const live = heardCall({
-    held: undefined,
-    voice: liveReport(LIVE_CALL, "Seven days."),
-    planId: PLAN,
-    now: 5_000,
-  });
-  const during = transcriptRegion({
-    transcript: { status: PLANNING_READ.READY, transcript: STORED },
-    heard: live,
-  });
-  assert.deepEqual(
-    during.kind === TRANSCRIPT_REGION.READY
-      ? during.calls.map((call) => [call.key, call.live, call.startedAt])
-      : [],
-    [
-      [EARLIER_CALL, false, 1_000],
-      [LIVE_CALL, true, 5_000],
-    ],
-  );
+/** The calls drawn, each as its key, whether it is live, and its first line's words. */
+function drawn(region: ReturnType<typeof transcriptRegion>) {
+  return region.kind === TRANSCRIPT_REGION.READY
+    ? region.calls.map((call) => [call.key, call.live, call.lines[0]?.text])
+    : [];
+}
 
-  // Hung up: the words stay, no longer live, until the read with the call lands.
-  const ended = heardCall({ held: live, voice: NO_CALL, planId: PLAN, now: 9_000 });
-  const before = transcriptRegion({
-    transcript: { status: PLANNING_READ.READY, transcript: STORED },
-    heard: ended,
-  });
-  assert.deepEqual(
-    before.kind === TRANSCRIPT_REGION.READY
-      ? before.calls.map((call) => [call.key, call.live, call.lines[0]?.text])
-      : [],
-    [
-      [EARLIER_CALL, false, "Invites should expire."],
-      [LIVE_CALL, false, "Seven days."],
-    ],
-  );
-
-  const recorded: PlanTranscript = {
+/** The stored transcript with the live call recorded as saying `text`. */
+function recordedSaying(text: string): PlanTranscript {
+  return {
     ...STORED,
     calls: [
       ...STORED.calls,
-      {
-        id: LIVE_CALL,
-        startedAt: 4_000,
-        lines: [{ speaker: TRANSCRIPT_SPEAKER.USER, text: "Seven days, then." }],
-      },
+      { id: LIVE_CALL, startedAt: 4_000, lines: [{ speaker: TRANSCRIPT_SPEAKER.USER, text }] },
     ],
   };
-  const after = transcriptRegion({
-    transcript: { status: PLANNING_READ.READY, transcript: recorded },
-    heard: ended,
+}
+
+test("the live call follows the stored calls, and its words outlast the call until the record catches up", () => {
+  const live = heardCalls({
+    held: [],
+    voice: liveReport(LIVE_CALL, "Seven days, then."),
+    planId: PLAN,
+    now: 5_000,
   });
-  assert.deepEqual(
-    after.kind === TRANSCRIPT_REGION.READY
-      ? after.calls.map((call) => [call.key, call.live, call.lines[0]?.text])
-      : [],
-    [
-      [EARLIER_CALL, false, "Invites should expire."],
-      [LIVE_CALL, false, "Seven days, then."],
-    ],
-  );
+  const ready = (transcript: PlanTranscript, heard: readonly HeardCall[]) =>
+    transcriptRegion({ transcript: { status: PLANNING_READ.READY, transcript }, heard });
+  assert.deepEqual(drawn(ready(STORED, live)), [
+    [EARLIER_CALL, false, "Invites should expire."],
+    [LIVE_CALL, true, "Seven days, then."],
+  ]);
+  // A read mid-call that already holds some of the call still draws it live, as heard.
+  assert.deepEqual(drawn(ready(recordedSaying("Seven"), live)), [
+    [EARLIER_CALL, false, "Invites should expire."],
+    [LIVE_CALL, true, "Seven days, then."],
+  ]);
+
+  // Hung up: the heard words stay until the record has as many.
+  const ended = heardCalls({ held: live, voice: NO_CALL, planId: PLAN, now: 9_000 });
+  assert.deepEqual(drawn(ready(STORED, ended)), [
+    [EARLIER_CALL, false, "Invites should expire."],
+    [LIVE_CALL, false, "Seven days, then."],
+  ]);
+  assert.deepEqual(drawn(ready(recordedSaying("Seven"), ended)), [
+    [EARLIER_CALL, false, "Invites should expire."],
+    [LIVE_CALL, false, "Seven days, then."],
+  ]);
+  assert.deepEqual(drawn(ready(recordedSaying("Seven days, then, okay."), ended)), [
+    [EARLIER_CALL, false, "Invites should expire."],
+    [LIVE_CALL, false, "Seven days, then, okay."],
+  ]);
 });
 
 test("the live call is drawn while the stored transcript is still being read", () => {
-  const heard = heardCall({
-    held: undefined,
+  const heard = heardCalls({
+    held: [],
     voice: liveReport(LIVE_CALL, "Seven days."),
     planId: PLAN,
     now: 5_000,
@@ -157,41 +146,57 @@ test("the live call is drawn while the stored transcript is still being read", (
   assert.equal(region.kind, TRANSCRIPT_REGION.READY);
 });
 
-test("the same call keeps when it was first heard, a new call starts its own, and another plan's call is not this tab's", () => {
-  const first = heardCall({
-    held: undefined,
+test("the same call keeps when it was first heard, a call begun at once keeps the last one's words, and another plan's call is not this tab's", () => {
+  const first = heardCalls({
+    held: [],
     voice: liveReport(LIVE_CALL, "Seven"),
     planId: PLAN,
     now: 5_000,
   });
-  const grown = heardCall({
+  const grown = heardCalls({
     held: first,
     voice: liveReport(LIVE_CALL, "Seven days."),
     planId: PLAN,
     now: 6_000,
   });
-  assert.equal(grown?.heardAt, 5_000);
-  assert.equal(grown?.transcript.lines[0]?.words, "Seven days.");
+  assert.deepEqual(
+    grown.map((call) => [call.heardAt, call.transcript.lines[0]?.words]),
+    [[5_000, "Seven days."]],
+  );
 
-  const ended = heardCall({ held: grown, voice: NO_CALL, planId: PLAN, now: 7_000 });
-  const next = heardCall({
+  const ended = heardCalls({ held: grown, voice: NO_CALL, planId: PLAN, now: 7_000 });
+  const next = heardCalls({
     held: ended,
-    voice: liveReport(EARLIER_CALL, "Back again."),
+    voice: liveReport(NEXT_CALL, "Back again."),
     planId: PLAN,
     now: 8_000,
   });
-  assert.equal(next?.heardAt, 8_000);
+  assert.deepEqual(
+    drawn(
+      transcriptRegion({
+        transcript: { status: PLANNING_READ.READY, transcript: STORED },
+        heard: next,
+      }),
+    ),
+    [
+      [EARLIER_CALL, false, "Invites should expire."],
+      [LIVE_CALL, false, "Seven days."],
+      [NEXT_CALL, true, "Back again."],
+    ],
+  );
 
-  const elsewhere: HeardCall | undefined = heardCall({
-    held: undefined,
-    voice: { ...liveReport(LIVE_CALL, "Seven days."), callPlanId: "another-plan" },
-    planId: PLAN,
-    now: 5_000,
-  });
-  assert.equal(elsewhere, undefined);
-  assert.equal(
-    heardCall({ held: grown, voice: NO_CALL, planId: "another-plan", now: 9_000 }),
-    undefined,
+  assert.deepEqual(
+    heardCalls({
+      held: [],
+      voice: { ...liveReport(LIVE_CALL, "Seven days."), callPlanId: "another-plan" },
+      planId: PLAN,
+      now: 5_000,
+    }),
+    [],
+  );
+  assert.deepEqual(
+    heardCalls({ held: grown, voice: NO_CALL, planId: "another-plan", now: 9_000 }),
+    [],
   );
 });
 
