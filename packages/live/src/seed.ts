@@ -1,21 +1,9 @@
-import {
-  CONVERSATION_ENTRY_KIND,
-  type ConversationEntry,
-  type ConversationEntryKind,
-  maximumConversationEntryLength,
-  recentConversationEntries,
-} from "@sidecar/session";
 import { startupTokens } from "./tokens.js";
 
 /**
- * What a session is told as it opens: the recent conversation, replayed from
- * Luke's own record into the session's startup `input`, which is where the
- * guide says to put context the model needs from the beginning. A session
- * closes whenever the desk is quiet, so the record is the memory and each
- * session is a window onto it, seeded with the same slice the brain's
- * standing context carries, in the conversation's own roles, so the model
- * conditions on its own earlier words as its own. Nothing of a line but its
- * kind and its words travels: no identity, no time, no id.
+ * What a session may be told as it opens: the startup `input`, which is where
+ * the guide says to put context the model needs from the beginning, in the
+ * shape and under the bounds the API takes.
  */
 
 /** The roles `input` accepts. There is no `system`; trusted notes are a developer's. */
@@ -53,26 +41,6 @@ export const LIVE_INPUT_BOUNDS = {
   TOKENS: 8_192,
 } as const;
 
-interface SeedBudget {
-  messages: number;
-  tokens: number;
-}
-
-/**
- * Which item each kind of line becomes. The developer's lines are the
- * conversation's user turns and Luke's are its assistant turns; an action
- * line narrates something done rather than words said, and is the one kind
- * that carries identities, so it is skipped: the brain still has it. A new
- * kind has to be placed here before it can be seeded at all.
- */
-const SEED_ROLE_OF_KIND = {
-  [CONVERSATION_ENTRY_KIND.ASK]: SEED_ROLE.USER,
-  [CONVERSATION_ENTRY_KIND.REPLY]: SEED_ROLE.ASSISTANT,
-  [CONVERSATION_ENTRY_KIND.ANNOUNCEMENT]: SEED_ROLE.ASSISTANT,
-  [CONVERSATION_ENTRY_KIND.ACTION]: undefined,
-  [CONVERSATION_ENTRY_KIND.OWN_ACTION]: undefined,
-} satisfies Record<ConversationEntryKind, SeedRole | undefined>;
-
 function seedItem(role: SeedRole, text: string): InitialItem {
   if (role === SEED_ROLE.ASSISTANT) {
     return {
@@ -97,9 +65,8 @@ export function seedItemTokens(items: readonly InitialItem[]): number {
 /**
  * A startup history held under the API's token bound by the side that pays
  * for it, rather than trusted to arrive there: the oldest of the
- * conversation's lines go first, as `conversationSeedItems` drops them, and
- * a developer message never does, since the application's own notes are
- * what the session opens on. Nothing is answered where the developer
+ * conversation's lines go first, and a developer message never does, since
+ * the application's own notes are what the session opens on. Nothing is answered where the developer
  * messages alone are past the bound, which no conforming device sends.
  */
 export function withinStartupBound(
@@ -112,37 +79,4 @@ export function withinStartupBound(
     kept.splice(oldest, 1);
   }
   return kept;
-}
-
-/**
- * The oldest lines go first when the list would not fit: a seed is memory of
- * what was just said, and the newest of it is what a follow-up needs.
- */
-function withinBudget(items: readonly InitialItem[], budget: SeedBudget): readonly InitialItem[] {
-  let kept = items.slice(Math.max(0, items.length - budget.messages));
-  while (kept.length > 0 && seedItemTokens(kept) > budget.tokens) {
-    kept = kept.slice(1);
-  }
-  return kept;
-}
-
-/**
- * Builds the items that seed one session with the recent conversation and
- * nothing else, oldest first, held under the budget by dropping the oldest
- * lines first; or nothing while nothing has been said. The budget defaults to
- * the API's own bounds, which a caller may narrow.
- */
-export function conversationSeedItems(
-  entries: readonly ConversationEntry[],
-  budget: SeedBudget = { messages: LIVE_INPUT_BOUNDS.MESSAGES, tokens: LIVE_INPUT_BOUNDS.TOKENS },
-): readonly InitialItem[] {
-  const items: InitialItem[] = [];
-  for (const entry of recentConversationEntries(entries)) {
-    const role = SEED_ROLE_OF_KIND[entry.kind];
-    if (!role) continue;
-    const words = entry.words.replace(/\s+/g, " ").trim().slice(0, maximumConversationEntryLength);
-    if (!words) continue;
-    items.push(seedItem(role, words));
-  }
-  return withinBudget(items, budget);
 }

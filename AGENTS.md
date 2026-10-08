@@ -1,7 +1,7 @@
 # Agent guide
 
-Luke is a macOS-first Electron sidecar that observes coding-agent sessions while
-preserving existing provider workflows.
+Luke is a macOS Electron app for planning a feature by voice: the developer
+talks a plan through with Luke, who writes it down as they go.
 
 ## Commands
 
@@ -12,7 +12,6 @@ preserving existing provider workflows.
 | `./scripts/verify.sh` | Complete macOS validation plus visual evidence |
 | `./scripts/run.sh` | Launch against live sessions, replacing any running instance (`--fixture smoke`, `--keep-running`, `--no-trace`) |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
-| `pnpm evidence:record` | Record the fixture transition on a physical Mac |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
 
@@ -252,8 +251,7 @@ the voice window alike, so no two windows share a browser registry),
 `apps/desktop/src/renderer/renderer-runtime.ts` (the module the root's
 runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
 reads it, the moment the root first reaches it, so the edge is here rather than
-at the root that imports it), the renderer's own fiber sites —
-`apps/desktop/src/renderer/introduction/introduction-takeover.tsx` and the
+at the root that imports it), the renderer's own fiber sites — the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
 module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
@@ -312,13 +310,12 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   than a fiber of whoever asked first, because a caller that gives up on its
   own await must not take the flight the other callers are still joined to.
 - **`packages/host/src/host-kernel.ts`** — `openExternalThroughNode`, the one
-  promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the two
-  composers that hand it on hand it to seams outside this repository's host
+  promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the
+  composer that hands it on hands it to a seam outside this repository's host
   package — the account session manager's consent
   (`packages/credentials/src/loopback-consent.ts`, whose `openExternal` is a
-  `void | Promise<void>` and whose `reopen()` is synchronous) and the calendar
-  sign-in's page (`packages/calendar/src/oauth.ts`) — so what would end this
-  row is a decision about those two seams rather than an implementation
+  `void | Promise<void>` and whose `reopen()` is synchronous) — so what would
+  end this row is a decision about that seam rather than an implementation
   detail of this door.
 - **`apps/desktop/src/main/app-state.ts`** — `AppStateStore`'s `snapshot`,
   `update`, and `touch` run their `SubscriptionRef` operation through

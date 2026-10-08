@@ -44,7 +44,6 @@
     "@excalidraw/excalidraw": "0.18.1",
     "@sentry/esbuild-plugin": "5.4.0",
     "@sidecar/analytics": "workspace:*",
-    "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/devtrace": "workspace:*",
     "@sidecar/feedback": "workspace:*",

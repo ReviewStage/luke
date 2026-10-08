@@ -1,9 +1,4 @@
 import assert from "node:assert/strict";
-import {
-  CLOUD_AGENT_PROVIDER_LIST,
-  CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_SOURCE,
-} from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView } from "@sidecar/settings/wire";
@@ -26,26 +21,13 @@ function searchInput(overrides: Partial<SettingsSearchInput> = {}): SettingsSear
     settings: settings(),
     voiceControlsDrawn: true,
     accountDrawn: true,
-    workspaceProviders: [],
     ...overrides,
   };
 }
 
 /** An input with every conditional row drawn, so the corpus is at its widest. */
 function everythingDrawn(): SettingsSearchInput {
-  return searchInput({
-    settings: settings({
-      credentialSources: {
-        ...settings().credentialSources,
-        [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-      },
-      calendarSignInAvailable: true,
-      calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
-    }),
-    workspaceProviders: [
-      { id: CREDENTIAL_PROVIDER_ID.CONDUCTOR, name: "Conductor", offersProjects: true },
-    ],
-  });
+  return searchInput();
 }
 
 function labels(entries: readonly SettingsSearchEntry[]): readonly string[] {
@@ -82,26 +64,9 @@ test("a row a page is not drawing is not offered", () => {
   // remaining rows' here.
   const bare = labels(settingsSearchEntries(searchInput({ voiceControlsDrawn: false })));
   assert.ok(!bare.includes("Captions"), "no voice controls until voice can run");
-  assert.ok(
-    !bare.includes("Announce when sessions need you"),
-    "the announce switch rides the voice controls",
-  );
-  assert.ok(!bare.includes("Quiet during meetings"), "no quiet row without a calendar account");
-  assert.ok(!bare.includes("New Conductor agents run"), "no agent row while disconnected");
-  assert.ok(
-    !bare.includes("Conductor default project"),
-    "no project row while none offers projects",
-  );
 
   const wide = labels(settingsSearchEntries(everythingDrawn()));
-  for (const label of [
-    "Captions",
-    "Quiet during meetings",
-    "New Conductor agents run",
-    "Conductor default project",
-  ]) {
-    assert.ok(wide.includes(label), `${label} is offered once its row is drawn`);
-  }
+  assert.ok(wide.includes("Captions"), "Captions is offered once its row is drawn");
 
   // The ways out belong to a signed-in account alone.
   const signedOut = labels(settingsSearchEntries(searchInput({ accountDrawn: false })));
@@ -134,10 +99,13 @@ test("a query narrows by every word, case-blind, and a blank query is no search"
   assert.equal(dock.matched, 1);
   assert.equal(dock.searched, entries.length);
 
-  // Both words must land: "quiet" alone finds several rows, "quiet music" one.
-  const quiet = labels(found(searchSettings(entries, "quiet")));
-  assert.ok(quiet.includes("Quiet Music and Spotify"));
-  assert.ok(quiet.includes("Quiet during meetings"));
+  // Both words must land: "microphone" alone finds several rows, "microphone
+  // bluetooth" one.
+  const microphone = labels(found(searchSettings(entries, "microphone")));
+  assert.ok(microphone.length > 1);
+  assert.deepEqual(labels(found(searchSettings(entries, "microphone bluetooth"))), [
+    "Prefer the Mac's microphone",
+  ]);
   assert.deepEqual(labels(found(searchSettings(entries, "quiet music"))), [
     "Quiet Music and Spotify",
   ]);
@@ -162,30 +130,19 @@ test("the kept rows come back grouped under their pages, in the pages' order", (
   assert.deepEqual(labels(shortcuts.groups[0]?.items ?? []), ["Talk to Luke", "Stop Luke"]);
   assert.equal(shortcuts.matched, 2);
 
-  // "key" lands on the talk and stop keys and on the cloud agents' keys, and
-  // on nothing under Voice: voice runs on the account, so no key row stands
-  // there. The groups keep the front page's navigation order.
-  const keys = searchSettings(entries, "key");
-  assert.ok(keys);
-  const pages = keys.groups.map((group) => group.page);
+  // "microphone" lands on the Voice page's rows and on the talk key, which
+  // holds one open, and the groups keep the front page's navigation order.
+  const microphone = searchSettings(entries, "microphone");
+  assert.ok(microphone);
   assert.deepEqual(
-    pages,
-    [SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
+    microphone.groups.map((group) => group.page),
+    [SETTINGS_VIEW.VOICE, SETTINGS_VIEW.SHORTCUTS],
     "groups follow the nav's order",
   );
 });
+
 test("the rows that are not settings are found by what they are", () => {
   const entries = settingsSearchEntries(everythingDrawn());
-
-  // Every key row answers to "api key": each cloud agent's under Connections,
-  // and none under Voice. Each is named the way its own row names it, because
-  // a result reads the row's own name rather than a second record of it.
-  const keyRows = found(searchSettings(entries, "api key"));
-  assert.ok(keyRows.every((entry) => entry.page !== SETTINGS_VIEW.VOICE));
-  const keys = labels(keyRows);
-  for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
-    assert.ok(keys.includes(provider.displayName), provider.displayName);
-  }
 
   const signOut = found(searchSettings(entries, "sign out"));
   assert.equal(signOut.find((entry) => entry.label === "Sign out")?.page, SETTINGS_VIEW.ROOT);
@@ -196,12 +153,12 @@ test("a page's own name finds everything the page holds", () => {
   // remembers where a row lives can still get there — the whole page comes
   // back as one group.
   const entries = settingsSearchEntries(everythingDrawn());
-  const connections = searchSettings(entries, "connections");
-  assert.ok(connections);
-  assert.equal(connections.groups.length, 1);
-  assert.equal(connections.groups[0]?.page, SETTINGS_VIEW.CONNECTIONS);
+  const appearance = searchSettings(entries, "appearance");
+  assert.ok(appearance);
+  assert.equal(appearance.groups.length, 1);
+  assert.equal(appearance.groups[0]?.page, SETTINGS_VIEW.APPEARANCE);
   assert.equal(
-    connections.matched,
-    entries.filter((entry) => entry.page === SETTINGS_VIEW.CONNECTIONS).length,
+    appearance.matched,
+    entries.filter((entry) => entry.page === SETTINGS_VIEW.APPEARANCE).length,
   );
 });

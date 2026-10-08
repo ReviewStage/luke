@@ -17,7 +17,6 @@ produce with `./scripts/verify.sh` and attach through GitHub's editor.
 ### Physical-device evidence
 
 - Screenshot or screen recording: `not attached`
-- Physical-notch check: `not performed`
 - Device/display configuration: `not recorded`
 
 ## Invariants

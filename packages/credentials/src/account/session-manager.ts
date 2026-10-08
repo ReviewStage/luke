@@ -95,13 +95,6 @@ interface AccountSessionManagerOptions {
   openExternal: (url: string) => Promise<void>;
   startCapabilities: Effect.Effect<void>;
   stopCapabilities: Effect.Effect<void>;
-  /**
-   * The last thing the departing account is used for, before its credential
-   * is cleared: what the account signed this installation up for on the
-   * service (its device row) is told to let go while the token still stands
-   * to say so. A failure here never holds up the sign-out.
-   */
-  onSignOut?: (account: StoredAccount) => Effect.Effect<void>;
 }
 
 export class AccountSessionManager {
@@ -187,9 +180,6 @@ export class AccountSessionManager {
       this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
       yield* this.#publishChange();
       const stored = yield* this.#options.store.readAccount();
-      if (stored && this.#options.onSignOut) {
-        yield* reportingFailure(this.#options.onSignOut(stored), "Account sign-out release failed");
-      }
       // The clearing and the capability stop run together rather than in a
       // fixed order: what the sign-out guarantees is that both have settled
       // before the account it reports is the cleared one.

@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  LIVE_SESSION_PHASE,
-  type LiveSessionPhase,
-  type VoiceLiveSessionChanged,
-} from "@sidecar/gateway";
+import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
 import { Context, Deferred, Effect, Fiber } from "effect";
@@ -16,11 +12,13 @@ import type {
   LiveVoiceSpeakers,
 } from "./live-voice-call.js";
 import {
-  type LiveVoiceExchangeOpening,
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
   type LiveVoiceView,
 } from "./live-voice-orchestrator.js";
+
+const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const BILLING_PLAN = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 /** The id a call carries once it has started; naming one is saying it started. */
 function sessionIdOf(call: FakeCall): string {
@@ -35,7 +33,7 @@ class FakeCall implements LiveVoiceCall {
   status: LiveStatus = LIVE_STATUS.IDLE;
   sessionId: string | undefined;
   opens = 0;
-  /** Who the call was told opened it, so a briefing's session can be seen to carry no device. */
+  /** What the call was told it was opened about. */
   openings: LiveVoiceCallOpening[] = [];
   unmutes = 0;
   mutes = 0;
@@ -122,20 +120,17 @@ const SURROUNDINGS: LiveVoiceSurroundings = {
   microphoneGranted: true,
 };
 
-function fixture(
-  surroundings: Partial<LiveVoiceSurroundings> = {},
-  options: { deskCalls?: boolean } = {},
-) {
+function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   const calls: FakeCall[] = [];
   const views: LiveVoiceView[] = [];
-  const openings: (LiveVoiceExchangeOpening | undefined)[] = [];
+  /** Whether each report was the one an exchange opened on. */
+  const openings: boolean[] = [];
   let microphoneGranted = true;
   let microphoneAsks = 0;
   let microphoneAsk: (() => Effect.Effect<boolean>) | undefined;
   const stops: number[] = [];
   const silencedAtStops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
-    ...options,
     services: Context.empty(),
     bridge: {
       reportView: (view, exchange) => {
@@ -173,8 +168,6 @@ function fixture(
     /** The host's word, started on its own fiber the way the window's subscription starts it. */
     obey: (change: VoiceLiveSessionChanged) =>
       Effect.forkDetach(orchestrator.obeySessionChange(change), { startImmediately: true }),
-    adopt: (phase: LiveSessionPhase | undefined) =>
-      Effect.forkDetach(orchestrator.adoptStanding(phase), { startImmediately: true }),
     calls,
     views,
     openings,
@@ -215,15 +208,17 @@ function row(
 }
 
 it.effect(
-  "the talk key's press opens a session by press when none stands and unmutes it once started; its release mutes once",
+  "the talk key's press opens a session about the plan when none stands and unmutes it once started; its release mutes once",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       assert.equal(call.opens, 1);
-      assert.deepEqual(call.openings, [{ byPress: true }]);
+      assert.deepEqual(call.openings, [{ planId: INVITES_PLAN }]);
       assert.equal(call.unmutes, 0);
       call.started();
       yield* Fiber.join(pressed);
@@ -237,7 +232,7 @@ it.effect(
       // A release with no press behind it does nothing.
       yield* f.endTalk();
       assert.equal(call.mutes, 1);
-      // The next hold against the standing session: no second session, one more unmute, one more mute.
+      // The next hold against the standing session, naming no plan: no second session, one more unmute, one more mute.
       yield* f.beginTalk();
       assert.equal(f.calls.length, 1);
       assert.equal(call.unmutes, 2);
@@ -250,7 +245,7 @@ it.effect(
 it.effect("a second press while the developer is heard never mutes", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     f.latest()?.started();
     yield* Fiber.join(pressed);
     yield* f.beginTalk();
@@ -265,7 +260,7 @@ it.effect("a second press while the developer is heard never mutes", () =>
 it.effect("a release while the press's session is still opening leaves it to open muted", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     const call = f.latest();
     assert.ok(call);
     assert.equal(call.standing, false);
@@ -280,33 +275,15 @@ it.effect("a release while the press's session is still opening leaves it to ope
 );
 
 it.effect(
-  "a press during a session opened for Luke's speech unmutes it once started, and a release during the opening does not",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
-      const call = f.latest();
-      assert.ok(call);
-      assert.deepEqual(call.openings, [{ byPress: false }]);
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
-      yield* settleFibers();
-      assert.equal(f.calls.length, 1);
-      call.started();
-      yield* Fiber.join(pressed);
-      assert.equal(call.unmutes, 1);
-      yield* f.endTalk();
-      assert.equal(call.mutes, 1);
-    }),
-);
-
-it.effect(
   "the stop key mutes a standing session once, does nothing against none, and ends the hold so the release mutes nothing more",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       assert.equal(yield* f.stopSpeaking(), false);
       assert.deepEqual(f.stops, []);
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       f.latest()?.started();
       yield* Fiber.join(pressed);
       assert.equal(yield* f.stopSpeaking(), true);
@@ -321,7 +298,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       call.started();
@@ -343,7 +322,7 @@ it.effect(
 it.effect("the talk key's release mutes and never tells the host to stop", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     f.latest()?.started();
     yield* Fiber.join(pressed);
     yield* f.endTalk();
@@ -355,7 +334,7 @@ it.effect("the talk key's release mutes and never tells the host to stop", () =>
 it.effect("the talk key's release while Luke answers leaves his voice playing", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     const call = f.latest();
     assert.ok(call);
     call.started();
@@ -371,13 +350,13 @@ it.effect("a press without the microphone asks for it, and a refusal opens nothi
   Effect.gen(function* () {
     const f = fixture({ microphoneGranted: false });
     f.setMicrophone(false);
-    yield* f.beginTalk();
+    yield* f.beginTalk(INVITES_PLAN);
     assert.equal(f.microphoneAsks(), 1);
     assert.equal(f.calls.length, 0);
     yield* settleFibers();
     assert.notEqual(f.views.at(-1)?.voiceError, undefined);
     f.setMicrophone(true);
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     yield* settleFibers();
     assert.equal(f.calls.length, 1);
     f.latest()?.started();
@@ -395,7 +374,7 @@ it.effect("a key let go of while the microphone dialog stands opens the session 
         grant = (granted) => resume(Effect.succeed(granted));
       }),
     );
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     yield* settleFibers();
     yield* f.endTalk();
     grant?.(true);
@@ -407,116 +386,8 @@ it.effect("a key let go of while the microphone dialog stands opens the session 
 it.effect("a press while voice is off opens nothing", () =>
   Effect.gen(function* () {
     const f = fixture({ voiceAvailable: false });
-    yield* f.beginTalk();
+    yield* f.beginTalk(INVITES_PLAN);
     assert.equal(f.calls.length, 0);
-  }),
-);
-
-it.effect(
-  "wanted opens a session with no device, closing hangs it up, and a session lost mid-hold listens again on the next",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
-      const first = f.latest();
-      assert.ok(first);
-      first.started();
-      yield* settleFibers();
-      assert.equal(first.unmutes, 0);
-      assert.equal(first.status, LIVE_STATUS.MUTED);
-      // A second wanted while it stands opens nothing more.
-      yield* f.obey({
-        phase: LIVE_SESSION_PHASE.WANTED,
-        sessionId: sessionIdOf(first),
-      });
-      assert.equal(f.calls.length, 1);
-      assert.deepEqual(first.openings, [{ byPress: false }]);
-      // The developer holds the key, then the connection is lost under them: the
-      // peer's own end may land before the host's word, and the wanted right
-      // after it.
-      yield* f.beginTalk();
-      assert.equal(first.unmutes, 1);
-      const lost = sessionIdOf(first);
-      first.settle(LIVE_STATUS.IDLE);
-      yield* f.obey({
-        phase: LIVE_SESSION_PHASE.CLOSED,
-        sessionId: lost,
-        reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
-      });
-      yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
-      const second = f.latest();
-      assert.ok(second);
-      assert.notEqual(second, first);
-      assert.deepEqual(second.openings, [{ byPress: false }]);
-      second.started();
-      yield* settleFibers();
-      assert.equal(second.unmutes, 1);
-      // A closing that names another session is not this call's.
-      yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: lost });
-      yield* settleFibers();
-      assert.equal(second.closes, 0);
-      yield* f.obey({
-        phase: LIVE_SESSION_PHASE.CLOSING,
-        sessionId: sessionIdOf(second),
-      });
-      yield* settleFibers();
-      assert.equal(second.closes, 1);
-    }),
-);
-
-it.effect("a session lost after the key was let go of does not listen again on the next", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
-    const first = f.latest();
-    assert.ok(first);
-    first.started();
-    yield* Fiber.join(pressed);
-    yield* f.endTalk();
-    assert.equal(first.mutes, 1);
-    // Lost before the mute's status landed: the last status the call reported was listening.
-    first.settle(LIVE_STATUS.LISTENING);
-    const lost = sessionIdOf(first);
-    first.settle(LIVE_STATUS.IDLE);
-    yield* f.obey({
-      phase: LIVE_SESSION_PHASE.CLOSED,
-      sessionId: lost,
-      reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
-    });
-    yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
-    const second = f.latest();
-    assert.ok(second);
-    assert.notEqual(second, first);
-    second.started();
-    yield* settleFibers();
-    assert.equal(second.unmutes, 0);
-  }),
-);
-
-it.effect("a session closed by the host's own decision does not listen again on the next", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
-    const first = f.latest();
-    assert.ok(first);
-    first.started();
-    yield* Fiber.join(pressed);
-    // The host's word ends the call before the peer has noticed: the call is
-    // let go of and hangs up behind, and the next wanted opens a new one.
-    yield* f.obey({
-      phase: LIVE_SESSION_PHASE.CLOSED,
-      sessionId: sessionIdOf(first),
-      reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
-    });
-    yield* settleFibers();
-    assert.equal(first.closes, 1);
-    yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
-    const second = f.latest();
-    assert.ok(second);
-    assert.notEqual(second, first);
-    second.started();
-    yield* settleFibers();
-    assert.equal(second.unmutes, 0);
   }),
 );
 
@@ -525,7 +396,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const first = f.latest();
       assert.ok(first);
       first.opensSucceed = false;
@@ -534,7 +407,7 @@ it.effect(
       assert.equal(first.unmutes, 0);
       yield* settleFibers();
       assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.FAILED);
-      const again = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const again = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
       assert.equal(f.calls.length, 2);
       f.latest()?.started();
       yield* Fiber.join(again);
@@ -542,12 +415,14 @@ it.effect(
 );
 
 it.effect(
-  "the view reports each edge once, counts the exchange on its opening edge under who opened it, and carries the captions",
+  "the view reports each edge once, counts the exchange on its opening edge, and carries the captions",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       yield* settleFibers();
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       yield* settleFibers();
@@ -555,7 +430,7 @@ it.effect(
         f.views.map((view) => view.voiceStatus),
         [LIVE_STATUS.IDLE, LIVE_STATUS.CONNECTING],
       );
-      assert.deepEqual(f.openings, [undefined, { microphoneCall: true }]);
+      assert.deepEqual(f.openings, [false, true]);
       assert.equal(f.views.at(-1)?.talkOpening, true);
       call.started();
       yield* Fiber.join(pressed);
@@ -580,7 +455,7 @@ it.effect(
       yield* settleFibers();
       assert.equal(f.views.at(-1)?.developerCaptions, undefined);
       // The count rose once for the whole exchange.
-      assert.equal(f.openings.filter((opening) => opening !== undefined).length, 1);
+      assert.equal(f.openings.filter(Boolean).length, 1);
     }),
 );
 
@@ -589,15 +464,17 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture({ captionsEnabled: false, outputSilent: false });
-      yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       call.started();
+      yield* Fiber.join(pressed);
       call.events.onCaptions([row("row-1", CONVERSATION_ENTRY_KIND.REPLY, "Two sessions")]);
       call.settle(LIVE_STATUS.SPEAKING);
       yield* settleFibers();
       assert.equal(f.views.at(-1)?.lukeCaptions, undefined);
-      assert.deepEqual(f.openings.filter(Boolean), [{ microphoneCall: false }]);
       f.surround({ ...SURROUNDINGS, captionsEnabled: false, outputSilent: true });
       yield* settleFibers();
       assert.deepEqual(f.views.at(-1)?.lukeCaptions, ["Two sessions"]);
@@ -609,7 +486,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture({ captionsEnabled: false, outputSilent: true });
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       call.started();
@@ -633,7 +512,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       call.started();
@@ -642,7 +523,7 @@ it.effect(
       yield* settleFibers();
       assert.equal(call.closes, 1);
       const g = fixture();
-      const opened = yield* Effect.forkChild(g.beginTalk(), { startImmediately: true });
+      const opened = yield* Effect.forkChild(g.beginTalk(INVITES_PLAN), { startImmediately: true });
       g.latest()?.started();
       yield* Fiber.join(opened);
       yield* settleFibers();
@@ -659,7 +540,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       call.started();
@@ -677,7 +560,7 @@ it.effect(
 it.effect("stop interrupts a call still opening, and releases it once the open settles", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     const call = f.latest();
     assert.ok(call);
     assert.equal(call.closes, 0);
@@ -695,7 +578,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       // The host hung up the session it still held before creating this one.
@@ -719,7 +604,7 @@ it.effect(
 it.effect("a stop while a press's session is still opening leaves it muted", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     const call = f.latest();
     assert.ok(call);
     assert.equal(call.standing, false);
@@ -732,33 +617,21 @@ it.effect("a stop while a press's session is still opening leaves it muted", () 
   }),
 );
 
-it.effect(
-  "a wanted the document held at adoption opens a session; any other standing phase opens none",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      yield* f.adopt(LIVE_SESSION_PHASE.CLOSED);
-      yield* f.adopt(undefined);
-      assert.equal(f.calls.length, 0);
-      yield* f.adopt(LIVE_SESSION_PHASE.WANTED);
-      assert.equal(f.calls.length, 1);
-    }),
-);
-
 it.effect("a session pausing between Luke's sentences is one exchange, counted once", () =>
   Effect.gen(function* () {
     const f = fixture();
-    yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     const call = f.latest();
     assert.ok(call);
     call.started();
+    yield* Fiber.join(pressed);
     call.settle(LIVE_STATUS.SPEAKING);
     yield* settleFibers();
     call.settle(LIVE_STATUS.MUTED);
     yield* settleFibers();
     call.settle(LIVE_STATUS.SPEAKING);
     yield* settleFibers();
-    assert.deepEqual(f.openings.filter(Boolean), [{ microphoneCall: false }]);
+    assert.equal(f.openings.filter(Boolean).length, 1);
   }),
 );
 
@@ -767,7 +640,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
       const call = f.latest();
       assert.ok(call);
       call.started();
@@ -794,10 +669,31 @@ it.effect(
     }),
 );
 
-it.effect("a session lost while both speakers stood listens again on the next", () =>
+it.effect(
+  "the host's closing hangs the standing call up, and a closing naming another session is not this call's",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: "another" });
+      yield* settleFibers();
+      assert.equal(call.closes, 0);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.CLOSING, sessionId: sessionIdOf(call) });
+      yield* settleFibers();
+      assert.equal(call.closes, 1);
+    }),
+);
+
+it.effect("a session lost while both speakers stood leaves nobody heard and opens nothing", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const pressed = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
+    const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
     const first = f.latest();
     assert.ok(first);
     first.started();
@@ -810,20 +706,13 @@ it.effect("a session lost while both speakers stood listens again on the next", 
       sessionId: lost,
       reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
     });
-    yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
-    const second = f.latest();
-    assert.ok(second);
-    assert.notEqual(second, first);
-    second.started();
     yield* settleFibers();
-    assert.equal(second.unmutes, 1);
+    assert.equal(f.calls.length, 1);
     // Nobody is heard on a call that is gone, whatever it was carrying when it went.
     assert.equal(f.views.at(-1)?.lukeSpeaking, false);
+    assert.equal(f.views.at(-1)?.listening, false);
   }),
 );
-
-const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const BILLING_PLAN = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 it.effect(
   "the planning button opens a call about its plan and hears it; the next press mutes it and the one after hears it again, on the same call",
@@ -835,7 +724,7 @@ it.effect(
       });
       const call = f.latest();
       assert.ok(call);
-      assert.deepEqual(call.openings, [{ byPress: true, planId: INVITES_PLAN }]);
+      assert.deepEqual(call.openings, [{ planId: INVITES_PLAN }]);
       call.started();
       yield* Fiber.join(pressed);
       assert.equal(call.status, LIVE_STATUS.LISTENING);
@@ -885,30 +774,21 @@ it.effect(
 );
 
 it.effect(
-  "a planning press over a desk call or another plan's call hangs that call up before opening one about its plan, and the talk key speaks into the plan's call",
+  "a planning press over another plan's call hangs that call up before opening one about its plan, and the talk key naming no plan speaks into the plan's call",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const desk = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
-      const deskCall = f.latest();
-      assert.ok(deskCall);
-      deskCall.started();
-      yield* Fiber.join(desk);
-      yield* f.endTalk();
-
       const invites = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
         startImmediately: true,
       });
-      yield* settleFibers();
-      assert.equal(deskCall.status, LIVE_STATUS.IDLE);
       const invitesCall = f.latest();
-      assert.ok(invitesCall && invitesCall !== deskCall);
-      assert.deepEqual(invitesCall.openings, [{ byPress: true, planId: INVITES_PLAN }]);
+      assert.ok(invitesCall);
+      assert.deepEqual(invitesCall.openings, [{ planId: INVITES_PLAN }]);
       invitesCall.started();
       yield* Fiber.join(invites);
       assert.equal(invitesCall.status, LIVE_STATUS.LISTENING);
 
-      // The talk key's hold is heard on the plan's call rather than opening a desk call.
+      // The talk key's hold is heard on the plan's call rather than opening another.
       yield* f.talkAboutPlan(INVITES_PLAN);
       yield* f.beginTalk();
       assert.equal(f.latest(), invitesCall);
@@ -922,7 +802,7 @@ it.effect(
       assert.equal(invitesCall.status, LIVE_STATUS.IDLE);
       const billingCall = f.latest();
       assert.ok(billingCall && billingCall !== invitesCall);
-      assert.deepEqual(billingCall.openings, [{ byPress: true, planId: BILLING_PLAN }]);
+      assert.deepEqual(billingCall.openings, [{ planId: BILLING_PLAN }]);
       billingCall.started();
       yield* Fiber.join(billing);
       assert.equal(billingCall.status, LIVE_STATUS.LISTENING);
@@ -932,23 +812,25 @@ it.effect(
 );
 
 it.effect(
-  "a talk key press naming the open plan opens a call about it, and over a desk call hangs the desk call up first",
+  "a talk key press naming the open plan opens a call about it, and over another plan's call hangs that call up first",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const desk = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
-      const deskCall = f.latest();
-      assert.ok(deskCall);
-      deskCall.started();
-      yield* Fiber.join(desk);
+      const billing = yield* Effect.forkChild(f.beginTalk(BILLING_PLAN), {
+        startImmediately: true,
+      });
+      const billingCall = f.latest();
+      assert.ok(billingCall);
+      billingCall.started();
+      yield* Fiber.join(billing);
       yield* f.endTalk();
 
       const held = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
       yield* settleFibers();
-      assert.equal(deskCall.status, LIVE_STATUS.IDLE);
+      assert.equal(billingCall.status, LIVE_STATUS.IDLE);
       const planCall = f.latest();
-      assert.ok(planCall && planCall !== deskCall);
-      assert.deepEqual(planCall.openings, [{ byPress: true, planId: INVITES_PLAN }]);
+      assert.ok(planCall && planCall !== billingCall);
+      assert.deepEqual(planCall.openings, [{ planId: INVITES_PLAN }]);
       planCall.started();
       yield* Fiber.join(held);
       assert.equal(planCall.status, LIVE_STATUS.LISTENING);
@@ -961,68 +843,62 @@ it.effect(
     }),
 );
 
-it.effect("a talk key let go of while the desk call is still hanging up opens no plan call", () =>
+it.effect(
+  "a talk key let go of while another plan's call is still hanging up opens no plan call",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const billing = yield* Effect.forkChild(f.beginTalk(BILLING_PLAN), {
+        startImmediately: true,
+      });
+      const billingCall = f.latest();
+      assert.ok(billingCall);
+      billingCall.started();
+      yield* Fiber.join(billing);
+      yield* f.endTalk();
+
+      const closed = yield* Deferred.make<void>();
+      billingCall.closing = Deferred.await(closed);
+      const held = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
+      yield* settleFibers();
+      yield* f.endTalk();
+      yield* Deferred.succeed(closed, undefined);
+      yield* settleFibers();
+      assert.equal(billingCall.status, LIVE_STATUS.IDLE);
+      assert.equal(f.latest(), billingCall);
+      yield* Fiber.join(held);
+    }),
+);
+
+it.effect("a planning call lost while heard leaves the view naming no plan once it is gone", () =>
   Effect.gen(function* () {
     const f = fixture();
-    const desk = yield* Effect.forkChild(f.beginTalk(), { startImmediately: true });
-    const deskCall = f.latest();
-    assert.ok(deskCall);
-    deskCall.started();
-    yield* Fiber.join(desk);
-    yield* f.endTalk();
+    const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+      startImmediately: true,
+    });
+    const planCall = f.latest();
+    assert.ok(planCall);
+    planCall.started();
+    yield* Fiber.join(pressed);
+    yield* settleFibers();
+    assert.equal(f.views.at(-1)?.callPlanId, INVITES_PLAN);
 
-    const closed = yield* Deferred.make<void>();
-    deskCall.closing = Deferred.await(closed);
-    const held = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
+    const lost = yield* f.obey({
+      phase: LIVE_SESSION_PHASE.CLOSED,
+      sessionId: sessionIdOf(planCall),
+      reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
+    });
+    yield* Fiber.join(lost);
     yield* settleFibers();
-    yield* f.endTalk();
-    yield* Deferred.succeed(closed, undefined);
-    yield* settleFibers();
-    assert.equal(deskCall.status, LIVE_STATUS.IDLE);
-    assert.equal(f.latest(), deskCall);
-    yield* Fiber.join(held);
+    assert.equal(f.views.at(-1)?.callPlanId, undefined);
   }),
 );
 
 it.effect(
-  "a planning call lost while heard is not listened to again: the desk session a wanted opens next stays muted, and the view names no plan once it is gone",
+  "the talk key naming no plan opens nothing while no call stands, and speaks into a plan's call that does",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
-        startImmediately: true,
-      });
-      const planCall = f.latest();
-      assert.ok(planCall);
-      planCall.started();
-      yield* Fiber.join(pressed);
-      yield* settleFibers();
-      assert.equal(f.views.at(-1)?.callPlanId, INVITES_PLAN);
-
-      const lost = yield* f.obey({
-        phase: LIVE_SESSION_PHASE.CLOSED,
-        sessionId: sessionIdOf(planCall),
-        reason: LIVE_CLOSE_REASON.CONNECTION_LOST,
-      });
-      yield* Fiber.join(lost);
-      yield* settleFibers();
-      assert.equal(f.views.at(-1)?.callPlanId, undefined);
-
-      const wanted = yield* f.obey({ phase: LIVE_SESSION_PHASE.WANTED });
-      const deskCall = f.latest();
-      assert.ok(deskCall && deskCall !== planCall);
-      deskCall.started();
-      yield* Fiber.join(wanted);
-      assert.deepEqual(deskCall.openings, [{ byPress: false }]);
-      assert.equal(deskCall.status, LIVE_STATUS.MUTED);
-    }),
-);
-
-it.effect(
-  "without desk calls the talk key opens nothing about no plan, and still speaks into a plan's call",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture({}, { deskCalls: false });
       yield* f.beginTalk();
       assert.equal(f.calls.length, 0);
       assert.equal(f.microphoneAsks(), 0);

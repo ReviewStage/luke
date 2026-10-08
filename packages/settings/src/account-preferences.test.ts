@@ -18,10 +18,6 @@ test("the account preference allowlist contains only cross-device preferences", 
   ]);
   assert.equal(ACCOUNT_PREFERENCE_FIELDS.includes(APP_SETTING_SCHEMA.openAtLogin.field), false);
   assert.equal(ACCOUNT_PREFERENCE_FIELDS.includes(APP_SETTING_SCHEMA.voiceHotkey.field), false);
-  assert.equal(
-    ACCOUNT_PREFERENCE_FIELDS.includes(APP_SETTING_SCHEMA.sessionSearchQuery.field),
-    false,
-  );
 });
 
 test("account preferences validate the shared fields and reject local-only payloads", () => {

@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { captionBlockSize, captionSegments, captionStackOverflow } from "./caption-layout";
-import { parsePixels } from "./session-motion";
+import { parsePixels } from "./motion-tokens";
 import {
   CAPTION_TONE,
   type CaptionTone,

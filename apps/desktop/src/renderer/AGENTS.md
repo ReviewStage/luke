@@ -43,8 +43,8 @@ bundle's own and are easy to undo:
 - The audio line carries a track at every moment of the session's life. GPT Live
   paces output against the input timeline, so a sender left with no track stalls
   it — a reply appended while the talk key was up was held until the next press,
-  then unloaded whole. A session opened for Luke's own speech carries synthesized
-  silence that the press swaps a device onto.
+  then unloaded whole. A muted session, or one whose microphone the system
+  refused, carries synthesized silence that the next press swaps a device onto.
 - The peer is acquired into a `Scope`, not closed by hand, and every bound is an
   `Effect.sleep` forked into that same scope — so nothing is left armed behind an
   ended session, and a test drives them with `TestClock`.
@@ -58,9 +58,6 @@ Read it first. What it does not cover is the Electron window under the surface:
 - **The window never animates its own frame.** An animated `setBounds` re-lays out
   the whole renderer every frame, because the panel is anchored to the viewport's
   centre.
-- The shape's depth is the menu bar's *painted* depth, not the safe-area inset.
-  macOS may paint the bar deeper than the inset, and a shape built on the inset
-  stops short of the strip it has to pass for.
 - `backdrop-filter` is not an option: a transparent window has no backdrop to
   sample, so it buys a render surface and returns nothing.
 

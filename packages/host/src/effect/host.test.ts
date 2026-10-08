@@ -92,10 +92,6 @@ describe("the standing host", () => {
     assert.deepEqual(HOST_START_ORDER, [
       HOST_CONCERN.SETTINGS,
       HOST_CONCERN.ACCOUNT,
-      HOST_CONCERN.DEVICES,
-      HOST_CONCERN.NOTEBOOK,
-      HOST_CONCERN.CALENDARS,
-      HOST_CONCERN.OBSERVATION,
       HOST_CONCERN.LIVE,
       HOST_CONCERN.PLANNING,
     ]);

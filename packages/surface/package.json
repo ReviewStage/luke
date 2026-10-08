@@ -10,16 +10,11 @@
   },
   "types": "./src/index.ts",
   "scripts": {
-    "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"
-  },
-  "dependencies": {
-    "@sidecar/session": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/react": "19.2.18",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   }
 }

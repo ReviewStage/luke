@@ -17,7 +17,6 @@ import {
   Environment,
   type HostSeamTags,
   IdSource,
-  MachinePresenceReader,
   RunMode,
   reporterLayer,
   SecretCipher,
@@ -60,7 +59,6 @@ const testSeamLayers = (seams: HostSeams) =>
     Layer.succeed(SecretCipher, seams.cipher),
     Layer.succeed(IdSource, { create: seams.createId }),
     reporterLayer(seams.report),
-    Layer.succeed(MachinePresenceReader, { read: seams.machinePresence }),
     Layer.succeed(ShutdownSignal, { notify: seams.onShutdownRequested }),
   );
 

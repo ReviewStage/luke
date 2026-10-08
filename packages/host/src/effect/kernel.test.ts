@@ -14,7 +14,6 @@ import {
   AppIdentity,
   Environment,
   IdSource,
-  MachinePresenceReader,
   Reporter,
   RunMode,
   reporterLayer,
@@ -64,7 +63,6 @@ const kernelLayerOver = (input: TestSeams) =>
       Layer.succeed(SecretCipherTag, input.cipher),
       Layer.succeed(IdSource, { create: input.createId }),
       reporterLayer(input.report),
-      Layer.succeed(MachinePresenceReader, { read: undefined }),
       Layer.succeed(ShutdownSignal, { notify: undefined }),
     ),
   );

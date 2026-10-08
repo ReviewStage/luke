@@ -2,25 +2,18 @@
 
 Last updated: 7 October 2026
 
-Luke is a macOS app that watches your coding agent sessions. This
-policy explains what we collect, who we send it to, and how to turn it off.
+Luke is a macOS app for planning a feature by voice. This policy explains
+what we collect, who we send it to, and how to turn it off.
 
 ## What we collect
 
-**On your Mac.** Luke reads no session file on your Mac, and nothing on it
-reads message history, file contents, or command output. The sessions the
-panel lists are the ones our service last observed under the Conductor key
-you synced, as described under "Scheduled observation of your Conductor
-sessions" below: the Mac app reads that stored roster from our service about
-once a minute, draws each row — the session's title, status, repository,
-branch, the agent kind running it, and the error line it stopped on — from
-nothing else, and keeps none of those fields in a file of its own. Luke's
-look at those sessions runs on our service too, never here: a Conductor chat
-our service learns gained messages wakes a turn there, in a conversation of
-Luke's own that follows that one session, and that turn reads the messages
-the chat gained since he last looked — your own messages and the agent's
-replies, not its tool activity — under the terms below; what our service
-keeps of such a turn is described under "Your account". No part of his
+**On your Mac.** Luke reads no coding agent session on your Mac, and nothing
+on it reads message history, file contents, or command output, beyond the
+read-only commands the planning model asks for in a plan's folder, described
+under "How the planning model reads your folder" below. The Mac app lists no
+coding agent sessions; what our service still does with a Conductor key an
+earlier version synced is described under "Scheduled observation of your
+Conductor sessions" below, and none of it runs here. No part of Luke's
 judgment runs on this Mac, so no transcript, working memory, or inbox of his
 is held here, in memory or on disk.
 
@@ -29,13 +22,11 @@ with Luke: no part of his judgment runs here, so no record of what you said,
 what he spoke or announced, or what he did at your ask is kept on this
 machine, in memory or on disk, and the Mac app does not read that record
 back.
-When a voice session opens, this Mac hands it a summary of the coding agent
-sessions on your screen (their titles, status, and branch, as the rows draw
-them), so the voice can follow what is on your desk as it stood when the
-session opened; no line of your conversation is handed to the session, from
-here or from our service, and what Luke knows of it when he answers a spoken
-ask he reads on our service, from the record described under "Your account"
-below. What our servers keep
+A voice session on this Mac is a call about one plan, and it opens with
+nothing of your coding agent sessions and no line of your conversation, from
+here or from our service; what Luke knows when he answers a spoken ask he
+reads on our service, from the plan and the record described under "Your
+account" below. What our servers keep
 of a conversation is the record described under "Your account" below; a
 fixture or evidence run keeps no conversation at all.
 
@@ -139,19 +130,17 @@ until you remove them.
 
 Luke's runtime runs inside the app, and can run on a server you connect to
 instead; either way it holds your settings and the encrypted credentials
-(decrypted where it runs, under the same Keychain entry), your account's
-session, and the observation of your sessions and calendars, while the part
-that draws listens, speaks, holds the keys, and asks the runtime for
-everything else. Nothing
+(decrypted where it runs, under the same Keychain entry) and your account's
+session, while the part that draws listens, speaks, holds the keys, and asks
+the runtime for everything else. Nothing
 about you crosses that boundary that the panel did not already draw; no
 stored key, token, or account secret travels in any answer or event, and the
 voice window is handed no credential at all — the runtime opens each voice
 session itself and hands the window only the connection answer it needs to
 hear and be heard. Quitting Luke cancels
 what was running and writes down what did not finish rather than finishing it
-on paper. The two things the app still does on this machine at the runtime's
-ask are opening an address you asked to open and running the Calendar helper
-behind macOS's own consent dialog.
+on paper. The one thing the app still does on this machine at the runtime's
+ask is opening an address you asked to open.
 
 **Things Luke remembers about you.** When Luke runs a turn for you on our
 service, he may record a concise preference, personal fact, goal, or recurring
@@ -229,16 +218,6 @@ refuses, or that fails, writes nothing. Nothing it reads or answers is kept
 beyond the saved plan, said aloud, or shown anywhere but the plan itself, and
 OpenAI keeps the request and its reply under its own retention policy.
 
-**Seeing what he saved.** The Mac app's Settings has a Memory page that reads
-the notebook back to you: `MEMORY.md`, `USER.md`, and the newest of the dated
-notes under `memory/`, as they stand on our service, drawn as the Markdown they
-are written in. It is a window and not a form: opening the page asks our
-service for your own account's rows over the app's signed-in connection, the
-app holds the answer only while the page
-is on screen and keeps nothing of it on disk or after you leave, nothing on
-the page writes, and no model runs for it. The page is excluded from the
-session recording described under "What we collect".
-
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. Signing in with GitHub grants no
 access to your repositories: plans read a folder on your Mac instead. An
@@ -274,8 +253,8 @@ you delete your account, which removes it at once.
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
 a fixed list. A voice session's start is counted
-with which of two sources opened it — our voice service on your account, or
-the accountless introduction — and never with a session id. A count made
+with the source that opened it, our voice service on your account, and never
+with a session id. A count made
 before you sign in is not sent. Nothing you type or say and nothing from
 a session can appear in one: no titles, branches, file paths, prompts, or
 error text.
@@ -283,19 +262,18 @@ error text.
 **Screen recordings.** Luke records what his own panel draws, and never your
 screen, your editor, your terminal, or any other app. The recording is the
 shape of the panel, not its words: before it leaves your Mac, every piece of
-text the panel shows is replaced with blocks of the same length, so a session
-title, an error line, a caption of what you or Luke said, your name and email
+text the panel shows is replaced with blocks of the same length, so a plan's
+name and its document, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. A screenshot
 you attach to the feedback form is left out, since a picture of your screen
 could carry another app's words, and so are the feedback form's message
-field, the Memory page in Settings, and a plan's whiteboard, as a second
-line. The whiteboard draws its words as pixels, which the text masking cannot
-reach, so leaving it out is its only line, and recording what a canvas draws
-is switched off. Luke does not report what you clicked.
+field and a plan's whiteboard, as a second line. The whiteboard draws its
+words as pixels, which the text masking cannot reach, so leaving it out is
+its only line, and recording what a canvas draws is switched off. Luke does
+not report what you clicked.
 
 Recording starts when Luke opens, before you sign in, so it covers the
-signed-out panel, the sign-in, and the spoken introduction that follows your
-first sign-in. A recording that begins
+signed-out panel and the sign-in. A recording that begins
 before you sign in is attached to your account if you sign in while it is
 running. One that never reaches a sign-in belongs to nobody, so deleting your
 account does not reach it — we have no way to tell it was yours.
@@ -310,21 +288,13 @@ identity, and does not enable PII collection, tracing, Sentry Replay,
 screenshots, profiling, or manual reports of handled errors. Fixture and
 evidence runs send no crash reports.
 
-**Provider API keys (server-side vault).** The Conductor key you enter into
-Luke is held by our service, not by your Mac. Saving it sends it, in the same
-press, to our vault under your signed-in account, and nothing of it is written
-to this Mac: no settings file, no Keychain entry, no cache. Luke asks for it
-right after your first sign-in, before showing any sessions; if you skip, the
-list stays empty and says so, and the row in Settings > Connections is the way
-to connect later. Its row reads
-"Held by Luke's service" from the vault's own list of which providers hold a
-key, never from anything stored here, and you have to be signed in to save
-one. Deleting it from its row deletes it from the vault. A key an earlier
-version of Luke kept encrypted on this Mac is handed to the vault once, the
-next time the account it was last synced for signs in, and deleted from the
-Mac when the vault confirms it; a key another account left here is sent
-nowhere, and a key Luke merely reads from your shell's environment is never
-sent and no longer connects anything. We store the key encrypted in our own database using
+**Provider API keys (server-side vault).** Earlier versions of the Mac app let
+you enter a Conductor key, which they sent to our vault under your signed-in
+account; this version neither asks for one nor shows one, and sends no key
+anywhere. A key or a calendar grant an earlier version kept encrypted on this
+Mac stays in its settings file as that version left it, still encrypted: this
+version neither reads nor sends it.
+We store a synced key encrypted in our own database using
 AES-256-GCM with a server-only secret. It is never returned to any caller:
 there is no endpoint that reads it back, and no code path that decrypts it
 for any purpose other than observing your sessions or carrying the actions
@@ -351,10 +321,8 @@ synced key, and hands them to Luke as one line per message under the speaker's
 name, alongside the chat's title, workspace, and provider from the stored
 roster. A chat that gained only tool activity wakes nothing. We keep the latest
 roster the pass read, encrypted at rest with the same server-only secret as
-your keys, so the Mac app can show your sessions
-without asking Conductor again (the Mac app reads this stored roster from our
-service on your account about once a minute, and draws its rows from nothing
-else); beside it we keep one instant per account, the point up to which Luke
+your keys, so an earlier version of the Mac app can show your sessions
+without asking Conductor again; beside it we keep one instant per account, the point up to which Luke
 has been told of your chats' changes, and one position per chat marking where
 his last read of it ended. The roster is replaced on every pass; nothing older
 is kept. The conversation Luke keeps for a chat he has been told about stands
@@ -366,21 +334,20 @@ Observation stops, and the stored roster, the instant, and the positions are
 deleted, when you delete the synced key, when you have not signed in for 7
 days, and alongside your account if you delete that.
 
-**Devices.** When you sign in on the Mac app, the iOS app, or the Apple Watch
-app, that installation registers itself with our service as one device row.
+**Devices.** This version of the Mac app registers no device row and reports
+no presence. When you signed in on an earlier version of the Mac app, the iOS
+app, or the Apple Watch app, that installation registered itself with our
+service as one device row, as follows.
 The row holds which platform it is, when it was last seen (refreshed by
-every poll and heartbeat: on a timer by the Mac, each time the phone comes
-to the foreground, and by the phone's and the watch's Conversation screens
-while they are open), an optional push token, and two instants: a presence
-instant and a quiet-until instant. The Mac reports both about once a minute
-on the same poll it uses to learn what changed, and once more the moment you
-flip the announcements switch or the spoken introduction finishes: presence
-set only while your Mac has seen input in the last two minutes and its screen
-is unlocked, and quiet-until as the later of two ends — the end of a meeting
-its calendar hold observes while you have Luke quiet during meetings, and,
-while announcements are switched off or the spoken introduction is still
-owed, an instant one to two hours ahead that each poll moves forward again,
-so that hold lifts on its own if the Mac stops polling. The phone and the
+every poll and heartbeat: on a timer by an earlier Mac app, each time the
+phone comes to the foreground, and by the phone's and the watch's
+Conversation screens while they are open), an optional push token, and two
+instants: a presence instant and a quiet-until instant. An earlier Mac app
+reports both about once a minute: presence set only while your Mac has seen
+input in the last two minutes and its screen is unlocked, and quiet-until as
+an instant that holds Luke quiet while that version's own meeting or
+announcement switches hold him, moved forward by each poll so it lifts on its
+own if the Mac stops polling. The phone and the
 watch each report a presence instant too, on the poll their Conversation screen makes every few
 seconds while it is on screen and the app is in the foreground, each holding
 for thirty seconds; neither observes a meeting, so neither reports a quiet
@@ -398,9 +365,10 @@ installation is named by an id the app made up once for itself; it is not a
 credential, and neither is a push token, which only our own Apple key can
 address. Signing into a different account on the same device moves its one
 row to that account rather than leaving a second. The row is deleted when
-you sign out on that device, when the phone and the watch part ways with the
-account, when Apple reports a push token gone, and alongside your account if
-you delete that.
+you sign out on the device that made it, when the phone and the watch part
+ways with the account, when Apple reports a push token gone, and alongside
+your account if you delete that; a row an earlier Mac app made is not deleted
+by signing out of this version.
 
 **Briefing notifications.** When Luke decides to tell you something about your
 sessions and no device of yours is placed to say it — no Mac of yours
@@ -455,21 +423,10 @@ only when you press Send.
   everything the microphone hears streams to OpenAI, and the moment you let
   go nothing does, the microphone closing; Luke can still speak into a
   session whose microphone is closed. There is no way to type to Luke; every
-  ask is spoken. A Mac's session opens with a
-  bounded summary of your coding agents — at most ten of them,
-  each as its title, which provider it belongs to, whether it is working,
-  waiting on you, finished, or failed, the tool it is holding for your
-  permission, and roughly how long since its provider last wrote about it,
-  and nothing else about it: no branch, repository, error line, model,
-  address, or conversation. That summary is what the session opens with; a
-  change to your desk while the session is open is not sent to the voice, and
-  what Luke says about it he reads for himself when you ask. What you say and what Luke says in a
+  ask is spoken. A Mac's session is a call about one plan, and opens with
+  nothing of your coding agents. What you say and what Luke says in a
   call is written to your account's Conversation by our service, as
-  described under "Your account" above, and kept nowhere on your Mac. Every
-  turn sends the session fields listed above, drawn from the
-  same cloud observation your vault keys already
-  allow (titles, status, repository, and branch of your cloud sessions, as
-  described under Provider API keys above). When you use voice through your
+  described under "Your account" above, and kept nowhere on your Mac. When you use voice through your
   Luke account, your Mac reaches OpenAI through our own voice
   service, which
   creates the session on our key, relays the control and transcript events
@@ -479,31 +436,12 @@ only when you press Send.
   reflects back so neither your voice nor Luke's transits our service, keeps of the
   exchange only the lines described under "Your account" above, logs only
   status codes and byte counts, and records the
-  billed seconds of each session once, beside which of your registered
-  devices opened it (each device names its own device row on the handshake,
-  and the service accepts that name only for a row your account holds), so a
-  briefing that device claims is spoken into that session and no other.
+  billed seconds of each session once.
   Every voice session is opened this way, through our service on your
   account: nothing on your Mac holds or is handed a credential for OpenAI,
   and your Mac never reaches OpenAI on a key of
-  your own. One such
-  session opens on its own at every signed-in launch, after the first
-  sign-in's arrival beat has played, so Luke can greet you: your Mac decides
-  the greeting is owed and asks our service to speak it, and the service
-  speaks a fixed script into which travels only the first word of the name
-  your account provider reported, never a session's title or anything else
-  about your work; the two onboarding lines (that you are all set, and the
-  ask to connect a calendar) reach the service the same way, carrying at most
-  the title of one working session and the name of your talk key, and each
-  waits like an announcement while a meeting or the Announce switch holds it.
-  A session also opens on its own when a briefing Luke has decided is on
-  offer to your account and this Mac is present (input within the last two
-  minutes, screen unlocked) with nothing holding him quiet, so the briefing
-  is said here rather than pushed to your phone: that opening is decided from
-  the offer's own status row and your Mac's presence, never by a model, it
-  opens at most one session a minute and none while one already stands, a
-  briefing another device claims first is left to it, and the phone's
-  two-minute grace is unchanged.
+  your own. No session opens on its own: a call opens only when you press
+  the talk key or the microphone on a plan.
   Luke's judgment is a separate call to OpenAI's Responses API, made from our
   service when a scheduled pass wakes the conversation following that session
   and when you ask him something: it carries that conversation's working
@@ -528,24 +466,8 @@ only when you press Send.
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no
   such switch and writes none.
-  The spoken introduction plays once, right after your first sign-in on the
-  Mac app; if you never sign in, it never plays. It is a scripted greeting,
-  not a conversation. It asks for your microphone first, through macOS's own
-  dialog at your press, so the talk key can work afterwards; the greeting
-  itself never listens, plays whether you allow the microphone or not, and
-  opens its one GPT Live session through our voice service with no
-  microphone attached and never unmuted, so nothing you say during it leaves
-  your Mac. Luke greets you by name: the first word of the name on your
-  account is sent to our voice service, as data for the greeting alone, and
-  that is the one thing about you that travels with it. The session is
-  opened without your account token, and our service keeps only a hash of
-  your network address for that day's rate limit and none of the greeting.
-  Nothing about your coding agent sessions travels: the offer keeps a seat
-  for their titles (at most eight, each cut short) and the app sends it
-  empty, and the introduction draws no sessions on screen, real or pretend.
-  It can act on nothing.
-- Coding agent providers you connect (Conductor), using the key or
-  account access you supply. The vault holds Conductor keys only.
+- Coding agent providers you connected in an earlier version (Conductor),
+  using the key you supplied. The vault holds Conductor keys only.
   Luke reads your sessions, and sends something back
   only when you ask it to, such as a message you wrote.
   With a Conductor key in the vault, our service also reads your Conductor sessions
@@ -556,9 +478,6 @@ only when you press Send.
   messages. A message or a workspace Luke sends to a Conductor session at
   your ask travels the same way, admitted by our service against the
   sessions it last showed you.
-- Google, if you connect Google Calendar. We request your calendar list and your
-  availability. Google returns busy times only, so event titles and attendees
-  are never available to Luke.
 - PostHog, for usage data and screen recordings, from the Mac app. The
   counts go through our own service; the recordings go from Luke to PostHog
   directly.
@@ -585,11 +504,12 @@ your network address, as it does for the app's recordings.
 
 ## Storage
 
-Your settings, local provider API keys, and calendar access stay on your
-Mac. Nothing of your conversation with Luke, his working memory, or his
-workspace is kept on your Mac.
-Your calendar access is encrypted in the macOS Keychain. Your
-Conductor key, and the latest roster of your
+Your settings and your account's sign-in tokens stay on your Mac, the tokens
+encrypted under a key held in the macOS Keychain, beside whatever settings,
+keys, or calendar grants an earlier version kept there, which stay as they
+were but for a voice key, removed as described above. Nothing of your
+conversation with Luke, his working memory, or his workspace is kept on your
+Mac. A Conductor key you synced, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored
 encrypted in our own database and nowhere on your Mac, as described above. When Luke runs a turn for
 you on our service, the workspace files that turn reads and writes, the things
@@ -600,10 +520,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices
 
-- Disconnect any provider or calendar to stop it being read.
 - Sign out of your Luke account to turn voice off.
-- Delete your Conductor key from its row in Settings, which removes it from
-  our vault. Keys are also deleted when you delete your account.
+- A Conductor key you synced from an earlier version is deleted from our
+  vault when you delete your account.
 - Ask Luke what he remembers, correct a memory, or tell him to forget one.
 - Delete any workspace file an earlier version of Luke left on your Mac;
   nothing reads it now. Luke's workspace rows on our service are edited
@@ -619,9 +538,7 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   talk key. The press opens the microphone and letting go closes it, so
   macOS's microphone indicator is lit exactly while the key is down; the stop
   key closes it too, and is the one key that also tells Luke to stop talking,
-  while letting go of the talk key lets him finish. A voice session Luke
-  opens to speak to you opens no
-  microphone at all. If Luke's key helper cannot start, the key reports
+  while letting go of the talk key lets him finish. If Luke's key helper cannot start, the key reports
   presses alone, so one press opens the microphone and the next closes it,
   and the Keyboard shortcuts page says so.
 - Delete your account from the Account section in Settings. This erases your
@@ -641,9 +558,9 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 Luke's use of information received from Google APIs adheres to the
 [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy),
-including the Limited Use requirements. We use your calendar availability only
-to hold Luke's spoken announcements while you are in a meeting. It is not
-transferred, sold, or used for advertising, and no human reads it.
+including the Limited Use requirements. We use what Google returns when you
+sign in with it, your name and email address, only to identify your account.
+It is not transferred, sold, or used for advertising.
 
 ## Contact
 

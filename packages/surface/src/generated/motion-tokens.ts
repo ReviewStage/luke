@@ -29,6 +29,3 @@ export const VOICE_CAPTION_MAX_HEIGHT = 210;
 /** The one gap between the strip, each band grown below it, and the shape's
  * bottom edge. CSS: `--voice-band-inset`. */
 export const VOICE_BAND_INSET = 6;
-
-/** Expanded panel width. CSS: `--panel-width`. */
-export const PANEL_WIDTH = 620;

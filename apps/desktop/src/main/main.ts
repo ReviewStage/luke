@@ -9,10 +9,9 @@ import { reportToStderr, tolerateClosedStderr } from "./stderr-report";
 /**
  * The desktop client's entry: the process that draws. It owns the windows,
  * the keys, the Dock, the native helpers this machine's devices answer
- * through, the updater that replaces this binary, and the one-time
- * introduction; it reaches everything else — the store, the brain, the
- * credentials, the observation, the accounts — through the Gateway as one
- * operator, and offers this machine's native capabilities back to the host as
+ * through, and the updater that replaces this binary; it reaches everything
+ * else — the settings, the account, the voice session, the plans — through
+ * the Gateway as one operator, and offers this machine's native capabilities back to the host as
  * one node. The host it operates is composed here, in this process.
  *
  * This is the one place in the process that runs an Effect. Everything of the

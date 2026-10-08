@@ -11,8 +11,6 @@ import {
   APP_UPDATE_CACHE_DIR_NAME,
   APP_UPDATE_FEED_URL,
   APPLE_EVENTS_USAGE_DESCRIPTION,
-  CALENDARS_USAGE_DESCRIPTION,
-  CALENDARS_USAGE_KEYS,
   MACOS_DEPLOYMENT_TARGET,
   MICROPHONE_USAGE_DESCRIPTION,
   resolveSigningMode,
@@ -48,9 +46,6 @@ export const ELECTRON_BUILDER_GITHUB_PUBLISH_CONFIG = {
 };
 
 function macBinaryPath(helper) {
-  if (helper.bundle) {
-    return path.join("Contents", "Resources", helper.bundle, "Contents", "MacOS", helper.binary);
-  }
   return path.join("Contents", "Resources", helper.binary);
 }
 
@@ -102,16 +97,13 @@ export function createElectronBuilderConfig(env = process.env) {
       entitlements: packageAssets.entitlementsPath,
       entitlementsInherit: packageAssets.entitlementsPath,
       minimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-      binaries: NATIVE_HELPERS.filter((helper) => !helper.bundle).map(macBinaryPath),
+      binaries: NATIVE_HELPERS.map(macBinaryPath),
       extendInfo: {
         CFBundleName: productName,
         CFBundleDisplayName: productName,
         LSMinimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
         LSUIElement: true,
         NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
-        ...Object.fromEntries(
-          CALENDARS_USAGE_KEYS.map((key) => [key, CALENDARS_USAGE_DESCRIPTION]),
-        ),
         NSMicrophoneUsageDescription: MICROPHONE_USAGE_DESCRIPTION,
         NSPrefersDisplaySafeAreaCompatibilityMode: false,
       },

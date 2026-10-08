@@ -1,16 +1,11 @@
-import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { LiveSessionPhase } from "@sidecar/gateway";
 import type { PlanningView } from "@sidecar/hosted/planning-view";
-import type { ObservedWorkspaceProject } from "@sidecar/session";
-import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
 import {
   type DisplayDiagnostic,
   type SessionReplayBootstrap,
-  type SessionRosterPayload,
   WINDOW_ROLE,
   type WindowMode,
   type WindowRole,
@@ -51,21 +46,8 @@ interface AppRunFacts {
   appVersion: string;
   captureMode: boolean;
   fixtureMode: boolean;
-  fixture: FixtureSnapshot;
   accountRequired: boolean;
-  observesProviders: boolean;
   agentTraceEnabled: boolean;
-}
-
-interface AppSessionsSlice {
-  roster: SessionRosterPayload;
-  /**
-   * Whether the roster reflects a reading Luke actually took. A run that
-   * observes nothing is settled from the start, so an empty list can say
-   * "nothing to watch" rather than "not looked yet".
-   */
-  settled: boolean;
-  workspaceProjects: readonly ObservedWorkspaceProject[];
 }
 
 export interface AppAudioSlice {
@@ -104,13 +86,6 @@ interface AppVoiceSlice {
    * one: it travels on `app:voice-level-changed` as the stream it is.
    */
   view?: VoiceView;
-  /**
-   * Where the host's one live session stands, as its last change event said:
-   * the phase, and the id once the provider named one. The voice window acts
-   * on the change events themselves, since a repeated phase is an event a
-   * version could not carry; this is what a panel may draw of it.
-   */
-  liveSession?: { sessionId?: string; phase: LiveSessionPhase };
 }
 
 /**
@@ -140,8 +115,6 @@ export interface AppState {
   run: AppRunFacts;
   settings?: AppSettings;
   account: AccountSnapshot;
-  sessions: AppSessionsSlice;
-  calendars: readonly ObservedAccountCalendars[];
   update: UpdateSnapshot;
   audio: AppAudioSlice;
   hotkeys: AppHotkeysSlice;
@@ -153,20 +126,6 @@ export interface AppState {
    * session and the talk key bind to.
    */
   planning: PlanningView;
-  announcements: { held: boolean };
-  /** The onboarding gates the host says stand: the key step ahead of the calendar's, both after the introduction. */
-  onboarding: { calendarOwed: boolean; conductorKeyOwed: boolean };
-  /**
-   * Whether the one-time spoken introduction holds a panel, true from the
-   * launch's own decision until the ending is taken. It is the takeover's
-   * whole standing: what the panel draws on, what the talk key's keyless
-   * claim is granted against, what the accountless mint is answered against,
-   * and what every takeover-only report is validated against. There is no
-   * second flag anywhere; a stale one would be a fullscreen surface nobody
-   * can dismiss. The display it covers is deliberately not here — that is a
-   * fact the window standing on it answers for, and it rides the snapshot.
-   */
-  introduction: { playing: boolean };
   sessionReplay: AppSessionReplaySlice;
 }
 

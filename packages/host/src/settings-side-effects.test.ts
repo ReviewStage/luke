@@ -19,7 +19,7 @@ type SideEffects = Readonly<
 >;
 
 it.effect(
-  "the announcement hold's side effect re-reads the hold and then sends the heartbeat, and the voice's reaches the source and then ends the standing session, each in that order",
+  "the voice's side effect reaches the source and then ends the standing session, in that order",
   () =>
     Effect.gen(function* () {
       const ran: string[] = [];
@@ -30,14 +30,8 @@ it.effect(
       const effects: SideEffects = hostSettingSideEffects({
         setVoice: () => step("setVoice"),
         endLiveSession: step("endLiveSession"),
-        refreshAnnouncementHold: step("refreshAnnouncementHold"),
-        reportPresence: step("reportPresence"),
       });
 
-      yield* effects[SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]({ settings: SETTINGS });
-      assert.deepEqual(ran, ["refreshAnnouncementHold", "reportPresence"]);
-
-      ran.length = 0;
       yield* effects[SETTING_SIDE_EFFECT.VOICE]({ settings: SETTINGS });
       assert.deepEqual(
         ran,
@@ -48,6 +42,6 @@ it.effect(
       ran.length = 0;
       yield* effects[SETTING_SIDE_EFFECT.NONE]({ settings: SETTINGS });
       yield* effects[SETTING_SIDE_EFFECT.DOCK]({ settings: SETTINGS });
-      assert.deepEqual(ran, [], "an effect the client owns sends no heartbeat");
+      assert.deepEqual(ran, [], "an effect the client owns does nothing here");
     }),
 );

@@ -82,13 +82,6 @@ export interface ConversationEntry {
   requestId?: string;
 }
 
-/** The recent slice safe to seed a session's context window with. */
-export function recentConversationEntries(
-  entries: readonly ConversationEntry[],
-): readonly ConversationEntry[] {
-  return entries.slice(-maximumConversationEntries);
-}
-
 /**
  * One normalization for every line, however it enters: line endings made
  * uniform and the ends trimmed, the line structure between kept, because the

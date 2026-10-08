@@ -43,8 +43,7 @@ makes motion stutter.
 The surface's fixed bounds are generated vocabulary too. Panel width and its
 height ceiling come from `design/generate-surface-shared.mjs`; TypeScript and
 CSS consume the emitted constants and custom properties rather than restating
-pixels. Pseudo-elements that merely extend the opaque surface into its notch
-flares count as part of that same leaf shape and may size with it. A scrolling
+pixels. A scrolling
 content viewport may animate a `mask-image` edge to disclose overflow, because
 the mask neither changes layout nor moves content; no other layered content
 gets a size-animation exception.
@@ -93,8 +92,8 @@ the surface's is wrong, whatever it looks like at speed.
 
 Content leaves first, over `--duration-exit`, and only its end releases the
 room: the surface must never shrink out from under something still drawn. For
-elements that unmount, hold them mounted through their own exit (the key slot
-and the feedback preview both keep drawing what they last held) and take them
+elements that unmount, hold them mounted through their own exit (the sign-in
+slot and the feedback preview both keep drawing what they last held) and take them
 out when the exit finishes, never on the frame the state changed.
 
 ## Mount animations, not `@starting-style`, for reveals

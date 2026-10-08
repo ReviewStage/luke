@@ -2,17 +2,14 @@ import type { ActionResult } from "@sidecar/wire";
 import { APP_SETTING_DEFAULTS, type StoredAppSettings } from "./schema-access.js";
 import type { RuntimeStatus } from "./status.js";
 
-export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
 export type { SettingsResetScope } from "./schema.js";
 export { SETTINGS_RESET_SCOPE } from "./schema.js";
 export type {
   AppSettingField,
   AppSettingValue,
-  KeyedAppSettingField,
-  SettingEntryValue,
 } from "./schema-access.js";
 
-export type { CalendarAccount, RuntimeStatus } from "./status.js";
+export type { RuntimeStatus } from "./status.js";
 
 /** Renderer-safe settings. Credentials are never sent to a renderer. */
 export interface AppSettings {

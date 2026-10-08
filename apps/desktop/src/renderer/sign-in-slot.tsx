@@ -1,8 +1,8 @@
 import { ACCOUNT_PROVIDER, type AccountProvider } from "@sidecar/credentials/snapshot";
 import { useRef } from "react";
 import { AccountProviderMark } from "./account-marks";
-import { useStagedFocus } from "./credential-entry";
 import { HIT_REGION } from "./panel-state";
+import { useStagedFocus } from "./staged-focus";
 
 /**
  * The panel stood down to the sign-in it is waiting on, the way it stands down

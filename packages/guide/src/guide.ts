@@ -1,6 +1,6 @@
 /**
- * The app guide's vocabulary: how a setting describes itself, the panel's
- * tabs, and the session list's orders, said once so the settings search, the
+ * The app guide's vocabulary: how a setting describes itself and the panel's
+ * tabs, said once so the settings search, the
  * renderer, and the analytics name the same words. Nothing here may ever
  * carry a credential: a setting says *whether* a provider is connected, never
  * what connects it.
@@ -48,13 +48,6 @@ export interface AppGuideSetting {
   defaultValue?: string;
   /** Every value a choice accepts, in the order settings offers them. */
   choices?: readonly string[];
-  /**
-   * For a choice whose values each take a companion effort level — a model
-   * whose agent documents levels — the levels riding each choice, keyed by
-   * the choice exactly as `choices` lists it. A choice absent here takes no
-   * level.
-   */
-  efforts?: Readonly<Partial<Record<string, readonly string[]>>>;
   /** Whether a spoken ask may change it; false means describe, never act. */
   adjustable: boolean;
   /** Where the same change is made by hand. */

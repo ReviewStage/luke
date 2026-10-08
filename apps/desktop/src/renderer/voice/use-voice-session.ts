@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
+import { PRODUCT_EXCHANGE_KIND } from "@sidecar/analytics";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { appSettingsView } from "@sidecar/settings/wire";
 import {
@@ -11,18 +12,13 @@ import * as Atom from "effect/unstable/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import {
-  SILENT_VOICE_LEVELS,
-  VOICE_COMMAND,
-  type VoiceLevels,
-  voiceExchangeKind,
-} from "#shared/messages/voice-view";
+import { SILENT_VOICE_LEVELS, VOICE_COMMAND, type VoiceLevels } from "#shared/messages/voice-view";
 import { useAct } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
 import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
-import { LIVE_CLOSE_OWNER, LiveCall } from "./live-call";
+import { LiveCall } from "./live-call";
 import { createBrowserSilence } from "./live-peer";
 import { openPreferredMicrophone } from "./microphone-choice";
 import { startVoiceLevelMeter } from "./voice-level-meter";
@@ -66,10 +62,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
   /** Everything the policy asks of the main process, over the one bridge this window has. */
   const bridge: LiveVoiceBridge = {
-    reportView: (view, exchange) =>
+    // Every exchange is a spoken one: a call is only ever opened by a press.
+    reportView: (view, exchangeOpened) =>
       window.sidecar.reportVoiceView(
         view,
-        exchange === undefined ? undefined : voiceExchangeKind(exchange),
+        exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined,
       ),
     requestMicrophone: () =>
       Effect.promise(
@@ -84,23 +81,15 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   orchestratorRef.current ??= new LiveVoiceOrchestrator({
     bridge,
     services: rendererServicesNow(),
-    // Luke speaks only on a planning call for now; the host refuses the rest.
-    deskCalls: false,
     createCall: (events) => {
       const call = new LiveCall({
         events,
         acts: {
-          createSession: (sdp, planId) =>
-            act(
-              ACT_KIND.VOICE_CREATE_LIVE_SESSION,
-              planId === undefined ? { sdp } : { sdp, planId },
-            ),
+          createSession: (sdp, planId) => act(ACT_KIND.VOICE_CREATE_LIVE_SESSION, { sdp, planId }),
           endSession: () => tell(ACT_KIND.VOICE_END_LIVE_SESSION),
           reportTransport: (report) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, report),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
         },
-        // The sessions route's close is the service's to send; the hang-up asks for it.
-        closeOwner: LIVE_CLOSE_OWNER.SERVICE,
         createPeerConnection: () => new RTCPeerConnection(),
         createSilence: createBrowserSilence,
         // The press's device, chosen by facts read natively: the Mac's own
@@ -225,9 +214,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     element.srcObject = remote ?? null;
     if (!remote) return;
     // A refused play is the one failure the call cannot see: Luke speaks and
-    // the captions draw while nothing is heard. A session opened for a
-    // briefing is exactly the one with no user gesture behind it to satisfy a
-    // playback gate, so the refusal is retried for as long as the stream
+    // the captions draw while nothing is heard, so the refusal is retried for as long as the stream
     // stands rather than swallowed once, under the renderer's own services
     // rather than a timer seam.
     const fiber = Effect.runForkWith(rendererServicesNow())(
@@ -264,17 +251,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     [drive, orchestrator],
   );
 
-  // The host's word on its one session: wanted opens one muted for whatever
-  // Luke has to say, closing hangs up. The phase the document held when this
-  // window came up is obeyed once, since a wanted announced before the
-  // subscription stood would otherwise reach nobody.
-  const standingPhase = state?.voice.liveSession?.phase;
-  const adopted = useRef(false);
-  useEffect(() => {
-    if (adopted.current || state === undefined) return;
-    adopted.current = true;
-    drive(orchestrator.adoptStanding(standingPhase));
-  }, [drive, orchestrator, standingPhase, state]);
+  // The host's word on its one session: closing hangs up.
   useEffect(
     () =>
       window.sidecar.onVoiceLiveSessionChanged((change) =>

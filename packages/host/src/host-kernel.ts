@@ -4,7 +4,6 @@ import { type AgentId, DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
 import { ExternalOpenAnswerLostError } from "@sidecar/session";
 import type { WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
-import type { MachinePresence } from "./device-presence.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
 import type { SecretCipher } from "./settings-store.js";
@@ -20,12 +19,6 @@ export interface HostSeams {
   cipher: SecretCipher;
   createId: () => string;
   report: (message: string) => void;
-  /**
-   * The machine's own idle time and lock state, read by the client that runs
-   * on it, for the presence this installation's device row reports. A host
-   * with no client on the machine reports no presence.
-   */
-  machinePresence?: () => MachinePresence;
   /**
    * Hears the protocol's shutdown method: the client's explicit Quit, or a
    * newer build draining this one. The process hosting the runtime leaves in
@@ -71,12 +64,11 @@ export interface HostKernel {
    * The kind is what the address is, an address unless a caller says
    * otherwise; the node decides from it what its own windows owe the open.
    *
-   * A promise and not an effect: the two composers that hand this on hand it
-   * to seams outside this package — the account session manager's consent and
-   * the calendar sign-in's page — each a synchronous or promise-shaped
-   * callback owned by `@sidecar/credentials` and `@sidecar/calendar`, and what
-   * would end that is a decision about those seams rather than anything this
-   * kernel holds.
+   * A promise and not an effect: the composer that hands this on hands it to
+   * a seam outside this package — the account session manager's consent, a
+   * promise-shaped callback owned by `@sidecar/credentials` — and what would
+   * end that is a decision about that seam rather than anything this kernel
+   * holds.
    */
   openExternalThroughNode: (url: string) => Promise<void>;
   reportOpenFailure: (error: Error) => void;

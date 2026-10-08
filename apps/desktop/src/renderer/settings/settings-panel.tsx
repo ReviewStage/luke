@@ -1,14 +1,13 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { PowerIcon } from "@sidecar/panel";
-import { SETTINGS_PAGE as SCHEMA_SETTINGS_PAGE, type SettingsRowsInput } from "@sidecar/settings";
+import type { SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useRef, useState } from "react";
-import type { CredentialEntryControl } from "../credential-entry";
 import type { FeedbackEntryControl } from "../feedback-entry";
-import { voiceAttentionNote } from "../microphone-access";
+import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import {
   landOnSettingsRow,
@@ -27,23 +26,12 @@ import {
 } from "../settings-views";
 import { AccountSection } from "./account-section";
 import { AppearanceSection } from "./appearance-page";
-import { CredentialsSection, IntegrationsSection, WorkspacesSection } from "./connections-page";
-import type {
-  AppleCalendarControl,
-  CalendarControl,
-  MicrophoneControl,
-  ShortcutControl,
-  UpdateControl,
-  WorkspaceProviderOption,
-} from "./controls";
+import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./controls";
 import { FeedbackSection } from "./feedback-section";
-import { MemorySection } from "./memory-page";
 import { SETTINGS_PAGE, SettingsNavRow, SettingsPageHeader } from "./pages";
 import { pageResetControl } from "./reset";
-import { SchemaSettingRows } from "./schema-rows";
 import { ShortcutSection } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
-import { settingsRowsInput, useConnectionInput } from "./use-connection-input";
 import { VoiceSection } from "./voice-page";
 import { useSettingsWrites } from "./writes";
 
@@ -63,16 +51,13 @@ export interface SettingsPanelProps {
   /**
    * Which settings page is showing: the front page, or one of the pages a
    * front-page row opens. Held by the app rather than here because Escape
-   * unwinds it and a credential entry has to survive a trip to the key slot
-   * with its page intact.
+   * unwinds it.
    */
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
   microphone: MicrophoneControl;
   updates: UpdateControl;
   settings?: AppSettingsView;
-  /** The one credential being entered anywhere, and everything that can be done to it. */
-  credentials: CredentialEntryControl;
   /** The one note to the founders being written, and everything that can be done to it. */
   feedback: FeedbackEntryControl;
   /**
@@ -81,16 +66,6 @@ export interface SettingsPanelProps {
    * and an entry can outlast the panel it was started in.
    */
   panelOpen: boolean;
-  /**
-   * The providers the default-workspace row may offer: the ones currently
-   * offering projects, plus a stored default that is not — a choice the row
-   * cannot show is one that can be neither seen nor cleared.
-   */
-  workspaceProviders: readonly WorkspaceProviderOption[];
-  /** Everything the Google Calendar block can do. */
-  calendar: CalendarControl;
-  /** Everything the Apple Calendar block can do. */
-  appleCalendar: AppleCalendarControl;
   onQuit: () => void;
   shortcuts: ShortcutControl;
   /**
@@ -104,8 +79,8 @@ export interface SettingsPanelProps {
   onSearchClose: () => void;
   /**
    * Reports someone being part-way through a settings search, which holds the
-   * panel open against the pointer wandering off — the same hold a half-typed
-   * ask has, for the same reason: the caret is the signal that hands are here.
+   * panel open against the pointer wandering off: the caret is the signal that
+   * hands are here.
    */
   onSearchEngaged: (engaged: boolean) => void;
 }
@@ -119,12 +94,8 @@ export function SettingsPanel({
   microphone,
   updates,
   settings,
-  credentials,
   feedback,
   panelOpen,
-  workspaceProviders,
-  calendar,
-  appleCalendar,
   onQuit,
   shortcuts,
   searchOpen,
@@ -152,20 +123,15 @@ export function SettingsPanel({
   // by the search corpus alike, so a result never leads to a page without
   // its row.
   const panelView: SettingsRowsInput | undefined = settings
-    ? settingsRowsInput({ settings, account, microphone, workspaceProviders })
+    ? {
+        settings,
+        voiceControlsDrawn: microphoneAccessRow({
+          voiceAvailable: microphone.voiceAvailable,
+          status: microphone.status,
+        }).ready,
+        accountDrawn: account.status === ACCOUNT_STATUS.SIGNED_IN,
+      }
     : undefined;
-  // Everything the connection rows are judged from and acted through,
-  // assembled once for every page that draws one.
-  const connections = useConnectionInput({
-    ...(panelView ? { view: panelView } : undefined),
-    ...(settings ? { settings } : undefined),
-    account,
-    credentials,
-    calendar,
-    appleCalendar,
-    workspaceProviders,
-    panelOpen,
-  });
   // Built only while a query stands: an empty field searches nothing.
   const search =
     panelView && searchOpen && searchQuery !== ""
@@ -266,13 +232,8 @@ export function SettingsPanel({
         </section>
       ) : null}
 
-      {view === SETTINGS_VIEW.VOICE && connections && panelView && !search ? (
-        <VoiceSection
-          input={connections}
-          view={panelView}
-          writes={writes}
-          microphone={microphone}
-        />
+      {view === SETTINGS_VIEW.VOICE && panelView && !search ? (
+        <VoiceSection view={panelView} writes={writes} microphone={microphone} />
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && panelView && !search ? (
@@ -285,29 +246,6 @@ export function SettingsPanel({
           writes={writes}
           {...(panelView ? { view: panelView } : undefined)}
           voiceAvailable={microphone.voiceAvailable}
-        />
-      ) : null}
-
-      {view === SETTINGS_VIEW.CONNECTIONS && connections && panelView && !search ? (
-        <>
-          <WorkspacesSection view={panelView} writes={writes} />
-          <CredentialsSection input={connections} />
-          <IntegrationsSection input={connections} view={panelView} writes={writes} />
-          {/* Whatever the page holds that stands under no heading of its
-              own: the sections above draw their own members, and a setting
-              added to this page with no section named lands here. */}
-          <SchemaSettingRows
-            page={SCHEMA_SETTINGS_PAGE.CONNECTIONS}
-            view={panelView}
-            writes={writes}
-          />
-        </>
-      ) : null}
-
-      {view === SETTINGS_VIEW.MEMORY && !search ? (
-        <MemorySection
-          signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN}
-          panelOpen={panelOpen}
         />
       ) : null}
 

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { runModeFor } from "@sidecar/host";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
@@ -21,7 +20,6 @@ const RUN = {
   launch: {
     captureOutput: undefined,
     profile: "idle",
-    fixtureName: undefined,
     captureMode: false,
     fixtureMode: false,
   },
@@ -74,37 +72,21 @@ it("a fresh document is version zero and carries this launch's own facts", () =>
   const state = store().snapshot();
   assert.equal(state.version, 0);
   assert.equal(state.run.appVersion, "1.2.3");
-  assert.equal(state.run.observesProviders, true);
-  assert.equal(state.sessions.settled, false);
   assert.equal(state.account.status, ACCOUNT_STATUS.SIGNED_OUT);
   assert.equal(state.update.currentVersion, "1.2.3");
   assert.equal(state.update.installSupported, true);
   assert.equal(state.audio.microphoneStatus, MICROPHONE_STATUS.NOT_DETERMINED);
 });
 
-it("nothing is introducing itself until the launch's own gate says so", () => {
-  const app = store();
-  assert.equal(app.snapshot().introduction.playing, false);
-  app.update({ introduction: { playing: true } });
-  assert.equal(app.snapshot().introduction.playing, true);
-  // The standing is the whole of the takeover, so the ending is a write to it
-  // and a second ending is no write at all.
-  const versionAtEnding = app.snapshot().version + 1;
-  app.update({ introduction: { playing: false } });
-  app.update({ introduction: { playing: false } });
-  assert.equal(app.snapshot().introduction.playing, false);
-  assert.equal(app.snapshot().version, versionAtEnding);
-});
-
 it.effect("one slice patched bumps the version once and announces once on `changes`", () =>
   Effect.gen(function* () {
     const app = store();
     const seen = yield* watchChanges(app, 2, () => {
-      app.update({ announcements: { held: true } });
+      app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
     });
     assert.equal(seen.length, 2);
     assert.equal(seen[1]?.version, 1);
-    assert.equal(seen[1]?.announcements.held, true);
+    assert.equal(seen[1]?.audio.microphoneStatus, MICROPHONE_STATUS.GRANTED);
   }),
 );
 
@@ -113,11 +95,11 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
     const app = store();
     const seen = yield* watchChanges(app, 2, () => {
       app.update({});
-      app.update({ announcements: { held: false } });
-      app.update({ calendars: [] });
+      app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED } });
+      app.update({ voice: {} });
       // The one real patch is the second document `changes` ever carries; the
       // three no-ops before it wrote nothing for a collector to see.
-      app.update({ announcements: { held: true } });
+      app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
     });
     assert.equal(seen.length, 2);
     assert.equal(seen[0]?.version, 0);
@@ -127,16 +109,19 @@ it.effect("a patch that says nothing new announces nothing on `changes`", () =>
 
 it("two slices in one patch are one version", () => {
   const app = store();
-  app.update({ announcements: { held: true }, calendars: [inert()] });
+  app.update({
+    audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED },
+    voice: { view: IDLE_VOICE_VIEW },
+  });
   assert.equal(app.snapshot().version, 1);
-  assert.equal(app.snapshot().calendars.length, 1);
+  assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
 });
 
 it.effect("a touch re-announces the document without numbering it again", () =>
   Effect.gen(function* () {
     const app = store();
     const seen = yield* watchChanges(app, 4, () => {
-      app.update({ announcements: { held: true } });
+      app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
       app.touch();
       app.touch();
     });
@@ -157,29 +142,14 @@ it("a slice is replaced whole rather than merged field by field", () => {
 it("the version climbs once per applied patch", () => {
   const app = store();
   for (let index = 0; index < 10; index += 1) {
-    app.update({ announcements: { held: index % 2 === 0 } });
+    app.update({
+      audio: {
+        microphoneStatus:
+          index % 2 === 0 ? MICROPHONE_STATUS.GRANTED : MICROPHONE_STATUS.NOT_DETERMINED,
+      },
+    });
   }
   assert.equal(app.snapshot().version, 10);
-});
-
-it("the live session's phase is a slice of the voice document beside the view, and a window going away keeps it", () => {
-  const app = new AppStateStore(initialAppState(RUN, false), Context.empty());
-  app.update({ voice: { view: IDLE_VOICE_VIEW } });
-  app.update({
-    voice: { ...app.snapshot().voice, liveSession: { phase: LIVE_SESSION_PHASE.WANTED } },
-  });
-  assert.deepEqual(app.snapshot().voice.liveSession, { phase: LIVE_SESSION_PHASE.WANTED });
-  assert.equal(app.snapshot().voice.view, IDLE_VOICE_VIEW);
-  app.update({
-    voice: {
-      ...app.snapshot().voice,
-      liveSession: { sessionId: "sess_1", phase: LIVE_SESSION_PHASE.STARTED },
-    },
-  });
-  assert.deepEqual(app.snapshot().voice.liveSession, {
-    sessionId: "sess_1",
-    phase: LIVE_SESSION_PHASE.STARTED,
-  });
 });
 
 it("a voice window that went away leaves the document holding no view", () => {
@@ -192,14 +162,6 @@ it("a voice window that went away leaves the document holding no view", () => {
 const BOOT: HostBootstrap = {
   settings: SETTINGS,
   account: inert(),
-  sessions: [],
-  sessionsSettled: false,
-  announcementsHeld: false,
-  workspaceProjects: [],
-  calendars: [],
-  calendarOnboardingOwed: false,
-  introductionOwed: false,
-  conductorKeyOnboardingOwed: false,
   sessionReplay: { permitted: true, accountId: "person" },
   voiceAvailable: true,
   agentTraceEnabled: true,
@@ -210,7 +172,6 @@ it("a host bootstrap lands in the document as the host answered it", () => {
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   const held = app.snapshot();
   assert.equal(held.run.agentTraceEnabled, true);
-  assert.equal(held.sessions.settled, false);
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
 });
 
@@ -224,15 +185,6 @@ it("a halt outlives every host read until the host's own event stands it down", 
   app.update(bootstrapPatch(app.snapshot(), BOOT));
   assert.equal(app.snapshot().sessionReplay.halted, true);
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
-});
-
-it("a run that observes nothing is settled whatever the host answered", () => {
-  const quiet = new AppStateStore(
-    initialAppState({ ...RUN, runMode: runModeFor({ capture: false, fixture: true }) }, false),
-    Context.empty(),
-  );
-  quiet.update(bootstrapPatch(quiet.snapshot(), BOOT));
-  assert.equal(quiet.snapshot().sessions.settled, true);
 });
 
 it("recording is what the host permitted less what an account's end stood down", () => {

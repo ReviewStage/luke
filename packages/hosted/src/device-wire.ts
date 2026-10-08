@@ -17,6 +17,13 @@ import { isWireUuid, wireUuidSchema } from "./service-wire.js";
  * newer service added now lives.
  */
 
+/** The devices path's three methods, as the service dispatches them. */
+export const DEVICE_METHOD = {
+  REGISTER: "POST",
+  HEARTBEAT: "PUT",
+  FORGET: "DELETE",
+} as const;
+
 /** The platforms a device row may name. */
 export const DEVICE_PLATFORM = {
   MACOS: "macos",

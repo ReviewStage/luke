@@ -5,7 +5,7 @@ import { isRecord, type UnparsedWireValue, type WireRecord } from "@sidecar/wire
 export interface JsonStateFileOptions<T> {
   /** The directory the record sits in: the app's own state root. */
   directory: () => string;
-  /** The file's name within it, e.g. `onboarding.json`. */
+  /** The file's name within it, e.g. `plan-folders.json`. */
   fileName: string;
   /**
    * The record as this build reads it, or nothing for one it cannot use. Called
@@ -25,9 +25,8 @@ export interface JsonStateFile<T> {
   /**
    * Persists `mutate`'s answer over whatever is on disk at this moment, rather
    * than over a record read earlier, and answers what was persisted. The one
-   * writer, because two processes write Luke's onboarding record, each owning
-   * its own moments, and one saving over its own older read would drop the
-   * other's. A write that cannot land is reported and nothing else: there is
+   * writer, because a caller saving over its own older read would drop
+   * another's write. A write that cannot land is reported and nothing else: there is
    * no recovery a caller here could take that the next write does not.
    */
   update(mutate: (current: T | undefined) => T): T;
@@ -38,13 +37,10 @@ export interface JsonStateFile<T> {
  * writer here waits on anything a promise could carry.
  *
  * The synchronous `node:fs` face beside `jsonStateFileEffect` in
- * `@sidecar/host/effect`, for the two callers that still read and write
- * synchronously: `compose-devices.ts`'s `DeviceCadence#deviceId()`, read from
- * a synchronous statement by `compose-host.ts`,
- * and the desktop's own last-run-version file, read before `whenReady`
- * resolves (`apps/desktop/src/main/services/update-service-host.ts`). The
- * onboarding record was the third and reads and writes through
- * `jsonStateFileEffect` now.
+ * `@sidecar/host/effect`, for the callers that still read and write
+ * synchronously: the plan folders (`compose-planning.ts`) and the desktop's
+ * own last-run-version file, read before `whenReady` resolves
+ * (`apps/desktop/src/main/services/update-service-host.ts`).
  */
 export function jsonStateFile<T>(options: JsonStateFileOptions<T>): JsonStateFile<T> {
   const filePath = () => path.join(options.directory(), options.fileName);

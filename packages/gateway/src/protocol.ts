@@ -13,8 +13,6 @@ import { Effect, Schema } from "effect";
 /** Every method the host answers, by the name a client calls it. */
 export const GATEWAY_METHOD = {
   SHUTDOWN: "gateway.shutdown",
-  /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
-  NOTEBOOK_READ: "notebook.read",
   /** The panel's Plans tab shows: the plan list read now, and the active plan's document with it. */
   PLANNING_REFRESH: "planning.refresh",
   /** One plan made the active one and its saved document read, replacing whichever was active. */
@@ -35,24 +33,11 @@ export const GATEWAY_METHOD = {
   SETTINGS_UPDATE: "settings.update",
   SETTINGS_UPDATE_ENTRY: "settings.updateEntry",
   SETTINGS_RESET: "settings.reset",
-  CREDENTIAL_SET_API_KEY: "credential.setApiKey",
   ACCOUNT_SNAPSHOT: "account.snapshot",
   ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
   ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
-  CALENDAR_CONNECT_GOOGLE: "calendar.connectGoogle",
-  CALENDAR_CANCEL_GOOGLE_SIGN_IN: "calendar.cancelGoogleSignIn",
-  CALENDAR_REOPEN_GOOGLE_SIGN_IN: "calendar.reopenGoogleSignIn",
-  CALENDAR_REMOVE_ACCOUNT: "calendar.removeAccount",
-  CALENDAR_CONNECT_APPLE: "calendar.connectApple",
-  CALENDAR_DISCONNECT_APPLE: "calendar.disconnectApple",
-  CALENDAR_APPLE_ACCESS_STATUS: "calendar.appleAccessStatus",
-  CALENDAR_CANCEL_APPLE_CONNECT: "calendar.cancelAppleConnect",
-  CALENDAR_REFRESH: "calendar.refresh",
-  CALENDAR_SET_SELECTED: "calendar.setSelected",
-  SESSION_ROSTER: "session.roster",
-  WORKSPACE_PROJECTS: "workspace.projects",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   VOICE_CREATE_LIVE_SESSION: "voice.createLiveSession",
   VOICE_END_LIVE_SESSION: "voice.endLiveSession",
@@ -62,13 +47,6 @@ export const GATEWAY_METHOD = {
   /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: "voice.recordTrace",
   ANALYTICS_RECORD: "analytics.record",
-  ONBOARDING_STATE: "onboarding.state",
-  ONBOARDING_SKIP_CALENDAR: "onboarding.skipCalendar",
-  ONBOARDING_COMPLETE_CALENDAR: "onboarding.completeCalendar",
-  /** The spoken introduction was given to its end; the host records the moment and stands the introduction down for good. */
-  ONBOARDING_COMPLETE_INTRODUCTION: "onboarding.completeIntroduction",
-  /** The developer declined the Conductor key step of onboarding; the settings row stays the way to connect later. */
-  ONBOARDING_SKIP_CONDUCTOR_KEY: "onboarding.skipConductorKey",
 } as const;
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
@@ -84,8 +62,6 @@ export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD]
 
 /** Where the one live session stands, as `voiceLiveSession.changed` reports it. */
 export const LIVE_SESSION_PHASE = {
-  /** The host wants a session and no peer has offered one yet. */
-  WANTED: "wanted",
   /** The provider created the session; its answer is on its way to the peer. */
   CREATED: "created",
   /** The provider announced the session live. */
@@ -181,13 +157,12 @@ function keptText(max: number): Schema.Codec<string, string> {
 const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /**
- * `voice.createLiveSession`: the peer's SDP offer, and the plan a planning
- * call is about where the panel's open plan opened it. The host creates a
- * planning call only for the plan the panel has open.
+ * `voice.createLiveSession`: the peer's SDP offer, and the plan the call is
+ * about. The host creates a call only for the plan the panel has open.
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
-  planId: Schema.optionalKey(text),
+  planId: text,
 });
 
 /**
@@ -231,39 +206,6 @@ export const voiceLiveSessionChangedSchema = Schema.Struct({
 });
 
 export type VoiceLiveSessionChanged = typeof voiceLiveSessionChangedSchema.Type;
-
-/**
- * One file of Luke's notebook as `notebook.read` carries it: where it stands
- * in the workspace, its Markdown from the front and cut at the service's own
- * bound, how many characters the whole row holds, and when it last changed.
- * The shape is the hosted wire's `notebookFileSchema` said again here,
- * because this package cannot reach `@sidecar/hosted` and the renderer's
- * act vocabulary reads its answers through this one.
- */
-export const notebookFileSchema = Schema.Struct({
-  path: Schema.NonEmptyString,
-  content: Schema.String,
-  chars: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  /** Epoch milliseconds of the row's last write. */
-  updatedAt: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
-});
-
-export type NotebookFile = typeof notebookFileSchema.Type;
-
-/**
- * What `notebook.read` answers when the service answered: the curated files
- * first and the newest dated notes after, and how many older notes stand
- * behind them uncarried. A host that could not ask — the run sends nothing,
- * the account gate is closed, the call did not land — answers an empty
- * record instead, which a client reads as the notebook being unreadable
- * just now rather than empty.
- */
-export const notebookReadResultSchema = Schema.Struct({
-  files: Schema.Array(notebookFileSchema),
-  omittedNotes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-});
-
-export type NotebookReadResult = typeof notebookReadResultSchema.Type;
 
 /** Every way a call can be refused: the dispatcher's own two, and the codes a handler fails with. */
 export const GATEWAY_ERROR = {
@@ -344,15 +286,6 @@ export const GATEWAY_EVENT = {
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
   ACCOUNT_CHANGED: "account.changed",
-  SESSIONS_CHANGED: "sessions.changed",
-  WORKSPACE_PROJECTS_CHANGED: "workspaceProjects.changed",
-  CALENDARS_CHANGED: "calendars.changed",
-  ANNOUNCEMENTS_HELD_CHANGED: "announcementsHeld.changed",
-  CALENDAR_ONBOARDING_CHANGED: "calendarOnboarding.changed",
-  /** Whether the spoken introduction is owed moved: the first sign-in this install observed put it up, or its completion took it down. */
-  INTRODUCTION_CHANGED: "introduction.changed",
-  /** Whether the Conductor key step of onboarding stands moved: the first sign-in put it up, a key in the vault or the skip took it down. */
-  CONDUCTOR_KEY_ONBOARDING_CHANGED: "conductorKeyOnboarding.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's plans, active plan, and document, whole, whenever a read moved them. */

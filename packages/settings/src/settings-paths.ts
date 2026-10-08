@@ -13,13 +13,3 @@ const SETTINGS_TAB = "the panel's Settings tab";
 
 export const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 export const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
-export const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
-export const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
-
-/**
- * The word both Conductor agent entries use for no choice at all. It is a
- * member of their choices on purpose: saying it is how a spoken ask returns a
- * half to Conductor's own default.
- */
-export const CONDUCTOR_DEFAULT_CHOICE = "Conductor's default";
-export const ASK_EACH_TIME_CHOICE = "ask each time";

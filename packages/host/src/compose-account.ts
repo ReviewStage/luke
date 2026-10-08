@@ -24,7 +24,7 @@ import {
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
-import { Config, Effect, MutableRef, Option, type Scope, Stream } from "effect";
+import { Config, Effect, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import type { SettingsComposer } from "./compose-settings.js";
@@ -44,14 +44,6 @@ interface AccountLinks {
   /** The account gate's own pair: opening it arms every cadence a signed-in account may have, and closing it disarms them. */
   readonly startCapabilities: Effect.Effect<void>;
   readonly stopCapabilities: Effect.Effect<void>;
-  /** The calendar step of onboarding, raised before the account event so the gate already stands when the renderer learns of the sign-in. */
-  onFirstSignIn: () => void;
-  /** The arrival beat's own moment, recorded after the account event. */
-  onFirstSignInArrival: () => void;
-  /** The device row let go of on the departing account's own token, before the credential is cleared. */
-  releaseDevice: (account: StoredAccount) => Effect.Effect<void>;
-  /** This installation's device row id, once registered, for the live session's handshake. */
-  deviceId: () => string | undefined;
 }
 
 export interface AccountComposer extends Composer {
@@ -81,10 +73,9 @@ interface AccountDependencies {
  * The account concern, over the kernel it takes as a tag rather than as a
  * constructor argument. What the merge links late is a set-once `Deferred`
  * (`lateService`) rather than a holder of its own, so the link a concern
- * holds cannot depend on the order the merge folded it in. Every link but one
- * is read by awaiting it, so a caller that asks before the merge has linked
- * suspends rather than throwing; the one synchronous reader takes a value the
- * link mirrors.
+ * holds cannot depend on the order the merge folded it in. Every link is
+ * read by awaiting it, so a caller that asks before the merge has linked
+ * suspends rather than throwing.
  */
 export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(function* (
   dependencies: AccountDependencies,
@@ -99,15 +90,6 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   const identity = yield* AppIdentity;
   const { runMode, report } = kernel;
   const late = yield* lateService<AccountLinks>();
-  /**
-   * The device row's id, mirrored for the one link a caller reads from a
-   * synchronous statement: the voice capability assembler asks for it while
-   * building a handshake and holds no fiber to await the links on. The link
-   * writes the reader the devices composer owns, so a read before the merge
-   * answers the no device an unregistered installation answers anyway rather
-   * than throwing.
-   */
-  const deviceIdReader = MutableRef.make<() => string | undefined>(() => undefined);
 
   const client = new AccountClient({
     baseUrl: kernel.accountBaseUrl,
@@ -130,7 +112,6 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     openExternal: (url) => kernel.openExternalThroughNode(url),
     startCapabilities: Effect.flatMap(late.value, (links) => links.startCapabilities),
     stopCapabilities: Effect.flatMap(late.value, (links) => links.stopCapabilities),
-    onSignOut: (stored) => Effect.flatMap(late.value, (links) => links.releaseDevice(stored)),
   });
 
   /**
@@ -144,18 +125,14 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   /**
    * What a session change means to the rest of the host, as the subscriber
    * a fiber in this composer's own lifetime pumps from `session.changes`
-   * rather than a callback `AccountSessionManager` held and ran. The order
-   * within one turn is what the comments below still guarantee — the
-   * calendar step of onboarding lands before the account event a renderer
-   * reads it against — never that a turn lands before the fiber that
-   * changed it moves on, which is the same eventual guarantee the two
-   * forks this replaces already gave `emitSessionReplay` and
-   * `settings.emitSettings()`.
+   * rather than a callback `AccountSessionManager` held and ran: never
+   * that a turn lands before the fiber that changed it moves on, which is
+   * the same eventual guarantee the two forks this replaces already gave
+   * `emitSessionReplay` and `settings.emitSettings()`.
    */
   const onAccountChange = /* @__PURE__ */ Effect.fnUntraced(function* (
     next: AccountSnapshot,
   ): Effect.fn.Return<void> {
-    const links = yield* late.value;
     const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
     const wasSignedIn = previousAccount.status === ACCOUNT_STATUS.SIGNED_IN;
     const previousAccountKey =
@@ -163,18 +140,10 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     const nextAccountKey = signedIn ? next.email : undefined;
     previousAccount = next;
     if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
-    // The vault's list is the departing account's: emptied here, ahead of
-    // the departure's own emit, so the very snapshot that reports the
-    // sign-out reads every cloud provider as not connected.
-    if (wasSignedIn && !signedIn) settings.forgetVaultKeys();
-    if (signedIn && !wasSignedIn) links.onFirstSignIn();
     kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));
     yield* settings.emitSettings();
     yield* emitSessionReplay;
-    if (signedIn && !wasSignedIn) {
-      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-      links.onFirstSignInArrival();
-    }
+    if (signedIn && !wasSignedIn) settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
   });
 
   /**
@@ -233,7 +202,6 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     }),
     openSocket: openSocketOverWs,
     refreshAccount: session.refreshOnce,
-    deviceId: () => MutableRef.get(deviceIdReader)(),
   });
 
   /**
@@ -336,12 +304,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     token,
     applyVoiceCredential,
     sessionReplayState,
-    link: (next) =>
-      Effect.flatMap(late.set(next), (supplied) =>
-        Effect.sync(() => {
-          if (supplied) MutableRef.set(deviceIdReader, next.deviceId);
-        }),
-      ),
+    link: (next) => Effect.asVoid(late.set(next)),
     // The session manager holds no timer this host started beyond its own
     // subscription: what a sign-in began is stopped by the capabilities it
     // started, and the subscription is forked into this same scope, so

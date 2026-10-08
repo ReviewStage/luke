@@ -8,7 +8,6 @@ import {
 } from "@sidecar/gateway";
 import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
 import {
-  closeEvent,
   decodeLivePayload,
   generalLiveError,
   LIVE_IDLE_WINDOW_MS,
@@ -76,26 +75,8 @@ const CAPTION_SETTLE_TICK_MS = 500;
 
 const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
-/**
- * Who sends a session's `session.close`, which the server-controls guide asks
- * be one owner per action. On the sessions route it is the voice service,
- * whose exchange holds the sideband and records the final usage, so the
- * peer asks the host for the close and sends none of its own; the
- * introduction has no exchange behind it, so its peer closes over its own
- * data channel and asks the host only when that channel cannot carry it.
- */
-export const LIVE_CLOSE_OWNER = {
-  SERVICE: "service",
-  CHANNEL: "channel",
-} as const;
-
-export type LiveCloseOwner = (typeof LIVE_CLOSE_OWNER)[keyof typeof LIVE_CLOSE_OWNER];
-
 interface LiveCallActs {
-  createSession: (
-    sdp: string,
-    planId: string | undefined,
-  ) => Promise<VoiceCreateLiveSessionResult | undefined>;
+  createSession: (sdp: string, planId: string) => Promise<VoiceCreateLiveSessionResult | undefined>;
   endSession: () => void;
   /** The peer connection's state as it changed, and at the peer's end, why it ended. */
   reportTransport: (report: VoiceReportLiveTransportParams) => void;
@@ -113,12 +94,9 @@ export interface LiveCallOptions {
   onLocalStream: (stream: MediaStream | undefined) => void;
   /**
    * Whether the element Luke's voice plays through is silenced, so the stop
-   * is heard at once rather than when the model obeys; a surface with no stop
-   * key, like the spoken introduction, wires none.
+   * is heard at once rather than when the model obeys.
    */
-  onOutputSilenced?: (silenced: boolean) => void;
-  /** Who sends the hang-up's `session.close`: the service behind the host, or this peer's own channel. */
-  closeOwner: LiveCloseOwner;
+  onOutputSilenced: (silenced: boolean) => void;
   /** The development trace's tap, handed each event as it crossed the channel. */
   onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
   /**
@@ -145,8 +123,10 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
 /**
  * The voice window's one session as a GPT Live peer. The renderer owns the
  * microphone switch and the hang-up and nothing else: it sends the mute and
- * unmute events the data channel permissions allow it, and the close only
- * where the close is its own to send (see {@link LIVE_CLOSE_OWNER}), opens the
+ * unmute events the data channel permissions allow it and never the close,
+ * which the server-controls guide asks be one owner's and on the sessions
+ * route is the voice service's, whose exchange holds the sideband and
+ * records the final usage, so the hang-up asks the host for it; it opens the
  * capture device for the unmute and releases it after the mute so the device
  * is open exactly while the talk key is held, leaves the peer's silent track
  * on the line in the device's place so the model's input timeline keeps
@@ -295,16 +275,16 @@ export class LiveCall implements LiveVoiceCall {
   silenceOutput(): void {
     if (!this.standing || !this.#lukeSpeaking || this.#outputSilenced) return;
     this.#outputSilenced = true;
-    this.#options.onOutputSilenced?.(true);
+    this.#options.onOutputSilenced(true);
   }
 
   /**
    * The graceful hang-up the conversations guide prescribes: the closed
-   * handler already stands, `session.close` goes from its one owner, and
-   * everything stays open until `session.closed` arrives or the bound
-   * passes. Where the service owns the close the microphone goes at the
-   * hang-up itself, since the wait is the service's and no word the
-   * developer says after hanging up is theirs to have heard.
+   * handler already stands, the host is asked for the service's
+   * `session.close`, and everything stays open until `session.closed`
+   * arrives or the bound passes. The microphone goes at the hang-up itself,
+   * since the wait is the service's and no word the developer says after
+   * hanging up is theirs to have heard.
    */
   close(): Effect.Effect<void> {
     return this.#closeEffect();
@@ -313,7 +293,7 @@ export class LiveCall implements LiveVoiceCall {
   /**
    * Luke audible on the remote track, from the level meter: the one source of
    * the speaking status, held through his pauses. His speech is activity on
-   * the session as much as the developer's is, so a briefing only listened to
+   * the session as much as the developer's is, so a reply only listened to
    * keeps the idle window open too.
    */
   reportRemoteAudioLevel(active: boolean): void {
@@ -426,7 +406,7 @@ export class LiveCall implements LiveVoiceCall {
       const opened = yield* acquireLivePeer({
         createPeerConnection: this.#options.createPeerConnection,
         createSilence: this.#options.createSilence,
-        ...(opening.byPress ? { openMicrophone: this.#options.openMicrophone } : undefined),
+        openMicrophone: this.#options.openMicrophone,
         createSession: (sdp) => this.#options.acts.createSession(sdp, opening.planId),
         onRemoteStream: (stream) => this.#options.onRemoteStream(stream),
       });
@@ -521,20 +501,16 @@ export class LiveCall implements LiveVoiceCall {
       const peer = this.#peer;
       if (!peer || this.#ended || this.#closing) return;
       this.#closing = true;
-      const byService = this.#options.closeOwner === LIVE_CLOSE_OWNER.SERVICE;
-      const dropped = byService ? this.#dropMicrophone(peer) : undefined;
+      const dropped = this.#dropMicrophone(peer);
       this.#setStatus(LIVE_STATUS.CLOSING);
-      if (byService) this.#options.acts.endSession();
+      this.#options.acts.endSession();
       // The silence goes back on the line, so the timeline the close drains on keeps running.
       if (dropped) yield* this.#takeOffLine(peer, dropped);
-      // A channel that cannot carry the close, or its `session.closed`, leaves
-      // the hang-up to the host, whose sideband can still close the session.
+      // A channel that cannot carry the session's `session.closed` waits for nothing.
       if (!this.#started || peer.channel.readyState !== "open") {
-        if (!byService) this.#options.acts.endSession();
         this.#tearDown(LIVE_STATUS.IDLE, LIVE_PEER_END_REASON.HUNG_UP);
         return;
       }
-      if (!byService) this.#send(closeEvent(this.#nextId()));
       const answered = yield* Effect.timeoutOption(
         Deferred.await(this.#announcedClose),
         Duration.millis(SESSION_CLOSE_TIMEOUT_MS),
@@ -732,7 +708,7 @@ export class LiveCall implements LiveVoiceCall {
   #restoreOutput(): void {
     if (!this.#outputSilenced) return;
     this.#outputSilenced = false;
-    this.#options.onOutputSilenced?.(false);
+    this.#options.onOutputSilenced(false);
   }
 
   /**

@@ -6,7 +6,6 @@
  * taking a kernel that holds all of them.
  */
 import { type ConfigProvider, Context, Layer, Logger } from "effect";
-import type { MachinePresence } from "../device-presence.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
 
@@ -79,20 +78,6 @@ export const reporterLayer = (report: (message: string) => void): Layer.Layer<Re
   );
 
 /**
- * The machine's own idle time and lock state, read by the client that runs
- * on it, for the presence this installation's device row reports. A host
- * with no client on the machine (`read` undefined) reports no presence.
- */
-export interface MachinePresenceSeam {
-  readonly read: (() => MachinePresence) | undefined;
-}
-
-export class MachinePresenceReader extends Context.Service<
-  MachinePresenceReader,
-  MachinePresenceSeam
->()("@sidecar/host/MachinePresenceReader") {}
-
-/**
  * Hears the protocol's shutdown method: the client's explicit Quit, or a
  * newer build draining this one. The process hosting the runtime leaves in
  * the coordinator's order; a host with no process to leave (a fixture run,
@@ -115,5 +100,4 @@ export type HostSeamTags =
   | SecretCipher
   | IdSource
   | Reporter
-  | MachinePresenceReader
   | ShutdownSignal;

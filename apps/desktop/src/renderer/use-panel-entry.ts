@@ -24,10 +24,7 @@ export function panelEntryOpen<T extends PanelEntryBase>(
 }
 
 interface PanelEntryHost {
-  /**
-   * The shape this composer stands the panel down to — the slot, or the
-   * feedback surface. Asking to write one thing is asking for one shape.
-   */
+  /** The shape this composer stands the panel down to. Asking to write one thing is asking for one shape. */
   aside: PanelPresentation;
   pointerInside: () => boolean;
   presentation: () => PanelPresentation;
@@ -48,8 +45,7 @@ interface PanelEntryHost {
   settle: () => void;
   /**
    * Mirror of whether an entry is held, read by the presentation cluster
-   * without waiting a render: a capsule close keeps the settings tab for a
-   * half-written key or note, and nothing else.
+   * without waiting a render.
    */
   heldRef: { current: boolean };
 }
@@ -62,11 +58,6 @@ interface PanelEntryHost {
 export type PanelEntrySurface = Omit<PanelEntryHost, "aside">;
 
 interface UsePanelEntryOptions<T extends PanelEntryBase> extends PanelEntryHost {
-  /**
-   * Whether giving up from the aside shape returns to the panel. A key page
-   * that was opened, or a composer asked for by voice, leaves instead.
-   */
-  restoresPanel: (entry: T) => boolean;
   isSendable: (entry: T | undefined) => entry is T;
   send: (entry: T) => Promise<{ rejection?: string }>;
   /** After a send lands, before the panel is restored — the "Sent" line. */
@@ -86,8 +77,6 @@ interface PanelEntry<T extends PanelEntryBase> {
   entry: T | undefined;
   latest: () => T | undefined;
   apply: (next: T | undefined) => void;
-  /** Stands the panel down to the aside shape, with this as what it holds. */
-  begin: (next: T) => void;
   /** Stands the panel down without replacing what is held. */
   standDown: () => void;
   patch: (partial: Partial<T>) => void;
@@ -96,10 +85,9 @@ interface PanelEntry<T extends PanelEntryBase> {
 }
 
 /**
- * One composer lifecycle: begin, type, send, give up. A credential's slot and
- * a note to the founders are the same hold on the panel, parameterized by the
- * shape they stand down to, whether giving up restores the panel, what is
- * worth sending, and how a send is carried.
+ * One composer lifecycle: begin, type, send, give up. A note to the founders
+ * is a hold on the panel, parameterized by the shape it stands down to, what
+ * is worth sending, and how a send is carried.
  */
 export function usePanelEntry<T extends PanelEntryBase>(
   options: UsePanelEntryOptions<T>,
@@ -129,14 +117,6 @@ export function usePanelEntry<T extends PanelEntryBase>(
     host.applyPresentation(host.aside);
   }, []);
 
-  const begin = useCallback(
-    (next: T) => {
-      apply(next);
-      standDown();
-    },
-    [apply, standDown],
-  );
-
   const patch = useCallback(
     (partial: Partial<T>) => {
       const current = latest();
@@ -152,10 +132,9 @@ export function usePanelEntry<T extends PanelEntryBase>(
     // Giving up from the aside shape returns you where you were; giving up
     // from inside the panel has nothing to put away.
     const aside = host.presentation() === host.aside;
-    const restores = current !== undefined && host.restoresPanel(current);
     apply(undefined);
     if (!aside) return;
-    if (restores) host.restorePanel();
+    if (current !== undefined) host.restorePanel();
     else host.leave();
   }, [apply, latest]);
 
@@ -199,7 +178,6 @@ export function usePanelEntry<T extends PanelEntryBase>(
     entry,
     latest,
     apply,
-    begin,
     standDown,
     patch,
     cancel,
