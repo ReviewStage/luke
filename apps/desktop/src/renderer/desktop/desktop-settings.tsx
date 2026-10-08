@@ -1,15 +1,17 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { BackIcon, LaptopIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { SETTINGS_PAGE } from "../settings/pages";
+import { pageResetControl } from "../settings/reset";
 import {
   SettingsPanel,
   type SettingsPanelProps,
   settingsRowsInput,
 } from "../settings/settings-panel";
+import { useSettingsWrites } from "../settings/writes";
 import {
   landOnSettingsRow,
   type SettingsSearchEntry,
@@ -35,7 +37,8 @@ function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } 
  * pages, with the way back to plans at its head and the search above the
  * list, and the chosen page stands beside it under its own title. The pages
  * are the panel's own, drawn by `SettingsPanel`; its front-page index and its
- * back buttons are this list's job here.
+ * back buttons are this list's job here, and a page's reset rides the
+ * toolbar's right edge beside the page's title.
  *
  * A query turns the list into what it found, and only the field changes it:
  * pressing a result opens the page beside the results and leaves them
@@ -65,6 +68,8 @@ export function DesktopSettings({
   useAppCommand(APP_COMMAND.BACK, onBack);
   const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
   const shown = pageOf(settings.view);
+  const writes = useSettingsWrites();
+  const reset = pageResetControl(settings.view, settings.settings, writes);
   const rows = settingsRowsInput(settings);
   // Built only while a query stands: an empty field searches nothing.
   const search =
@@ -82,11 +87,16 @@ export function DesktopSettings({
     setOpened(undefined);
   };
   // The page the result named opens and the view follows to the row itself.
-  // Fire-and-forget: the seek gives itself up after its own frame limit.
+  // The seek gives itself up after its own frame limit, and sooner when the
+  // next result is pressed or Settings closes, so it never lands on a row of
+  // a page it was not sent to.
+  const landing = useRef<() => void>(undefined);
+  useEffect(() => () => landing.current?.(), []);
   const openResult = (entry: SettingsSearchEntry) => {
     setOpened(entry);
     settings.onViewChange(entry.page);
-    landOnSettingsRow(entry.id);
+    landing.current?.();
+    landing.current = landOnSettingsRow(entry.id);
   };
   const first = search?.groups[0]?.items[0];
   // The opened result stays marked only while its page is the one showing: a
@@ -149,6 +159,7 @@ export function DesktopSettings({
           <div className="desktop-toolbar-heading">
             <h1 className="desktop-toolbar-title">{shown.title}</h1>
           </div>
+          {reset ? <div className="desktop-toolbar-actions">{reset}</div> : null}
         </header>
         <div className="settings-page-scroll">
           <SettingsPanel {...settings} />
