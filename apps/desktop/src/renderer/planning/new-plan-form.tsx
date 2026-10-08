@@ -9,8 +9,8 @@ import type { PlansControl } from "./use-plans-tab";
  * Drawn the way a devtool's new-task page is: a heading, and under it a card
  * holding the name and, along its foot, the folder chip and the round start
  * button. Ordinary setup fields and nothing spoken: nothing typed here reaches
- * the model as conversation. The folder starts on the one the last opened plan
- * read; the chip offers the other recent ones and the system's folder picker,
+ * the model as conversation. The folder starts on the one the newest plan was
+ * started in; the chip offers the other recent ones and the system's folder picker,
  * and the planning model's commands run in that folder for the plan's whole
  * life. Enter starts the plan; a refusal keeps the page with the reason under
  * the card, and the button can be pressed again.

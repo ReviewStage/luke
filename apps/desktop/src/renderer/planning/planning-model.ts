@@ -95,9 +95,10 @@ export function folderName(folderPath: string): string {
 }
 
 /**
- * The folders this Mac's plans read, most recently opened first and each
- * once, so the new-plan page can offer the last one used and a few before it.
- * The list is already in that order, and a plan with no folder here adds none.
+ * The folders this Mac's plans read, the newest started plan's first and each
+ * once, so the new-plan page can offer the folder the last plan was started
+ * in and a few before it. The list is already newest started first, and a
+ * plan with no folder here adds none.
  */
 export function recentFolders(
   plans: PlanningView["plans"],

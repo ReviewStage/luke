@@ -129,8 +129,8 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
    whose placeholder, "Name the feature, e.g. Dark mode toggle", reads as an
    example to replace rather than a filled value.
 2. **Folder**, the chip along the card's foot: the folder of this Mac the
-   plan reads, kept on this Mac alone. It starts on the folder of the most
-   recently opened plan this Mac holds one for, and offers up to five recent
+   plan reads, kept on this Mac alone. It starts on the folder of the newest
+   started plan this Mac holds one for, and offers up to five recent
    folders over `Choose another folder…`, the system's picker. With no recent
    folder it reads `Choose folder` and opens the picker directly.
 3. **Start**, the round arrow at the card's other end, enabled once both are

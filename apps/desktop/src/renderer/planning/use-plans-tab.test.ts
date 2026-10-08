@@ -147,7 +147,7 @@ test("New plan leaves an open plan and asks the new-plan page for its name field
   assert.equal(tab.control().newPlan.presses, before + 2);
 });
 
-test("the new-plan page offers the folders of the plans this Mac holds, the last opened first", () => {
+test("the new-plan page offers the folders of the plans this Mac holds, the newest started first", () => {
   const second = { ...PLAN, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", name: "Billing export" };
   const tab = mount({
     planning: {
