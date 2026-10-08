@@ -1026,49 +1026,6 @@ importers:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  tools/ios-parity:
-    dependencies:
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../../packages/actions
-      '@sidecar/analytics':
-        specifier: workspace:*
-        version: link:../../packages/analytics
-      '@sidecar/gateway':
-        specifier: workspace:*
-        version: link:../../packages/gateway
-      '@sidecar/guide':
-        specifier: workspace:*
-        version: link:../../packages/guide
-      '@sidecar/hosted':
-        specifier: workspace:*
-        version: link:../../packages/hosted
-      '@sidecar/live':
-        specifier: workspace:*
-        version: link:../../packages/live
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../../packages/session
-      '@sidecar/voice':
-        specifier: workspace:*
-        version: link:../../packages/voice
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../../packages/wire
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115
-    devDependencies:
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.51.0)(tsx@4.23.12)(yaml@2.9.0))
-
   tools/trace-export:
     dependencies:
       '@effect/platform-node':

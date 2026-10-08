@@ -11,7 +11,7 @@ import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
  * a user row says whose words these are and which channel carried them, an
  * assistant row says which of Luke's parts spoke and whether the row is a
  * compaction standing in for the rows before it. A system row carries no
- * metadata at all. Declared here so the desktop, the service, and the phone
+ * metadata at all. Declared here so the desktop and the service
  * decode one shape, and so a key the schema does not name is refused rather
  * than stored.
  *

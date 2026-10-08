@@ -277,7 +277,7 @@ pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts -
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
 # production answers 404 (LUKE-186). Every /api/ literal and path builder under
-# apps/desktop/src, apps/ios, packages/*/src, scripts, and tools must resolve
+# apps/desktop/src, packages/*/src, scripts, and tools must resolve
 # to a rewrite of the table or an extensionless alias the Build Output emits.
 pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 

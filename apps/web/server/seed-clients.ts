@@ -7,12 +7,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { authSecrets } from "./auth-deployment.js";
 import { jwks as jwksTable, oauthClient as oauthClientTable } from "./db/auth-schema.js";
 import { db } from "./db/query.js";
-import {
-  DESKTOP_OAUTH_CLIENT,
-  MOBILE_OAUTH_CLIENT,
-  type OAuthClient,
-  oauthClientRecord,
-} from "./oauth-clients.js";
+import { DESKTOP_OAUTH_CLIENT, type OAuthClient, oauthClientRecord } from "./oauth-clients.js";
 import { disposeWebRuntime, runWeb } from "./runtime.js";
 
 /**
@@ -92,14 +87,7 @@ export function dropUnreadableJwks(
   });
 }
 
-function seedOAuthClients(now = new Date()): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
-  return Effect.andThen(
-    seedOAuthClient(DESKTOP_OAUTH_CLIENT, now),
-    seedOAuthClient(MOBILE_OAUTH_CLIENT, now),
-  );
-}
-
-/** What every deployment build seeds: the clients, and then a key set this deployment can sign with. */
+/** What every deployment build seeds: the desktop client, and then a key set this deployment can sign with. */
 function seedDeployment(
   variables: Record<string, string | undefined>,
 ): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
@@ -107,7 +95,7 @@ function seedDeployment(
   // Note that a build without a session secret drops nothing, because the
   // deployment it builds signs nothing, and `auth.ts` says so as it loads.
   return Effect.andThen(
-    seedOAuthClients(),
+    seedOAuthClient(DESKTOP_OAUTH_CLIENT),
     sessionSecret === undefined ? Effect.void : dropUnreadableJwks(sessionSecret),
   );
 }

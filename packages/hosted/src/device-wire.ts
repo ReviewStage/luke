@@ -6,8 +6,8 @@ import { isWireUuid, wireUuidSchema } from "./service-wire.js";
 /**
  * One device record per app installation, on every platform Luke runs on.
  * The three endpoints on one path — register, heartbeat, forget — take and
- * answer the shapes declared here, and the desktop, the service, and the
- * Swift transcription in `LukeKit/DeviceClient.swift` mirror this one file.
+ * answer the shapes declared here, and the desktop and the service mirror
+ * this one file.
  *
  * Every request and answer below is composed directly with Effect's
  * `Schema.Struct` and exported under its own name; a caller reads one
@@ -17,7 +17,7 @@ import { isWireUuid, wireUuidSchema } from "./service-wire.js";
  * newer service added now lives.
  */
 
-/** The platforms a device row may name. Shared on the wire with the Swift `DevicePlatform`. */
+/** The platforms a device row may name. */
 export const DEVICE_PLATFORM = {
   MACOS: "macos",
   IOS: "ios",
@@ -56,7 +56,7 @@ export const isPushEnvironment: (value: UnparsedWireValue) => value is PushEnvir
  * last. The id is Luke's own opaque UUID — it names no session, branch, path,
  * or error line, is unique to one message so it correlates nothing across
  * pushes, and means nothing to Apple — and it is the only identifier the
- * payload carries. Shared on the wire with the Swift `BriefingPushTap`.
+ * payload carries.
  */
 export const BRIEFING_PUSH_PAYLOAD_KEY = {
   MESSAGE_ID: "messageId",

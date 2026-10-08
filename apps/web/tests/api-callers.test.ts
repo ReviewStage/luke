@@ -53,8 +53,11 @@ const refusals = (report: { readonly refused: readonly { display: string; reason
 
 test("a caller path the table does not serve is refused, whichever language spells it", async () => {
   const report = await scratchReport({
-    "client.ts": `const url = \`\${origin}/api/nowhere\`;\nfetch("https://luke.test/api/devices?since=1");\n`,
-    "Client.swift": 'let url = base.appendingPathComponent("api/elsewhere")\n',
+    "client.ts": [
+      `const url = \`\${origin}/api/nowhere\`;`,
+      'fetch("https://luke.test/api/devices?since=1");',
+      'const relative = new URL("api/elsewhere", base);',
+    ].join("\n"),
     "probe.sh": 'curl "https://luke.test/api/absent"\n',
   });
   assert.deepEqual(refusals(report), [
@@ -74,7 +77,7 @@ test("a template interpolating a whole segment is matched against the pattern th
       `const read = \`/api/brain/turns/\${encodeURIComponent(id)}\`;`,
       `const events = \`\${origin}/api/brain/turns/\${id}/events\`;`,
     ].join("\n"),
-    "Client.swift": 'let url = "\\(origin)/api/brain/turns/\\(turnId)/events"\n',
+    "probe.sh": 'curl "$ORIGIN/api/brain/turns/$TURN_ID/events"\n',
   });
   assert.deepEqual(refusals(report), []);
   assert.deepEqual(
@@ -105,8 +108,11 @@ test("a template whose interpolation is not a whole segment is refused as unread
 test("a base other segments are appended to resolves as a prefix, and an alias as itself", async () => {
   // `/api/auth/` is the wildcard's own match with an empty capture, so it is a rewrite, not a prefix.
   const report = await scratchReport({
-    "client.ts": 'const base = "https://luke.test/api/auth";\nconst feedback = "/api/feedback";\n',
-    "Client.swift": 'static let auth = URL(string: "https://luke.test/api/auth/")!\n',
+    "client.ts": [
+      'const base = "https://luke.test/api/auth";',
+      'const feedback = "/api/feedback";',
+      'const auth = new URL("https://luke.test/api/auth/");',
+    ].join("\n"),
   });
   assert.deepEqual(refusals(report), []);
   assert.deepEqual(
@@ -126,20 +132,18 @@ test("comments are not callers, and skipped directories are not scanned", async 
       "/** `PUT /api/elsewhere/{id}` */",
       'const x = "none";',
     ].join("\n"),
-    "Client.swift": ["/// PUT /api/nowhere", "/* /api/elsewhere */", 'let x = "none"'].join("\n"),
     "probe.sh": "# curl /api/nowhere\n",
     "node_modules/dep/index.js": 'fetch("/api/nowhere");\n',
     "dist/out.js": 'fetch("/api/nowhere");\n',
   });
   assert.deepEqual(report.scan.sites, []);
-  assert.equal(report.scan.filesScanned, 3);
+  assert.equal(report.scan.filesScanned, 2);
 });
 
 test("a package directory with no source directory contributes nothing, and the scan completes", async () => {
   const root = scratch({
     "packages/one/src/client.ts": 'fetch("/api/devices");\n',
-    "packages/two/src/nested/Client.swift":
-      'let url = base.appendingPathComponent("api/feedback")\n',
+    "packages/two/src/nested/client.ts": 'const url = new URL("api/feedback", base);\n',
     "packages/stale/dist/index.js": 'fetch("/api/nowhere");\n',
     "packages/notes.md": "# not a package\n",
   });

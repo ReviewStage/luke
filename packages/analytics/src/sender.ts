@@ -15,8 +15,6 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
-  PRODUCT_EVENT_CLIENT,
-  PRODUCT_EVENT_CLIENT_HEADER,
   type ProductEvent,
   type ProductEventName,
   type ProductEventPropertiesFor,
@@ -256,11 +254,6 @@ export class ProductEventSender {
         this.#call.send({
           method: HTTP_METHOD.POST,
           path: HOSTED_SERVICE_PATH.EVENTS,
-          headers: {
-            // This sender is the desktop's; the iOS app runs its own Swift
-            // sender and names itself the same way.
-            [PRODUCT_EVENT_CLIENT_HEADER]: PRODUCT_EVENT_CLIENT.DESKTOP,
-          },
           body: JSON.stringify({ events }),
         }),
         (answer) => {

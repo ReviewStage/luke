@@ -281,8 +281,7 @@ function safeUrl(url: string): string {
 }
 
 /**
- * A message's words drawn as the Markdown they were written in, the way the
- * iOS app's bubbles draw them: inline emphasis, code, strikethrough, and web
+ * A message's words drawn as the Markdown they were written in: inline emphasis, code, strikethrough, and web
  * links inside the paragraph, and the blocks a paragraph cannot hold —
  * headings, lists, quotes, fenced code, tables, rules — composed around it.
  * Raw HTML in the words is text. Every size in the stylesheet is in `em`, so
