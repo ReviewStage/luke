@@ -1,73 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { settingsView } from "@sidecar/settings/testing";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { UPDATE_STATUS } from "#shared/messages/update";
+import { settingsPanelProps } from "#testing/settings-panel-props";
 import { SETTINGS_VIEW, type SettingsView, settingsNavRowId } from "../settings-views";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel";
-
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED } as const);
-
-function panelProps(overrides: Partial<SettingsPanelProps> = {}): SettingsPanelProps {
-  return {
-    account: { status: ACCOUNT_STATUS.SIGNED_OUT },
-    onSignOut: () => Promise.resolve(),
-    onDeleteAccount: accepted,
-    view: SETTINGS_VIEW.ROOT,
-    onViewChange: () => undefined,
-    microphone: {
-      status: MICROPHONE_STATUS.GRANTED,
-      voiceAvailable: true,
-      onRequest: () => undefined,
-      onOpenSettings: () => undefined,
-    },
-    updates: {
-      update: {
-        status: UPDATE_STATUS.IDLE,
-        currentVersion: "0.0.0",
-        installSupported: false,
-        upToDate: false,
-      },
-      onCheck: () => Promise.resolve(),
-      onInstall: () => undefined,
-      onOpenLatest: () => undefined,
-    },
-    settings: settingsView({ voiceAvailable: true }),
-    feedback: {
-      begin: () => undefined,
-      changeMessage: () => undefined,
-      changeName: () => undefined,
-      changeEmail: () => undefined,
-      attach: () => undefined,
-      removeImage: () => undefined,
-      dismiss: () => undefined,
-      cancel: () => undefined,
-      commit: () => undefined,
-    },
-    panelOpen: true,
-    onQuit: () => undefined,
-    shortcuts: {
-      voiceHotkeyHeld: false,
-      voiceChosen: false,
-      voiceOff: false,
-      onVoiceHotkeyChange: accepted,
-      stopChosen: false,
-      stopOff: false,
-      onStopHotkeyChange: accepted,
-      onCapture: () => undefined,
-    },
-    searchOpen: false,
-    onSearchClose: () => undefined,
-    onSearchEngaged: () => undefined,
-    ...overrides,
-  };
-}
 
 function mount(props: SettingsPanelProps): HTMLElement {
   const container = document.createElement("div");
@@ -100,7 +39,7 @@ afterEach(() => {
 
 test("on a nested page the search stands above the page's own head", () => {
   for (const view of [SETTINGS_VIEW.APPEARANCE, SETTINGS_VIEW.SHORTCUTS] as const) {
-    const order = headOrder(mount(panelProps({ view, searchOpen: true })));
+    const order = headOrder(mount(settingsPanelProps({ view, searchOpen: true })));
     const stand = order.indexOf("settings-search-stand");
     const header = order.indexOf("settings-header");
     assert.ok(stand >= 0, `${view} draws the search`);
@@ -113,10 +52,12 @@ test("on a nested page the search stands above the page's own head", () => {
 });
 
 test("the search closed draws the page's head first, and the front page draws no head", () => {
-  const nested = headOrder(mount(panelProps({ view: SETTINGS_VIEW.APPEARANCE })));
+  const nested = headOrder(mount(settingsPanelProps({ view: SETTINGS_VIEW.APPEARANCE })));
   assert.equal(nested[0], "settings-header");
   assert.equal(nested.includes("settings-search-stand"), false);
-  const front = headOrder(mount(panelProps({ view: SETTINGS_VIEW.ROOT, searchOpen: true })));
+  const front = headOrder(
+    mount(settingsPanelProps({ view: SETTINGS_VIEW.ROOT, searchOpen: true })),
+  );
   assert.equal(front[0], "settings-search-stand");
   assert.equal(front.includes("settings-header"), false);
 });
@@ -125,7 +66,7 @@ test("a front-page row pressed under an open, empty field closes the field and o
   const closed: boolean[] = [];
   const opened: SettingsView[] = [];
   const container = mount(
-    panelProps({
+    settingsPanelProps({
       searchOpen: true,
       onSearchClose: () => closed.push(true),
       onViewChange: (view) => opened.push(view),

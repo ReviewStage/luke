@@ -29,4 +29,5 @@ export const SETTINGS_SEARCH_ROW = {
   MICROPHONE: "microphone",
   TALK_KEY: "talk-key",
   STOP_KEY: "stop-key",
+  SIDEBAR_KEY: "sidebar-key",
 } as const;

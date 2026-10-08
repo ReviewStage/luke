@@ -14,6 +14,7 @@ import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
+import { SIDEBAR_HOTKEY } from "../desktop/sidebar-collapse";
 import { Keycaps } from "../keycaps";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -295,6 +296,20 @@ export function ShortcutSection({
         onChange={shortcuts.onStopHotkeyChange}
         onCapture={shortcuts.onCapture}
       />
+      {/* The window's own chord rather than one taken from the machine: it
+          answers only while Luke's window has the keyboard, so it is fixed
+          and listed here to be found, not chosen. */}
+      <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.SIDEBAR_KEY)}>
+        <span className="settings-copy">
+          <strong>Show or hide the sidebar</strong>
+          <small>In Luke's window, while the plans are showing.</small>
+        </span>
+        <span className="shortcut-controls">
+          <span className="settings-actions">
+            <Keycaps className="shortcut-chord" accelerator={SIDEBAR_HOTKEY} />
+          </span>
+        </span>
+      </div>
     </section>
   );
 }

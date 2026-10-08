@@ -16,6 +16,7 @@ import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
 import { DesktopShell } from "./desktop/desktop-shell";
+import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
 import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
@@ -308,6 +309,11 @@ export function App(): React.JSX.Element {
     onComposingChange: setPlansComposing,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
   });
+  // The sidebar folds only where it is drawn: Settings keeps its page list,
+  // and the sign-in gate draws no sidebar at all.
+  const sidebar = useSidebarCollapse(
+    presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS && !accountGated,
+  );
 
   const caption = useCaptionPresentation({
     lukeCaptions,
@@ -590,6 +596,7 @@ export function App(): React.JSX.Element {
           tab={tab}
           onTabChange={changeTab}
           plans={plans}
+          sidebar={sidebar}
           settingsSearchOpen={settingsSearchOpen}
           onSettingsSearchToggle={() =>
             settingsSearchOpen ? closeSettingsSearch() : openSettingsSearch()
