@@ -1,11 +1,8 @@
 import { Effect, Result } from "effect";
+import type { SessionAuth } from "eve/context";
 import { defineDynamic, defineTool } from "eve/tools";
 import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
-import {
-  conversationSessionOf,
-  eveTurnIdOf,
-  type HostedToolBinding,
-} from "../../server/hosted/brain-host/host.js";
+import { eveTurnIdOf, type HostedToolBinding } from "../../server/hosted/brain-host/host.js";
 import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
 
@@ -15,19 +12,20 @@ import { host } from "../host.js";
  * steps, so each tool captures only data — its name, the conversation, the
  * turn — and reaches the host through this module's own import when it runs.
  * A session the host does not admit is offered nothing. A subagent offers
- * the named few of the same tools through `hostedTools`, admitted through the
- * root session it was delegated from (`conversationSessionOf`).
+ * the named few of the same tools through `hostedTools`, under the admission
+ * its resolver can take (`host.admitDelegated`); each call is admitted again
+ * as it runs, through the root eve then names.
  */
-export function hostedTools(offered?: ReadonlySet<string>) {
+export function hostedTools(
+  offered?: ReadonlySet<string>,
+  admit: (auth: SessionAuth, sessionId: string) => ReturnType<typeof host.admit> = host.admit,
+) {
   return defineDynamic({
     events: {
       "turn.started": (event, ctx) =>
         runWeb(
           Effect.gen(function* () {
-            const admitted = yield* host.admit(
-              ctx.session.auth,
-              conversationSessionOf(ctx.session),
-            );
+            const admitted = yield* admit(ctx.session.auth, ctx.session.id);
             if (Result.isFailure(admitted)) return null;
             // SAFETY: eve hands a resolver the JSON event it recorded; the host reads it as wire input.
             const eveTurnId = eveTurnIdOf(unparsedWire(event as WireBoundaryInput));

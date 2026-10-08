@@ -547,3 +547,28 @@ test("a subagent's tool call is admitted through the root it was delegated from:
     reason: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION,
   });
 });
+
+test("a subagent's resolvers are admitted on ownership alone, since eve names its child session no record holds: the owner's child is admitted whichever session the conversation runs in, and another account's seat is refused", async () => {
+  const SESSION = sessions();
+  const CHILD = "wrun_01MCHILD000000000000001";
+  const userA = await database.createUser();
+  const userB = await database.createUser();
+  const target = await ownedConversation(userA);
+  const seat = ownSeat(userA, target.conversationId);
+  const { host } = hostOverTestDatabase();
+  assert.equal(await start(host, seat, SESSION.OLDER), true);
+
+  assert.deepEqual(
+    await database.run(host.admit(seat, CHILD)),
+    Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
+  );
+  const delegated = await database.run(host.admitDelegated(seat, CHILD));
+  assert.ok(Result.isSuccess(delegated));
+  assert.deepEqual(delegated.success.target, target);
+
+  const seatB = principal(userB, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId });
+  assert.deepEqual(
+    await database.run(host.admitDelegated({ current: seatB, initiator: seatB }, CHILD)),
+    Result.fail(BRAIN_HOST_REFUSAL.NOT_OWNER),
+  );
+});

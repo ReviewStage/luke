@@ -1,5 +1,6 @@
 import { defineAgent } from "eve";
 import { brainModel } from "../../agent.js";
+import { host } from "../../host.js";
 
 /**
  * The researcher: a subagent the planning model hands a research question to,
@@ -11,5 +12,5 @@ export default defineAgent({
   description:
     "Research one question on the public Internet in the background and return a short summary with its sources. Returns at once; the findings arrive later.",
   defaultTools: false,
-  model: brainModel,
+  model: brainModel(host.admitDelegated),
 });

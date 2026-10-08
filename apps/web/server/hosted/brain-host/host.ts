@@ -112,14 +112,13 @@ export function eveTurnIdOf(event: UnparsedWireValue): string | undefined {
 /**
  * The eve session a conversation's record names for this session: its own id
  * for a root session, and its root's for a subagent's child session. Note that
- * a child is admitted through its root, because eve mints a child its own
- * session id that no conversation records, and hands it the root's auth and
- * lineage, so the root standing as the conversation's current session is what
- * admits the child's model and tools.
+ * a child's tool call is admitted through its root, because eve mints a child
+ * its own session id that no conversation records and hands a tool the
+ * child's lineage, so the root standing as the conversation's current session
+ * is what lets the call land. A resolver is handed no lineage, so a child's
+ * resolvers take `admitDelegated` instead.
  */
-export function conversationSessionOf(
-  session: Pick<SessionContext["session"], "id" | "parent">,
-): string {
+function conversationSessionOf(session: Pick<SessionContext["session"], "id" | "parent">): string {
   return session.parent?.rootSessionId ?? session.id;
 }
 
@@ -131,6 +130,8 @@ export interface BrainHost {
   admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The same admission for a session claiming the conversation as it starts, before its record stands. */
   admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
+  /** The admission a subagent's resolvers take, on ownership alone: eve hands a resolver no lineage, and the child's id is no record's. */
+  admitDelegated(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The kind of turn the current request opened, or nothing for a request that named none. */
   turnKindOf(auth: SessionAuth): HostedTurnKind | undefined;
   /** The turn eve just started, keyed as the store keys it; nothing for a request that named no kind. */
@@ -194,6 +195,8 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT }),
     admitStarting: (auth, sessionId) =>
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CLAIMING }),
+    admitDelegated: (auth, sessionId) =>
+      admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.DELEGATED }),
 
     turnKindOf(auth) {
       const kind = turnKindOf(auth.current);
