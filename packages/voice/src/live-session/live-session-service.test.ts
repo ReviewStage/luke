@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import {
   LIVE_CLIENT_EVENT,
@@ -327,6 +328,8 @@ interface Fixture {
   reports: string[];
   /** Every status `onStatus` was told, in order. */
   statuses: LiveSessionStatus[];
+  /** Every place `onCode` put on screen, in order. */
+  codes: CodeRef[];
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
@@ -338,12 +341,14 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const sidebands: FakeSideband[] = [];
     const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
+    const codes: CodeRef[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
         createId: () => `id-${++ids}`,
         report: (message) => reports.push(message),
         onStatus: (status) => statuses.push(status),
+        onCode: (ref) => codes.push(ref),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -353,6 +358,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       sidebands,
       reports,
       statuses,
+      codes,
       service,
       open: () =>
         Effect.gen(function* () {
@@ -736,6 +742,48 @@ it.effect(
       const contents = commentary.map((event) => ("content" in event ? event.content : ""));
       assert.ok(contents[0]?.includes("After how long?") && contents[0].includes("Seven days."));
       assert.ok(contents[1]?.includes("Can an admin re-send one?"));
+    }),
+);
+
+it.effect(
+  "code the planning model shows waits for Luke's next words, then goes on screen with a note the voice keeps",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Where does the invite get checked?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      const ref = { path: "src/invite.ts", startLine: 3, endLine: 5 };
+
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN, runId: "run-1", ref });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-1",
+        question: "Should the expiry check move here?",
+        recommendation: "Yes.",
+      });
+      yield* settle();
+      assert.deepEqual(f.codes, [], "nothing is on screen before Luke speaks");
+      // Each append waits on the last one's acknowledgment, as every append does.
+      sideband.acknowledge(
+        sideband.sent.findIndex((event) => event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND),
+        1000,
+        1100,
+      );
+
+      sideband.output("Look at", 1000, 1100);
+      yield* settle();
+
+      assert.deepEqual(f.codes, [ref]);
+      const notes = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
+        "content" in event ? event.content : "",
+      );
+      assert.ok(notes.some((note) => note.includes("src/invite.ts, lines 3 to 5")));
+      sideband.output(" lines three to five.", 1100, 1300);
+      yield* settle();
+      assert.deepEqual(f.codes, [ref], "the code goes on screen once");
     }),
 );
 

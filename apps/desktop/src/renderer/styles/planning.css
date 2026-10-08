@@ -458,3 +458,110 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* The call's code pane: a small window showing the code Luke talks about. In
+   the panel it stands between the document and the microphone row; in the
+   desktop window it floats over the document's lower right. */
+.code-pane {
+  display: flex;
+  min-height: 0;
+  max-height: 45%;
+  flex: 0 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: #0d1117;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.code-pane[data-folded="true"] {
+  max-height: none;
+}
+
+.code-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--raised);
+  font-size: 11.5px;
+}
+
+.code-pane-path {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-pane-range {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.code-pane-button {
+  margin-left: auto;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.code-pane-button:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.code-pane-note {
+  margin: 0;
+  padding: 14px 12px;
+  color: var(--text-secondary);
+}
+
+.code-lines {
+  min-height: 0;
+  flex: 1;
+  padding: 6px 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  color: #e6edf3;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+}
+
+.code-line {
+  display: flex;
+  min-width: max-content;
+}
+
+/* The lines pointed at, lit across the whole width with a bar in the gutter. */
+.code-line[data-pointed="true"] {
+  background: rgba(56, 139, 253, 0.16);
+  box-shadow: inset 2px 0 0 #388bfd;
+}
+
+.code-line-number {
+  flex: 0 0 auto;
+  width: 48px;
+  padding: 0 12px 0 0;
+  color: rgba(230, 237, 243, 0.32);
+  text-align: right;
+  user-select: none;
+}
+
+.code-line[data-pointed="true"] .code-line-number {
+  color: rgba(230, 237, 243, 0.8);
+}
+
+.code-line-text {
+  padding-right: 16px;
+  font: inherit;
+  white-space: pre;
+}

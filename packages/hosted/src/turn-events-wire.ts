@@ -1,10 +1,12 @@
+import type { CodeRef } from "./plan-wire.js";
+
 /**
  * A turn's events: what the voice hears of a turn it asked while the turn
  * runs. The kinds are the run seams the live session service consumes — a
- * slow step began, a planning turn queued a question, every action settled,
- * one sentence of the reply, the turn ended — and nothing wider: no tool
- * part, no reasoning, and no message, only what a voice needs to speak
- * commentary while the turn runs. Each event is numbered from one inside its
+ * slow step began, a planning turn queued a question or showed code, every
+ * action settled, one sentence of the reply, the turn ended — and nothing
+ * wider: no tool part, no reasoning, and no message, only what a voice needs
+ * to speak commentary while the turn runs. Each event is numbered from one inside its
  * turn, so a reader that took some hears the rest exactly once. The same
  * words as the brain's own run stream, spelled here because this package
  * cannot reach the brain; a test above both holds them equal.
@@ -15,6 +17,8 @@ export const TURN_EVENT_KIND = {
   SLOW_STEP: "slow_step",
   /** A planning turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
   QUESTION_QUEUED: "question_queued",
+  /** A planning turn put code of the plan's folder on screen, by place; told as the call is journaled, before the turn ends. */
+  CODE_SHOWN: "code_shown",
   /** Every action the turn has journaled by now has its result on the record; the reply's sentences follow, the first while the turn may still run. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the reply, in order, after the actions settled. */
@@ -60,6 +64,7 @@ export type TurnEventBody =
       readonly question: string;
       readonly recommendation: string;
     }
+  | ({ readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN } & CodeRef)
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };

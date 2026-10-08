@@ -63,6 +63,18 @@ Each command and its output are stored with the plan, and with the
 plan's planning conversation, under the terms described for each; deleting
 the plan deletes its commands.
 
+**Code on screen during a planning call.** During a planning call, Luke shows
+code from the plan's folder in a small pane in the Plans tab. When the planning
+model wants to show you code, it names a file in the folder and a range of
+lines. That file path and those line numbers are stored with the plan's
+planning conversation, and our service passes them to your Mac. Luke on your
+Mac reads the lines from the folder itself, so the code you see never goes
+through our service to reach the screen. Luke refuses a path outside the
+folder and never reads a file named `.env` or starting with `.env`. Our service
+tells the voice model the file path and line numbers on screen, so Luke can
+refer to them. The pane and its code are cleared when the call ends. They are
+never part of the plan's document.
+
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
 written summary of his own when it grows long — and it is kept where his

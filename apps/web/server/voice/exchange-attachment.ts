@@ -93,6 +93,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         createId: deps.createId,
         report: deps.report,
         ...(session.onActivity ? { onActivity: session.onActivity } : undefined),
+        ...(session.onCode ? { onCode: session.onCode } : undefined),
       });
       const adopted = yield* exchange.adopt({
         sessionId: session.sessionId,

@@ -853,3 +853,17 @@ body,
   line-height: 1.5;
   text-align: left;
 }
+
+/* The call's code pane ----------------------------------------------------- */
+
+.desktop-document {
+  position: relative;
+}
+
+.desktop-document .code-pane {
+  position: absolute;
+  right: 24px;
+  bottom: 16px;
+  width: min(640px, calc(100% - 48px));
+  max-height: 58%;
+}

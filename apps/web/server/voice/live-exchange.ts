@@ -1,3 +1,4 @@
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { PlanActivity } from "@sidecar/hosted/planning-view";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
@@ -79,6 +80,8 @@ export interface HostedLiveExchangeOptions {
   readonly report: (message: string) => void;
   /** What the voice, the brain, and the notetaker are doing, told whole on each change; the device is shown it. */
   readonly onActivity?: (activity: PlanActivity) => void;
+  /** Code Luke is about to talk about, by place, told as he starts to speak; a planning call's device is shown it. */
+  readonly onCode?: (ref: CodeRef) => void;
 }
 
 /** One signed-in session the voice service created or re-attached, as an exchange is offered it. */
@@ -95,6 +98,8 @@ export interface AttachedSession {
   readonly onPlanDraft?: ((draft: PlanDraft) => void) | undefined;
   /** The device's door for what each part of Luke is doing on the call; absent where the service sends it nothing of its own. */
   readonly onActivity?: ((activity: PlanActivity) => void) | undefined;
+  /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
+  readonly onCode?: ((ref: CodeRef) => void) | undefined;
 }
 
 /**
@@ -263,6 +268,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
         status = told;
         tellActivity();
       },
+      ...(options.onCode ? { onCode: options.onCode } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );

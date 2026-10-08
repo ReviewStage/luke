@@ -125,3 +125,36 @@ export type PlanCommandResult = typeof planCommandResultSchema.Type;
 export const planCommandSettleAnswerSchema = EffectSchema.Struct({
   settled: EffectSchema.Boolean,
 });
+
+/** The most lines one code reference points at; a reference is a passage, not a file. */
+const CODE_REF_MAX_LINES = 200;
+
+/** The most characters of a path one code reference names: macOS's own bound. */
+export const CODE_PATH_MAX_CHARS = 1_024;
+
+const codeLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+
+/** Whether a reference names both of its lines or neither, in order and within the bound. */
+function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boolean {
+  if (ref.startLine === undefined || ref.endLine === undefined) {
+    return ref.startLine === ref.endLine;
+  }
+  return ref.endLine >= ref.startLine && ref.endLine - ref.startLine < CODE_REF_MAX_LINES;
+}
+
+/**
+ * Code on screen during a planning call, by place and never by content: a
+ * file of the plan's folder, named relative to it, and the lines pointed at,
+ * or the file whole with none. Luke names one through the planning model's
+ * `show_code`, and the Mac reads the lines from its own folder.
+ */
+export const codeRefSchema = EffectSchema.Struct({
+  path: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS),
+  ),
+  startLine: EffectSchema.optionalKey(codeLineSchema),
+  endLine: EffectSchema.optionalKey(codeLineSchema),
+}).check(EffectSchema.makeFilter(codeRangeIsReadable));
+
+export type CodeRef = typeof codeRefSchema.Type;

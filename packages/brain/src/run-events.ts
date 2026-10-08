@@ -37,6 +37,8 @@ export const BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   /** A planning run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
   QUESTION_QUEUED: "question_queued",
+  /** A planning run put code of the plan's folder on the developer's screen, by place; told as the call is journaled, before the run ends. */
+  CODE_SHOWN: "code_shown",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the answer, in order, after every write the run took has settled. */
@@ -177,6 +179,13 @@ export type BrainRunEventBody =
       readonly runId: string;
       readonly question: string;
       readonly recommendation: string;
+    }
+  | {
+      readonly kind: typeof BRAIN_RUN_EVENT.CODE_SHOWN;
+      readonly runId: string;
+      readonly path: string;
+      readonly startLine?: number;
+      readonly endLine?: number;
     }
   | { readonly kind: typeof BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {

@@ -26,6 +26,7 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
+import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { projectTurnEvents, UNANSWERED_TURN_END_SEQ } from "../server/hosted/turn-events";
@@ -352,7 +353,7 @@ function journal(parts: StoredUIMessage["parts"]): StoredUIMessage {
 function toolPart(
   name: string,
   callId: string,
-  input: Readonly<Record<string, string>> = {},
+  input: Readonly<Record<string, string | number>> = {},
   state = "input-available",
 ): StoredUIMessage["parts"][number] {
   // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one ahead of its run.
@@ -412,6 +413,27 @@ test("the projection: every question a planning call queued is told before the t
         step: TURN_SLOW_STEP.REPOSITORY_READ,
       },
       { turnId: TURN.id, seq: 3, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...second },
+    ],
+  );
+});
+
+test("the projection: code a planning call shows is told by place, in order with its questions, once its call is whole and reads", () => {
+  const shown = { path: "src/invite.ts", startLine: 40, endLine: 58 };
+  const queued = { question: "Move the check here?", recommendation: "Yes." };
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(SHOW_CODE_TOOL.name, "c1", shown),
+        toolPart(QUEUE_QUESTION_TOOL.name, "c2", queued),
+        toolPart(SHOW_CODE_TOOL.name, "c3", { path: "src/a.ts", startLine: 9, endLine: 2 }),
+        toolPart(SHOW_CODE_TOOL.name, "c4", { path: "src/b.ts", startLine: 1 }),
+        toolPart(SHOW_CODE_TOOL.name, "c5", { path: "src/c.ts" }, "input-streaming"),
+      ]),
+    ),
+    [
+      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CODE_SHOWN, ...shown },
+      { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
     ],
   );
 });
