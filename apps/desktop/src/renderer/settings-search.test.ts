@@ -122,13 +122,17 @@ test("the kept rows come back grouped under their pages, in the pages' order", (
   const entries = settingsSearchEntries(everythingDrawn());
 
   // "shortcut" lands only on the Keyboard shortcuts page, so one group holds
-  // the two key rows.
+  // the two key rows and the sidebar's chord.
   const shortcuts = searchSettings(entries, "shortcut");
   assert.ok(shortcuts);
   assert.equal(shortcuts.groups.length, 1);
   assert.equal(shortcuts.groups[0]?.page, SETTINGS_VIEW.SHORTCUTS);
-  assert.deepEqual(labels(shortcuts.groups[0]?.items ?? []), ["Talk to Luke", "Stop Luke"]);
-  assert.equal(shortcuts.matched, 2);
+  assert.deepEqual(labels(shortcuts.groups[0]?.items ?? []), [
+    "Talk to Luke",
+    "Stop Luke",
+    "Show or hide the sidebar",
+  ]);
+  assert.equal(shortcuts.matched, 3);
 
   // "microphone" lands on the Voice page's rows and on the talk key, which
   // holds one open, and the groups keep the front page's navigation order.

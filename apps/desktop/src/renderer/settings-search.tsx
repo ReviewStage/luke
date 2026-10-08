@@ -184,6 +184,13 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.SHORTCUTS,
       haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
     },
+    // The window's own chord, fixed rather than chosen, drawn beside them.
+    {
+      id: SETTINGS_SEARCH_ROW.SIDEBAR_KEY,
+      label: "Show or hide the sidebar",
+      page: SETTINGS_VIEW.SHORTCUTS,
+      haystack: ["Show or hide the sidebar", "keyboard shortcut key chord sidebar collapse fold"],
+    },
   ];
   return entries.filter((entry): entry is SettingsSearchEntry => entry !== undefined);
 }

@@ -9,6 +9,9 @@
   --desktop-well: #0f0f12;
   --desktop-bar-height: 52px;
   --sidebar-width: 264px;
+  /* Where the work column's toolbar starts its title while the sidebar is
+     folded: clear of the traffic lights and the sidebar toggle beside them. */
+  --sidebar-toggle-clearance: 124px;
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
 }
@@ -29,7 +32,9 @@ body,
      their first row is nothing here. */
   --shape-top: 96px;
   --strip-height: 0px;
-  --voice-band-width: min(640px, calc(100vw - var(--sidebar-width) - 96px));
+  /* Where the work column begins, which the captions centre on. */
+  --work-left: var(--sidebar-width);
+  --voice-band-width: min(640px, calc(100vw - var(--work-left) - 96px));
   position: absolute;
   inset: 0;
   color: var(--text-primary);
@@ -56,7 +61,51 @@ body,
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
 }
 
+.app-stage[data-surface="desktop"]:has(.desktop-shell[data-sidebar-collapsed="true"]) {
+  --work-left: 0px;
+}
+
 /* Sidebar ----------------------------------------------------------------- */
+
+/* Folding the sidebar away moves it rather than narrowing it: the work column
+   takes the window at once and the sidebar slides off the left edge over it,
+   on transform and opacity alone, so neither column re-wraps a line on the
+   way. Unfolding is the same slide back in beside a column already narrowed.
+   Only the plans' shell folds, so Settings keeps its fixed page list. */
+.desktop-shell[data-sidebar-collapsed] {
+  overflow: hidden;
+}
+
+.desktop-shell[data-sidebar-collapsed="true"] {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.desktop-shell[data-sidebar-collapsed] .desktop-sidebar {
+  position: relative;
+  z-index: 1;
+  width: var(--sidebar-width);
+  transition:
+    transform var(--duration-quick) var(--motion-exit),
+    opacity var(--duration-quick) var(--motion-exit);
+}
+
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-sidebar {
+  opacity: 0;
+  transform: translateX(-100%);
+}
+
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .desktop-toolbar {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
+/* Beside the traffic lights, centred on them, in the same place whichever way
+   the sidebar is. */
+.sidebar-toggle {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 80px;
+}
 
 .desktop-sidebar {
   display: flex;
@@ -827,7 +876,7 @@ body,
   z-index: 6;
   top: auto;
   bottom: calc(96px + var(--volume-hint-size));
-  left: calc(var(--sidebar-width) + (100% - var(--sidebar-width)) / 2);
+  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
   height: auto;
   max-height: var(--caption-max);
   padding: 14px 18px;
@@ -851,7 +900,7 @@ body,
   z-index: 6;
   top: auto;
   bottom: 88px;
-  left: calc(var(--sidebar-width) + (100% - var(--sidebar-width)) / 2);
+  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
   animation: none;
   transform: translateX(-50%);
 }

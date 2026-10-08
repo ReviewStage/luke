@@ -335,6 +335,16 @@ export function SidePanelIcon(): React.JSX.Element {
   );
 }
 
+/** The window's sidebar, shown or folded away: the side panel's frame with its left column ruled off. */
+export function SidebarIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="3.2" y="4.6" width="17.6" height="14.8" rx="2.6" />
+      <path d="M9.4 4.6v14.8" />
+    </Glyph>
+  );
+}
+
 /** Stops the reply under way, drawn the way every chat surface draws it: a square. */
 export function StopIcon(): React.JSX.Element {
   return (

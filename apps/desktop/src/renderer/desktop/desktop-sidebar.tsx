@@ -91,9 +91,11 @@ function AccountButton({
  * account owns, and the account's row that leads to Settings. It is where the
  * developer moves between things; what they work on is the column beside it.
  * The strip above Luke is the window's drag handle and the traffic lights'
- * room.
+ * room. Folded away, it is inert as well as out of sight, so no key reaches
+ * a row nobody can see.
  */
 export function DesktopSidebar({
+  collapsed,
   identity,
   plans,
   tab,
@@ -101,6 +103,7 @@ export function DesktopSidebar({
   account,
   settingsNote,
 }: {
+  collapsed: boolean;
   identity: LukeIdentityProps;
   plans: PlansControl;
   tab: PanelTab;
@@ -125,7 +128,7 @@ export function DesktopSidebar({
   };
 
   return (
-    <aside className="desktop-sidebar">
+    <aside className="desktop-sidebar" inert={collapsed}>
       <div className="desktop-drag-strip" />
       <LukeIdentity {...identity} />
 
