@@ -6,13 +6,22 @@ set -euo pipefail
 #   scripts/queue-watch.sh [--press] [--repo OWNER/NAME] [--interval SECONDS]
 #                          [--timeout-minutes MINUTES] PULL_REQUEST_NUMBER
 #
-# Unarmed, it polls until the ruleset's required contexts and the extra checks
-# below have passed on the head and no review thread stands unresolved, prints
-# READY with the head oid, and exits without touching the queue: a watcher is
-# not armed until someone says to press. With --press it enqueues at that
-# moment, dequeues if a thread appears while the entry stands, and reports how
-# the queue ended. Every read and write goes through `gh`, so the test puts a
-# fake one on PATH and the script never learns the difference.
+#   QUEUE_WATCH_EXTRA_REQUIRED_CHECKS   checks to wait on beyond the ruleset's,
+#                                       one name per line; none by default
+#
+# Unarmed, it polls until the ruleset's required contexts (and any extra checks
+# named above) have passed on the head and no review thread stands unresolved,
+# prints READY with the head oid, and exits without touching the queue: a
+# watcher is not armed until someone says to press. With --press it enqueues at
+# that moment, dequeues if a thread appears while the entry stands, and reports
+# how the queue ended. Every read and write goes through `gh`, so the test puts
+# a fake one on PATH and the script never learns the difference.
+#
+# This is how a pull request merges here. `main` merges only through its merge
+# queue, which `gh pr merge` does not enter: the press is the GraphQL
+# `enqueuePullRequest` mutation, sent with the head it was decided on. A stacked
+# pull request is the exception and merges with `gh stack merge`, which queues
+# the whole stack at once; this watcher presses one pull request at a time.
 #
 # The one thing this script knows that a single read cannot: GitHub removes the
 # queue entry before the pull request reads MERGED, so the tick on which the
@@ -98,17 +107,15 @@ PRESS=0
 REPO=""
 PULL_REQUEST_NUMBER=""
 
-# The ruleset requires the contexts it names; the review bots are required by
-# the workflow on top of it, because a verdict landing while queued is the trap
-# on record. A build's own list can be replaced for a test, one name per line.
-if [[ -n "${QUEUE_WATCH_EXTRA_REQUIRED_CHECKS+set}" ]]; then
-    EXTRA_REQUIRED_CHECKS=()
-    while IFS= read -r check_name; do
-        [[ -n "$check_name" ]] && EXTRA_REQUIRED_CHECKS+=("$check_name")
-    done <<<"$QUEUE_WATCH_EXTRA_REQUIRED_CHECKS"
-else
-    EXTRA_REQUIRED_CHECKS=("Cursor Bugbot" "Cursor Security Agent: Security Reviewer")
-fi
+# The ruleset's required contexts, read from the base branch on every tick, are
+# what gate a merge, and by default the watcher waits on nothing else: a check
+# named here that never runs on the pull request is waited for until the watch
+# times out. QUEUE_WATCH_EXTRA_REQUIRED_CHECKS opts into more, one name per
+# line, for a check that does run and must pass before the press.
+EXTRA_REQUIRED_CHECKS=()
+while IFS= read -r check_name; do
+    [[ -n "$check_name" ]] && EXTRA_REQUIRED_CHECKS+=("$check_name")
+done <<<"${QUEUE_WATCH_EXTRA_REQUIRED_CHECKS:-}"
 
 usage() {
     printf 'usage: %s [--press] [--repo OWNER/NAME] [--interval SECONDS] [--timeout-minutes MINUTES] PULL_REQUEST_NUMBER\n' "$0" >&2
