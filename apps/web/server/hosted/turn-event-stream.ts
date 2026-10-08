@@ -35,6 +35,7 @@ import type { UserIdResolver } from "./http-effect.js";
 import { QUEUE_QUESTION_TOOL, queuedQuestionOf } from "./queue-question.js";
 import { makeRateBrake } from "./rate-brake.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
+import { SHOW_PSEUDOCODE_TOOL, shownPseudocodeOf } from "./show-pseudocode.js";
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
 /**
@@ -128,11 +129,12 @@ type JournalParts = StoredUIMessage["parts"];
 /**
  * What the journal's calls tell before the turn ends, in the order the calls
  * were written: the first slow step, once, as the desktop tells one per run,
- * and every question a planning call queued. Note that a planning call's
- * repository command is named before the policy is asked, because it is a
- * planning tool and no catalog policy offers it, so the brain's own
- * `slowStepOf` would never count it. A queued question is told once its
- * input is whole, never while it streams, so a question is never told twice.
+ * every question a planning call queued, and every pseudocode it showed.
+ * Note that a planning call's repository command is named before the policy
+ * is asked, because it is a planning tool and no catalog policy offers it, so
+ * the brain's own `slowStepOf` would never count it. A queued question and a
+ * shown pseudocode are told once their input is whole, never while it
+ * streams, so neither is ever told twice.
  */
 function midTurnEventsOf(parts: JournalParts, trigger: BrainTurnTrigger): TurnEventBody[] {
   const policy = hostedTurnPolicy(trigger);
@@ -144,6 +146,11 @@ function midTurnEventsOf(parts: JournalParts, trigger: BrainTurnTrigger): TurnEv
     if (name === QUEUE_QUESTION_TOOL.name) {
       const queued = queuedQuestionOf(part);
       if (queued !== undefined) bodies.push({ kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued });
+      continue;
+    }
+    if (name === SHOW_PSEUDOCODE_TOOL.name) {
+      const shown = shownPseudocodeOf(part);
+      if (shown !== undefined) bodies.push({ kind: TURN_EVENT_KIND.PSEUDOCODE_SHOWN, ...shown });
       continue;
     }
     const step =

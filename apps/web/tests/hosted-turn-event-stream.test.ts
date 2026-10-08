@@ -48,6 +48,7 @@ import {
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
+import { SHOW_PSEUDOCODE_TOOL } from "../server/hosted/show-pseudocode";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
@@ -566,6 +567,26 @@ test("the projection: a queued question still streaming in, or one that does not
       ]),
     ),
     [],
+  );
+});
+
+test("the projection: pseudocode a planning call showed is told once its input is whole, beside the questions queued", () => {
+  const shown = { title: "Accepting an invite", body: "1. Find the invite\n2. Add the membership" };
+  const question = { question: "Does step 2 match?", recommendation: "Yes." };
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c1", { title: "Accepting" }, "input-streaming"),
+        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c2", shown),
+        toolPart(QUEUE_QUESTION_TOOL.name, "c3", question),
+        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c4", { title: "No steps" }),
+      ]),
+    ),
+    [
+      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.PSEUDOCODE_SHOWN, ...shown },
+      { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...question },
+    ],
   );
 });
 

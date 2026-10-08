@@ -31,6 +31,7 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
+import { SHOW_PSEUDOCODE_TOOL } from "../server/hosted/show-pseudocode";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import type { MessageListRead } from "../server/hosted/store/message-reads";
@@ -681,6 +682,51 @@ it.live(
         runId: accepted.runId,
         action: undefined,
       });
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "pseudocode the planning model shows reaches the service while its turn still runs, with its steps for the notetaker",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const planConversation = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* createPlan(target.userId, PLAN);
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+          }),
+        ),
+      );
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const accepted = yield* Effect.promise(() =>
+        database.run(f.brain.submitAsk({ submissionId: randomUUID(), question: "q" })),
+      );
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target: { userId: target.userId, conversationId: planConversation },
+        kind: CONVERSATION_KIND.PLAN,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const shown = { title: "Accepting an invite", body: "1. Find the invite\n2. Accept it" };
+      const events = planningTurn(FIRST_EVE_TURN, NOW, {
+        toolName: SHOW_PSEUDOCODE_TOOL.name,
+        input: shown,
+        output: { status: "accepted" },
+      });
+      const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* f.arrived(1);
+      assert.deepEqual(f.events, [
+        { kind: LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN, runId: accepted.runId, ...shown },
+      ]);
+      yield* Effect.promise(() => play(events.slice(requested), standing));
+      yield* f.arrived(5);
       yield* Effect.promise(() => f.stop());
     }),
 );

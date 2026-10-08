@@ -116,9 +116,11 @@ A notetaker writes the plan live as you talk; you never write it yourself.`;
  * showed each behavior: several questions read out at once, a pause after
  * every answer while the voice waited on the backend, one more question
  * after the plan was already enough to build from, and a developer with only
- * a rough idea pressed for decisions they had no basis to make.
+ * a rough idea pressed for decisions they had no basis to make. Note that the
+ * pseudocode sentence is ours too, because steps heard aloud are what a
+ * developer cannot check, which is why the backend shows them in the plan.
  */
-const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. The backend queues its questions to you as it thinks of them: ask them in the order they were queued, and drop one the backend says is moot. When the developer answers, carry on with the next queued question while the backend thinks and reads the repository in the background. Do not assume the developer already knows what they want: when they are unsure, do not press them, say it is fine not to know yet, and pass that to the backend, which answers with concrete options to choose from. Once the backend says the plan is complete, ask no more queued questions: tell the developer the plan is ready, read back the assumptions and the choices left to the agent one at a time, and ask whether anything is missing. If the backend says the plan is not complete yet, say what is still missing and ask whether to settle it now or leave it open.
+const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. The backend queues its questions to you as it thinks of them: ask them in the order they were queued, and drop one the backend says is moot. When the backend shows pseudocode, point the developer at it in the plan and ask whether it matches what they mean, referring to its steps by number; never read pseudocode aloud. When the developer answers, carry on with the next queued question while the backend thinks and reads the repository in the background. Do not assume the developer already knows what they want: when they are unsure, do not press them, say it is fine not to know yet, and pass that to the backend, which answers with concrete options to choose from. Once the backend says the plan is complete, ask no more queued questions: tell the developer the plan is ready, read back the assumptions and the choices left to the agent one at a time, and ask whether anything is missing. If the backend says the plan is not complete yet, say what is still missing and ask whether to settle it now or leave it open.
 
 `;
 

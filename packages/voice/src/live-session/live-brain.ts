@@ -15,6 +15,7 @@ import type { Effect } from "effect";
 export const LIVE_BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   QUESTION_QUEUED: "question_queued",
+  PSEUDOCODE_SHOWN: "pseudocode_shown",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
   ENDED: "ended",
@@ -52,6 +53,13 @@ export type LiveBrainRunEvent =
       /** A question the planning model queued for the developer, and the answer it recommends. */
       readonly question: string;
       readonly recommendation: string;
+    }
+  | {
+      readonly kind: typeof LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN;
+      readonly runId: string;
+      /** Pseudocode the planning model put in front of the developer: what it shows, and its steps. */
+      readonly title: string;
+      readonly body: string;
     }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {

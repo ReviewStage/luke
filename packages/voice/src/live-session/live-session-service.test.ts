@@ -724,6 +724,32 @@ it.effect(
 );
 
 it.effect(
+  "pseudocode the planning model shows is handed to the voice by its title alone, so its steps are never read aloud",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What happens when someone accepts?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN,
+        runId: "run-1",
+        title: "Accepting an invite",
+        body: "1. Find the invite by its token\n2. If it has expired, refuse",
+      });
+      yield* settle();
+
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      const contents = commentary.map((event) => ("content" in event ? event.content : ""));
+      assert.equal(contents.length, 1);
+      assert.ok(contents[0]?.includes("Accepting an invite"));
+      assert.equal(contents[0]?.includes("Find the invite by its token"), false);
+    }),
+);
+
+it.effect(
   "a slow step earns the exchange's one thinking append, and the reply streams only after the actions settled, each chunk awaiting its ack",
   () =>
     Effect.gen(function* () {

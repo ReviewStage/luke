@@ -117,6 +117,15 @@ function queuedQuestionNote(question: string, recommendation: string): string {
 }
 
 /**
+ * Pseudocode the planning model put in the plan, as the voice is handed it:
+ * its title and never its steps, because steps read aloud are what the
+ * developer could not follow by ear, so the voice points at the plan instead.
+ */
+function shownPseudocodeNote(title: string): string {
+  return `Pseudocode titled "${title}" is now in the plan under Implementation. When you reach it, tell the developer to look at it and ask whether it matches what they mean. Never read the pseudocode aloud; refer to its steps by number.`;
+}
+
+/**
  * How long after a fragment lands its row's write is put off, so a burst of
  * deltas is one write rather than one per syllable. Each fragment re-arms it,
  * and silence arms nothing: a row whose write has landed owes the record
@@ -1201,6 +1210,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       // A queued question is no action's result, so it is spoken without waiting on the settle.
       case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED:
         this.#speakSentence(exchange, queuedQuestionNote(event.question, event.recommendation));
+        return;
+      // Shown pseudocode is no action's result either, and only its title is spoken of.
+      case LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN:
+        this.#speakSentence(exchange, shownPseudocodeNote(event.title));
         return;
       // The brain tells the settle as soon as no write of the run is still
       // out, which for a read-only run is at its first words, so the gate

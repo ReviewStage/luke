@@ -101,7 +101,8 @@ keep or delete, and nothing on your Mac reads or writes them.
 
 **Feature plans.** When you start a named plan, our service stores it under
 your account: its name and the plan's one document, a Markdown body and a list of
-assumptions, written by the planning call's notetaker as you talk. It is
+assumptions, written by the planning call's notetaker as you talk, including any
+pseudocode Luke shows you. It is
 stored as written, bound to your account and readable by our own operators,
 the same way the conversation described below is. A save
 replaces the document and no earlier version is kept; deleting a plan removes
@@ -238,7 +239,9 @@ plan document; Luke's own judgment no longer does. Once you have been quiet
 for about a second, it makes one call to OpenAI (`gpt-5.6-luna`) on our key,
 carrying the plan as it is saved, both sides of what was said since its last
 note with a few lines before them, and the words of Luke's own replies, and
-saves the fields that call answers into that one plan. It runs only during a
+saves the fields that call answers into that one plan. When Luke's planning
+model shows pseudocode for you to check, the notetaker saves it into the
+same plan at once, without a call of its own. It runs only during a
 planning call you started and only for that call's plan, each run counts
 against the same daily allowance as Luke's turns, and a run the allowance
 refuses, or that fails, writes nothing. Nothing it reads or answers is kept

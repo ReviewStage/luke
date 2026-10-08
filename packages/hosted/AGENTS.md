@@ -65,11 +65,12 @@ model's own replay.
 
 ## A turn's events are a projection
 
-**The five run seams and nothing wider — a slow step began, a planning turn
-queued a question, every action settled, one sentence of the reply, the turn
-ended. No tool part, no reasoning, no message.** A queued question is read off
-its `queue_question` call's input, the one call whose words are told, because
-that call exists only to hand the voice its words. The kinds are the brain's own run-stream words spelled here because
+**The six run seams and nothing wider — a slow step began, a planning turn
+queued a question, a planning turn showed pseudocode, every action settled,
+one sentence of the reply, the turn ended. No tool part, no reasoning, no
+message.** A queued question is read off its `queue_question` call's input,
+and shown pseudocode off its `show_pseudocode` call's, the two calls whose
+words are told, because each exists only to hand its words on. The kinds are the brain's own run-stream words spelled here because
 this package cannot reach the brain; a test in the web app holds the two sets
 equal.
 

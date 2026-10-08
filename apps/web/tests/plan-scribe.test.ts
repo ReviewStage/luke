@@ -24,6 +24,8 @@ const RELAY_PLAN: NewPlan = {
 };
 
 const PROBLEM = "Only an admin can add someone to a workspace.";
+const ACCEPT_STEPS =
+  "1. Find the invite by its token\n2. If it has expired, refuse\n3. Add the membership";
 const OUTCOME = "A member invites a teammate by email.";
 
 const openPlan = Effect.gen(function* () {
@@ -67,6 +69,10 @@ const settledRead = <A, E, R>(read: Effect.Effect<A, E, R>, expected: (value: A)
 
 const savedBodyOnce = (userId: string, planId: string, expected: (body: string) => boolean) =>
   settledRead(savedBody(userId, planId), expected);
+
+/** The run event the live brain tells when the planning model shows pseudocode. */
+const shownPseudocode = (title: string, body: string) =>
+  ({ kind: LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN, runId: "ask-1", title, body }) as const;
 
 const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
@@ -346,5 +352,91 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         assert.equal(reports.length, 1);
       }),
     ),
+  );
+
+  it.effect(
+    "pseudocode the planning model shows is written into the plan at once, without waiting for the quiet",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe, drafts } = yield* scribeFor(userId, planId, []);
+
+          scribe.observeRun(shownPseudocode("Accepting an invite", ACCEPT_STEPS));
+          const body = yield* savedBodyOnce(userId, planId, (saved) =>
+            saved.includes("### Pseudocode"),
+          );
+
+          assert.ok(
+            body.includes(
+              `### Pseudocode\n\nAccepting an invite\n\n\`\`\`text\n${ACCEPT_STEPS}\n\`\`\`\n`,
+            ),
+          );
+          assert.equal(drafts.at(-1)?.document.body, body);
+          assert.ok(drafts.at(-1)?.savedAt !== undefined);
+        }),
+      ),
+  );
+
+  it.effect(
+    "steps holding backticks or a heading stay inside the pseudocode's fence, and a second showing replaces the first",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe } = yield* scribeFor(userId, planId, []);
+          const steps = "1. Read ```the token```\n## Decisions\n2. Done";
+
+          scribe.observeRun(shownPseudocode("First try", "1. Accept"));
+          yield* savedBodyOnce(userId, planId, (saved) => saved.includes("First try"));
+          scribe.observeRun(shownPseudocode("Second try", steps));
+          const body = yield* savedBodyOnce(userId, planId, (saved) =>
+            saved.includes("Second try"),
+          );
+
+          assert.equal(body.includes("First try"), false);
+          // The fence is a backtick longer than the steps' own run, and the real section follows it.
+          assert.ok(
+            body.includes(
+              `### Pseudocode\n\nSecond try\n\n\`\`\`\`text\n${steps}\n\`\`\`\`\n\n## Decisions\n`,
+            ),
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "a run that began before pseudocode was shown saves its words and keeps the pseudocode",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe, writing } = yield* scribeFor(userId, planId, [
+            { goal: { problem: PROBLEM } },
+          ]);
+
+          scribe.observe(heard("Only admins can add people.", 0, 1_000));
+          yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
+          yield* settledRead(
+            Effect.sync(() => writing.length),
+            (count) => count > 0,
+          );
+          scribe.observeRun(shownPseudocode("Accepting an invite", ACCEPT_STEPS));
+          for (let beat = 0; beat < 20; beat += 1) {
+            yield* Effect.andThen(
+              TestClock.adjust(Duration.millis(PLAN_SCRIBE.DRAFT_EVERY_MS)),
+              settle,
+            );
+          }
+
+          const body = yield* savedBodyOnce(
+            userId,
+            planId,
+            (saved) => saved.includes(PROBLEM) && saved.includes(ACCEPT_STEPS),
+          );
+          assert.ok(body.includes(PROBLEM));
+          assert.ok(body.includes(ACCEPT_STEPS));
+        }),
+      ),
   );
 });

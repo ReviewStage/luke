@@ -2,6 +2,7 @@ import { jsonSchemaGoldenRoot, jsonSchemaOf, settleJsonSchemaGolden } from "@sid
 import { test } from "vitest";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
+import { SHOW_PSEUDOCODE_TOOL } from "../server/hosted/show-pseudocode";
 
 /**
  * The input schemas the planning model is offered its public research
@@ -33,5 +34,13 @@ test("queue_question offers exactly a bounded question and recommendation, with 
     ROOT,
     "queue-question-tool-input",
     jsonSchemaOf(QUEUE_QUESTION_TOOL.inputSchema),
+  );
+});
+
+test("show_pseudocode offers exactly a bounded title and steps, with nothing else to carry", async () => {
+  await settleJsonSchemaGolden(
+    ROOT,
+    "show-pseudocode-tool-input",
+    jsonSchemaOf(SHOW_PSEUDOCODE_TOOL.inputSchema),
   );
 });

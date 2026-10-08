@@ -23,7 +23,9 @@ are not reopened here. The two that shape everything below:
 - **The model drives the workflow.** Question choice, agreement, corrections,
   and the final review live in the planning model's instructions, and the
   planning model never writes the document: it is handed the saved document
-  every turn, so Luke keeps talking while the notetaker writes.
+  every turn, so Luke keeps talking while the notetaker writes. The one thing
+  it puts in front of the developer is pseudocode (`show_pseudocode`,
+  "Pseudocode" below), which the notetaker writes into the document for it.
   The tab saves nothing of its own and decides nothing; it shows the saved
   document and the voice state.
 
@@ -180,7 +182,9 @@ research notes. Once the developer has been quiet for about a second, it makes
 one `gpt-5.6-luna` call over the saved document and what was said since its
 last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves the
 answer through `update_plan`. Its runs never overlap, so it is the plan's only writer, and a
-run that fails moves nothing forward.
+run that fails moves nothing forward. It also writes each pseudocode the
+planning model shows the moment it is shown ("Pseudocode" below), under the
+same permit as a run's save, so no two saves race.
 
 The notes type in while they are written. The call streams its answer, and
 each partial answer that reads under the template is merged and formatted
@@ -212,7 +216,7 @@ next turn.
 | Goal | `goal.problem`, `outcome` | The current problem and who it affects, and the observable improvement. |
 | Scope | `scope.included`, `excluded`, `constraints` | What is in, what is explicitly out, and the limits that apply (permissions, privacy, performance, compatibility). |
 | Rules | `rules` | Each rule as one sentence, with the Given/When/Then examples that pin it, more of them where a rule is ambiguous. |
-| Implementation | `implementation.changeMap`, `contracts`, `patterns`, `order` | Each path the change touches and what it gets there; new or changed types, schema, and signatures written as code, never function bodies; existing code to follow; and, only where it matters, the order steps must land in. |
+| Implementation | `implementation.changeMap`, `contracts`, `patterns`, `pseudocode`, `order` | Each path the change touches and what it gets there; new or changed types, schema, and signatures written as code, never function bodies; existing code to follow; pseudocode Luke showed, where logic's order or branches matter; and, only where it matters, the order steps must land in. |
 | Decisions | `decisions` | Each consequential choice, why, and the alternative rejected. |
 | Verification | `verification` | The end-to-end check that proves the change works, beyond the examples passing. |
 | Left to the agent | `leftToAgent` | Exactly which choices the implementing agent may make itself. |
@@ -223,8 +227,8 @@ next turn.
 - **Types.** An ordinary field is `null` or nonblank text; it is `null` only
   until it is first answered, since an update never clears it, and a core
   field renders it as "Unanswered" until then.
-  `implementation.order` and `dataAndMigration` are optional: the body leaves
-  them out while null. A rule is exactly its one-sentence `statement` and its
+  `implementation.pseudocode`, `implementation.order`, and `dataAndMigration`
+  are optional: the body leaves them out while null. A rule is exactly its one-sentence `statement` and its
   `examples`, null until one is agreed and rendering "No examples yet"; an
   example is exactly `given`, `when`, and `then`, each one line. `rules` is
   null until one is agreed. `openQuestions` is always a list, rendering "No
@@ -277,6 +281,28 @@ behavior, quality, risks, rollout, and steps were cut: the agent reads the
 current system from the code, and no agent-facing source asks for the rest.
 None of these validates these exact fields or a voice model; comparative
 evaluations are outside this work.
+
+### Pseudocode
+
+Some logic can't be checked by ear: the order of steps, a branch, a retry, a
+loop. When a decision turns on logic like that, the planning model calls
+`show_pseudocode` with a title and short plain steps
+(`apps/web/server/hosted/show-pseudocode.ts`), and queues a question that
+points at it. The call does nothing when it runs: like `queue_question`, its
+journaled input is told mid-turn as a `pseudocode_shown` event, and two
+things follow from it.
+
+- **The notetaker writes it into the plan** at once, without waiting for the
+  quiet, as the `implementation.pseudocode` field: the title, then the steps
+  in one fence longer than any run of backticks inside them. A new call
+  replaces what the field holds. The save goes out as a `plan.draft`, so the
+  Mac needs nothing new to draw it.
+- **The voice points at it.** Luke is told the title, never the steps, and
+  asks whether it matches what the developer means, naming steps by number.
+  Steps read aloud are what the developer could not follow in the first place.
+
+A correction by voice gets a new `show_pseudocode` call, so the planning
+model is the field's only author; the notetaker's own runs leave it alone.
 
 ### Microphone row and the panel's voice
 

@@ -32,13 +32,19 @@ import {
   Queue,
   Result,
   type Scope,
+  Semaphore,
   Stream,
 } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { SCRIBE_INSTRUCTIONS } from "../hosted/brain-host/planning.js";
 import { readPlan } from "../hosted/plan-store.js";
 import { spendHostedMeter } from "../hosted/quota.js";
-import { saveUpdate, UPDATE_PLAN_STATUS } from "../hosted/update-plan-tool.js";
+import { pseudocodeField, type ShownPseudocode } from "../hosted/show-pseudocode.js";
+import {
+  saveUpdate,
+  UPDATE_PLAN_STATUS,
+  type UpdatePlanResult,
+} from "../hosted/update-plan-tool.js";
 
 /**
  * plan-scribe.ts -- a planning call's notetaker: it listens to the call and writes the plan while Luke and the developer talk.
@@ -52,8 +58,11 @@ import { saveUpdate, UPDATE_PLAN_STATUS } from "../hosted/update-plan-tool.js";
  * changed through `saveUpdate`, the plan's one write; while the model writes, its partial
  * answer goes to the device as a draft of the plan, so the Plans tab types
  * the notes in as they are written. It is the plan's only writer and its
- * runs never overlap, one fiber reading the debounced stream in turn, so no
- * save races another. A run that fails, is refused, or saves nothing moves no
+ * runs never overlap, one fiber reading the debounced stream in turn. It
+ * also writes each pseudocode the planning model shows into the plan the
+ * moment it is shown, rather than at the next quiet, since the developer is
+ * told to look at it now; one permit holds that save and a run's apart, so
+ * no save races another. A run that fails, is refused, or saves nothing moves no
  * cursor, and the next run is handed those lines again. The scribe decides
  * nothing of the call: nothing it does is said aloud or reaches the voice.
  *
@@ -112,7 +121,7 @@ export interface PlanDraft {
 export interface PlanScribe {
   /** Hears one live event: a transcript fragment is noted, and the developer's words start the quiet over. */
   readonly observe: (event: LiveServerEvent) => void;
-  /** Hears one of the brain's run events, keeping its reply sentences as research notes. */
+  /** Hears one of the brain's run events: reply sentences are kept as research notes, and shown pseudocode is written into the plan. */
   readonly observeRun: (event: LiveBrainRunEvent) => void;
 }
 
@@ -149,6 +158,22 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
   /** Where the last run that landed stopped: the session-timeline instant heard through, and the notes read. */
   const cursor = { heardThrough: Number.NEGATIVE_INFINITY, notesRead: 0 };
   const heard = yield* Queue.unbounded<void>();
+  const shown = yield* Queue.unbounded<ShownPseudocode>();
+  const saving = (yield* Semaphore.make(1)).withPermits(1);
+  /** The document as last saved here, so a run that breaks off restores what stands rather than what it began from. */
+  const lastSaved = { document: Option.none<PlanDocument>() };
+
+  /** Sends a save that landed to the device, or reports why it did not; whether it landed. */
+  const announced = (saved: UpdatePlanResult, failure: string) =>
+    Effect.sync(() => {
+      if (saved.status !== UPDATE_PLAN_STATUS.SAVED) {
+        options.report(`${failure}: ${saved.reason}`);
+        return false;
+      }
+      lastSaved.document = Option.some(saved.document);
+      options.onDraft?.({ document: saved.document, savedAt: saved.savedAt });
+      return true;
+    });
 
   /** The model call's failure, its words bounded for the report. */
   const modelError = (failed: Error | string) =>
@@ -259,16 +284,11 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       }
       // An answer naming no field is the model saying nothing new was said.
       if (Object.keys(output.success).length > 0) {
-        const saved = yield* saveUpdate(
-          { userId: options.userId, planId: options.planId, header },
-          output.success,
+        const saved = yield* saving(
+          saveUpdate({ userId: options.userId, planId: options.planId, header }, output.success),
         );
-        if (saved.status !== UPDATE_PLAN_STATUS.SAVED) {
-          options.report(`The plan's notetaker could not save: ${saved.reason}`);
-          return;
-        }
+        if (!(yield* announced(saved, "The plan's notetaker could not save"))) return;
         drafted.landed = true;
-        options.onDraft?.({ document: saved.document, savedAt: saved.savedAt });
       }
       cursor.heardThrough = heardThrough;
       cursor.notesRead = notesRead;
@@ -278,7 +298,9 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       landed,
       Effect.sync(() => {
         if (drafted.at > Number.NEGATIVE_INFINITY && !drafted.landed) {
-          options.onDraft?.({ document: plan.document });
+          options.onDraft?.({
+            document: Option.getOrElse(lastSaved.document, () => plan.document),
+          });
         }
       }),
     );
@@ -298,6 +320,32 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
     Stream.runForEach(() => run),
     Effect.forkScoped,
   );
+
+  /** Writes one shown pseudocode into the plan's Pseudocode field, replacing what it held. */
+  const show = (pseudocode: ShownPseudocode) =>
+    Effect.gen(function* () {
+      const stored = yield* readPlan(options.userId, options.planId);
+      if (Option.isNone(stored)) return;
+      const binding = {
+        userId: options.userId,
+        planId: options.planId,
+        header: { name: stored.value.plan.name },
+      };
+      const update = { implementation: { pseudocode: pseudocodeField(pseudocode) } };
+      const saved = yield* saving(saveUpdate(binding, update));
+      yield* announced(saved, "The plan's notetaker could not write the pseudocode");
+    }).pipe(
+      Effect.provideService(SqlClient.SqlClient, sql),
+      Effect.catchCause((cause) =>
+        Effect.sync(() =>
+          options.report(
+            `The plan's notetaker could not write the pseudocode: ${Cause.pretty(cause)}`,
+          ),
+        ),
+      ),
+    );
+
+  yield* Stream.fromQueue(shown).pipe(Stream.runForEach(show), Effect.forkScoped);
 
   return {
     observe: (event) => {
@@ -321,6 +369,9 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
     },
     observeRun: (event) => {
       if (event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE) notes.push(event.sentence);
+      if (event.kind === LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN) {
+        Queue.offerUnsafe(shown, { title: event.title, body: event.body });
+      }
     },
   };
 });

@@ -15,6 +15,7 @@ import {
 } from "../public-research.js";
 import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL, runInRepository } from "../repository-shell.js";
+import { runShowPseudocode, SHOW_PSEUDOCODE_TOOL } from "../show-pseudocode.js";
 import type { PlanDocumentBinding } from "../update-plan-tool.js";
 import type { HostedToolDeclaration } from "./tools.js";
 
@@ -58,7 +59,9 @@ import type { HostedToolDeclaration } from "./tools.js";
  * developer who came with a rough idea was pressed for decisions they had no
  * basis to make; an unsure answer now becomes concrete options to choose
  * from, and a recommendation taken as an assumption once there is no
- * preference.
+ * preference. Note that "Showing pseudocode" is ours as well, because a
+ * developer asked to see pseudocode while planning: logic heard aloud cannot
+ * be checked, so the model shows it in the plan and Luke points at it.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -89,6 +92,10 @@ Don't assume the user arrives knowing what to build. They may bring a finished d
 
 When the user is unsure, or answers "I don't know", don't press them for an answer. Queue the same decision again as concrete options instead: two or three directions grounded in what you found in the code, with the one you recommend and why. If they still have no preference, take your recommendation as a working assumption and move on. Never mistake a vague answer for a decision: a direction is settled only once the user has agreed to it.
 
+### Showing pseudocode
+
+Some logic is hard to agree on by ear: the order of steps, branches, retries, a loop. When a decision turns on logic like that, show it with show_pseudocode so the user can read it in the plan while Luke asks about it, then queue a question that points at it, such as "Does step 3 match what you mean?". Keep it to short plain steps, numbered where the user will refer to one, never real code. After a correction, show the pseudocode again with the change. Never put pseudocode in your return: Luke would read it aloud.
+
 ### Facts and decisions
 
 Finding _facts_ is your job, never the user's. Don't ask the user for anything you could look up yourself. Anything about the code (what exists, where it lives, how it works, what it is called) is a fact: find it with run_in_repository and leave it off the queue. The _decisions_ are the user's: put each to them and wait.
@@ -109,6 +116,7 @@ Once it is, queue nothing more: any question Luke still holds is moot. Open your
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
+- show_pseudocode puts pseudocode in the plan's Pseudocode field for the user to read; a new call replaces it.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet.
 
@@ -134,6 +142,7 @@ You are handed the saved document, the call's latest lines, and Luke's research 
 - Send only the fields that change. A field left out keeps its saved value, and so does a field sent null: nothing you send erases an answer, and a correction rewrites the field. A list (rules, open questions, assumptions) is sent whole when any of it changes, each rule with all its examples.
 - When you send a field, copy every line and bullet you are not changing exactly as it stands in the saved document, in the same order, so only what changed differs.
 - Keep exact names from Luke's research notes: file paths, functions, tables, commands.
+- Leave implementation.pseudocode out: Luke writes it himself, and shows it again when the developer changes a step.
 - Write each answer as a Markdown bullet list, one point per bullet and a line or two each, so the plan can be skimmed. Use a sentence of prose only where the whole answer is one short point.
 - Keep each field's words as tight as a good design document's.
 - When the latest lines change nothing, answer an empty object.
@@ -193,7 +202,8 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient;
 /**
  * The tools a planning turn is offered, in the order the model reads them.
  * None writes the plan, which is the notetaker's; `queue_question` hands the
- * voice a question mid-turn (`queue-question.ts`); `run_in_repository` runs a
+ * voice a question mid-turn (`queue-question.ts`); `show_pseudocode` hands
+ * the notetaker pseudocode to write into the plan (`show-pseudocode.ts`); `run_in_repository` runs a
  * command in the plan's folder on the developer's Mac, under the same
  * binding; the public search and page read (`public-research.ts`)
  * answer what the repository cannot. Every read's result goes back to the
@@ -203,6 +213,10 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...QUEUE_QUESTION_TOOL,
     run: (_call, input) => Effect.succeed(runQueueQuestion(input)),
+  },
+  {
+    ...SHOW_PSEUDOCODE_TOOL,
+    run: (_call, input) => Effect.succeed(runShowPseudocode(input)),
   },
   {
     ...RUN_IN_REPOSITORY_TOOL,

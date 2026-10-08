@@ -87,6 +87,7 @@ export const HOSTED_ASK_REFUSAL_NOTE = {
 const RUN_EVENT_OF_TURN_EVENT = {
   [TURN_EVENT_KIND.SLOW_STEP]: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
   [TURN_EVENT_KIND.QUESTION_QUEUED]: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+  [TURN_EVENT_KIND.PSEUDOCODE_SHOWN]: LIVE_BRAIN_RUN_EVENT.PSEUDOCODE_SHOWN,
   [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
   [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
   [TURN_EVENT_KIND.ENDED]: LIVE_BRAIN_RUN_EVENT.ENDED,
@@ -109,6 +110,13 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
         runId,
         question: event.question,
         recommendation: event.recommendation,
+      };
+    case TURN_EVENT_KIND.PSEUDOCODE_SHOWN:
+      return {
+        kind: RUN_EVENT_OF_TURN_EVENT[event.kind],
+        runId,
+        title: event.title,
+        body: event.body,
       };
     case TURN_EVENT_KIND.ACTIONS_SETTLED:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId };

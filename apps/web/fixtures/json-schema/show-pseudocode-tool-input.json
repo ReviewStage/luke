@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "What the pseudocode shows, in a few words, such as \"Accepting an invite\"."
+    },
+    "body": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "The steps as plain pseudocode, one step a line, indented under the step that holds them, numbered where the developer will refer to a step. Not real code and no fences."
+    }
+  },
+  "required": [
+    "title",
+    "body"
+  ],
+  "additionalProperties": false
+}

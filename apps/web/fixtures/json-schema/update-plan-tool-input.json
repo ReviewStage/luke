@@ -214,6 +214,19 @@
           ],
           "description": "Existing code to follow, by path, and what to copy from it. Leave out unless the latest lines change it."
         },
+        "pseudocode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Pseudocode Luke showed the developer, for logic whose order or branches matter. Written by Luke's own tool; left out of the document while absent. Leave out unless the latest lines change it."
+        },
         "order": {
           "anyOf": [
             {

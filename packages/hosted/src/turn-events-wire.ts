@@ -6,9 +6,10 @@ import { wireUuidSchema, writtenText } from "./service-wire.js";
 /**
  * The turn event stream: what a client that just asked a turn hears of it
  * while it runs, as Server-Sent Events over `GET /api/brain/turns/{id}/events`.
- * The four kinds are the run seams the live session service consumes — a slow
- * step began, every action settled, one sentence of the reply, the turn ended
- * — and nothing wider: the stream carries no tool part, no reasoning, and no
+ * The kinds are the run seams the live session service consumes — a slow
+ * step began, a planning question was queued, pseudocode was shown, every
+ * action settled, one sentence of the reply, the turn ended — and nothing
+ * wider: the stream carries no tool part, no reasoning, and no
  * message, only what a voice needs to speak commentary while the turn runs.
  * Each event is numbered from one inside its turn, and the number is the
  * frame's `id`, so a client that lost its connection attaches again with the
@@ -37,6 +38,8 @@ export const TURN_EVENT_KIND = {
   SLOW_STEP: "slow_step",
   /** A planning turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
   QUESTION_QUEUED: "question_queued",
+  /** A planning turn put pseudocode in front of the developer to align on; told as the call is journaled, before the turn ends. */
+  PSEUDOCODE_SHOWN: "pseudocode_shown",
   /** Every action the turn dispatched has its result on the record; the reply's sentences follow. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the reply, in order, after the actions settled. */
@@ -85,6 +88,11 @@ export type TurnEventBody =
       readonly question: string;
       readonly recommendation: string;
     }
+  | {
+      readonly kind: typeof TURN_EVENT_KIND.PSEUDOCODE_SHOWN;
+      readonly title: string;
+      readonly body: string;
+    }
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };
@@ -107,6 +115,12 @@ export const turnEventSchema = EffectSchema.Union([
     kind: EffectSchema.Literal(TURN_EVENT_KIND.QUESTION_QUEUED),
     question: writtenText,
     recommendation: writtenText,
+  }),
+  EffectSchema.Struct({
+    ...eventBase,
+    kind: EffectSchema.Literal(TURN_EVENT_KIND.PSEUDOCODE_SHOWN),
+    title: writtenText,
+    body: writtenText,
   }),
   EffectSchema.Struct({
     ...eventBase,

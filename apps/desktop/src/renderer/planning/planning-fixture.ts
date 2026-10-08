@@ -20,9 +20,9 @@ import type { VoiceView } from "#shared/messages/voice-view";
 
 /**
  * The reference journey's plan partway through its conversation: the goal,
- * two rules with their examples, the change map, and a decision settled, an
- * example still without its outcome, and everything else unanswered, as the
- * fixed template shows a draft.
+ * two rules with their examples, the change map, the pseudocode Luke showed,
+ * and a decision settled, an example still without its outcome, and
+ * everything else unanswered, as the fixed template shows a draft.
  */
 const FIXTURE_UPDATE: FullPlanUpdate = {
   ...EMPTY_PLAN_UPDATE,
@@ -61,6 +61,15 @@ const FIXTURE_UPDATE: FullPlanUpdate = {
     changeMap:
       "- `src/db/schema/memberships.ts`: a `pending` state.\n" +
       "- `src/members/invite.ts`: new, sending and accepting an invite.",
+    pseudocode:
+      "Accepting an invite\n\n" +
+      "```text\n" +
+      "1. Find the membership by the link's token\n" +
+      "2. If it is not pending, or older than 7 days:\n" +
+      '     show "This invite is no longer valid" and stop\n' +
+      "3. Set its state to active\n" +
+      "4. Sign the teammate in to the workspace\n" +
+      "```",
   },
   decisions:
     "Model an invite as a `memberships` row with `state = pending`. Why: removal covers " +

@@ -59,6 +59,7 @@ export const PLAN_HEADING = {
   CHANGE_MAP: "Change map",
   CONTRACTS: "Contracts",
   PATTERNS: "Patterns to follow",
+  PSEUDOCODE: "Pseudocode",
   ORDER: "Order",
   DECISIONS: "Decisions",
   VERIFICATION: "Verification",
@@ -160,6 +161,13 @@ export const planFieldsSchema = EffectSchema.Struct({
         "fenced blocks against the plan's commit. Signatures only, never function bodies.",
     ),
     patterns: answer("Existing code to follow, by path, and what to copy from it."),
+    // Note that the key may be missing, because plans saved before it existed hold none.
+    pseudocode: EffectSchema.optionalKey(
+      answer(
+        "Pseudocode Luke showed the developer, for logic whose order or branches matter. " +
+          "Written by Luke's own tool; left out of the document while absent.",
+      ),
+    ),
     order: answer(
       "Only where one step must land before another: the steps in order and why. Left out of " +
         "the document while null.",
@@ -434,6 +442,7 @@ export function planBody(header: PlanHeader, fields: PlanFields): string {
       field(PLAN_HEADING.CHANGE_MAP, answerBlock(implementation.changeMap)),
       field(PLAN_HEADING.CONTRACTS, answerBlock(implementation.contracts)),
       field(PLAN_HEADING.PATTERNS, answerBlock(implementation.patterns)),
+      ...optionalField(PLAN_HEADING.PSEUDOCODE, implementation.pseudocode ?? null),
       ...optionalField(PLAN_HEADING.ORDER, implementation.order),
     ]),
     section(PLAN_HEADING.DECISIONS, [answerBlock(fields.decisions)]),
