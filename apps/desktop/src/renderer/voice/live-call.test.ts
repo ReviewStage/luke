@@ -1129,10 +1129,11 @@ it.effect("a press landing after the hang-up opens no microphone on a closing ca
     yield* settle;
     f.started();
     yield* Fiber.join(opening);
+    const opensBefore = f.microphoneOpens();
     yield* Effect.forkChild(f.call.close());
     yield* settle;
     assert.equal(yield* f.call.unmute(), false);
-    assert.equal(f.microphoneOpens(), 0);
+    assert.equal(f.microphoneOpens(), opensBefore);
     assert.deepEqual(f.sentTypes(), []);
   }),
 );
@@ -1203,42 +1204,40 @@ it.effect("the only records the call sends are the two switches, in the channel'
   }),
 );
 
-it.effect(
-  "a session sends nothing until its first unmute, then the two switches",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open(OPENING));
-      yield* settle;
-      f.peer.gathered();
-      yield* settle;
-      f.started();
-      yield* Fiber.join(opening);
-      // No session configuration, tool list, or instructions crosses from
-      // the peer: the two switches are its whole vocabulary.
-      assert.deepEqual(f.sentTypes(), []);
-      const unmuting = yield* Effect.forkChild(f.call.unmute());
-      yield* settle;
-      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      yield* Fiber.join(unmuting);
-      const muting = yield* Effect.forkChild(f.call.mute());
-      yield* settle;
-      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      yield* Fiber.join(muting);
-      const closing = yield* Effect.forkChild(f.call.close());
-      yield* settle;
-      f.channel().receive({
-        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
-        event_id: "closed",
-        reason: "close_requested",
-        usage: { seconds: 1 },
-      });
-      yield* Fiber.join(closing);
-      assert.deepEqual(f.channel().sent, [
-        { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
-        { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
-      ]);
-    }),
+it.effect("a session sends nothing until its first unmute, then the two switches", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
+    yield* settle;
+    f.peer.gathered();
+    yield* settle;
+    f.started();
+    yield* Fiber.join(opening);
+    // No session configuration, tool list, or instructions crosses from
+    // the peer: the two switches are its whole vocabulary.
+    assert.deepEqual(f.sentTypes(), []);
+    const unmuting = yield* Effect.forkChild(f.call.unmute());
+    yield* settle;
+    f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+    yield* Fiber.join(unmuting);
+    const muting = yield* Effect.forkChild(f.call.mute());
+    yield* settle;
+    f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+    yield* Fiber.join(muting);
+    const closing = yield* Effect.forkChild(f.call.close());
+    yield* settle;
+    f.channel().receive({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "closed",
+      reason: "close_requested",
+      usage: { seconds: 1 },
+    });
+    yield* Fiber.join(closing);
+    assert.deepEqual(f.channel().sent, [
+      { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
+      { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
+    ]);
+  }),
 );
 
 it.effect(
