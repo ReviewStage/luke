@@ -26,6 +26,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     live: false,
     planView: { shown: PLAN_VIEW.DOCUMENT, onChoose: ignore },
     board: undefined,
+    code: undefined,
     onSelect: ignore,
     onChooseFolder: ignore,
     onRetryList: ignore,

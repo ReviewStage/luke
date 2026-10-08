@@ -1,4 +1,5 @@
 import { CheckIcon, CloseIcon, CopyIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
+import { CodePane } from "../planning/code-pane";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanBody } from "../planning/plan-body";
@@ -149,10 +150,12 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
       {plans.planView.shown === PLAN_VIEW.BOARD ? (
         <section className="desktop-document desktop-board">
           <PlanBoard planId={plan.id} board={plans.board} />
+          {plans.code === undefined ? null : <CodePane code={plans.code} />}
         </section>
       ) : (
         <section className="desktop-document" aria-label={plan.name}>
           <PlanBody plan={plan} live={plans.live} />
+          {plans.code === undefined ? null : <CodePane code={plans.code} />}
         </section>
       )}
       <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>

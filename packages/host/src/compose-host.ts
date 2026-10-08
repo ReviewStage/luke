@@ -4,7 +4,12 @@ import {
   type GatewayMethodTable,
   type GatewayShutdownSteps,
 } from "@sidecar/gateway";
-import { HostedPlanClient, type PlanActivityFrame, type PlanDraftFrame } from "@sidecar/hosted";
+import {
+  HostedPlanClient,
+  type PlanActivityFrame,
+  type PlanCodeFrame,
+  type PlanDraftFrame,
+} from "@sidecar/hosted";
 import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
@@ -84,12 +89,16 @@ export const hostAssemblyLayer: Layer.Layer<
     let activePlanId: () => string | undefined = () => undefined;
     let showPlanDraft: (draft: PlanDraftFrame) => void = () => undefined;
     let showPlanActivity: (activity: PlanActivityFrame) => void = () => undefined;
+    let planCallEnded: (planId: string) => void = () => undefined;
+    let showPlanCode: (code: PlanCodeFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
       activePlanId: () => activePlanId(),
       showPlanDraft: (draft) => showPlanDraft(draft),
       showPlanActivity: (activity) => showPlanActivity(activity),
+      planCallEnded: (planId) => planCallEnded(planId),
+      showPlanCode: (code) => showPlanCode(code),
     });
     const planning = yield* composePlanning({
       kernel,
@@ -104,6 +113,8 @@ export const hostAssemblyLayer: Layer.Layer<
     activePlanId = planning.activePlanId;
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
+    planCallEnded = planning.callEnded;
+    showPlanCode = (code) => planning.showCode(code.planId, code.ref);
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch

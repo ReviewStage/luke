@@ -1,5 +1,5 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
+import { PLANNING_READ, type PlanCode, type PlanningView } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -62,6 +62,8 @@ export interface PlansControl {
   planView: { shown: PlanView; onChoose: (view: PlanView) => void };
   /** The open plan's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
+  /** The code Luke has on screen, drawn only while the open plan's call is in progress. */
+  code: PlanCode | undefined;
   onSelect: (planId: string) => void;
   /** Chooses the open plan's folder on this Mac again, through the folder picker. */
   onChooseFolder: () => void;
@@ -178,6 +180,9 @@ export function usePlansTab(input: {
     if (microphone.press === MICROPHONE_PRESS.TALK) tell(ACT_KIND.PLANNING_TALK);
   };
 
+  // The code pane stands for the call alone; a fixture's for its drawn call.
+  const codeShown = live || fixture !== undefined;
+
   // A cancelled picker keeps whatever folder the plan had.
   const chooseFolder = () => {
     const planId = planning.activePlanId;
@@ -239,6 +244,7 @@ export function usePlansTab(input: {
       onChoose: setPlanView,
     },
     board: planning.board,
+    code: codeShown ? planning.code : undefined,
     onSelect: select,
     onChooseFolder: chooseFolder,
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),

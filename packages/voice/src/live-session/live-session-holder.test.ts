@@ -6,7 +6,7 @@ import {
   LIVE_TRANSPORT_STATE,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
-import { type PlanActivityFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import { type PlanActivityFrame, type PlanCodeFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import {
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
@@ -111,6 +111,12 @@ interface Fixture {
   activity: PlanActivityFrame[];
   /** The service's activity frame, as the source's door would deliver it. */
   tellActivity(activity: PlanActivityFrame): void;
+  /** Every code frame the holder told its caller, in order. */
+  code: PlanCodeFrame[];
+  /** The service's code frame, as the source's door would deliver it. */
+  tellCode(code: PlanCodeFrame): void;
+  /** Every plan whose call the holder told its caller ended, in order. */
+  callsEnded: string[];
   created: number;
   sourceAvailable: boolean;
   /** Whether the source opens the doors for the idle report and the stop, as the hosted source does and the keyed one does not. */
@@ -128,6 +134,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const reports: boolean[] = [];
     const activity: PlanActivityFrame[] = [];
     let activityListener: ((activity: PlanActivityFrame) => void) | undefined;
+    const code: PlanCodeFrame[] = [];
+    let codeListener: ((code: PlanCodeFrame) => void) | undefined;
+    const callsEnded: string[] = [];
     const state = {
       sourceAvailable: true,
       reportsActivity: true,
@@ -159,6 +168,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   onPlanActivity: (listener: (activity: PlanActivityFrame) => void) => {
                     activityListener = listener;
                   },
+                  onPlanCode: (listener: (code: PlanCodeFrame) => void) => {
+                    codeListener = listener;
+                  },
                 }
               : undefined),
           };
@@ -174,6 +186,12 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       emit: (change) => changes.push(change),
       onPlanActivity: (word) => {
         activity.push(word);
+      },
+      onPlanCode: (frame) => {
+        code.push(frame);
+      },
+      onPlanCallEnded: (planId) => {
+        callsEnded.push(planId);
       },
       onSessionCreated: () => {
         state.created += 1;
@@ -201,6 +219,11 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       tellActivity: (word) => {
         activityListener?.(word);
       },
+      code,
+      tellCode: (frame) => {
+        codeListener?.(frame);
+      },
+      callsEnded,
       get reportsActivity() {
         return state.reportsActivity;
       },
@@ -592,6 +615,36 @@ it.effect(
       assert.equal(yield* Fiber.join(creating), undefined);
       assert.deepEqual(f.plans, [BILLING_PLAN]);
       assert.equal(f.holder.sessionStands(), false);
+    }),
+);
+
+it.effect(
+  "a planning call passes on the code Luke shows about its own plan, drops code about another, and tells its end so the code goes with it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+
+      const shown: PlanCodeFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_CODE,
+        planId: INVITES_PLAN,
+        ref: { path: "src/invite.ts", startLine: 3, endLine: 5 },
+      };
+      f.tellCode(shown);
+      f.tellCode({ ...shown, planId: BILLING_PLAN });
+      assert.deepEqual(f.code, [shown]);
+
+      sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 4);
+      yield* settle();
+      assert.deepEqual(f.callsEnded, [INVITES_PLAN]);
+      // Code arriving after the call ended reaches nobody.
+      f.tellCode(shown);
+      assert.equal(f.code.length, 1);
     }),
 );
 
