@@ -48,19 +48,6 @@ const SETTINGS_FIELD = {
 } as const;
 
 /**
- * What earlier builds kept in this file and this build reads no longer: a
- * provider's API key, a calendar's grant and choices, and the account a key
- * was synced for. `retireStoredSecrets` writes the file once without them, so
- * a secret nothing reads does not stay on disk.
- */
-const RETIRED_SETTINGS_FIELDS: readonly string[] = [
-  "apiKeys",
-  "calendarAccounts",
-  "appleCalendar",
-  "vaultSyncAccount",
-];
-
-/**
  * A credential is only ever written through OS-provided encryption. Electron's
  * `safeStorage` satisfies this on macOS by deriving its key from the Keychain.
  *
@@ -109,7 +96,8 @@ export interface SettingsStoreOptions {
  * The settings file is read as a `Schema` whose every field is a total
  * reader: what a field cannot read is that field's fallback, never a refused
  * file, because a file this build half-understands still carries the
- * account an older or newer build wrote, and the next write must not lose it. The one refusal is a file whose top level is not an object, which
+ * account an older or newer build wrote, and the next write must not lose it.
+ * The one refusal is a file whose top level is not an object, which
  * `parsePersistedSettingsEither` below answers as `SettingsParseRefusal`. No
  * model is ever shown this record, so the node a reader declares is a
  * placeholder and nothing draws it.
@@ -299,9 +287,9 @@ function storedAccountPreferencesSync(
  * The settings file's record: the version and the keys every file carries,
  * the sections a file holds only while something stands in them, and every
  * stored setting. Read by `parsePersistedSettingsEither` and written by
- * `#write`; a key beside these is dropped on the next write, as it always
- * was. `settledPersistedSettings` below is the rule between two fields no
- * one field's reader can hold.
+ * `#write`; a key beside these is carried through every write as the file
+ * held it (`carriedSettingsFields`). `settledPersistedSettings` below is the
+ * rule between two fields no one field's reader can hold.
  */
 const PersistedSettingsSchema = Schema.Struct({
   [SETTINGS_FIELD.VERSION]: settingsField((value) =>
@@ -347,13 +335,22 @@ function settledPersistedSettings(persisted: PersistedSettings): PersistedSettin
   };
 }
 
-/** Whether the file's own text still holds a field only an earlier build read. */
-function holdsRetiredFields(source: string): boolean {
+const DECLARED_SETTINGS_FIELDS: ReadonlySet<string> = new Set(
+  Object.keys(PersistedSettingsSchema.fields),
+);
+
+/**
+ * Every top-level key of the file this build's record does not declare, as
+ * the file holds it. Another build's keys, credentials, and choices are
+ * written back unchanged and never decrypted, so a build that reads less
+ * than an earlier one does not erase what the earlier one stored, and that
+ * build finds it again once it is back.
+ */
+function carriedSettingsFields(source: string): WireRecord {
   const parsed = Result.try(() => JSON.parse(source));
-  return (
-    Result.isSuccess(parsed) &&
-    isRecord(parsed.success) &&
-    RETIRED_SETTINGS_FIELDS.some((field) => Object.hasOwn(parsed.success, field))
+  if (Result.isFailure(parsed) || !isRecord(parsed.success)) return {};
+  return Object.fromEntries(
+    Object.entries(parsed.success).filter(([field]) => !DECLARED_SETTINGS_FIELDS.has(field)),
   );
 }
 
@@ -423,8 +420,8 @@ export class SettingsStore {
    */
   #held: PersistedSettings | undefined;
   readonly #reads = Semaphore.makeUnsafe(1);
-  /** Whether the file as last read still holds a field only an earlier build read. */
-  #retiredHeld = false;
+  /** The file's undeclared keys as last read, written back beside every write. */
+  #carried: WireRecord = {};
   /**
    * Runs one settings change at a time. Serializing only the file write is not
    * enough: two changes started together would both read the same file before
@@ -664,21 +661,6 @@ export class SettingsStore {
   }
 
   /**
-   * Writes the file once without the fields only an earlier build read, so a
-   * key or a grant it stored does not stay on disk with nothing reading it. A
-   * ciphertext is never decrypted to be dropped. Answers whether the file
-   * moved.
-   */
-  retireStoredSecrets(): Effect.Effect<boolean, PlatformError> {
-    return this.#mutate(
-      (persisted) => (this.#retiredHeld ? { ...persisted } : undefined),
-      () => {
-        this.#retiredHeld = false;
-      },
-    );
-  }
-
-  /**
    * Returns one group of preferences to its defaults in a single write, by
    * forgetting the choices rather than storing copies of the defaults: an
    * optional field is deleted the way its own clear deletes it, and a plain
@@ -707,30 +689,22 @@ export class SettingsStore {
   }
 
   /**
-   * The one settings write: serialize, load, mutate, stamp, write, cache, and
-   * invalidate. A mutator answering nothing means the stored value is already
-   * the one asked for, so nothing is written. It runs exactly once per call,
-   * so it may record what it decided for its caller to read afterwards.
-   *
-   * `invalidate` drops the caches the write made stale, and runs only after
-   * one actually landed: dropping a decrypted value a no-op change did not
-   * disturb would cost a Keychain read for nothing. Answers whether a write
-   * landed.
+   * The one settings write: serialize, load, mutate, stamp, write, and cache.
+   * A mutator answering nothing means the stored value is already the one
+   * asked for, so nothing is written. It runs exactly once per call, so it
+   * may record what it decided for its caller to read afterwards.
    */
   #mutate(
     mutate: (persisted: PersistedSettings) => PersistedSettings | undefined,
-    invalidate?: () => void,
-  ): Effect.Effect<boolean, PlatformError> {
+  ): Effect.Effect<void, PlatformError> {
     return this.#writes.withPermits(1)(
       Effect.gen({ self: this }, function* () {
         const persisted = yield* this.#load();
         const mutated = mutate(persisted);
-        if (!mutated) return false;
+        if (!mutated) return;
         const next: PersistedSettings = { ...mutated, version: SETTINGS_FILE_VERSION };
         yield* this.#write(next);
         this.#held = next;
-        invalidate?.();
-        return true;
       }),
     );
   }
@@ -789,22 +763,27 @@ export class SettingsStore {
 
   #readPersisted(): Effect.Effect<PersistedSettings, PlatformError> {
     return Effect.map(this.#onFileSystem(readSettingsFileText(this.#directory())), (source) => {
+      this.#carried = {};
       if (source === undefined) return defaultPersistedSettings();
-      this.#retiredHeld = holdsRetiredFields(source);
       // A corrupt settings file is replaced by the next write rather than
       // failing app start, so a refusal here falls back to defaults exactly
-      // as an absent file does.
-      return Result.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings);
+      // as an absent file does, and carries nothing.
+      const parsed = parsePersistedSettingsEither(source);
+      if (Result.isFailure(parsed)) return defaultPersistedSettings();
+      this.#carried = carriedSettingsFields(source);
+      return parsed.success;
     });
   }
 
-  /** Only ever run inside `#mutate`'s gate, so writes cannot interleave. */
+  /**
+   * Only ever run inside `#mutate`'s gate, so writes cannot interleave. The
+   * carried keys never share a name with a declared one, so nothing this
+   * build writes is overridden by them.
+   */
   #write(persisted: PersistedSettings): Effect.Effect<void, PlatformError> {
+    const written = { ...encodePersistedSettings(persisted), ...this.#carried };
     return this.#onFileSystem(
-      writeSettingsFileAtomic(
-        this.#directory(),
-        `${JSON.stringify(encodePersistedSettings(persisted), undefined, 2)}\n`,
-      ),
+      writeSettingsFileAtomic(this.#directory(), `${JSON.stringify(written, undefined, 2)}\n`),
     );
   }
 

@@ -180,7 +180,6 @@ interface PromisedSettingsStore {
     accountEmail: string,
     preferences: AccountPreferences,
   ): Promise<boolean>;
-  retireStoredSecrets(): Promise<boolean>;
 }
 
 function awaitedStoreOf(
@@ -205,7 +204,6 @@ function awaitedStoreOf(
       awaited(store.accountPreferencesSyncBaseline(accountEmail)),
     setAccountPreferencesSyncBaseline: (accountEmail, preferences) =>
       awaited(store.setAccountPreferencesSyncBaseline(accountEmail, preferences)),
-    retireStoredSecrets: () => awaited(store.retireStoredSecrets()),
   };
 }
 
@@ -532,56 +530,63 @@ test("decides the Dock icon from the file alone, never the keychain", async (t) 
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
-test("retiring stored secrets drops what an earlier build kept and nothing else", async (t) => {
+/**
+ * A file as a build that kept provider keys, calendar grants, the vault's
+ * account, and preferences this build draws no row for wrote it.
+ */
+const EARLIER_BUILD_FIELDS = {
+  apiKeys: { conductor: sealed("conductor-key") },
+  calendarAccounts: [
+    { id: "dev@example.com", token: sealed("1//grant"), calendars: ["dev@example.com"] },
+  ],
+  appleCalendar: { calendars: ["home"] },
+  vaultSyncAccount: "developer@example.com",
+  announceSessions: false,
+  quietDuringMeetings: false,
+  showOnAllDisplays: true,
+  formFactor: "bubble",
+  sessionFilters: ["waiting"],
+} as const satisfies WireRecord;
+
+test("a write carries every field this build does not read as the file held it", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
-  // A file as a build that kept provider keys, calendar grants, and the
-  // vault's account wrote it, beside a choice and the account this build reads.
   await writeSettingsFile(directory, {
     version: 2,
-    apiKeys: { conductor: sealed("conductor-retired-key") },
-    calendarAccounts: [
-      { id: "dev@example.com", token: sealed("1//grant"), calendars: ["dev@example.com"] },
-    ],
-    appleCalendar: { calendars: ["home"] },
-    vaultSyncAccount: "developer@example.com",
+    ...EARLIER_BUILD_FIELDS,
     account: persistedAccount(),
     voiceCaptions: true,
   });
-  const cipher = countingCipher();
-  const store = storeIn(directory, { cipher });
-
-  assert.equal(await store.retireStoredSecrets(), true, "the file moved");
+  await storeIn(directory).set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await storeIn(directory).set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
 
   assert.deepEqual(
     JSON.parse(await readSettingsFile(directory)),
-    expectedPersistedSettings({ account: persistedAccount(), voiceCaptions: true }),
+    expectedPersistedSettings({
+      ...EARLIER_BUILD_FIELDS,
+      account: persistedAccount(),
+      voiceCaptions: true,
+      showInDock: true,
+      duckOtherMedia: false,
+    }),
   );
-  // A ciphertext is dropped as it stands, never opened to be dropped.
-  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
-  // Nothing left to drop is no write at all.
-  assert.equal(await store.retireStoredSecrets(), false);
-  const reopened = storeIn(directory);
-  assert.equal(await reopened.retireStoredSecrets(), false);
-  assert.deepEqual(await reopened.readAccount(), TEST_ACCOUNT);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceCaptions.field), true);
 });
 
-test("retiring stored secrets leaves a file that never held them as it was", async (t) => {
+test("a field this build clears stays cleared beside the fields it carries", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   await writeSettingsFile(directory, {
     version: 2,
+    ...EARLIER_BUILD_FIELDS,
     account: persistedAccount(),
-    voiceCaptions: true,
+    voice: LIVE_VOICE.MARIN,
   });
-  const before = await readSettingsFile(directory);
 
-  assert.equal(await storeIn(directory).retireStoredSecrets(), false);
-  assert.equal(await readSettingsFile(directory), before);
+  await storeIn(directory).clearAccount();
 
-  // A launch with no file yet creates none for this.
-  const empty = await temporaryDirectory(t, "luke-settings-");
-  assert.equal(await storeIn(empty).retireStoredSecrets(), false);
-  await assert.rejects(() => readSettingsFile(empty), /ENOENT/);
+  assert.deepEqual(
+    JSON.parse(await readSettingsFile(directory)),
+    expectedPersistedSettings(EARLIER_BUILD_FIELDS),
+  );
+  assert.equal(await storeIn(directory).readAccount(), undefined);
 });
 
 test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {
