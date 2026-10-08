@@ -77,7 +77,14 @@ export function planFoldersFile(
 /** The service's side of the plans, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
-  "list" | "open" | "create" | "delete" | "claimCommand" | "settleCommand" | "readBoard" | "saveBoard"
+  | "list"
+  | "open"
+  | "create"
+  | "delete"
+  | "claimCommand"
+  | "settleCommand"
+  | "readBoard"
+  | "saveBoard"
 >;
 
 export interface PlanningDependencies {
