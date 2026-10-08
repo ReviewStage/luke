@@ -75,7 +75,7 @@ body,
    takes the window at once and the sidebar slides off the left edge over it,
    on transform and opacity alone, so neither column re-wraps a line on the
    way. Unfolding is the same slide back in beside a column already narrowed.
-   Only the plans' shell folds, so Settings keeps its fixed page list. */
+   Only the plans' shell folds, so Settings always keeps its page list. */
 .desktop-shell[data-sidebar-collapsed] {
   overflow: hidden;
 }
@@ -964,6 +964,7 @@ body,
 }
 
 .settings-pages {
+  position: relative;
   display: flex;
   min-height: 0;
   flex-direction: column;
