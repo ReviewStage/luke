@@ -299,11 +299,19 @@ test("a turn cancelled after a sentence it released keeps none of its words, and
   const heard = await projected(target.userId, turnId);
   assert.deepEqual(
     heard.filter((event) => event.seq > 3),
-    [{ turnId, seq: UNANSWERED_TURN_END_SEQ, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.CANCELLED }],
+    [
+      {
+        turnId,
+        seq: UNANSWERED_TURN_END_SEQ,
+        kind: TURN_EVENT_KIND.ENDED,
+        end: TURN_END.CANCELLED,
+      },
+    ],
   );
-  assert.deepEqual(heard.filter((event) => event.seq <= 3), [
-    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
-  ]);
+  assert.deepEqual(
+    heard.filter((event) => event.seq <= 3),
+    [{ turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ }],
+  );
 });
 
 test("a cancelled turn and a failed one end without a settled mark or a sentence", async () => {

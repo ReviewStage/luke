@@ -229,7 +229,7 @@ export interface HostedLiveBrainOptions {
   readonly asks: AskSeams;
   /** The store the standing and the journal are read from, on the connection the socket's own fiber holds. */
   readonly store: Pick<HostedStore, "turns" | "messages">;
-  /** The writer a cancelled run's turn is stamped through, as the typed Stop stamps it. */
+  /** The writer a cancelled run's turn is stamped through, as every Stop stamps it. */
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
   readonly report: (message: string) => void;
   /** The follow's own bounds, narrowed by a test so a poll is milliseconds and the bound is reached inside a test. */
