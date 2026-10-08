@@ -8,9 +8,8 @@ import { Schema as EffectSchema, SchemaTransformation } from "effect";
  * wire module beside this one.
  *
  * Every declaration below is composed directly as an Effect `Schema` and
- * exported under its own name, the way `brain-contract.ts` states its
- * declarations: a caller reads one through `readEither` and shows it through
- * `emitJsonSchema`, both from `@sidecar/wire/effect`.
+ * exported under its own name: a caller reads one through `readEither` and
+ * shows it through `emitJsonSchema`, both from `@sidecar/wire/effect`.
  */
 
 /** Every refusal a hosted endpoint answers with, by its reason. */
@@ -44,22 +43,9 @@ export const HOSTED_API_ERROR = {
   PROMPT_TOO_LARGE: "prompt-too-large",
   /** A tool name the service's catalog does not register; no schema was selected. */
   UNKNOWN_TOOL: "unknown-tool",
-  /**
-   * A stored row this build cannot read back — parts that are not a
-   * message's, a registered tool's input its schema refuses — so the page it
-   * stands on was refused whole rather than answered without it; the answer
-   * names the row's conversation and sequence. A tool part naming a tool the
-   * catalog has retired is not this: the read drops the part and answers the
-   * row.
-   */
-  UNREADABLE_ROW: "unreadable-row",
   METHOD_NOT_ALLOWED: "method-not-allowed",
   /** The row the path names is not one this account holds; another account's and none at all read alike. */
   NOT_FOUND: "not-found",
-  /** The message stands and is the caller's, but it is not one of Luke's, and only Luke's words take a rating. */
-  NOT_RATEABLE: "not-rateable",
-  /** The turn the path names has no session running it, so there is nothing to stop; its record stands as it was. */
-  NOT_RUNNING: "not-running",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

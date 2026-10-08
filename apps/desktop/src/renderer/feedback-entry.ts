@@ -3,13 +3,12 @@ import type { FeedbackImage, FeedbackKind } from "@sidecar/feedback";
 import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "@sidecar/feedback";
 
 /**
- * A note to the founders being written, wherever the panel happens to be.
- * Like a credential entry, it is app state rather than field state: the
- * pointer leaving, the panel closing, or a visit to the sessions tab must not
- * discard words someone is in the middle of — only Cancel and a landed send
- * end an entry. Unlike a credential it carries no secret, so what it holds is
- * only ever the user's own words, their optional signature, and the
- * screenshots they chose.
+ * A note to the founders being written, wherever the panel happens to be. It
+ * is app state rather than field state: the pointer leaving, the panel
+ * closing, or a visit to the plans tab must not discard words someone is in
+ * the middle of — only Cancel and a landed send end an entry. It carries no
+ * secret, so what it holds is only ever the user's own words, their optional
+ * signature, and the screenshots they chose.
  */
 export interface FeedbackEntry {
   kind: FeedbackKind;
@@ -25,12 +24,6 @@ export interface FeedbackEntry {
   images: readonly FeedbackImage[];
   /** True while the note is being sent. */
   busy: boolean;
-  /**
-   * Whether the composer was last asked for from inside the panel. It is the
-   * difference between someone partway down the settings tab and a spoken ask,
-   * so it decides whether leaving the shape returns to the panel or nothing.
-   */
-  fromPanel: boolean;
   /** Why the last attempt was refused, if it was. */
   rejection?: string | undefined;
 }
@@ -38,8 +31,7 @@ export interface FeedbackEntry {
 /**
  * The one way to act on the note being written. The state lives above both of
  * its views — the settings section that offers it and the shape it is written
- * in — for the same reason a credential's does: a view can leave the screen,
- * and the entry must not go with it.
+ * in — because a view can leave the screen, and the entry must not go with it.
  */
 export interface FeedbackEntryControl {
   entry?: FeedbackEntry | undefined;
@@ -81,7 +73,6 @@ export function accountSignature(
 
 export function freshFeedbackEntry(
   kind: FeedbackKind,
-  fromPanel: boolean,
   signature?: FeedbackSignature,
 ): FeedbackEntry {
   return {
@@ -91,55 +82,36 @@ export function freshFeedbackEntry(
     email: signature?.email ?? "",
     images: [],
     busy: false,
-    fromPanel,
   };
 }
 
 /**
- * One request to open the composer, wherever it came from — the settings
- * section's buttons or a spoken ask carried through the same path.
- * `draft` is starting text for the note, and it is only ever words already
- * the user's: the section never sends one, the spoken tool's contract
- * forbids anything the user did not say, and the draft a thumbs down offers
- * quotes the rated message and the ask before it exactly as the thread drew
- * them on the user's own screen. `signature` is the
- * signed-in account's credit, and it seeds only a note that does not exist
- * yet: a note already there keeps its fields exactly as its author left
- * them, cleared ones included.
+ * One request to open the composer, from the settings section's buttons.
+ * `signature` is the signed-in account's credit, and it seeds only a note
+ * that does not exist yet: a note already there keeps its fields exactly as
+ * its author left them, cleared ones included.
  */
 export interface FeedbackOpenAsk {
   kind: FeedbackKind;
-  fromPanel: boolean;
-  draft?: string;
   signature?: FeedbackSignature | undefined;
 }
 
 /**
  * What opening the composer does to the note already there. A draft in
  * progress is never discarded by asking again: opening over a half-written
- * note brings that note back, only a note with nothing in it yet is
- * re-labelled to the kind that was just asked for, and starting text lands
- * only in that same empty note — words someone typed are never overwritten by
- * words someone said. A note mid-send belongs to the reply on its way back,
- * so it is not touched at all. Where leaving returns you follows the latest
- * ask, not the first. `drafted` reports whether the starting text was placed,
- * so a spoken open can say honestly what it found.
+ * note brings that note back, and only a note with nothing in it yet is
+ * re-labelled to the kind that was just asked for. A note mid-send belongs to
+ * the reply on its way back, so it is not touched at all, and nothing is
+ * answered.
  */
-export function openedFeedbackEntry(current: FeedbackEntry | undefined, ask: FeedbackOpenAsk) {
-  if (current?.busy)
-    return { drafted: false } satisfies { entry?: FeedbackEntry; drafted: boolean };
+export function openedFeedbackEntry(
+  current: FeedbackEntry | undefined,
+  ask: FeedbackOpenAsk,
+): FeedbackEntry | undefined {
+  if (current?.busy) return undefined;
   const blank = (current?.message ?? "").trim().length === 0;
-  const drafted = ask.draft !== undefined && blank;
-  const base = current ?? freshFeedbackEntry(ask.kind, ask.fromPanel, ask.signature);
-  return {
-    entry: {
-      ...base,
-      ...(blank ? { kind: ask.kind } : undefined),
-      ...(drafted && ask.draft !== undefined ? { message: ask.draft } : undefined),
-      fromPanel: ask.fromPanel,
-    },
-    drafted,
-  } satisfies { entry?: FeedbackEntry; drafted: boolean };
+  const base = current ?? freshFeedbackEntry(ask.kind, ask.signature);
+  return blank ? { ...base, kind: ask.kind } : base;
 }
 
 /**

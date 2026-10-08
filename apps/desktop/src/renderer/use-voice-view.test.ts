@@ -4,17 +4,12 @@ import { test } from "vitest";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import {
-  CLEAR_FAILED_REASON,
   fixtureVoice,
-  panelVoiceView,
   voiceActiveFor,
   voiceErrorToShow,
   voiceNoticeToShow,
 } from "./use-voice-view";
 import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice/voice-level-meter";
-
-const ASK_REFUSED = "My notes are full of asks whose endings I haven't managed to file yet.";
-const ASK_CONFLICTED = "That ask arrived under an id I already have for different words.";
 
 const NOBODY = { listening: false, lukeSpeaking: false };
 const LUKE = { listening: false, lukeSpeaking: true };
@@ -38,7 +33,6 @@ test("a panel that has heard nothing draws an idle voice with neither speaker", 
   assert.equal(IDLE_VOICE_VIEW.lukeSpeaking, false);
   assert.equal(IDLE_VOICE_VIEW.talkOpening, false);
   assert.equal(IDLE_VOICE_VIEW.lukeCaptions, undefined);
-  assert.deepEqual(IDLE_VOICE_VIEW.liveConversationLines, []);
 });
 
 test("a voice failure is drawn on the strip, but never over a speaker or a fixture", () => {
@@ -89,32 +83,6 @@ test("a notice yields to Luke's voice alone, because the developer's draws nothi
     undefined,
   );
   assert.equal(voiceNoticeToShow({ ...notice, fixtureSpeaking: true }), undefined);
-});
-
-test("the panel's own strip lines stand over the voice window's while they last, and otherwise the report is handed on whole", () => {
-  const reported = {
-    ...IDLE_VOICE_VIEW,
-    voiceError: "The voice service refused the call (status 401).",
-    voiceNotice: "Listening on the built-in microphone.",
-  };
-  assert.equal(
-    panelVoiceView(reported, { error: undefined, notice: undefined }),
-    reported,
-    "nothing of the panel's own leaves the report untouched",
-  );
-  const both = panelVoiceView(reported, {
-    error: CLEAR_FAILED_REASON,
-    notice: ASK_REFUSED,
-  });
-  assert.equal(both.voiceError, CLEAR_FAILED_REASON);
-  assert.equal(both.voiceNotice, ASK_REFUSED);
-  assert.equal(both.voiceStatus, reported.voiceStatus);
-  const noticeOnly = panelVoiceView(reported, {
-    error: undefined,
-    notice: ASK_CONFLICTED,
-  });
-  assert.equal(noticeOnly.voiceError, reported.voiceError, "a refusal displaces no fault");
-  assert.equal(noticeOnly.voiceNotice, ASK_CONFLICTED);
 });
 
 test("a quiet level lets the hangover run out from the last loud one, never past it", () => {

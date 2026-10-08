@@ -1,17 +1,12 @@
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { it } from "@effect/vitest";
-import { ACTION_REFUSAL } from "@sidecar/actions";
-import { GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
-import { ACTION_RESULT_STATUS, isRecord, isWireString } from "@sidecar/wire";
+import { GATEWAY_ERROR, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
+import { isRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Effect, Layer, Result } from "effect";
 import { hostAssemblyLayer } from "./compose-host.js";
 import { type Composer, DuplicateGatewayMethod, foldMethods } from "./composer.js";
 import { HostTag, hostStandingLayer } from "./effect/host.js";
-import { ONBOARDING_STATE_FILE } from "./onboarding-state.js";
-import { runModeFor } from "./run-mode.js";
 import { testKernelLayer } from "./testing/test-kernel.js";
 
 function stubComposer(methods: readonly GatewayMethod[]): Composer {
@@ -56,114 +51,17 @@ it.effect(
       yield* Effect.provide(
         Effect.gen(function* () {
           const host = yield* HostTag;
-          // The one method no composer owns: it reads six of them, so an answer
-          // proves the merge stood every concern up and linked their back-edges.
+          // The one method no composer owns: it reads several of them, so an
+          // answer proves the merge stood every concern up and linked their
+          // back-edges.
           const response = yield* host.gateway.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP);
           assert.ok(response.ok);
           assert.ok(isRecord(response.result));
-          assert.equal(response.result.calendarOnboardingOwed, false);
-          assert.equal(response.result.introductionOwed, false);
-          assert.equal(response.result.conductorKeyOnboardingOwed, false);
           assert.equal(response.result.voiceAvailable, false);
           const first = yield* host.drain({ deadlineMs: 0 });
           // A second drain is the quit arriving twice; it must answer the first outcome rather than throw.
           const second = yield* host.drain({ deadlineMs: 0 });
           assert.deepEqual(second, first);
-        }),
-        fixtureHostLayer(stateRoot),
-      );
-    }),
-);
-
-it.effect("onboarding stands down even where the record owes every step", (t) =>
-  Effect.gen(function* () {
-    const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
-    const at = "2026-10-05T12:00:00.000Z";
-    yield* Effect.promise(() =>
-      writeFile(
-        join(stateRoot, ONBOARDING_STATE_FILE),
-        JSON.stringify({
-          introductionRequiredAt: at,
-          conductorKeyOnboardingRequiredAt: at,
-          calendarOnboardingRequiredAt: at,
-        }),
-      ),
-    );
-    yield* Effect.provide(
-      Effect.gen(function* () {
-        const host = yield* HostTag;
-        const response = yield* host.gateway.call(GATEWAY_METHOD.ONBOARDING_STATE);
-        assert.ok(response.ok);
-        assert.deepEqual(response.result, {
-          calendarOnboardingOwed: false,
-          introductionOwed: false,
-          conductorKeyOnboardingOwed: false,
-        });
-        yield* host.drain({ deadlineMs: 0 });
-      }),
-      Layer.provide(
-        Layer.provide(hostStandingLayer, hostAssemblyLayer),
-        testKernelLayer({
-          stateRoot,
-          runMode: { ...runModeFor({ capture: false, fixture: true }), requiresAccount: true },
-        }),
-      ),
-    );
-  }),
-);
-
-it.effect("a cloud provider's key is refused signed out, and the store never held it", (t) =>
-  Effect.gen(function* () {
-    const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
-    yield* Effect.provide(
-      Effect.gen(function* () {
-        const host = yield* HostTag;
-        const response = yield* host.gateway.call(GATEWAY_METHOD.CREDENTIAL_SET_API_KEY, {
-          providerId: "conductor",
-          apiKey: "cnd_test_key_1234567890",
-        });
-        assert.ok(response.ok);
-        assert.ok(isRecord(response.result));
-        assert.equal(response.result.status, ACTION_RESULT_STATUS.REJECTED);
-        assert.ok(isWireString(response.result.reason));
-        assert.ok(isRecord(response.result.settings));
-        assert.ok(isRecord(response.result.settings.status));
-        assert.ok(isRecord(response.result.settings.status.credentialSources));
-        assert.equal(response.result.settings.status.credentialSources.conductor, "none");
-      }),
-      fixtureHostLayer(stateRoot),
-    );
-  }),
-);
-
-it.effect(
-  "a row's write reaches the host as a method and is refused for a session the roster does not hold",
-  (t) =>
-    Effect.gen(function* () {
-      const stateRoot = yield* Effect.promise(() => temporaryDirectory(t));
-      yield* Effect.provide(
-        Effect.gen(function* () {
-          const host = yield* HostTag;
-          const identity = { providerId: "conductor", providerSessionId: "chat-nobody-observed" };
-          const [sent, pressed] = yield* Effect.all(
-            [
-              host.gateway.call(GATEWAY_METHOD.SESSION_SEND_MESSAGE, { identity, text: "hello" }),
-              host.gateway.call(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL, {
-                identity,
-                controlId: "cancel-run",
-              }),
-            ],
-            { concurrency: "unbounded" },
-          );
-          // A fixture host observes nothing, so admission's own roster refusal is the
-          // answer for both writes: the method is wired, and nothing past admission ran.
-          for (const response of [sent, pressed]) {
-            assert.ok(response.ok);
-            assert.deepEqual(response.result, {
-              status: ACTION_RESULT_STATUS.REJECTED,
-              reason: ACTION_REFUSAL.NO_SESSION,
-            });
-          }
         }),
         fixtureHostLayer(stateRoot),
       );
@@ -179,18 +77,18 @@ it.effect(
         Effect.gen(function* () {
           const host = yield* HostTag;
           const sdp = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n";
-          const [aboutPlan, desk] = yield* Effect.all([
+          const [aboutPlan, aboutNothing] = yield* Effect.all([
             host.gateway.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, {
               sdp,
               planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
             }),
             host.gateway.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }),
           ]);
-          // A fixture host stands no voice source, so a desk offer is refused for want of a
-          // session; the planning offer is refused for its plan first, and never reaches that.
-          assert.ok(!aboutPlan.ok && !desk.ok);
-          assert.notEqual(aboutPlan.error.message, desk.error.message);
+          // The planning offer is refused for its plan; an offer about no plan
+          // is not a call this host creates at all.
+          assert.ok(!aboutPlan.ok && !aboutNothing.ok);
           assert.match(aboutPlan.error.message, /plan/);
+          assert.equal(aboutNothing.error.code, GATEWAY_ERROR.INVALID_PARAMS);
         }),
         fixtureHostLayer(stateRoot),
       );

@@ -33,12 +33,6 @@ done
 rsvg-convert -w 660 -h 400 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background.png
 rsvg-convert -w 1320 -h 800 dmg/luke-dmg-background.svg -o dmg/luke-dmg-background@2x.png
 rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../apps/web/public/luke-og-card.png
-appiconset=../../apps/ios/Luke/Assets.xcassets/AppIcon.appiconset
-rsvg-convert -w 1024 -h 1024 icon/luke-icon-ios-light.svg -o $appiconset/AppIcon.png
-rsvg-convert -w 1024 -h 1024 icon/luke-icon-ios-dark.svg -o $appiconset/AppIcon-Dark.png
-rsvg-convert -w 1024 -h 1024 icon/luke-icon-ios-tinted.svg -o $appiconset/AppIcon-Tinted.png
-watchappiconset=../../apps/ios/LukeWatch/Assets.xcassets/AppIcon.appiconset
-rsvg-convert -w 1024 -h 1024 icon/luke-icon-ios-dark.svg -o $watchappiconset/AppIcon.png
 ```
 
 ## In the app
@@ -47,7 +41,7 @@ rsvg-convert -w 1024 -h 1024 icon/luke-icon-ios-dark.svg -o $watchappiconset/App
 `app.dock.setIcon`. The Dock tile is swapped between the two mode icons as the
 theme changes.
 
-The notch panel draws the face itself rather than loading these SVGs, because it
+The panel draws the face itself rather than loading these SVGs, because it
 needs two things a baked asset cannot give it: `currentColor`, so it can take the
 microphone's colour, and CSS animation, so the renderer's `--face-motion` token can hold every loop still for
 a capture run or for reduced motion. SMIL answers to neither without JavaScript.
@@ -86,7 +80,6 @@ spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the 
 |---|---|
 | `luke-wordmark-{light,dark}.svg` | Face-first caps LUKE wordmark |
 | `icon/luke-icon-{light,dark}.svg` + `luke-icon-dark-{16…1024}.png` + `luke-icon-light-512.png` | App icon (squircle tile), per mode. The dark set is cut at every size because the `.icns` is cut from it; the light mode needs the one size the running app swaps into the Dock |
-| `icon/luke-icon-ios-{light,dark,tinted}.svg` | The iPhone app icon, per iOS appearance, full-bleed: iOS masks every icon to its own rounded rectangle, so a tile with baked corners and margin would draw a second border inside the system's. The tinted appearance is grayscale — white on true black — because iOS maps its luminance onto the user's accent color. The 1024 PNGs are cut outside this directory, into `apps/ios/Luke/Assets.xcassets/AppIcon.appiconset/`, where Xcode reads them. The dark cut is also the Apple Watch app's one icon, cut to `apps/ios/LukeWatch/Assets.xcassets/AppIcon.appiconset/AppIcon.png`: watchOS masks every icon to a circle and takes a single appearance, and space black is the tile that reads on the watch's black home screen, the same call the packaged `.icns` makes |
 | `dmg/luke-dmg-background.svg` + `luke-dmg-background{,@2x}.png` | Neutral installer background with a branded drag-and-drop arrow |
 | `mark/luke-mark-square{,-transparent}-{light,dark}.svg` + `-1024.png` | The face at its own tight crop on a square canvas, per mode: over the icon's gradient with square corners (the avatar shape for surfaces that round their own tiles, GitHub among them), and the same crop with no tile. A transparent avatar shows GitHub's badge background color instead, so pair the dark set with `#1c1c1e`, the space-black end of the dark icon tile, which reads on either GitHub theme |
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |

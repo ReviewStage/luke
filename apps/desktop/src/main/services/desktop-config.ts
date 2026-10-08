@@ -9,9 +9,6 @@ interface DesktopLaunch {
   /** Where an evidence run writes its PNG, and the sign that this is one. */
   readonly captureOutput: string | undefined;
   readonly profile: string;
-  readonly fixtureName: string | undefined;
-  readonly startPeeked: boolean;
-  readonly startInSlot: boolean;
   readonly captureMode: boolean;
   readonly fixtureMode: boolean;
 }

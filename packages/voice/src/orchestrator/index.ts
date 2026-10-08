@@ -10,4 +10,3 @@ export {
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
 } from "./live-voice-orchestrator.js";
-export { NoticeStrip } from "./notice-strip.js";

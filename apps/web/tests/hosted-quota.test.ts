@@ -5,18 +5,11 @@ import { Effect } from "effect";
 import { test } from "vitest";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
-import { hostedUsage, introductionUsage } from "../server/db/usage-schema";
-import {
-  HOSTED_DAILY_LIMIT,
-  spendHostedMeter,
-  spendIntroductionMeter,
-  utcDayEnd,
-  utcDayKey,
-} from "../server/hosted/quota";
+import { hostedUsage } from "../server/db/usage-schema";
+import { HOSTED_DAILY_LIMIT, spendHostedMeter, utcDayEnd, utcDayKey } from "../server/hosted/quota";
 import { testSqlClient } from "./support/sql-client";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const openUser = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
@@ -70,24 +63,6 @@ it.layer(testSqlClient)("the quota meters over effect/unstable/sql", (it) => {
       const overLimit = yield* spendHostedMeter({ userId, now: NOON_UTC });
       assert.equal(overLimit.allowed, false);
       assert.equal(overLimit.quota.used, HOSTED_DAILY_LIMIT + 1);
-    }),
-  );
-
-  it.effect("an introduction spend moves the shared counter", () =>
-    Effect.gen(function* () {
-      const spend = yield* spendIntroductionMeter({ now: NOON_UTC + 1 });
-      assert.equal(spend.allowed, true);
-    }),
-  );
-
-  it.effect("a spent introduction ceiling refuses the next mint", () =>
-    Effect.gen(function* () {
-      const day = NOON_UTC + DAY_MS;
-      yield* db
-        .insert(introductionUsage)
-        .values({ caller: "global", day: utcDayKey(day), mints: HOSTED_DAILY_LIMIT });
-      const overLimit = yield* spendIntroductionMeter({ now: day });
-      assert.equal(overLimit.allowed, false);
     }),
   );
 });

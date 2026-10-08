@@ -1,6 +1,6 @@
 import type { AccountAppSeams } from "../account-app.js";
 import { deleteAccount, readAccountPreferences, writeAccountPreferences } from "./account-store.js";
-import { resolveHostedUserId } from "./vault-route.js";
+import { resolveHostedUserId } from "./bearer.js";
 
 /**
  * The account group's seams over this deployment's real database. The

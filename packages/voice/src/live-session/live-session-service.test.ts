@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import {
   LIVE_CLIENT_EVENT,
@@ -10,13 +11,12 @@ import {
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
   type LiveServerEventType,
-  PROACTIVE_SPEECH_KIND,
   parseLiveServerEvent,
   TRANSCRIPT_SPEAKER,
   UTTERANCE_GAP_MS,
 } from "@sidecar/live";
 import type { WireRecord } from "@sidecar/wire";
-import { Clock, Deferred, Duration, Effect, Fiber, Layer, type Scope, type Stream } from "effect";
+import { Deferred, Duration, Effect, Fiber, Layer, type Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
@@ -299,23 +299,6 @@ function attaches(record: FakeRecord) {
 }
 
 /**
- * The instant the service reads, as the test reads it: the ambient
- * `TestClock`'s own, which the service keeps time on too, so a value a test
- * builds and one the service records are built from the same number.
- */
-interface TestNow {
-  readonly now: number;
-}
-
-function testNow(clock: Clock.Clock): TestNow {
-  return {
-    get now() {
-      return clock.currentTimeMillisUnsafe();
-    },
-  };
-}
-
-/**
  * Moves the ambient `TestClock` forward by `deltaMs`, firing whatever it finds
  * due, and settles what that firing started. The turns before the move are
  * what let a delay the service armed on its own fiber reach its sleep, since
@@ -337,50 +320,45 @@ function settle() {
 }
 
 interface Fixture {
-  clock: TestNow;
   brain: FakeBrain;
   record: FakeRecord;
   /** Every sideband adopted so far, in order; the session adopted over the nth is `sess-n`. */
   sidebands: FakeSideband[];
-  spoken: string[];
   /** Every line the service reported, in order. */
   reports: string[];
   /** Every status `onStatus` was told, in order. */
   statuses: LiveSessionStatus[];
+  /** Every place `onCode` put on screen, in order. */
+  codes: CodeRef[];
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
-  /** What the test wants told of a briefing's last append; nothing by default. */
-  onBriefingAppend?: (delivery: { briefing: string; decidedAt: number }, eventId: string) => void;
 }
 
 function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const clock = testNow(yield* Clock.Clock);
     const record = new FakeRecord();
     const sidebands: FakeSideband[] = [];
-    const spoken: string[] = [];
     const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
+    const codes: CodeRef[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
         createId: () => `id-${++ids}`,
         report: (message) => reports.push(message),
-        onProactiveSpoken: (kind) => spoken.push(kind),
-        onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
         onStatus: (status) => statuses.push(status),
+        onCode: (ref) => codes.push(ref),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
-    const fixtureState: Fixture = {
-      clock,
+    return {
       brain,
       record,
       sidebands,
-      spoken,
       reports,
       statuses,
+      codes,
       service,
       open: () =>
         Effect.gen(function* () {
@@ -397,7 +375,6 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
           return sideband;
         }),
     };
-    return fixtureState;
   });
 }
 
@@ -429,7 +406,7 @@ it.effect(
 );
 
 it.effect(
-  "a session adopted as already started is speakable at once: it hears no session.started again, so a briefing delivered to it is appended without waiting, where one adopted as not yet started waits for the start",
+  "a session adopted as already started is speakable at once: it hears no session.started again, so the stop key reaches it without waiting, where one adopted as not yet started waits for the start",
   () =>
     Effect.gen(function* () {
       const running = yield* fixture();
@@ -442,12 +419,9 @@ it.effect(
         }),
         true,
       );
-      running.service.deliverBriefing({
-        briefing: "Nukualofa finished.",
-        decidedAt: running.clock.now,
-      });
+      assert.equal(running.service.stopSpeaking(), true);
       yield* settle();
-      assert.equal(appends(runningSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      assert.equal(appends(runningSideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
 
       const fresh = yield* fixture();
       const freshSideband = new FakeSideband();
@@ -459,15 +433,14 @@ it.effect(
         }),
         true,
       );
-      fresh.service.deliverBriefing({
-        briefing: "Nukualofa finished.",
-        decidedAt: fresh.clock.now,
-      });
+      assert.equal(fresh.service.stopSpeaking(), false);
       yield* settle();
-      assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+      assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
       freshSideband.started("sess-fresh");
       yield* settle();
-      assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      assert.equal(fresh.service.stopSpeaking(), true);
+      yield* settle();
+      assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
     }),
 );
 
@@ -769,6 +742,48 @@ it.effect(
       const contents = commentary.map((event) => ("content" in event ? event.content : ""));
       assert.ok(contents[0]?.includes("After how long?") && contents[0].includes("Seven days."));
       assert.ok(contents[1]?.includes("Can an admin re-send one?"));
+    }),
+);
+
+it.effect(
+  "code the planning model shows waits for Luke's next words, then goes on screen with a note the voice keeps",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Where does the invite get checked?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      const ref = { path: "src/invite.ts", startLine: 3, endLine: 5 };
+
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN, runId: "run-1", ref });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-1",
+        question: "Should the expiry check move here?",
+        recommendation: "Yes.",
+      });
+      yield* settle();
+      assert.deepEqual(f.codes, [], "nothing is on screen before Luke speaks");
+      // Each append waits on the last one's acknowledgment, as every append does.
+      sideband.acknowledge(
+        sideband.sent.findIndex((event) => event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND),
+        1000,
+        1100,
+      );
+
+      sideband.output("Look at", 1000, 1100);
+      yield* settle();
+
+      assert.deepEqual(f.codes, [ref]);
+      const notes = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
+        "content" in event ? event.content : "",
+      );
+      assert.ok(notes.some((note) => note.includes("src/invite.ts, lines 3 to 5")));
+      sideband.output(" lines three to five.", 1100, 1300);
+      yield* settle();
+      assert.deepEqual(f.codes, [ref], "the code goes on screen once");
     }),
 );
 
@@ -1166,51 +1181,47 @@ it.effect("a refused submission is spoken as its refusal under the delegation", 
 );
 
 it.effect(
-  "a briefing is spoken into the standing session with no delegation, settled spoken by the first output past its end",
+  "an error naming an append refuses that append and never counts as success: each sentence is sent once more and then given up, and a run whose every sentence was refused is spoken as its failure note",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
       yield* settle();
-      f.service.deliverBriefing({ briefing: "Nukualofa finished.", decidedAt: f.clock.now });
+      sideband.input("What changed?", 0, 800);
+      sideband.delegation("item_1", 900);
       yield* settle();
-      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(commentary.length, 1);
-      assert.equal(
-        commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
-        null,
-      );
-      sideband.acknowledge(0, 5000, 5200);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "One." });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Two." });
       yield* settle();
-      sideband.output("Nuku", 5100, 5150);
-      yield* settle();
-      assert.deepEqual(f.spoken, []);
-      sideband.output("alofa is done.", 5150, 5400);
-      yield* settle();
-      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.BRIEFING]);
+      const refuse = (index: number) => {
+        const event = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND)[index];
+        assert.ok(event);
+        sideband.receive({
+          type: LIVE_SERVER_EVENT.ERROR,
+          event_id: `err-${index}`,
+          error: { code: null, client_event_id: event.event_id },
+        });
+      };
+      for (let index = 0; index < 4; index += 1) {
+        assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, index + 1);
+        refuse(index);
+        yield* settle();
+      }
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.FAILED,
+      });
+      yield* advanceClock(1000);
+      assert.deepEqual(contents(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), [
+        "One.",
+        "One.",
+        "Two.",
+        "Two.",
+        RUN_END_NOTE[LIVE_BRAIN_RUN_END.FAILED],
+      ]);
     }),
-);
-
-it.effect("an error naming an append refuses that append and never counts as success", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const sideband = yield* f.open();
-    yield* settle();
-    f.service.deliverBriefing({ briefing: "One.", decidedAt: f.clock.now });
-    f.service.deliverBriefing({ briefing: "Two.", decidedAt: f.clock.now });
-    yield* settle();
-    const first = sideband.sent[0];
-    assert.ok(first);
-    sideband.receive({
-      type: LIVE_SERVER_EVENT.ERROR,
-      event_id: "err",
-      error: { code: null, client_event_id: first.event_id },
-    });
-    yield* settle();
-    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-    sideband.output("One", 100, 200);
-    assert.deepEqual(f.spoken, []);
-  }),
 );
 
 it.effect(
@@ -1220,9 +1231,12 @@ it.effect(
       const f = yield* fixture();
       const sideband = yield* f.open();
       yield* settle();
-      f.service.deliverBriefing({ briefing: "One.", decidedAt: f.clock.now });
+      sideband.input("What changed?", 0, 800);
+      sideband.delegation("item_1", 900);
       yield* settle();
-      const first = sideband.sent[0];
+      replyWith(f, "One.");
+      yield* settle();
+      const first = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND)[0];
       assert.ok(first);
       sideband.receive({
         type: LIVE_SERVER_EVENT.ERROR,
@@ -1240,214 +1254,14 @@ it.effect(
         error: { type: "invalid_request_error", code: "invalid_value", event_id: "other-1" },
       });
       yield* settle();
-      assert.deepEqual(f.reports, [
-        "A live error reached the general handler, type=server_error code=internal",
-        "A live error reached the general handler, type=none code=none",
-      ]);
-    }),
-);
-
-it.effect(
-  "the launch greeting is an instructions append acknowledged before the one commentary cue, settled spoken by output past the cue",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.service.speakBeat({
-        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
-        firstName: "Ada",
-        decidedAt: f.clock.now,
-      });
-      const sideband = yield* f.open();
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-      const instruction = sideband.sent[0];
-      assert.equal(
-        instruction && "delegation_id" in instruction && instruction.delegation_id,
-        null,
-      );
-      sideband.acknowledge(0, 100, 200);
-      yield* settle();
-      const cues = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(cues.length, 1);
-      assert.equal(cues[0] && "delegation_id" in cues[0] && cues[0].delegation_id, null);
-      sideband.acknowledge(1, 300, 400);
-      yield* settle();
-      sideband.output("Hey Ada", 350, 380);
-      yield* settle();
-      assert.deepEqual(f.spoken, []);
-      sideband.output(", I'm here.", 380, 900);
-      yield* settle();
-      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH]);
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
-    }),
-);
-
-it.effect(
-  "a launch greeting whose instruction is refused sends no cue and stands released for another ask",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
-      yield* settle();
-      const instruction = sideband.sent[0];
-      assert.ok(instruction);
-      sideband.receive({
-        type: LIVE_SERVER_EVENT.ERROR,
-        event_id: "err",
-        error: { code: null, client_event_id: instruction.event_id },
-      });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-      assert.deepEqual(f.spoken, []);
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 2);
-    }),
-);
-
-it.effect(
-  "a launch greeting waiting beside briefings is spoken ahead of them, whichever was asked for first",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.service.deliverBriefing({
-        briefing: "The scroll fix is on the PR.",
-        decidedAt: f.clock.now,
-      });
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
-      const sideband = yield* f.open();
-      yield* settle();
       assert.deepEqual(
-        sideband.sent.map((event) => event.type),
-        [LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND],
+        f.reports.filter((report) => report.startsWith("A live error")),
+        [
+          "A live error reached the general handler, type=server_error code=internal",
+          "A live error reached the general handler, type=none code=none",
+        ],
       );
-      sideband.acknowledge(0, 100, 200);
-      yield* settle();
-      // The cue follows the instruction, and the briefing waits behind the cue.
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      sideband.acknowledge(1, 300, 400);
-      yield* settle();
-      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(commentary.length, 2);
-      assert.equal(
-        commentary[1] && "content" in commentary[1] && commentary[1].content,
-        "The scroll fix is on the PR.",
-      );
-      sideband.acknowledge(2, 500, 600);
-      sideband.output("Hey, I'm here.", 450, 900);
-      yield* settle();
-      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH, PROACTIVE_SPEECH_KIND.BRIEFING]);
     }),
-);
-
-it.effect(
-  "a launch greeting reaching a session already asked to speak is settled without a word, so the briefing under way is not cut off",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      f.service.deliverBriefing({
-        briefing: "The scroll fix is on the PR.",
-        decidedAt: f.clock.now,
-      });
-      yield* settle();
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
-      yield* settle();
-      sideband.acknowledge(0, 100, 200);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH]);
-      sideband.output("The scroll fix is on the PR.", 250, 2200);
-      yield* settle();
-      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH, PROACTIVE_SPEECH_KIND.BRIEFING]);
-      // Settled is spent: the run asks for no second greeting.
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
-    }),
-);
-
-it.effect(
-  "a launch greeting reaching a session the developer has already spoken into is settled without a word",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const sideband = yield* f.open();
-      yield* settle();
-      sideband.input("What needs me?", 0, 800);
-      yield* settle();
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 0);
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH]);
-    }),
-);
-
-it.effect(
-  "a proactive turn with no session waits for one and speaks once it starts; a stale one is dropped instead",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.service.deliverBriefing({ briefing: "News.", decidedAt: f.clock.now });
-      f.service.speakBeat({
-        kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-        decidedAt: f.clock.now,
-      });
-      const sideband = yield* f.open();
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      sideband.acknowledge(0, 100, 200);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-      yield* advanceClock(3 * 60_000);
-      f.service.deliverBriefing({ briefing: "Old news.", decidedAt: f.clock.now - 3 * 60_000 });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-    }),
-);
-
-it.effect("a beat asked for twice is one line, and is spoken at most once to the end per run", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const sideband = yield* f.open();
-    yield* settle();
-    f.service.deliverBriefing({ briefing: "First.", decidedAt: f.clock.now });
-    f.service.speakBeat({
-      kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-      decidedAt: f.clock.now,
-    });
-    f.service.speakBeat({
-      kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-      decidedAt: f.clock.now,
-    });
-    yield* settle();
-    // The briefing left first; the beat, asked for twice, follows it once.
-    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-    sideband.acknowledge(0, 100, 200);
-    yield* settle();
-    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-    sideband.acknowledge(1, 300, 400);
-    sideband.output("Connect your calendar.", 500, 900);
-    yield* settle();
-    assert.deepEqual(f.spoken, [
-      PROACTIVE_SPEECH_KIND.BRIEFING,
-      PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-    ]);
-    f.service.speakBeat({
-      kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-      decidedAt: f.clock.now,
-    });
-    yield* settle();
-    assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
-  }),
 );
 
 it.effect(
@@ -1455,11 +1269,15 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
+      f.brain.refuse = "No brain stands.";
       const sideband = yield* f.open();
       yield* settle();
-      f.service.deliverBriefing({ briefing: "Fresh.", decidedAt: f.clock.now });
+      // The refusal is spoken, which is the host appending into the session.
+      sideband.input("Hello?", 0, 800);
+      sideband.delegation("item_1", 900);
       yield* settle();
-      sideband.acknowledge(0, 100, 200);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      sideband.acknowledge(0, 1000, 1200);
       yield* advanceClock(60_000);
       f.service.reportActivity(true);
       yield* settle();
@@ -1534,6 +1352,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
+      f.brain.refuse = "No brain stands.";
       const sideband = yield* f.open();
       yield* settle();
       sideband.receive({
@@ -1541,7 +1360,8 @@ it.effect(
         event_id: "u1",
         usage: { seconds: 20 },
       });
-      f.service.deliverBriefing({ briefing: "Pending.", decidedAt: f.clock.now });
+      sideband.input("Hello?", 0, 800);
+      sideband.delegation("item_1", 900);
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
       sideband.dropConnection();
@@ -1551,7 +1371,6 @@ it.effect(
       const second = yield* f.open();
       yield* settle();
       assert.equal(appends(second, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-      assert.deepEqual(f.spoken, []);
     }),
 );
 
@@ -1851,39 +1670,6 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a briefing's last append is told to the record before it is sent, once, under the event id the append carries; a beat tells nothing",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const told: { briefing: string; eventId: string }[] = [];
-      f.onBriefingAppend = (delivery, eventId) =>
-        told.push({ briefing: delivery.briefing, eventId });
-      const sideband = yield* f.open();
-      yield* settle();
-      const long = Array.from(
-        { length: 40 },
-        (_, index) => `Sentence ${index} is long enough.`,
-      ).join(" ");
-      f.service.deliverBriefing({ briefing: long, decidedAt: f.clock.now });
-      f.service.speakBeat({
-        kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
-        decidedAt: f.clock.now,
-      });
-      yield* settle();
-      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.ok(commentary.length >= 1);
-      assert.equal(told.length, 1);
-      assert.equal(told[0]?.briefing, long);
-      // The id told is the one on the last chunk of the briefing, which is the append whose speech settles it.
-      const briefingAppends = commentary.slice(0, commentary.length);
-      const lastBriefingChunk = briefingAppends.find(
-        (event) => event.event_id === told[0]?.eventId,
-      );
-      assert.ok(lastBriefingChunk);
-    }),
-);
-
 it.effect("adopting a session while one stands closes the standing one first", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
@@ -2065,15 +1851,20 @@ it.effect(
       const f = yield* fixture();
       const sideband = yield* f.open();
       yield* settle();
-      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.ARRIVAL, decidedAt: f.clock.now });
       sideband.input("Summarize.", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
       f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      // The first sentence waits on its acknowledgment, and the second is pending behind it.
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
         runId: "run-1",
         sentence: "Done.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Also this.",
       });
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
@@ -2084,7 +1875,6 @@ it.effect(
       yield* settle();
       yield* settle();
       assert.equal(appends(second, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-      assert.deepEqual(f.spoken, []);
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.ENDED,
         runId: "run-1",

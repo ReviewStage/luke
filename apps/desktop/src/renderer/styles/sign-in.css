@@ -23,71 +23,11 @@
   color: var(--text-secondary);
 }
 
-/* The face's reserved room on the gate. The face itself is `.sign-in-luke`,
-   drawn once on the stage so the same Luke can travel between the gate and
-   the peek's strip; this box is where he rests while the panel is up. */
+/* The face's room on the gate. */
 .sign-in-face {
   width: 56px;
   height: 56px;
   margin: 4px 0 2px;
-}
-
-/* The one signed-out Luke, like the caption a single element in every state so
-   the morph carries him rather than trading two copies. At rest he stands over
-   the gate's reserved box — `--sign-in-face-rest` is that box's top: the lift
-   the panel stands off the edge, the strip, then the panel's own padding
-   (14px) plus the gate's (4px) and the box's margin (4px) — and in the compact
-   shapes he takes the wing spot the authed face holds: against the housing,
-   past `--wing-inset` and half his drawn width, at the strip's centre. Only
-   `transform` and `opacity` move him, on the caption's own beat: leaving a
-   state, he travels with the shape rather than ahead of it. 0.3214 is 18/56 —
-   the wing face's size over the gate's. */
-.sign-in-luke {
-  --sign-in-face-rest: calc(var(--shape-top, 0px) + var(--strip-height) + 22px);
-
-  position: absolute;
-  z-index: 3;
-  top: var(--sign-in-face-rest);
-  left: calc(50% - 28px);
-  display: flex;
-  width: 56px;
-  height: 56px;
-  pointer-events: none;
-  transform-origin: center;
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring) var(--duration-exit);
-  will-change: transform;
-}
-
-.sign-in-luke .luke-face {
-  width: 56px;
-  height: 56px;
-}
-
-/* He keeps the panel's own ink through every gesture: the wing recolours
-   listening because there the colour reports whose turn a conversation is, and
-   here there is no conversation for it to report. */
-.sign-in-luke .luke-face[data-motion="listening"] {
-  color: var(--text-primary);
-}
-
-/* The compact pose, shared by the capsule and the peek: the wing spot, at the
-   wing face's size — where the authed strip keeps Luke in the same states. */
-.app-stage[data-presentation="capsule"] .sign-in-luke,
-.app-stage[data-presentation="peek"] .sign-in-luke {
-  transform: translate(
-      calc(var(--notch-housing-width) / -2 - 18px),
-      calc(var(--capsule-height) / 2 - var(--sign-in-face-rest) - 28px)
-    )
-    scale(0.3214);
-}
-
-/* The waiting popup has its own words; the face steps out of their way and
-   comes back when the panel does. */
-.app-stage[data-presentation="slot"] .sign-in-luke,
-.app-stage[data-presentation="feedback"] .sign-in-luke {
-  opacity: 0;
 }
 
 .sign-in-actions {
@@ -127,109 +67,6 @@
 
 .sign-in-gate .sign-in-error {
   color: var(--state-attention);
-}
-
-/* The calendar gate borrows the sign-in gate's voice but not its grid: the
-   review half can hold more calendars than the panel has height, so the gate
-   is a column whose review region alone shrinks and scrolls while the
-   title, the buttons, and the footer stay on screen. It reserves no face
-   box — signed in, Luke already stands in the housing's wing — and it is a
-   step rather than a first meeting, so its type sits at the settings pages'
-   scale instead of the sign-in gate's hero size. */
-.calendar-gate {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.calendar-gate .sign-in-provider {
-  min-height: 32px;
-  font-size: 12px;
-}
-
-/* Only the review region may give up height; squashing a button or the
-   heading instead would trade the crop for a different one. */
-.calendar-gate > * {
-  flex-shrink: 0;
-}
-
-/* The key step speaks for itself, since no beat announces it: one line
-   asking, one small line saying where the key lives, both at the settings
-   pages' scale like the rest of the gate. */
-.conductor-key-gate p {
-  margin: 0 0 8px;
-  font-size: 12px;
-}
-
-.conductor-key-gate small {
-  margin-top: 6px;
-}
-
-/* Each source's own mark, at the size the account marks keep beside a label. */
-.calendar-gate .provider-mark {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-
-/* The review half is the Connections page's own calendar block, handed in
-   whole so it reads exactly as it does there — this wrapper only lends it a
-   left-reading column that scrolls on the settings page's own terms when the
-   Mac's calendar list outgrows the panel. */
-.calendar-gate-review {
-  width: 100%;
-  min-height: 0;
-  flex-shrink: 1;
-  /* The settings page's own posture, for the settings page's own rows: the
-     marks deliberately bleed past their rows (`.credential-mark`'s negative
-     margins), which the page absorbs with padding and clips against sideways
-     scrolling. Without both, the bleed makes this wrapper horizontally
-     scrollable and the whole block can be dragged off its left edge. */
-  padding: 0 4px;
-  text-align: left;
-  overflow-x: clip;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-  scrollbar-width: thin;
-  animation: scroll-edge-fade linear both;
-  animation-timeline: scroll(self block);
-}
-
-/* The two footnotes share a line and a voice; only the quit admits danger on
-   hover, because only it ends the run. */
-.calendar-gate-footer {
-  display: flex;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.calendar-gate-footer .sign-in-quit {
-  margin-top: 0;
-}
-
-.calendar-gate-skip {
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  font-weight: 620;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.calendar-gate-skip:hover:not(:disabled) {
-  background: var(--raised);
-  color: var(--text-primary);
-}
-
-.calendar-gate-skip:disabled {
-  opacity: 0.55;
 }
 
 /* Quiet on purpose: leaving is the one action here that is not the reason the

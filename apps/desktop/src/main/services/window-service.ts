@@ -1,14 +1,9 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { PRODUCT_EVENT } from "@sidecar/analytics";
-import { INTRODUCTION_HANDOFF_READY_MS, openSocketOverWs } from "@sidecar/host";
-import { hostedVoiceServiceOrigin } from "@sidecar/hosted";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { IntroductionLiveSessionSource } from "@sidecar/voice";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import { Effect } from "effect";
+import type { Effect } from "effect";
 import {
   app,
   type IpcMainEvent,
@@ -27,11 +22,9 @@ import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
 import type { DesktopConfig } from "./desktop-config";
-import { IntroductionSession } from "./introduction-session";
 import type { NativeNode } from "./native-node";
 import type { OperatorClient } from "./operator-client";
 import type { DesktopService } from "./service";
-import type { TelemetryService } from "./telemetry-service";
 
 /** How long a display change is let settle before the panels are laid out over it. */
 const DISPLAY_SETTLE_MS = 100;
@@ -41,7 +34,6 @@ export interface WindowServiceDependencies {
   /** What the windows are told from, and where what this service holds of it is written. */
   state: AppStateStore;
   native: NativeNode;
-  telemetry: TelemetryService;
   operator: OperatorClient;
   /** Every operator effect this service reads, run on the launch's own runtime. */
   run: <A>(effect: Effect.Effect<A>) => Promise<A>;
@@ -59,8 +51,6 @@ export interface WindowService extends DesktopService {
   readonly voiceWindow: VoiceWindow;
   readonly hotkeys: HotkeyRegistrar;
   readonly dock: DockPresence;
-  /** The takeover's own voice session, opened through the accountless endpoint for the signed-in developer. */
-  readonly introductionSession: IntroductionSession;
   /**
    * One `app:state` per window, each composed with that window's own facts.
    * The one place the document becomes a push, so what a window is told and
@@ -86,35 +76,18 @@ export interface WindowService extends DesktopService {
   applyLoginItem: (openAtLogin: boolean) => void;
   reapplyTalkHotkey: () => void;
   recycleVoiceWindow: () => void;
-  /** A panel that finished painting, which is what the takeover's handoff waits for. */
-  notePanelReady: (sender: WebContents) => void;
-  /**
-   * The host's word on whether the introduction is owed moved: the first
-   * sign-in this install observed put it up, so the takeover begins now, over
-   * the panel the sign-in landed on.
-   */
-  reconcileIntroduction: () => void;
-  /**
-   * The introduction's one ending, whichever way the takeover reported it.
-   * `given` records the completion, so an introduction that was never given
-   * plays for real on a later launch.
-   */
-  endIntroduction: (given: boolean) => Promise<void>;
-  /** Whether the introduction holds the panel — what every takeover-only answer gates on. */
-  introductionPlaying: () => boolean;
 }
 
 /**
  * Everything this process draws or claims from the machine on the windows'
- * behalf: the panels — the one-time introduction among them, as a fullscreen
- * mode of one — the hidden voice window, the keys, the Dock, the login item,
- * the media permissions, and the display and power changes the panels answer.
+ * behalf: the panel, the hidden voice window, the keys, the Dock, the login
+ * item, the media permissions, and the display and power changes the panel
+ * answers.
  * It is the one concern that opens a window, and it opens none until `start`.
  */
 export function createWindowService(dependencies: WindowServiceDependencies): WindowService {
-  const { config, state, native, telemetry, operator, run, launchStanding } = dependencies;
+  const { config, state, native, operator, run, launchStanding } = dependencies;
   const { runMode } = config;
-  const recordProductEvent = telemetry.recordProductEvent;
 
   const reporters = new WeakMap<WebContents, string>();
   function reporterOf(sender: WebContents): string {
@@ -146,12 +119,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     // moving, and both ride the snapshot a window is handed: the document is
     // re-announced so every window is handed one again.
     onWindowFactsChanged: () => state.touch(),
-    onTakeoverGone: (reason) => {
-      config.report(`Introduction abandoned: ${reason}`);
-      void endIntroduction(false);
-    },
   });
-  const introductionPlaying = () => state.snapshot().introduction.playing;
   /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({
     runMode,
@@ -173,11 +141,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
 
   function raiseVoiceWindow(): void {
-    // Not while the introduction plays: its own call runs in the panel it
-    // took, and every voice of Luke's is held while the introduction is
-    // owed, so a second window standing by has nothing to hold. The ending
-    // raises it.
-    if (introductionPlaying()) return;
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
   }
 
@@ -226,11 +189,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   /**
-   * Every wait this service schedules — the takeover's handoff and the
-   * settling a display change waits out — held so the quit can take them
-   * back. Each opens a window or claims the keys when it fires, and the
-   * teardown now runs for seconds with the drain behind it, so one landing
-   * afterwards would re-open what the teardown had just given back.
+   * Every wait this service schedules — the settling a display change waits
+   * out — held so the quit can take them back. Each opens a window when it
+   * fires, and the teardown now runs for seconds with the drain behind it, so
+   * one landing afterwards would re-open what the teardown had just given
+   * back.
    */
   const pendingWaits = new Set<ReturnType<typeof setTimeout>>();
   function afterDelay(delayMs: number, run: () => void): void {
@@ -245,70 +208,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     }, delayMs);
     pendingWaits.add(wait);
   }
-  // The voice service origin is pinned by the build; a development build may
-  // point it elsewhere the way the account service is, and a packaged one may not.
-  const introductionSession = new IntroductionSession({
-    source: new IntroductionLiveSessionSource({
-      serviceOrigin: hostedVoiceServiceOrigin({
-        packaged: config.packaged,
-        override: config.environment.LUKE_VOICE_SERVICE_ORIGIN,
-      }),
-      openSocket: openSocketOverWs,
-    }),
-    recordProductEvent,
-  });
-  /**
-   * Whether the takeover's window is waiting for the panel to be drawn under
-   * it. The window keeps the display until then: the panel draws its capsule
-   * at the notch inside the very surface the takeover covers, so the window
-   * shrinking to that capsule's own bounds afterwards moves nothing on
-   * screen — where letting it shrink first would clip the stand-down into a
-   * capsule before the panel had drawn one.
-   */
-  let awaitingPanel = false;
-
-  function handOverToPanel(): void {
-    if (!awaitingPanel) return;
-    awaitingPanel = false;
-    panels.leaveTakeover();
-  }
-
-  /**
-   * The introduction's one ending, however the takeover reported it: the
-   * greeting spoken to its end, or a takeover that cannot be given at all.
-   * The standing goes down first, so nothing granted against it — the
-   * session, the takeover's own reports, the talk key's release — outlives
-   * the ending; the window follows the panel that draws in its place. The
-   * completion is the host's to write, since the host owns the onboarding
-   * record and the holds that stand while the introduction is owed.
-   * Idempotent through that standing: a second ending finds nothing playing.
-   */
-  async function endIntroduction(given: boolean): Promise<void> {
-    if (!introductionPlaying() || !launchStanding()) return;
-    introductionSession.end();
-    if (given) {
-      void run(operator.completeIntroduction());
-      recordProductEvent(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
-    }
-    state.update({ introduction: { playing: false } });
-    awaitingPanel = true;
-    // A panel that never reports being drawn must not leave a window covering
-    // the whole display, so the window follows anyway once the wait is spent.
-    afterDelay(INTRODUCTION_HANDOFF_READY_MS, handOverToPanel);
-    raiseVoiceWindow();
-    await hotkeys.reapply(HOTKEY_RANK.TALK);
-  }
-
   const hotkeys = new HotkeyRegistrar({
     registersGlobalKeys: runMode.registersGlobalKeys,
-    // A voice stands only when the host says one does, and not while the
-    // introduction plays: its greeting is scripted and never unmutes, and a
-    // press that opened the ordinary session would speak over it.
-    hasCredentials: () => operator.voiceAvailable() && !introductionPlaying(),
+    // A voice stands only when the host says one does.
+    hasCredentials: () => operator.voiceAvailable(),
     host: {
       voiceHost: () => voiceWindow.current(),
       // The plan open in the panel owns the talk key until it is left, whether
-      // or not the panel still shows it; with no plan open the key is the desk's.
+      // or not the panel still shows it; with no plan open the key opens nothing.
       talkPlanId: () => state.snapshot().planning.activePlanId,
       hotkeyChanged: (rank) => {
         const current = state.snapshot().hotkeys;
@@ -355,57 +262,25 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     );
   }
 
-  /**
-   * The panels laid out again over the displays as they now stand, then
-   * `then` run over them, unless the launch ended while the geometry was
-   * read: a wait that resumes after the quit landed must not raise panels
-   * over a client whose keys and windows are already given back. Begun on
-   * the launch's runtime and not waited for, since the caller is an Electron
-   * event handler with nothing to answer.
-   */
-  function relayout(then: () => void): void {
-    void run(
-      Effect.andThen(
-        Effect.promise(() => panels.refreshGeometry()),
-        Effect.sync(() => {
-          if (launchStanding()) then();
-        }),
-      ),
-    );
-  }
-
   function handleDisplayChange(): void {
-    afterDelay(DISPLAY_SETTLE_MS, () => {
-      relayout(() => {
-        panels.reconcile();
-        // A takeover follows its display: the reconcile above moved its
-        // window somewhere it can stand, and re-taking covers whichever
-        // display that window now stands on.
-        if (introductionPlaying()) panels.enterTakeover();
-      });
-    });
+    afterDelay(DISPLAY_SETTLE_MS, () => panels.reconcile());
   }
 
   const handleSecondInstance = (_event: Electron.Event, argv: string[]): void => {
-    relayout(() => {
-      if (introductionPlaying()) {
-        panels.enterTakeover();
-        return;
-      }
-      if (argv.includes("--expanded")) {
-        const panel = panels.primaryPanel();
-        const displayId = panel ? panels.displayIdFor(panel.webContents) : undefined;
-        if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
-        return;
-      }
-      panels.reconcile();
-      panels.focusExpanded();
-    });
+    if (!launchStanding()) return;
+    if (argv.includes("--expanded")) {
+      const panel = panels.primaryPanel();
+      const displayId = panel ? panels.displayIdFor(panel.webContents) : undefined;
+      if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
+      return;
+    }
+    panels.reconcile();
+    panels.focusExpanded();
   };
   // The Dock tile pressed: the window comes back, whether it was closed or
   // only behind another app.
   const handleActivate = (): void => {
-    if (!introductionPlaying()) panels.focusExpanded();
+    panels.focusExpanded();
   };
   // Named one at a time because Electron's `on` is typed per event name.
   const wake = (eventName: "resume" | "unlock-screen" | "user-did-become-active") => () => {
@@ -418,58 +293,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     "user-did-become-active": wake("user-did-become-active"),
   } as const;
 
-  /**
-   * Whether this run has begun the introduction. One run gives it at most
-   * once: a greeting cut short writes no completion and stays owed, and the
-   * record says it replays at the next signed-in launch, not the moment the
-   * account's next event lands in this one.
-   */
-  let introductionAttempted = false;
-
-  /**
-   * Whether this launch gives the introduction now: the host says it is owed,
-   * the developer it is owed to is signed in, this run has not begun it, and
-   * nothing is playing. A launch that cannot reach its runtime knows nothing
-   * of the account and greets nobody.
-   */
-  function introductionDue(): boolean {
-    return (
-      runMode.requiresAccount &&
-      operator.signedIn() &&
-      operator.introductionOwed() &&
-      !introductionAttempted &&
-      !introductionPlaying()
-    );
-  }
-
-  /**
-   * Begins the takeover over the primary panel. The standing is written
-   * first, so the panel's renderer reads it and draws the takeover rather than
-   * the panel and then the takeover; the talk key is released against it;
-   * and no panel anywhere is nothing to take the screen with, so the standing
-   * comes back down and the ordinary launch stands.
-   */
-  async function beginIntroduction(): Promise<void> {
-    introductionAttempted = true;
-    state.update({ introduction: { playing: true } });
-    await hotkeys.reapply(HOTKEY_RANK.TALK);
-    if (!launchStanding()) return;
-    if (panels.enterTakeover() === undefined) {
-      // No panel to take the screen with is no attempt: the run's one
-      // attempt is given back, so a panel that opens later can still play it.
-      introductionAttempted = false;
-      state.update({ introduction: { playing: false } });
-      await hotkeys.reapply(HOTKEY_RANK.TALK);
-    }
-  }
-
   return {
     name: "windows",
     panels,
     voiceWindow,
     hotkeys,
     dock,
-    introductionSession,
     publishAppState,
     windowFactsFor,
     sendToVoice,
@@ -485,31 +314,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       voiceWindow.close();
       raiseVoiceWindow();
     },
-    notePanelReady: (sender) => {
-      if (panels.owns(sender)) handOverToPanel();
-    },
-    endIntroduction,
-    introductionPlaying,
-    reconcileIntroduction: () => {
-      // Before the launch has opened a panel there is nothing to take the
-      // screen with; `start` decides for itself once one stands.
-      if (!launchStanding() || panels.standing === 0 || !introductionDue()) return;
-      void beginIntroduction();
-    },
     start: async () => {
-      // The introduction is given to a signed-in developer the host says it is
-      // owed to: at this launch when the record already says so, or the
-      // moment the first sign-in lands, through the reconcile above.
-      const giveIntroduction = introductionDue();
-      if (giveIntroduction) introductionAttempted = true;
-      await panels.refreshGeometry();
-      // A Quit landing inside one of the launch's own waits is already tearing
-      // this process down; nothing is opened or armed over it. This check sits
-      // after every wait that still has a window behind it.
-      if (!launchStanding()) return;
       dock.applyIcon();
       dock.watchTheme();
       const settings = await run(operator.ensureSettings());
+      // A Quit landing inside one of the launch's own waits is already tearing
+      // this process down; nothing is opened or armed over it. This check sits
+      // after every wait that still has a window behind it.
       if (!launchStanding()) return;
       if (settings?.stored.showInDock) dock.apply(true);
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
@@ -518,26 +329,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
           settings?.stored.duckOtherMedia ?? APP_SETTING_SCHEMA.duckOtherMedia.default,
         );
       }
-      panels.setShowOnAllDisplays(settings?.stored.showOnAllDisplays === true);
-      panels.setFormFactor(settings?.stored.formFactor ?? DEFAULT_PANEL_FORM_FACTOR);
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
-      // The standing is written before the first window opens, so the panel's
-      // own renderer reads it in the state it bootstraps from and draws the
-      // takeover rather than the panel and then the takeover.
-      if (giveIntroduction) state.update({ introduction: { playing: true } });
       await hotkeys.reapply(HOTKEY_RANK.TALK);
       if (!launchStanding()) return;
       panels.reconcile();
-      // No panel anywhere is nothing to take the screen with, so there is no
-      // introduction to run and the ordinary launch stands. Taking it
-      // reconciles again, to the one display it covers.
-      if (giveIntroduction && panels.enterTakeover() === undefined) {
-        introductionAttempted = false;
-        state.update({ introduction: { playing: false } });
-        await hotkeys.reapply(HOTKEY_RANK.TALK);
-        if (!launchStanding()) return;
-      }
       raiseVoiceWindow();
       configurePermissions();
 
@@ -563,7 +359,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       pendingWaits.clear();
       hotkeys.release();
       voiceWindow.closeForGood();
-      panels.clearCollapseTimers();
     },
   };
 }

@@ -9,19 +9,14 @@ import {
   ASK_ORIGIN,
   BRAIN_REQUEST_FAILURE,
   BRAIN_RUN_EVENT,
-  BRAIN_TOOL,
-  CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
-  OBSERVATION_SOURCE,
   type SpokenAskMetadata,
   TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { hostTurnId, reasoningItemId } from "../server/hosted/brain-host/ids";
@@ -32,17 +27,16 @@ import {
   redactCredentials,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
-import { SPEECH_OFFER } from "../server/hosted/store/speech";
 import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
-  readEventsByConversation,
   readMessagesByConversationTyped,
   readTurnsByConversation,
 } from "./support/store-rows";
@@ -61,11 +55,7 @@ const NOW = 1_800_000_000_000;
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-const writer = await database.run(
-  storeWriter({
-    tools: CATALOG_TOOL_SET,
-  }),
-);
+const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 
 /**
  * The developer's spoken line as the voice writer leaves it since the ledger
@@ -94,26 +84,17 @@ async function spokenLine(
   return { ok: true, id: written.success.id };
 }
 const refusals: string[] = [];
-/** The children whose sealed turn the relay handed to the completion seam, in order. */
-const completed: string[] = [];
 const relay = new StreamRelay({
   writer,
   asks: askRecord(),
   stopTurn: () => Effect.void,
-  offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
-  deliverCompletion: (child) =>
-    Effect.sync(() => {
-      completed.push(child.conversationId);
-    }),
   now: () => NOW,
   report: (message) => refusals.push(message),
 });
 
-async function conversation(
-  kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND] = CONVERSATION_KIND.MAIN,
-): Promise<ConversationTarget> {
+async function conversation(): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const conversationId = await insertConversation(database.run, { userId, kind });
+  const conversationId = await insertConversation(database.run, { userId });
   return { userId, conversationId };
 }
 
@@ -128,7 +109,7 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
     stamped({ type: "turn.started", data: { turnId, sequence } }),
     stamped({
       type: "message.received",
-      data: { turnId, sequence, message: "remember that I prefer short replies" },
+      data: { turnId, sequence, message: "what is at the repository's root?" },
     }),
     stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
     stamped({
@@ -141,8 +122,8 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: BRAIN_TOOL.WRITE_WORKSPACE_FILE,
-            input: { name: "USER.md", content: "- 2026-09-15: prefers short replies" },
+            toolName: RUN_IN_REPOSITORY_TOOL.name,
+            input: { command: "ls" },
           },
         ],
       },
@@ -157,15 +138,20 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: BRAIN_TOOL.WRITE_WORKSPACE_FILE,
-          output: { status: "accepted", chars: 35 },
+          toolName: RUN_IN_REPOSITORY_TOOL.name,
+          output: {
+            status: REPOSITORY_SHELL_STATUS.RAN,
+            exitCode: 0,
+            stdout: "README.md\n",
+            stderr: "",
+          },
         },
       },
     }),
     // eve emits a step's reasoning after that step's result (S0's spike).
     stamped({
       type: "reasoning.completed",
-      data: { turnId, sequence, stepIndex: 0, reasoning: "The developer states a preference." },
+      data: { turnId, sequence, stepIndex: 0, reasoning: "List the root first." },
     }),
     stamped({
       type: "step.completed",
@@ -180,7 +166,7 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
     stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
     stamped({
       type: "message.completed",
-      data: { turnId, sequence, stepIndex: 1, finishReason: "stop", message: "Noted." },
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop", message: "A README." },
     }),
     stamped({
       type: "step.completed",
@@ -197,15 +183,10 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
 }
 
 /** One eve session per conversation, as the host opens them; the id is eve's shape, minted afresh. */
-function standingFor(
-  target: ConversationTarget,
-  turn: BrainHostTurn | undefined,
-  kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND] = CONVERSATION_KIND.MAIN,
-): RelayStanding {
+function standingFor(target: ConversationTarget, turn: BrainHostTurn | undefined): RelayStanding {
   return {
     sessionId: `wrun_${randomUUID()}`,
     target,
-    kind,
     turn,
     model: "scripted-model",
     state: memoryRelayState(),
@@ -222,13 +203,22 @@ async function rows(target: ConversationTarget) {
   return { turnRows, messageRows };
 }
 
-/** The rows a device would take past the position it holds: the store's own cursor read, in sequence. */
+/**
+ * The rows a device would take past the position it holds: the conversation's
+ * rows whose place is past it, in sequence, with an absent turn or finish
+ * read as absent.
+ */
 async function pastCursor(target: ConversationTarget, after: number) {
-  const read = await database.run(
-    database.store.messages.list(target.userId, target.conversationId, CATALOG_TOOL_SET, { after }),
-  );
-  assert.ok(read.ok);
-  return read.value;
+  const stored = await readMessagesByConversationTyped(database.run, target.conversationId);
+  return stored
+    .filter((row) => row.seq > after)
+    .map((row) => ({
+      id: row.id,
+      seq: row.seq,
+      clientId: row.clientId,
+      turnId: row.turnId ?? undefined,
+      finishedAt: row.finishedAt ?? undefined,
+    }));
 }
 
 function readMessageSeqs(records: readonly { readonly seq: number }[]): number[] {
@@ -277,7 +267,7 @@ it.effect(
       // reasoning, then the call — although eve told the reasoning last.
       assert.deepEqual(
         answer.parts.map((part) => part.type),
-        [STEP_START, "reasoning", `tool-${BRAIN_TOOL.WRITE_WORKSPACE_FILE}`, STEP_START, "text"],
+        [STEP_START, "reasoning", `tool-${RUN_IN_REPOSITORY_TOOL.name}`, STEP_START, "text"],
       );
       const toolPart = answer.parts.find((part) => isToolUIPart(part));
       assert.ok(toolPart);
@@ -496,7 +486,7 @@ it.effect("a tool call's part stands on the journal before its result and settle
     // The step was told before the call it bounds, so the journal reads the boundary first.
     assert.deepEqual(
       journal.parts.map((part) => part.type),
-      [STEP_START, `tool-${BRAIN_TOOL.WRITE_WORKSPACE_FILE}`],
+      [STEP_START, `tool-${RUN_IN_REPOSITORY_TOOL.name}`],
     );
     const pending = journal.parts.find((part) => isToolUIPart(part));
     assert.ok(pending);
@@ -512,120 +502,6 @@ it.effect("a tool call's part stands on the journal before its result and settle
     assert.ok(settled);
     assert.equal(settled.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
   }),
-);
-
-it.effect(
-  "an observation turn over a transcript change lands the same way, with the transcript change as its source, and its briefing is offered once however often the result is re-emitted",
-  () =>
-    Effect.promise(async () => {
-      const target = await conversation(CONVERSATION_KIND.OBSERVED);
-      const standing = standingFor(target, BRAIN_HOST_TURN.OBSERVATION);
-      const turnId = "turn_0";
-      await play(
-        [
-          stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
-          stamped({
-            type: "message.received",
-            data: { turnId, sequence: 0, message: "[observed messages] ..." },
-          }),
-          stamped({
-            type: "step.started",
-            data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" },
-          }),
-          stamped({
-            type: "actions.requested",
-            data: {
-              turnId,
-              sequence: 0,
-              stepIndex: 0,
-              actions: [
-                {
-                  kind: "tool-call",
-                  callId: "call-a",
-                  toolName: BRAIN_TOOL.ANNOUNCE,
-                  input: { briefing: "One agent finished." },
-                },
-              ],
-            },
-          }),
-          stamped({
-            type: "action.result",
-            data: {
-              turnId,
-              sequence: 0,
-              stepIndex: 0,
-              status: "completed",
-              result: {
-                kind: "tool-result",
-                callId: "call-a",
-                toolName: BRAIN_TOOL.ANNOUNCE,
-                output: { status: "accepted" },
-              },
-            },
-          }),
-          stamped({
-            type: "step.completed",
-            data: { turnId, sequence: 0, stepIndex: 0, finishReason: "tool-calls" },
-          }),
-          // eve re-emits the settled call under a new event id, as a replayed step would.
-          stamped({
-            type: "action.result",
-            data: {
-              turnId,
-              sequence: 0,
-              stepIndex: 0,
-              status: "completed",
-              result: {
-                kind: "tool-result",
-                callId: "call-a",
-                toolName: BRAIN_TOOL.ANNOUNCE,
-                output: { status: "accepted" },
-              },
-            },
-          }),
-          stamped({
-            type: "step.started",
-            data: { turnId, sequence: 0, stepIndex: 1, modelId: "m" },
-          }),
-          stamped({
-            type: "message.completed",
-            data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop", message: null },
-          }),
-          stamped({
-            type: "step.completed",
-            data: { turnId, sequence: 0, stepIndex: 1, finishReason: "stop" },
-          }),
-          stamped({ type: "turn.completed", data: { turnId, sequence: 0 } }),
-        ],
-        standing,
-      );
-
-      const { turnRows, messageRows } = await rows(target);
-      assert.equal(turnRows[0]?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
-      assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
-      assert.equal(turnRows[0]?.usage, null);
-      const [words, answer] = messageRows;
-      assert.ok(words && answer);
-      assert.deepEqual(words.metadata, {
-        author: MESSAGE_AUTHOR.BRAIN,
-        source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
-      });
-      // The second step delivered nothing to announce, and stands as its boundary alone.
-      assert.deepEqual(
-        answer.parts.map((part) => part.type),
-        [STEP_START, `tool-${BRAIN_TOOL.ANNOUNCE}`, STEP_START],
-      );
-      const offered = (await readEventsByConversation(database.run, target.conversationId)).map(
-        (event) => ({ kind: event.kind, messageId: event.messageId, payload: event.payload }),
-      );
-      assert.deepEqual(offered, [
-        {
-          kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-          messageId: answer.id,
-          payload: { expiresAt: NOW + SPEECH_OFFER.TTL_MS },
-        },
-      ]);
-    }),
 );
 
 it.effect(
@@ -775,7 +651,7 @@ it.effect(
       assert.ok(answer);
       assert.deepEqual(
         answer.parts.map((part) => part.type),
-        [STEP_START, "reasoning", `tool-${BRAIN_TOOL.WRITE_WORKSPACE_FILE}`, STEP_START, "text"],
+        [STEP_START, "reasoning", `tool-${RUN_IN_REPOSITORY_TOOL.name}`, STEP_START, "text"],
       );
     }),
 );
@@ -960,7 +836,7 @@ it.effect(
     Effect.promise(async () => {
       const target = await conversation();
       const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
-      const tools = CATALOG_TOOL_SET;
+      const tools = HOSTED_TOOL_SET;
       await play(typedTurn("turn_0", 0), standing);
       const events = typedTurn("turn_1", 1);
       const requested = events.findIndex((event) => event.type === "actions.requested");
@@ -1002,8 +878,6 @@ it.effect(
           enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
         },
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -1037,8 +911,6 @@ it.effect(
           },
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
         },
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -1074,8 +946,6 @@ it.effect(
           enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
         },
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -1091,7 +961,7 @@ it.effect(
         [
           [
             MESSAGE_ROLE.ASSISTANT,
-            [STEP_START, `tool-${BRAIN_TOOL.WRITE_WORKSPACE_FILE}`, "reasoning", STEP_START],
+            [STEP_START, `tool-${RUN_IN_REPOSITORY_TOOL.name}`, "reasoning", STEP_START],
           ],
         ],
       );
@@ -1120,8 +990,6 @@ it.effect(
           enqueueTurn: (to, enqueue) => writer.enqueueTurn(to, enqueue),
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
         },
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -1145,88 +1013,6 @@ it.effect(
         settled.messageRows.filter((row) => row.role === MESSAGE_ROLE.ASSISTANT).length,
         1,
       );
-    }),
-);
-
-it.effect(
-  "a sealed turn of a child conversation hands the child to the completion seam once; a turn of any other kind of conversation hands nothing",
-  () =>
-    Effect.promise(async () => {
-      completed.length = 0;
-      const child = await conversation(CONVERSATION_KIND.CHILD);
-      await play(
-        typedTurn("turn_0", 0),
-        standingFor(child, BRAIN_HOST_TURN.CHILD_TASK, CONVERSATION_KIND.CHILD),
-      );
-      assert.deepEqual(completed, [child.conversationId]);
-
-      // The end eve re-emits finds the turn gone from relay state and reaches the seam again by nothing here;
-      // the seam's own claim is what makes a second visit deliver nothing.
-      const [ended] = typedTurn("turn_0", 0).slice(-1);
-      assert.ok(ended);
-      await play([ended], standingFor(child, BRAIN_HOST_TURN.CHILD_TASK, CONVERSATION_KIND.CHILD));
-      assert.deepEqual(completed, [child.conversationId]);
-
-      const main = await conversation(CONVERSATION_KIND.MAIN);
-      await play(typedTurn("turn_1", 1), standingFor(main, BRAIN_HOST_TURN.TYPED));
-      assert.deepEqual(completed, [child.conversationId]);
-    }),
-);
-
-it.effect(
-  "a completion seam that fails is said and leaves the seal standing rather than failing the hook",
-  () =>
-    Effect.promise(async () => {
-      const failing = new StreamRelay({
-        writer,
-        asks: askRecord(),
-        stopTurn: () => Effect.void,
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.die(new Error("the completion store is down")),
-        now: () => NOW,
-        report: (message) => refusals.push(message),
-      });
-      const child = await conversation(CONVERSATION_KIND.CHILD);
-      const standing = standingFor(child, BRAIN_HOST_TURN.CHILD_TASK, CONVERSATION_KIND.CHILD);
-      for (const event of typedTurn("turn_0", 0))
-        await database.run(failing.handle(event, standing));
-
-      const { turnRows } = await rows(child);
-      assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
-      assert.ok(
-        refusals.some((message) =>
-          message.includes(
-            `The completion of child ${child.conversationId} could not be delivered`,
-          ),
-        ),
-      );
-      assert.deepEqual(standing.state.get().turns, {});
-    }),
-);
-
-it.effect(
-  "a child-task turn lands under the child origin and a child-completion turn under the child_completion origin, each received message the brain's own note",
-  () =>
-    Effect.promise(async () => {
-      for (const [turn, origin, source] of [
-        [BRAIN_HOST_TURN.CHILD_TASK, TURN_ORIGIN.CHILD, OBSERVATION_SOURCE.CHILD],
-        [
-          BRAIN_HOST_TURN.CHILD_COMPLETION,
-          TURN_ORIGIN.CHILD_COMPLETION,
-          OBSERVATION_SOURCE.CHILD_COMPLETION,
-        ],
-      ] as const) {
-        const target = await conversation(CONVERSATION_KIND.OBSERVED);
-        await play(typedTurn("turn_0", 0), standingFor(target, turn));
-
-        const { turnRows, messageRows } = await rows(target);
-        assert.equal(turnRows.length, 1);
-        assert.equal(turnRows[0]?.origin, origin);
-        assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
-        const words = messageRows.find((row) => row.role === MESSAGE_ROLE.USER);
-        assert.ok(words);
-        assert.deepEqual(words.metadata, { author: MESSAGE_AUTHOR.BRAIN, source });
-      }
     }),
 );
 

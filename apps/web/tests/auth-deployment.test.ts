@@ -219,9 +219,9 @@ test("only a preview carries the sign-in hook that names that return, ahead of t
     }),
   );
 
-  // The preview adds one hook ahead of the plugin's, and behind them the three that carry a link
-  // (`auth-proxy-link.test.ts`); production adds only the relay guard, and keeps the plugin's own.
-  assert.equal(preview.hooks.before.length, 1 + plugin.hooks.before.length + 3);
+  // The preview adds one hook ahead of the plugin's; production adds only the relay guard, and
+  // keeps the plugin's own.
+  assert.equal(preview.hooks.before.length, 1 + plugin.hooks.before.length);
   assert.notEqual(preview.hooks.before[0], plugin.hooks.before[0]);
   assert.equal(production.hooks.before.length, plugin.hooks.before.length + 1);
   assert.equal(production.hooks.before[0] === preview.hooks.before[0], false);

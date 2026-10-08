@@ -1,22 +1,6 @@
-import type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
 import type { MicrophoneStatus } from "#shared/messages/audio";
-import type { WorkspaceProviderId } from "#shared/messages/session";
 import type { UpdateSnapshot } from "#shared/messages/update";
-
-/** One provider the default-workspace rows can offer, by id and display name. */
-export interface WorkspaceProviderOption {
-  id: WorkspaceProviderId;
-  name: string;
-  /**
-   * The projects this provider's default-project row can offer: everything
-   * currently observed for it, and nothing else. A stored default the provider
-   * has stopped offering has no label of its own to be drawn under, and steers
-   * nothing until it is cleared, which the main process does on the same
-   * observation that stopped offering it.
-   */
-  projects: readonly { id: string; label: string }[];
-}
 
 /**
  * Whether Luke may open the microphone, and the two things that can be done
@@ -95,48 +79,4 @@ export interface ShortcutControl {
    * key may act on its own press: the chord arriving is an entry, not an ask.
    */
   onCapture: (capturing: boolean) => void;
-}
-
-/** Everything the Google Calendar block can do, wired above the panel. */
-export interface CalendarControl {
-  /** Each connected account's calendars, as last observed. */
-  choices: readonly ObservedAccountCalendars[];
-  /** True while another entry holds the slot, which refuses a second action. */
-  held: boolean;
-  /** True while a sign-in is waiting on the browser. */
-  connecting: boolean;
-  /** Stands the panel down and opens Google's consent page. */
-  onSignIn: () => void;
-  onRemoveAccount: (accountId: string) => Promise<ActionResult>;
-  onToggleCalendar: (
-    accountId: string,
-    calendarId: string,
-    selected: boolean,
-  ) => Promise<ActionResult>;
-  /**
-   * Runs one calendar observation pass now, over every source. Block-level
-   * because the pass is, though only the Apple row draws the button today.
-   */
-  onRefresh: () => Promise<void>;
-}
-
-/** Everything the Apple Calendar row can do, wired above the panel. */
-export interface AppleCalendarControl {
-  /** This Mac's calendars, as last observed. */
-  choices: readonly AccountCalendar[];
-  /** True while another entry holds the slot, which refuses a second action. */
-  held: boolean;
-  /** True while the system's consent dialog is up. */
-  connecting: boolean;
-  /** Stands the panel down so macOS's own dialog is not covered by it. */
-  onSignIn: () => void;
-  onDisconnect: () => Promise<ActionResult>;
-  onToggleCalendar: (calendarId: string, selected: boolean) => Promise<ActionResult>;
-  /**
-   * True when the System Settings switch has been turned off: the stored
-   * connection stands, but the row offers Connect again — reconnecting is
-   * the only action left, and refresh or disconnect would both be acts on a
-   * grant that is gone.
-   */
-  revoked: boolean;
 }

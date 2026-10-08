@@ -1,17 +1,11 @@
-import {
-  CREDENTIAL_PROVIDER_ID,
-  CREDENTIAL_SOURCE,
-  SECRET_STORAGE,
-} from "@sidecar/credentials/vocabulary";
 import { LIVE_VOICE } from "@sidecar/live";
-import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { APP_SETTING_DEFAULTS } from "./schema-access.js";
 import type { SettingsVisibility } from "./schema-types.js";
 import type { AppSettingsView } from "./wire.js";
 
 /**
  * What a case may move, including back to a field's stored default of nothing:
- * the view resolves `voice` and `formFactor` to a value, and a
+ * the view resolves `voice` to a value, and a
  * case that moves one to the absence the schema declares says so with
  * `undefined`.
  */
@@ -29,23 +23,12 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
   return Object.assign<AppSettingsView, SettingsViewOverrides>(
     {
       ...APP_SETTING_DEFAULTS,
-      credentialSources: {
-        [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
-      },
-      secretStorage: SECRET_STORAGE.UNKNOWN,
       showInDock: false,
       voice: LIVE_VOICE.CEDAR,
       voiceCaptions: false,
       duckOtherMedia: true,
-      quietDuringMeetings: true,
-      announceSessions: true,
-      calendarSignInAvailable: false,
-      appleCalendarAvailable: false,
       voiceAvailable: false,
       preferBuiltInMicrophone: false,
-      calendarAccounts: [],
-      showOnAllDisplays: false,
-      formFactor: PANEL_FORM_FACTOR.BUBBLE,
     },
     overrides,
   );
@@ -53,8 +36,8 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
 
 /**
  * What a row's own condition is judged from, at a stated resting state: no
- * account, no voice controls, nothing installed and nothing offering projects,
- * so a test says which of those it is about by moving it.
+ * account and no voice controls, so a test says which of those it is about by
+ * moving it.
  */
 export function settingsVisibility(
   overrides: Partial<Omit<SettingsVisibility, "settings">> & {
@@ -65,7 +48,6 @@ export function settingsVisibility(
   return {
     voiceControlsDrawn: false,
     accountDrawn: false,
-    workspaceProviders: [],
     ...rest,
     settings: settingsView(settings),
   };

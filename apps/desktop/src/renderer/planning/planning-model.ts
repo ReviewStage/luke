@@ -1,8 +1,5 @@
-import { GITHUB_FAILURE, type GitHubRepository } from "@sidecar/hosted/github-wire";
 import type { Plan, PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
-  type GitHubCallFailure,
-  PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanningView,
   VOICE_PHASE,
@@ -19,8 +16,8 @@ import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
  *
  * Every decision the tab makes is here and pure, so the components only lay
  * it out: which page shows, which state the document region is in, how the
- * plan's folder reads in the header, what a refusal tells
- * the developer to do, what Copy shows, and the word beside the microphone.
+ * plan's folder reads in the header, what Copy shows, and the word beside the
+ * microphone.
  */
 
 /** What the assumptions' section says while the list is empty, the words Copy writes there. */
@@ -40,6 +37,14 @@ export const PLANS_PAGE = {
 } as const;
 
 export type PlansPage = (typeof PLANS_PAGE)[keyof typeof PLANS_PAGE];
+
+/** What the open plan's page shows under its header: the saved document, or the whiteboard. */
+export const PLAN_VIEW = {
+  DOCUMENT: "document",
+  BOARD: "board",
+} as const;
+
+export type PlanView = (typeof PLAN_VIEW)[keyof typeof PLAN_VIEW];
 
 /**
  * The page the tab shows. An open plan is the document page, in every panel
@@ -140,71 +145,8 @@ export function copyShown(outcome: CopyOutcome | undefined, document: PlanDocume
     : COPY_SHOWN.IDLE;
 }
 
-/**
- * A run of reads where only the newest one's answer is applied: an answer
- * from a read that another read has since replaced is dropped, whenever it
- * lands. A read that fails applies nothing.
- */
-export function newestReadOnly<A>(): (read: Promise<A>, apply: (answer: A) => void) => void {
-  let newest = 0;
-  return (read, apply) => {
-    newest += 1;
-    const mine = newest;
-    read.then(
-      (answer) => {
-        if (mine === newest) apply(answer);
-      },
-      () => undefined,
-    );
-  };
-}
-
-/**
- * Runs `returned` each time the panel takes focus again, which is the
- * developer coming back from the Connect GitHub page in the browser, perhaps
- * before the link finished. Answers the cancel, for a wait that ended.
- */
-export function onEachReturn(window: EventTarget, returned: () => void): () => void {
-  window.addEventListener("focus", returned);
-  return () => window.removeEventListener("focus", returned);
-}
-
-/** Whether the new-plan form should offer to connect GitHub rather than a list. */
-export function offersGitHubConnect(failure: GitHubCallFailure): boolean {
-  return failure === GITHUB_FAILURE.NOT_CONNECTED || failure === GITHUB_FAILURE.ACCESS_DENIED;
-}
-
-/** What a GitHub refusal tells the developer, in the new-plan form's words. */
-export function githubFailureNote(failure: GitHubCallFailure): string {
-  switch (failure) {
-    case GITHUB_FAILURE.NOT_CONNECTED:
-      return "Connect GitHub to choose a repository.";
-    case GITHUB_FAILURE.ACCESS_DENIED:
-      return "GitHub no longer accepts Luke's connection. Connect GitHub again.";
-    case GITHUB_FAILURE.NOT_FOUND:
-      return "That repository could not be read. It may be gone, or the connection cannot see it.";
-    case GITHUB_FAILURE.EMPTY_REPOSITORY:
-      return "That repository has no commits on its default branch to plan against.";
-    case GITHUB_FAILURE.RATE_LIMITED:
-      return "GitHub is limiting requests right now. Try again in a minute.";
-    case GITHUB_FAILURE.FAILED:
-      return "GitHub could not be reached. Try again.";
-    case PLAN_CALL_FAILURE.UNANSWERED:
-      return "Luke's service could not be reached. Try again.";
-  }
-}
-
-/** The repositories whose `owner/name` holds the filter, case-blind; the filter narrows and nothing else. */
-export function repositoriesMatching(
-  repositories: readonly GitHubRepository[],
-  filter: string,
-): readonly GitHubRepository[] {
-  const needle = filter.trim().toLowerCase();
-  if (needle.length === 0) return repositories;
-  return repositories.filter((repository) =>
-    `${repository.owner}/${repository.name}`.toLowerCase().includes(needle),
-  );
-}
+/** What the new-plan form says when the service answered no plan. */
+export const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
 
 /** The status word beside the microphone for a call, or nothing where none stands. */
 const STATUS_WORD = {
@@ -280,8 +222,8 @@ const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
 /**
  * Whether a planning call is in progress, which holds the expanded panel
  * against the pointer leaving: the developer is talking a plan through and
- * reading the document it writes, often with their hands elsewhere. A desk
- * call holds nothing, and neither does a call closing or failed.
+ * reading the document it writes, often with their hands elsewhere. A call
+ * closing or failed holds nothing.
  */
 export function planningCallHoldsPanel(
   view: Pick<VoiceView, "voiceStatus" | "callPlanId">,
@@ -324,7 +266,7 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
  * press that cannot be heard is no press; then the plan, since a call is
  * always about the open plan. The press toggles: while the developer is
  * heard on this plan's own call it mutes, and otherwise it opens the plan's
- * call or hears it again, hanging up a desk call or another plan's first,
+ * call or hears it again, hanging up another plan's first,
  * which is also how a call that failed or was lost is tried again. Muted is
  * this plan's own call standing with the developer not heard, so the button
  * says so rather than reading as a call not yet begun.

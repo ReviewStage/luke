@@ -1,18 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
 import { channels } from "#shared/bridge";
-import { ACT, ACT_KIND } from "#shared/messages/acts";
+import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { ActRefused, type ActRows, createActRouter } from "../act-router";
+import { type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
 import { planningActRows } from "./planning-acts";
-import { sessionActRows } from "./session-acts";
 import { settingsActRows } from "./settings-rows";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
 import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
@@ -29,8 +27,8 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
  */
 export function registerDesktopIpc(services: DesktopServices): void {
   const { config, state, telemetry, native, updates, operator, windows, run } = services;
-  const { runMode, launch } = config;
-  const { panels, voiceWindow, hotkeys, dock, introductionSession } = windows;
+  const { launch } = config;
+  const { panels, voiceWindow, hotkeys, dock } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -42,16 +40,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     panels,
     voiceWindow,
     state,
-    // The Conversation Clear is the service's soft delete of the account's
-    // main conversation, which is the thread every panel draws; a Clear the
-    // service did not take leaves the thread standing and is reported to the
-    // panel as refused.
-    clearConversation: () => operator.host.clearConversation(),
-    // A spoken line settled: the record is being written, so the poll is asked
-    // to read now rather than at its cadence; nothing waits on the read.
-    refreshConversation: () => {
-      void run(operator.host.refreshConversation());
-    },
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
     liveDiagnostics: () => operator.host.liveDiagnostics(),
@@ -77,20 +65,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       applyLoginItem: windows.applyLoginItem,
       panels,
       mediaDuck: native.mediaDuck,
-      openExternal: (url) => void config.openExternal(url),
-    }),
-    ...sessionActRows({
-      performer: {
-        openSession: (identity) => operator.host.openSession(identity),
-        openSessionApplication: (identity, applicationId) =>
-          operator.host.openSessionApplication(identity, applicationId),
-        openSessionChange: (identity) => operator.host.openSessionChange(identity),
-      },
-      writes: {
-        sendMessage: (identity, text) => operator.host.sendSessionMessage(identity, text),
-        executeControl: (identity, controlId) =>
-          operator.host.executeSessionControl(identity, controlId),
-      },
     }),
     ...windowSurfaceActRows({
       panels,
@@ -125,89 +99,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
     [ACT_KIND.UPDATE_OPEN_CHANGELOG]: () => updates.openChangelog(),
-    [ACT_KIND.ONBOARDING_SKIP_CALENDAR]: () => operator.host.skipCalendarOnboarding(),
-    [ACT_KIND.ONBOARDING_COMPLETE_CALENDAR]: () => operator.host.completeCalendarOnboarding(),
-    [ACT_KIND.ONBOARDING_SKIP_CONDUCTOR_KEY]: () => operator.host.skipConductorKeyOnboarding(),
-    // The takeover's own session, answered only while it holds the panel and
-    // only on a run that reaches the network at all: the offer goes to the
-    // accountless voice service with the signed-in developer's first name as
-    // its one observed value, read here from the account this process holds
-    // and never from the window, and the hang-up closes the connection the
-    // service reads as the end.
-    [ACT_KIND.INTRODUCTION_CREATE_SESSION]: ({ sdp, titles }, { introduction }) => {
-      if (!introduction || !runMode.sendsNetwork) return Promise.resolve(undefined);
-      const account = state.snapshot().account;
-      // The open is an effect, run on the desktop's own runtime like every
-      // other act rather than behind a promise door of the session's.
-      return run(
-        introductionSession.open({
-          sdp,
-          titles,
-          name: account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined,
-        }),
-      );
-    },
-    [ACT_KIND.INTRODUCTION_END_SESSION]: (_payload, { introduction }) => {
-      if (introduction) introductionSession.end();
-    },
-    [ACT_KIND.INTRODUCTION_COMPLETE]: async ({ given }, { introduction }) => {
-      if (!introduction) return;
-      await windows.endIntroduction(given === true);
-    },
-    [ACT_KIND.INTRODUCTION_ABANDON]: ({ reason }, { introduction }) => {
-      if (!introduction) return;
-      config.report(`Introduction abandoned: ${reason}`);
-      void windows.endIntroduction(false);
-    },
-    // The thumb is a control of the Conversation tab, and a tab exists only on
-    // a panel; the hidden voice window and the introduction's takeover draw
-    // none, so they are refused before the host is reached. Everything else
-    // about the rating — whether the message stands, whether it is Luke's,
-    // what reaches the service — is the host's to decide.
-    [ACT_KIND.CONVERSATION_RATE_MESSAGE]: ({ messageId, rating }, sender) => {
-      if (!sender.panel || sender.introduction) {
-        throw new ActRefused({ message: ACT[ACT_KIND.CONVERSATION_RATE_MESSAGE].refusal });
-      }
-      return operator.host.rateConversationMessage(messageId, rating);
-    },
-    // Older turns are read for the thread a panel draws, and a tab exists
-    // only on a panel; the hidden voice window and the introduction's takeover
-    // draw none, so they are refused before the host is reached. Whether
-    // older turns stand and what a page holds are the host's to decide.
-    [ACT_KIND.CONVERSATION_LOAD_OLDER]: (_payload, sender) => {
-      if (!sender.panel || sender.introduction) {
-        throw new ActRefused({ message: ACT[ACT_KIND.CONVERSATION_LOAD_OLDER].refusal });
-      }
-      return operator.host.loadOlderConversation();
-    },
-    // A transcript is a view of the Conversation tab, and a tab exists only
-    // on a panel; the hidden voice window and the introduction's takeover
-    // draw none, so they are refused before the host is reached. Whether the
-    // conversation stands and what its transcript holds are the host's to decide.
-    [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: ({ conversationId, kind }, sender) => {
-      if (!sender.panel || sender.introduction) {
-        throw new ActRefused({ message: ACT[ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT].refusal });
-      }
-      return operator.host.openChildTranscript(conversationId, kind);
-    },
-    [ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: (_payload, sender) => {
-      if (!sender.panel || sender.introduction) {
-        throw new ActRefused({
-          message: ACT[ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT].refusal,
-        });
-      }
-      return operator.host.closeChildTranscript();
-    },
-    // The Memory page is a page of the Settings tab, and a tab exists only on
-    // a panel; the hidden voice window and the introduction's takeover draw
-    // none, so they are refused before the host is reached. What the notebook
-    // holds and whether the service can be asked are the host's to decide.
-    [ACT_KIND.NOTEBOOK_READ]: (_payload, sender) => {
-      if (!sender.panel || sender.introduction) {
-        throw new ActRefused({ message: ACT[ACT_KIND.NOTEBOOK_READ].refusal });
-      }
-      return Effect.map(operator.host.readNotebook(), Option.getOrUndefined);
-    },
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
     [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
     [ACT_KIND.WINDOW_QUIT]: () => config.quit(),
@@ -222,7 +113,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       void run(operator.host.recordAgentTrace(trace));
     },
     notifyReady: async (context) => {
-      windows.notePanelReady(context.sender);
       if (!launch.captureOutput) return;
       const window = BrowserWindow.fromWebContents(context.sender);
       if (!window || window.isDestroyed()) return;
@@ -246,10 +136,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       sender,
       panel: panels.owns(sender),
       voice: voiceWindow.owns(sender),
-      // The introduction is a fullscreen mode of the panel rather than a
-      // window of its own, so what a takeover-only row is owed is the
-      // standing the document holds and the panel asking under it.
-      introduction: windows.introductionPlaying() && panels.owns(sender),
     }),
     router: createActRouter(rows),
     run,

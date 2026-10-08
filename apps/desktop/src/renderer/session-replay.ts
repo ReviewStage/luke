@@ -14,11 +14,14 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
  * every input is masked, the attributes that carry words or an image are
  * asterisked, and autocapture is off. What leaves is layout, pointer
- * positions, and asterisks of the right length. Seven elements also block
+ * positions, and asterisks of the right length. Five elements also block
  * their whole subtree with the library's fixed `ph-no-capture` class as a
- * second line: the Conversation tab's three pages (the thread, the Agents
- * list, and an open transcript), the feedback composer's message field, its
- * attached images and their preview, and the Settings tab's Memory page.
+ * second line: the feedback composer's message field, its attached images
+ * and their preview, the Settings tab's Memory page, and a plan's
+ * whiteboard. The whiteboard is the one surface that draws its words on a
+ * canvas, which the text masking cannot reach, so its block is its only
+ * line, and canvas recording is held off by name rather than by the
+ * library's default.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
  * masking and those blocks are the whole of what decides it.
@@ -29,8 +32,7 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * There is no switch — `PRIVACY.md` is where a user learns this happens, so
  * that file carries the whole of the disclosure and has to keep doing it. No
  * account is among the reasons either. Recording begins at the first paint of
- * an ordinary launch, before anyone has signed in and through the spoken
- * introduction, because the launch is where what goes wrong goes wrong and a
+ * an ordinary launch, before anyone has signed in, because the launch is where what goes wrong goes wrong and a
  * recording that waited for a sign-in never saw it. A session that reaches
  * one is joined to the person there; a session that never does stays
  * anonymous, which is the part `PRIVACY.md` has to say plainly, because such
@@ -171,8 +173,7 @@ function scrubbedProperties(properties: Properties): Properties {
 }
 
 /**
- * The project the recording is filed under, fixed at build time the way the
- * calendar client's secret is. A build packaged without one records nothing —
+ * The project the recording is filed under, fixed at build time. A build packaged without one records nothing —
  * the same kill switch the site's own counting has, so a local run or an
  * unconfigured build measures nothing rather than measuring into a stranger's
  * project.
@@ -239,8 +240,12 @@ function preloadRemoteConfig(key: string): void {
  * no `maskAllText` for recordings, and the recorder drops an option it does
  * not know without a word, so the names are asserted against the installed
  * bundle), inputs masked by the library's default, the attributes that carry
- * words or an image asterisked while `class` and `style` still lay out, and
- * autocapture off, since a click event carries the text of what was clicked.
+ * words or an image asterisked while `class` and `style` still lay out,
+ * autocapture off, since a click event carries the text of what was clicked,
+ * and canvas recording off, since a canvas carries its words as pixels. Note
+ * that the canvas option is set here rather than left to the library's
+ * default, because the library reads it before the remote configuration and a
+ * project that switched canvas recording on would otherwise turn it on here.
  */
 const WORDS = new Set(["title", "aria-label", "aria-description", "alt", "placeholder", "src"]);
 const SESSION_REPLAY_MASKING = {
@@ -248,6 +253,7 @@ const SESSION_REPLAY_MASKING = {
   capture_dead_clicks: false,
   mask_all_text: true,
   session_recording: {
+    captureCanvas: { recordCanvas: false },
     maskTextSelector: "*",
     maskAttributeFn: (name: string, value: string): string =>
       WORDS.has(name) ? "*".repeat(value.length) : value,

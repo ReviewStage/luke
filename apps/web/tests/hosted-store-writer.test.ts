@@ -6,7 +6,7 @@ import { Effect, Option, Result, Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
-  ACTION_OUTPUT_STATUS,
+  ACTION_RESULT_STATUS,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -17,10 +17,8 @@ import {
   type BrainTurnOrigin,
   type BrainTurnTrigger,
   COMPACTION_SOURCE,
-  CONVERSATION_EVENT_KIND,
   isRecord,
   isStoredToolPart,
-  MAIN_SESSION_KEY,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -29,9 +27,10 @@ import {
   SCHEMA_REFUSAL,
   SLOW_STEP_KIND,
   STEP_START_PART,
+  sessionKey,
   TOOL_CALL_SETTLEMENT,
   TOOL_PART_STATE,
-  type ToolRefusalStatus,
+  type ToolCallSettlement,
   TURN_ORIGIN,
   TURN_STATUS,
   toolPartType,
@@ -40,7 +39,6 @@ import {
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
   type UserMessageMetadata,
-  unknownActionOutput,
   unparsedWire,
   type WireBoundaryInput,
 } from "../server/core";
@@ -61,7 +59,6 @@ import {
   insertConversation,
   insertMessage,
   insertVoiceSession,
-  readEventsByConversation,
   readMessagesByConversationTyped,
   readTurnById,
   readVoiceSessionByIdTyped,
@@ -78,6 +75,12 @@ import {
 const NOW = 1_800_000_000_000;
 
 type TurnFailure = BrainRequestFailure;
+
+/** The statuses a refused call settles under, as the run stream's own settlement types them. */
+type ToolRefusalStatus = Extract<
+  ToolCallSettlement,
+  { readonly state: typeof TOOL_CALL_SETTLEMENT.OUTPUT_ERROR }
+>["status"];
 
 /** The one failure word the fixtures need, typed against the run's own set so a misspelling fails to compile. */
 const MODEL_FAILURE: TurnFailure = "model";
@@ -113,9 +116,9 @@ const TOOLS: ToolSet = {
     // schema has to admit the unknown outcome, or the reader refuses the row of a call that did not answer.
     outputSchema: z.object({
       status: z.enum([
-        ACTION_OUTPUT_STATUS.ACCEPTED,
+        ACTION_RESULT_STATUS.ACCEPTED,
         UNKNOWN_ACTION_STATUS,
-        ACTION_OUTPUT_STATUS.REFUSED,
+        ACTION_RESULT_STATUS.REJECTED,
       ]),
       reason: z.string().optional(),
     }),
@@ -156,7 +159,7 @@ class Stream {
     this.#sequence += 1;
     return {
       ...body,
-      conversationId: MAIN_SESSION_KEY,
+      conversationId: sessionKey("main"),
       turnId: this.turnId,
       sequence: this.#sequence,
     };
@@ -685,7 +688,7 @@ test("a refused call settles as an error part carrying the refusal's own reason 
       "call_r",
       "read_transcript",
       "The session is not in the roster.",
-      ACTION_OUTPUT_STATUS.REFUSED,
+      ACTION_RESULT_STATUS.REJECTED,
     ),
   ]);
   assert.equal(results.every(Result.isSuccess), true);
@@ -706,7 +709,7 @@ test("a refused call settles as an error part carrying the refusal's own reason 
         "call_r",
         "read_transcript",
         "The session is not in the roster.",
-        ACTION_OUTPUT_STATUS.REFUSED,
+        ACTION_RESULT_STATUS.REJECTED,
       ),
     ),
   );
@@ -716,7 +719,10 @@ test("a refused call settles as an error part carrying the refusal's own reason 
 test("an action whose effect is unknown settles as an answer carrying its envelope, distinguishable on the row from a refused one", async () => {
   const target = await conversation();
   const stream = new Stream();
-  const uncertain = unknownActionOutput("The node closed before it answered.");
+  const uncertain = {
+    status: UNKNOWN_ACTION_STATUS,
+    reason: "The node closed before it answered.",
+  };
   const results = await feed(target, [
     stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
     stream.toolCall("call_u", "send_session_message", SEND_INPUT),
@@ -726,7 +732,7 @@ test("an action whose effect is unknown settles as an answer carrying its envelo
       "call_f",
       "send_session_message",
       "Not in the roster.",
-      ACTION_OUTPUT_STATUS.REFUSED,
+      ACTION_RESULT_STATUS.REJECTED,
     ),
   ]);
   assert.equal(results.every(Result.isSuccess), true);
@@ -1192,113 +1198,12 @@ test("the relay's own events and the stream's compaction event write nothing", a
   assert.deepEqual(await storedMessages(target), []);
 });
 
-test("events about a message are numbered by the conversation's own event sequence, and one about no message is refused", async () => {
-  const target = await conversation();
-  const stream = new Stream();
-  await feed(target, developerTurn(stream, randomUUID(), randomUUID()));
-  const [, reply] = await storedMessages(target);
-  assert.ok(reply);
-  const offered = await database.run(
-    writer.recordEvent(target, {
-      messageId: reply.id,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-      unless: [],
-    }),
-  );
-  const claimed = await database.run(
-    writer.recordEvent(target, {
-      messageId: reply.id,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-      deviceId: "device-1",
-      payload: { at: NOW },
-      unless: [],
-    }),
-  );
-  assert.equal(Result.isSuccess(offered) && offered.success.seq, 1);
-  assert.equal(Result.isSuccess(claimed) && claimed.success.seq, 2);
-  const stored = (await readEventsByConversation(database.run, target.conversationId))
-    .filter((row) => row.messageId === reply.id)
-    .map((row) => ({
-      seq: Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq),
-      kind: row.kind,
-      deviceId: row.deviceId,
-      payload: row.payload,
-    }));
-  assert.deepEqual(stored, [
-    { seq: 1, kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, deviceId: null, payload: null },
-    {
-      seq: 2,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-      deviceId: "device-1",
-      payload: { at: NOW },
-    },
-  ]);
-  assert.deepEqual(await counters(target), { message: 3, event: 3 });
-
-  const noMessage = await database.run(
-    writer.recordEvent(target, {
-      messageId: randomUUID(),
-      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-      unless: [],
-    }),
-  );
-  assert.deepEqual(noMessage, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_MESSAGE }));
-
-  const other = await conversation();
-  const elsewhere = await database.run(
-    writer.recordEvent(other, {
-      messageId: reply.id,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-      unless: [],
-    }),
-  );
-  assert.deepEqual(elsewhere, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_MESSAGE }));
-
-  const secondClaim = await database.run(
-    writer.recordEvent(target, {
-      messageId: reply.id,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-      deviceId: "device-2",
-      unless: [],
-    }),
-  );
-  assert.deepEqual(secondClaim, Result.fail({ refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED }));
-
-  // A write naming kinds that exclude it is refused while one of them stands, and lands otherwise.
-  const superseded = await database.run(
-    writer.recordEvent(target, {
-      messageId: reply.id,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_PUSHED,
-      unless: [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
-    }),
-  );
-  assert.deepEqual(superseded, Result.fail({ refusal: STORE_WRITE_REFUSAL.SUPERSEDED }));
-  const claimedAgain = await database.run(
-    writer.recordEvent(target, {
-      messageId: reply.id,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
-      deviceId: "device-2",
-      unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
-    }),
-  );
-  assert.deepEqual(claimedAgain, Result.fail({ refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED }));
-  const spoken = await database.run(
-    writer.recordEvent(target, {
-      messageId: reply.id,
-      kind: CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
-      deviceId: "device-1",
-      unless: [CONVERSATION_EVENT_KIND.SPEECH_EXPIRED],
-    }),
-  );
-  assert.equal(Result.isSuccess(spoken) && spoken.success.seq, 3);
-  assert.deepEqual(await counters(target), { message: 3, event: 4 });
-});
-
 test("a spoken reply is a finished assistant row under no turn, once per client id; the latest spoken line is found by its span and names the delegation that owns it", async () => {
   const target = await conversation();
   const spokenLine = (clientId: string, fromMs: number, toMs: number, delegationId?: string) =>
     database.run(
-      writer.recordUserMessage(target, {
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.USER,
         clientId,
         text: `line ${fromMs}`,
         metadata: {
@@ -1412,7 +1317,8 @@ test("a row is placed where it stands in the Conversation: a spoken row at its s
   assert.ok(session);
   const spokenLine = (clientId: string, sessionId: string, fromMs: number) =>
     database.run(
-      writer.recordUserMessage(target, {
+      writer.upsertSpokenRow(target, {
+        role: MESSAGE_ROLE.USER,
         clientId,
         text: `line ${fromMs}`,
         metadata: {
@@ -1424,17 +1330,7 @@ test("a row is placed where it stands in the Conversation: a spoken row at its s
         },
       }),
     );
-  assert.ok(
-    Result.isSuccess(
-      await database.run(
-        writer.recordUserMessage(target, {
-          clientId: "typed-placed",
-          text: "typed",
-          metadata: TYPED_ASK,
-        }),
-      ),
-    ),
-  );
+  await feed(target, developerTurn(new Stream(), "typed-placed", randomUUID()));
   assert.ok(Result.isSuccess(await spokenLine("spoken-placed", voiceSessionId, 4_000)));
   // A spoken row naming a session the store does not hold, or holds for
   // another account, has no clock to stand on.

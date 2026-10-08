@@ -1,10 +1,5 @@
 import { useAtomSet } from "@effect/atom-react/Hooks";
-import type {
-  AppSettingField,
-  AppSettingValue,
-  KeyedAppSettingField,
-  SettingEntryValue,
-} from "@sidecar/settings";
+import type { AppSettingField, AppSettingValue } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { Effect } from "effect";
 import { useMemo } from "react";
@@ -17,7 +12,6 @@ import {
   type ActOutcome,
   type ActPayload,
   type ActResultFor,
-  type SettingEntryPayload,
   type SettingUpdatePayload,
 } from "#shared/messages/acts";
 import { rendererRuntime } from "./renderer-runtime";
@@ -82,18 +76,13 @@ function performTell<Kind extends ActKind>(
 }
 
 /**
- * The two settings writes, generic in the field each names. Both are the acts
- * a row's own press mints — there is no second way to write a setting.
+ * The settings write, generic in the field it names. It is the act a row's
+ * own press mints — there is no second way to write a setting.
  */
 interface SettingWriteActs {
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
-  ): Promise<SettingsUpdateResult>;
-  updateSettingEntry<Field extends KeyedAppSettingField>(
-    field: Field,
-    key: string,
-    value: SettingEntryValue<Field> | undefined,
   ): Promise<SettingsUpdateResult>;
 }
 
@@ -126,9 +115,6 @@ export function useAct(): ActHandle {
       // SAFETY: as updateSetting's own cast above, for this render tree's channel.
       updateSetting: (field, value) =>
         boundAct(ACT_KIND.SETTING_UPDATE, { field, value } as SettingUpdatePayload),
-      // SAFETY: as updateSettingEntry's own cast above, for this render tree's channel.
-      updateSettingEntry: (field, key, value) =>
-        boundAct(ACT_KIND.SETTING_UPDATE_ENTRY, { field, key, value } as SettingEntryPayload),
     };
   }, [send]);
 }

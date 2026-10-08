@@ -4,7 +4,7 @@ import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from 
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings } from "@sidecar/settings/wire";
-import { ACTION_RESULT_STATUS, TRANSCRIPT_KIND, type WireRecord } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { appSettingsWire } from "../../testing/spoken-setting-bridge";
 import { createHostOperator } from "./host-operator";
@@ -44,8 +44,8 @@ it.effect("a setting's value travels as the method's value field", () =>
     const operator = operatorOver(client);
 
     const result = yield* operator.updateSetting(
-      APP_SETTING_SCHEMA.sessionSearchQuery.field,
-      "review",
+      APP_SETTING_SCHEMA.voiceHotkey.field,
+      "Alt+Space",
       REPORTER,
     );
 
@@ -54,8 +54,8 @@ it.effect("a setting's value travels as the method's value field", () =>
     const [request] = requests;
     assert.equal(request?.method, GATEWAY_METHOD.SETTINGS_UPDATE);
     assert.deepEqual(request?.params, {
-      field: APP_SETTING_SCHEMA.sessionSearchQuery.field,
-      value: "review",
+      field: APP_SETTING_SCHEMA.voiceHotkey.field,
+      value: "Alt+Space",
       reporter: REPORTER,
     });
   }),
@@ -67,7 +67,7 @@ it.effect("a cleared setting travels as an absent value field, so the clear reac
     const operator = operatorOver(client);
 
     const cleared = yield* operator.updateSetting(
-      APP_SETTING_SCHEMA.sessionSearchQuery.field,
+      APP_SETTING_SCHEMA.voiceHotkey.field,
       undefined,
       REPORTER,
     );
@@ -77,7 +77,7 @@ it.effect("a cleared setting travels as an absent value field, so the clear reac
     const [request] = requests;
     assert.equal(request !== undefined && "value" in request.params, false);
     assert.deepEqual(request?.params, {
-      field: APP_SETTING_SCHEMA.sessionSearchQuery.field,
+      field: APP_SETTING_SCHEMA.voiceHotkey.field,
       reporter: REPORTER,
     });
   }),
@@ -89,7 +89,6 @@ it.effect("every clearable plain setting reaches the host when cleared", () =>
     const operator = operatorOver(client);
 
     const fields = [
-      APP_SETTING_SCHEMA.sessionFilters.field,
       APP_SETTING_SCHEMA.voiceHotkey.field,
       APP_SETTING_SCHEMA.stopHotkey.field,
     ] as const;
@@ -104,49 +103,5 @@ it.effect("every clearable plain setting reaches the host when cleared", () =>
         reporter: REPORTER,
       });
     }
-  }),
-);
-
-it.effect(
-  "opening a transcript names the conversation and its kind, and the close carries nothing",
-  () =>
-    Effect.gen(function* () {
-      const { client, requests } = recordingClient();
-      const operator = operatorOver(client);
-
-      // The client above answers a settings write, which is no open; the operator reads that as the host not taking it.
-      assert.equal(yield* operator.openChildTranscript("agent-1", TRANSCRIPT_KIND.OBSERVED), false);
-      yield* operator.closeChildTranscript();
-
-      const [opened, closed] = requests;
-      assert.equal(opened?.method, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT);
-      assert.deepEqual(opened?.params, {
-        conversationId: "agent-1",
-        kind: TRANSCRIPT_KIND.OBSERVED,
-      });
-      assert.equal(closed?.method, GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT);
-      assert.deepEqual(closed?.params, {});
-    }),
-);
-
-it.effect("a forgotten entry travels as an absent value field", () =>
-  Effect.gen(function* () {
-    const { client, requests } = recordingClient();
-    const operator = operatorOver(client);
-
-    yield* operator.updateSettingEntry(
-      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-      "conductor",
-      undefined,
-      REPORTER,
-    );
-
-    const [request] = requests;
-    assert.equal(request?.method, GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY);
-    assert.deepEqual(request?.params, {
-      field: APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-      key: "conductor",
-      reporter: REPORTER,
-    });
   }),
 );

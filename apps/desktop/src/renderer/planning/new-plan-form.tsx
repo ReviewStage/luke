@@ -2,7 +2,7 @@ import { BackIcon } from "@sidecar/panel";
 import { useId, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
-import { folderLine, githubFailureNote } from "./planning-model";
+import { folderLine, START_FAILED_NOTE } from "./planning-model";
 
 /**
  * new-plan-form.tsx -- the Plans tab's new-plan page: the plan's name and the folder on this Mac it plans against.
@@ -128,7 +128,7 @@ export function NewPlanForm({
     act(ACT_KIND.PLANNING_START, { name, folderPath: folder })
       .then(
         (answer) => {
-          if ("failure" in answer) setNote(githubFailureNote(answer.failure));
+          if ("failure" in answer) setNote(START_FAILED_NOTE);
           else onStarted();
         },
         (refused: Error) => setNote(refused.message),

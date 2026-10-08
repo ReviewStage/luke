@@ -9,49 +9,8 @@ export {
 export {
   MOTION_DELAY_MS,
   MOTION_DURATION_MS,
-  PANEL_MAX_HEIGHT,
-  PANEL_WIDTH,
   VOICE_BAND_INSET,
   VOICE_CAPTION_MAX_HEIGHT,
 } from "./generated/motion-tokens.js";
-export {
-  APPLE_CALENDAR_MARK_LAYERS,
-  CLAUDE_CODE_PATH,
-  CLAUDE_PATH,
-  CLOUD_BADGE_PATH,
-  CODEX_PATH,
-  CONDUCTOR_MARK_PATHS,
-  COPILOT_PATH,
-  CURSOR_PATH,
-  GEMINI_CLI_MARK_LAYERS,
-  GEMINI_CLI_MARK_MASK_PATH,
-  GITHUB_PATH,
-  GOOGLE_CALENDAR_MARK_LAYERS,
-  GOOGLE_MARK_LAYERS,
-  GROK_BUILD_ORBIT_PATH,
-  GROK_BUILD_TAIL_PATH,
-  OMP_PATH,
-  OPENAI_PATH,
-  OPENCODE_BLOCK_PATH,
-  OPENCODE_FRAME_PATH,
-  SUPERSET_PATH,
-} from "./generated/provider-mark-paths.js";
-export { compareSessionsByUrgency, urgencyLabel } from "./generated/session-display.js";
-export {
-  CAPSULE_SIDE_WIDTH,
-  DEFAULT_PANEL_FORM_FACTOR,
-  isPanelFormFactor,
-  type NativeNotchGeometry,
-  PANEL_FORM_FACTOR,
-  PANEL_FORM_FACTOR_LIST,
-  type PanelFormFactor,
-  PanelFormFactorSchema,
-  PEEK_MIN_WIDTH,
-  PEEK_SIDE_GROWTH,
-  peekWidth,
-  positionNotchWindow,
-  type Rectangle,
-  type ResolvedNotchGeometry,
-  resolveNotchGeometry,
-  type WindowMode,
-} from "./geometry.js";
+export { GITHUB_PATH, GOOGLE_MARK_LAYERS } from "./generated/provider-mark-paths.js";
+export type { Rectangle, WindowMode } from "./geometry.js";

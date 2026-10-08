@@ -6,26 +6,14 @@ import {
   LEAVE_DELAY_MS,
   PANEL_PRESENTATION,
   type PanelPresentation,
-  presentationForMode,
   SETTLE_DELAY_MS,
 } from "./panel-state";
 
 export interface PanelPresentationOptions {
-  /**
-   * A credential still on the settings tab, which holds the panel open against
-   * the pointer the way the ask field does.
-   */
-  entryDrawn: () => boolean;
   /** A planning call in progress, which holds the panel open against the pointer too. */
   planningHeld: () => boolean;
-  /** A key or note being written, which keeps the settings tab through a close. */
-  composerHeld: () => boolean;
-  /** The sheet is only ever drawn inside the panel. */
+  /** A search is only ever drawn inside the panel. */
   onNotPanel: () => void;
-  /** Closing to the capsule resets the list: a filter is not something anyone is in the middle of. */
-  onCapsuleList: () => void;
-  /** And the tab, unless a composer is what they were in the middle of. */
-  onCapsuleTab: () => void;
 }
 
 export interface PanelPresentationApi {
@@ -46,8 +34,8 @@ export interface PanelPresentationApi {
 }
 
 /**
- * The surface's shape: the panel, or the panel stood down to one field — a
- * key, a consent wait, a note. Main answers every mode request with the
+ * The surface's shape: the panel, or the panel stood down to one thing — the
+ * sign-in it waits on, or a note. Main answers every mode request with the
  * panel, so a close asked of the window leaves it open.
  */
 export function usePanelPresentation(options: PanelPresentationOptions): PanelPresentationApi {
@@ -74,8 +62,7 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
   const recededAt = useRef<number | undefined>(undefined);
 
   const heldAgainstPointer = useCallback(
-    () =>
-      optionsRef.current.entryDrawn() || optionsRef.current.planningHeld() || askEngaged.current,
+    () => optionsRef.current.planningHeld() || askEngaged.current,
     [],
   );
 
@@ -89,50 +76,28 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     presentationRef.current = next;
     setPresentation(next);
     if (next !== PANEL_PRESENTATION.PANEL) recededAt.current = undefined;
-    const host = optionsRef.current;
-    // The sheet is only ever drawn inside the panel, so any other shape puts
-    // it away. Left set behind a shape that cannot draw it, it would be over
-    // the list again the next time the panel came forward with nothing having
-    // been pressed — and a key half-entered is the one thing that survives a
-    // close, which the sheet is not.
-    if (next !== PANEL_PRESENTATION.PANEL) host.onNotPanel();
-    // A panel that has closed reopens on the session list, showing every
-    // session with whatever needs a person first: settings are somewhere you
-    // go, not a state the capsule remembers, and a filter left in place would
-    // let the panel hide a session the capsule is still counting.
-    //
-    // Something half-written is the one exception, and only to the tab — a
-    // key being entered or a note to the founders alike: it is what someone
-    // is in the middle of, so however the panel closed, it opens again where
-    // they left it. The list is not something anyone is in the middle of, so
-    // it resets either way.
-    if (next === PANEL_PRESENTATION.CAPSULE) {
-      host.onCapsuleList();
-      if (!host.composerHeld()) host.onCapsuleTab();
-    }
+    // A search is only ever drawn inside the panel, so any other shape puts
+    // it away.
+    if (next !== PANEL_PRESENTATION.PANEL) optionsRef.current.onNotPanel();
   }, []);
 
   const applyAuthoritativeMode = useCallback(
     (nextMode: WindowMode) => {
-      // A lifecycle notification can originate outside this renderer (for
-      // example from a spoken ask). Ignore an older IPC result that arrives later.
+      // A lifecycle notification can originate outside this renderer. Ignore
+      // an older IPC result that arrives later.
       modeGeneration.current += 1;
-      applyPresentation(presentationForMode(nextMode));
+      if (nextMode === "expanded") applyPresentation(PANEL_PRESENTATION.PANEL);
     },
     [applyPresentation],
   );
 
-  /**
-   * Only the panel needs the main process. The capsule and the peek share a
-   * window, so hovering never leaves the renderer — which is what lets the peek
-   * answer the pointer immediately.
-   */
+  /** The mode is the main process's to confirm: it answers every request with the panel. */
   const changeMode = useCallback(
     async (expanded: boolean) => {
       const previous = presentationRef.current;
       const generation = modeGeneration.current + 1;
       modeGeneration.current = generation;
-      presentationRef.current = expanded ? PANEL_PRESENTATION.PANEL : PANEL_PRESENTATION.CAPSULE;
+      if (expanded) presentationRef.current = PANEL_PRESENTATION.PANEL;
       // Spent here as well as on the confirmed presentation, because a newer
       // generation can win the race and leave this call's applyPresentation
       // unmade — a mark surviving that into a reopened panel would swallow
@@ -144,8 +109,8 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
           expanded,
           focus: expanded,
         });
-        if (modeGeneration.current === generation) {
-          applyPresentation(presentationForMode(confirmedMode));
+        if (modeGeneration.current === generation && confirmedMode === "expanded") {
+          applyPresentation(PANEL_PRESENTATION.PANEL);
         }
       } catch (error) {
         if (modeGeneration.current === generation) presentationRef.current = previous;
@@ -164,8 +129,8 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       const receded = recededAt.current !== undefined;
       recededAt.current = undefined;
       // The slot and the composer stay put — someone is in the middle of
-      // writing, often in a browser — and a key or ask being typed holds the
-      // panel the same way. A panel whose shape has just receded out from
+      // writing, or signing in in a browser — and a search being typed holds
+      // the panel the same way. A panel whose shape has just receded out from
       // under the pointer stays too: entering a settings page shorter than
       // the one it replaces shrinks the shape past a resting hand, and that
       // is the shape leaving the pointer, not the pointer leaving the shape.
@@ -175,7 +140,6 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       // under a resting cursor, a window standing up beneath one — and
       // closing on it would collapse a panel nobody dismissed.
       const drawn = presentationRef.current;
-      if (drawn === PANEL_PRESENTATION.CAPSULE) return;
       if (drawn === PANEL_PRESENTATION.SLOT) return;
       if (drawn === PANEL_PRESENTATION.FEEDBACK) return;
       if (drawn === PANEL_PRESENTATION.PANEL && (heldAgainstPointer() || receded || !travelled)) {
@@ -183,14 +147,12 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       }
       hoverTimer.current = window.setTimeout(() => {
         hoverTimer.current = undefined;
-        const fired = presentationRef.current;
-        if (fired === PANEL_PRESENTATION.PEEK) applyPresentation(PANEL_PRESENTATION.CAPSULE);
-        else if (fired === PANEL_PRESENTATION.PANEL && !heldAgainstPointer()) {
+        if (presentationRef.current === PANEL_PRESENTATION.PANEL && !heldAgainstPointer()) {
           void changeMode(false);
         }
       }, LEAVE_DELAY_MS);
     },
-    [applyPresentation, cancelHover, changeMode, heldAgainstPointer],
+    [cancelHover, changeMode, heldAgainstPointer],
   );
 
   const changeAskEngagement = useCallback(

@@ -3,14 +3,7 @@ import { atInstant, fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Option } from "effect";
 import { ConnectionError, SqlError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
-import {
-  PRODUCT_EVENT,
-  PRODUCT_EVENT_BATCH_LIMIT,
-  PRODUCT_EVENT_CLIENT,
-  PRODUCT_EVENT_CLIENT_HEADER,
-  PRODUCT_EVENT_CLIENT_LIB,
-  type WireValue,
-} from "../server/core";
+import { PRODUCT_EVENT, PRODUCT_EVENT_BATCH_LIMIT, type WireValue } from "../server/core";
 import { type EventsOptions, handleEvents } from "../server/hosted/events";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { PosthogBatch, PosthogBatchItem } from "../server/hosted/posthog";
@@ -264,32 +257,7 @@ test("the forwarded document matches the processor's documented batch shape", as
   assert.equal(item.timestamp, new Date(LAUNCH.at).toISOString());
 });
 
-test("the client header selects the $lib tag, and anything else is the desktop", async () => {
-  for (const client of [PRODUCT_EVENT_CLIENT.IOS, PRODUCT_EVENT_CLIENT.WATCHOS]) {
-    const posted = upstream();
-    await runWithoutDatabase(
-      events(
-        options({
-          request: new Request("https://luke.test/api/events", {
-            method: "POST",
-            headers: {
-              authorization: "Bearer token-1",
-              [PRODUCT_EVENT_CLIENT_HEADER]: client,
-            },
-            body: JSON.stringify({ events: [LAUNCH] }),
-          }),
-          httpClient: posted.layer,
-          resolveUserId: freshUser(),
-        }),
-      ),
-    );
-    assert.equal(
-      itemAt(onlyBatch(posted.forwarded).items, 0).properties.$lib,
-      PRODUCT_EVENT_CLIENT_LIB[client],
-    );
-  }
-
-  // A header outside the set cannot put its own words in the tag.
+test("every batch is tagged as the desktop's, and a header cannot put its own words in the tag", async () => {
   const forged = upstream();
   await runWithoutDatabase(
     events(
@@ -298,7 +266,7 @@ test("the client header selects the $lib tag, and anything else is the desktop",
           method: "POST",
           headers: {
             authorization: "Bearer token-1",
-            [PRODUCT_EVENT_CLIENT_HEADER]: "my-own-fork /Users/me",
+            "x-luke-client": "my-own-fork /Users/me",
           },
           body: JSON.stringify({ events: [LAUNCH] }),
         }),
@@ -307,10 +275,7 @@ test("the client header selects the $lib tag, and anything else is the desktop",
       }),
     ),
   );
-  assert.equal(
-    itemAt(onlyBatch(forged.forwarded).items, 0).properties.$lib,
-    PRODUCT_EVENT_CLIENT_LIB[PRODUCT_EVENT_CLIENT.DESKTOP],
-  );
+  assert.equal(itemAt(onlyBatch(forged.forwarded).items, 0).properties.$lib, "luke-desktop");
 });
 
 test("the account's name and address ride as person properties, once per batch", async () => {

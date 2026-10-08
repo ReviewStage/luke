@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import { Effect, Redacted, Result, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, DEVICE_PLATFORM, WORKSPACE_FILE } from "../server/core";
-import { devices } from "../server/db/devices-schema";
-import { db } from "../server/db/query";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_TURN,
@@ -17,9 +13,13 @@ import {
 import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
+import {
+  PLANNING_INSTRUCTIONS,
+  planningToolDeclarations,
+} from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type ConversationTarget, promptHashOf, storeWriter } from "../server/hosted/store";
 import { toolSetHashOf } from "../server/hosted/store/content-addressed";
 import { stampedEveEvent } from "./support/eve-events";
@@ -32,22 +32,17 @@ import { insertConversation, readTurnById, readTurnsByConversation } from "./sup
  * composed, which is all the record keeps of the prompt, and the hash of the
  * tool set the turn was offered, through the
  * same host functions the eve project's authored files call, over the real
- * migrations on PGlite. The interesting case is the
- * second: a workspace file edited between two sessions yields a new hash on
- * the next session's first turn, which is what fails if the hash covers
- * something that should not vary or misses something that should. Synthetic
- * accounts and sessions throughout.
+ * migrations on PGlite. Synthetic accounts and sessions throughout.
  */
 
 const NOW = 1_800_000_000_000;
-const TEST_VAULT_SECRET = Redacted.make("v".repeat(64));
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const writer = await database.run(
   storeWriter({
-    tools: CATALOG_TOOL_SET,
+    tools: HOSTED_TOOL_SET,
   }),
 );
 
@@ -58,8 +53,6 @@ function unreached(name: string): () => never {
 }
 
 const seams: BrainHostSeams = {
-  eveOrigin: () => undefined,
-  store: () => Effect.succeed(database.store),
   writer: () => Effect.succeed(writer),
   userInfo: () => Effect.succeed(undefined),
   ownership: {
@@ -68,14 +61,10 @@ const seams: BrainHostSeams = {
       database.run(conversationOwnedBy(userId, conversationId)),
   },
   openAi: () => undefined,
-  embedder: () => undefined,
   deploymentSecret: () => undefined,
+  eveOrigin: () => undefined,
   scriptedModel: () => true,
   spend: unreached("spend"),
-  vaultRows: () => Effect.succeed([]),
-  vaultSecret: () => Effect.succeed(TEST_VAULT_SECRET),
-  providerKey: unreached("providerKey"),
-  executeAction: unreached("executeAction"),
   now: () => NOW,
 };
 
@@ -100,11 +89,9 @@ function seat(target: ConversationTarget, turn: BrainHostTurn): SessionAuth {
   return { current: own, initiator: own };
 }
 
-async function ownedConversation(
-  kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND] = CONVERSATION_KIND.MAIN,
-): Promise<ConversationTarget> {
+async function ownedConversation(): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const conversationId = await insertConversation(database.run, { userId, kind });
+  const conversationId = await insertConversation(database.run, { userId });
   return { userId, conversationId };
 }
 
@@ -136,7 +123,7 @@ async function composePrompt(host: BrainHost, session: Session) {
   if (!Result.isSuccess(admitted)) throw new Error("not admitted");
   const kind = host.turnKindOf(session.auth);
   assert.ok(kind);
-  return database.run(host.prompt(admitted.success));
+  return host.prompt();
 }
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
@@ -188,26 +175,6 @@ async function relayTurn(
 }
 
 /** The conversation's turn rows by id, since both turns of a test start on the one fixed clock. */
-/** One Mac of the account reporting its quiet instant, as the heartbeat writes it; null clears it. */
-async function reportQuiet(userId: string, quietUntil: number | null) {
-  const at = quietUntil === null ? null : new Date(quietUntil);
-  await database.run(
-    Effect.asVoid(
-      db
-        .insert(devices)
-        .values({
-          id: `mac-${userId}`,
-          userId,
-          installationId: `install-${userId}`,
-          platform: DEVICE_PLATFORM.MACOS,
-          quietUntil: at,
-        })
-        // The reported instant, whether the row is this heartbeat's first or its tenth.
-        .onConflictDoUpdate({ target: devices.id, set: { quietUntil: at } }),
-    ),
-  );
-}
-
 async function turnRows(target: ConversationTarget) {
   const rows = await readTurnsByConversation(database.run, target.conversationId);
   return [...rows]
@@ -240,55 +207,25 @@ async function tablesNamed(name: string): Promise<readonly string[]> {
   return rows.map((row) => Schema.decodeUnknownSync(TableNameRowSchema)(row).name);
 }
 
-test("two sessions composed over unchanged workspace rows carry one prompt hash, the hash of the prompt as sent, and the prompt is stored nowhere", async () => {
-  const host = Effect.runSync(brainHost(seams));
+test("every session, of one account or another, carries one prompt hash, the hash of the planning instructions, and the prompt is stored nowhere", async () => {
+  const host = brainHost(seams);
   const target = await ownedConversation();
-  const first = await startSession(host, target, BRAIN_HOST_TURN.TYPED);
-  const firstPrompt = await composePrompt(host, first);
-  const second = await startSession(host, target, BRAIN_HOST_TURN.TYPED);
-  const secondPrompt = await composePrompt(host, second);
+  const first = await composePrompt(host, await startSession(host, target, BRAIN_HOST_TURN.TYPED));
+  const second = await composePrompt(host, await startSession(host, target, BRAIN_HOST_TURN.TYPED));
+  const other = await composePrompt(
+    host,
+    await startSession(host, await ownedConversation(), BRAIN_HOST_TURN.SPOKEN),
+  );
 
-  assert.equal(secondPrompt.hash, firstPrompt.hash);
-  assert.equal(secondPrompt.text, firstPrompt.text);
-  assert.equal(firstPrompt.hash, promptHashOf(firstPrompt.text));
+  assert.equal(first.hash, promptHashOf(PLANNING_INSTRUCTIONS));
+  assert.equal(first.text, PLANNING_INSTRUCTIONS);
+  assert.equal(second.hash, first.hash);
+  assert.equal(other.hash, first.hash);
   assert.deepEqual(await tablesNamed(PROMPTS_TABLE), []);
 });
 
-test("a workspace file edited between two sessions yields a new hash", async () => {
-  const host = Effect.runSync(brainHost(seams));
-  const target = await ownedConversation();
-  const before = await composePrompt(host, await startSession(host, target, BRAIN_HOST_TURN.TYPED));
-
-  await database.run(
-    database.store.workspace.write(
-      target.userId,
-      WORKSPACE_FILE.USER,
-      "# User\n\n- Remembered: prefers short replies\n",
-      NOW + 1,
-    ),
-  );
-  const after = await composePrompt(host, await startSession(host, target, BRAIN_HOST_TURN.TYPED));
-
-  assert.notEqual(after.hash, before.hash);
-  assert.notEqual(after.text, before.text);
-});
-
-test("two accounts over the same seeded rows compose one prompt hash", async () => {
-  const host = Effect.runSync(brainHost(seams));
-  const one = await composePrompt(
-    host,
-    await startSession(host, await ownedConversation(), BRAIN_HOST_TURN.TYPED),
-  );
-  const other = await composePrompt(
-    host,
-    await startSession(host, await ownedConversation(), BRAIN_HOST_TURN.TYPED),
-  );
-
-  assert.equal(other.hash, one.hash);
-});
-
-test("two turns of one session record the session's prompt hash and one tool set, hashed from the declarations the tools resolver offers", async () => {
-  const host = Effect.runSync(brainHost(seams));
+test("two turns of one session record the session's prompt hash and one tool set, the hash of the planning tools' declarations", async () => {
+  const host = brainHost(seams);
   const target = await ownedConversation();
   const session = await startSession(host, target, BRAIN_HOST_TURN.TYPED);
   const prompt = await composePrompt(host, session);
@@ -305,95 +242,21 @@ test("two turns of one session record the session's prompt hash and one tool set
     rows.map((row) => row.promptHash),
     [prompt.hash, prompt.hash],
   );
-  const offered = await database.run(
-    host.toolDeclarations(
-      { target, kind: CONVERSATION_KIND.MAIN },
-      {
-        kind: BRAIN_HOST_TURN.TYPED,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
-        turnId: firstTurn,
-      },
-    ),
-  );
-  const expected = toolSetHashOf(offered);
+  const expected = toolSetHashOf(planningToolDeclarations());
   assert.deepEqual(
     rows.map((row) => row.toolSetHash),
     [expected, expected],
   );
 });
 
-test("an observation turn is offered another tool set and records another hash, and a session that composed no prompt records none", async () => {
-  const host = Effect.runSync(brainHost(seams));
-  const typed = await startSession(host, await ownedConversation(), BRAIN_HOST_TURN.TYPED);
-  const observedTarget = await ownedConversation(CONVERSATION_KIND.OBSERVED);
-  const observed = await startSession(host, observedTarget, BRAIN_HOST_TURN.OBSERVATION);
-  const typedPrompt = await composePrompt(host, typed);
+test("a session that composed no prompt records no prompt hash on its turn", async () => {
+  const host = brainHost(seams);
+  const session = await startSession(host, await ownedConversation(), BRAIN_HOST_TURN.SPOKEN);
 
-  const typedTurn = await relayTurn(host, typed, "turn_0", 0, { hash: typedPrompt.hash });
-  const observationTurn = await relayTurn(host, observed, "turn_0", 0, {});
+  const turn = await relayTurn(host, session, "turn_0", 0, {});
 
-  const typedRow = await readTurnById(database.run, typedTurn);
-  const observationRow = await readTurnById(database.run, observationTurn);
-  assert.ok(typedRow);
-  assert.ok(observationRow?.toolSetHash);
-  assert.notEqual(observationRow.toolSetHash, typedRow.toolSetHash);
-  assert.equal(
-    observationRow.toolSetHash,
-    toolSetHashOf(
-      await database.run(
-        host.toolDeclarations(
-          { target: observedTarget, kind: CONVERSATION_KIND.OBSERVED },
-          {
-            kind: BRAIN_HOST_TURN.OBSERVATION,
-            trigger: BRAIN_TURN_TRIGGER.ROSTER,
-            turnId: observationTurn,
-          },
-        ),
-      ),
-    ),
-  );
-  assert.equal(observationRow.promptHash, null);
-  assert.equal(typedRow.promptHash, typedPrompt.hash);
-});
-
-test("while a device of the account reports quiet ahead, an observation turn is offered no announce and records the hash of what it was offered; the quiet lifting offers it again", async () => {
-  const host = Effect.runSync(brainHost(seams));
-  const target = await ownedConversation(CONVERSATION_KIND.OBSERVED);
-  const session = await startSession(host, target, BRAIN_HOST_TURN.OBSERVATION);
-  const turn = { kind: BRAIN_HOST_TURN.OBSERVATION, trigger: BRAIN_TURN_TRIGGER.ROSTER } as const;
-
-  await reportQuiet(target.userId, NOW + 30 * 60_000);
-  const quietTurn = await relayTurn(host, session, "turn_0", 0, {});
-  const quietOffered = await database.run(
-    host.toolDeclarations(
-      { target, kind: CONVERSATION_KIND.OBSERVED },
-      { ...turn, turnId: quietTurn },
-    ),
-  );
-  assert.equal(
-    quietOffered.some((declared) => declared.name === BRAIN_TOOL.ANNOUNCE),
-    false,
-  );
-  assert.equal(
-    (await readTurnById(database.run, quietTurn))?.toolSetHash,
-    toolSetHashOf(quietOffered),
-  );
-
-  await reportQuiet(target.userId, null);
-  const loudTurn = await relayTurn(host, session, "turn_1", 1, {});
-  const loudOffered = await database.run(
-    host.toolDeclarations(
-      { target, kind: CONVERSATION_KIND.OBSERVED },
-      { ...turn, turnId: loudTurn },
-    ),
-  );
-  assert.equal(
-    loudOffered.some((declared) => declared.name === BRAIN_TOOL.ANNOUNCE),
-    true,
-  );
-  assert.equal(
-    (await readTurnById(database.run, loudTurn))?.toolSetHash,
-    toolSetHashOf(loudOffered),
-  );
-  assert.notEqual(toolSetHashOf(loudOffered), toolSetHashOf(quietOffered));
+  const row = await readTurnById(database.run, turn);
+  assert.ok(row);
+  assert.equal(row.promptHash, null);
+  assert.equal(row.toolSetHash, toolSetHashOf(planningToolDeclarations()));
 });

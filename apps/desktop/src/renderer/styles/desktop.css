@@ -20,6 +20,10 @@ body,
 }
 
 .app-stage[data-surface="desktop"] {
+  /* No housing to blend into: the slot and the composer draw as the
+     free-standing cards a display without a notch gets. */
+  --notch-top-inset: 0px;
+  --notch-housing-width: 0px;
   /* The entry sheets hang this far below the window's top edge. The bubble
      rules spend `--shape-top` for that drop, and the strip they reserve above
      their first row is nothing here. */
@@ -486,6 +490,14 @@ body,
   flex-direction: column;
 }
 
+/* The whiteboard fills the column edge to edge: the canvas is its own page,
+   so the panel's inset card gives way. */
+.desktop-board .plan-board {
+  margin: 0;
+  border-radius: 0;
+  background: none;
+}
+
 .desktop-document .plan-document-scroll {
   padding: 44px 48px 140px;
   scrollbar-gutter: stable;
@@ -840,4 +852,18 @@ body,
   font-weight: 500;
   line-height: 1.5;
   text-align: left;
+}
+
+/* The call's code pane ----------------------------------------------------- */
+
+.desktop-document {
+  position: relative;
+}
+
+.desktop-document .code-pane {
+  position: absolute;
+  right: 24px;
+  bottom: 16px;
+  width: min(640px, calc(100% - 48px));
+  max-height: 58%;
 }

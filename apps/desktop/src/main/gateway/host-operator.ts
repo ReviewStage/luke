@@ -1,20 +1,12 @@
 import type { ProductEventName, ProductEventPropertiesFor } from "@sidecar/analytics";
-import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
-import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
-import type { CredentialProviderId } from "@sidecar/credentials";
 import type { AccountProvider, AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { AgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import type { GatewayCallResult, GatewayClient, GatewayMethod } from "@sidecar/gateway";
 import {
-  CONVERSATION_RATE_STATUS,
-  type ConversationRateMessageResult,
   carried,
-  conversationRateMessageResultSchema,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
   gatewayEventReader,
-  type NotebookReadResult,
-  notebookReadResultSchema,
   type VoiceCreateLiveSessionResult,
   type VoiceLiveSessionChanged,
   type VoiceReportLiveTransportParams,
@@ -24,59 +16,31 @@ import {
 } from "@sidecar/gateway";
 import {
   PLAN_CALL_FAILURE,
-  type PlanningRepositoriesAnswer,
+  type PlanningBoardSaveParams,
   type PlanningSetFolderParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningView,
-  planningRepositoriesAnswerSchema,
   planningStartAnswerSchema,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
-import {
-  type ConversationViewSnapshot,
-  isSessionWriteResult,
-  type ObservedWorkspaceProject,
-  type Session,
-  type SessionApplicationId,
-  type SessionIdentity,
-  type SessionWriteResult,
-  type TranscriptSnapshot,
-} from "@sidecar/session";
-import type {
-  AppSettingField,
-  AppSettingValue,
-  KeyedAppSettingField,
-  SettingEntryValue,
-  SettingsResetScope,
-} from "@sidecar/settings";
+import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
-  type ActionResult,
   EXCESS_KEYS,
   isRecord,
   isWireBoolean,
   isWireString,
-  type RatingWord,
-  type TranscriptKind,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, Effect, Option, Result } from "effect";
-import {
-  type AgentsSnapshot,
-  agentsSnapshotSchema,
-  type ChildrenSnapshot,
-  childrenSnapshotSchema,
-  transcriptSnapshotSchema,
-} from "#shared/messages/agents";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
- * integration, session, voice, and client-fact methods the runtime host
- * answers, and the events it pushes. Every method answers an effect: it
+ * voice, planning, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
  * composes one request and reads its answer, and nothing here runs it — the
  * act row that asked yields it, and the router runs it once on the launch's
  * own runtime. The host is this same process, so an answer that is not the
@@ -88,21 +52,6 @@ import {
 export interface HostBootstrap {
   settings: AppSettings;
   account: AccountSnapshot;
-  sessions: readonly Session[];
-  sessionsSettled: boolean;
-  announcementsHeld: boolean;
-  conversationView: ConversationViewSnapshot;
-  children: ChildrenSnapshot;
-  agents: AgentsSnapshot;
-  /** The one transcript the host holds open, a child's or an agent's, absent while none is. */
-  childTranscript?: TranscriptSnapshot;
-  workspaceProjects: readonly ObservedWorkspaceProject[];
-  calendars: readonly ObservedAccountCalendars[];
-  calendarOnboardingOwed: boolean;
-  /** Whether the spoken introduction is owed to the signed-in developer, as the host's onboarding record has it. */
-  introductionOwed: boolean;
-  /** Whether the Conductor key step of onboarding stands, ahead of the calendar's and of any row. */
-  conductorKeyOnboardingOwed: boolean;
   sessionReplay: { permitted: boolean; accountId?: string };
   voiceAvailable: boolean;
   agentTraceEnabled: boolean;
@@ -119,74 +68,29 @@ interface HostSessionReplay {
   accountId?: string;
 }
 
-/** The open transcript as the host last told it; no transcript says none is open any more. */
-interface HostTranscript {
-  transcript: TranscriptSnapshot | undefined;
-}
-
 export interface HostOperator {
   bootstrap(): Effect.Effect<Option.Option<HostBootstrap>>;
   settingsSnapshot(): Effect.Effect<Option.Option<AppSettings>>;
-  updateSetting<Field extends Exclude<AppSettingField, KeyedAppSettingField>>(
+  updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,
     reporter: string,
   ): Effect.Effect<SettingsUpdateResult>;
-  updateSettingEntry<Field extends KeyedAppSettingField>(
-    field: Field,
-    key: string,
-    value: SettingEntryValue<Field> | undefined,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
   resetSettings(scope: SettingsResetScope, reporter: string): Effect.Effect<SettingsUpdateResult>;
-  setProviderApiKey(
-    providerId: CredentialProviderId,
-    apiKey: string | undefined,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
   accountSnapshot(): Effect.Effect<Option.Option<AccountSnapshot>>;
   beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot>;
   cancelSignIn(): Effect.Effect<void>;
   signOut(): Effect.Effect<AccountSnapshot>;
   deleteAccount(): Effect.Effect<AccountSnapshot>;
-  connectGoogleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult>;
-  cancelGoogleCalendarSignIn(): Effect.Effect<void>;
-  reopenGoogleCalendarSignIn(): Effect.Effect<void>;
-  removeCalendarAccount(accountId: string, reporter: string): Effect.Effect<SettingsUpdateResult>;
-  connectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult>;
-  disconnectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult>;
-  appleCalendarAccessStatus(): Effect.Effect<Option.Option<AppleCalendarAccess>>;
-  cancelAppleCalendarConnect(): Effect.Effect<void>;
-  refreshCalendars(): Effect.Effect<void>;
-  setCalendarSelected(
-    accountId: string,
-    calendarId: string,
-    selected: boolean,
-    reporter: string,
-  ): Effect.Effect<SettingsUpdateResult>;
-  sessionRoster(): Effect.Effect<{ sessions: readonly Session[]; settled: boolean }>;
-  openSession(identity: SessionIdentity): Effect.Effect<ActionResult>;
-  openSessionApplication(
-    identity: SessionIdentity,
-    applicationId: SessionApplicationId,
-  ): Effect.Effect<ActionResult>;
-  openSessionChange(identity: SessionIdentity): Effect.Effect<ActionResult>;
-  /** The two writes a session's row asks for; the host admits each against the roster before any provider sees it. */
-  sendSessionMessage(identity: SessionIdentity, text: string): Effect.Effect<SessionWriteResult>;
-  executeSessionControl(
-    identity: SessionIdentity,
-    controlId: string,
-  ): Effect.Effect<SessionWriteResult>;
-  workspaceProjects(): Effect.Effect<readonly ObservedWorkspaceProject[]>;
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
   liveDiagnostics(): Effect.Effect<Option.Option<LiveDiagnostics>>;
   /**
-   * The peer's SDP offer, and the plan a planning call is about, answered with
-   * the session the host created; a host that creates none answers nothing.
+   * The peer's SDP offer, and the plan the call is about, answered with the
+   * session the host created; a host that creates none answers nothing.
    */
   createLiveSession(
     sdp: string,
-    planId: string | undefined,
+    planId: string,
   ): Effect.Effect<Option.Option<VoiceCreateLiveSessionResult>>;
   endLiveSession(): Effect.Effect<void>;
   reportLiveTransport(report: VoiceReportLiveTransportParams): Effect.Effect<void>;
@@ -200,22 +104,6 @@ export interface HostOperator {
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
   ): Effect.Effect<void>;
-  /** The Conversation tab's Clear: the service's soft delete of the account's main conversation, answered as whether it landed. */
-  clearConversation(): Effect.Effect<boolean>;
-  /** A read of the Conversation now: a spoken line settled and the record is being written, so the poll should not wait its cadence out. */
-  refreshConversation(): Effect.Effect<void>;
-  /** One page of older turns read onto the Conversation the host publishes, for a reader at the top of the thread; answers whether a page landed. */
-  loadOlderConversation(): Effect.Effect<boolean>;
-  /** One transcript held open on the host, read to its end and again as its list's head moves; answers whether the host took it. Named for the child's transcript still, kept so the Gateway method names stay put. */
-  openChildTranscript(conversationId: string, kind: TranscriptKind): Effect.Effect<boolean>;
-  closeChildTranscript(): Effect.Effect<void>;
-  /** Luke's notebook as the service holds it, for the Settings page that shows what he has saved; nothing when the host could not read it. */
-  readNotebook(): Effect.Effect<Option.Option<NotebookReadResult>>;
-  /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
-  rateConversationMessage(
-    messageId: string,
-    rating: RatingWord,
-  ): Effect.Effect<ConversationRateMessageResult>;
   /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
   planningRefresh(): Effect.Effect<void>;
   /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
@@ -229,44 +117,10 @@ export interface HostOperator {
   planningDelete(planId: string): Effect.Effect<boolean>;
   /** The folder of this Mac a plan reads, chosen again. */
   planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
-  /** The repositories the account's GitHub connection can read, or why it could not be read. */
-  planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
-  /** Opens the Connect GitHub page in the browser; whether it opened, which it does only for a signed-in account. */
-  planningConnectGitHub(): Effect.Effect<boolean>;
-  onboardingState(): Effect.Effect<
-    | {
-        calendarOnboardingOwed: boolean;
-        introductionOwed: boolean;
-        conductorKeyOnboardingOwed: boolean;
-      }
-    | undefined
-  >;
-  skipCalendarOnboarding(): Effect.Effect<void>;
-  completeCalendarOnboarding(): Effect.Effect<void>;
-  /** The developer declined the Conductor key step; the Connections row stays the way to connect later. */
-  skipConductorKeyOnboarding(): Effect.Effect<void>;
-  /** The introduction given to its end: the host writes the completion, drops its hold, and asks for the beats that waited. */
-  completeIntroduction(): Effect.Effect<void>;
+  /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
+  planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
-  onSessionsChanged(
-    listener: (roster: { sessions: readonly Session[]; settled: boolean }) => void,
-  ): () => void;
-  onWorkspaceProjectsChanged(
-    listener: (projects: readonly ObservedWorkspaceProject[]) => void,
-  ): () => void;
-  onCalendarsChanged(
-    listener: (calendars: readonly ObservedAccountCalendars[]) => void,
-  ): () => void;
-  onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
-  onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
-  onChildrenChanged(listener: (children: ChildrenSnapshot) => void): () => void;
-  onAgentsChanged(listener: (agents: AgentsSnapshot) => void): () => void;
-  /** Named for the child's transcript still, kept so the Gateway event name stays put. */
-  onChildTranscriptChanged(listener: (change: HostTranscript) => void): () => void;
-  onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
-  onIntroductionChanged(listener: (owed: boolean) => void): () => void;
-  onConductorKeyOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
   onPlanningChanged(listener: (view: PlanningView) => void): () => void;
@@ -306,10 +160,6 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
   return value === undefined ? undefined : (value as unknown as Value);
 }
 
-function answeredList<Value>(value: UnparsedWireValue): readonly Value[] {
-  return Array.isArray(value) ? value.flatMap((entry) => answered<Value>(entry) ?? []) : [];
-}
-
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -329,27 +179,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     Effect.flatMap(result, (answer) => {
       const account = answered<AccountSnapshot>(record(answer)?.account);
       return account ? Effect.succeed(account) : unanswered(method, answer);
-    });
-
-  const actionResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<ActionResult> =>
-    Effect.flatMap(result, (answer) => {
-      const action = answered<ActionResult>(record(answer));
-      return action ? Effect.succeed(action) : unanswered(method, answer);
-    });
-
-  // A write's answer is read against its own shape rather than restored by
-  // assertion: the host may answer unknown where a write's answer was lost,
-  // and a row must draw that as neither a failure nor a success.
-  const writeResult = (
-    method: GatewayMethod,
-    result: Effect.Effect<GatewayCallResult>,
-  ): Effect.Effect<SessionWriteResult> =>
-    Effect.flatMap(result, (answer) => {
-      const written = record(answer);
-      return isSessionWriteResult(written) ? Effect.succeed(written) : unanswered(method, answer);
     });
 
   const fire = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<void> =>
@@ -386,29 +215,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...wireReporter(reporter),
         }),
       ),
-    updateSettingEntry: (field, key, value, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY,
-        client.call(GATEWAY_METHOD.SETTINGS_UPDATE_ENTRY, {
-          field,
-          key,
-          ...wireValue(value),
-          ...wireReporter(reporter),
-        }),
-      ),
     resetSettings: (scope, reporter) =>
       settingsResult(
         GATEWAY_METHOD.SETTINGS_RESET,
         client.call(GATEWAY_METHOD.SETTINGS_RESET, { scope, ...wireReporter(reporter) }),
-      ),
-    setProviderApiKey: (providerId, apiKey, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.CREDENTIAL_SET_API_KEY,
-        client.call(GATEWAY_METHOD.CREDENTIAL_SET_API_KEY, {
-          providerId,
-          ...(apiKey !== undefined ? { apiKey } : undefined),
-          ...wireReporter(reporter),
-        }),
       ),
     accountSnapshot: () =>
       Effect.map(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT), (answer) =>
@@ -424,103 +234,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       accountResult(GATEWAY_METHOD.ACCOUNT_SIGN_OUT, client.call(GATEWAY_METHOD.ACCOUNT_SIGN_OUT)),
     deleteAccount: () =>
       accountResult(GATEWAY_METHOD.ACCOUNT_DELETE, client.call(GATEWAY_METHOD.ACCOUNT_DELETE)),
-    connectGoogleCalendar: (reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE,
-        client.call(GATEWAY_METHOD.CALENDAR_CONNECT_GOOGLE, wireReporter(reporter)),
-      ),
-    cancelGoogleCalendarSignIn: () =>
-      fire(client.call(GATEWAY_METHOD.CALENDAR_CANCEL_GOOGLE_SIGN_IN)),
-    reopenGoogleCalendarSignIn: () =>
-      fire(client.call(GATEWAY_METHOD.CALENDAR_REOPEN_GOOGLE_SIGN_IN)),
-    removeCalendarAccount: (accountId, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.CALENDAR_REMOVE_ACCOUNT,
-        client.call(GATEWAY_METHOD.CALENDAR_REMOVE_ACCOUNT, {
-          accountId,
-          ...wireReporter(reporter),
-        }),
-      ),
-    connectAppleCalendar: (reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.CALENDAR_CONNECT_APPLE,
-        client.call(GATEWAY_METHOD.CALENDAR_CONNECT_APPLE, wireReporter(reporter)),
-      ),
-    disconnectAppleCalendar: (reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE,
-        client.call(GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE, wireReporter(reporter)),
-      ),
-    appleCalendarAccessStatus: () =>
-      Effect.map(client.call(GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS), (answer) =>
-        Option.fromUndefinedOr(answered<AppleCalendarAccess>(record(answer)?.access)),
-      ),
-    cancelAppleCalendarConnect: () =>
-      fire(client.call(GATEWAY_METHOD.CALENDAR_CANCEL_APPLE_CONNECT)),
-    refreshCalendars: () => fire(client.call(GATEWAY_METHOD.CALENDAR_REFRESH)),
-    setCalendarSelected: (accountId, calendarId, selected, reporter) =>
-      settingsResult(
-        GATEWAY_METHOD.CALENDAR_SET_SELECTED,
-        client.call(GATEWAY_METHOD.CALENDAR_SET_SELECTED, {
-          accountId,
-          calendarId,
-          selected,
-          ...wireReporter(reporter),
-        }),
-      ),
-    sessionRoster: () =>
-      Effect.map(client.call(GATEWAY_METHOD.SESSION_ROSTER), (result) => {
-        const answer = record(result);
-        return {
-          sessions: answeredList<Session>(answer?.sessions),
-          settled: answer?.settled === true,
-        };
-      }),
-    openSession: (identity) =>
-      actionResult(
-        GATEWAY_METHOD.SESSION_OPEN,
-        client.call(GATEWAY_METHOD.SESSION_OPEN, { identity: { ...identity } }),
-      ),
-    openSessionApplication: (identity, applicationId) =>
-      actionResult(
-        GATEWAY_METHOD.SESSION_OPEN_APPLICATION,
-        client.call(GATEWAY_METHOD.SESSION_OPEN_APPLICATION, {
-          identity: { ...identity },
-          applicationId,
-        }),
-      ),
-    openSessionChange: (identity) =>
-      actionResult(
-        GATEWAY_METHOD.SESSION_OPEN_CHANGE,
-        client.call(GATEWAY_METHOD.SESSION_OPEN_CHANGE, { identity: { ...identity } }),
-      ),
-    sendSessionMessage: (identity, text) =>
-      writeResult(
-        GATEWAY_METHOD.SESSION_SEND_MESSAGE,
-        client.call(GATEWAY_METHOD.SESSION_SEND_MESSAGE, { identity: { ...identity }, text }),
-      ),
-    executeSessionControl: (identity, controlId) =>
-      writeResult(
-        GATEWAY_METHOD.SESSION_EXECUTE_CONTROL,
-        client.call(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL, {
-          identity: { ...identity },
-          controlId,
-        }),
-      ),
-    workspaceProjects: () =>
-      Effect.map(client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS), (answer) =>
-        answeredList<ObservedWorkspaceProject>(record(answer)?.projects),
-      ),
     liveDiagnostics: () =>
       Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
         Option.fromUndefinedOr(answered<LiveDiagnostics>(record(answer)?.diagnostics)),
       ),
     createLiveSession: (sdp, planId) =>
       Effect.map(
-        client.call(
-          GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION,
-          planId === undefined ? { sdp } : { sdp, planId },
-        ),
+        client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp, planId }),
         (answer) =>
           answer.ok
             ? Result.getSuccess(
@@ -556,44 +276,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           }),
         ),
       ),
-    clearConversation: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_CLEAR),
-        (answer) => record(answer)?.cleared === true,
-      ),
-    refreshConversation: () => fire(client.call(GATEWAY_METHOD.CONVERSATION_REFRESH)),
-    loadOlderConversation: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_LOAD_OLDER),
-        (answer) => record(answer)?.loaded === true,
-      ),
-    openChildTranscript: (conversationId, kind) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { conversationId, kind }),
-        (answer) => record(answer)?.opened === true,
-      ),
-    closeChildTranscript: () =>
-      fire(client.call(GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT)),
-    readNotebook: () =>
-      Effect.map(client.call(GATEWAY_METHOD.NOTEBOOK_READ), (answer) =>
-        answer.ok
-          ? Result.getSuccess(
-              readEither(notebookReadResultSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
-            )
-          : Option.none(),
-      ),
-    rateConversationMessage: (messageId, rating) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, { messageId, rating }),
-        (answer) =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(conversationRateMessageResultSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { status: CONVERSATION_RATE_STATUS.UNAVAILABLE },
-      ),
     planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
     planningOpen: (planId) =>
       Effect.map(
@@ -626,40 +308,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),
-    planningRepositories: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_REPOSITORIES),
-        (answer): PlanningRepositoriesAnswer =>
-          (answer.ok
-            ? Result.getOrUndefined(
-                readEither(planningRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
-                  answer.result,
-                ),
-              )
-            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+    planningBoardSave: (params) =>
+      fire(
+        client.call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
+          planId: params.planId,
+          elements: params.elements,
+          appliedDrawing: params.appliedDrawing,
+        }),
       ),
-    planningConnectGitHub: () =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB),
-        (answer) => record(answer)?.opened === true,
-      ),
-    onboardingState: () =>
-      Effect.map(client.call(GATEWAY_METHOD.ONBOARDING_STATE), (result) => {
-        const answer = record(result);
-        return answer
-          ? {
-              calendarOnboardingOwed: answer.calendarOnboardingOwed === true,
-              introductionOwed: answer.introductionOwed === true,
-              conductorKeyOnboardingOwed: answer.conductorKeyOnboardingOwed === true,
-            }
-          : undefined;
-      }),
-    skipCalendarOnboarding: () => fire(client.call(GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR)),
-    completeCalendarOnboarding: () =>
-      fire(client.call(GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR)),
-    completeIntroduction: () => fire(client.call(GATEWAY_METHOD.ONBOARDING_COMPLETE_INTRODUCTION)),
-    skipConductorKeyOnboarding: () =>
-      fire(client.call(GATEWAY_METHOD.ONBOARDING_SKIP_CONDUCTOR_KEY)),
     onSettingsChanged: (listener) =>
       on(
         GATEWAY_EVENT.SETTINGS_CHANGED,
@@ -678,98 +334,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ACCOUNT_CHANGED,
         (payload) => (isRecord(payload) ? answered<AccountSnapshot>(payload) : undefined),
-        listener,
-      ),
-    onSessionsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.SESSIONS_CHANGED,
-        (payload) =>
-          isRecord(payload)
-            ? {
-                sessions: answeredList<Session>(payload.sessions),
-                settled: payload.settled === true,
-              }
-            : undefined,
-        listener,
-      ),
-    onWorkspaceProjectsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED,
-        (payload) =>
-          isRecord(payload) ? answeredList<ObservedWorkspaceProject>(payload.projects) : undefined,
-        listener,
-      ),
-    onCalendarsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CALENDARS_CHANGED,
-        (payload) =>
-          isRecord(payload) ? answeredList<ObservedAccountCalendars>(payload.calendars) : undefined,
-        listener,
-      ),
-    onAnnouncementsHeldChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.ANNOUNCEMENTS_HELD_CHANGED,
-        (payload) => (isRecord(payload) && isWireBoolean(payload.held) ? payload.held : undefined),
-        listener,
-      ),
-    onConversationViewChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED,
-        (payload) =>
-          isRecord(payload) && Array.isArray(payload.groups) && isWireBoolean(payload.settled)
-            ? answered<ConversationViewSnapshot>(payload)
-            : undefined,
-        listener,
-      ),
-    onChildrenChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CHILDREN_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(childrenSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
-        listener,
-      ),
-    onAgentsChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.AGENTS_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(agentsSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
-        listener,
-      ),
-    onChildTranscriptChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CHILD_TRANSCRIPT_CHANGED,
-        (payload): HostTranscript | undefined => {
-          if (!isRecord(payload)) return undefined;
-          // An empty record is the host saying none is open; anything else must read as a transcript.
-          if (Object.keys(payload).length === 0) return { transcript: undefined };
-          const read = readEither(transcriptSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload);
-          // The groups are the host's own composed rows, restored to the view's type as the Conversation snapshot's are.
-          return Result.isSuccess(read)
-            ? { transcript: answered<TranscriptSnapshot>(payload) }
-            : undefined;
-        },
-        listener,
-      ),
-    onCalendarOnboardingChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED,
-        (payload) => (isRecord(payload) && isWireBoolean(payload.owed) ? payload.owed : undefined),
-        listener,
-      ),
-    onIntroductionChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.INTRODUCTION_CHANGED,
-        (payload) => (isRecord(payload) && isWireBoolean(payload.owed) ? payload.owed : undefined),
-        listener,
-      ),
-    onConductorKeyOnboardingChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CONDUCTOR_KEY_ONBOARDING_CHANGED,
-        (payload) => (isRecord(payload) && isWireBoolean(payload.owed) ? payload.owed : undefined),
         listener,
       ),
     onVoiceLiveSessionChanged: (listener) =>

@@ -1,3 +1,5 @@
+import { boardText } from "@sidecar/hosted/board-text";
+import type { Board } from "@sidecar/hosted/board-wire";
 import { PLAN_FIELD, PLAN_FIELD_PURPOSE } from "@sidecar/hosted/plan-template";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
@@ -5,7 +7,9 @@ import type { ToolSet } from "ai";
 import { Effect, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
+import type { ToolDefinition } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
+import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../board-tool.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
 import type { StoredPlan } from "../plan-store.js";
 import {
@@ -17,7 +21,7 @@ import {
 } from "../public-research.js";
 import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL, runInRepository } from "../repository-shell.js";
-import type { HostedToolDeclaration } from "./tools.js";
+import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
 
 /**
  * planning.ts -- what a plan conversation's turns run under: the planning model's instructions, its document, and its tools.
@@ -109,11 +113,19 @@ The plan is done when the saved document is enough for a separate agent to build
 
 Once it is, queue nothing more: any question Luke still holds is moot. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
 
+### The whiteboard
+
+The plan has a whiteboard the developer sees beside the document and can draw on too. Draw on it with draw_on_board when a picture helps the user decide: the components a change touches and how they connect, a flow with its branches, or the options for a decision side by side. Draw when the user asks you to, or when a structure is hard to follow by voice alone, and tell Luke in your return what you drew so he can talk the user through it. Keep a drawing small: a handful of labelled boxes and the arrows between them, laid out left to right or top to bottom. Each call sends the whole diagram and replaces your previous drawing, so to change it, send it again with the change; what the developer drew stays.
+
+The board as it stands is handed to you every turn under [board], with every element's id. Anything the developer drew or moved since your last turn is there: read it as part of what they are telling you, and ask about it when its meaning is unclear.
+
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
+- show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet.
+- draw_on_board draws a diagram of shapes, arrows, and text on the plan's whiteboard, replacing your previous one.
 
 ## Return the result
 
@@ -161,27 +173,40 @@ const DOCUMENT_MARKER = "[saved document]";
 
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name and the saved document as JSON, read again from the row each
- * turn so what the notetaker saved is what the next turn reads. A plan that no
- * longer stands gets the heading alone.
+ * plan's name, the saved document as JSON, and the whiteboard as the model
+ * reads it (`board-text.ts`), each read again every turn so what the
+ * notetaker saved and what the developer drew is what the next turn reads. A
+ * plan that no longer stands gets the heading alone.
  */
-export function planningStandingContext(stored: StoredPlan | undefined, now: number): string {
+export function planningStandingContext(
+  stored: StoredPlan | undefined,
+  board: Board,
+  now: number,
+): string {
   const heading = `${PLAN_MARKER} ${new Date(now).toISOString()}`;
   if (!stored) return heading;
   const { plan } = stored;
-  return [heading, `Name: ${plan.name}`, DOCUMENT_MARKER, JSON.stringify(plan.document)].join("\n");
+  return [
+    heading,
+    `Name: ${plan.name}`,
+    DOCUMENT_MARKER,
+    JSON.stringify(plan.document),
+    boardText(board),
+  ].join("\n");
 }
 
 /**
- * The saved document the standing context carries, read back from its text;
- * nothing where the text carries none. The scripted fixture model reads its
- * document this way, which is the only reader: the service never parses the
- * text it composed.
+ * One tool as eve is told of it: the name, words, and wire schema as JSON.
+ * Nothing but data, because eve keeps what a dynamic tool resolver returns
+ * across its durable steps and admits no closure that captures anything
+ * else; the execution is bound in the eve project's own file, over these
+ * declarations and the host it imports.
  */
-export function documentTextOf(standingContext: string): string | undefined {
-  const lines = standingContext.split("\n");
-  const at = lines.indexOf(DOCUMENT_MARKER);
-  return at === -1 ? undefined : lines[at + 1];
+export interface HostedToolDeclaration {
+  readonly name: string;
+  readonly description: string;
+  /** The wire schema's JSON, as eve takes a plain JSON Schema input. */
+  readonly inputSchema: ToolDefinition["inputSchema"];
 }
 
 /** What one planning call runs under: the plan the conversation belongs to and the turn's research bounds. */
@@ -207,16 +232,22 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient;
 /**
  * The tools a planning turn is offered, in the order the model reads them.
  * None writes the plan, which is the notetaker's; `queue_question` hands the
- * voice a question mid-turn (`queue-question.ts`); `run_in_repository` runs a
+ * voice a question mid-turn (`queue-question.ts`); `show_code` puts lines of
+ * the plan's folder on the developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
  * command in the plan's folder on the developer's Mac, under the same
  * binding; the public search and page read (`public-research.ts`)
- * answer what the repository cannot. Every read's result goes back to the
- * model as data.
+ * answer what the repository cannot; `draw_on_board` draws on the plan's
+ * whiteboard under the same binding (`board-tool.ts`). Every read's result
+ * goes back to the model as data.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...QUEUE_QUESTION_TOOL,
     run: (_call, input) => Effect.succeed(runQueueQuestion(input)),
+  },
+  {
+    ...SHOW_CODE_TOOL,
+    run: (_call, input) => Effect.succeed(runShowCode(input)),
   },
   {
     ...RUN_IN_REPOSITORY_TOOL,
@@ -235,11 +266,15 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
     run: (call, input) =>
       Effect.map(runReadWebPage(call.research, input), (result) => ({ ...result })),
   },
+  {
+    ...DRAW_ON_BOARD_TOOL,
+    run: (call, input) => Effect.map(runDrawOnBoard(call.plan, input), (result) => ({ ...result })),
+  },
 ];
 
 const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, tool]));
 
-/** The declarations every planning turn is offered, whatever kind of turn opened it. */
+/** The declarations every turn is offered, whatever kind of turn opened it. */
 export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
   return PLANNING_TOOLS.map((tool) => ({
     name: tool.name,

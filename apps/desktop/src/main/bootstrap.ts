@@ -72,8 +72,7 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
   const runMode = runModeFor({ capture: captureMode, fixture: fixtureName !== undefined });
   dependencies.initializeCrashReporting(runMode);
 
-  // The introduction's mint lives on the same origin as the account service;
-  // the one development override redirects both, and stops at packaging.
+  // The account service's one development override stops at packaging.
   const accountBaseUrl =
     (app.isPackaged ? undefined : environment.LUKE_ACCOUNT_BASE_URL) ??
     "https://tryluke.dev/api/auth";
@@ -90,9 +89,6 @@ export function bootstrapDesktop(dependencies: BootstrapDependencies): DesktopCo
     launch: {
       captureOutput,
       profile,
-      fixtureName,
-      startPeeked: argv.includes("--peek"),
-      startInSlot: argv.includes("--slot"),
       captureMode,
       fixtureMode,
     },

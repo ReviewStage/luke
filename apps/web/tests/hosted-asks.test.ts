@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ASK_ORIGIN } from "@sidecar/hosted";
-import { TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
-import { atInstant } from "@sidecar/wire/testing";
+import { TURN_STATUS } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -11,7 +10,7 @@ import { afterAll } from "vitest";
 import { db } from "../server/db/query";
 import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { ASK_REFUSAL, acceptAsk, askStanding, stopAsk } from "../server/hosted/brain-ask";
+import { ASK_REFUSAL, acceptAsk, askStanding } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_CANCEL_OUTCOME,
@@ -24,7 +23,7 @@ import {
   type RelayStanding,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
 import { ASK_DISPATCH_REFUSAL, type AskRow, askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
@@ -373,7 +372,7 @@ it.effect(
 
       const stops: (readonly [string, string, string, string])[] = [];
       let throwOnce = false;
-      const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
+      const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
       const relay = new StreamRelay({
         writer,
         asks: askEffects,
@@ -385,8 +384,6 @@ it.effect(
             }
             stops.push([stopped.conversationId, session, eveTurnId, turnId]);
           }),
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: () => undefined,
       });
@@ -394,7 +391,6 @@ it.effect(
         sessionId,
         target,
         turn: BRAIN_HOST_TURN.TYPED,
-        kind: CONVERSATION_KIND.MAIN,
         state: memoryRelayState(),
       };
       const start = (turn: string, deliveries: readonly string[]): MessageStreamEvent => {
@@ -453,190 +449,6 @@ it.effect(
 );
 
 it.effect(
-  "the stamp and the start's binding converge in either order: bound-then-stamped, the Stop cancels the turn itself; stamped-then-bound, the start carries it; each order stops the turn once",
-  () =>
-    Effect.promise(async () => {
-      const userId = await database.createUser();
-      const conversationId = await conversation(userId);
-      const target = { userId, conversationId };
-      const sessionId = `wrun_${randomUUID()}`;
-      await setConversationRuntimeSessionId(conversationId, sessionId);
-      const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
-      const writes = {
-        enqueueTurn: (
-          target: Parameters<typeof writer.enqueueTurn>[0],
-          enqueue: Parameters<typeof writer.enqueueTurn>[1],
-        ) => database.run(writer.enqueueTurn(target, enqueue)),
-        requestTurnCancel: (
-          target: Parameters<typeof writer.requestTurnCancel>[0],
-          cancel: Parameters<typeof writer.requestTurnCancel>[1],
-        ) => database.run(writer.requestTurnCancel(target, cancel)),
-      };
-      const turnId = hostTurnId(sessionId, "turn_9");
-      const waiting = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, waiting.id, () =>
-        Effect.succeed({
-          sessionId,
-          deliveryId: "delivery-w",
-        }),
-      );
-      const cancels: (readonly [string, string | undefined])[] = [];
-      const eve = {
-        ...eveAccepting(sessionId),
-        cancel(session: string, eveTurnId?: string) {
-          cancels.push([session, eveTurnId]);
-          return Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.ACCEPTED });
-        },
-      };
-      // The start lands between the Stop's read and its stamp: the turn row is written and the ask
-      // bound before the stamp, so the start read no stamp and carried nothing.
-      const bindingBeforeStamp = {
-        ...askEffects,
-        cancelRequested: (id: string, at: Date) =>
-          Effect.promise(async () => {
-            assert.ok(
-              Result.isSuccess(
-                await writes.enqueueTurn(target, {
-                  turnId,
-                  eveTurnId: "turn_9",
-                  origin: TURN_ORIGIN.TYPED,
-                }),
-              ),
-            );
-            await asks.bindDeliveries(target, ["delivery-w"], turnId);
-            await asks.cancelRequested(id, at);
-          }),
-      };
-      const outcome = await database.run(
-        atInstant(NOW)(
-          stopAsk(
-            {
-              store: database.store,
-              asks: bindingBeforeStamp,
-              writer,
-              eve,
-            },
-            userId,
-            waiting.id,
-          ),
-        ),
-      );
-      assert.ok(Result.isSuccess(outcome));
-      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-      const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
-      assert.equal(turn?.cancelRequestedAt?.getTime(), NOW);
-
-      // The other order in the same run: the Stop stamps first and finds nothing bound, so it cancels
-      // nothing itself; the start that binds the ask afterwards reads the stamp and carries it.
-      const later = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, later.id, () =>
-        Effect.succeed({
-          sessionId,
-          deliveryId: "delivery-l",
-        }),
-      );
-      const stampedFirst = await database.run(
-        atInstant(NOW)(
-          stopAsk({ store: database.store, asks: askEffects, writer, eve }, userId, later.id),
-        ),
-      );
-      assert.ok(Result.isSuccess(stampedFirst));
-      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-      const stops: (readonly [string, string, string, string])[] = [];
-      const relay = new StreamRelay({
-        writer,
-        asks: askEffects,
-        stopTurn: (stopped, session, eveTurnId, stoppedTurn) =>
-          Effect.sync(() => {
-            stops.push([stopped.conversationId, session, eveTurnId, stoppedTurn]);
-          }),
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
-        now: () => NOW,
-        report: () => undefined,
-      });
-      const started = stampedEveEvent(
-        { type: "turn.started", data: { turnId: "turn_10", sequence: 1 } },
-        NOW,
-      );
-      await database.run(
-        relay.handle(
-          { ...started, meta: { ...started.meta, deliveryIds: ["delivery-l"] } },
-          {
-            sessionId,
-            target,
-            kind: CONVERSATION_KIND.MAIN,
-            turn: BRAIN_HOST_TURN.TYPED,
-            state: memoryRelayState(),
-          },
-        ),
-      );
-      assert.deepEqual(stops, [
-        [conversationId, sessionId, "turn_10", hostTurnId(sessionId, "turn_10")],
-      ]);
-      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-
-      // Both landed before both later reads: the start's honour stamped the turn, so the Stop's re-read
-      // finds the stamp standing and answers it without a cancel of its own, which unscoped could reach
-      // the turn queued next.
-      const honoured = await asks.record(write(userId, conversationId));
-      await asks.dispatchOnce(target, honoured.id, () =>
-        Effect.succeed({
-          sessionId,
-          deliveryId: "delivery-h",
-        }),
-      );
-      const honouredTurn = hostTurnId(sessionId, "turn_11");
-      const honouredBeforeStamp = {
-        ...askEffects,
-        cancelRequested: (askId: string, at: Date) =>
-          Effect.promise(async () => {
-            assert.ok(
-              Result.isSuccess(
-                await writes.enqueueTurn(target, {
-                  turnId: honouredTurn,
-                  eveTurnId: "turn_11",
-                  origin: TURN_ORIGIN.TYPED,
-                }),
-              ),
-            );
-            await asks.bindDeliveries(target, ["delivery-h"], honouredTurn);
-            await writes.requestTurnCancel(target, { turnId: honouredTurn, at: new Date(NOW - 5) });
-            await asks.cancelRequested(askId, at);
-          }),
-      };
-      const afterHonour = await database.run(
-        atInstant(NOW)(
-          stopAsk(
-            {
-              store: database.store,
-              asks: honouredBeforeStamp,
-              writer,
-              eve,
-            },
-            userId,
-            honoured.id,
-          ),
-        ),
-      );
-      assert.deepEqual(
-        Result.isSuccess(afterHonour) && afterHonour.success.cancelRequestedAt,
-        NOW - 5,
-      );
-      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-
-      // A second Stop on a running turn already stamped is a repeat: eve is not asked again.
-      const again = await database.run(
-        atInstant(NOW + 1)(
-          stopAsk({ store: database.store, asks: askEffects, writer, eve }, userId, waiting.id),
-        ),
-      );
-      assert.deepEqual(Result.isSuccess(again) && again.success.cancelRequestedAt, NOW);
-      assert.deepEqual(cancels, [[sessionId, "turn_9"]]);
-    }),
-);
-
-it.effect(
   "over the real record, a follow-up ask stands queued under its own id until eve's start names its delivery, and then reads as the turn it ran in",
   () =>
     Effect.promise(async () => {
@@ -661,23 +473,21 @@ it.effect(
       if (!Result.isSuccess(accepted)) return;
       assert.deepEqual(eve.deliveries, ["delivery-1"]);
       const queued = await database.run(askStanding(reads, userId, accepted.success.id));
-      assert.equal(queued?.answer.status, TURN_STATUS.QUEUED);
-      assert.equal(queued?.answer.turnId, undefined);
+      assert.equal(queued?.ask?.id, accepted.success.id);
+      assert.equal(queued?.ask?.turnId, undefined);
+      assert.equal(queued?.turn, undefined);
 
-      const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
+      const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
       const relay = new StreamRelay({
         writer,
         asks: askEffects,
         stopTurn: () => Effect.void,
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: () => undefined,
       });
       const standing: RelayStanding = {
         sessionId,
         target: { userId, conversationId },
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.TYPED,
         state: memoryRelayState(),
       };
@@ -694,12 +504,12 @@ it.effect(
 
       const turnId = hostTurnId(sessionId, "turn_3");
       const running = await database.run(askStanding(reads, userId, accepted.success.id));
-      assert.equal(running?.answer.turnId, turnId);
-      assert.equal(running?.answer.status, TURN_STATUS.RUNNING);
+      assert.equal(running?.ask?.turnId, turnId);
+      assert.equal(running?.turn?.id, turnId);
+      assert.equal(running?.turn?.status, TURN_STATUS.RUNNING);
       assert.deepEqual(await database.run(askStanding(reads, userId, turnId)), {
-        ...running,
-        answer: { ...running?.answer, id: turnId },
         ask: undefined,
+        turn: running?.turn,
       });
 
       const again = await database.run(

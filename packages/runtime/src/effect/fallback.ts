@@ -1,7 +1,7 @@
 /**
  * fallback.ts -- recovering from a failure or a defect while an interruption passes through.
  *
- * A read that failed or defected stands as its fallback; a caller ending the
+ * A read that failed or defected is recovered from; a caller ending the
  * fiber is neither, so what is handled here is the typed failure and the
  * unexpected throw, never the cause whole: `Effect.catchCause` would take an
  * interruption with them and a fiber that was told to stop would go on. A
@@ -21,14 +21,6 @@ export function catchAllButInterrupt<A, E, R, B, E2, R2>(
     Effect.catch(effect, (error) => recover(Cause.fail(error))),
     (defect) => recover(Cause.die(defect)),
   );
-}
-
-/** A failure or a defect answered with `fallback`; an interruption passes through. */
-export function withFallback<A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-  fallback: A,
-): Effect.Effect<A, never, R> {
-  return catchAllButInterrupt(effect, () => Effect.succeed(fallback));
 }
 
 /**

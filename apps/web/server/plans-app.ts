@@ -1,3 +1,4 @@
+import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
@@ -9,6 +10,7 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
+import { readBoard, writeScene } from "./hosted/board-store.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -35,6 +37,10 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * `GET /api/plans/{id}` is the window opening a plan, so it also moves the
  * plan to the head of the list.
  *
+ * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
+ * Luke's latest drawing, and writes the scene back whole, the last write
+ * winning (`hosted/board-store.ts`).
+ *
  * Starting a plan names a folder on the developer's Mac and nothing more.
  * The two command paths are the Mac's side of `run_in_repository`
  * (`hosted/repository-shell.ts`): a held claim of the next command the
@@ -46,6 +52,8 @@ const PLANS_PATH = {
   COLLECTION: "/api/plans",
   /** GET opens, DELETE deletes; the rewrite moves the path's id into the `id` query. */
   ONE: "/api/plans/plan",
+  /** GET reads the plan's board, PUT writes it; the rewrite moves the path's id into the `id` query. */
+  BOARD: "/api/plans/board",
   /** POST claims the plan's next command, held open until one arrives. */
   COMMAND_CLAIM: "/api/plans/commands/claim",
   /** POST settles one claimed command; the rewrite moves its id into the `command` query. */
@@ -57,6 +65,7 @@ const COMMAND_ID_QUERY = "command";
 const HTTP_METHOD = {
   GET: "GET",
   POST: "POST",
+  PUT: "PUT",
   DELETE: "DELETE",
 } as const;
 
@@ -64,6 +73,9 @@ const PLAN_ID_QUERY = "id";
 
 /** A start request is a name and a folder path, so a body past this is not one. */
 const MAXIMUM_CREATE_BODY_BYTES = 8_192;
+
+/** A save is a scene at its byte bound, with room for the drawing's number around it. */
+const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + 1_024;
 
 /** A result is two outputs of at most `PLAN_COMMAND_OUTPUT_MAX_CHARS` each, every character escaped at worst. */
 const MAXIMUM_RESULT_BODY_BYTES = 2 * PLAN_COMMAND_OUTPUT_MAX_CHARS * 6 + 1_024;
@@ -148,6 +160,32 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/planEndpoint")(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
 
+/** GET reads the plan's board; PUT writes the Mac's scene whole. */
+const boardEndpoint = /* @__PURE__ */ Effect.fn("web/planBoardEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.PUT) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  if (incoming.method === HTTP_METHOD.GET) {
+    const board = yield* hostedStoreOrUnavailable(readBoard(userId, planId));
+    if (Option.isNone(board)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { board: board.value });
+  }
+  const body = yield* readJsonBodyEffect(MAXIMUM_BOARD_BODY_BYTES);
+  const save = readEither(boardSaveRequestSchema)(body);
+  if (Result.isFailure(save)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const written = yield* hostedStoreOrUnavailable(
+    writeScene(userId, planId, save.success.elements, save.success.appliedDrawing),
+  );
+  if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { board: written.value });
+});
+
 /** POST: the plan's next command, claimed for the caller's Mac, or null once the hold ran out. */
 const commandClaimEndpoint = /* @__PURE__ */ Effect.fn("web/planCommandClaimEndpoint")(function* (
   seams: PlansAppSeams,
@@ -196,6 +234,7 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COLLECTION, refusing(collectionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, refusing(oneEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, refusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COMMAND_CLAIM, refusing(commandClaimEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COMMAND, refusing(commandSettleEndpoint(seams))),
     hostedNotFoundRoute,

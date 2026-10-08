@@ -15,11 +15,7 @@ import {
   JWT_KEY_STORAGE,
 } from "../server/auth-policy";
 import * as authSchema from "../server/db/auth-schema";
-import {
-  DESKTOP_OAUTH_CLIENT,
-  MOBILE_OAUTH_CLIENT,
-  oauthClientRecord,
-} from "../server/oauth-clients";
+import { DESKTOP_OAUTH_CLIENT, oauthClientRecord } from "../server/oauth-clients";
 import { dropUnreadableJwks, seedOAuthClient } from "../server/seed-clients";
 import { openMigratedPglite, sqlClientOverPglite, testSqlClient } from "./support/sql-client";
 
@@ -105,38 +101,6 @@ it.layer(testSqlClient)("the auth service's own tables", (it) => {
       const rows = yield* readOAuthClient(DESKTOP_OAUTH_CLIENT.id);
       assert.equal(rows.length, 1);
     }),
-  );
-
-  it.effect(
-    "mobile client seeding updates the one client identity instead of creating another",
-    () =>
-      Effect.gen(function* () {
-        const opened = new Date("2026-08-17T00:00:00.000Z");
-        yield* seedOAuthClient(MOBILE_OAUTH_CLIENT, opened);
-        const [seeded] = yield* readOAuthClient(MOBILE_OAUTH_CLIENT.id);
-        assert.ok(seeded);
-        assert.deepEqual(seeded, {
-          id: MOBILE_OAUTH_CLIENT.id,
-          client_id: MOBILE_OAUTH_CLIENT.id,
-          disabled: false,
-          skip_consent: true,
-          enable_end_session: false,
-          scopes: ["openid", "profile", "email", "offline_access"],
-          name: "Luke for iOS",
-          redirect_uris: ["dev.tryluke.ios://oauth/callback"],
-          token_endpoint_auth_method: "none",
-          grant_types: ["authorization_code", "refresh_token"],
-          response_types: ["code"],
-          public: true,
-          type: "native",
-          require_pkce: true,
-        });
-
-        const updated = new Date("2026-08-18T00:00:00.000Z");
-        yield* seedOAuthClient(MOBILE_OAUTH_CLIENT, updated);
-        const rows = yield* readOAuthClient(MOBILE_OAUTH_CLIENT.id);
-        assert.equal(rows.length, 1);
-      }),
   );
 
   // A Preview's branch database carries production's key, sealed under a
@@ -260,8 +224,6 @@ test("Better Auth's own adapter writes an access token's scopes into the migrate
 
 test("the auth service encrypts credentials and refuses user-provisioned OAuth clients", () => {
   assert.equal(ACCOUNT_TOKEN_STORAGE.encryptOAuthTokens, true);
-  // An account signed in with Google links a GitHub account whose email differs.
-  assert.equal(ACCOUNT_TOKEN_STORAGE.accountLinking.allowDifferentEmails, true);
   assert.equal(JWT_KEY_STORAGE.jwks.disablePrivateKeyEncryption, false);
   assert.equal(denyOAuthClientPrivileges(), false);
 });
@@ -281,28 +243,4 @@ test("the desktop client stays public, secretless, trusted, and bound to PKCE", 
   assert.deepEqual(record.scopes, ["openid", "profile", "email", "offline_access"]);
   assert.equal(record.createdAt, now);
   assert.equal(record.updatedAt, now);
-});
-
-test("the mobile client stays public, secretless, trusted, and bound to PKCE", () => {
-  const now = new Date("2026-08-17T00:00:00.000Z");
-  const record = oauthClientRecord(MOBILE_OAUTH_CLIENT, now);
-
-  assert.equal(record.id, MOBILE_OAUTH_CLIENT.id);
-  assert.equal(record.clientId, MOBILE_OAUTH_CLIENT.id);
-  assert.equal("clientSecret" in record, false);
-  assert.equal(record.public, true);
-  assert.equal(record.requirePKCE, true);
-  assert.equal(record.skipConsent, true);
-  assert.deepEqual(record.redirectUris, ["dev.tryluke.ios://oauth/callback"]);
-  assert.deepEqual(record.grantTypes, ["authorization_code", "refresh_token"]);
-  assert.deepEqual(record.scopes, ["openid", "profile", "email", "offline_access"]);
-  assert.equal(record.createdAt, now);
-  assert.equal(record.updatedAt, now);
-});
-
-test("mobile client uses a custom URI scheme, not a loopback address", () => {
-  const [redirectUri] = MOBILE_OAUTH_CLIENT.redirectUris;
-  const url = new URL(redirectUri);
-  assert.notEqual(url.protocol, "http:");
-  assert.notEqual(url.protocol, "https:");
 });

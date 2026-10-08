@@ -1,38 +1,12 @@
-import { isProviderId, type Session } from "@sidecar/session";
-import type { Rectangle, ResolvedNotchGeometry } from "@sidecar/surface";
-import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import type { Rectangle } from "@sidecar/surface";
 
-export {
-  isWorkspaceProviderId,
-  type SessionOpenResult,
-  type SessionWriteResult,
-  type WorkspaceProviderId,
-} from "@sidecar/session";
 export type { WindowMode } from "@sidecar/surface";
-
-/**
- * A session as its provider named it, read at a process boundary. The
- * provider id is admitted against the registry rather than typed by it: a
- * `SessionIdentity` carries the id its provider reported, and this build's own
- * registry is what says whether that is one it observes.
- */
-export function isSessionIdentity(value: UnparsedWireValue): boolean {
-  if (!isRecord(value)) return false;
-  return (
-    isWireString(value.providerId) &&
-    isProviderId(value.providerId) &&
-    isWireString(value.providerSessionId) &&
-    value.providerSessionId.length > 0
-  );
-}
 
 /**
  * Which surface a window exists to draw. Every window loads the same renderer
  * bundle, so the role is what tells the hidden voice window apart from the
  * panel windows — decided in the main process by which window asked, never by
- * anything the renderer could claim about itself. The spoken introduction is
- * not one of them: it is a fullscreen mode of the panel, and the document's
- * own `introduction` slice is what says so.
+ * anything the renderer could claim about itself.
  */
 export const WINDOW_ROLE = {
   PANEL: "panel",
@@ -48,7 +22,6 @@ export interface DisplayDiagnostic {
   bounds: Rectangle;
   workArea: Rectangle;
   scaleFactor: number;
-  notch: ResolvedNotchGeometry;
 }
 
 /**
@@ -88,9 +61,4 @@ export interface SessionReplayBootstrap {
    * lands during it and to nobody if none ever does.
    */
   accountId?: string | undefined;
-}
-
-/** The complete session state one observation revision publishes to a desktop surface. */
-export interface SessionRosterPayload {
-  sessions: readonly Session[];
 }

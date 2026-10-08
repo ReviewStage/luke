@@ -1,5 +1,3 @@
-import { ACTION_OUTPUT_STATUS } from "@sidecar/actions";
-import { type EffectiveToolPolicy, TOOL_EFFECT, TOOL_EXECUTION } from "@sidecar/runtime";
 import type { CompactionSource, SessionKey } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
@@ -12,13 +10,11 @@ import {
 import type { UIMessage } from "ai";
 import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
 import { spokenProse } from "./spoken-prose.js";
-import { BRAIN_TOOL } from "./tools.js";
 import type { BrainTurnTrigger } from "./turn.js";
 
 /**
- * What a turn tells whoever is listening, as it happens, whichever kind of
- * turn it is: a developer's ask, an observation, a child's task, or a
- * child's completion. Two audiences hear one stream. A relay into
+ * What a turn tells whoever is listening, as it happens. Two audiences hear
+ * one stream. A relay into
  * a live conversation reads the recorded run's moments: the one step worth a
  * spoken update, the moment every write it took has its result journaled,
  * the answer a sentence at a time once that moment has passed — the words of
@@ -41,6 +37,8 @@ export const BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   /** A planning run queued one question for the voice to put to the developer when it reaches it; told as the call is journaled, before the run ends. */
   QUESTION_QUEUED: "question_queued",
+  /** A planning run put code of the plan's folder on the developer's screen, by place; told as the call is journaled, before the run ends. */
+  CODE_SHOWN: "code_shown",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the answer, in order, after every write the run took has settled. */
@@ -74,7 +72,7 @@ export const SLOW_STEP_KIND = {
   REPOSITORY_READ: "repository_read",
 } as const;
 
-export type SlowStepKind = (typeof SLOW_STEP_KIND)[keyof typeof SLOW_STEP_KIND];
+type SlowStepKind = (typeof SLOW_STEP_KIND)[keyof typeof SLOW_STEP_KIND];
 
 /** Who or what opened a turn, as the turn's record takes it: attribution, never a permission. */
 export const BRAIN_TURN_ORIGIN = {
@@ -113,17 +111,18 @@ export const TOOL_CALL_SETTLEMENT = {
  * whole rather than folding into an error that would read as a refusal, the
  * opposite claim and one that would license doing it again.
  */
-export const TOOL_REFUSAL_STATUS = {
+const TOOL_REFUSAL_STATUS = {
   REJECTED: ACTION_RESULT_STATUS.REJECTED,
   UNSUPPORTED: ACTION_RESULT_STATUS.UNSUPPORTED,
-  REFUSED: ACTION_OUTPUT_STATUS.REFUSED,
+  /** An action envelope's own refusal word, which folds an adapter's rejected and unsupported into one. */
+  REFUSED: "refused",
 } as const;
 
-export type ToolRefusalStatus = (typeof TOOL_REFUSAL_STATUS)[keyof typeof TOOL_REFUSAL_STATUS];
+type ToolRefusalStatus = (typeof TOOL_REFUSAL_STATUS)[keyof typeof TOOL_REFUSAL_STATUS];
 
 const TOOL_REFUSAL_STATUS_LIST: readonly string[] = Object.values(TOOL_REFUSAL_STATUS);
 
-export function isToolRefusalStatus(status: string): status is ToolRefusalStatus {
+function isToolRefusalStatus(status: string): status is ToolRefusalStatus {
   return TOOL_REFUSAL_STATUS_LIST.includes(status);
 }
 
@@ -148,7 +147,7 @@ export type ToolCallSettlement =
     };
 
 /** A compaction as the turn reports it: which way it folded, how much, and the summary where one was written. */
-export interface TurnCompaction {
+interface TurnCompaction {
   readonly source: CompactionSource;
   readonly dropped: number;
   readonly summary?: string;
@@ -180,6 +179,13 @@ export type BrainRunEventBody =
       readonly runId: string;
       readonly question: string;
       readonly recommendation: string;
+    }
+  | {
+      readonly kind: typeof BRAIN_RUN_EVENT.CODE_SHOWN;
+      readonly runId: string;
+      readonly path: string;
+      readonly startLine?: number;
+      readonly endLine?: number;
     }
   | { readonly kind: typeof BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
@@ -270,20 +276,6 @@ export function toolCallSettlementOf(
   }
   const reason = isRecord(output) && isWireString(output.reason) ? output.reason : outputJson;
   return { state: TOOL_CALL_SETTLEMENT.OUTPUT_ERROR, output, errorText: reason, status };
-}
-
-/** Which slow step a tool call the policy offers begins, or nothing for a call that is neither slow nor offered. */
-export function slowStepOf(policy: EffectiveToolPolicy, name: string): SlowStepKind | undefined {
-  const tool = policy.allowed.find((candidate) => candidate.schema.name === name);
-  if (!tool) return undefined;
-  if (
-    tool.execution === TOOL_EXECUTION.PERFORMER ||
-    (tool.execution === TOOL_EXECUTION.MEMORY && tool.effect === TOOL_EFFECT.WRITE)
-  ) {
-    return SLOW_STEP_KIND.PROVIDER_WRITE;
-  }
-  if (name === BRAIN_TOOL.READ_TRANSCRIPT) return SLOW_STEP_KIND.TRANSCRIPT_READ;
-  return undefined;
 }
 
 const SENTENCE_BOUNDARY = /(?<=[.!?…]["'”’)\]]*)\s+|\n+/;

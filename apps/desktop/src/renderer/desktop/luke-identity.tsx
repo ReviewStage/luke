@@ -5,8 +5,7 @@ import {
   type VoiceLevels,
   type VoiceSpeakers,
 } from "#shared/messages/voice-view";
-import { type FaceContext, speechFaceInputs, useFaceHover, useFaceMotion } from "../luke-face-mood";
-import type { SessionTally } from "../session-model";
+import { speechFaceInputs, useFaceHover, useFaceMotion } from "../luke-face-mood";
 import { usePrefersReducedMotion } from "../use-reduced-motion";
 import type { VoiceActivity } from "../use-voice-view";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "../waveform";
@@ -20,11 +19,8 @@ const VOICE_STATUS = {
 
 type VoiceStatus = (typeof VOICE_STATUS)[keyof typeof VOICE_STATUS];
 
-/** What the card says while no call stands: whether Luke may speak up unbidden. */
-const RESTING_LINE = {
-  READY: "Ready",
-  HELD: "Quiet for now",
-} as const;
+/** What the card says while no call stands. */
+const RESTING_LINE = "Ready";
 
 /**
  * The one line of voice state the card draws. Luke speaking wins over the
@@ -43,44 +39,33 @@ export function voiceStatus(input: {
 }
 
 export interface LukeIdentityProps {
-  tally: SessionTally;
   levels?: VoiceLevels;
   speakers: VoiceSpeakers;
   voiceActive: VoiceActivity;
   fixtureSpeaking: boolean;
   voiceOpening: boolean;
-  announcementsHeld: boolean;
-  sessionsSettled: boolean;
 }
 
 /**
- * Luke at the head of the sidebar: his face, reacting to the same material
- * the notch wings read, his name, and one line saying what the voice is doing,
- * with a meter for whoever is talking.
+ * Luke at the head of the sidebar: his face, reacting to the voice, his
+ * name, and one line saying what the voice is doing, with a meter for
+ * whoever is talking.
  */
 export function LukeIdentity({
-  tally,
   levels = SILENT_VOICE_LEVELS,
   speakers,
   voiceActive,
   fixtureSpeaking,
   voiceOpening,
-  announcementsHeld,
-  sessionsSettled,
 }: LukeIdentityProps): React.JSX.Element {
   // The box the hover is read against, not the face itself: the drawing is
   // remounted for every play, and the hover has to survive the trick it fires.
   const faceElement = useRef<HTMLSpanElement>(null);
-  const faceContext: FaceContext = {
-    ...speechFaceInputs(speakers),
-    announcementsHeld,
-    settled: sessionsSettled,
-    attention: tally.attentionIds,
-    working: tally.working,
-    complete: tally.complete,
-    total: tally.total,
-  };
-  const face = useFaceMotion(faceContext, usePrefersReducedMotion(), useFaceHover(faceElement));
+  const face = useFaceMotion(
+    speechFaceInputs(speakers),
+    usePrefersReducedMotion(),
+    useFaceHover(faceElement),
+  );
   const status = voiceStatus({ speakers, voiceOpening });
   const meterVoice: WaveformVoice | undefined =
     status === VOICE_STATUS.SPEAKING
@@ -88,7 +73,7 @@ export function LukeIdentity({
       : status === VOICE_STATUS.LISTENING
         ? WAVEFORM_VOICE.DEVELOPER
         : undefined;
-  const line = status ?? (announcementsHeld ? RESTING_LINE.HELD : RESTING_LINE.READY);
+  const line = status ?? RESTING_LINE;
 
   return (
     <div className="luke-identity" data-turn={meterVoice}>

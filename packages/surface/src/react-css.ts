@@ -14,8 +14,6 @@ export function cssCustomProperties(properties: Record<string, string | number>)
  * quietly the wrong size.
  */
 export const SURFACE_PROPERTY = {
-  NOTCH_TOP_INSET: "--notch-top-inset",
-  NOTCH_HOUSING_WIDTH: "--notch-housing-width",
   PANEL_HEIGHT: "--panel-height",
   SLOT_HEIGHT: "--slot-height",
   FEEDBACK_HEIGHT: "--feedback-height",

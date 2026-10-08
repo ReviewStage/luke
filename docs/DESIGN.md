@@ -12,8 +12,8 @@ way to pass that review is to build from them.
 
 One spring drives everything that needs to travel: `--spring` for the surface
 and anything that travels with it, `--spring-fast` (the same damping ratio at
-a higher frequency) for small elements like switch thumbs. Settings pages and
-the tab selection indicator change at once; task navigation does not travel.
+a higher frequency) for small elements like switch thumbs. Settings pages
+change at once; task navigation does not travel.
 Durations and delays come only from the tokens in
 `packages/surface/src/generated/motion-tokens.css` (`--duration-shape`,
 `--duration-exit`, `--duration-quick`, `--duration-fast`, `--duration-hover`,
@@ -28,9 +28,9 @@ and a loop that carries one must answer a play-state token. A finite companion
 timed to a generated face gesture may also use the gesture's literal phase,
 but it must answer `--face-motion`, live beside a comment naming the generated
 cycle and phase it follows, and do no work when that gesture is not selected.
-A main-process
-constant that mirrors a CSS total (`COLLAPSE_ANIMATION_MS`) names the
-`MOTION_DURATION_MS` tokens it mirrors.
+A TypeScript
+constant that mirrors a CSS total (`CONFIRMATION_ENTRANCE_MS` in
+`feedback-confirmation.ts`) names the `MOTION_DURATION_MS` tokens it mirrors.
 
 ## The surface owns size; everything else owns transform and opacity
 
@@ -43,19 +43,14 @@ makes motion stutter.
 The surface's fixed bounds are generated vocabulary too. Panel width and its
 height ceiling come from `design/generate-surface-shared.mjs`; TypeScript and
 CSS consume the emitted constants and custom properties rather than restating
-pixels. Pseudo-elements that merely extend the opaque surface into its notch
-flares count as part of that same leaf shape and may size with it. A scrolling
+pixels. A scrolling
 content viewport may animate a `mask-image` edge to disclose overflow, because
 the mask neither changes layout nor moves content; no other layered content
 gets a size-animation exception.
 
-One motion is the browser's rather than a transition of ours: the Conversation
-thread's stamp column is scrolled in by the thread's own sideways scroll and
-put back by `scroll-snap-type`, because only the browser sees the fingers
-lift, and a listener that guessed the lift from the steps would snap while a
-hand still rested. It is the sole snap on the surface, `repository-checks.sh`
-holds it to `conversation.css`, and nothing else may borrow a native motion in
-place of the spring.
+No motion is the browser's rather than a transition of ours: nothing on the
+surface borrows a native motion in place of the spring, and
+`repository-checks.sh` refuses `scroll-snap-type` in the renderer's styles.
 
 **Never make the surface chase.** The surface's size is measured off content
 and animated by one transition. If content grows gradually, its own height
@@ -83,7 +78,8 @@ Three rules, one per element involved:
 3. **Whatever its room displaced replays the journey.** Layout has already
    moved the elements below it; animate them FLIP-style from where they were
    to where they now are, on the same spring (`session-motion` does this for
-   re-sorted rows; `.feedback-follow` does it for the composer's send row).
+   the wing's re-sorted marks; `.feedback-follow` does it for the composer's
+   send row).
 
 Ordering comes from delay, and direction decides it: against a **growing**
 edge, trail it (`--slot-delay`-class delays keep a traveling element behind
@@ -96,8 +92,8 @@ the surface's is wrong, whatever it looks like at speed.
 
 Content leaves first, over `--duration-exit`, and only its end releases the
 room: the surface must never shrink out from under something still drawn. For
-elements that unmount, hold them mounted through their own exit (the key slot
-and the feedback preview both keep drawing what they last held) and take them
+elements that unmount, hold them mounted through their own exit (the sign-in
+slot and the feedback preview both keep drawing what they last held) and take them
 out when the exit finishes, never on the frame the state changed.
 
 ## Mount animations, not `@starting-style`, for reveals

@@ -4,7 +4,6 @@ import { ImageIcon, WingFace as LukeFace, RemoveIcon } from "@sidecar/panel";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
-import { useStagedFocus } from "./credential-entry";
 import { CONFIRMATION_ENTRANCE_MS, type FeedbackConfirmation } from "./feedback-confirmation";
 import {
   FEEDBACK_COPY,
@@ -13,8 +12,9 @@ import {
   isSendable,
 } from "./feedback-entry";
 import { imageFiles } from "./feedback-images";
+import { parseMilliseconds, parsePixels, STILL_MS } from "./motion-tokens";
 import { HIT_REGION } from "./panel-state";
-import { parseMilliseconds, parsePixels, STILL_MS } from "./session-motion";
+import { useStagedFocus } from "./staged-focus";
 
 const MESSAGE_FIELD_ID = "feedback-message";
 
@@ -167,7 +167,7 @@ export function FeedbackSlot({
   // A zero-duration property change runs no transition and fires no end event,
   // so under capture the fade's end would never come and the shape would stay
   // tall around an invisible image. Read the fade's own token the way
-  // session-motion reads every duration: below STILL_MS the close is a request
+  // every duration is read: below STILL_MS the close is a request
   // for stillness, and the room goes back before the next frame paints.
   useLayoutEffect(() => {
     if (!previewClosing) return;
@@ -253,9 +253,8 @@ export function FeedbackSlot({
         <label className="settings-label" htmlFor={MESSAGE_FIELD_ID}>
           {copy.label}
         </label>
-        {/* The note may open prefilled with the conversation's own words — the
-            one category Luke blocks from the recording by his own posture
-            rather than the library's input masking — so the field carries the
+        {/* The note is blocked from the recording by Luke's own posture
+            rather than the library's input masking, so the field carries the
             library's fixed blocking class itself, and nothing else of the
             composer changes what it records. */}
         <textarea

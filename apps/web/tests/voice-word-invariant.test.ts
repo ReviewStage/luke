@@ -26,7 +26,7 @@ import {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
-  MAIN_SESSION_KEY,
+  sessionKey,
   UI_PART_TYPE,
 } from "../server/core";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../server/db/voice-vocabulary";
@@ -124,7 +124,9 @@ async function target(): Promise<VoiceTarget> {
   const userId = await database.createUser();
   const conversationId = await insertConversation(database.run, { userId });
   const liveSessionId = `sess_${randomUUID()}`;
-  await database.run(sessionRecord.register({ userId, sessionId: liveSessionId }));
+  await database.run(
+    sessionRecord.register({ userId, sessionId: liveSessionId, planId: randomUUID() }),
+  );
   return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
 
@@ -159,7 +161,7 @@ class TurnOpeningBrain implements LiveBrain {
         origin: BRAIN_TURN_ORIGIN.SPOKEN,
         trigger: BRAIN_TURN_TRIGGER.ASK,
         at: NOW,
-        conversationId: MAIN_SESSION_KEY,
+        conversationId: sessionKey(this.#conversation.conversationId),
         turnId,
         sequence: 1,
       });

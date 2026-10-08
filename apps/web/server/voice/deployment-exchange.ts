@@ -3,27 +3,24 @@ import { Data, Effect, type Layer, type Redacted } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
-  EVE_CALLER,
   type EveSessions,
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../hosted/brain-host/eve-sessions.js";
 import { openAiBrainModel } from "../hosted/brain-host/model.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
-import { payloadKeyRing } from "../hosted/encryption.js";
 import { storeWriter } from "../hosted/store/index.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
-import type { ExchangeAttachment, ExchangeReport } from "./live-exchange.js";
+import type { ExchangeAttachment } from "./live-exchange.js";
 import { PLAN_SCRIBE } from "./plan-scribe.js";
 
 /**
- * The exchange attachment as the sessions route passes it: `exchangeAttachment`
+ * The exchange attachment as the voice function passes it: `exchangeAttachment`
  * over the deployment's own seams, composed once per function instance on the
  * first session offered and reused for every session after. The seams are
- * the three the hosted tier already turns on: the payload secret the store's
- * sealed rows open under, the deployment's own secret it acts for an account
- * under at eve's door, and the origin eve answers on. A deployment missing
- * any of the three composes no exchange and the attachment fails, which the
+ * the two the hosted tier already turns on: the deployment's own secret it
+ * acts for an account under at eve's door, and the origin eve answers on. A
+ * deployment missing either composes no exchange and the attachment fails, which the
  * service answers as the refusal of every session, since a session with no
  * exchange behind it would have no one to answer its asks: the same kill
  * switch every hosted endpoint keeps, and the same outcome a store that
@@ -33,13 +30,11 @@ import { PLAN_SCRIBE } from "./plan-scribe.js";
  */
 
 interface DeploymentExchangeSeams {
-  /** The secret the store's sealed rows open under; nothing means the hosted tier is off. */
-  readonly encryptionSecret: () => Redacted.Redacted | undefined;
-  /** The secret the deployment acts for an account under at eve's door, the tick's own; nothing refuses every session. */
+  /** The secret the deployment acts for an account under at eve's door, the cron's own; nothing refuses every session. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on; nothing refuses every session. */
   readonly eveOrigin: () => string | undefined;
-  /** The deployment's OpenAI key the plan's notetaker runs on; nothing means a planning call writes no plan. */
+  /** The deployment's OpenAI key the plan's notetaker runs on; nothing means a call writes no plan. */
   readonly openAiKey: () => Redacted.Redacted | undefined;
   /** eve as the deployment reaches it for one account; a test hands in a fake, the function composes the real client below. */
   readonly eve?: (accountId: string) => EveSessions;
@@ -50,9 +45,8 @@ interface DeploymentExchangeSeams {
    * the service's upstream reaches OpenAI through (`openai.ts`) stands.
    */
   readonly httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  readonly now: () => number;
-  /** Where a standing exchange's own reports go, each named with the route and the platform of the session it stood on. */
-  readonly report: (report: ExchangeReport) => void;
+  /** Where a standing exchange's own reports go. */
+  readonly report: (message: string) => void;
 }
 
 /** The deployment names no secret or origin the exchange could stand under; every session is refused on it. */
@@ -68,22 +62,14 @@ function exchangeUnconfigured(missing: string): ExchangeUnconfigured {
 }
 
 const EXCHANGE_CONFIGURATION = {
-  ENCRYPTION_SECRET: "the payload encryption secret",
   DEPLOYMENT_SECRET: "the deployment secret",
   EVE_ORIGIN: "eve's origin",
 } as const;
 
-/** The three seams read now, or the first one missing, named. */
+/** The two seams read now, or the first one missing, named. */
 function configuredSeams(
   seams: DeploymentExchangeSeams,
-): Effect.Effect<
-  { encryptionSecret: Redacted.Redacted; deploymentSecret: Redacted.Redacted; origin: string },
-  ExchangeUnconfigured
-> {
-  const encryptionSecret = seams.encryptionSecret();
-  if (encryptionSecret === undefined) {
-    return Effect.fail(exchangeUnconfigured(EXCHANGE_CONFIGURATION.ENCRYPTION_SECRET));
-  }
+): Effect.Effect<{ deploymentSecret: Redacted.Redacted; origin: string }, ExchangeUnconfigured> {
   const deploymentSecret = seams.deploymentSecret();
   if (deploymentSecret === undefined) {
     return Effect.fail(exchangeUnconfigured(EXCHANGE_CONFIGURATION.DEPLOYMENT_SECRET));
@@ -92,7 +78,7 @@ function configuredSeams(
   if (origin === undefined) {
     return Effect.fail(exchangeUnconfigured(EXCHANGE_CONFIGURATION.EVE_ORIGIN));
   }
-  return Effect.succeed({ encryptionSecret, deploymentSecret, origin });
+  return Effect.succeed({ deploymentSecret, origin });
 }
 
 /** eve as the deployment reaches it for one account, under the deployment's own secret on the origin eve answers on. */
@@ -104,7 +90,7 @@ function deploymentEve(
   return (accountId) =>
     compose({
       origin,
-      caller: { kind: EVE_CALLER.DEPLOYMENT, secret: deploymentSecret, account: accountId },
+      caller: { secret: deploymentSecret, account: accountId },
     });
 }
 
@@ -115,11 +101,11 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
   let standing: ExchangeAttachment | undefined;
 
   const compose = Effect.gen(function* () {
-    const { encryptionSecret, deploymentSecret, origin } = yield* configuredSeams(seams);
+    const { deploymentSecret, origin } = yield* configuredSeams(seams);
     // The writer's composition probes every declared output schema, so a warm
     // instance pays that walk once rather than once per session.
-    // A planning call writes into a plan conversation, whose rows name the
-    // planning tools, so the writer holds rows to the hosted set as the brain's does.
+    // A call writes into a plan conversation, whose rows name the planning
+    // tools, so the writer holds rows to the hosted set as the brain's does.
     const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
     // eve's client is composed once per instance too, over the client the seam names; a test's
     // fake eve stands in its place and composes none.
@@ -131,14 +117,12 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
         deploymentSecret,
       );
     return exchangeAttachment({
-      context: { keys: payloadKeyRing(encryptionSecret) },
       writer,
       eve,
       scribeModel: () => {
         const key = seams.openAiKey();
         return key === undefined ? undefined : openAiBrainModel(key, PLAN_SCRIBE.MODEL);
       },
-      now: seams.now,
       createId: () => randomUUID(),
       report: seams.report,
     });

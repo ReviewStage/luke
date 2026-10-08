@@ -36,8 +36,8 @@ function nativeDirectory(): string {
   return resolvedNativeDirectory;
 }
 
-/** The one path resolver for executable helpers and the stationary addon. */
-export function nativeHelperPath(binary: string): string {
+/** The one path resolver for executable helpers. */
+function nativeHelperPath(binary: string): string {
   return path.join(nativeDirectory(), binary);
 }
 
@@ -170,27 +170,4 @@ export class NativeHelper {
     child?.removeAllListeners();
     return child;
   }
-}
-
-/** Runs a finite helper through the same spawn and line framing as watchers. */
-export function nativeHelperLines(binary: string, timeoutMs: number): Promise<readonly string[]> {
-  return new Promise((resolve) => {
-    const lines: string[] = [];
-    const helper = new NativeHelper({ binary, output: "lines" });
-    let settled = false;
-    const finish = (result: readonly string[]) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
-    helper.onLine((line) => lines.push(line));
-    helper.onExit(() => finish(lines));
-    const timer = setTimeout(() => {
-      void helper.stop();
-      finish([]);
-    }, timeoutMs);
-    timer.unref();
-    if (!helper.start()) finish([]);
-  });
 }

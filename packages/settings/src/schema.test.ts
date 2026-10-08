@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { PRODUCT_SETTING_VALUE } from "@sidecar/analytics";
-import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_ID, APP_SETTING_KIND, isAppSettingId } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE, LIVE_VOICE_LIST } from "@sidecar/live";
-import { PROVIDER_ID } from "@sidecar/session";
 import { test } from "vitest";
 import {
   APP_SETTING_SCHEMA,
@@ -18,11 +16,8 @@ import {
   APP_SETTING_FIELDS,
   type AppSettingField,
   isAppSettingField,
-  isKeyedAppSettingField,
   isSettingsResetScope,
-  SETTING_PAGE,
   settingAnalytics,
-  settingEntryGuard,
   settingFieldForGuideId,
   settingGuideEntries,
   settingIdVisible,
@@ -85,17 +80,11 @@ test("every field's own declaration answers for everything read of it", () => {
     for (const id of entry.ids) assert.ok(isAppSettingId(id), `${field} names ${id}`);
 
     // A row `SchemaSettingRows` draws is one the guide describes, since the
-    // guide entry is what it draws from; a field nothing draws describes no
-    // row of its own. A bespoke row in between may have neither, because what
-    // covers it is the context its own provider's projects travel in.
+    // guide entry is what it draws from.
     if (entry.rows === SETTING_ROWS.SCHEMA) assert.ok(entry.ids.length > 0, field);
-    if (entry.rows === SETTING_ROWS.NONE) assert.equal(entry.ids.length, 0, field);
 
     // Nothing is counted that has no id to count under.
     assert.ok(entry.analytics === undefined || entry.ids.length > 0, field);
-
-    // A row cannot answer to two records of the same condition.
-    assert.ok(entry.visible === undefined || entry.visibleById === undefined, field);
 
     const built = entriesFor(field);
     for (const guideEntry of built) {
@@ -142,9 +131,6 @@ test("every field's own declaration answers for everything read of it", () => {
         );
       }
     }
-
-    // A map-valued field is exactly one that declares how a key is written.
-    assert.equal(isKeyedAppSettingField(field), "entry" in entry, field);
   }
 });
 
@@ -154,14 +140,12 @@ const SETTINGS_PAGE_WORD = {
   [SETTINGS_PAGE.VOICE]: "Voice page",
   [SETTINGS_PAGE.APPEARANCE]: "Appearance page",
   [SETTINGS_PAGE.SHORTCUTS]: "Settings tab",
-  [SETTINGS_PAGE.CONNECTIONS]: "Connections page",
-  [SETTINGS_PAGE.MEMORY]: "Memory page",
 } satisfies Record<string, string>;
 
-test("every settings id is described by exactly one field, and placed on one page", () => {
+test("every settings id a field describes is described by that field alone", () => {
   // The ids the guide, the counts, and a spoken change all name are one set,
-  // and every member of it belongs to one field — an id described twice would
-  // be two rows claiming the same change.
+  // and every member a field claims belongs to that one field — an id
+  // described twice would be two rows claiming the same change.
   const claimed = new Map<string, AppSettingField>();
   for (const field of APP_SETTING_FIELDS) {
     for (const id of APP_SETTING_SCHEMA[field].ids) {
@@ -169,18 +153,6 @@ test("every settings id is described by exactly one field, and placed on one pag
       claimed.set(id, field);
       assert.equal(settingFieldForGuideId(id), field, id);
     }
-  }
-  for (const id of Object.values(APP_SETTING_ID)) {
-    // Which calendars count is chosen on the rows themselves, so it is the one
-    // id no field stores; the page table names it all the same.
-    if (id === APP_SETTING_ID.CALENDAR_SELECTED) {
-      assert.equal(claimed.get(id), undefined);
-      assert.equal(SETTING_PAGE[id], SETTINGS_PAGE.CONNECTIONS);
-      continue;
-    }
-    const field = claimed.get(id);
-    assert.ok(field, `${id} is described by a field`);
-    assert.equal(SETTING_PAGE[id], APP_SETTING_SCHEMA[field].page, id);
   }
 });
 
@@ -212,37 +184,10 @@ test("a scope reads unchanged at its defaults and changed by one of its own fiel
   assert.equal(settingsScopeChanged(moved, SETTINGS_RESET_SCOPE.VOICE), false);
 });
 
-test("a keyed field validates one entry exactly as its whole map would", () => {
-  assert.deepEqual(settingEntryGuard("workspaceProjectDefaults", PROVIDER_ID.CONDUCTOR, "repo"), {
-    valid: true,
-    value: "repo",
-  });
-  // A key the map's own guard drops is one no entry write can slip past.
-  assert.equal(
-    settingEntryGuard("workspaceProjectDefaults", PROVIDER_ID.CONDUCTOR, "   ").valid,
-    false,
-  );
-  assert.equal(
-    settingEntryGuard("workspaceAgentDefaults", PROVIDER_ID.CONDUCTOR, { agent: 7 }).valid,
-    false,
-  );
-});
-
-test("a field whose entries stand under conditions of their own answers per id", () => {
-  // The Conductor rows need a connected Conductor the build has a model table for.
-  const conductor = settingsVisibility({
-    settings: {
-      credentialSources: {
-        ...settingsView().credentialSources,
-        [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-      },
-    },
-  });
-  assert.equal(settingIdVisible(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, conductor), true);
-  assert.equal(settingIdVisible(APP_SETTING_ID.WORKSPACE_AGENT_MODEL, settingsVisibility()), false);
-
-  // An id no field claims is drawn nowhere rather than everywhere.
-  assert.equal(settingIdVisible(APP_SETTING_ID.CALENDAR_SELECTED, conductor), false);
+test("an id no field claims is drawn nowhere rather than everywhere", () => {
+  const view = settingsVisibility({ voiceControlsDrawn: true, accountDrawn: true });
+  assert.equal(settingIdVisible(APP_SETTING_ID.CALENDAR_SELECTED, view), false);
+  assert.equal(settingIdVisible(APP_SETTING_ID.VOICE, view), true);
 });
 
 test("a page's section draws its own members, in the order they claim", () => {
@@ -250,12 +195,12 @@ test("a page's section draws its own members, in the order they claim", () => {
   const appearance = settingRowsForPage(SETTINGS_PAGE.APPEARANCE, SETTING_SECTION.MAIN, view);
   assert.deepEqual(
     appearance.map((row) => row.field),
-    ["openAtLogin", "showInDock", "showOnAllDisplays", "formFactor"],
+    ["openAtLogin", "showInDock"],
   );
   const voice = settingRowsForPage(SETTINGS_PAGE.VOICE, SETTING_SECTION.CONTROLS, view);
   assert.deepEqual(
     voice.map((row) => row.field),
-    ["voice", "voiceCaptions", "duckOtherMedia", "preferBuiltInMicrophone", "announceSessions"],
+    ["voice", "voiceCaptions", "duckOtherMedia", "preferBuiltInMicrophone"],
   );
   // Nothing draws a row for a setting whose condition is unmet.
   assert.deepEqual(
@@ -290,21 +235,6 @@ test("a choice row's control offers what its own values say, worded for a contro
     settingsVisibility({ voiceControlsDrawn: true, settings: { voice: LIVE_DEFAULTS.VOICE } }),
   ).filter((row) => row.field === "voice");
   assert.equal(resting?.changed, false);
-
-  // The default-workspace row offers what the observation reported and one
-  // token for no default at all, which no provider id can collide with.
-  const workspaces = settingRowsForPage(
-    SETTINGS_PAGE.CONNECTIONS,
-    SETTING_SECTION.WORKSPACES,
-    settingsVisibility({
-      workspaceProviders: [{ id: PROVIDER_ID.CODEX, name: "Codex", offersProjects: true }],
-    }),
-  );
-  assert.deepEqual(workspaces[0]?.control?.options, [
-    { value: "", label: "Ask each time" },
-    { value: PROVIDER_ID.CODEX, label: "Codex" },
-  ]);
-  assert.equal(workspaces[0]?.control?.value, "");
 });
 
 test("nothing the guide says about a setting names a credential or its shape", () => {

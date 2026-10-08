@@ -58,15 +58,14 @@ export const voiceSessions = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The `devices` row's id for the installation that opened the session; null once that row has gone. */
+    /** The `devices` row's id an earlier build's session named; nothing writes it any more. */
     deviceId: text("device_id"),
     /**
-     * The plan a planning call was opened about, or null for every other
-     * session. A plain column like the device's rather than a reference:
-     * a session is bound to its plan for its whole life, so a re-attach
-     * after the plan was deleted must still read the binding and find no
-     * plan to land in, rather than read a null and land in the account's
-     * main.
+     * The plan the call was opened about; null only for a session an
+     * earlier build opened with none, which a re-attach refuses. A plain
+     * column rather than a reference: a session is bound to its plan for its
+     * whole life, so a re-attach after the plan was deleted must still read
+     * the binding and find no plan to land in.
      */
     planId: uuid("plan_id"),
     liveSessionId: text("live_session_id").notNull().unique(),
@@ -79,7 +78,7 @@ export const voiceSessions = pgTable(
      * When the device's socket last went without a hang-up, leaving the
      * WebRTC session standing for a re-attach; null while a connection holds
      * the session, and cleared by the re-attach. An open row stamped longer
-     * ago than the grace is an orphan the scheduled tick closes.
+     * ago than the grace is an orphan the scheduled sweep closes.
      */
     detachedAt: instant("detached_at"),
   },

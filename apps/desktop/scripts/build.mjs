@@ -20,6 +20,42 @@ const DOCK_ICON_IMAGES = {
   "luke-icon-dark.png": "luke-icon-dark-512.png",
 };
 
+// The whiteboard bundle (`src/renderer/whiteboard/`) is Excalidraw, which
+// reaches three things the board never uses through dynamic imports: the
+// Mermaid converter, every interface language but English, and the font
+// subsetter an SVG export embeds its fonts with (1.8 MB of WebAssembly), the
+// board offering no export. An IIFE inlines a dynamic import, so each is
+// answered with an empty module here rather than carried; the English
+// strings are Excalidraw's own built-ins. The locales folder also holds the
+// translation-progress table, which Excalidraw imports statically, so it is
+// kept.
+const EXCALIDRAW_UNUSED =
+  /^(@excalidraw\/mermaid-to-excalidraw|\.\/locales\/[^/]+\.js|\.\/subset-(shared|worker)\.chunk\.js)$/;
+const EXCALIDRAW_KEPT_LOCALE = /^\.\/locales\/percentages-/;
+const excalidrawTrim = {
+  name: "excalidraw-trim",
+  setup(build) {
+    build.onResolve({ filter: EXCALIDRAW_UNUSED }, (args) =>
+      EXCALIDRAW_KEPT_LOCALE.test(args.path)
+        ? undefined
+        : { path: args.path, namespace: "excalidraw-unused" },
+    );
+    build.onLoad({ filter: /.*/, namespace: "excalidraw-unused" }, () => ({
+      contents: "export default {};",
+      loader: "js",
+    }));
+  },
+};
+
+// Excalidraw's fonts, copied beside the whiteboard bundle so the panel loads
+// nothing from the network. Xiaolai is left out: it is 13 MB of CJK glyphs,
+// and the system's own font draws those characters instead.
+const EXCALIDRAW_FONTS = path.join(
+  path.dirname(fileURLToPath(import.meta.resolve("@excalidraw/excalidraw"))),
+  "fonts",
+);
+const EXCALIDRAW_FONTS_LEFT_OUT = new Set(["Xiaolai"]);
+
 function sentryPlugins() {
   if (!process.env.SENTRY_AUTH_TOKEN) return [];
   return [
@@ -47,13 +83,6 @@ await Promise.all([
     external: ["electron"],
     plugins: sentryPlugins(),
     define: {
-      // The Google Calendar client secret rides into the bundle from the
-      // packaging environment rather than sitting in source, where secret
-      // scanners cannot tell a desktop client's published "secret" from a
-      // real one; see google-calendar-oauth.ts.
-      PACKAGED_GOOGLE_CALENDAR_CLIENT_SECRET: JSON.stringify(
-        process.env.GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET ?? "",
-      ),
       PACKAGED_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
       // Whether this bundle rides in a Developer ID release, which is what
       // decides the name — and so the state directory and Keychain entry —
@@ -86,6 +115,35 @@ await Promise.all([
     sourcemap: true,
     logLevel: "info",
   }),
+  // The Plans tab's whiteboard, its own bundle and stylesheet so the bundle
+  // every window parses never carries Excalidraw; the tab loads both the
+  // first time a board is shown (`src/renderer/whiteboard/contract.ts`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.tsx")],
+    outfile: path.join(outputRoot, "renderer/whiteboard.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    jsx: "automatic",
+    minify: true,
+    conditions: ["production"],
+    plugins: [excalidrawTrim, ...sentryPlugins()],
+    sourcemap: true,
+    logLevel: "info",
+    define: { "process.env.NODE_ENV": '"production"', "process.env.IS_PREACT": '"false"' },
+  }),
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
+    outfile: path.join(outputRoot, "renderer/whiteboard.css"),
+    bundle: true,
+    target: "chrome140",
+    conditions: ["production"],
+    // Its `url(./fonts/...)` stay as written, and reach the fonts copied beside it below.
+    external: ["*.woff2"],
+    minify: true,
+    logLevel: "info",
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/index.tsx")],
     outfile: path.join(outputRoot, "renderer/renderer.js"),
@@ -101,8 +159,8 @@ await Promise.all([
     define: {
       "process.env.NODE_ENV": '"production"',
       // The analytics project the screen recorder files into, from the
-      // packaging environment rather than source, on the calendar secret's
-      // terms above. A build without one records nothing at all — the same
+      // packaging environment rather than source, where secret scanners
+      // cannot tell a published project key from a real secret. A build without one records nothing at all — the same
       // kill switch the site's own counting has, so a local run or an
       // unconfigured build cannot record into a stranger's project.
       PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
@@ -123,6 +181,16 @@ await Promise.all([
     path.join(outputRoot, "renderer/voice.html"),
   ),
 ]);
+
+await Promise.all(
+  (await fs.readdir(EXCALIDRAW_FONTS))
+    .filter((family) => !EXCALIDRAW_FONTS_LEFT_OUT.has(family))
+    .map((family) =>
+      fs.cp(path.join(EXCALIDRAW_FONTS, family), path.join(outputRoot, "renderer/fonts", family), {
+        recursive: true,
+      }),
+    ),
+);
 
 await Promise.all(
   Object.entries(DOCK_ICON_IMAGES).map(([name, source]) =>

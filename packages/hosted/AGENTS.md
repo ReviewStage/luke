@@ -5,7 +5,7 @@ per domain, and the clients that speak them.
 
 ## The dependency direction is the point
 
-It depends only on lower wire and session vocabulary and on `@sidecar/live`,
+It depends only on lower wire vocabulary and on `@sidecar/live`,
 which imports nothing of this one, so the edge points down.
 
 A client sits here because it speaks nothing but hosted vocabulary and holds no
@@ -16,11 +16,6 @@ vocabulary.
 
 **A request frame refuses a key it did not name; an answer ignores one a newer
 service added.** Every wire module here keeps that rule.
-
-A renamed wire field keeps its old name on the wire for one iOS release. The
-desktop and service ship together, but an installed phone reads whatever the
-service sends until its owner updates it, so the service writes both names and
-every reader accepts either.
 
 ## One call stands behind all of them
 
@@ -49,20 +44,6 @@ package reads no environment itself.
 The service authorizes and meters a session by direct calls into its own account
 code, so **no internal route and no shared secret exist between two deployments.**
 
-## A cursor is minted here and echoed by a device
-
-The per-resource reads stand on opaque strings: a record's JSON, base64url
-encoded, read back by the same schema that bounded it, so **a device holds one
-string per resource and never composes one.** An answer carries a cursor as the
-validated string, not the decoded record, since the string is what goes back on
-the wire.
-
-What a read route may answer a message with is `ClientUIMessage` and nothing else,
-minted by `clientUIMessage` alone, **which cuts the provider's replay slot — the
-opaque reasoning item and its id — from every part.** A device receives the
-reasoning's summary text and never the item; the stored row keeps the slot for the
-model's own replay.
-
 ## A turn's events are a projection
 
 **The five run seams and nothing wider — a slow step began, a planning turn
@@ -73,7 +54,6 @@ that call exists only to hand the voice its words. The kinds are the brain's own
 this package cannot reach the brain; a test in the web app holds the two sets
 equal.
 
-Each event is numbered from one inside its turn, so a client that lost its
-connection attaches with the last number as `after` and hears the rest exactly
-once. A stream closing without an end is one whose attachment lapsed at the
-function's own bound. The service stores no event of this kind.
+Each event is numbered from one inside its turn, so a reader that took some hears
+the rest exactly once. The service stores no event of this kind; the voice's live
+brain projects them in process from the turn row and its journal.

@@ -1,8 +1,4 @@
-import {
-  APP_SETTING_DEFAULTS,
-  SETTING_SIDE_EFFECT,
-  type SettingSideEffectId,
-} from "@sidecar/settings";
+import { SETTING_SIDE_EFFECT, type SettingSideEffectId } from "@sidecar/settings";
 import type { AppSettings } from "@sidecar/settings/wire";
 import type { WebContents } from "electron";
 import type { MediaDuckController } from "../native/media-duck";
@@ -62,18 +58,9 @@ export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDe
   return {
     [SETTING_SIDE_EFFECT.NONE]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: noClientSettingSideEffect,
-    [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: ({ settings }) => applyLoginItem(settings.stored.openAtLogin),
     [SETTING_SIDE_EFFECT.DOCK]: ({ settings, sender }) =>
       dock.apply(settings.stored.showInDock, panels.displayIdFor(sender)),
-    [SETTING_SIDE_EFFECT.DISPLAYS]: ({ settings }) => {
-      panels.setShowOnAllDisplays(settings.stored.showOnAllDisplays);
-      panels.reconcile();
-    },
-    [SETTING_SIDE_EFFECT.FORM_FACTOR]: ({ settings }) => {
-      panels.setFormFactor(settings.stored.formFactor ?? APP_SETTING_DEFAULTS.formFactor);
-      panels.positionAll();
-    },
     [SETTING_SIDE_EFFECT.TALK_HOTKEY]: async ({ settings }) => {
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings.stored.voiceHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);

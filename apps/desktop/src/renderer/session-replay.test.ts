@@ -77,7 +77,14 @@ test("the installed bundle still knows every name the masking rests on", () => {
     createRequire(import.meta.url).resolve("posthog-js/dist/module.full.no-external"),
     "utf8",
   );
-  const names = ["maskTextSelector", "maskAttributeFn", "ph-no-capture", "_POSTHOG_REMOTE_CONFIG"];
+  const names = [
+    "maskTextSelector",
+    "maskAttributeFn",
+    "ph-no-capture",
+    "_POSTHOG_REMOTE_CONFIG",
+    "captureCanvas",
+    "recordCanvas",
+  ];
   for (const name of names) assert.ok(bundle.includes(name), name);
 });
 

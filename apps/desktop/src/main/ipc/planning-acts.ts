@@ -1,5 +1,5 @@
 import type {
-  PlanningRepositoriesAnswer,
+  PlanningBoardSaveParams,
   PlanningSetFolderParams,
   PlanningStartAnswer,
   PlanningStartRequest,
@@ -14,7 +14,7 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
  * The one check this process makes is who asked. Only a panel draws the
  * Plans tab, and the takeover and the hidden voice window draw no plan, so
  * every row refuses them. What the host does with an ask — which plan is
- * active, what the service answers, why GitHub refused — is the host's to
+ * active, what the service answers — is the host's to
  * decide, and comes back as the panel's own answer. Nothing is held here.
  */
 export interface PlanningActsDependencies {
@@ -25,9 +25,7 @@ export interface PlanningActsDependencies {
     planningDelete(planId: string): Effect.Effect<boolean>;
     planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
     planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
-    planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
-    /** Opens the Connect GitHub page in the browser; whether it opened. */
-    planningConnectGitHub(): Effect.Effect<boolean>;
+    planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   };
   /** The folder picker; the chosen folder's absolute path, or null when the developer cancelled. */
   chooseFolder: () => Effect.Effect<string | null>;
@@ -45,15 +43,14 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_CLOSE
   | typeof ACT_KIND.PLANNING_START
   | typeof ACT_KIND.PLANNING_DELETE
-  | typeof ACT_KIND.PLANNING_REPOSITORIES
-  | typeof ACT_KIND.PLANNING_CONNECT_GITHUB
   | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
   | typeof ACT_KIND.PLANNING_SET_FOLDER
-  | typeof ACT_KIND.PLANNING_TALK;
+  | typeof ACT_KIND.PLANNING_TALK
+  | typeof ACT_KIND.PLANNING_BOARD_SAVE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
-  if (!sender.panel || sender.introduction) {
+  if (!sender.panel) {
     throw new ActRefused({ message: ACT[kind].refusal });
   }
 }
@@ -93,19 +90,6 @@ export function planningActRows(
       refuseUnlessPanel(ACT_KIND.PLANNING_DELETE, sender);
       return host.planningDelete(planId);
     },
-    [ACT_KIND.PLANNING_REPOSITORIES]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_REPOSITORIES, sender);
-      return host.planningRepositories();
-    },
-    // The link itself happens in the browser, under the developer's Luke
-    // session there; the press opens the page and the form reads the
-    // repositories again once the developer comes back.
-    [ACT_KIND.PLANNING_CONNECT_GITHUB]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_CONNECT_GITHUB, sender);
-      return Effect.flatMap(host.planningConnectGitHub(), (opened) =>
-        opened ? Effect.void : Effect.fail(new ActRefused({ message: GITHUB_CONNECT_SIGNED_OUT })),
-      );
-    },
     [ACT_KIND.PLANNING_CHOOSE_FOLDER]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_CHOOSE_FOLDER, sender);
       return dependencies.chooseFolder();
@@ -124,8 +108,9 @@ export function planningActRows(
       }
       dependencies.talkAboutPlan(planId);
     },
+    [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
+      return host.planningBoardSave(params);
+    },
   };
 }
-
-/** What the Connect GitHub press answers when the host opened nothing, because no account is signed in. */
-export const GITHUB_CONNECT_SIGNED_OUT = "Sign in to Luke to connect GitHub.";

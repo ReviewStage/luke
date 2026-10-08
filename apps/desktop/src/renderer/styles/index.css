@@ -12,17 +12,12 @@
 /* Before the surfaces that hold keycaps, so each can size its own without
    out-specifying the cap itself. */
 @import "./keycaps.css";
-@import "./sessions.css";
-@import "./conversation.css";
 @import "./sign-in.css";
 @import "./voice.css";
 @import "./planning.css";
-/* After sessions.css and sign-in.css: the takeover restages their rows and
-   provider buttons and its overrides have to win. */
-@import "./introduction.css";
 /* Generated from design/generate-brand-assets.mjs; base.css holds the wiring it
    assumes. Last, so a hand-written rule can still win. */
 @import "./generated/face-motion.css";
-/* After everything: the window's own layout restages the notch surface's
+/* After everything: the window's own layout restages the shared surface's
    elements, and its overrides have to win. */
 @import "./desktop.css";

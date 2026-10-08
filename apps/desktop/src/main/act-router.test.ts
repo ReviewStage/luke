@@ -22,7 +22,7 @@ import {
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, introduction: false };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
 
 const KINDS: readonly ActKind[] = Object.values(ACT_KIND);
 
@@ -108,8 +108,8 @@ it.effect(
           [ACT_KIND.WINDOW_QUIT]: () => {
             throw new ActRefused({ message: "A quit is held while the update installs." });
           },
-          [ACT_KIND.CALENDAR_REFRESH]: () => {
-            throw new Error("EPIPE writing to the helper");
+          [ACT_KIND.PLANNING_REFRESH]: () => {
+            throw new Error("EPIPE writing to the host");
           },
         }),
       );
@@ -118,9 +118,9 @@ it.effect(
         reason: "A quit is held while the update installs.",
       });
       // Nothing an exception carried reaches the window: the kind's own sentence does.
-      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.CALENDAR_REFRESH }, PANEL), {
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.PLANNING_REFRESH }, PANEL), {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.CALENDAR_REFRESH].refusal,
+        reason: ACT[ACT_KIND.PLANNING_REFRESH].refusal,
       });
     }),
 );
@@ -130,14 +130,14 @@ it.effect("an answer the kind's own guard refuses is a refusal rather than a val
     const router = createActRouter(
       rowsRecording([], {
         // SAFETY: this is the wrong-shaped answer under test.
-        [ACT_KIND.SESSION_SEND_MESSAGE]: () => ({ runId: "run-1" }) as never,
+        [ACT_KIND.PLANNING_SELECT]: () => ({ runId: "run-1" }) as never,
       }),
     );
     assert.deepEqual(
-      yield* perform(router, ONE_ACT_OF_EACH_KIND[ACT_KIND.SESSION_SEND_MESSAGE], PANEL),
+      yield* perform(router, ONE_ACT_OF_EACH_KIND[ACT_KIND.PLANNING_SELECT], PANEL),
       {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.SESSION_SEND_MESSAGE].refusal,
+        reason: ACT[ACT_KIND.PLANNING_SELECT].refusal,
       },
     );
   }),
@@ -155,7 +155,7 @@ it.effect(
               ran.push(ACT_KIND.WINDOW_SET_EXPANDED);
               return "expanded";
             }),
-          [ACT_KIND.CALENDAR_REFRESH]: () => Effect.die(new Error("calendar.refresh was refused")),
+          [ACT_KIND.PLANNING_REFRESH]: () => Effect.die(new Error("planning.refresh was refused")),
           [ACT_KIND.WINDOW_QUIT]: () =>
             Effect.fail(new ActRefused({ message: "A quit is held while the update installs." })),
         }),
@@ -169,9 +169,9 @@ it.effect(
         { status: ACT_OUTCOME_STATUS.DONE, value: "expanded" },
       );
       assert.deepEqual(ran, [ACT_KIND.WINDOW_SET_EXPANDED]);
-      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.CALENDAR_REFRESH }, PANEL), {
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.PLANNING_REFRESH }, PANEL), {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.CALENDAR_REFRESH].refusal,
+        reason: ACT[ACT_KIND.PLANNING_REFRESH].refusal,
       });
       assert.deepEqual(yield* perform(router, { kind: ACT_KIND.WINDOW_QUIT }, PANEL), {
         status: ACT_OUTCOME_STATUS.REFUSED,
@@ -190,7 +190,7 @@ it.effect("a row is handed the sender's standing, which no payload can claim", (
         },
       }),
     );
-    const voice: ActSender = { sender: SENDER, panel: false, voice: true, introduction: false };
+    const voice: ActSender = { sender: SENDER, panel: false, voice: true };
     yield* perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, PANEL);
     yield* perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, voice);
     assert.deepEqual(seen, [PANEL, voice]);

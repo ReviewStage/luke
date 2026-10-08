@@ -1,5 +1,10 @@
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
+import {
+  COPY_SHOWN,
+  DOCUMENT_REGION,
+  PLAN_VIEW,
+  PLANS_PAGE,
+} from "../renderer/planning/planning-model";
 import type { PlansControl } from "../renderer/planning/use-plans-tab";
 
 const ignore = () => undefined;
@@ -19,6 +24,9 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     stop: { shown: false, onPress: ignore },
     status: undefined,
     live: false,
+    planView: { shown: PLAN_VIEW.DOCUMENT, onChoose: ignore },
+    board: undefined,
+    code: undefined,
     onSelect: ignore,
     onChooseFolder: ignore,
     onRetryList: ignore,

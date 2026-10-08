@@ -1,10 +1,11 @@
 import { Schema as EffectSchema } from "effect";
+import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import {
-  GITHUB_FAILURE,
-  type GitHubFailure,
-  githubRepositoryListAnswerSchema,
-} from "./github-wire.js";
-import { planCreateRequestSchema, planSchema, planSummarySchema } from "./plan-wire.js";
+  codeRefSchema,
+  planCreateRequestSchema,
+  planSchema,
+  planSummarySchema,
+} from "./plan-wire.js";
 
 /**
  * planning-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
@@ -89,6 +90,47 @@ export const planActivitySchema = EffectSchema.Struct({
 
 export type PlanActivity = typeof planActivitySchema.Type;
 
+/** Why a file named for the screen drew no lines. */
+export const CODE_UNREADABLE = {
+  /** The plan has no folder on this Mac to read it from. */
+  NO_FOLDER: "no-folder",
+  /** No such file in the plan's folder. */
+  MISSING: "missing",
+  /** The path leaves the folder, or names a file kept secret, such as a `.env`. */
+  REFUSED: "refused",
+  /** The file is larger than the screen draws, or is not text. */
+  TOO_LARGE: "too-large",
+} as const;
+
+export type CodeUnreadable = (typeof CODE_UNREADABLE)[keyof typeof CODE_UNREADABLE];
+
+/** One run of a line in one colour, as the host's highlighter split it. */
+const codeTokenSchema = EffectSchema.Struct({
+  text: EffectSchema.String,
+  /** A `#rrggbb` colour; absent for the theme's own foreground. */
+  color: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+export type CodeToken = typeof codeTokenSchema.Type;
+
+/**
+ * The code on screen during the call about the active plan: what Luke named,
+ * and the file's lines as this Mac read and coloured them, line one
+ * first, or why it drew none. It stands for the call alone: nothing of it
+ * enters the plan.
+ */
+const planCodeSchema = EffectSchema.Struct({
+  ref: codeRefSchema,
+  /** The file's line the first drawn line is; the screen holds a window of a long file around the lines pointed at. */
+  firstLine: EffectSchema.optionalKey(EffectSchema.Int),
+  /** How many lines the whole file has. */
+  lineCount: EffectSchema.optionalKey(EffectSchema.Int),
+  lines: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.Array(codeTokenSchema))),
+  unreadable: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODE_UNREADABLE))),
+});
+
+export type PlanCode = typeof planCodeSchema.Type;
+
 export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, most recently opened first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
@@ -98,6 +140,10 @@ export const planningViewSchema = EffectSchema.Struct({
   document: planningDocumentSchema,
   /** What each part of Luke is doing on the call about the active plan, as last told; absent with no plan open or no word yet. */
   activity: EffectSchema.optionalKey(planActivitySchema),
+  /** The active plan's whiteboard as last read or saved; absent with no plan open or before its first read lands. */
+  board: EffectSchema.optionalKey(boardSchema),
+  /** The code on screen during the call about the active plan; absent with none, and cleared with the activity. */
+  code: EffectSchema.optionalKey(planCodeSchema),
   /** The folder of this Mac each plan reads, by plan id; a plan this Mac holds no folder for is absent. */
   folders: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
 });
@@ -128,6 +174,14 @@ export const planningSetFolderParamsSchema = EffectSchema.Struct({
 
 export type PlanningSetFolderParams = typeof planningSetFolderParamsSchema.Type;
 
+/** A plan's board as the panel asks it saved: the whole scene, and the number of Luke's drawing it holds. */
+export const planningBoardSaveParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  ...boardSaveRequestSchema.fields,
+});
+
+export type PlanningBoardSaveParams = typeof planningBoardSaveParamsSchema.Type;
+
 /** Why a plan call answered nothing a window can draw. */
 export const PLAN_CALL_FAILURE = {
   /** The call never reached an answer: no credential, the network, a refusal, a shape not read. */
@@ -138,26 +192,10 @@ export const PLAN_CALL_FAILURE = {
 
 export type PlanCallFailure = (typeof PLAN_CALL_FAILURE)[keyof typeof PLAN_CALL_FAILURE];
 
-/** Why a call that goes through the account's GitHub connection answered nothing. */
-export type GitHubCallFailure = GitHubFailure | typeof PLAN_CALL_FAILURE.UNANSWERED;
-
-const githubCallFailureSchema = EffectSchema.Literals([
-  ...Object.values(GITHUB_FAILURE),
-  PLAN_CALL_FAILURE.UNANSWERED,
-]);
-
 /** Starting a plan, as the window hears it: the plan now active, or why none started. */
 export const planningStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.String }),
-  EffectSchema.Struct({ failure: githubCallFailureSchema }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
 ]);
 
 export type PlanningStartAnswer = typeof planningStartAnswerSchema.Type;
-
-/** The repository picker's list, or why the connection could not be read. */
-export const planningRepositoriesAnswerSchema = EffectSchema.Union([
-  githubRepositoryListAnswerSchema,
-  EffectSchema.Struct({ failure: githubCallFailureSchema }),
-]);
-
-export type PlanningRepositoriesAnswer = typeof planningRepositoriesAnswerSchema.Type;

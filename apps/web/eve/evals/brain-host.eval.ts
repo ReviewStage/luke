@@ -1,51 +1,42 @@
 import assert from "node:assert/strict";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { isTextUIPart, isToolUIPart } from "ai";
-import { and, eq, isNull } from "drizzle-orm";
-import { Effect, ManagedRuntime, Option, Redacted, Result, Schema } from "effect";
+import { isTextUIPart } from "ai";
+import { eq } from "drizzle-orm";
+import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { defineEval } from "eve/evals";
 import {
-  BRAIN_TOOL,
-  BRAIN_TURN_TRIGGER,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
-  TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
-  WORKSPACE_FILE,
 } from "../../server/core";
 import { user } from "../../server/db/auth-schema";
 import { db } from "../../server/db/query";
 import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { conversations } from "../../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../../server/hosted/brain-host/ids";
-import { hostedToolDeclarations } from "../../server/hosted/brain-host/tools";
-import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption";
+import { planningToolDeclarations } from "../../server/hosted/brain-host/planning";
 import {
   createPlan,
   openPlanConversation,
   readPlan,
   savePlanDocument,
 } from "../../server/hosted/plan-store";
-import { hostedStore } from "../../server/hosted/store";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
-import { SCRIPTED_FACT, SCRIPTED_PLANNING_REPLY } from "../scripted-model";
+import { SCRIPTED_PLANNING_REPLY } from "../scripted-model";
 
 /**
- * The whole host under eve, end to end: eve's runtime runs a typed ask under
- * the scripted fixture model, the tool adapters carry one USER.md write
- * recording a fact about the developer, and the relay writes the turn into
- * the store through the writer. A plan's conversation then runs the same way
- * under the planning model: the scripted model is handed the saved document
- * in its standing context and answers in words, leaving the document as the
- * notetaker saved it. The eve server runs in this process with the database the
+ * The whole host under eve, end to end: eve's runtime runs a typed ask in a
+ * plan's conversation under the scripted fixture model, which is handed the
+ * saved document in its standing context and answers in words, leaving the
+ * document as the notetaker saved it, and the relay writes the turn into the
+ * store through the writer. The eve server runs in this process with the database the
  * environment names, so the eval reads the rows back from the same Postgres.
  * Where no database is named the eval skips rather than pretending: the
  * relay and the writer meet PGlite in the store tests, and this is where
@@ -91,33 +82,6 @@ async function ensureLocalDevUser(run: Run): Promise<void> {
   );
 }
 
-/** The account's one standing main conversation, opened on the first run and reused on every later one. */
-async function standingMainConversation(run: Run): Promise<{ id: string }> {
-  return run(
-    Effect.gen(function* () {
-      const IdRowSchema = Schema.Struct({ id: Schema.String });
-      const standing = yield* db
-        .select({ id: conversations.id })
-        .from(conversations)
-        .where(
-          and(
-            eq(conversations.userId, LOCAL_DEV_PRINCIPAL),
-            eq(conversations.kind, CONVERSATION_KIND.MAIN),
-            isNull(conversations.deletedAt),
-          ),
-        );
-      if (standing[0]) return Schema.decodeUnknownSync(IdRowSchema)(standing[0]);
-      const opened = yield* db
-        .insert(conversations)
-        .values({ userId: LOCAL_DEV_PRINCIPAL, kind: CONVERSATION_KIND.MAIN })
-        .returning({ id: conversations.id });
-      const [row] = opened;
-      assert.ok(row);
-      return Schema.decodeUnknownSync(IdRowSchema)(row);
-    }),
-  );
-}
-
 function readConversationRuntimeSessionId(
   run: Run,
   conversationId: string,
@@ -155,26 +119,18 @@ async function planDocument(run: Run, planId: string) {
   return stored.value.plan.document;
 }
 
-/** The database and vault secret the fixture runs against, or nothing where the environment names neither. */
-function fixtureEnvironment(): { connectionString: string; secret: string } | undefined {
-  const connectionString = process.env[DATABASE_ENVIRONMENT.URL];
-  const secret = process.env[VAULT_ENCRYPTION_ENVIRONMENT.SECRET];
-  return connectionString && secret ? { connectionString, secret } : undefined;
-}
-
 export default defineEval({
-  description: "A typed ask runs through eve, the tools, the relay, and the writer into the store.",
+  description:
+    "A typed ask in a plan's conversation runs through eve, the relay, and the writer into the store.",
   async test(t) {
-    const named = fixtureEnvironment();
-    if (named === undefined) {
-      return t.skip("no database and vault secret are named; the fixture writes nowhere");
+    const connectionString = process.env[DATABASE_ENVIRONMENT.URL];
+    if (!connectionString) {
+      return t.skip("no database is named; the fixture writes nowhere");
     }
-    const { connectionString, secret } = named;
     const runtime = ManagedRuntime.make(sqlClientOverUrl(connectionString));
     const run: Run = (effect) => runtime.runPromise(effect);
     try {
       await ensureLocalDevUser(run);
-      const conversation = await standingMainConversation(run);
 
       /** A typed ask opening a new session over the conversation, answered once the session is its record. */
       const openSession = async (conversationId: string, message: string) => {
@@ -205,73 +161,47 @@ export default defineEval({
         return accepted;
       };
 
-      const accepted = await openSession(conversation.id, "remember that I prefer short replies");
-      const session = await t.target.attachSession(accepted.sessionId);
-      session.succeeded();
-      session.calledTool(BRAIN_TOOL.WRITE_WORKSPACE_FILE);
-
-      const turnId = hostTurnId(accepted.sessionId, "turn_0");
-      const turn = await readTurnById(run, turnId);
-      assert.ok(turn);
-      assert.equal(turn.conversationId, conversation.id);
-      assert.equal(turn.origin, TURN_ORIGIN.TYPED);
-      assert.equal(turn.status, TURN_STATUS.SETTLED);
-      // What the turn ran under, carried from the session's start through eve's
-      // durable state to the turn row: the prompt's fingerprint and the tool
-      // set's, neither naming a row, since nothing of either is kept.
-      assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
-      assert.ok(turn.toolSetHash);
-      assert.equal(
-        turn.toolSetHash,
-        toolSetHashOf(hostedToolDeclarations(BRAIN_TURN_TRIGGER.ASK, { quiet: false })),
-      );
-
-      const messageRows = await readMessagesByTurn(run, conversation.id, turnId);
-      assert.deepEqual(
-        messageRows.map((row) => row.role),
-        [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
-      );
-      assert.deepEqual(messageRows[0]?.metadata, {
-        author: MESSAGE_AUTHOR.DEVELOPER,
-        channel: MESSAGE_CHANNEL.TYPED,
-      });
-      const answer = messageRows[1];
-      assert.ok(answer);
-      const toolPart = answer.parts.find((part) => isToolUIPart(part));
-      assert.ok(toolPart);
-      assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
-      assert.equal(answer.parts.filter((part) => isTextUIPart(part)).length, 1);
-
-      const store = hostedStore({ keys: payloadKeyRing(Redacted.make(secret)) });
-      const user = await run(store.workspace.read(LOCAL_DEV_PRINCIPAL, WORKSPACE_FILE.USER));
-      assert.ok(user);
-      assert.equal(user.content.split(SCRIPTED_FACT).length - 1, 1);
-      const runtimeSessionId = await readConversationRuntimeSessionId(run, conversation.id);
-      assert.equal(runtimeSessionId, accepted.sessionId);
-
-      // A plan's conversation: the planning model is handed the saved document
-      // and answers in words; the notetaker beside the call writes the plan,
-      // so the turn leaves the document as it stood.
+      // The planning model is handed the saved document and answers in words;
+      // the notetaker beside the call writes the plan, so the turn leaves the
+      // document as it stood.
       const plan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
       await run(savePlanDocument(LOCAL_DEV_PRINCIPAL, plan.id, PLAN_SAVED));
       const planConversationId = await planConversation(run, plan.id);
       const planning = await openSession(planConversationId, PLAN_WORDS.FIRST);
       const planningSession = await t.target.attachSession(planning.sessionId);
       planningSession.succeeded();
-      planningSession.notCalledTool(BRAIN_TOOL.WRITE_WORKSPACE_FILE);
       assert.deepEqual(await planDocument(run, plan.id), PLAN_SAVED);
-      const planningRows = await readMessagesByTurn(
-        run,
-        planConversationId,
-        hostTurnId(planning.sessionId, "turn_0"),
+
+      const turnId = hostTurnId(planning.sessionId, "turn_0");
+      const turn = await readTurnById(run, turnId);
+      assert.ok(turn);
+      assert.equal(turn.conversationId, planConversationId);
+      assert.equal(turn.origin, TURN_ORIGIN.TYPED);
+      assert.equal(turn.status, TURN_STATUS.SETTLED);
+      // What the turn ran under, carried from the session's start through eve's
+      // durable state to the turn row: the prompt's fingerprint and the tool
+      // set's, neither naming a row, since nothing of either is kept.
+      assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
+      assert.equal(turn.toolSetHash, toolSetHashOf(planningToolDeclarations()));
+
+      const planningRows = await readMessagesByTurn(run, planConversationId, turnId);
+      assert.deepEqual(
+        planningRows.map((row) => row.role),
+        [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
       );
-      const planningAnswer = planningRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
+      assert.deepEqual(planningRows[0]?.metadata, {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.TYPED,
+      });
+      const planningAnswer = planningRows[1];
       assert.ok(planningAnswer);
       assert.ok(
         planningAnswer.parts.some(
           (part) => isTextUIPart(part) && part.text === SCRIPTED_PLANNING_REPLY,
         ),
       );
+      const runtimeSessionId = await readConversationRuntimeSessionId(run, planConversationId);
+      assert.equal(runtimeSessionId, planning.sessionId);
     } finally {
       await runtime.dispose();
     }

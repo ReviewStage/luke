@@ -1,7 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
-import { fixtureSnapshot } from "@sidecar/session/fixtures";
 import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
 import type { AppState } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -96,34 +95,18 @@ export class AppStateStore {
 
 /**
  * One host bootstrap as a patch of this document. What each slice carries is
- * the host's own answer; the three readings of it are this client's. A run
- * that observes nothing is settled from the start. The trace gate is a fact
- * of the run rather than of the launch's arguments. And a halt outlives a
- * host read: the account it was raised for is going, the host still answers
- * `permitted` until its own change event lands, and only that event stands
- * the halt down.
+ * the host's own answer; the readings of it are this client's. The trace gate
+ * is a fact of the run rather than of the launch's arguments. And a halt
+ * outlives a host read: the account it was raised for is going, the host
+ * still answers `permitted` until its own change event lands, and only that
+ * event stands the halt down.
  */
 export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePatch {
   return {
     run: { ...held.run, agentTraceEnabled: boot.agentTraceEnabled },
     settings: boot.settings,
     account: boot.account,
-    sessions: {
-      roster: { sessions: boot.sessions },
-      settled: !held.run.observesProviders || boot.sessionsSettled,
-      workspaceProjects: boot.workspaceProjects,
-    },
-    calendars: boot.calendars,
     voice: held.voice,
-    conversation: boot.conversationView,
-    children: boot.children,
-    agents: boot.agents,
-    childTranscript: boot.childTranscript,
-    announcements: { held: boot.announcementsHeld },
-    onboarding: {
-      calendarOwed: boot.calendarOnboardingOwed,
-      conductorKeyOwed: boot.conductorKeyOnboardingOwed,
-    },
     sessionReplay: { ...boot.sessionReplay, halted: held.sessionReplay.halted },
   };
 }
@@ -147,37 +130,15 @@ export function initialAppState(
       appVersion: config.appVersion,
       captureMode: launch.captureMode,
       fixtureMode: launch.fixtureMode,
-      fixture: fixtureSnapshot(launch.fixtureName ?? "smoke"),
-      startPeeked: launch.startPeeked,
-      startInSlot: launch.startInSlot,
       accountRequired: runMode.requiresAccount,
-      observesProviders: runMode.observesProviders,
       agentTraceEnabled: false,
     },
     account: { status: ACCOUNT_STATUS.SIGNED_OUT },
-    sessions: {
-      roster: { sessions: [] },
-      // A fixture run never observes and its sessions travel in the fixture
-      // itself, so it is settled from the start.
-      settled: !runMode.observesProviders,
-      workspaceProjects: [],
-    },
-    calendars: [],
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     hotkeys: { talkHeld: true },
     voice: {},
-    // A run that sends nothing reads no Conversation, so its empty thread and its empty children and agents lists are settled from the start.
-    conversation: { groups: [], settled: !runMode.sendsNetwork },
-    children: { settled: !runMode.sendsNetwork, children: [] },
-    agents: { settled: !runMode.sendsNetwork, agents: [] },
-    childTranscript: undefined,
     planning: IDLE_PLANNING_VIEW,
-    announcements: { held: false },
-    onboarding: { calendarOwed: false, conductorKeyOwed: false },
-    // Nothing plays until the launch's own gate says so; the window service
-    // is the one writer of this slice.
-    introduction: { playing: false },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
   };
 }

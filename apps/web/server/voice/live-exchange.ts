@@ -1,26 +1,19 @@
-import type { DevicePlatform, SessionBeatFrame } from "@sidecar/hosted";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { PlanActivity } from "@sidecar/hosted/planning-view";
-import { PROACTIVE_SPEECH_KIND, type ProactiveSpeechKind } from "@sidecar/live";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   type AdoptableSession,
-  type BeatTurn,
   LiveSessionService,
   type LiveSessionStatus,
 } from "@sidecar/voice/live-session";
 import type { LanguageModel } from "ai";
-import { eq } from "drizzle-orm";
-import { Cause, Effect, Layer, Option, Result, Schema, type Scope } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
+import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
-import { db } from "../db/query.js";
-import { voiceSessions } from "../db/voice-schema.js";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
-import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { askRecord } from "../hosted/store/asks.js";
-import type { HostedStoreContext } from "../hosted/store/database.js";
 import {
   type HostedStore,
   hostedStore,
@@ -29,36 +22,28 @@ import {
   voiceWriter,
 } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
-import type { VoiceRoute } from "./frames.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
-import {
-  type HostedBriefingDelivery,
-  type HostedBriefings,
-  hostedBriefings,
-} from "./live-briefings.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
 import { type PlanDraft, planScribe } from "./plan-scribe.js";
 
 /**
  * The live session service composed for the hosted tier, for one account's
- * one live session: the brain answered in process through the ask door under
- * the eve client the caller composed for the account, the record over the voice writer with the
- * sideband observed so the writer sees each event once ahead of the service,
- * and the briefings claimed as the session's device before they are spoken.
- * Everything of the store arrives as one context — the database, the runner,
- * and the key ring — so the writers, the ask record, and the reads hold one
- * client over one database. The session itself is still the caller's: the
- * sessions route hands in a session it already created for the device and
- * the exchange adopts it, seeding nothing, through `adopt`. The account's
- * quiet is not this composition's: the briefing look leaves a quiet
- * account's offers unread, so nothing here is held or released.
+ * one planning call: the brain answered in process through the ask door under
+ * the eve client the caller composed for the account, and the record over the
+ * voice writer with the sideband observed so the writer sees each event once
+ * ahead of the service. The writers, the ask record, and the reads all stand
+ * on the ambient client, so they hold one client over one database. The
+ * session itself is
+ * still the caller's: the voice service hands in a session it already
+ * created for the device and the exchange adopts it, seeding nothing,
+ * through `adopt`.
  *
  * The composition is a scope's, not a socket callback's: it is built in the
  * `Scope` its caller opened for the socket, and every fiber it runs is forked
  * into that scope — the one that reports what the record made of each live
- * event, the brain's follow of each accepted ask, the briefing look on its
- * schedule, and the service's own — so closing the scope when the socket
+ * event, the brain's follow of each accepted ask, and the service's own — so
+ * closing the scope when the socket
  * detaches interrupts each of them. The session's graceful close (or, where
  * the device's socket went with no hang-up, its release with nothing said to
  * it) and the wait on every record write already started are finalizers of
@@ -70,104 +55,65 @@ export interface HostedLiveExchangeOptions {
   /** The account the session was opened for, resolved at the handshake; the deployment acts for it at eve's door. */
   readonly userId: string;
   readonly liveSessionId: string;
-  /** The conversation the spoken asks and the record land in: the account's standing main, or a planning call's plan conversation. */
+  /** The conversation the spoken asks and the record land in: the plan's conversation. */
   readonly conversationId: string;
   /**
-   * Whether the session is a planning call. A planning call speaks none of
-   * the desk's proactive turns: a beat asked of it is dropped, and the
-   * caller starts no briefing look over it, so nothing of the desk enters the
-   * plan's conversation. What opens a newly created call is the voice
-   * service's own instruction on its start, and nothing here.
-   */
-  readonly planning?: boolean;
-  /**
-   * The notetaker a planning call writes its plan through: the plan the
-   * session is bound to and the model the scribe runs on. Absent for every
-   * other session, and for a planning call on a deployment with no model key,
-   * which then writes nothing.
+   * The notetaker the call writes its plan through: the plan the session is
+   * bound to and the model the scribe runs on. Absent on a deployment with no
+   * model key, which then writes nothing.
    */
   readonly scribe?: {
     readonly planId: string;
     readonly model: LanguageModel;
-    /** Where each draft of the plan goes as the notetaker writes it; nowhere where the route sends nothing. */
+    /** Where each draft of the plan goes as the notetaker writes it; nowhere where the service sends nothing. */
     readonly onDraft?: ((draft: PlanDraft) => void) | undefined;
   };
-  readonly context: HostedStoreContext;
-  /** The store writer over the catalog, which the voice writer and the speech claim write through. */
+  /** The store writer, which the voice writer writes through. */
   readonly writer: StoreWriter;
   /**
-   * eve as the deployment reaches it for this account: `eveSessions` under
-   * `EVE_CALLER.DEPLOYMENT` with the deployment's secret and this account,
-   * composed by the caller, so neither the secret nor eve's origin enters
+   * eve as the deployment reaches it for this account: `eveSessions` with
+   * the deployment's secret and this account, composed by the caller, so neither the secret nor eve's origin enters
    * here and a test hands in a fake.
    */
   readonly eve: EveSessions;
-  readonly now: () => number;
   readonly createId: () => string;
   readonly report: (message: string) => void;
-  /**
-   * A proactive turn was spoken to its end, by kind: a beat the device
-   * asked for, or a briefing this exchange decided. The device keeps the
-   * record of the beats and the counts that follow every spoken turn, so the
-   * route tells it in the service's own frame.
-   */
-  readonly onProactiveSpoken?: (kind: ProactiveSpeechKind) => void;
-  /** What the voice, the brain, and the notetaker are doing, told whole on each change; a planning call's device is shown it. */
+  /** What the voice, the brain, and the notetaker are doing, told whole on each change; the device is shown it. */
   readonly onActivity?: (activity: PlanActivity) => void;
+  /** Code Luke is about to talk about, by place, told as he starts to speak; a planning call's device is shown it. */
+  readonly onCode?: (ref: CodeRef) => void;
 }
 
-/** One signed-in session the sessions route created or re-attached, as an exchange is offered it. */
+/** One signed-in session the voice service created or re-attached, as an exchange is offered it. */
 export interface AttachedSession {
-  /** The route the session was opened on, which is what a report about it is written down under. */
-  readonly route: VoiceRoute;
   readonly accountId: string;
   readonly sessionId: string;
-  /** The device the handshake named and the account was shown to hold; none where the device sent none or the route re-attached. */
-  readonly deviceId: string | undefined;
-  /** The platform that device row named, which is what a report about this session is counted by; none where no row was resolved. */
-  readonly platform: DevicePlatform | undefined;
-  /** The plan a planning call is bound to, which its asks and its record land in; none for every other session. */
-  readonly planId: string | undefined;
-  /** The socket the route attached to the session, which the relay pipes and the exchange reads its sideband over. */
+  /** The plan the call is bound to, which its asks and its record land in. */
+  readonly planId: string;
+  /** The socket the service attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
   /** Whether the session is already running: a fresh connection to a standing session finds it started, and hears no `session.started` again. */
   readonly started: boolean;
-  /** The device's door for the service's word that a turn was spoken to its end; absent where the route sends it nothing of its own. */
-  readonly onSpoken?: ((kind: ProactiveSpeechKind) => void) | undefined;
-  /** The device's door for a planning call's plan as its notetaker has it now; absent where the route sends it nothing of its own. */
+  /** The device's door for the plan as its notetaker has it now; absent where the service sends it nothing of its own. */
   readonly onPlanDraft?: ((draft: PlanDraft) => void) | undefined;
-  /** The device's door for what each part of Luke is doing on the call; absent where the route sends it nothing of its own. */
+  /** The device's door for what each part of Luke is doing on the call; absent where the service sends it nothing of its own. */
   readonly onActivity?: ((activity: PlanActivity) => void) | undefined;
+  /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
+  readonly onCode?: ((ref: CodeRef) => void) | undefined;
 }
 
 /**
  * The composition's exchange for one session, standing on it, or nothing
  * where this build stands none; one offered that cannot stand fails, and the
- * route refuses the session. The attachment builds the sideband over the
+ * service refuses the session. The attachment builds the sideband over the
  * socket and adopts, so the service itself reaches nothing of the exchange
- * or the live-session door; the function bundle gained that edge in the
- * commit that passed the attachment and unwired the desktop's own exchange,
- * since with both live every spoken ask would be delegated twice and every
- * reply appended twice. The scope is the caller's: everything the standing
- * acquires (the follows, the briefing look, the record writes under way)
- * belongs to it, and closing it is the exchange's stop.
+ * or the live-session door. The scope is the caller's: everything the
+ * standing acquires (the follows, the record writes under way) belongs to
+ * it, and closing it is the exchange's stop.
  */
 export type ExchangeAttachment = (
   session: AttachedSession,
 ) => Effect.Effect<HostedLiveExchange | undefined, Error, Scope.Scope | SqlClient.SqlClient>;
-
-/**
- * Something a standing exchange reported of itself, as the composition that
- * offered it writes it down: the reporter's own sentence, and the route and
- * the platform of the session it was reported for, so a failure only phones
- * see, or only the audio route sees, is visible in the function's log without
- * the sentence being read past its first colon.
- */
-export interface ExchangeReport {
-  readonly message: string;
-  readonly route: VoiceRoute;
-  readonly platform: DevicePlatform | undefined;
-}
 
 /**
  * How the exchange's scope lets go of the session it stands on: closing it,
@@ -183,42 +129,21 @@ export const EXCHANGE_ENDING = {
 export type ExchangeEnding = (typeof EXCHANGE_ENDING)[keyof typeof EXCHANGE_ENDING];
 
 export interface HostedLiveExchange {
-  readonly service: LiveSessionService<HostedBriefingDelivery>;
+  readonly service: LiveSessionService;
   /**
    * Names how the scope's close is to end the session, asked before that
    * close; an exchange never told closes it.
    */
   endAs(ending: ExchangeEnding): void;
   readonly brain: HostedLiveBrain;
-  readonly briefings: HostedBriefings;
   readonly store: HostedStore;
   /**
-   * Runs a session the route created for the device: the record observes its
-   * sideband ahead of the service, and the service stands it without seeding.
+   * Runs a session the service created for the device: the record observes
+   * its sideband ahead of the service, and the service stands it without
+   * seeding.
    */
   adopt(opened: AdoptableSession): Effect.Effect<boolean>;
-  /**
-   * A beat the device decided is owed, spoken by this exchange from the
-   * build's own script: the frame carries the kind and the bounded values the
-   * script may mention, and the moment it was decided is this side's clock,
-   * not the device's word.
-   */
-  speakBeat(beat: SessionBeatFrame): void;
 }
-
-const VoiceSessionDeviceIdRowSchema = Schema.Struct({
-  deviceId: Schema.NullOr(Schema.String),
-});
-
-const findVoiceSessionDeviceId = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: VoiceSessionDeviceIdRowSchema,
-  execute: (liveSessionId) =>
-    db
-      .select({ deviceId: voiceSessions.deviceId })
-      .from(voiceSessions)
-      .where(eq(voiceSessions.liveSessionId, liveSessionId)),
-});
 
 /**
  * What the record made of one live event, as the fiber below says it: the
@@ -246,8 +171,8 @@ function writeReport(
 export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExchange")(function* (
   options: HostedLiveExchangeOptions,
 ): Effect.fn.Return<HostedLiveExchange, never, Scope.Scope | SqlClient.SqlClient> {
-  const { userId, liveSessionId, conversationId, context, writer, report } = options;
-  const store = hostedStore(context);
+  const { userId, liveSessionId, conversationId, writer, report } = options;
+  const store = hostedStore();
   const target: VoiceTarget = {
     userId,
     liveSessionId,
@@ -322,23 +247,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     yield* Effect.addFinalizer(() => Effect.sync(unheard));
   }
 
-  /** The device the session's row names now, read at each look so a row completed after creation is seen. */
-  const deviceId = Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
-    Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullishOr(found.deviceId))),
-  );
-
-  const briefings = yield* hostedBriefings({
-    userId,
-    speech: { writer },
-    offers: store.speech,
-    tools: CATALOG_TOOL_SET,
-    deviceId,
-    deliver: (delivery) => service.deliverBriefing(delivery),
-    now: options.now,
-    report,
-  });
-
-  /** The sideband with the record, and a planning call's notetaker, listening ahead of the service, on every session adopted. */
+  /** The sideband with the record, and the notetaker, listening ahead of the service, on every session adopted. */
   const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
     return () =>
       Effect.map(attach(), (sideband) =>
@@ -352,16 +261,14 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
   // The brain and the record are built beside the service here rather than
   // by a caller, so the layers that name them are provided on the spot.
   const service = yield* Effect.provide(
-    LiveSessionService.make<HostedBriefingDelivery>({
+    LiveSessionService.make({
       createId: options.createId,
       report,
-      onBriefingAppend: (delivery, eventId) =>
-        voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
-      ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
       onStatus: (told) => {
         status = told;
         tellActivity();
       },
+      ...(options.onCode ? { onCode: options.onCode } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );
@@ -377,7 +284,6 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       ending = next;
     },
     brain,
-    briefings,
     store,
     adopt: (opened) =>
       service.adoptSession({
@@ -385,30 +291,5 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
         attach: observing(() => opened.attach()),
         started: opened.started,
       }),
-    speakBeat: (beat) => {
-      if (options.planning === true) return;
-      service.speakBeat(beatTurn(beat, options.now()));
-    },
   };
 });
-
-/** The turn a beat frame asks for: the frame's own values, and the instant it was read as its decision. */
-function beatTurn(beat: SessionBeatFrame, decidedAt: number): BeatTurn {
-  switch (beat.kind) {
-    case PROACTIVE_SPEECH_KIND.ARRIVAL:
-      return {
-        kind: beat.kind,
-        decidedAt,
-        ...(beat.sessionTitle === undefined ? undefined : { sessionTitle: beat.sessionTitle }),
-        ...(beat.talkKeyLabel === undefined ? undefined : { talkKeyLabel: beat.talkKeyLabel }),
-      };
-    case PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING:
-      return { kind: beat.kind, decidedAt };
-    case PROACTIVE_SPEECH_KIND.LAUNCH:
-      return {
-        kind: beat.kind,
-        decidedAt,
-        ...(beat.firstName === undefined ? undefined : { firstName: beat.firstName }),
-      };
-  }
-}

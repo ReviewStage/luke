@@ -38,20 +38,17 @@ A reviewer can hold the build to these as easily as to the layout:
 - The assumption list is read-only: plain text, with nothing to click.
 - No conversation transcript pane. Captions show what is being said now; the
   document is the record.
-- One visible document. There are no split views or second documents.
-- No window of its own. Planning lives in the notch panel (LUKE-347): there is
-  no separate planning window, Dock tile, Cmd-Tab entry, or app menu for it.
+- One visible view at a time. The open plan shows its document or its
+  whiteboard ("Whiteboard" below), never both side by side, and there are no
+  second documents.
+- No window of its own. Planning lives in Luke's one window (LUKE-347): there
+  is no separate planning window, Dock tile, Cmd-Tab entry, or app menu for it.
 
 ## The Plans tab
 
-Planning is the panel's first tab, `Plans`, beside `Settings`, and the tab
-the panel opens on. The Sessions and Conversation tabs are hidden for now
-(LUKE-350): they are out of the tab bar and nothing opens them, not a key, a
-press, a composer's return, or a collapse, while the desk services, stores,
-and hosted endpoints behind them stand, so they come back by returning them
-to `APP_PANEL_TAB` and the bar's list in `panel-tabs.tsx`. The tab draws
-inside the panel's own frame (620 wide, at most 520 tall, the expanded window
-every tab shares), one page at a time:
+Planning is the window's first place, `Plans`, beside `Settings`, and the
+one the window opens on. The tab draws in the work column beside the
+sidebar, one page at a time:
 
 ```
  ┌──────────────────────────────────────────────────────────────┐
@@ -87,17 +84,16 @@ every tab shares), one page at a time:
 Escape unwinds one page at a time, after any open microphone has been muted
 (Escape mutes first, as it does for any call): the document page back to the
 list, which leaves the plan, the new-plan page back to the list, and the list
-closes the panel. Escape on the Settings tab's front page comes back to Plans,
-and the panel closing to the capsule turns it back to Plans as well.
+closes the panel. Escape on the Settings tab's front page comes back to Plans.
 
 ### Opening, leaving, and the talk key
 
 - Opening a plan, from the list or by starting one, makes it the host's one
   **active plan**, and every panel's Plans tab shows it on its document page.
-- A plan stays open while the developer turns to another tab or the panel
-  closes to the capsule, so a call about it goes on. The capsule and the peek
-  draw a planning call exactly as any call: Luke's face, the waveform in the
-  wings, and the captions under the shape. They carry no plan name.
+- A plan stays open while the developer turns to Settings or closes the
+  window, so a call about it goes on. The sidebar draws a planning call
+  exactly as any call: Luke's face and the waveform beside it, with the
+  captions over the work column. They carry no plan name.
 - A plan is left by Back (`‹`) or Escape on its document page, by opening
   another plan, or by a sign-out. Leaving ends the plan's call; opening
   another plan ends the old plan's call before the new one is active in any
@@ -124,32 +120,22 @@ and the panel closing to the capsule turns it back to Plans as well.
 A page of ordinary setup fields and buttons under a `‹ New plan` header, and
 nothing spoken:
 
-1. **Connect GitHub**, shown only while the account has no repository
-   connection. A GitHub sign-in asks for `repo` and so is the connection
-   already; the step is for an account signed in with Google, or a GitHub
-   sign-in from before sign-in asked for `repo` (signing in with GitHub again
-   also mends that).
-2. **Plan name**, a single-line field whose placeholder, "e.g. Dark mode
+1. **Plan name**, a single-line field whose placeholder, "e.g. Dark mode
    toggle", reads as an example to replace rather than a filled value.
-3. **Repository**, a filterable list of the existing repositories the
-   connection can read, private ones included. The filter narrows the list and
-   nothing else.
-4. **Start plan**, enabled once both fields are filled. Pressing it resolves
-   the repository's default branch to one commit, then saves the plan with its
-   name, `owner/repository`, default branch, and commit, and the untouched
-   template as its document, and opens it. If the resolution fails (access revoked, network,
-   or an empty repository), the page stays open with the reason and the
-   button can be pressed again.
-
-That commit is the plan's source context for its whole life. Resuming reads the
-same commit, and nothing refreshes it. The header shows it as
-`acme/relay · main @ 4f2c9e1`. The commit is not a version of the plan.
+2. **Folder**, chosen with `Choose folder`: the folder of this Mac the plan
+   reads, kept on this Mac alone.
+3. **Start plan**, enabled once both are set. Pressing it saves the plan with
+   its name and the untouched template as its document, records its folder
+   on this Mac, and opens it. If the service cannot be reached, the page
+   stays open with the reason and the button can be pressed again.
 
 ### Header
 
 - `‹`, back to the list, which leaves the plan.
 - The plan's name.
 - The repository line, as `owner/repository · branch @ short commit`.
+- **Document | Board**, the switch between the plan's document and its
+  whiteboard. A plan always opens on its document.
 - **Copy**, the one action on the document. It is always enabled, however
   much of the plan is written. It copies the current document as described in
   "Copy". It never launches an agent and never asks the model anything.
@@ -168,6 +154,37 @@ same commit, and nothing refreshes it. The header shows it as
   "None recorded".
 - If the saved document cannot be read, the region shows the failure and a
   `Try again` button. The tab never draws a document it did not read.
+
+### Whiteboard
+
+Each plan has one whiteboard, an Excalidraw scene that Luke and the developer
+both draw on. It shows in place of the document, between the header and the
+microphone row.
+
+- **Luke draws whole diagrams.** The planning model's `draw_on_board` tool
+  sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
+  text, and arrows between ids. It replaces his previous drawing and leaves
+  what the developer drew. The service only stores it
+  (`apps/web/server/hosted/board-tool.ts`). The voice hands a request to
+  draw to the planning model, as it does any other request.
+- **The Mac converts it.** The canvas turns Luke's drawing into Excalidraw
+  elements with Excalidraw's own converter, marks them as his, and puts them
+  in place of his previous ones, then saves the scene. An element of his that
+  the developer moved goes back where his next drawing says.
+- **The developer draws with Excalidraw's own tools.** Images, embeds, and
+  export are left out. The scene is saved whole once the canvas pauses, and
+  the last write wins.
+- **Luke reads the board every turn.** The planning model's standing context
+  carries the scene as text under `[board]` (`board-text.ts`), so whatever
+  the developer drew is in front of it on its next turn.
+- **The Mac reads the board** when a plan opens, when the tab shows, and when
+  the call's activity says a drawing just settled.
+- **Excalidraw is its own bundle** (`whiteboard.js`), loaded the first time a
+  board is shown, with its fonts shipped beside it. The bundle every window
+  parses never carries it.
+- **The board is never recorded.** Its root is left out of the screen
+  recording, because a canvas draws its words as pixels that the recording's
+  text masking cannot reach.
 
 ### The notetaker
 
@@ -474,7 +491,7 @@ ends and the microphone closes. Everything the model saved is already the
 plan's document, so nothing is lost except the words of an unfinished
 sentence. A save the model had not made is not in the document, and the tab
 never claims otherwise. Turning to another tab or letting the panel close does
-not leave the plan: the call goes on under the capsule.
+not leave the plan: the call goes on.
 
 The next day they open the Plans tab. The plan list shows
 "Teammate invitations" first. Selecting it draws the saved document with the
@@ -567,15 +584,14 @@ the exact shape.
 
 | Part | Reuse | New |
 | --- | --- | --- |
-| The tab | The panel's tab bar and its page idiom (`panel-tabs.tsx`, `panel-body.tsx`; the Conversation tab's pages in `agents-panel.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the tab bar and the counted `panel:tab_change` share | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`renderer/planning/plans-panel.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). `SESSIONS` and `CONVERSATION` out of both, and every way into a tab typed to the shown set (`ShownPanelTab`) while the body still draws the hidden two (LUKE-350). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, and starting a plan, the repositories, Connect GitHub, and the microphone. |
-| Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list, the form, and the repository list read from the GitHub connection (LUKE-337, LUKE-338). |
-| GitHub connection | `ConsentConnectSlot` (`apps/desktop/src/renderer/consent-connect-slot.tsx`) and `useConnections` (`use-connections.ts`), the pattern the calendar consent uses | The repository connection itself, with its scopes and token held in connection handling and never in the renderer or a model-visible argument (LUKE-338). |
+| The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, choosing its folder, and the microphone. |
+| Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |
-| Copy | `ConversationCopyButton`'s pattern (`conversation-copy.tsx`), `ACT_KIND.WINDOW_COPY_TEXT`, and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- ` bullets, or "None recorded" (LUKE-352). |
+| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- ` bullets, or "None recorded" (LUKE-352). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`apps/desktop/src/shared/messages/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@sidecar/live`) | The status word beside the microphone, for the open plan's call alone. |
-| Captions, levels, errors | The panel's caption strip (`useCaptionPresentation`, `caption-layout.ts`) and the wings' waveform (`notch-wings.tsx`), unchanged | None. |
+| Captions, levels, errors | The panel's caption strip (`useCaptionPresentation`, `caption-layout.ts`) and the sidebar's waveform (`desktop/luke-identity.tsx`), unchanged | None. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
 | Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
@@ -641,12 +657,14 @@ changes when a check is run, not when one is planned.
   `./scripts/verify.sh` has not been run on the integrated application. The
   Plans tab in the panel, the fixed template's presentation (LUKE-352), the
   document scrolling inside the panel's ceiling,
-  the microphone row, and the capsule and captions during a planning call
+  the microphone row, and the captions during a planning call
   have never been seen running. `./scripts/evidence.sh` captures the panel
   expanded on the Plans tab over a synthetic plan
-  (`app-smoke-planning.png`, from `--profile planning --expanded`) and over
-  the synthetic plan list with none open (`app-smoke-expanded.png`, the panel
-  opening on Plans with Sessions and Conversation hidden), but neither
+  (`app-smoke-planning.png`, from `--profile planning --expanded`), on the
+  plan's whiteboard (`app-smoke-planning-board.png`, from
+  `--profile planning-board --expanded`), and over
+  the synthetic plan list with none open (`app-smoke-expanded.png`, the
+  window opening on Plans), but neither
   capture has been taken yet.
 - **Real voice.** No spoken planning conversation has run against GPT Live:
   ordinary assent, interruption, a continuing answer, a correction, resuming,
@@ -657,8 +675,7 @@ changes when a check is run, not when one is planned.
 ### Known limitations
 
 - **GitHub's `repo` scope is broader than Luke's use.** GitHub sign-in and the
-  Connect GitHub step (`/connect-github.html`, opened by the new-plan page)
-  both ask under the existing OAuth App for the classic `repo` scope,
+  Connect GitHub page (`/connect-github.html`) both ask under the existing OAuth App for the classic `repo` scope,
   which grants read and write to every repository the developer can reach.
   Luke only reads, through GitHub's read-only MCP endpoint, but the token
   itself could write. `PRIVACY.md` discloses it under "Your account".

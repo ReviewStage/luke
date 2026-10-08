@@ -43,7 +43,7 @@ import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
 import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
-import { projectTurnEvents } from "../hosted/turn-event-stream.js";
+import { projectTurnEvents } from "../hosted/turn-events.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
 
 /**
@@ -51,20 +51,18 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * process, never over HTTP. The voice function resolved the account at its
  * handshake and dropped the bearer there, so it holds nothing eve's door or
  * this deployment's own routes would take; what it holds is the ask door
- * itself — `acceptAsk`, the same function the ask route is a thin adapter
- * over — and the store, so a spoken ask is admitted, recorded, and handed to
- * eve exactly as a typed one is, under the eve client the composition built
- * for the account. A turn's events are the same projection C7's stream
- * serves, `projectTurnEvents` over the turn row and its journal, read again
- * on a schedule until the turn ends; there is no HTTP hop and so no second
- * function ceiling to re-attach across. The run the service keys an exchange
- * by is the ask's own id, since eve names the turn only once it starts, and
- * every event is translated back to it. A run is cancelled through
- * `stopAsk`, the same Stop the typed route carries, so the voice's stop key
- * and the developer's Stop button stop a turn the same way. What the stream
- * carries mid-turn is the slow step, each queued question, and each sentence
- * of the reply once it has finished forming and every call ahead of it has
- * settled, which is what the voice speaks meanwhile.
+ * itself — `acceptAsk` — and the store, so a spoken ask is admitted,
+ * recorded, and handed to eve under the eve client the composition built for
+ * the account. A turn's events are `projectTurnEvents` over the turn row and
+ * its journal, read again on a schedule until the turn ends; there is no
+ * HTTP hop and so no function ceiling to re-attach across. The run the
+ * service keys an exchange by is the ask's own id, since eve names the turn
+ * only once it starts, and every event is translated back to it. A run is
+ * cancelled through `stopAsk`, so the voice's stop key stops a turn as eve's
+ * cancel of it or a stamp its start honours. What the projection carries
+ * mid-turn is the slow step, each queued question, and each sentence of the
+ * reply once it has finished forming and every call ahead of it has settled,
+ * which is what the voice speaks meanwhile.
  *
  * How far each turn was told is written on the ask's row before it is told,
  * so a connection that re-attaches to the session on another function
@@ -107,6 +105,7 @@ export const HOSTED_ASK_REFUSAL_NOTE = {
 const RUN_EVENT_OF_TURN_EVENT = {
   [TURN_EVENT_KIND.SLOW_STEP]: LIVE_BRAIN_RUN_EVENT.SLOW_STEP,
   [TURN_EVENT_KIND.QUESTION_QUEUED]: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+  [TURN_EVENT_KIND.CODE_SHOWN]: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN,
   [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
   [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
   [TURN_EVENT_KIND.ENDED]: LIVE_BRAIN_RUN_EVENT.ENDED,
@@ -130,6 +129,10 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
         question: event.question,
         recommendation: event.recommendation,
       };
+    case TURN_EVENT_KIND.CODE_SHOWN: {
+      const { kind, turnId: _turnId, seq: _seq, ...ref } = event;
+      return { kind: RUN_EVENT_OF_TURN_EVENT[kind], runId, ref };
+    }
     case TURN_EVENT_KIND.ACTIONS_SETTLED:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId };
     case TURN_EVENT_KIND.REPLY_SENTENCE:
@@ -225,18 +228,13 @@ function cancelOf(outcome: StopOutcome): LiveBrainCancel {
 export interface HostedLiveBrainOptions {
   /** The account the voice session was opened for, resolved at the handshake and written to `voice_sessions`. */
   readonly userId: string;
-  /**
-   * The conversation every ask lands in, where the composition pins one: the
-   * same one its record writes, so an ask and the lines it leaves cannot name
-   * two conversations once a Clear has moved the standing main. Unpinned, each
-   * ask resolves the standing main at its own instant.
-   */
-  readonly conversationId?: string;
+  /** The conversation every ask lands in: the plan's, the same one its record writes. */
+  readonly conversationId: string;
   /** The ask door's seams: the ask record, eve under the deployment principal for this account, and the clock. */
   readonly asks: AskSeams;
   /** The store the standing and the journal are read from, on the connection the socket's own fiber holds. */
   readonly store: Pick<HostedStore, "turns" | "messages">;
-  /** The writer a cancelled run's turn is stamped through, as the typed Stop stamps it. */
+  /** The writer a cancelled run's turn is stamped through, as every Stop stamps it. */
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
   readonly report: (message: string) => void;
   /** The follow's own bounds, narrowed by a test so a poll is milliseconds and the bound is reached inside a test. */
@@ -497,14 +495,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         question: ask.question,
         origin: ASK_ORIGIN.SPOKEN,
         clientId: ask.submissionId,
+        conversationId: options.conversationId,
         voice: { sessionId: ask.sessionId, revision: ask.revision },
       };
-      const pinned = options.conversationId;
       return Effect.gen(function* () {
-        const outcome = yield* acceptAsk(
-          options.asks,
-          pinned === undefined ? input : { ...input, conversationId: pinned },
-        );
+        const outcome = yield* acceptAsk(options.asks, input);
         if (Result.isFailure(outcome)) {
           return {
             outcome: LIVE_BRAIN_SUBMISSION.REFUSED,

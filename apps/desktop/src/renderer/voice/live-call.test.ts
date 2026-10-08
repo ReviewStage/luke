@@ -19,9 +19,7 @@ import type { WireRecord } from "@sidecar/wire";
 import { type Context, Deferred, Duration, Effect, Exit, Fiber, Logger, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import {
-  LIVE_CLOSE_OWNER,
   LiveCall,
-  type LiveCloseOwner,
   MICROPHONE_ACK_TIMEOUT_MS,
   SESSION_CLOSE_TIMEOUT_MS,
   SESSION_START_TIMEOUT_MS,
@@ -45,6 +43,9 @@ import {
  * description, the session, and the answer — with room over it, and a count
  * too low fails every run rather than one.
  */
+/** What every call here is opened about: the plan a press names. */
+const OPENING = { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" } as const;
+
 const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Duration.zero)), {
   times: 12,
 });
@@ -191,8 +192,6 @@ interface FixtureOptions {
   microphone?: boolean;
   sessionCreated?: boolean;
   voiceSessionId?: string;
-  /** The sessions route's service by default; the introduction's own channel where named. */
-  closeOwner?: LiveCloseOwner;
 }
 
 function build(services: Context.Context<never>, options: FixtureOptions) {
@@ -250,7 +249,6 @@ function build(services: Context.Context<never>, options: FixtureOptions) {
       },
       reportActivity: (idle) => activity.push(idle),
     },
-    closeOwner: options.closeOwner ?? LIVE_CLOSE_OWNER.SERVICE,
     createPeerConnection: () => peer,
     createSilence: () => silence,
     openMicrophone: async () => {
@@ -346,7 +344,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       assert.deepEqual(f.peer.steps, ["add-track", "create-channel", "create-offer", "set-local"]);
       assert.deepEqual(f.peer.added, [f.track]);
@@ -371,7 +369,7 @@ it.effect(
 it.effect("ICE gathering that never completes sends the offer at the bound", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    yield* Effect.forkChild(f.call.open({ byPress: true }));
+    yield* Effect.forkChild(f.call.open(OPENING));
     yield* settle;
     yield* advance(5_000);
     assert.equal(f.offers.length, 1);
@@ -381,7 +379,7 @@ it.effect("ICE gathering that never completes sends the offer at the bound", () 
 it.effect("a host that creates no session leaves the peer closed and the call failed", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ sessionCreated: false });
-    const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
     yield* settle;
     f.peer.gathered();
     assert.equal(yield* Fiber.join(opening), false);
@@ -397,7 +395,7 @@ it.effect("a host that creates no session leaves the peer closed and the call fa
 it.effect("a session that never announces itself started is given up at the bound", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
     yield* settle;
     f.peer.gathered();
     yield* settle;
@@ -417,7 +415,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -459,7 +457,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -490,7 +488,7 @@ it.effect(
 it.effect("a mute the server never acknowledges still releases the device at the bound", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
     yield* settle;
     f.peer.gathered();
     yield* settle;
@@ -515,7 +513,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -550,17 +548,18 @@ it.effect(
   "a release while the press's device is still opening stops that device instead of attaching it",
   () =>
     Effect.gen(function* () {
-      const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+      const f = yield* fixture({ microphone: false });
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
       yield* Fiber.join(opening);
+      f.grantMicrophone();
       f.holdNextMicrophone();
       const unmuting = yield* Effect.forkChild(f.call.unmute());
       yield* settle;
-      assert.equal(f.microphoneOpens(), 1);
+      assert.equal(f.microphoneOpens(), 2);
       const muting = yield* Effect.forkChild(f.call.mute());
       assert.equal(yield* Fiber.join(muting), true);
       f.releaseMicrophone();
@@ -576,13 +575,14 @@ it.effect(
   "a release while the press's device is being attached takes it back off the line and stops it",
   () =>
     Effect.gen(function* () {
-      const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+      const f = yield* fixture({ microphone: false });
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
       yield* Fiber.join(opening);
+      f.grantMicrophone();
       let attach: (() => void) | undefined;
       f.peer.sender.replaceTrack = (track) => {
         f.peer.replaced.push(track);
@@ -610,7 +610,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -651,7 +651,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -667,25 +667,26 @@ it.effect(
 );
 
 it.effect(
-  "a session opened for Luke's own speech carries no device: the silent track rides the offer and no microphone opens",
+  "a press whose microphone the system refuses rides the silent track, and the next press opens the device",
   () =>
     Effect.gen(function* () {
-      const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+      const f = yield* fixture({ microphone: false });
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       assert.deepEqual(f.peer.steps.slice(0, 2), ["add-track", "create-channel"]);
       assert.deepEqual(f.peer.added, [f.silence.track]);
-      assert.equal(f.microphoneOpens(), 0);
+      assert.equal(f.microphoneOpens(), 1);
       f.peer.gathered();
       yield* settle;
       f.started();
       assert.equal(yield* Fiber.join(opening), true);
+      f.grantMicrophone();
       assert.equal(f.local.at(-1), undefined);
       assert.equal(f.track.stopped, false);
       // The press against it opens the device then, and only then.
       const unmuting = yield* Effect.forkChild(f.call.unmute());
       yield* settle;
-      assert.equal(f.microphoneOpens(), 1);
+      assert.equal(f.microphoneOpens(), 2);
       assert.deepEqual(f.peer.replaced, [f.track]);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
       assert.equal(yield* Fiber.join(unmuting), true);
@@ -694,13 +695,14 @@ it.effect(
 
 it.effect("a muted session with no device still reports idle once the window passes", () =>
   Effect.gen(function* () {
-    const f = yield* fixture();
-    const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+    const f = yield* fixture({ microphone: false });
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
     yield* settle;
     f.peer.gathered();
     yield* settle;
     f.started();
     yield* Fiber.join(opening);
+    f.grantMicrophone();
     yield* advance(LIVE_IDLE_WINDOW_MS - 1);
     assert.deepEqual(f.activity, []);
     yield* advance(1);
@@ -713,7 +715,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -735,7 +737,7 @@ it.effect(
 /** A call opened for Luke's own speech and started, with nothing pressed. */
 const startedCall = Effect.gen(function* () {
   const f = yield* fixture();
-  const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+  const opening = yield* Effect.forkChild(f.call.open(OPENING));
   yield* settle;
   f.peer.gathered();
   yield* settle;
@@ -803,13 +805,14 @@ it.effect(
   "the sending line always carries a track: across presses and releases the sender is handed the device or the silence, never nothing",
   () =>
     Effect.gen(function* () {
-      const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+      const f = yield* fixture({ microphone: false });
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
       f.started();
       yield* Fiber.join(opening);
+      f.grantMicrophone();
       for (const _ of [0, 1]) {
         const unmuting = yield* Effect.forkChild(f.call.unmute());
         yield* settle;
@@ -841,7 +844,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -868,7 +871,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ microphone: false });
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       assert.deepEqual(f.peer.steps.slice(0, 2), ["add-track", "create-channel"]);
       assert.deepEqual(f.peer.added, [f.silence.track]);
@@ -889,7 +892,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ microphone: false });
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -912,7 +915,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -971,7 +974,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ voiceSessionId: "vs_1" });
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -995,7 +998,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -1025,7 +1028,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -1050,7 +1053,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -1091,7 +1094,7 @@ it.effect(
       // A second call with no closed event closes its peer at the bound, which
       // is what ends a session whose service could not be reached.
       const g = yield* fixture();
-      const opened = yield* Effect.forkChild(g.call.open({ byPress: true }));
+      const opened = yield* Effect.forkChild(g.call.open(OPENING));
       yield* settle;
       g.peer.gathered();
       yield* settle;
@@ -1120,52 +1123,19 @@ it.effect(
 it.effect("a press landing after the hang-up opens no microphone on a closing call", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
     yield* settle;
     f.peer.gathered();
     yield* settle;
     f.started();
     yield* Fiber.join(opening);
+    const opensBefore = f.microphoneOpens();
     yield* Effect.forkChild(f.call.close());
     yield* settle;
     assert.equal(yield* f.call.unmute(), false);
-    assert.equal(f.microphoneOpens(), 0);
+    assert.equal(f.microphoneOpens(), opensBefore);
     assert.deepEqual(f.sentTypes(), []);
   }),
-);
-
-it.effect(
-  "the introduction's hang-up sends its own close and holds everything open until closed arrives",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture({ closeOwner: LIVE_CLOSE_OWNER.CHANNEL });
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
-      yield* settle;
-      f.peer.gathered();
-      yield* settle;
-      f.started();
-      yield* Fiber.join(opening);
-      const closing = yield* Effect.forkChild(f.call.close());
-      yield* settle;
-      assert.deepEqual(f.sentTypes(), [LIVE_CLIENT_EVENT.CLOSE]);
-      assert.equal(f.ends(), 0);
-      assert.equal(f.statuses.at(-1), LIVE_STATUS.CLOSING);
-      assert.equal(f.peer.steps.includes("close"), false);
-      f.channel().receive({
-        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
-        event_id: "closed",
-        reason: "close_requested",
-        usage: { seconds: 42 },
-      });
-      yield* Fiber.join(closing);
-      yield* settle;
-      assert.deepEqual(
-        f.peer.steps.filter((step) => step === "close"),
-        ["close"],
-      );
-      assert.equal(f.track.stopped, true);
-      assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.HUNG_UP]);
-    }),
 );
 
 it.effect(
@@ -1173,7 +1143,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -1185,7 +1155,7 @@ it.effect(
       assert.equal(f.transports.at(-1), LIVE_TRANSPORT_STATE.CLOSED);
       assert.deepEqual(f.endReasons, [LIVE_PEER_END_REASON.CHANNEL_CLOSED]);
       const g = yield* fixture();
-      const opened = yield* Effect.forkChild(g.call.open({ byPress: true }));
+      const opened = yield* Effect.forkChild(g.call.open(OPENING));
       yield* settle;
       g.peer.gathered();
       yield* settle;
@@ -1201,7 +1171,7 @@ it.effect(
 it.effect("the only records the call sends are the two switches, in the channel's own order", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
     yield* settle;
     f.peer.gathered();
     yield* settle;
@@ -1234,43 +1204,40 @@ it.effect("the only records the call sends are the two switches, in the channel'
   }),
 );
 
-it.effect(
-  "a session opened for Luke's own speech sends nothing until pressed, then the same switches a press sends",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: false }));
-      yield* settle;
-      f.peer.gathered();
-      yield* settle;
-      f.started();
-      yield* Fiber.join(opening);
-      // No session configuration, tool list, or instructions crosses for a
-      // session nobody pressed for: the briefing's own vocabulary is empty
-      // until the developer presses.
-      assert.deepEqual(f.sentTypes(), []);
-      const unmuting = yield* Effect.forkChild(f.call.unmute());
-      yield* settle;
-      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
-      yield* Fiber.join(unmuting);
-      const muting = yield* Effect.forkChild(f.call.mute());
-      yield* settle;
-      f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
-      yield* Fiber.join(muting);
-      const closing = yield* Effect.forkChild(f.call.close());
-      yield* settle;
-      f.channel().receive({
-        type: LIVE_SERVER_EVENT.SESSION_CLOSED,
-        event_id: "closed",
-        reason: "close_requested",
-        usage: { seconds: 1 },
-      });
-      yield* Fiber.join(closing);
-      assert.deepEqual(f.channel().sent, [
-        { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
-        { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
-      ]);
-    }),
+it.effect("a session sends nothing until its first unmute, then the two switches", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const opening = yield* Effect.forkChild(f.call.open(OPENING));
+    yield* settle;
+    f.peer.gathered();
+    yield* settle;
+    f.started();
+    yield* Fiber.join(opening);
+    // No session configuration, tool list, or instructions crosses from
+    // the peer: the two switches are its whole vocabulary.
+    assert.deepEqual(f.sentTypes(), []);
+    const unmuting = yield* Effect.forkChild(f.call.unmute());
+    yield* settle;
+    f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
+    yield* Fiber.join(unmuting);
+    const muting = yield* Effect.forkChild(f.call.mute());
+    yield* settle;
+    f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED);
+    yield* Fiber.join(muting);
+    const closing = yield* Effect.forkChild(f.call.close());
+    yield* settle;
+    f.channel().receive({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "closed",
+      reason: "close_requested",
+      usage: { seconds: 1 },
+    });
+    yield* Fiber.join(closing);
+    assert.deepEqual(f.channel().sent, [
+      { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "peer-1" },
+      { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "peer-2" },
+    ]);
+  }),
 );
 
 it.effect(
@@ -1348,9 +1315,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const first = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const first = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
-      const second = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const second = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -1365,7 +1332,7 @@ it.effect(
         ["create-channel"],
       );
       // Once it has settled, an ask reads the call's own standing.
-      assert.equal(yield* f.call.open({ byPress: true }), true);
+      assert.equal(yield* f.call.open(OPENING), true);
     }),
 );
 
@@ -1374,7 +1341,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;
@@ -1414,7 +1381,7 @@ it.effect(
     const lines: string[] = [];
     return Effect.gen(function* () {
       const f = yield* fixture();
-      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      const opening = yield* Effect.forkChild(f.call.open(OPENING));
       yield* settle;
       f.peer.gathered();
       yield* settle;

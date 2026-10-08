@@ -20,12 +20,8 @@
   },
   "dependencies": {
     "@sidecar/analytics": "workspace:*",
-    "@sidecar/calendar": "workspace:*",
-    "@sidecar/credentials": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/live": "workspace:*",
-    "@sidecar/session": "workspace:*",
-    "@sidecar/surface": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"
   }

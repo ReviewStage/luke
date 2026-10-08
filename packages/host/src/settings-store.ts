@@ -1,27 +1,11 @@
-import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
-import {
-  CREDENTIAL_PROVIDER_LIST,
-  type CredentialFormat,
-  type CredentialProvider,
-  type CredentialProviderId,
-  isCredentialProviderId,
-} from "@sidecar/credentials";
 import {
   ACCOUNT_STATUS,
   type AccountProvider,
   type AccountSnapshot,
   isAccountProvider,
 } from "@sidecar/credentials/snapshot";
-import {
-  CREDENTIAL_SOURCE,
-  type CredentialSource,
-  SECRET_STORAGE,
-  type SecretStorage,
-} from "@sidecar/credentials/vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
-import { type CloudAgentProviderId, isCloudAgentProviderId } from "@sidecar/session";
 import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@sidecar/settings/wire";
-import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -29,24 +13,19 @@ import {
   isWireString,
   wireRecord as readWireRecord,
   type UnparsedWireValue,
-  unparsedWire,
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
 import { declareReader } from "@sidecar/wire/effect";
-import { Data, Effect, Redacted, Result, Schema, Semaphore, type Types } from "effect";
+import { Data, Effect, Result, Schema, Semaphore, type Types } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
-// The reader owns the shape it is fed: what this store resolves a stored
-// connection into is exactly what `readAppleCalendarConnection` promises it.
-import type { AppleCalendarConnection } from "./apple-calendar.js";
 import type { SettingsEnvironmentOverrides } from "./effect/settings-overrides.js";
 import { readSettingsFileText, writeSettingsFileAtomic } from "./effect/settings-store-io.js";
 
 export type { StoredAccount } from "@sidecar/credentials";
 
-import type { CalendarAccountCredential } from "@sidecar/calendar";
 import type { StoredAccount } from "@sidecar/credentials";
 import {
   ACCOUNT_PREFERENCE_FIELDS,
@@ -57,34 +36,30 @@ import {
   type AppSettingField,
   type AppSettingValue,
   accountPreferencesFromStored,
-  type KeyedAppSettingField,
-  type SettingEntryValue,
   type StoredAppSettings,
-  sameSettingEntry,
 } from "@sidecar/settings";
 
 const SETTINGS_FILE_VERSION = 2;
 
 const SETTINGS_FIELD = {
   ACCOUNT: "account",
-  API_KEYS: "apiKeys",
-  APPLE_CALENDAR: "appleCalendar",
-  CALENDAR_ACCOUNTS: "calendarAccounts",
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
-  VAULT_SYNC_ACCOUNT: "vaultSyncAccount",
   VERSION: "version",
 } as const;
 
-const API_KEY_LENGTH = {
-  MINIMUM: 8,
-  MAXIMUM: 512,
-} as const;
+/** Where an earlier build kept its provider keys, ciphertext by provider id. */
+const STORED_API_KEYS_FIELD = "apiKeys";
 
-/** Providers whose credential source a snapshot resolves at once; a resolution may reach the settings file or the Keychain. */
-const SNAPSHOT_SOURCE_CONCURRENCY = 4;
+/**
+ * The providers whose stored key an earlier build could still use: the set
+ * its credential provider list last named. A ciphertext under any other id
+ * (the developer's own OpenAI key, until LUKE-205) is dropped by
+ * `retireStoredApiKeys`; these are carried. Spelled out here, since the
+ * vocabulary that named them is gone with them.
+ */
+const KEPT_API_KEY_PROVIDER = { CONDUCTOR: "conductor" } as const;
 
-/** Printable ASCII with no spaces — the bytes an authorization header accepts. */
-const PRINTABLE_ASCII = /^[\x21-\x7e]+$/;
+const KEPT_API_KEY_PROVIDERS: ReadonlySet<string> = new Set(Object.values(KEPT_API_KEY_PROVIDER));
 
 /**
  * A credential is only ever written through OS-provided encryption. Electron's
@@ -111,20 +86,12 @@ export interface SettingsStoreOptions {
    */
   overrides: SettingsEnvironmentOverrides;
   /**
-   * Whether this run will use the credentials it resolves. A fixture or evidence
-   * run will not, and the panel has to mark what would actually happen rather
+   * Whether this run will use the account it holds. A fixture or evidence run
+   * will not, and the panel has to mark what would actually happen rather
    * than what is stored — so `voiceAvailable` is false there however good the
-   * key is. Only the app knows which kind of run this is. True by default.
+   * account is. Only the app knows which kind of run this is. True by default.
    */
   credentialsUsable?: boolean;
-  /**
-   * Whether Luke's service holds a key for a cloud agent provider, as its
-   * vault last listed. A cloud provider's key lives there and nowhere on this
-   * machine, so its row's source is read from this and never from the file or
-   * the environment; the local store still carries one such key only until
-   * the migration below has handed it to the vault.
-   */
-  vaultKeyHeld: (providerId: CloudAgentProviderId) => boolean;
   /**
    * The file system `#readPersisted` and `#write` below reach the settings
    * file through, resolved once by the composer from the host's own assembly
@@ -137,20 +104,14 @@ export interface SettingsStoreOptions {
   path: Path.Path;
 }
 
-interface ResolvedApiKey {
-  /** Sealed: the store hands it to the provider's adapter, which reveals it onto its header, and to nothing else. */
-  apiKey?: Redacted.Redacted;
-  source: CredentialSource;
-}
-
 /* ----- The settings file's record ----- */
 
 /**
  * The settings file is read as a `Schema` whose every field is a total
  * reader: what a field cannot read is that field's fallback, never a refused
- * file, because a file this build half-understands still carries the keys
- * and tokens an older or newer build wrote, and the next write must not lose
- * them. The one refusal is a file whose top level is not an object, which
+ * file, because a file this build half-understands still carries the
+ * account an older or newer build wrote, and the next write must not lose it.
+ * The one refusal is a file whose top level is not an object, which
  * `parsePersistedSettingsEither` below answers as `SettingsParseRefusal`. No
  * model is ever shown this record, so the node a reader declares is a
  * placeholder and nothing draws it.
@@ -205,147 +166,6 @@ function storedAccount(value: UnparsedWireValue): PersistedAccount | undefined {
   };
 }
 
-interface PersistedCalendarAccount {
-  id: string;
-  /** The sign-in's grant, encrypted like every credential. */
-  token: string;
-  /** The calendar ids the user chose to count toward meetings. */
-  calendars: readonly string[];
-}
-
-/** An account or calendar id reads like one wire value; longer is not an id. */
-const MAXIMUM_CALENDAR_IDENTIFIER_LENGTH = 200;
-/** More accounts than one person signs into; a cap, not a plan. */
-const MAXIMUM_CALENDAR_ACCOUNTS = 10;
-/** More calendars than anyone counts meetings from. */
-const MAXIMUM_SELECTED_CALENDARS = 50;
-
-/** A calendar-world identifier as this store will keep it, or nothing. */
-function calendarIdentifierText(value: UnparsedWireValue): string | undefined {
-  if (!isWireString(value)) return undefined;
-  const normalized = value.trim();
-  if (!normalized || normalized.length > MAXIMUM_CALENDAR_IDENTIFIER_LENGTH) return undefined;
-  return normalized;
-}
-
-/**
- * A stored selection as this store will keep it: well-formed ids, bounded
- * count. Every path that writes one — parsed from disk or handed in — passes
- * this one gate.
- */
-function sanitizedCalendarIds(value: UnparsedWireValue): readonly string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => calendarIdentifierText(unparsedWire(entry)))
-    .filter((entry): entry is string => entry !== undefined)
-    .slice(0, MAXIMUM_SELECTED_CALENDARS);
-}
-
-/**
- * The selection after one calendar's toggle, or nothing to write — the same
- * edit for every source, stated once. Nothing to write is a toggle to the
- * value already held, or one past the cap.
- */
-function toggledCalendarSelection(
-  held: readonly string[],
-  id: string,
-  selected: boolean,
-): readonly string[] | undefined {
-  if (held.includes(id) === selected) return undefined;
-  const calendars = held.filter((candidate) => candidate !== id);
-  if (selected) calendars.push(id);
-  return calendars.length > MAXIMUM_SELECTED_CALENDARS ? undefined : calendars;
-}
-
-/** Reads the stored calendar accounts, keeping only well-formed entries. */
-function storedCalendarAccounts(persisted: UnparsedWireValue): readonly PersistedCalendarAccount[] {
-  if (!Array.isArray(persisted)) return [];
-  const accounts: PersistedCalendarAccount[] = [];
-  for (const entry of persisted) {
-    if (accounts.length >= MAXIMUM_CALENDAR_ACCOUNTS) break;
-    if (!isRecord(entry)) continue;
-    const { id, token, calendars } = entry;
-    const accountId = calendarIdentifierText(id);
-    if (!accountId || !isWireString(token) || !token) continue;
-    if (accounts.some((held) => held.id === accountId)) continue;
-    accounts.push({ id: accountId, token, calendars: sanitizedCalendarIds(calendars) });
-  }
-  return accounts;
-}
-
-/**
- * The Apple Calendar connection: present exactly while connected, holding
- * only the calendar ids the user chose to count. No credential rides with
- * it — the grant lives with macOS, withdrawable in System Settings.
- */
-interface PersistedAppleCalendar {
-  calendars: readonly string[];
-}
-
-/** The stored Apple Calendar connection; its presence is the connection. */
-function storedAppleCalendar(value: UnparsedWireValue): PersistedAppleCalendar | undefined {
-  const held = readWireRecord(value);
-  if (!held) return undefined;
-  return { calendars: sanitizedCalendarIds(held.calendars) };
-}
-
-/**
- * The settings with this account list, kept the way an emptied map is kept: an
- * empty list is a deleted field, so a disconnection reads as no calendars
- * rather than as a connection with none.
- */
-function withCalendarAccounts(
-  persisted: PersistedSettings,
-  calendarAccounts: readonly PersistedCalendarAccount[],
-): PersistedSettings {
-  const next: PersistedSettings = { ...persisted };
-  if (calendarAccounts.length > 0) next.calendarAccounts = calendarAccounts;
-  else delete next.calendarAccounts;
-  return next;
-}
-
-/** The settings with this Mac's connection, on the same terms. */
-function withAppleCalendar(
-  persisted: PersistedSettings,
-  appleCalendar: PersistedSettings["appleCalendar"],
-): PersistedSettings {
-  const next: PersistedSettings = { ...persisted };
-  if (appleCalendar) next.appleCalendar = appleCalendar;
-  else delete next.appleCalendar;
-  return next;
-}
-
-/**
- * A rejected key never reaches disk, and the reason never echoes the submitted
- * value. Most of what this rules out is a value that cannot be sent as an HTTP
- * authorization header at all. A provider that publishes more than one kind of
- * key also has the kind Luke cannot use ruled out here, so a credential that
- * would only ever be refused is refused at the door rather than stored and
- * quietly unused.
- */
-export function apiKeyRejection(apiKey: string, format?: CredentialFormat): string | undefined {
-  if (apiKey.length < API_KEY_LENGTH.MINIMUM) return "That API key is too short.";
-  if (apiKey.length > API_KEY_LENGTH.MAXIMUM) return "That API key is too long.";
-  if (!PRINTABLE_ASCII.test(apiKey)) return "That API key contains unsupported characters.";
-  if (format && !apiKey.startsWith(format.prefix)) return format.rejection;
-  return undefined;
-}
-
-/**
- * Ciphertext by provider id. A provider this build does not know is carried
- * through untouched so an older build cannot discard a newer one's key.
- */
-function storedApiKeys(persisted: UnparsedWireValue) {
-  const apiKeys: Record<string, string> = {};
-  if (isRecord(persisted)) {
-    for (const [providerId, ciphertext] of Object.entries(persisted)) {
-      if (!isWireString(ciphertext) || !ciphertext) continue;
-      apiKeys[providerId] = ciphertext;
-    }
-  }
-  return apiKeys;
-}
-
 /**
  * The stored settings, each read through its own guard, so an entry the
  * build's own table does not list is dropped: a file written by another
@@ -393,34 +213,12 @@ function sameAccountPreferenceValue(current: UnparsedWireValue, next: UnparsedWi
   return JSON.stringify(current) === JSON.stringify(next);
 }
 
-function accountPreferenceRecord(value: UnparsedWireValue): WireRecord {
-  return isRecord(value) ? value : {};
-}
-
+/** A field's value as the merge settles it: the remote one where this device left it as last synced, its own otherwise. */
 function accountPreferenceWithLocalChanges(
-  field: AccountPreferenceField,
   remote: UnparsedWireValue,
   current: UnparsedWireValue,
   expected: UnparsedWireValue,
 ): UnparsedWireValue {
-  if (
-    field === APP_SETTING_SCHEMA.workspaceAgentDefaults.field ||
-    field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field
-  ) {
-    const entries = { ...accountPreferenceRecord(remote) };
-    const currentEntries = accountPreferenceRecord(current);
-    const expectedEntries = accountPreferenceRecord(expected);
-    const keys = new Set<string>();
-    for (const key of Object.keys(currentEntries)) keys.add(key);
-    for (const key of Object.keys(expectedEntries)) keys.add(key);
-    for (const key of keys) {
-      const currentEntry = currentEntries[key];
-      if (sameAccountPreferenceValue(currentEntry, expectedEntries[key])) continue;
-      if (currentEntry === undefined) delete entries[key];
-      else entries[key] = currentEntry;
-    }
-    return Object.keys(entries).length > 0 ? entries : undefined;
-  }
   return sameAccountPreferenceValue(current, expected) ? remote : current;
 }
 
@@ -433,7 +231,6 @@ function accountPreferencesWithLocalChanges(
   for (const field of ACCOUNT_PREFERENCE_FIELDS) {
     // SAFETY: AccountPreferenceField selects JSON-compatible account preference values.
     const value = accountPreferenceWithLocalChanges(
-      field,
       remote[field] as UnparsedWireValue,
       current[field] as UnparsedWireValue,
       expected[field] as UnparsedWireValue,
@@ -478,40 +275,21 @@ function storedAccountPreferencesSync(
 }
 
 /**
- * Which account an earlier build last synced this Mac's provider keys for —
- * its opaque id, or its address where the identity carried no id. Read
- * only: this build writes it never and keeps no local provider key of its
- * own, but the one migration of a key that earlier build left here asks
- * it whose key that was, so a later sign-in on a shared Mac cannot claim
- * someone else's.
- */
-function storedVaultSyncAccount(value: UnparsedWireValue): string | undefined {
-  return isWireString(value) && value ? value : undefined;
-}
-
-/**
  * The settings file's record: the version and the keys every file carries,
  * the sections a file holds only while something stands in them, and every
  * stored setting. Read by `parsePersistedSettingsEither` and written by
- * `#write`; a key beside these is dropped on the next write, as it always
- * was. `settledPersistedSettings` below is the rule between two fields no
- * one field's reader can hold.
+ * `#write`; a key beside these is carried through every write as the file
+ * held it (`carriedSettingsFields`). `settledPersistedSettings` below is the
+ * rule between two fields no one field's reader can hold.
  */
 const PersistedSettingsSchema = Schema.Struct({
   [SETTINGS_FIELD.VERSION]: settingsField((value) =>
     isWireNumber(value) ? value : SETTINGS_FILE_VERSION,
   ).pipe(Schema.withDecodingDefault(ABSENT)),
-  [SETTINGS_FIELD.API_KEYS]: settingsField(storedApiKeys).pipe(Schema.withDecodingDefault(ABSENT)),
   [SETTINGS_FIELD.ACCOUNT]: Schema.optionalKey(settingsField(storedAccount)),
-  // The connected calendar accounts: each account's id, the grant its sign-in
-  // produced as ciphertext, and the calendar ids the user chose to count.
-  // Absent from the file while none are connected.
-  [SETTINGS_FIELD.CALENDAR_ACCOUNTS]: Schema.optionalKey(settingsField(storedCalendarAccounts)),
-  [SETTINGS_FIELD.APPLE_CALENDAR]: Schema.optionalKey(settingsField(storedAppleCalendar)),
   [SETTINGS_FIELD.ACCOUNT_PREFERENCES_SYNC]: Schema.optionalKey(
     settingsField(storedAccountPreferencesSync),
   ),
-  [SETTINGS_FIELD.VAULT_SYNC_ACCOUNT]: Schema.optionalKey(settingsField(storedVaultSyncAccount)),
   ...storedSettingFields,
 });
 
@@ -532,32 +310,39 @@ type AccountTokens = typeof AccountTokensSchema.Type;
 const decodeAccountTokens = Schema.decodeUnknownResult(Schema.fromJsonString(AccountTokensSchema));
 
 /**
- * The record as the store keeps it: a section its reader could not read, or
- * one holding nothing, is not a key holding `undefined` but no key at all,
- * so a disconnection reads as no calendars rather than as a connection with
- * none; and a sync baseline is kept only for the account signed in, since
- * one left by another account would let that account's edits stand in for
- * this one's.
+ * The record as the store keeps it: a section its reader could not read is
+ * not a key holding `undefined` but no key at all, and a sync baseline is
+ * kept only for the account signed in, since one left by another account
+ * would let that account's edits stand in for this one's.
  */
 function settledPersistedSettings(persisted: PersistedSettings): PersistedSettings {
-  const {
-    account,
-    accountPreferencesSync,
-    calendarAccounts,
-    appleCalendar,
-    vaultSyncAccount,
-    ...settings
-  } = persisted;
+  const { account, accountPreferencesSync, ...settings } = persisted;
   return {
     ...settings,
     ...(account ? { account } : undefined),
     ...(account && accountPreferencesSync?.accountEmail === account.email
       ? { accountPreferencesSync }
       : undefined),
-    ...(calendarAccounts && calendarAccounts.length > 0 ? { calendarAccounts } : undefined),
-    ...(appleCalendar ? { appleCalendar } : undefined),
-    ...(vaultSyncAccount ? { vaultSyncAccount } : undefined),
   };
+}
+
+const DECLARED_SETTINGS_FIELDS: ReadonlySet<string> = new Set(
+  Object.keys(PersistedSettingsSchema.fields),
+);
+
+/**
+ * Every top-level key of the file this build's record does not declare, as
+ * the file holds it. Another build's keys, credentials, and choices are
+ * written back unchanged and never decrypted, so a build that reads less
+ * than an earlier one does not erase what the earlier one stored, and that
+ * build finds it again once it is back.
+ */
+function carriedSettingsFields(source: string): WireRecord {
+  const parsed = Result.try(() => JSON.parse(source));
+  if (Result.isFailure(parsed) || !isRecord(parsed.success)) return {};
+  return Object.fromEntries(
+    Object.entries(parsed.success).filter(([field]) => !DECLARED_SETTINGS_FIELDS.has(field)),
+  );
 }
 
 /** Every field at its fallback: the record an empty file decodes to. */
@@ -607,16 +392,15 @@ export function parsePersistedSettingsEither(
 }
 
 /**
- * Reads and writes the small set of user-owned settings Luke needs. A stored
- * credential stays in the main process: callers can learn that a provider has a
- * key and can replace it, but no accessor returns one to a renderer.
+ * Reads and writes the small set of user-owned settings Luke needs. The
+ * stored account's tokens stay in the main process: no accessor returns them
+ * to a renderer.
  */
 export class SettingsStore {
   readonly #directory: () => string;
   readonly #cipher: SecretCipher;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
-  readonly #vaultKeyHeld: (providerId: CloudAgentProviderId) => boolean;
   readonly #fileSystem: FileSystem.FileSystem;
   readonly #path: Path.Path;
   /**
@@ -627,14 +411,12 @@ export class SettingsStore {
    */
   #held: PersistedSettings | undefined;
   readonly #reads = Semaphore.makeUnsafe(1);
-  #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
-  /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
-  #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
+  /** The file's undeclared keys as last read, written back beside every write. */
+  #carried: WireRecord = {};
   /**
    * Runs one settings change at a time. Serializing only the file write is not
-   * enough: a user with more than one provider row can start a second save
-   * before the first lands, and both would read the same stored keys before
-   * either wrote, so the later write would drop the other provider's key.
+   * enough: two changes started together would both read the same file before
+   * either wrote, so the later write would drop the other's change.
    */
   readonly #writes = Semaphore.makeUnsafe(1);
 
@@ -656,38 +438,6 @@ export class SettingsStore {
         const next: PersistedSettings = { ...persisted };
         if (value === undefined) delete next[field];
         else Object.assign(next, { [field]: value });
-        return next;
-      });
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
-    });
-  }
-
-  /**
-   * Writes one entry of a map-valued setting, or forgets it when the value is
-   * omitted. The merge happens inside the mutation rather than in the caller so
-   * one key's write cannot drop another's: a caller holding the map it read
-   * before an overlapping write landed would put the stale copy back. A map
-   * left with no entries is deleted, so an emptied setting reads as unset
-   * rather than as an empty object.
-   */
-  setEntry<Field extends KeyedAppSettingField>(
-    field: Field,
-    key: string,
-    value: SettingEntryValue<Field> | undefined,
-  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    // SAFETY: a setting entry's own value is one of the wire values it was parsed from.
-    const entry = value as UnparsedWireValue;
-    return Effect.gen({ self: this }, function* () {
-      yield* this.#mutate((persisted) => {
-        // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
-        const current = persisted[field] as WireRecord | undefined;
-        if (sameSettingEntry(field, current?.[key], entry)) return undefined;
-        const entries = { ...current };
-        if (entry === undefined) delete entries[key];
-        else entries[key] = entry;
-        const next: PersistedSettings = { ...persisted };
-        if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
-        else delete next[field];
         return next;
       });
       return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
@@ -724,8 +474,7 @@ export class SettingsStore {
           if (!sameAccountPreferenceValue(persisted[field] as UnparsedWireValue, value)) {
             changed.push(field);
           }
-          if (value === undefined) delete next[field];
-          else Object.assign(next, { [field]: value });
+          Object.assign(next, { [field]: value });
         }
         return changed.length > 0 ? next : undefined;
       });
@@ -767,37 +516,14 @@ export class SettingsStore {
     });
   }
 
-  /** Clears one map entry only if it still holds the value the caller read. */
-  clearEntryIfUnchanged<Field extends KeyedAppSettingField>(
-    field: Field,
-    key: string,
-    expected: SettingEntryValue<Field>,
-  ): Effect.Effect<SettingsUpdateResult & { cleared: boolean }, PlatformError> {
-    // SAFETY: a setting entry's own value is one of the wire values it was parsed from.
-    const held = expected as UnparsedWireValue;
-    return Effect.gen({ self: this }, function* () {
-      const cleared = yield* this.#mutate((persisted) => {
-        // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
-        const current = persisted[field] as WireRecord | undefined;
-        if (!sameSettingEntry(field, current?.[key], held)) return undefined;
-        const entries = { ...current };
-        delete entries[key];
-        const next: PersistedSettings = { ...persisted };
-        if (Object.keys(entries).length > 0) Object.assign(next, { [field]: entries });
-        else delete next[field];
-        return next;
-      });
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot(), cleared };
-    });
-  }
-  #secretStorage: SecretStorage = SECRET_STORAGE.UNKNOWN;
+  /** Whether the cipher can protect a secret, asked at most once a run; unasked until then. */
+  #secretStorageAvailable: boolean | undefined;
 
   constructor(options: SettingsStoreOptions) {
     this.#directory = options.directory;
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
-    this.#vaultKeyHeld = options.vaultKeyHeld;
     this.#fileSystem = options.fileSystem;
     this.#path = options.path;
   }
@@ -806,80 +532,21 @@ export class SettingsStore {
     return Effect.gen({ self: this }, function* () {
       const persisted = yield* this.#load();
       const voiceAvailable = yield* this.#voiceAvailable();
-      const sources = yield* Effect.forEach(
-        CREDENTIAL_PROVIDER_LIST,
-        (
-          provider,
-        ): Effect.Effect<readonly [CredentialProviderId, CredentialSource], PlatformError> =>
-          // A cloud agent provider's key is the service's: its row answers for
-          // the vault, and a key this Mac still holds or reads from its shell
-          // is not one Luke observes with. Held only while an account stands
-          // in this same snapshot: the vault's list is the account's, so a
-          // sign-out reads not connected in the very emit that reports it,
-          // whatever the list last said.
-          isCloudAgentProviderId(provider.id)
-            ? Effect.succeed([
-                provider.id,
-                persisted.account !== undefined && this.#vaultKeyHeld(provider.id)
-                  ? CREDENTIAL_SOURCE.SERVICE
-                  : CREDENTIAL_SOURCE.NONE,
-              ] as const)
-            : Effect.map(
-                this.#resolveApiKey(provider),
-                (resolved) => [provider.id, resolved.source] as const,
-              ),
-        { concurrency: SNAPSHOT_SOURCE_CONCURRENCY },
-      );
       return {
         stored: {
           ...storedSettingsFromPersisted(persisted),
           // Resolved the way the session source resolves it, so the panel marks
           // what would actually be heard while the persisted file remains optional.
           voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
-          formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
         },
         status: {
-          // SAFETY: the registry list contains every credential provider exactly once.
-          credentialSources: Object.fromEntries(sources) as Record<
-            CredentialProviderId,
-            CredentialSource
-          >,
-          // Reports what storing a key has already established, and asks nothing on
-          // its own: a snapshot is taken on every launch, and most of them are for
-          // a user with no key to protect.
-          secretStorage: this.#secretStorage,
           // Whether a spoken turn could actually be opened: an account signed in,
           // and this run will use it. Resolved here rather than left to the panel
-          // because it is the same question the voice and the pace are answered
-          // by — what would actually happen — and it travels with every settings
-          // reply, so signing in is what turns voice on and signing out is what
-          // turns it off.
+          // because it is the same question the voice is answered by — what
+          // would actually happen — and it travels with every settings reply,
+          // so signing in is what turns voice on and signing out is what turns
+          // it off.
           voiceAvailable,
-          // Whether this build can offer the Google Calendar sign-in at all: a
-          // registered OAuth client resolved, and this run would use what it
-          // grants. Without one the integration is not drawn at all.
-          calendarSignInAvailable:
-            this.#credentialsUsable && this.#overrides.googleCalendarSignIn !== undefined,
-          // Whether this build can offer the Apple Calendar connection: a Mac to
-          // read, and a run that would use what macOS grants. No client gates it
-          // the way the sign-ins are gated — the grant lives with the system.
-          appleCalendarAvailable: this.#credentialsUsable && process.platform === "darwin",
-          // The accounts without their grants: which are connected and which
-          // calendars count is the renderer's to draw; the tokens never travel.
-          calendarAccounts: (persisted.calendarAccounts ?? []).map((account) => ({
-            id: account.id,
-            selectedCalendarIds: account.calendars,
-          })),
-          // The Apple Calendar connection on the same terms: the fact and the
-          // chosen calendars, with nothing behind them to keep from travelling.
-          ...(persisted.appleCalendar
-            ? {
-                appleCalendar: {
-                  id: APPLE_CALENDAR_ID,
-                  selectedCalendarIds: persisted.appleCalendar.calendars,
-                },
-              }
-            : undefined),
         },
       };
     });
@@ -943,9 +610,7 @@ export class SettingsStore {
           },
         };
         if (persisted.account?.email && persisted.account.email !== account.email) {
-          for (const field of ACCOUNT_PREFERENCE_FIELDS) {
-            delete next[field];
-          }
+          for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
           delete next.accountPreferencesSync;
         }
         return next;
@@ -960,9 +625,7 @@ export class SettingsStore {
         if (!persisted.account) return undefined;
         const { account: _account, ...withoutAccount } = persisted;
         const next: PersistedSettings = { ...withoutAccount };
-        for (const field of ACCOUNT_PREFERENCE_FIELDS) {
-          delete next[field];
-        }
+        for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
         delete next.accountPreferencesSync;
         return next;
       }),
@@ -984,321 +647,21 @@ export class SettingsStore {
   }
 
   /**
-   * Main-process only: the resolved key used to authenticate that provider's
-   * reads. A provider with no key resolves to nothing, so its adapter observes
-   * nothing and issues no request.
+   * Drops the ciphertext of every provider an earlier build no longer named,
+   * so a key nothing would read does not stay on disk, and carries the rest.
+   * A ciphertext is never decrypted to be dropped.
    */
-  readApiKey(
-    providerId: CredentialProviderId,
-  ): Effect.Effect<Redacted.Redacted | undefined, PlatformError> {
-    const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
-    if (!provider) return Effect.succeed(undefined);
-    return Effect.map(this.#resolveApiKey(provider), (resolved) => resolved.apiKey);
-  }
-
-  /** The account an earlier build last synced this Mac's keys for; see the field. Never written here. */
-  readVaultSyncAccount(): Effect.Effect<string | undefined, PlatformError> {
-    return Effect.map(this.#load(), (persisted) => persisted.vaultSyncAccount);
-  }
-
-  /**
-   * Main-process only: the key stored encrypted in Luke's own file, and never
-   * one resolved from the launch environment. The migration of a cloud
-   * provider's key into the vault is the caller — an environment key was
-   * configured for this machine's shell, not entered into Luke, so it is not
-   * Luke's to send anywhere.
-   */
-  readStoredApiKey(
-    providerId: CredentialProviderId,
-  ): Effect.Effect<Redacted.Redacted | undefined, PlatformError> {
-    const provider = CREDENTIAL_PROVIDER_LIST.find((candidate) => candidate.id === providerId);
-    if (!provider) return Effect.succeed(undefined);
-    return Effect.map(this.#resolveApiKey(provider), (resolved) =>
-      resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined,
-    );
-  }
-
-  /**
-   * Drops the ciphertext of every provider this build no longer names, so a
-   * key an earlier build stored (the developer's own OpenAI key, until
-   * LUKE-205) does not stay on disk with nothing reading it. A ciphertext is
-   * never decrypted to be dropped. Answers whether the file moved.
-   */
-  retireStoredApiKeys(): Effect.Effect<boolean, PlatformError> {
+  retireStoredApiKeys(): Effect.Effect<void, PlatformError> {
     return this.#mutate((persisted) => {
+      const apiKeys = this.#carried[STORED_API_KEYS_FIELD];
+      if (!isRecord(apiKeys)) return undefined;
       const kept = Object.fromEntries(
-        Object.entries(persisted.apiKeys).filter(([providerId]) =>
-          isCredentialProviderId(providerId),
-        ),
+        Object.entries(apiKeys).filter(([providerId]) => KEPT_API_KEY_PROVIDERS.has(providerId)),
       );
-      return Object.keys(kept).length === Object.keys(persisted.apiKeys).length
-        ? undefined
-        : { ...persisted, apiKeys: kept };
+      if (Object.keys(kept).length === Object.keys(apiKeys).length) return undefined;
+      this.#carried = { ...this.#carried, [STORED_API_KEYS_FIELD]: kept };
+      return { ...persisted };
     });
-  }
-
-  /**
-   * Stores one provider's key encrypted at rest, or clears it when omitted. A
-   * key the user cannot use comes back as a `reason` rather than an exception,
-   * so only an unexpected filesystem failure throws.
-   */
-  setApiKey(
-    providerId: CredentialProviderId,
-    apiKey: string | undefined,
-  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      const keyFormat = CREDENTIAL_PROVIDER_LIST.find(
-        (candidate) => candidate.id === providerId,
-      )?.keyFormat;
-      const normalized = apiKey?.trim();
-      // Clearing a key needs no cipher, so only a key on its way in asks whether
-      // there is anywhere to put it.
-      const rejection = normalized
-        ? !this.#secretStorageUsable()
-          ? "Encrypted credential storage is unavailable on this system."
-          : apiKeyRejection(normalized, keyFormat)
-        : undefined;
-      if (rejection)
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          settings: yield* this.snapshot(),
-          reason: rejection,
-        };
-
-      yield* this.#mutate(
-        (persisted) => {
-          const ciphertext = normalized
-            ? this.#cipher.encrypt(normalized).toString("base64")
-            : undefined;
-          // A key that is already stored is not a write.
-          if (persisted.apiKeys[providerId] === ciphertext) return undefined;
-          // Every other provider's ciphertext is carried over, so saving one key
-          // never disturbs another.
-          const apiKeys = { ...persisted.apiKeys };
-          if (ciphertext) apiKeys[providerId] = ciphertext;
-          else delete apiKeys[providerId];
-          return { ...persisted, apiKeys };
-        },
-        () => this.#resolved.delete(providerId),
-      );
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
-    });
-  }
-
-  /**
-   * Connects one calendar account: the grant its sign-in produced, encrypted
-   * at rest like every credential, under the account's own id. Signing into
-   * an account already connected replaces its grant and keeps its calendar
-   * choices — the choices are the user's, and a fresh grant is not a fresh
-   * mind about them.
-   */
-  addCalendarAccount(
-    accountId: string,
-    refreshToken: string,
-    selectedCalendarIds: readonly string[],
-  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      const id = calendarIdentifierText(accountId);
-      const normalized = refreshToken.trim();
-      const rejection = !id
-        ? "Google answered the sign-in without naming an account."
-        : !this.#secretStorageUsable()
-          ? "Encrypted credential storage is unavailable on this system."
-          : // The shape rules a pasted key answers to: a grant is Google's to
-            // shape, and only sendability is checked.
-            apiKeyRejection(normalized);
-      if (rejection || !id) {
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          settings: yield* this.snapshot(),
-          reason: rejection ?? "Google answered the sign-in without naming an account.",
-        };
-      }
-
-      yield* this.#mutate(
-        (persisted) => {
-          const token = this.#cipher.encrypt(normalized).toString("base64");
-          const existing = persisted.calendarAccounts ?? [];
-          const held = existing.find((account) => account.id === id);
-          if (!held && existing.length >= MAXIMUM_CALENDAR_ACCOUNTS) {
-            throw new Error("More calendar accounts than the store keeps");
-          }
-          const account: PersistedCalendarAccount = {
-            id,
-            token,
-            calendars: held
-              ? held.calendars
-              : sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
-          };
-          return withCalendarAccounts(
-            persisted,
-            held
-              ? existing.map((candidate) => (candidate.id === id ? account : candidate))
-              : [...existing, account],
-          );
-        },
-        () => this.#forgetCalendarAccounts(),
-      );
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
-    });
-  }
-
-  /** Disconnects one account, deleting its stored grant with it. */
-  removeCalendarAccount(accountId: string): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      yield* this.#mutate(
-        (persisted) => {
-          const existing = persisted.calendarAccounts ?? [];
-          const calendarAccounts = existing.filter((account) => account.id !== accountId);
-          return calendarAccounts.length === existing.length
-            ? undefined
-            : withCalendarAccounts(persisted, calendarAccounts);
-        },
-        () => this.#forgetCalendarAccounts(),
-      );
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
-    });
-  }
-
-  /**
-   * Chooses whether one of a connection's calendars counts toward meetings —
-   * the Google accounts and this Mac's connection through one door, routed
-   * by the account id, so no caller has to know the two are stored apart.
-   * Whether the calendar exists is answered where the list lives — the main
-   * process validates a selection against its latest observation — so only
-   * the value's shape is held here.
-   */
-  setCalendarSelected(
-    accountId: string,
-    calendarId: string,
-    selected: boolean,
-  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      const id = calendarIdentifierText(calendarId);
-      if (!id)
-        return {
-          status: ACTION_RESULT_STATUS.REJECTED,
-          settings: yield* this.snapshot(),
-          reason: "That is not a calendar id.",
-        };
-      let missing: string | undefined;
-      const apple = accountId === APPLE_CALENDAR_ID;
-      yield* this.#mutate(
-        (persisted) => {
-          if (apple) {
-            const held = persisted.appleCalendar;
-            if (!held) {
-              missing = "Apple Calendar is not connected.";
-              return undefined;
-            }
-            const calendars = toggledCalendarSelection(held.calendars, id, selected);
-            return calendars ? withAppleCalendar(persisted, { calendars }) : undefined;
-          }
-          const existing = persisted.calendarAccounts ?? [];
-          const held = existing.find((account) => account.id === accountId);
-          if (!held) {
-            missing = "That calendar account is not connected.";
-            return undefined;
-          }
-          const calendars = toggledCalendarSelection(held.calendars, id, selected);
-          if (!calendars) return undefined;
-          return withCalendarAccounts(
-            persisted,
-            existing.map((account) =>
-              account.id === accountId ? { ...account, calendars } : account,
-            ),
-          );
-        },
-        // Only a Google account's grant is decrypted, so only its edit costs the
-        // cache; this Mac's connection carries no grant to have cached.
-        apple ? undefined : () => this.#forgetCalendarAccounts(),
-      );
-      const settings = yield* this.snapshot();
-      return missing
-        ? { status: ACTION_RESULT_STATUS.REJECTED, settings, reason: missing }
-        : { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
-    });
-  }
-
-  /**
-   * Main-process only, like the resolved keys: every connected account with
-   * its grant decrypted, for the reader. A grant that no longer decrypts —
-   * another OS account, a rotated Keychain — is skipped; its row still shows
-   * connected, and the failing read is what says to sign in again.
-   */
-  readCalendarAccounts(): Effect.Effect<readonly CalendarAccountCredential[], PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      if (this.#resolvedCalendarAccounts) return this.#resolvedCalendarAccounts;
-      const persisted = yield* this.#load();
-      const accounts: CalendarAccountCredential[] = [];
-      for (const account of persisted.calendarAccounts ?? []) {
-        const refreshToken = this.#decryptSecret(account.token);
-        if (!refreshToken) continue;
-        accounts.push({ id: account.id, refreshToken, selectedCalendarIds: account.calendars });
-      }
-      this.#resolvedCalendarAccounts = accounts;
-      return accounts;
-    });
-  }
-
-  /**
-   * Connects this Mac's Calendar. Nothing secret is stored — the grant lives
-   * with macOS — only the fact of the connection and the calendar ids the
-   * user chose to count. Connecting while already connected keeps the held
-   * choices: the choices are the user's, and asking again is not a fresh
-   * mind about them.
-   */
-  connectAppleCalendar(
-    selectedCalendarIds: readonly string[],
-  ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      yield* this.#mutate((persisted) =>
-        persisted.appleCalendar
-          ? undefined
-          : withAppleCalendar(persisted, {
-              calendars: sanitizedCalendarIds(unparsedWire(selectedCalendarIds)),
-            }),
-      );
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
-    });
-  }
-
-  /**
-   * Disconnects this Mac's Calendar. Only the connection is Luke's to delete:
-   * the system grant stays macOS's, withdrawable in System Settings.
-   */
-  disconnectAppleCalendar(): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      yield* this.#mutate((persisted) =>
-        persisted.appleCalendar ? withAppleCalendar(persisted, undefined) : undefined,
-      );
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
-    });
-  }
-
-  /** The decrypted account list a written one makes stale. */
-  #forgetCalendarAccounts(): void {
-    this.#resolvedCalendarAccounts = undefined;
-  }
-
-  /**
-   * Whether any calendar connection is stored at all — presence alone, with
-   * no grant decrypted and no keychain touched, for the onboarding reconcile
-   * that only needs to know the step's purpose is already standing.
-   */
-  calendarConnectionStored(): Effect.Effect<boolean, PlatformError> {
-    return Effect.map(
-      this.#load(),
-      (persisted) =>
-        (persisted.calendarAccounts ?? []).length > 0 || persisted.appleCalendar !== undefined,
-    );
-  }
-
-  /** The connection as the reader is fed it; absent means never run the helper. */
-  readAppleCalendarConnection(): Effect.Effect<AppleCalendarConnection | undefined, PlatformError> {
-    return Effect.map(this.#load(), ({ appleCalendar: held }) =>
-      held ? { selectedCalendarIds: held.calendars } : undefined,
-    );
   }
 
   /**
@@ -1330,30 +693,22 @@ export class SettingsStore {
   }
 
   /**
-   * The one settings write: serialize, load, mutate, stamp, write, cache, and
-   * invalidate. A mutator answering nothing means the stored value is already
-   * the one asked for, so nothing is written. It runs exactly once per call,
-   * so it may record what it decided for its caller to read afterwards.
-   *
-   * `invalidate` drops the caches the write made stale, and runs only after
-   * one actually landed: dropping a decrypted value a no-op change did not
-   * disturb would cost a Keychain read for nothing. Answers whether a write
-   * landed.
+   * The one settings write: serialize, load, mutate, stamp, write, and cache.
+   * A mutator answering nothing means the stored value is already the one
+   * asked for, so nothing is written. It runs exactly once per call, so it
+   * may record what it decided for its caller to read afterwards.
    */
   #mutate(
     mutate: (persisted: PersistedSettings) => PersistedSettings | undefined,
-    invalidate?: () => void,
-  ): Effect.Effect<boolean, PlatformError> {
+  ): Effect.Effect<void, PlatformError> {
     return this.#writes.withPermits(1)(
       Effect.gen({ self: this }, function* () {
         const persisted = yield* this.#load();
         const mutated = mutate(persisted);
-        if (!mutated) return false;
+        if (!mutated) return;
         const next: PersistedSettings = { ...mutated, version: SETTINGS_FILE_VERSION };
         yield* this.#write(next);
         this.#held = next;
-        invalidate?.();
-        return true;
       }),
     );
   }
@@ -1365,47 +720,16 @@ export class SettingsStore {
    * permission dialog this deliberately keeps out of an ordinary launch.
    */
   #secretStorageUsable(): boolean {
-    if (this.#secretStorage === SECRET_STORAGE.UNKNOWN) {
+    if (this.#secretStorageAvailable === undefined) {
       let available = false;
       try {
         available = this.#cipher.isAvailable();
       } catch {
         available = false;
       }
-      this.#secretStorage = available ? SECRET_STORAGE.AVAILABLE : SECRET_STORAGE.UNAVAILABLE;
+      this.#secretStorageAvailable = available;
     }
-    return this.#secretStorage === SECRET_STORAGE.AVAILABLE;
-  }
-
-  /**
-   * The resolved key is cached because the observation timer asks for it every
-   * few seconds, and decrypting on each tick would hit the OS keychain
-   * thousands of times a day for a value only the user can change.
-   */
-  #resolveApiKey(provider: CredentialProvider): Effect.Effect<ResolvedApiKey, PlatformError> {
-    return Effect.gen({ self: this }, function* () {
-      const cached = this.#resolved.get(provider.id);
-      if (cached) return cached;
-      const stored = yield* this.#storedApiKey(provider);
-      const fromEnvironment = stored ? undefined : this.#overrides.apiKeys.get(provider.id);
-      const resolved: ResolvedApiKey = stored
-        ? { apiKey: stored, source: CREDENTIAL_SOURCE.ENCRYPTED_FILE }
-        : fromEnvironment
-          ? { apiKey: fromEnvironment, source: CREDENTIAL_SOURCE.ENVIRONMENT }
-          : { source: CREDENTIAL_SOURCE.NONE };
-      this.#resolved.set(provider.id, resolved);
-      return resolved;
-    });
-  }
-
-  #storedApiKey(
-    provider: CredentialProvider,
-  ): Effect.Effect<Redacted.Redacted | undefined, PlatformError> {
-    return Effect.map(this.#load(), (persisted) => {
-      const ciphertext = persisted.apiKeys[provider.id];
-      const key = ciphertext ? this.#decryptSecret(ciphertext, provider.keyFormat) : undefined;
-      return key === undefined ? undefined : Redacted.make(key);
-    });
+    return this.#secretStorageAvailable;
   }
 
   /**
@@ -1418,21 +742,6 @@ export class SettingsStore {
     const plain = Result.try(() => this.#cipher.decrypt(Buffer.from(cipherText, "base64")));
     if (Result.isFailure(plain)) return undefined;
     return Result.getOrUndefined(decodeAccountTokens(plain.success));
-  }
-
-  /**
-   * One stored ciphertext's plain secret, held to the same sendability rule a
-   * pasted key answers to — so a secret stored before this build learned which
-   * kind its provider issues is held to the rule added later. Unrecoverable
-   * reads as absent, exactly as a record's does.
-   */
-  #decryptSecret(cipherText: string, format?: CredentialFormat): string | undefined {
-    try {
-      const secret = this.#cipher.decrypt(Buffer.from(cipherText, "base64")).trim();
-      return secret && !apiKeyRejection(secret, format) ? secret : undefined;
-    } catch {
-      return undefined;
-    }
   }
 
   /**
@@ -1457,23 +766,28 @@ export class SettingsStore {
   }
 
   #readPersisted(): Effect.Effect<PersistedSettings, PlatformError> {
-    return Effect.map(this.#onFileSystem(readSettingsFileText(this.#directory())), (source) =>
-      source === undefined
-        ? defaultPersistedSettings()
-        : // A corrupt settings file is replaced by the next write rather than
-          // failing app start, so a refusal here falls back to defaults exactly
-          // as an absent file does.
-          Result.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings),
-    );
+    return Effect.map(this.#onFileSystem(readSettingsFileText(this.#directory())), (source) => {
+      this.#carried = {};
+      if (source === undefined) return defaultPersistedSettings();
+      // A corrupt settings file is replaced by the next write rather than
+      // failing app start, so a refusal here falls back to defaults exactly
+      // as an absent file does, and carries nothing.
+      const parsed = parsePersistedSettingsEither(source);
+      if (Result.isFailure(parsed)) return defaultPersistedSettings();
+      this.#carried = carriedSettingsFields(source);
+      return parsed.success;
+    });
   }
 
-  /** Only ever run inside `#mutate`'s gate, so writes cannot interleave. */
+  /**
+   * Only ever run inside `#mutate`'s gate, so writes cannot interleave. The
+   * carried keys never share a name with a declared one, so nothing this
+   * build writes is overridden by them.
+   */
   #write(persisted: PersistedSettings): Effect.Effect<void, PlatformError> {
+    const written = { ...encodePersistedSettings(persisted), ...this.#carried };
     return this.#onFileSystem(
-      writeSettingsFileAtomic(
-        this.#directory(),
-        `${JSON.stringify(encodePersistedSettings(persisted), undefined, 2)}\n`,
-      ),
+      writeSettingsFileAtomic(this.#directory(), `${JSON.stringify(written, undefined, 2)}\n`),
     );
   }
 

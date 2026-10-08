@@ -1,19 +1,17 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
-import type { PlanningStartAnswer } from "@sidecar/hosted/planning-view";
+import { PLAN_CALL_FAILURE, type PlanningStartAnswer } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
-import { GITHUB_CONNECT_SIGNED_OUT, planningActRows } from "./planning-acts";
+import { planningActRows } from "./planning-acts";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, introduction: false };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
-const INTRODUCTION: ActSender = { ...PANEL, introduction: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const REQUEST = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
@@ -38,10 +36,9 @@ function fixture() {
   const asked: string[] = [];
   const talked: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
-  const account = { signedIn: true };
   const picker: FolderPicker = { chosen: "/Users/dev/relay" };
   const start: StartScript = {
-    answer: { failure: GITHUB_FAILURE.NOT_CONNECTED },
+    answer: { failure: PLAN_CALL_FAILURE.UNANSWERED },
     voiceReady: true,
   };
   const rows = planningActRows({
@@ -65,19 +62,8 @@ function fixture() {
         }),
       planningSetFolder: (params) =>
         Effect.sync(() => void asked.push(`folder:${params.planId}:${params.folderPath}`)),
-      planningRepositories: () =>
-        Effect.sync(() => {
-          asked.push("repositories");
-          return {
-            repositories: [{ owner: "acme", name: "relay", private: true }],
-            truncated: false,
-          };
-        }),
-      planningConnectGitHub: () =>
-        Effect.sync(() => {
-          asked.push("connect");
-          return account.signedIn;
-        }),
+      planningBoardSave: (params) =>
+        Effect.sync(() => void asked.push(`board:${params.planId}:${params.appliedDrawing}`)),
     },
     chooseFolder: () =>
       Effect.sync(() => {
@@ -93,7 +79,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, view, account, start, picker };
+  return { router, asked, talked, view, start, picker };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -109,10 +95,6 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       { kind: ACT_KIND.PLANNING_START, payload: REQUEST },
       PANEL,
     );
-    const repositories = yield* f.router.performAct(
-      { kind: ACT_KIND.PLANNING_REPOSITORIES },
-      PANEL,
-    );
     yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CLOSE }, PANEL);
     const deleted = yield* f.router.performAct(
       { kind: ACT_KIND.PLANNING_DELETE, payload: { planId: PLAN_ID } },
@@ -123,17 +105,12 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
     assert.deepEqual(selected, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(started, {
       status: ACT_OUTCOME_STATUS.DONE,
-      value: { failure: GITHUB_FAILURE.NOT_CONNECTED },
-    });
-    assert.deepEqual(repositories, {
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { repositories: [{ owner: "acme", name: "relay", private: true }], truncated: false },
+      value: { failure: PLAN_CALL_FAILURE.UNANSWERED },
     });
     assert.deepEqual(f.asked, [
       "refresh",
       `open:${PLAN_ID}`,
       "start:/Users/dev/relay",
-      "repositories",
       "close",
       `delete:${PLAN_ID}`,
     ]);
@@ -153,52 +130,46 @@ it.effect("Choose folder answers the folder picked, or null when the picker was 
   }),
 );
 
-it.effect("neither the voice window nor the takeover reaches the plans", () =>
+it.effect("the voice window does not reach the plans", () =>
   Effect.gen(function* () {
     const f = fixture();
+    const board = { planId: PLAN_ID, elements: [], appliedDrawing: 0 };
 
-    for (const sender of [VOICE, INTRODUCTION]) {
-      const selected = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_SELECT, payload: { planId: PLAN_ID } },
-        sender,
-      );
-      assert.deepEqual(selected, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.PLANNING_SELECT].refusal,
-      });
-    }
+    const selected = yield* f.router.performAct(
+      { kind: ACT_KIND.PLANNING_SELECT, payload: { planId: PLAN_ID } },
+      VOICE,
+    );
+    const saved = yield* f.router.performAct(
+      { kind: ACT_KIND.PLANNING_BOARD_SAVE, payload: board },
+      VOICE,
+    );
+    assert.deepEqual(selected, {
+      status: ACT_OUTCOME_STATUS.REFUSED,
+      reason: ACT[ACT_KIND.PLANNING_SELECT].refusal,
+    });
+    assert.deepEqual(saved, {
+      status: ACT_OUTCOME_STATUS.REFUSED,
+      reason: ACT[ACT_KIND.PLANNING_BOARD_SAVE].refusal,
+    });
     assert.deepEqual(f.asked, []);
   }),
 );
 
-it.effect(
-  "Connect GitHub opens the page through the host, and says to sign in when it opened nothing",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
+it.effect("the panel's board save reaches the host with the drawing its scene holds", () =>
+  Effect.gen(function* () {
+    const f = fixture();
 
-      const connected = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
-        PANEL,
-      );
-      f.account.signedIn = false;
-      const signedOut = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
-        PANEL,
-      );
-      const fromVoice = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_CONNECT_GITHUB },
-        VOICE,
-      );
+    const saved = yield* f.router.performAct(
+      {
+        kind: ACT_KIND.PLANNING_BOARD_SAVE,
+        payload: { planId: PLAN_ID, elements: [], appliedDrawing: 3 },
+      },
+      PANEL,
+    );
 
-      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
-      assert.deepEqual(signedOut, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: GITHUB_CONNECT_SIGNED_OUT,
-      });
-      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.asked, ["connect", "connect"]);
-    }),
+    assert.equal(saved.status, ACT_OUTCOME_STATUS.DONE);
+    assert.deepEqual(f.asked, [`board:${PLAN_ID}:3`]);
+  }),
 );
 
 it.effect(
@@ -211,10 +182,8 @@ it.effect(
       assert.equal(talked.status, ACT_OUTCOME_STATUS.DONE);
       assert.deepEqual(f.talked, [PLAN_ID]);
 
-      for (const sender of [VOICE, INTRODUCTION]) {
-        const refused = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, sender);
-        assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
-      }
+      const refused = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, VOICE);
+      assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
       f.view.activePlanId = undefined;
       const unopened = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_TALK }, PANEL);
       assert.deepEqual(unopened, {

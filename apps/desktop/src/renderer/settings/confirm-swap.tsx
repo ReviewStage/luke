@@ -1,6 +1,6 @@
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useEffect, useRef } from "react";
-import { focusWhenVisible, useStagedFocus } from "../credential-entry";
+import { focusWhenVisible, useStagedFocus } from "../staged-focus";
 import {
   CONFIRM_STAGE,
   type ConfirmStage,

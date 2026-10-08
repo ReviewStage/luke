@@ -1,7 +1,7 @@
 # Agent guide
 
-Luke is a macOS-first Electron sidecar that observes coding-agent sessions while
-preserving existing provider workflows.
+Luke is a macOS Electron app for planning a feature by voice: the developer
+talks a plan through with Luke, who writes it down as they go.
 
 ## Commands
 
@@ -12,7 +12,6 @@ preserving existing provider workflows.
 | `./scripts/verify.sh` | Complete macOS validation plus visual evidence |
 | `./scripts/run.sh` | Launch against live sessions, replacing any running instance (`--fixture smoke`, `--keep-running`, `--no-trace`) |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
-| `pnpm evidence:record` | Record the fixture transition on a physical Mac |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
 
@@ -39,140 +38,16 @@ in for the missing job before the first release.
 - Never add to this file (`AGENTS.md`, which `CLAUDE.md` links to) unless the
   user explicitly approved the addition.
 
-## The scheduled pass and the briefing push
+## The scheduled sweep
 
-- The one observation that runs on a clock of Luke's own is the service's
-  scheduled pass, and it is bounded on every side. Vercel's cron calls
-  `/api/observation/tick` once a minute (`apps/web/vercel.json`;
-  `apps/web/server/hosted/observation-tick.ts`) under the deployment's own
-  `CRON_SECRET`, compared in constant time, and a deployment missing that secret
-  or the key-encryption secret answers unavailable and observes nothing, since a
-  pass that could read no key would be written down as an account with nothing.
-  It runs only for an account that holds a synced cloud provider key and has a
-  device row seen within the last 7 days
-  (`OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS`; `listEligibleAccounts` in
-  `apps/web/server/observation-app.ts`), at most 200 accounts a tick, least
-  recently attempted first, four at a time inside a 50-second budget with a
-  25-second deadline per account; and every tick begins by dropping the
-  snapshot, the brain's transcript mark, and the pass record of every account no
-  longer eligible, so a deleted key or a week's silence ends the observation
-  and empties what it kept. One account's pass is the same
-  read-only fan-out the on-demand endpoint runs, on a plugin built for that
-  pass alone under the account's decrypted key (`observation-pass.ts` over
-  `cloud-observe.ts`): the workspaces, the chats, each chat's status, the agent
-  kinds, and the projects the provider reports, and no chat's messages. A pass
-  every provider answered whole replaces the account's one `roster_snapshot`
-  row, sealed under the same server-only secret as the keys and stamped with a
-  fingerprint of the key it was observed under, so a snapshot observed under
-  another key is neither served nor admitted against; a pass any
-  provider refused, rate limited, or failed leaves the previous snapshot
-  standing and is recorded as failed. A pass whose snapshot landed also
-  retires, per provider it read, the conversation of every observed chat the
-  roster no longer lists (`retireDepartedObservedConversations` in
-  `store/observed-conversations.ts`, on the landed branch alone): stamped
-  `deleted_at` with its descendants on the terms of a Clear, skipped by every
-  read, purged thirty days on, and a chat listed again opens a fresh row
-  under the partial index migration 0048 made. Nothing in the pass decides
-  anything: no model runs in it, and nothing leaves it. The snapshot is never
-  diffed: it is
-  what the Mac panel, the on-demand observe endpoint, and the brain's
-  `list_sessions` show, and what names the chats the opener may ask about.
-  The opener (`apps/web/server/hosted/brain-host/opener.ts`) runs for the
-  same account right after its pass and under the same deadline, and what
-  wakes it is a chat gaining messages, not the roster moving: for each cloud
-  provider in the snapshot it asks, through the provider's documented
-  read (`transcriptChanges`, for Conductor the status endpoint's `updatedAt`
-  the pass already read for each chat, held as the observation's
-  `lastActivityAt`, so the read sends nothing of its own and carries no
-  message body), which of those chats moved since the account's mark (`transcript_mark`, one
-  instant per account), takes the oldest under the bound of eight turns an
-  account a tick, reads what each gained since the cursor kept for it
-  through the provider's documented
-  incremental read (Conductor's `transcriptSince`) under the same synced key,
-  cut from the front by whole lines to 20,000 characters
-  (`BRAIN_HOST.TRANSCRIPT_DELTA_CHARS`), and hands the hosted brain one
-  `[observed messages]` turn per chat with words to carry: an envelope naming
-  the provider, workspace, chat title, and instant from the snapshot, then
-  the messages one line each under the speaker's name, rendered as data. A
-  delta with no attributed message opens no turn and moves its cursor all the
-  same. Every turn goes as the deployment acting for that one account under
-  the tick's own secret (`EVE_CALLER.DEPLOYMENT`), so the account named to
-  the brain is only ever one this tick enumerated, and nothing but such a
-  change or a settled child's undelivered completion opens a scheduled turn
-  (the sweep in `child-completion.ts` hands a child whose spawn expected a
-  completion, whose `completion_delivered_at` is null, and whose latest turn
-  is terminal to its parent as one `child-completion` turn, at most eight an
-  account a tick, and only where the relay's attempt left the row unstamped,
-  a refused send being retried nowhere). The cursors and the mark
-  move in one transaction, each a compare-and-set over what the visit read,
-  and only once the brain has accepted every turn; a turn the brain refused,
-  or a transcript the provider would not answer, ends the visit with nothing
-  committed and the next tick reads the same changes again. The mark stops
-  strictly before the first chat the bound held back, so a chat is never
-  jumped, and the bound counts turns and not chats read (at most 32 a
-  visit), so a chat read again to no new message holds nothing behind it
-  back; a first visit adopts the newest instant the providers answer and
-  wakes nothing, since what stood before is history the roster shows and not
-  news. That incremental read is the only place a scheduled turn touches a
-  transcript, and it is not the pass's. Widening what the pass reads, who it
-  runs for, how long a snapshot stands, what counts as a change, or what a
-  turn carries is a product decision, not an implementation detail, and
-  `PRIVACY.md` discloses the pass under "Scheduled observation of your
-  Conductor sessions".
-- Luke's words leave his own service unbidden in one place, and it is the
-  service rather than this Mac they leave from: the briefing push to a phone
-  (`apps/web/server/hosted/speech-push.ts`), run on the scheduled tick after the
-  speech sweep and by nothing else. What it may carry is only a briefing the
-  brain has already decided, the settled `announce` call's own words read back
-  from the announcing row under the tool's 200-character bound
-  (`briefing-words.ts`; `maximumBriefingLength`), and it decides from two things
-  it reads and nothing it infers: how the offer stands, and what the account's
-  devices last reported of themselves. No Mac reporting itself active means the
-  words are pushed now; a Mac active but not claiming within two minutes of the
-  offer (`SPEECH_PUSH.GRACE_MS`) means they are pushed anyway; a claim means a
-  device is saying them and the offer is never pushed, whatever became of the
-  claim; a quiet instant standing on any device of the account (a meeting its
-  calendar hold observes, or the announcements switch off or the spoken
-  introduction owed on a Mac, each restated by its heartbeat as an instant one
-  to two hours ahead so it lapses with the Mac that asserts it), means nothing
-  is pushed and nothing expires until it lifts; and an offer past its own instant is the sweep's to end, never pushed
-  stale. A phone or watch reporting itself present is no reason to wait, since
-  neither opens a session for an offer (`SPEAKING_PLATFORMS`, still
-  `{ macos }`); but a phone's or a watch's call that already stands claims a
-  briefing and speaks it exactly as a Mac's session does, since the exchange
-  behind the sessions and audio routes claims as the session's device and never
-  asks its platform, so such an offer is claimed and never pushed. Those are
-  two of the voice service's three routes (`apps/web/server/voice/frames.ts`
-  holds each route's frame policy; `apps/web/server/voice/opening.ts` holds
-  the openings): the sessions route, `/api/voice/sessions`, is a signed-in
-  device's WebRTC session, a Mac's or a phone's, created and relayed by the
-  service with the developer's voice and Luke's never transiting it; the
-  audio route, `/api/voice/audio`, is the third, where the service holds the
-  Live primary WebSocket on its own key for a device without WebRTC (the
-  watch) and relays PCM both ways, the one route on which audio transits the
-  service. The mark precedes the send:
-  `markSpeechPushed` settles the offer under the conversation's lock, only a
-  mark that landed is sent, and the next tick finds it settled, so what is
-  guaranteed is at most one push per briefing, never that it arrived; a send
-  Apple refused or the network dropped is counted, ends the pass, and is retried
-  nowhere, and a token Apple reports gone deletes that device's row. One device
-  is addressed, the account's most recently seen device holding a push token,
-  because a phone forwards to its paired watch itself and two pushes would be
-  one briefing told twice. The notification (`briefingNotification`) is the
-  words as the alert body, the default sound, the ordinary interruption level
-  that breaks through no Focus, and one custom key, the pushed message's id
-  (`BRIEFING_PUSH_PAYLOAD_KEY.MESSAGE_ID` in
-  `packages/hosted/src/device-wire.ts`), an opaque UUID of Luke's own that the
-  phone's tap opens the Conversation at; no title, subtitle, thread, or collapse
-  key, and no session title, branch, path, error line, or identity beyond what
-  the words themselves contain. It is readable on a locked screen and Apple
-  carries it under its own terms, which is why the words and that id are the
-  whole payload. A deployment without the Apple credential (`APNS_ENVIRONMENT`)
-  constructs no sender and pushes nothing, the same kill switch every hosted
-  endpoint keeps. Widening what a push carries, when it is sent, or which
-  platforms it waits for is a product decision, not an implementation detail,
-  and `PRIVACY.md` says each in as many words under "Briefing notifications" and
-  the Apple line of "Who we send it to".
+Vercel's cron calls `/api/maintenance/sweep` once a minute (`apps/web/vercel.json`;
+`apps/web/server/hosted/maintenance-sweep.ts`) under the deployment's own
+`CRON_SECRET`, compared in constant time; a deployment missing that secret
+answers unavailable and sweeps nothing. Each call purges the conversations
+stamped deleted thirty days ago, settles as abandoned every turn still running
+an hour after it started, and ends on Luke's key every voice session whose
+device detached and did not come back within the grace. It reads no account's
+words and runs no model.
 
 ## Testing
 
@@ -199,9 +74,8 @@ evidence; CI builds nothing for the Mac.
   HTTP, Apple, the model, the OS, the clock.
 - Assert what a caller observes, never private state or call counts.
 - Use the shared builders before inline setup: `packages/host/src/testing/`,
-  `apps/web/tests/support/`, `packages/wire/src/testing/`,
-  `packages/providers/src/testing/`, and `temporaryDirectory` from
-  `@sidecar/runtime/testing`.
+  `apps/web/tests/support/`, `packages/wire/src/testing/`, and
+  `temporaryDirectory` from `@sidecar/runtime/testing`.
 - Effect tests use `it.effect` and `TestClock.adjust`. `Effect.run*`,
   `Runtime.run*`, and `ManagedRuntime.make` in a test file fail lint
   (`testing/no-runner`); `setTimeout`, `setInterval`, `Effect.sleep`, and
@@ -252,28 +126,21 @@ the voice window alike, so no two windows share a browser registry),
 `apps/desktop/src/renderer/renderer-runtime.ts` (the module the root's
 runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
 reads it, the moment the root first reaches it, so the edge is here rather than
-at the root that imports it), the renderer's own fiber sites —
-`apps/desktop/src/renderer/introduction/introduction-takeover.tsx`, the
-panel's own `apps/desktop/src/renderer/use-voice-view.ts` (the panel's notice
-strip forks its own clock the same way the voice window's does), and the
+at the root that imports it), the renderer's own fiber sites — the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
-module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
+module-scope memoized runtime `apps/web/server/runtime.ts` and the three doors
 that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
 function module under `apps/web/server/routes/**` exports its `HttpRouter`
 through, which reads that runtime once per instance and lets the handler it
-builds do its own running), `apps/web/server/hosted/store-route.ts` (the same
-door for a hosted store route, whose handler is composed over the ambient
-`SqlClient` rather than a router), `apps/web/server/voice/function.ts`
+builds do its own running), `apps/web/server/voice/function.ts`
 (the voice service, stood for a function instance's life rather than for a
 request, so there is no request fiber to compose it into) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
 its own process), the eve project's authored files —
 `apps/web/eve/agent.ts`, `apps/web/eve/channels/eve.ts`,
 `apps/web/eve/hooks/store.ts`, `apps/web/eve/instructions/prompt.ts`,
-`apps/web/eve/instructions/seed.ts`, `apps/web/eve/memory/notebook.ts` (the
-memory slot whose `compaction.requested` capture runs the pre-compaction
-memory flush), and `apps/web/eve/tools/brain.ts` — each
+`apps/web/eve/instructions/seed.ts`, and `apps/web/eve/tools/brain.ts` — each
 an edge because eve drives them through promise-shaped hooks of its own and
 an authored file is where this deployment runs what it hands eve — and
 `apps/web/eve/host.ts`, the one module those files share their host through,
@@ -314,15 +181,13 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   than a fiber of whoever asked first, because a caller that gives up on its
   own await must not take the flight the other callers are still joined to.
 - **`packages/host/src/host-kernel.ts`** — `openExternalThroughNode`, the one
-  promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the two
-  composers that hand it on hand it to seams outside this repository's host
+  promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the
+  composer that hands it on hands it to a seam outside this repository's host
   package — the account session manager's consent
   (`packages/credentials/src/loopback-consent.ts`, whose `openExternal` is a
-  `void | Promise<void>` and whose `reopen()` is synchronous) and the calendar
-  sign-in's page (`packages/calendar/src/oauth.ts`) — and the session opens a
-  row press reaches wrap the same door in `Effect.tryPromise`; so what would
-  end this row is a decision about those two seams rather than an
-  implementation detail of this door.
+  `void | Promise<void>` and whose `reopen()` is synchronous) — so what would
+  end this row is a decision about that seam rather than an implementation
+  detail of this door.
 - **`apps/desktop/src/main/app-state.ts`** — `AppStateStore`'s `snapshot`,
   `update`, and `touch` run their `SubscriptionRef` operation through
   `Effect.runSyncWith` on the services the launch handed them, never an empty
@@ -390,8 +255,8 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
 reads it: `apps/desktop/src/shared/messages/acts.ts`,
-`packages/hosted/src/reads-wire.ts`, `packages/wire/src/effect/json-schema.ts`,
-and `apps/web/server/hosted/store/message-reads.ts` all produce or read it.
+`packages/wire/src/effect/json-schema.ts`, and
+`apps/web/server/hosted/store/message-reads.ts` all produce or read it.
 
 ### Idioms
 

@@ -1,6 +1,6 @@
 import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Result } from "effect";
+import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -9,11 +9,7 @@ import {
   callAnswered,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
-import {
-  type GitHubRepositoryListAnswer,
-  githubFailureAnswerSchema,
-  githubRepositoryListAnswerSchema,
-} from "./github-wire.js";
+import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
 import {
   type Plan,
   type PlanCommand,
@@ -27,13 +23,10 @@ import {
   planDeleteAnswerSchema,
   planListAnswerSchema,
 } from "./plan-wire.js";
-import {
-  type GitHubCallFailure,
-  PLAN_CALL_FAILURE,
-  type PlanCallFailure,
-} from "./planning-view.js";
+import { PLAN_CALL_FAILURE, type PlanCallFailure } from "./planning-view.js";
 import {
   HOSTED_SERVICE_PATH,
+  planBoardPath,
   planCommandClaimPath,
   planCommandPath,
   planPath,
@@ -41,13 +34,12 @@ import {
 import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
 
 /**
- * plan-client.ts -- the Plans tab's side of the named plans, the GitHub repository list, and the planning model's folder commands, as the host asks the service for them.
+ * plan-client.ts -- the Plans tab's side of the named plans and the planning model's folder commands, as the host asks the service for them.
  *
  * Every call is the one account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. What the window has to say about a
- * call that did not answer is one of a few reasons: the service never
- * answered, the plan is gone, or GitHub refused the account's connection for
- * a reason the service named. GitHub's own words never travel this far.
+ * call that did not answer is one of two reasons: the service never answered,
+ * or the plan is gone.
  */
 
 /** One call's answer, or why there is none. */
@@ -72,8 +64,7 @@ function succeeded<Answer>(answer: Answer) {
 
 /**
  * The Plans tab's reads and its one write of the service: the list of
- * plans, one plan opened with its document, a plan started, and the
- * repositories the account's GitHub connection can read. Each resolves to a
+ * plans, one plan opened with its document, and a plan started. Each resolves to a
  * result rather than failing, because every caller does the same thing with
  * a failure: draws why, and offers to try again.
  */
@@ -165,6 +156,33 @@ export class HostedPlanClient {
     });
   }
 
+  /** One plan's whiteboard as it stands; nothing where the service did not answer one. */
+  readBoard(planId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask({ method: HTTP_METHOD.GET, path: planBoardPath(planId) }, boardAnswerSchema),
+      (answer) => answer?.board,
+    );
+  }
+
+  /** The board's scene written whole, with the number of Luke's drawing it holds; the board as written, or nothing where the service did not answer. */
+  saveBoard(
+    planId: string,
+    elements: readonly BoardElement[],
+    appliedDrawing: number,
+  ): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        {
+          method: HTTP_METHOD.PUT,
+          path: planBoardPath(planId),
+          body: JSON.stringify({ elements, appliedDrawing }),
+        },
+        boardAnswerSchema,
+      ),
+      (answer) => answer?.board,
+    );
+  }
+
   /** Deletes one plan with its document and its conversation; whether the service deleted it. */
   delete(planId: string): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return Effect.map(
@@ -177,57 +195,29 @@ export class HostedPlanClient {
   }
 
   /**
-   * Starts a plan with the fixed template untouched. The service resolves the
-   * repository's default branch to one commit itself; a request the service
+   * Starts a plan with the fixed template untouched; a request the service
    * would refuse by shape is refused here without traveling at all.
    */
   create(
     request: PlanCreateRequest,
-  ): Effect.Effect<PlanCallResult<Plan, GitHubCallFailure>, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(readEither(planCreateRequestSchema)(request));
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#throughGitHub(
-      { method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.PLANS, body: JSON.stringify(admitted) },
-      planAnswerSchema,
-      (answer) => answer.plan,
-    );
-  }
-
-  /** The repositories the account's GitHub connection can read, most recently pushed first. */
-  repositories(): Effect.Effect<
-    PlanCallResult<GitHubRepositoryListAnswer, GitHubCallFailure>,
+  ): Effect.Effect<
+    PlanCallResult<Plan, typeof PLAN_CALL_FAILURE.UNANSWERED>,
     never,
     HttpClient.HttpClient
   > {
-    return this.#throughGitHub(
-      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.GITHUB_REPOSITORIES },
-      githubRepositoryListAnswerSchema,
-      (answer) => answer,
+    const admitted = Result.getOrUndefined(readEither(planCreateRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.map(
+      this.#call.ask(
+        {
+          method: HTTP_METHOD.POST,
+          path: HOSTED_SERVICE_PATH.PLANS,
+          body: JSON.stringify(admitted),
+        },
+        planAnswerSchema,
+      ),
+      (answer) => (answer === undefined ? UNANSWERED : succeeded(answer.plan)),
     );
-  }
-
-  /**
-   * One call the service carries through the account's GitHub connection:
-   * the answer read under its own schema, or GitHub's refusal read as the
-   * reason the service named, or unanswered for anything else.
-   */
-  #throughGitHub<Wire, Encoded, Answer>(
-    request: Parameters<AccountCallEffects["send"]>[0],
-    schema: EffectSchema.Codec<Wire, Encoded>,
-    project: (wire: Wire) => Answer,
-  ): Effect.Effect<PlanCallResult<Answer, GitHubCallFailure>, never, HttpClient.HttpClient> {
-    const call = this.#call;
-    return Effect.gen(function* () {
-      const answer = yield* call.send(request);
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (answer.response.ok) {
-        const read = Result.getOrUndefined(readEither(schema)(payload));
-        return read === undefined ? UNANSWERED : succeeded(project(read));
-      }
-      const refusal = Result.getOrUndefined(readEither(githubFailureAnswerSchema)(payload));
-      return refusal === undefined ? UNANSWERED : { ok: false, failure: refusal.reason };
-    });
   }
 }
 

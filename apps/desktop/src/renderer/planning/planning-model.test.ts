@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
-import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
-import {
-  PLAN_CALL_FAILURE,
-  PLANNING_READ,
-  type PlanningView,
-  VOICE_PHASE,
-} from "@sidecar/hosted/planning-view";
+import { PLANNING_READ, type PlanningView, VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { test } from "vitest";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -20,16 +14,11 @@ import {
   DOCUMENT_REGION,
   documentRegion,
   folderLine,
-  githubFailureNote,
   MICROPHONE_PRESS,
   microphoneButton,
-  newestReadOnly,
-  offersGitHubConnect,
-  onEachReturn,
   PLANS_PAGE,
   planningCallHoldsPanel,
   plansPage,
-  repositoriesMatching,
 } from "./planning-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -87,28 +76,6 @@ test("the header names the plan's folder, with the home folder as ~", () => {
   assert.equal(folderLine("/Users/dev/relay"), "~/relay");
   assert.equal(folderLine("/Users/dev"), "~");
   assert.equal(folderLine("/Volumes/work/relay"), "/Volumes/work/relay");
-});
-
-test("an account with no usable GitHub connection is offered Connect GitHub, anything else Try again", () => {
-  assert.equal(offersGitHubConnect(GITHUB_FAILURE.NOT_CONNECTED), true);
-  assert.equal(offersGitHubConnect(GITHUB_FAILURE.ACCESS_DENIED), true);
-  assert.equal(offersGitHubConnect(GITHUB_FAILURE.RATE_LIMITED), false);
-  assert.equal(offersGitHubConnect(PLAN_CALL_FAILURE.UNANSWERED), false);
-  assert.match(githubFailureNote(GITHUB_FAILURE.EMPTY_REPOSITORY), /no commits/u);
-});
-
-test("the repository filter narrows by owner and name, case-blind", () => {
-  const repositories = [
-    { owner: "acme", name: "relay", private: true },
-    { owner: "acme", name: "ledger", private: false },
-    { owner: "Other", name: "Relay-Docs", private: false },
-  ];
-  assert.deepEqual(
-    repositoriesMatching(repositories, " relay ").map((repository) => repository.name),
-    ["relay", "Relay-Docs"],
-  );
-  assert.equal(repositoriesMatching(repositories, "acme/l").length, 1);
-  assert.equal(repositoriesMatching(repositories, "").length, 3);
 });
 
 test("an open plan is the document page whatever this panel was doing, and the form shows only with none open", () => {
@@ -282,48 +249,6 @@ test("once a save changes the document, Copy returns to rest until pressed again
 
   assert.equal(copyShown(outcome, saved), COPY_SHOWN.IDLE);
   assert.equal(copyShown(undefined, REVIEWED), COPY_SHOWN.IDLE);
-});
-
-test("the sheet reads again on every return from the browser until the wait is cancelled", () => {
-  const window = new EventTarget();
-  let reads = 0;
-  const cancel = onEachReturn(window, () => {
-    reads += 1;
-  });
-
-  // Back once mid-way through GitHub's page, then again once the link landed.
-  window.dispatchEvent(new Event("focus"));
-  window.dispatchEvent(new Event("focus"));
-  cancel();
-  window.dispatchEvent(new Event("focus"));
-
-  assert.equal(reads, 2);
-});
-
-/** A read whose answer the test hands over when it chooses. */
-function heldRead() {
-  let answer: (value: string) => void = () => undefined;
-  const promise = new Promise<string>((resolve) => {
-    answer = resolve;
-  });
-  return { promise, resolve: (value: string) => answer(value) };
-}
-
-test("a list read that another read replaced is dropped when it lands late", async () => {
-  const applyNewest = newestReadOnly<string>();
-  const drawn: string[] = [];
-  const older = heldRead();
-  const newer = heldRead();
-
-  applyNewest(older.promise, (answer) => drawn.push(answer));
-  applyNewest(newer.promise, (answer) => drawn.push(answer));
-  newer.resolve("connected");
-  await newer.promise;
-  older.resolve("not-connected");
-  await older.promise;
-  await Promise.resolve();
-
-  assert.deepEqual(drawn, ["connected"]);
 });
 
 test("a planning call in progress holds the panel open, and a desk call or a finished one does not", () => {

@@ -15,7 +15,6 @@ import {
   SETTINGS_PAGE,
   SETTINGS_RESET_SCOPE,
   type SettingControl,
-  type SettingEntryDefinition,
   type SettingGuardResult,
   type SettingOption,
   type SettingSection,
@@ -39,7 +38,7 @@ const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: fa
  * `Result.match` rather than a test of the tag and a reach into the arm it
  * proved.
  */
-export const settingGuardFromEither = <Value>(
+const settingGuardFromEither = <Value>(
   either: Result.Result<Value, Value>,
 ): SettingGuardResult<Value> => Result.match(either, { onSuccess: valid, onFailure: invalid });
 
@@ -70,7 +69,7 @@ function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined
 const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value ? PRODUCT_SETTING_VALUE.ON : PRODUCT_SETTING_VALUE.OFF;
 
-export const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
+const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value === undefined ? PRODUCT_SETTING_VALUE.CLEARED : PRODUCT_SETTING_VALUE.SET;
 
 // A deleted key counts as off rather than set: a stored value stands either
@@ -78,41 +77,6 @@ export const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue 
 // never travels, whichever shape is reported.
 const hotkeyAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value === VOICE_HOTKEY_NONE ? PRODUCT_SETTING_VALUE.OFF : choiceAnalytics(value);
-
-/**
- * A hand-written entry, for the few settings no builder answers for: a map
- * whose keys are observed, or view state the pages draw no row for at all.
- * An identity function, so the entry is checked against the contract where it
- * is written rather than where it is read.
- */
-export function storedSetting<
-  Field extends string,
-  Value,
-  Id extends AppSettingId,
-  Default extends Value,
->(
-  entry: AppSettingSchemaEntry<Field, Value, Id, Default>,
-): AppSettingSchemaEntry<Field, Value, Id, Default> {
-  return entry;
-}
-
-/**
- * A hand-written entry whose value is a map, so the store can write one of its
- * keys at a time. The entry definition rides on the return type rather than the
- * shared contract, because it is what `KeyedAppSettingField` is derived from:
- * an optional member of every entry would make every field a keyed one.
- */
-export function keyedSetting<
-  Field extends string,
-  Value,
-  Id extends AppSettingId,
-  Default extends Value,
-  Entry extends SettingEntryDefinition<never>,
->(
-  entry: AppSettingSchemaEntry<Field, Value, Id, Default> & { entry: Entry },
-): AppSettingSchemaEntry<Field, Value, Id, Default> & { entry: Entry } {
-  return entry;
-}
 
 /**
  * A stored on/off. That it is a toggle is what fixes its guard, its guide

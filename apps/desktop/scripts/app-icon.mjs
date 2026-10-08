@@ -4,10 +4,8 @@ import path from "node:path";
 import { ICONSET_SOURCES, iconutilArguments } from "./package-config.mjs";
 
 /**
- * Builds the one Luke.icns both bundles carry — the app's, and the calendar
- * helper's, whose System Settings consent row draws it — from the committed
- * brand PNGs. Skipped while the built icon is newer than every source, so
- * the dev launches that build the helper on every start pay nothing; the
+ * Builds the app's Luke.icns from the committed brand PNGs. Skipped while
+ * the built icon is newer than every source, so dev launches pay nothing; the
  * sources are committed files, so mtime is a sound freshness answer.
  */
 export function buildAppIcon(appRoot, repoRoot) {

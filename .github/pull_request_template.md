@@ -17,7 +17,6 @@ produce with `./scripts/verify.sh` and attach through GitHub's editor.
 ### Physical-device evidence
 
 - Screenshot or screen recording: `not attached`
-- Physical-notch check: `not performed`
 - Device/display configuration: `not recorded`
 
 ## Invariants
@@ -30,8 +29,7 @@ judgment call is a reason to stop and ask, not to tick it.
 - [ ] JSON Schema goldens unchanged (`LUKE_UPDATE_FIXTURES` not run, or diff explained line by line). (CI)
 - [ ] Every behavior change has, in this PR, the test that fails without it; no change-detector test added. (manual; root `AGENTS.md` "Testing")
 - [ ] Gateway envelope goldens unchanged. (CI)
-- [ ] No new `as` type assertion outside the allowlisted files; `as Admitted` only in `admit.ts` and wire's admitted files. (CI via anti-slop + new grep)
-- [ ] No `effect` import in an OpenClaw-ported file. (CI grep)
+- [ ] No new `as` type assertion outside the allowlisted files. (CI via anti-slop)
 - [ ] No `Effect.runPromise`/`runSync`/`runFork` outside the runtime edges and the shims `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-run-promise-outside-edges`)
 - [ ] No new `setTimeout`/`setInterval`/`new Promise`/`AbortController`/`fs.watch` outside the files `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-raw-async-primitives`)
 - [ ] No Effect, Stream, or Layer written as a statement and dropped; a description a caller walks past runs nothing. (CI via `pnpm discarded-effect`)

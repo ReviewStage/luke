@@ -5,12 +5,12 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./connect-github-page": "./src/connect-github-page.js",
-    "./github-wire": "./src/github-wire.js",
+    "./board-text": "./src/board-text.js",
+    "./board-vocabulary": "./src/board-vocabulary.js",
+    "./board-wire": "./src/board-wire.js",
     "./plan-template": "./src/plan-template.js",
     "./plan-wire": "./src/plan-wire.js",
-    "./planning-view": "./src/planning-view.js",
-    "./reads-wire": "./src/reads-wire.js"
+    "./planning-view": "./src/planning-view.js"
   },
   "types": "./src/index.ts",
   "scripts": {
@@ -19,7 +19,6 @@
   },
   "dependencies": {
     "@sidecar/live": "workspace:*",
-    "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"
   },

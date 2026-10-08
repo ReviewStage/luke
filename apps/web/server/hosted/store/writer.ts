@@ -20,8 +20,6 @@ import {
   BRAIN_TURN_ORIGIN,
   type BrainRunEvent,
   type BrainTurnOrigin,
-  CONVERSATION_EVENT_KIND,
-  type ConversationEventKind,
   isSettledToolPartState,
   isStoredToolPart,
   isWireString,
@@ -33,7 +31,6 @@ import {
   readStoredUIMessages,
   type SchemaPath,
   type SchemaRefusal,
-  type SpeechEventKind,
   type SpokenAskMetadata,
   STEP_START_PART,
   type StoredMessageMetadata,
@@ -48,19 +45,17 @@ import {
   toolPartType,
   UI_PART_STATE,
   UI_PART_TYPE,
+  UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
-  type UserMessageMetadata,
-  unknownActionOutput,
-  WireValueSchema,
 } from "../../core.js";
 import { db } from "../../db/query.js";
-import { asks, conversations, events, messages, turns } from "../../db/storage-schema.js";
+import { asks, conversations, messages, turns } from "../../db/storage-schema.js";
 import { voiceSessions } from "../../db/voice-schema.js";
 import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./database.js";
 
 /**
- * The store writer: the one path by which a `messages`, `turns`, or `events`
- * row is written. It consumes the brain's run event stream (`BrainRunEvent`,
+ * The store writer: the one path by which a `messages` or `turns` row is
+ * written. It consumes the brain's run event stream (`BrainRunEvent`,
  * every kind of turn) and keeps the record the plan describes: a turn row
  * from queued through running to its end, one assistant message per turn
  * that is the turn's journal while it runs — each tool call written in
@@ -115,10 +110,13 @@ import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./databa
  * them and a caller composes a write into the request it is already on.
  */
 
+/** The envelope of a call whose effect is unknown: dispatched, its answer lost, so it may have happened. */
+function unknownOutcome(reason: string) {
+  return { status: UNKNOWN_ACTION_STATUS, reason } as const;
+}
+
 /** The one output any tool's schema must admit: the envelope of a call whose effect is unknown. */
-const UNKNOWN_OUTCOME_PROBE = unknownActionOutput(
-  "the call was dispatched and its effect is unknown",
-);
+const UNKNOWN_OUTCOME_PROBE = unknownOutcome("the call was dispatched and its effect is unknown");
 
 /** The tools whose declared output schema would refuse the unknown outcome's envelope. */
 const toolsRefusingUnknownOutcome = (tools: ToolSet): Effect.Effect<readonly string[]> =>
@@ -157,18 +155,13 @@ type StoreWriteEffect = (typeof STORE_WRITE_EFFECT)[keyof typeof STORE_WRITE_EFF
 
 /**
  * Why a write was refused: the row it needs is not there, the row or call it
- * would change is closed, the claim it makes is already another's, an event
- * it named as excluding it already stands, or what it carries is outside the
- * vocabulary.
+ * would change is closed, or what it carries is outside the vocabulary.
  */
 export const STORE_WRITE_REFUSAL = {
   NO_CONVERSATION: "no_conversation",
   NO_TURN: "no_turn",
   NO_CALL: "no_call",
-  NO_MESSAGE: "no_message",
   FINISHED: "finished",
-  ALREADY_CLAIMED: "already_claimed",
-  SUPERSEDED: "superseded",
   MESSAGE_REFUSED: "message_refused",
 } as const;
 
@@ -231,18 +224,6 @@ type TurnEnqueueResult = Result.Result<
 >;
 
 /**
- * A user message written outside the run stream: the developer's own words
- * as another writer cut them — a spoken ask from a voice session's transcript
- * — with the metadata that says how they arrived. Idempotent on its client id.
- */
-interface UserMessageWrite {
-  readonly clientId: string;
-  readonly turnId?: string;
-  readonly text: string;
-  readonly metadata: UserMessageMetadata;
-}
-
-/**
  * One speaker's spoken utterance as the voice writer cuts it from the
  * session's segments now, under the client id the service's ledger minted
  * for the row: the developer's as a user row, Luke's as an assistant row
@@ -251,8 +232,7 @@ interface UserMessageWrite {
  * Luke's where the developer's line before it was a delegation's, that
  * delegation; the store adds what it can read of what Luke's words were read
  * from — the journal of the delegation's settled turn, which then owns the
- * row, or the briefing whose `speech.spoken` fell inside the span — so a view
- * can fold that message's words behind the words actually said.
+ * row — so a view can fold that message's words behind the words actually said.
  */
 type SpokenRowWrite =
   | {
@@ -309,41 +289,6 @@ type UserMessageWriteResult = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** An event any caller may write: every kind but speech, whose writes have one door, `store/speech.ts`. */
-interface EventWrite {
-  readonly messageId: string;
-  readonly kind: Exclude<ConversationEventKind, SpeechEventKind>;
-  readonly deviceId?: string;
-  readonly payload?: UnparsedWireValue;
-}
-
-/**
- * A speech event, which cannot be written without naming the kinds whose
- * standing on the message refuse it: read under the conversation's lock in
- * the same transaction as the insert, so a transition decided against the
- * events a caller read lands only while those are still all there are. The
- * speech module composes these; a `speech.*` kind on a plain event write
- * does not compile, which is what keeps every speech transition behind that
- * one door.
- */
-interface SpeechEventWrite {
-  readonly messageId: string;
-  readonly kind: SpeechEventKind;
-  readonly deviceId?: string;
-  readonly payload?: UnparsedWireValue;
-  readonly unless: readonly ConversationEventKind[];
-}
-
-type EventWriteResult = Result.Result<
-  { readonly id: string; readonly seq: number },
-  Refused<
-    | typeof STORE_WRITE_REFUSAL.NO_CONVERSATION
-    | typeof STORE_WRITE_REFUSAL.NO_MESSAGE
-    | typeof STORE_WRITE_REFUSAL.ALREADY_CLAIMED
-    | typeof STORE_WRITE_REFUSAL.SUPERSEDED
-  >
->;
-
 /**
  * The one path by which a conversation's rows are written, each method an
  * effect over the ambient client: a caller composes one into the request it
@@ -356,16 +301,6 @@ export interface StoreWriter {
   enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Write<TurnEnqueueResult>;
   /** Stamps the instant a Stop was asked on a turn the conversation holds, once. */
   requestTurnCancel(target: ConversationTarget, cancel: TurnCancelRequest): Write<TurnCancelResult>;
-  /** Appends one event about a message, numbered by the conversation's event sequence. */
-  recordEvent(
-    target: ConversationTarget,
-    event: EventWrite | SpeechEventWrite,
-  ): Write<EventWriteResult>;
-  /** Writes the developer's own words as a finished user message, once per client id. */
-  recordUserMessage(
-    target: ConversationTarget,
-    message: UserMessageWrite,
-  ): Write<UserMessageWriteResult>;
   /**
    * Takes into the turn every row of an ask the turn ran, by the ask's id on
    * the row's metadata, where the row stands with no turn yet: the other half
@@ -497,8 +432,6 @@ const TurnUsageColumnSchema = Schema.Struct({
   reasoningTokens: Schema.Number,
 });
 
-export const ConversationEventKindSchema = Schema.Literals(Object.values(CONVERSATION_EVENT_KIND));
-
 const MessageRoleSchema = Schema.Literals(Object.values(MESSAGE_ROLE));
 
 const TurnStatusSchema = Schema.Literals(Object.values(TURN_STATUS));
@@ -510,8 +443,7 @@ const RowIdSchema = Schema.Struct({ id: Schema.String });
 /**
  * The `jsonb` fields a row is found by or read out of, which the builder has
  * no operator for: a spoken row's session, span, and delegation on its own
- * metadata, what one of Luke's rows was read from, and the session and
- * instant a briefing's speech event names. Each is one fragment, named once
+ * metadata, and what one of Luke's rows was read from. Each is one fragment, named once
  * and embedded in the statements that need it, so the key's spelling stands
  * in a single place.
  */
@@ -519,8 +451,6 @@ const SPOKEN_VOICE_SESSION_ID = sql`${messages.metadata} ->> 'voice_session_id'`
 const SPOKEN_FROM_MS = sql`(${messages.metadata} ->> 'from_ms')::int`;
 const SPOKEN_DELEGATION_ID = sql<string | null>`${messages.metadata} ->> 'delegation_id'`;
 const SPOKEN_READ_FROM = sql`${messages.metadata} ->> 'read_from'`;
-const SPEECH_EVENT_VOICE_SESSION_ID = sql`${events.payload} ->> 'voiceSessionId'`;
-const SPEECH_EVENT_AT_MS = sql`(${events.payload} ->> 'atMs')::int`;
 
 const ConversationTargetSchema = Schema.Struct({
   userId: Schema.String,
@@ -592,12 +522,6 @@ const pastTheHighestMessageSeq = (conversationId: string) =>
     .from(messages)
     .where(eq(messages.conversationId, conversationId));
 
-const pastTheHighestEventSeq = (conversationId: string) =>
-  db
-    .select({ free: sql<number>`coalesce(max(${events.seq}), 0) + 1` })
-    .from(events)
-    .where(eq(events.conversationId, conversationId));
-
 const allocateMessageSequence = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, now: Schema.Date }),
   Result: SequenceSchema,
@@ -610,19 +534,6 @@ const allocateMessageSequence = SqlSchema.findOneOption({
       })
       .where(eq(conversations.id, request.conversationId))
       .returning({ next: conversations.nextMessageSeq }),
-});
-
-const allocateEventSequence = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: SequenceSchema,
-  execute: (conversationId) =>
-    db
-      .update(conversations)
-      .set({
-        nextEventSeq: sql`greatest(${conversations.nextEventSeq}, ${pastTheHighestEventSeq(conversationId)}) + 1`,
-      })
-      .where(eq(conversations.id, conversationId))
-      .returning({ next: conversations.nextEventSeq }),
 });
 
 const findTurn = SqlSchema.findOneOption({
@@ -647,41 +558,6 @@ const findSettledTurn = SqlSchema.findOneOption({
       .select({ status: turns.status, settledAt: turns.settledAt })
       .from(turns)
       .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
-});
-
-/**
- * The briefing whose speech began inside a span of one voice session's clock:
- * the `speech.spoken` event names the session and the instant on its clock
- * the voice followed the briefing's append, and Luke's utterance covering
- * that instant is the briefing read aloud. A row is read from one message,
- * so where two briefings appended back to back were both marked by one delta
- * and read in one breath, the later is the one the reading names and the
- * earlier keeps its own bubble; two briefings in one utterance is the
- * exception a single link accepts rather than a list it grows for.
- */
-const findBriefingSpokenWithin = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    conversationId: Schema.String,
-    voiceSessionId: Schema.String,
-    fromMs: Schema.Int,
-    toMs: Schema.Int,
-  }),
-  Result: Schema.Struct({ messageId: Schema.String }),
-  execute: (request) =>
-    db
-      .select({ messageId: events.messageId })
-      .from(events)
-      .where(
-        and(
-          eq(events.conversationId, request.conversationId),
-          eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN),
-          sql`${SPEECH_EVENT_VOICE_SESSION_ID} = ${request.voiceSessionId}`,
-          sql`${SPEECH_EVENT_AT_MS} >= ${request.fromMs}`,
-          sql`${SPEECH_EVENT_AT_MS} <= ${request.toMs}`,
-        ),
-      )
-      .orderBy(desc(events.seq))
-      .limit(1),
 });
 
 /**
@@ -985,64 +861,6 @@ const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
       .limit(1),
 });
 
-const findMessageInConversation = SqlSchema.findOneOption({
-  Request: Schema.Struct({ messageId: Schema.String, conversationId: Schema.String }),
-  Result: RowIdSchema,
-  execute: (request) =>
-    db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.id, request.messageId),
-          eq(messages.conversationId, request.conversationId),
-        ),
-      ),
-});
-
-const findEventKinds = SqlSchema.findAll({
-  Request: Schema.Struct({
-    messageId: Schema.String,
-    kinds: Schema.Array(ConversationEventKindSchema),
-  }),
-  Result: Schema.Struct({ kind: ConversationEventKindSchema }),
-  execute: (request) =>
-    db
-      .select({ kind: events.kind })
-      .from(events)
-      .where(
-        and(eq(events.messageId, request.messageId), inArray(events.kind, [...request.kinds])),
-      ),
-});
-
-const insertEvent = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    conversationId: Schema.String,
-    seq: Schema.Int,
-    messageId: Schema.String,
-    kind: ConversationEventKindSchema,
-    deviceId: Schema.NullOr(Schema.String),
-    payload: Schema.NullOr(WireValueSchema),
-    createdAt: Schema.Date,
-  }),
-  Result: RowIdSchema,
-  execute: (row) =>
-    db
-      .insert(events)
-      .values({
-        userId: row.userId,
-        conversationId: row.conversationId,
-        seq: row.seq,
-        messageId: row.messageId,
-        kind: row.kind,
-        deviceId: row.deviceId,
-        payload: row.payload,
-        createdAt: row.createdAt,
-      })
-      .returning({ id: events.id }),
-});
-
 function pendingToolPart(name: string, callId: string, input: UnparsedWireValue): ToolPart {
   return {
     type: toolPartType(name),
@@ -1064,7 +882,7 @@ function unansweredToolPart(part: StoredToolPart, status: BrainRequestStatus): T
     toolCallId: part.toolCallId,
     state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
     input: part.input,
-    output: unknownActionOutput(
+    output: unknownOutcome(
       status === BRAIN_REQUEST_STATUS.CANCELLED
         ? "The turn was cancelled before the call answered; it may have run."
         : "The turn ended before the call answered; it may have run.",
@@ -1148,14 +966,6 @@ const allocateMessageSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
     conversationId: context.target.conversationId,
     now: context.now,
   });
-  const allocated = yield* required(row, "the conversation vanished under its own lock");
-  return allocated.next - 1;
-});
-
-const allocateEventSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
-  context: WriterContext,
-): Effect.fn.Return<number, WriteFailure, SqlClient.SqlClient> {
-  const row = yield* allocateEventSequence(context.target.conversationId);
   const allocated = yield* required(row, "the conversation vanished under its own lock");
   return allocated.next - 1;
 });
@@ -1587,6 +1397,7 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
     case BRAIN_RUN_EVENT.COMPACTION_COMPLETED:
     case BRAIN_RUN_EVENT.SLOW_STEP:
     case BRAIN_RUN_EVENT.QUESTION_QUEUED:
+    case BRAIN_RUN_EVENT.CODE_SHOWN:
     case BRAIN_RUN_EVENT.ACTIONS_SETTLED:
     case BRAIN_RUN_EVENT.REPLY_SENTENCE:
     case BRAIN_RUN_EVENT.ENDED:
@@ -1615,72 +1426,6 @@ const enqueueTurn = /* @__PURE__ */ Effect.fn("web/enqueueTurn")(function* (
     queuedAt: context.now,
   });
   return Result.succeed({ turnId, effect: STORE_WRITE_EFFECT.WRITTEN });
-});
-
-const stampTurnCancel = SqlSchema.findAll({
-  Request: Schema.Struct({
-    turnId: Schema.String,
-    conversationId: Schema.String,
-    at: Schema.Date,
-  }),
-  Result: Schema.Struct({ id: Schema.String }),
-  execute: (row) =>
-    db
-      .update(turns)
-      .set({ cancelRequestedAt: row.at })
-      .where(
-        and(
-          eq(turns.id, row.turnId),
-          eq(turns.conversationId, row.conversationId),
-          isNull(turns.cancelRequestedAt),
-        ),
-      )
-      .returning({ id: turns.id }),
-});
-
-/**
- * The Stop on a turn's row: the instant it was asked, written once, so the
- * record says a Stop was asked whatever eve does with it. A second Stop finds
- * the first instant standing and writes nothing; a turn the conversation does
- * not hold is refused.
- */
-const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(function* (
-  context: WriterContext,
-  cancel: TurnCancelRequest,
-): Effect.fn.Return<TurnCancelResult, WriteFailure, SqlClient.SqlClient> {
-  if (Option.isNone(yield* turnRow(context, cancel.turnId))) return Result.fail(NO_TURN);
-  const stamped = yield* stampTurnCancel({
-    turnId: cancel.turnId,
-    conversationId: context.target.conversationId,
-    at: cancel.at,
-  });
-  return Result.succeed(
-    stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
-  );
-});
-
-const recordUserMessage = /* @__PURE__ */ Effect.fn("web/recordUserMessage")(function* (
-  context: WriterContext,
-  write: UserMessageWrite,
-): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
-  const standing = yield* messageByClientId(context, write.clientId);
-  if (Option.isSome(standing)) {
-    return Result.succeed({ id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED });
-  }
-  const read = yield* admitted(context, {
-    id: write.clientId,
-    role: MESSAGE_ROLE.USER,
-    metadata: write.metadata,
-    parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
-  });
-  if (Result.isFailure(read)) return Result.fail(read.failure);
-  const { id } = yield* insertMessage(context, {
-    clientId: write.clientId,
-    turnId: write.turnId,
-    message: read.success,
-    finishedAt: context.now,
-  });
-  return Result.succeed({ id, effect: STORE_WRITE_EFFECT.WRITTEN });
 });
 
 const upsertSpokenRow = /* @__PURE__ */ Effect.fn("web/upsertSpokenRow")(function* (
@@ -1762,11 +1507,9 @@ interface ReadAloudSource {
 const NOTHING_READ: ReadAloudSource = { turnId: undefined, messageId: undefined };
 
 /**
- * What Luke's utterance was read from, as the record can tell. A briefing
- * whose speech began inside the span comes first, since a briefing is said
- * whatever line stood before it, and the developer's latest line stays a
- * delegation's for as long as no line follows it. Otherwise, under a
- * delegation whose turn is known, the utterance joins that turn while the
+ * What Luke's utterance was read from, as the record can tell: the
+ * developer's latest line stays a delegation's for as long as no line
+ * follows it, and under a delegation whose turn is known, the utterance joins that turn while the
  * turn still runs, and joins it as its reply read aloud where the turn had
  * settled within the window before the words were written; one long after
  * the settle is an aside, read from nothing and standing where it was said.
@@ -1776,21 +1519,6 @@ function readAloudFrom(
   metadata: AssistantMessageMetadata,
 ): Write<ReadAloudSource> {
   return Effect.gen(function* () {
-    if (
-      metadata.voice_session_id !== undefined &&
-      metadata.from_ms !== undefined &&
-      metadata.to_ms !== undefined
-    ) {
-      const briefing = yield* findBriefingSpokenWithin({
-        conversationId: context.target.conversationId,
-        voiceSessionId: metadata.voice_session_id,
-        fromMs: metadata.from_ms,
-        toMs: metadata.to_ms,
-      });
-      if (Option.isSome(briefing)) {
-        return { turnId: undefined, messageId: briefing.value.messageId };
-      }
-    }
     if (metadata.delegation_id === undefined) return NOTHING_READ;
     const turnId = yield* askTurnOf({
       conversationId: context.target.conversationId,
@@ -2103,51 +1831,46 @@ const attachSpokenAsk = /* @__PURE__ */ Effect.fn("web/attachSpokenAsk")(functio
   return Result.succeed(attached);
 });
 
+const stampTurnCancel = SqlSchema.findAll({
+  Request: Schema.Struct({
+    turnId: Schema.String,
+    conversationId: Schema.String,
+    at: Schema.Date,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (row) =>
+    db
+      .update(turns)
+      .set({ cancelRequestedAt: row.at })
+      .where(
+        and(
+          eq(turns.id, row.turnId),
+          eq(turns.conversationId, row.conversationId),
+          isNull(turns.cancelRequestedAt),
+        ),
+      )
+      .returning({ id: turns.id }),
+});
+
 /**
- * One event about a message. A claim is the one kind the schema makes
- * exclusive, and under the conversation's lock the check for a standing claim
- * holds when the insert runs, so the second claimant is answered by name and
- * the partial unique index stays the backstop it is. The kinds a write names
- * in `unless` are checked the same way, so a speech transition decided
- * against the events a caller read is refused as superseded when another
- * landed between the read and the lock, rather than re-opening a settled
- * offer by landing after it.
+ * The Stop on a turn's row: the instant it was asked, written once, so the
+ * record says a Stop was asked whatever eve does with it. A second Stop finds
+ * the first instant standing and writes nothing; a turn the conversation does
+ * not hold is refused.
  */
-const recordEvent = /* @__PURE__ */ Effect.fn("web/recordEvent")(function* (
+const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(function* (
   context: WriterContext,
-  event: EventWrite | SpeechEventWrite,
-): Effect.fn.Return<EventWriteResult, WriteFailure, SqlClient.SqlClient> {
-  const { conversationId, userId } = context.target;
-  const message = yield* findMessageInConversation({
-    messageId: event.messageId,
-    conversationId,
+  cancel: TurnCancelRequest,
+): Effect.fn.Return<TurnCancelResult, WriteFailure, SqlClient.SqlClient> {
+  if (Option.isNone(yield* turnRow(context, cancel.turnId))) return Result.fail(NO_TURN);
+  const stamped = yield* stampTurnCancel({
+    turnId: cancel.turnId,
+    conversationId: context.target.conversationId,
+    at: cancel.at,
   });
-  if (Option.isNone(message)) return Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_MESSAGE });
-  const claiming = event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED;
-  const excluding: ConversationEventKind[] = [
-    ...(claiming ? [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED] : []),
-    ...("unless" in event ? event.unless : []),
-  ];
-  if (excluding.length > 0) {
-    const standing = yield* findEventKinds({ messageId: event.messageId, kinds: excluding });
-    if (standing.some((row) => claiming && row.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)) {
-      return Result.fail({ refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED });
-    }
-    if (standing.length > 0) return Result.fail({ refusal: STORE_WRITE_REFUSAL.SUPERSEDED });
-  }
-  const seq = yield* allocateEventSeq(context);
-  const inserted = yield* insertEvent({
-    userId,
-    conversationId,
-    seq,
-    messageId: event.messageId,
-    kind: event.kind,
-    deviceId: nullable(event.deviceId),
-    payload: nullable(event.payload),
-    createdAt: context.now,
-  });
-  const written = yield* required(inserted, "the event insert answered no row");
-  return Result.succeed({ id: written.id, seq });
+  return Result.succeed(
+    stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
+  );
 });
 
 /**
@@ -2186,10 +1909,6 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
       underConversation(target, (context) => enqueueTurn(context, enqueue)),
     requestTurnCancel: (target, cancel) =>
       underConversation(target, (context) => requestTurnCancel(context, cancel)),
-    recordEvent: (target, event) =>
-      underConversation(target, (context) => recordEvent(context, event)),
-    recordUserMessage: (target, message) =>
-      underConversation(target, (context) => recordUserMessage(context, message)),
     attachAskLines: (target, turnId) =>
       underConversation(target, (context) => attachAskLines(context, turnId)),
     attachSpokenAsk: (target, attach) =>

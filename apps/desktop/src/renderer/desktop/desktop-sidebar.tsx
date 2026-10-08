@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { OptionsIcon, PlusIcon } from "@sidecar/panel";
-import { PANEL_TAB, type PanelTab, type ShownPanelTab } from "../panel-tabs";
+import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { folderLine, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
@@ -23,7 +23,7 @@ export function DesktopSidebar({
   identity: LukeIdentityProps;
   plans: PlansControl;
   tab: PanelTab;
-  onTabChange: (tab: ShownPanelTab) => void;
+  onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
   /** News Settings wears as a dot: a newer release waiting. */
   settingsNote: string | undefined;

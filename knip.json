@@ -28,6 +28,7 @@
         "src/main/index.ts",
         "src/preload/index.ts",
         "src/renderer/index.tsx",
+        "src/renderer/whiteboard/index.tsx",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],
@@ -42,8 +43,7 @@
         "scripts/*.ts",
         "server/feedback.mjs"
       ],
-      "project": ["src/**", "server/**", "scripts/**", "tests/**"],
-      "ignoreDependencies": ["@sidecar/providers"]
+      "project": ["src/**", "server/**", "scripts/**", "tests/**"]
     },
     "packages/*": {
       "entry": ["src/ui-messages/index.ts", "src/testing/index.ts", "src/effect/index.ts"],

@@ -58,20 +58,9 @@ test("the crash reporter is initialized only once both paths have moved", () => 
 
 test("the state root is the moved path, and the launch's flags are read from its own arguments", () => {
   const steps: string[] = [];
-  const config = bootstrap(steps, [
-    "electron",
-    ".",
-    "--fixture",
-    "smoke",
-    "--profile",
-    "working",
-    "--peek",
-  ]);
+  const config = bootstrap(steps, ["electron", ".", "--fixture", "smoke", "--profile", "working"]);
   assert.equal(config.stateRoot, path.join("/tmp", "appData", DEVELOPMENT_APP_NAME));
-  assert.equal(config.launch.fixtureName, "smoke");
   assert.equal(config.launch.profile, "working");
-  assert.equal(config.launch.startPeeked, true);
-  assert.equal(config.launch.startInSlot, false);
   assert.equal(config.launch.captureMode, false);
   assert.equal(config.launch.fixtureMode, true);
   assert.equal(config.runMode.sendsNetwork, false);

@@ -19,6 +19,9 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
+  SCRIPTED_DRAW,
+  SCRIPTED_DRAWN_ID,
+  SCRIPTED_DRAWN_REPLY,
   SCRIPTED_LOOK_UP,
   SCRIPTED_NO_SOURCE_REPLY,
   SCRIPTED_PLANNING_REPLY,
@@ -27,7 +30,8 @@ import {
 } from "../eve/scripted-model";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
+import { readBoard, writeScene } from "../server/hosted/board-store";
+import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_REFUSAL,
@@ -38,11 +42,9 @@ import {
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
-import { documentTextOf } from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { payloadKeyRing } from "../server/hosted/encryption";
 import {
   createPlan,
   deletePlan,
@@ -54,7 +56,8 @@ import {
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
-import { hostedStore, storeWriter } from "../server/hosted/store";
+import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
+import { storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { noNetwork } from "./support/no-network";
 import { testSqlClient } from "./support/sql-client";
@@ -151,9 +154,6 @@ const planningHost = (
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: HOSTED_TOOL_SET });
     const seams: BrainHostSeams = {
-      eveOrigin: () => undefined,
-      store: () =>
-        Effect.succeed(hostedStore({ keys: payloadKeyRing(Redacted.make("c".repeat(64))) })),
       writer: () => Effect.succeed(writer),
       userInfo: () => Effect.succeed(undefined),
       ownership: {
@@ -161,17 +161,13 @@ const planningHost = (
         ownsConversation: unreached("ownsConversation"),
       },
       openAi,
-      embedder: () => undefined,
       deploymentSecret: () => undefined,
+      eveOrigin: () => undefined,
       scriptedModel: () => true,
       spend,
-      vaultRows: () => Effect.succeed([]),
-      vaultSecret: unreached("vaultSecret"),
-      providerKey: unreached("providerKey"),
-      executeAction: unreached("executeAction"),
       now: () => NOW,
     };
-    return yield* brainHost(seams);
+    return brainHost(seams);
   });
 
 const openUser = Effect.gen(function* () {
@@ -285,10 +281,10 @@ const planningTurn = (
         )
         .pipe(Effect.provide(noNetwork));
 
-    const prompt = yield* host.prompt(standing);
+    const prompt = host.prompt();
     const seed = yield* host.seed(standing);
     const context = yield* host.standingContext(standing);
-    const declarations = yield* host.toolDeclarations(standing, turn);
+    const declarations = host.toolDeclarations();
     const tools: ToolSet = Object.fromEntries(
       declarations.map((declared) => [
         declared.name,
@@ -409,12 +405,16 @@ const planningTurn = (
 
 const readDocument = Schema.decodeUnknownSync(Schema.fromJsonString(planDocumentSchema));
 
-/** The document a standing context hands the model, failing the test where it carries none. */
+/** The line the saved document follows in a standing context, as the model reads it. */
+const DOCUMENT_MARKER = "[saved document]";
+
+/** The document a standing context hands the model, on the line after its marker, failing the test where it carries none. */
 function handedDocument(context: string): PlanDocument {
-  const text = documentTextOf(context);
-  return text === undefined
+  const lines = context.split("\n");
+  const at = lines.indexOf(DOCUMENT_MARKER);
+  return at === -1
     ? assert.fail("the standing context carries no document")
-    : readDocument(text);
+    : readDocument(lines[at + 1]);
 }
 
 /** The document the Plans tab opens, failing the test where the plan does not open. */
@@ -456,27 +456,22 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered the question queue, the repository and research reads, no write to the plan, and none of the brain's catalog",
+    "a planning turn is offered the question queue, the code it shows, and the repository and research reads, and no write to the plan",
     () =>
       Effect.gen(function* () {
-        const { host, userId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId);
-        const standing = yield* admitted(host, session);
-        assert.equal(standing.kind, CONVERSATION_KIND.PLAN);
+        const { host } = yield* savedPlanWithConversation();
 
-        const offered = yield* host.toolDeclarations(standing, {
-          kind: BRAIN_HOST_TURN.TYPED,
-          trigger: BRAIN_HOST_TURN_KIND[BRAIN_HOST_TURN.TYPED].trigger,
-          turnId: hostTurnId(session.id, "turn_0"),
-        });
+        const offered = host.toolDeclarations();
 
         assert.deepEqual(
           offered.map((declared) => declared.name),
           [
             QUEUE_QUESTION_TOOL.name,
+            SHOW_CODE_TOOL.name,
             RUN_IN_REPOSITORY_TOOL.name,
             SEARCH_WEB_TOOL.name,
             READ_WEB_PAGE_TOOL.name,
+            DRAW_ON_BOARD_TOOL.name,
           ],
         );
       }),
@@ -509,7 +504,6 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
         yield* savePlanDocument(userId, planId, SAVED);
         const standing = yield* admitted(host, session);
-        assert.equal(standing.kind, CONVERSATION_KIND.PLAN);
         assert.deepEqual(handedDocument(yield* host.standingContext(standing)), SAVED);
 
         // The question as the voice composes it: the recent words as context, and the latest line as the ask.
@@ -524,6 +518,52 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         assert.equal(reply, SCRIPTED_PLANNING_REPLY);
         assert.deepEqual(yield* windowDocument(userId, planId), SAVED);
+      }),
+  );
+
+  it.effect(
+    "asked to draw, the planning model draws on the plan's board, and what the developer draws reaches its next turn",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+
+        const reply = yield* planningTurn(host, session, "turn_0", `${SCRIPTED_DRAW}Invite API`);
+
+        assert.equal(reply, SCRIPTED_DRAWN_REPLY);
+        const drawn = Option.getOrThrow(yield* readBoard(userId, planId));
+        assert.equal(drawn.drawing?.number, 1);
+        assert.deepEqual(
+          drawn.drawing?.elements.map((element) => element.id),
+          [SCRIPTED_DRAWN_ID],
+        );
+        const pending = yield* host.standingContext(yield* admitted(host, session));
+        assert.ok(pending.includes("Your latest drawing is not on the board yet"));
+
+        // The developer's Mac puts the drawing on the board beside a note of the developer's own.
+        const box = {
+          id: SCRIPTED_DRAWN_ID,
+          type: "rectangle",
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 80,
+        } as const;
+        const note = {
+          id: "dev-note",
+          type: "text",
+          x: 0,
+          y: 200,
+          width: 120,
+          height: 25,
+          text: "Rate limit invites",
+        } as const;
+        yield* writeScene(userId, planId, [box, note], 1);
+        const context = yield* host.standingContext(yield* admitted(host, session));
+
+        assert.ok(context.includes(`${SCRIPTED_DRAWN_ID} rectangle at 0,0 200x80`));
+        assert.ok(context.includes('dev-note "Rate limit invites" at 0,200'));
+        assert.ok(!context.includes("not on the board yet"));
       }),
   );
 

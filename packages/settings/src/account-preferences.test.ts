@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { LIVE_VOICE } from "@sidecar/live";
-import { PROVIDER_ID } from "@sidecar/session";
 import { test } from "vitest";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import {
@@ -10,77 +9,34 @@ import {
 } from "./schema-access.js";
 
 test("the account preference allowlist contains only cross-device preferences", () => {
-  assert.deepEqual(ACCOUNT_PREFERENCE_FIELDS, [
-    "voice",
-    "defaultWorkspaceProvider",
-    "workspaceProjectDefaults",
-    "workspaceAgentDefaults",
-  ]);
+  assert.deepEqual(ACCOUNT_PREFERENCE_FIELDS, ["voice"]);
   assert.equal(ACCOUNT_PREFERENCE_FIELDS.includes(APP_SETTING_SCHEMA.openAtLogin.field), false);
   assert.equal(ACCOUNT_PREFERENCE_FIELDS.includes(APP_SETTING_SCHEMA.voiceHotkey.field), false);
-  assert.equal(
-    ACCOUNT_PREFERENCE_FIELDS.includes(APP_SETTING_SCHEMA.sessionSearchQuery.field),
-    false,
-  );
 });
 
 test("account preferences validate the shared fields and reject local-only payloads", () => {
-  assert.deepEqual(
-    accountPreferencesFromWire({
-      voice: LIVE_VOICE.MARIN,
-      defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
-      workspaceProjectDefaults: { conductor: "project-1" },
-      workspaceAgentDefaults: {
-        conductor: { agent: "codex", model: "gpt-5.6-sol", effort: "high" },
-      },
-    }),
-    {
-      voice: LIVE_VOICE.MARIN,
-      defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
-      workspaceProjectDefaults: { conductor: "project-1" },
-      workspaceAgentDefaults: {
-        conductor: { agent: "codex", model: "gpt-5.6-sol", effort: "high" },
-      },
-    },
-  );
+  assert.deepEqual(accountPreferencesFromWire({ voice: LIVE_VOICE.MARIN }), {
+    voice: LIVE_VOICE.MARIN,
+  });
 
   assert.equal(accountPreferencesFromWire({ voiceHotkey: "Command+Space" }), undefined);
   assert.equal(accountPreferencesFromWire({ voice: "baritone" }), undefined);
+  // The workspace defaults an earlier build synced are no preference of this one.
+  assert.equal(accountPreferencesFromWire({ defaultWorkspaceProvider: "conductor" }), undefined);
 });
 
 test("null clears an account preference field in write payloads", () => {
-  assert.deepEqual(
-    accountPreferencesFromWire({
-      voice: null,
-      workspaceProjectDefaults: { conductor: "project-1" },
-    }),
-    { workspaceProjectDefaults: { conductor: "project-1" } },
-  );
+  assert.deepEqual(accountPreferencesFromWire({ voice: null }), {});
 });
 
-test("account preferences reads ignore newer and corrupt stored fields", () => {
+test("account preferences reads ignore newer, retired, and corrupt stored fields", () => {
   assert.deepEqual(
     accountPreferencesFromStored({
       voice: LIVE_VOICE.SAGE,
       futureSetting: "held by a newer build",
-      workspaceAgentDefaults: { conductor: { agent: "codex", model: "no-such-model" } },
+      workspaceProjectDefaults: { conductor: "project-1" },
     }),
     { voice: LIVE_VOICE.SAGE },
   );
-});
-
-test("strict account preferences parsing rejects map entries it would otherwise trim", () => {
-  assert.deepEqual(accountPreferencesFromWire({ workspaceProjectDefaults: {} }), {});
-  assert.equal(
-    accountPreferencesFromWire({
-      workspaceProjectDefaults: { conductor: "project-1", future: "project-2" },
-    }),
-    undefined,
-  );
-  assert.equal(
-    accountPreferencesFromWire({
-      workspaceAgentDefaults: { conductor: { agent: "codex", model: "missing" } },
-    }),
-    undefined,
-  );
+  assert.deepEqual(accountPreferencesFromStored({ voice: "baritone" }), {});
 });

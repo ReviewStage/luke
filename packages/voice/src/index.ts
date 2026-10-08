@@ -3,9 +3,6 @@ export { holdSocket } from "./held-socket.js";
 export {
   environmentLiveVoice,
   HOSTED_REATTACH_DELAYS_MS,
-  type IntroductionLiveSessionOpened,
-  IntroductionLiveSessionSource,
-  type IntroductionSessionSource,
   LIVE_ENVIRONMENT,
   type LiveSessionCreateInput,
   unavailableLiveDiagnostics,

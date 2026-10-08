@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import { planAnswerSchema, planListAnswerSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -9,8 +11,13 @@ import { Effect, Layer, Option, Result, type Schema } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { user } from "../server/db/auth-schema";
-import { planCommand } from "../server/db/plan-schema";
+import { planBoard, planCommand } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
+import {
+  DRAW_ON_BOARD_REFUSAL,
+  DRAW_ON_BOARD_STATUS,
+  runDrawOnBoard,
+} from "../server/hosted/board-tool";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";
@@ -33,6 +40,7 @@ import { testSqlClient } from "./support/sql-client";
 const ORIGIN = "https://luke.test";
 const PLANS = "/api/plans";
 const ONE_PLAN = "/api/plans/plan";
+const BOARD = "/api/plans/board";
 const COMMAND_CLAIM = "/api/plans/commands/claim";
 const COMMAND = "/api/plans/commands/command";
 
@@ -116,6 +124,23 @@ function startedId(started: Answer): string {
 }
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
+
+/** A note the developer drew, as the canvas would send it. */
+const NOTE = {
+  id: "dev-note",
+  type: BOARD_ELEMENT_TYPE.TEXT,
+  x: 0,
+  y: 200,
+  width: 120,
+  height: 25,
+  text: "Rate limit invites",
+  fontFamily: 5,
+} as const;
+
+/** Luke's drawing of one labelled box. */
+const DRAW_API = {
+  elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
+};
 
 it.layer(testSqlClient)("the plan routes", (it) => {
   it.effect("a started plan lists, and opens with what its notes saved", () =>
@@ -244,6 +269,136 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         .from(planCommand)
         .where(eq(planCommand.id, queued.id));
       assert.deepEqual(stored?.result, result);
+    }),
+  );
+
+  it.effect(
+    "a board reads empty, holds Luke's latest drawing for the Mac, and keeps the scene the Mac writes",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const read = () =>
+          Effect.map(
+            ask(request(BOARD, owner, { id: planId })),
+            (answered) => readAnswer(boardAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).board,
+          );
+
+        assert.deepEqual(yield* read(), { elements: [], appliedDrawing: 0 });
+        const drawn = yield* runDrawOnBoard({ userId: owner, planId }, unparsedWire(DRAW_API));
+        assert.deepEqual(drawn, { status: DRAW_ON_BOARD_STATUS.DRAWN, drawing: 1 });
+        assert.deepEqual(yield* read(), {
+          elements: [],
+          appliedDrawing: 0,
+          drawing: { number: 1, elements: DRAW_API.elements },
+        });
+
+        const written = yield* ask(
+          request(BOARD, owner, {
+            method: "PUT",
+            id: planId,
+            body: { elements: [NOTE], appliedDrawing: 1 },
+          }),
+        );
+        assert.equal(written.status, HOSTED_HTTP_STATUS.OK);
+
+        // Luke draws again: the new drawing replaces his last and leaves the scene to the Mac.
+        yield* runDrawOnBoard({ userId: owner, planId }, unparsedWire(DRAW_API));
+        const board = yield* read();
+        assert.deepEqual(board.elements, [NOTE]);
+        assert.equal(board.appliedDrawing, 1);
+        assert.equal(board.drawing?.number, 2);
+      }),
+  );
+
+  it.effect(
+    "another account's board answers as none, and a scene the board does not admit is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        const save = (userId: string, body: WireBoundaryInput) =>
+          ask(request(BOARD, userId, { method: "PUT", id: planId, body }));
+
+        assert.deepEqual(yield* ask(request(BOARD, other, { id: planId })), notFound);
+        assert.deepEqual(yield* save(other, { elements: [NOTE], appliedDrawing: 0 }), notFound);
+        assert.equal(
+          (yield* runDrawOnBoard({ userId: other, planId }, unparsedWire(DRAW_API))).status,
+          DRAW_ON_BOARD_STATUS.NOT_DRAWN,
+        );
+        assert.deepEqual(
+          yield* save(owner, { elements: [{ ...NOTE, type: "image" }], appliedDrawing: 0 }),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* save(owner, { elements: [NOTE], appliedDrawing: 0, planId }),
+          invalid,
+        );
+        assert.deepEqual(yield* ask(request(BOARD, owner, { id: planId })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { board: { elements: [], appliedDrawing: 0 } },
+        });
+      }),
+  );
+
+  it.effect("a drawing whose arrow names an id it does not hold draws nothing, and says why", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+      const binding = { userId: owner, planId };
+      const arrowToNothing = {
+        type: BOARD_ELEMENT_TYPE.ARROW,
+        id: "calls",
+        from: "api",
+        to: "cache",
+      };
+
+      const dangling = yield* runDrawOnBoard(
+        binding,
+        unparsedWire({ elements: [...DRAW_API.elements, arrowToNothing] }),
+      );
+      const twice = yield* runDrawOnBoard(
+        binding,
+        unparsedWire({ elements: [...DRAW_API.elements, ...DRAW_API.elements] }),
+      );
+      const unreadable = yield* runDrawOnBoard(binding, unparsedWire({ elements: "a box" }));
+
+      assert.deepEqual(dangling, {
+        status: DRAW_ON_BOARD_STATUS.NOT_DRAWN,
+        reason: DRAW_ON_BOARD_REFUSAL.NO_END,
+      });
+      assert.equal(twice.status, DRAW_ON_BOARD_STATUS.NOT_DRAWN);
+      assert.equal(unreadable.status, DRAW_ON_BOARD_STATUS.NOT_DRAWN);
+      assert.deepEqual(yield* ask(request(BOARD, owner, { id: planId })), {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: { board: { elements: [], appliedDrawing: 0 } },
+      });
+    }),
+  );
+
+  it.effect("a deleted plan takes its board with it", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+      yield* runDrawOnBoard({ userId: owner, planId }, unparsedWire(DRAW_API));
+
+      yield* ask(request(ONE_PLAN, owner, { id: planId, method: "DELETE" }));
+
+      const rows = yield* db
+        .select({ planId: planBoard.planId })
+        .from(planBoard)
+        .where(eq(planBoard.planId, planId));
+      assert.deepEqual(rows, []);
+      assert.equal(
+        (yield* ask(request(BOARD, owner, { id: planId }))).status,
+        HOSTED_HTTP_STATUS.NOT_FOUND,
+      );
     }),
   );
 

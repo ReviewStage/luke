@@ -1,8 +1,6 @@
 /**
- * Luke's own native clients, and the one record shape they are provisioned
- * under. Both are public PKCE clients with no secret: the same terms, so the
- * record is written once and each client differs only in its id, its name,
- * and where its redirect lands.
+ * Luke's own native client, and the record shape it is provisioned under: a
+ * public PKCE client with no secret.
  */
 
 export const DESKTOP_OAUTH_CLIENT = {
@@ -16,18 +14,7 @@ export const DESKTOP_OAUTH_CLIENT = {
   type: "native",
 } as const;
 
-export const MOBILE_OAUTH_CLIENT = {
-  id: "luke-mobile",
-  name: "Luke for iOS",
-  scopes: ["openid", "profile", "email", "offline_access"],
-  redirectUris: ["dev.tryluke.ios://oauth/callback"],
-  tokenEndpointAuthMethod: "none",
-  grantTypes: ["authorization_code", "refresh_token"],
-  responseTypes: ["code"],
-  type: "native",
-} as const;
-
-export type OAuthClient = typeof DESKTOP_OAUTH_CLIENT | typeof MOBILE_OAUTH_CLIENT;
+export type OAuthClient = typeof DESKTOP_OAUTH_CLIENT;
 
 /** One `oauth_client` row, camelCase as the auth service's own Kysely adapter reads and writes it. */
 interface OAuthClientRecord {

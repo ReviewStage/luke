@@ -5,7 +5,6 @@ import { Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
-  EVE_CALLER,
   EVE_CANCEL_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveCaller,
@@ -17,22 +16,15 @@ import {
 /**
  * The host's three calls into eve, against an `HttpClient` that answers as
  * eve's routes document: the request each makes, how each answer reads, how
- * each of the two callers — an account's bearer, the deployment for an
- * account — identifies itself on the wire, how the not-active retry steps
- * through its ladder on the clock, and how a call that never reached eve
- * comes back typed.
+ * the deployment acting for an account identifies itself on the wire, how
+ * the not-active retry steps through its ladder on the clock, and how a call
+ * that never reached eve comes back typed.
  */
 
 const ORIGIN = "https://luke.test";
-const AUTHORIZATION = "Bearer token-1";
-const ACCOUNT_CALLER: EveCaller = { kind: EVE_CALLER.ACCOUNT, authorization: AUTHORIZATION };
 const CRON_SECRET = "cron-secret-1";
-const ACCOUNT = "user-observed-1";
-const DEPLOYMENT_CALLER: EveCaller = {
-  kind: EVE_CALLER.DEPLOYMENT,
-  secret: Redacted.make(CRON_SECRET),
-  account: ACCOUNT,
-};
+const ACCOUNT = "user-1";
+const CALLER: EveCaller = { secret: Redacted.make(CRON_SECRET), account: ACCOUNT };
 const CONVERSATION = "2b000000-0000-4000-8000-000000000001";
 const SESSION = "wrun_01M0000000000000000000001";
 
@@ -69,10 +61,7 @@ async function bodyText(body: RequestInit["body"]): Promise<string> {
  * answered: the fake throws where the network would, and the client's
  * error comes back typed.
  */
-function answeringEach(
-  answers: readonly (Answer | undefined)[],
-  caller: EveCaller = ACCOUNT_CALLER,
-) {
+function answeringEach(answers: readonly (Answer | undefined)[]) {
   const seen: Seen[] = [];
   const client = fakeHttpClientLayer(async (url, init) => {
     seen.push({
@@ -86,14 +75,14 @@ function answeringEach(
     return new Response(JSON.stringify(answer.body), { status: answer.status });
   });
   const sessions: Effect.Effect<EveSessions> = Effect.provide(
-    eveSessions({ origin: ORIGIN, caller }),
+    eveSessions({ origin: ORIGIN, caller: CALLER }),
     client,
   );
   return { seen, sessions };
 }
 
-function answering(status: number, body: EveAnswer, caller: EveCaller = ACCOUNT_CALLER) {
-  return answeringEach([{ status, body }], caller);
+function answering(status: number, body: EveAnswer) {
+  return answeringEach([{ status, body }]);
 }
 
 const NOT_ACTIVE: Answer = { status: 409, body: { ok: false, code: "session_not_active" } };
@@ -105,7 +94,7 @@ const ACCEPTED_FOLLOW_UP: Answer = {
 const MESSAGE = { conversationId: CONVERSATION, turn: BRAIN_HOST_TURN.TYPED, message: "hello" };
 
 it.effect(
-  "opening posts the first message under the conversation and turn headers with the caller's bearer, and reads the session eve names",
+  "opening posts the first message under the conversation and turn headers with the deployment's bearer and the account it acts for, and reads the session eve names",
   () =>
     Effect.gen(function* () {
       const { seen, sessions } = answering(202, {
@@ -122,41 +111,12 @@ it.effect(
       assert.ok(request);
       assert.equal(request.url, `${ORIGIN}/eve/v1/session`);
       assert.equal(request.method, "POST");
-      assert.equal(request.headers.get("authorization"), AUTHORIZATION);
+      assert.equal(request.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
       assert.equal(request.headers.get("content-type"), "application/json");
-      assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), null);
+      assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
       assert.deepEqual(request.body, { message: "hello" });
-    }),
-);
-
-it.effect(
-  "the deployment calls under its own secret and names the account it acts for in the account header, on an opening and a follow-up alike",
-  () =>
-    Effect.gen(function* () {
-      const observation = { ...MESSAGE, turn: BRAIN_HOST_TURN.OBSERVATION };
-      const opened = answering(
-        202,
-        { ok: true, sessionId: SESSION, status: "accepted" },
-        DEPLOYMENT_CALLER,
-      );
-      assert.equal(
-        (yield* Effect.flatMap(opened.sessions, (eve) => eve.open(observation))).outcome,
-        EVE_SEND_OUTCOME.ACCEPTED,
-      );
-      const followed = answeringEach([ACCEPTED_FOLLOW_UP], DEPLOYMENT_CALLER);
-      assert.equal(
-        (yield* Effect.flatMap(followed.sessions, (eve) => eve.send(SESSION, observation))).outcome,
-        EVE_SEND_OUTCOME.ACCEPTED,
-      );
-      for (const seen of [opened.seen[0], followed.seen[0]]) {
-        assert.ok(seen);
-        assert.equal(seen.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
-        assert.equal(seen.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
-        assert.equal(seen.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.OBSERVATION);
-        assert.equal(seen.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
-      }
     }),
 );
 
@@ -176,6 +136,9 @@ it.effect(
       assert.equal(accepted.seen.length, 1);
       assert.equal(accepted.seen[0]?.url, `${ORIGIN}/eve/v1/session/${SESSION}`);
       assert.equal(accepted.seen[0]?.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
+      assert.equal(accepted.seen[0]?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+      assert.equal(accepted.seen[0]?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
+      assert.equal(accepted.seen[0]?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
 
       const refused = answering(403, { ok: false, code: "forbidden" });
       assert.deepEqual(

@@ -33,15 +33,11 @@ export interface HostSettingSideEffectDependencies {
    * voice for as long as it idled, which reads as the choice not taking.
    */
   readonly endLiveSession: Effect.Effect<void>;
-  /** The hold read again for the panel, which draws it; nothing on this side queues speech to hold since E5-3. */
-  readonly refreshAnnouncementHold: Effect.Effect<void>;
-  /** The device heartbeat sent now, carrying the quiet instant as it stands after the write. */
-  readonly reportPresence: Effect.Effect<void>;
 }
 
 /**
  * The side effects a setting has in the host. The client applies its own — the
- * login item, the Dock, the displays, the form factor, the keys, the duck —
+ * login item, the Dock, the keys, the duck —
  * from the same answered snapshot; nothing here reaches a window.
  */
 export function hostSettingSideEffects(dependencies: HostSettingSideEffectDependencies) {
@@ -49,8 +45,6 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.NONE]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.DOCK]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.DISPLAYS]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.FORM_FACTOR]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.TALK_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
@@ -61,13 +55,5 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     // session can stand, so the end is a no-op there.
     [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) =>
       Effect.andThen(dependencies.setVoice(settings.voice), dependencies.endLiveSession),
-    // The hold is the service's to apply since E5-3: a briefing is spoken by
-    // the service's own exchange against the quiet instant this device's
-    // heartbeat reports, which folds the pause and the meeting hold both. So
-    // the toggle moves two things: the hold the panel draws, and the row on
-    // the service, by a heartbeat sent now rather than at the next scheduled
-    // beat, so a pause released frees the account's briefings at once.
-    [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () =>
-      Effect.andThen(dependencies.refreshAnnouncementHold, dependencies.reportPresence),
   } satisfies HostSettingSideEffects;
 }

@@ -31,20 +31,17 @@ const PANEL: ActSender = {
   sender: {} as WebContents,
   panel: true,
   voice: false,
-  introduction: false,
 };
 
 function rows(overrides: {
   updateSetting?: () => Effect.Effect<SettingsUpdateResult, Error>;
-  connectGoogleCalendar?: () => Effect.Effect<SettingsUpdateResult, Error>;
   applyLoginItem?: () => void;
   lastSettings?: () => AppSettings | undefined;
 }) {
   const fragment = settingsActRows({
-    // SAFETY: these rows reach only the three host calls named here.
+    // SAFETY: these rows reach only the two host calls named here.
     host: {
       updateSetting: overrides.updateSetting ?? (() => Effect.succeed(accepted())),
-      connectGoogleCalendar: overrides.connectGoogleCalendar ?? (() => Effect.succeed(accepted())),
       settingsSnapshot: () => Effect.succeedNone,
     } as unknown as HostOperator,
     reporterOf: () => "reporter",
@@ -60,7 +57,6 @@ function rows(overrides: {
     panels: {} as PanelManager,
     // SAFETY: as above, the duck.
     mediaDuck: {} as MediaDuckController,
-    openExternal: () => undefined,
   });
   // SAFETY: only the settings rows are under test; the router dispatches on the
   // kind alone, so the kinds this fragment does not answer are never reached.
@@ -116,11 +112,11 @@ it.effect("a client with no snapshot at all refuses through the act's own senten
   Effect.gen(function* () {
     const router = rows({
       lastSettings: () => undefined,
-      connectGoogleCalendar: () => Effect.die(new Error("calendar.connectGoogle was refused")),
+      updateSetting: () => Effect.die(new Error("settings.update was refused")),
     });
-    assert.deepEqual(yield* router.performAct({ kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE }, PANEL), {
+    assert.deepEqual(yield* router.performAct(OPEN_AT_LOGIN, PANEL), {
       status: "refused",
-      reason: ACT[ACT_KIND.CALENDAR_CONNECT_GOOGLE].refusal,
+      reason: ACT[ACT_KIND.SETTING_UPDATE].refusal,
     });
   }),
 );

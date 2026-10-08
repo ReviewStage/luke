@@ -7,26 +7,28 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
-import { connectGitHubPageAddress } from "@sidecar/hosted/connect-github-page";
+import { DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanningDocument,
-  type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
   type PlanningView,
+  planningBoardSaveParamsSchema,
   planningSetFolderParamsSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, Result, Schema, type Scope, Semaphore } from "effect";
+import { Effect, Option, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
+import { planCode } from "./plan-code.js";
 import { servePlanningCommands } from "./planning-commands.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -38,13 +40,25 @@ import type { RunMode } from "./run-mode.js";
  * happens. Every write happens during a planning call, and the notetaker's
  * drafts arrive on that call's own socket and are drawn in place: the list
  * and the open plan are read when the Plans tab shows, when a plan opens, and
- * when one starts, and never on a clock. The one loop here is the open plan's
- * folder commands (`planning-commands.ts`), which the planning model asks
- * this Mac to run.
+ * when one starts, and never on a clock. The open plan's whiteboard is read
+ * with its document, and again whenever the call's activity says a draw by
+ * the planning model just settled or the planning model stopped working, since
+ * a draw happens only inside its turn; the panel saves the board's scene
+ * through here and the view takes the board as the service answered it. The
+ * loops here are the open plan's folder commands (`planning-commands.ts`),
+ * which the planning model asks this Mac to run, those board reads, and the
+ * code Luke puts on screen during a call (`plan-code.ts`), read from the
+ * plan's folder.
  */
 
 /** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
+
+/** One ask to put code on screen, for the plan it was named about. */
+interface CodeAsk {
+  readonly planId: string;
+  readonly ref: CodeRef;
+}
 
 /** The folder of this Mac each plan reads, by plan id, as this Mac alone records it. */
 export type PlanFolders = Readonly<Record<string, string>>;
@@ -73,7 +87,14 @@ export function planFoldersFile(
 /** The service's side of the plans, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
-  "list" | "open" | "create" | "delete" | "repositories" | "claimCommand" | "settleCommand"
+  | "list"
+  | "open"
+  | "create"
+  | "delete"
+  | "claimCommand"
+  | "settleCommand"
+  | "readBoard"
+  | "saveBoard"
 >;
 
 export interface PlanningDependencies {
@@ -84,21 +105,9 @@ export interface PlanningDependencies {
   folders: JsonStateFile<PlanFolders>;
   /**
    * Ends the planning call standing about any plan but `keep`, and waits for
-   * it to end; a desk session and the call about `keep` are left standing.
+   * it to end; the call about `keep` is left standing.
    */
   endPlanCall: (keep: string | undefined) => Effect.Effect<void>;
-  /**
-   * What opening the Connect GitHub page needs: the service it is on, the
-   * account this Mac is signed in as, which the page links GitHub for and no
-   * other, and the browser to open it in. The link itself happens there,
-   * under the browser's own Luke session; this process never holds GitHub's
-   * token.
-   */
-  connectGitHub: {
-    serviceBaseUrl: string;
-    accountId: () => Effect.Effect<string | undefined>;
-    openExternal: (url: string) => Effect.Effect<void>;
-  };
 }
 
 export interface PlanningComposer extends Composer {
@@ -121,6 +130,14 @@ export interface PlanningComposer extends Composer {
    * doing.
    */
   showActivity: (activity: PlanActivityFrame) => void;
+  /**
+   * Puts code of the open plan's folder on screen, as Luke named it on its
+   * call: read and coloured here, the newest ask replacing any still being
+   * read. An ask about any other plan is dropped.
+   */
+  showCode: (planId: string, ref: CodeRef) => void;
+  /** The call about `planId` ended: the code it put on screen goes with it. */
+  callEnded: (planId: string) => void;
 }
 
 /**
@@ -137,7 +154,7 @@ export interface PlanningComposer extends Composer {
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client, folders, endPlanCall, connectGitHub } = dependencies;
+  const { kernel, account, client, folders, endPlanCall } = dependencies;
   const idleView = (): PlanningView => ({ ...IDLE_PLANNING_VIEW, folders: folders.read() ?? {} });
 
   /** Records `folderPath` as the plan's folder on this Mac, and draws it. */
@@ -169,10 +186,25 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
   }
 
-  /** The view with no activity, as a plan left behind leaves it. */
-  function withoutActivity({ activity: _activity, ...rest }: PlanningView): PlanningView {
+  /**
+   * Bumped whenever the code on screen is cleared, so a read still out when
+   * the call ended or the plan was left lands on nothing.
+   */
+  let codeGeneration = 0;
+
+  /** The view with no activity, no board, and no code, as a plan left behind leaves it. */
+  function withoutActivity({
+    activity: _activity,
+    board: _board,
+    code: _code,
+    ...rest
+  }: PlanningView): PlanningView {
+    codeGeneration += 1;
     return rest;
   }
+
+  /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
+  const boardReads = yield* Queue.sliding<string>(1);
 
   /** The document of `planId` as held now, if the held one is that plan's. */
   function heldPlanOf(planId: string): PlanningDocument["plan"] {
@@ -221,6 +253,15 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     });
   }
 
+  /** Reads the active plan's board; a failed read keeps the board drawn. */
+  function readBoard(planId: string) {
+    return Effect.gen(function* () {
+      const board = yield* Effect.provide(client.readBoard(planId), FetchHttpClient.layer);
+      if (board === undefined || view.activePlanId !== planId) return;
+      write({ board });
+    });
+  }
+
   function showDraft(draft: PlanDraftFrame): void {
     const held = heldPlanOf(draft.planId);
     if (held === undefined || view.activePlanId !== draft.planId) return;
@@ -233,10 +274,48 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     write({ document: { status: PLANNING_READ.READY, plan } });
   }
 
+  /**
+   * Shows the call's activity, and asks for the board again where it says a
+   * draw just settled: the planning model's pending call was a draw and is
+   * not any more, or the planning model stopped working, which also covers a
+   * draw that settled between two words about it.
+   */
   function showActivity({ type: _type, planId, ...activity }: PlanActivityFrame): void {
     if (view.activePlanId !== planId) return;
+    const was = view.activity?.planner;
+    const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
+    const stopped = was !== undefined && activity.planner === undefined;
     write({ activity });
+    if (drew || stopped) Queue.offerUnsafe(boardReads, planId);
   }
+
+  // Note that only the newest ask is kept, because code named while an older
+  // file is still being read is what the call is looking at now.
+  const codeAsks = yield* Queue.sliding<CodeAsk>(1);
+
+  function showCode(planId: string, ref: CodeRef): void {
+    if (view.activePlanId !== planId) return;
+    Queue.offerUnsafe(codeAsks, { planId, ref });
+  }
+
+  function callEnded(planId: string): void {
+    if (view.activePlanId !== planId || view.code === undefined) return;
+    codeGeneration += 1;
+    const { code: _code, ...rest } = view;
+    view = rest;
+    publish();
+  }
+
+  /** Reads each ask's code from the plan's folder and draws it, unless the call moved on meanwhile. */
+  const serveCode = Effect.forever(
+    Effect.gen(function* () {
+      const ask = yield* Queue.take(codeAsks);
+      const generation = codeGeneration;
+      const code = yield* planCode(view.folders[ask.planId], ask.ref);
+      if (view.activePlanId !== ask.planId || codeGeneration !== generation) return;
+      write({ code });
+    }),
+  );
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
@@ -247,6 +326,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             yield* readList;
             const planId = view.activePlanId;
             if (planId !== undefined) yield* readDocument(planId);
+            if (planId !== undefined) yield* readBoard(planId);
           }),
         );
         return {};
@@ -273,6 +353,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         yield* serial(
           Effect.gen(function* () {
             yield* readDocument(planId);
+            yield* readBoard(planId);
             // Opening moved the plan to the head of the list.
             yield* readList;
           }),
@@ -355,26 +436,25 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         recordFolder(read.success.planId, read.success.folderPath);
         return {};
       }),
-    [GATEWAY_METHOD.PLANNING_REPOSITORIES]: () =>
+    // A save of another plan than the open one is dropped: its board is not drawn.
+    [GATEWAY_METHOD.PLANNING_BOARD_SAVE]: (params) =>
       Effect.gen(function* () {
-        if (!gate()) {
-          return carried<PlanningRepositoriesAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
-        }
-        const listed = yield* Effect.provide(client.repositories(), FetchHttpClient.layer);
-        return carried<PlanningRepositoriesAnswer>(
-          listed.ok ? listed.answer : { failure: listed.failure },
+        const read = readEither(planningBoardSaveParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("saving a board names a plan and its scene");
+        const { planId, elements, appliedDrawing } = read.success;
+        if (!gate() || view.activePlanId !== planId) return { saved: false };
+        return yield* serial(
+          Effect.gen(function* () {
+            const board = yield* Effect.provide(
+              client.saveBoard(planId, elements, appliedDrawing),
+              FetchHttpClient.layer,
+            );
+            if (board === undefined) return { saved: false };
+            if (view.activePlanId === planId) write({ board });
+            return { saved: true };
+          }),
         );
-      }),
-    // Opened for a signed-in account only; the panel reads the repositories
-    // again once the developer is back, so nothing here waits on the link.
-    [GATEWAY_METHOD.PLANNING_CONNECT_GITHUB]: () =>
-      Effect.gen(function* () {
-        if (!gate()) return { opened: false };
-        const accountId = yield* connectGitHub.accountId();
-        yield* connectGitHub.openExternal(
-          connectGitHubPageAddress(connectGitHub.serviceBaseUrl, accountId),
-        );
-        return { opened: true };
       }),
   };
 
@@ -384,6 +464,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     activePlanId: () => view.activePlanId,
     showDraft,
     showActivity,
+    showCode,
+    callEnded,
     reset: Effect.gen(function* () {
       yield* endPlanCall(undefined);
       yield* serial(
@@ -393,14 +475,25 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The open plan's folder commands; every read of the plans is an ask's.
-    lifetime: servePlanningCommands({
-      client,
-      openPlan: () => {
-        const planId = view.activePlanId;
-        if (!gate() || planId === undefined) return undefined;
-        return { planId, folder: view.folders[planId] };
-      },
+    // The open plan's folder commands, the board reads a settled draw asks
+    // for, and its code on screen; every other read of the plans is an ask's.
+    lifetime: Effect.gen(function* () {
+      yield* Effect.forkScoped(serveCode);
+      yield* servePlanningCommands({
+        client,
+        openPlan: () => {
+          const planId = view.activePlanId;
+          if (!gate() || planId === undefined) return undefined;
+          return { planId, folder: view.folders[planId] };
+        },
+      });
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(boardReads), (planId) =>
+            gate() ? serial(readBoard(planId)) : Effect.void,
+          ),
+        ),
+      );
     }),
   };
 });

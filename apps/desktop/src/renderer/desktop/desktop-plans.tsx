@@ -1,20 +1,24 @@
 import { CheckIcon, CloseIcon, CopyIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
+import { CodePane } from "../planning/code-pane";
 import { NewPlanForm } from "../planning/new-plan-form";
+import { PlanBoard } from "../planning/plan-board";
 import { PlanBody } from "../planning/plan-body";
 import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   DOCUMENT_REGION,
   folderLine,
+  PLAN_VIEW,
   PLANS_PAGE,
 } from "../planning/planning-model";
-import { DeletePlanButton, MicrophoneRow } from "../planning/planning-parts";
+import { DeletePlanButton, MicrophoneRow, PlanViewSwitch } from "../planning/planning-parts";
 import type { PlansControl } from "../planning/use-plans-tab";
 
 /**
- * The work column while Plans is chosen: the open plan as a document with
- * its toolbar above and the call bar below, the new-plan form, or the empty
- * state that offers one. The plan list itself is the sidebar's.
+ * The work column while Plans is chosen: the open plan as a document or its
+ * whiteboard, with its toolbar above and the call bar below, the new-plan
+ * form, or the empty state that offers one. The plan list itself is the
+ * sidebar's.
  */
 
 /** The strip across the top of the work column, which is also the window's drag handle. */
@@ -134,6 +138,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             Choose folder…
           </button>
         ) : null}
+        <PlanViewSwitch planView={plans.planView} />
         <CopyButton copy={plans.copy} />
         <DeletePlanButton
           key={plan.id}
@@ -142,9 +147,17 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
         />
         {closeButton}
       </Toolbar>
-      <section className="desktop-document" aria-label={plan.name}>
-        <PlanBody plan={plan} live={plans.live} />
-      </section>
+      {plans.planView.shown === PLAN_VIEW.BOARD ? (
+        <section className="desktop-document desktop-board">
+          <PlanBoard planId={plan.id} board={plans.board} />
+          {plans.code === undefined ? null : <CodePane code={plans.code} />}
+        </section>
+      ) : (
+        <section className="desktop-document" aria-label={plan.name}>
+          <PlanBody plan={plan} live={plans.live} />
+          {plans.code === undefined ? null : <CodePane code={plans.code} />}
+        </section>
+      )}
       <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>
         <MicrophoneRow status={plans.status} microphone={plans.microphone} stop={plans.stop} />
       </div>

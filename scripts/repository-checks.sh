@@ -24,7 +24,6 @@ required_files=(
     apps/desktop/scripts/electron-builder-config.mjs
     apps/desktop/scripts/electron-builder-hooks.mjs
     apps/desktop/scripts/prepare-builder-assets.mjs
-    apps/desktop/native/macos/ScreenGeometry.swift
     apps/desktop/native/macos/TalkKey.swift
     packages/wire/package.json
     scripts/release-macos.sh
@@ -44,8 +43,6 @@ required_files=(
     packages/hosted/CLAUDE.md
     packages/live/AGENTS.md
     packages/live/CLAUDE.md
-    packages/providers/AGENTS.md
-    packages/providers/CLAUDE.md
     packages/surface/AGENTS.md
     packages/surface/CLAUDE.md
     .conductor/settings.toml
@@ -101,49 +98,11 @@ if [[ -n "$engines_drift" ]]; then
     exit 1
 fi
 
-# The runtime keeps two doors: the barrel, which reaches `node:fs` and croner,
-# and `@sidecar/runtime/vocabulary`, which the packages below the runtime import
-# so neither reaches a renderer bundle or a web function. The split only holds
-# while no name leaves through both — a name behind two doors is a name a
-# consumer can reach through the wrong one, and `export *` silently drops one of
-# them where the web server's `core.ts` opens both.
-node --input-type=module -e '
-  import { readFile } from "node:fs/promises";
-  import path from "node:path";
-  const directory = path.join(process.argv[1], "packages/runtime/src");
-  const exported = async (file) => {
-    const text = await readFile(path.join(directory, file), "utf8");
-    const names = new Set();
-    for (const block of text.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
-      for (const specifier of block[1].split(",")) {
-        const name = specifier.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop();
-        if (name) names.add(name.trim());
-      }
-    }
-    for (const declaration of text.matchAll(
-      /export\s+(?:declare\s+)?(?:const|function|class|interface|type|enum)\s+(\w+)/g,
-    )) {
-      names.add(declaration[1]);
-    }
-    return names;
-  };
-  const barrel = await exported("index.ts");
-  const vocabulary = await exported("vocabulary.ts");
-  const both = [...vocabulary].filter((name) => barrel.has(name)).sort();
-  if (both.length > 0) {
-    process.stderr.write(
-      `error: these names leave @sidecar/runtime through both doors: ${both.join(", ")}\n`,
-    );
-    process.exit(1);
-  }
-' "$SIDECAR_REPO_ROOT"
-
-# The packages below the runtime (live, hosted, voice, devtrace, memory) open
+# The packages below the runtime (live, hosted, voice, devtrace) open
 # `@sidecar/runtime/vocabulary` precisely because it resolves no Node module
 # and no Effect layer that would carry one in. The renderer's own `node:` grep
 # (below) can only see files inside one directory; this walks the door's
-# actual relative-import graph, the way the barrel/vocabulary check above
-# walks its export lists, so a later re-export cannot quietly reintroduce
+# actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/unstable/sql` a few files deep.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
@@ -174,91 +133,6 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# A tool module under `packages/brain/src/tools/` reaches the brain only
-# through the context its `execute` is handed: it imports the packages below
-# the brain and its own directory, never the agent, the turn runner, the
-# ledger, or anything else of the brain by relative path. That is what lets a
-# tool be read, tested, and moved to another runtime without the agent that
-# runs it, and what keeps `admitEffect()` inside `execute` rather than beside
-# it.
-node --input-type=module -e '
-  import { readdir, readFile } from "node:fs/promises";
-  import path from "node:path";
-  const directory = path.join(process.argv[1], "packages/brain/src/tools");
-  const reaching = [];
-  for (const file of (await readdir(directory)).filter((name) => name.endsWith(".ts")).sort()) {
-    const text = await readFile(path.join(directory, file), "utf8");
-    for (const match of text.matchAll(/from\s+"([^"]+)"/g)) {
-      const specifier = match[1];
-      if (specifier.startsWith("../") || specifier.startsWith("@sidecar/brain")) {
-        reaching.push(`${file}: ${specifier}`);
-      }
-    }
-  }
-  if (reaching.length > 0) {
-    process.stderr.write(
-      `error: a tool module reaches into the brain outside its directory: ${reaching.join(", ")}\n`,
-    );
-    process.exit(1);
-  }
-' "$SIDECAR_REPO_ROOT"
-
-# Admission has one home in the brain: a tool module's own `execute`, under
-# `packages/brain/src/tools/`. Nothing else of the brain, and nothing in the
-# memory package, may call `admitEffect()` or reach for it, so no path can
-# hand a raw call to admit and carry in one breath. The host's own row presses
-# admit through the same gauntlet on their own terms and are outside this
-# check. The check reads import lists rather than call sites, because a file
-# that never imports the gauntlet cannot call it.
-node --input-type=module -e '
-  import { readdir, readFile } from "node:fs/promises";
-  import path from "node:path";
-  const root = process.argv[1];
-  const scopes = [
-    { directory: "packages/brain/src", allowed: "packages/brain/src/tools" },
-    { directory: "packages/memory/src", allowed: undefined },
-  ];
-  const reaching = [];
-  for (const scope of scopes) {
-    const directory = path.join(root, scope.directory);
-    const entries = await readdir(directory, { withFileTypes: true, recursive: true });
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
-      const file = path.join(entry.parentPath, entry.name);
-      const relative = path.relative(root, file);
-      if (scope.allowed && relative.startsWith(scope.allowed)) continue;
-      const text = await readFile(file, "utf8");
-      for (const match of text.matchAll(/import\s*(?:type\s+)?\{([^}]*)\}\s*from\s+"@sidecar\/actions"/g)) {
-        const names = match[1].split(",").map((name) => name.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]);
-        if (names.includes("admitEffect")) reaching.push(relative);
-      }
-    }
-  }
-  if (reaching.length > 0) {
-    process.stderr.write(
-      `error: admitEffect() is reached outside the brain tool modules: ${reaching.join(", ")}\n`,
-    );
-    process.exit(1);
-  }
-' "$SIDECAR_REPO_ROOT"
-
-# Everything this Mac observes, draws, and acts on arrives through the
-# service, never through a provider adapter held here: the host and the
-# desktop import nothing from `@sidecar/providers`, so no path from a turn, a
-# row, or a window can reach a provider plugin, a CLI, or a local file without
-# the service's admission in between. The web functions still compile the
-# Conductor cloud adapter out of that package by relative path, which is the
-# service's own read and not this Mac's.
-host_provider_imports=$(grep -rEn 'from "@sidecar/providers(/[^"]*)?"' \
-    --include='*.ts' --include='*.tsx' --exclude='*.test.ts' --exclude='*.test.tsx' \
-    "$SIDECAR_REPO_ROOT"/packages/host/src \
-    "$SIDECAR_REPO_ROOT"/apps/desktop/src || true)
-if [[ -n "$host_provider_imports" ]]; then
-    printf 'error: this Mac reaches a provider adapter outside the service:\n%s\n' \
-        "$host_provider_imports" >&2
-    exit 1
-fi
-
 # The brand artwork has one source and three sets of committed outputs cut from
 # it: the SVGs, the face the renderer draws, and the motions it plays. If the
 # copies no longer match the source, one of them is telling a story the artwork
@@ -277,7 +151,7 @@ pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts -
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
 # production answers 404 (LUKE-186). Every /api/ literal and path builder under
-# apps/desktop/src, apps/ios, packages/*/src, scripts, and tools must resolve
+# apps/desktop/src, packages/*/src, scripts, and tools must resolve
 # to a rewrite of the table or an extensionless alias the Build Output emits.
 pnpm --dir "$SIDECAR_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
@@ -325,58 +199,12 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
-# Every provider passes one contract suite, and its recorded answers are the
-# ruler. A golden is written by the suite itself in one canonical formatting —
-# object keys sorted at every depth, two-space indent, a trailing newline — so
-# a hand edit is a claim about a provider's behaviour that no provider made.
-# Biome is kept off the fixture tree for the same reason, which leaves this as
-# the only thing that would notice.
-node --input-type=module -e '
-  import { readdir, readFile } from "node:fs/promises";
-  import path from "node:path";
-  const root = path.join(process.argv[1], "packages/session/fixtures/providers");
-  const sorted = (value) =>
-    `${JSON.stringify(
-      value,
-      (_key, entry) =>
-        typeof entry !== "object" || entry === null || Array.isArray(entry)
-          ? entry
-          : Object.fromEntries(Object.keys(entry).sort().map((key) => [key, entry[key]])),
-      2,
-    )}\n`;
-  const drifted = [];
-  for (const provider of await readdir(root)) {
-    const goldenDirectory = path.join(root, provider, "golden");
-    const names = await readdir(goldenDirectory).catch(() => []);
-    for (const name of names) {
-      const filePath = path.join(goldenDirectory, name);
-      const recorded = await readFile(filePath, "utf8");
-      const canonical = name.endsWith(".json")
-        ? sorted(JSON.parse(recorded))
-        : recorded.endsWith("\n")
-          ? recorded
-          : `${recorded}\n`;
-      if (recorded !== canonical) drifted.push(path.relative(process.argv[1], filePath));
-    }
-  }
-  if (drifted.length > 0) {
-    process.stderr.write(
-      `error: a recorded golden is not in the formatting the contract suite writes (record it with LUKE_UPDATE_FIXTURES=1 rather than editing it):\n${drifted.join("\n")}\n`,
-    );
-    process.exit(1);
-  }
-' "$SIDECAR_REPO_ROOT"
-
-# docs/DESIGN.md admits one native motion on the surface: the Conversation thread's
-# stamp column, scrolled in by the thread's own sideways scroll and put back by
-# scroll snapping, because only the browser sees the fingers lift. Everything
-# else moves on the spring, so a snap anywhere else is a second exception the
-# contract has not granted.
-snaps_outside_history=$(grep -rln 'scroll-snap-type' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer/styles" |
-    grep -v '/conversation\.css$' || true)
-if [[ -n "$snaps_outside_history" ]]; then
-    printf 'error: scroll snapping is the Conversation thread'"'"'s alone (docs/DESIGN.md); found in:\n%s\n' \
-        "$snaps_outside_history" >&2
+# docs/DESIGN.md admits no native motion on the surface: everything moves on
+# the spring, so a snap is an exception the contract has not granted.
+snaps=$(grep -rln 'scroll-snap-type' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer/styles" || true)
+if [[ -n "$snaps" ]]; then
+    printf 'error: the surface moves on the spring alone (docs/DESIGN.md); scroll snapping found in:\n%s\n' \
+        "$snaps" >&2
     exit 1
 fi
 
@@ -533,64 +361,6 @@ literal_effect_versions=$(grep -rnE '"effect": *"[^c]' --include=package.json \
 if [[ -n "$literal_effect_versions" ]]; then
     printf 'error: "effect" must be declared as "catalog:", never a literal version:\n%s\n' \
         "$literal_effect_versions" >&2
-    exit 1
-fi
-
-# `Admitted` is a nominal brand behind a module-private `unique symbol`, and the
-# whole point is that the set is entered in one place. The type system already
-# refuses an object literal, but a cast spells the brand out and would enter the
-# set from anywhere it is written, so the cast lives in the two wire modules that
-# define and re-shape the brand and in `admitEffect()`, the one minter. An Effect
-# `Schema.brand` would be a third way in, which is why admission is not one.
-admitted_casts=$(grep -rEn --exclude-dir=node_modules --include='*.ts' --include='*.tsx' 'as Admitted\b' \
-    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" |
-    grep -vE '/(packages/actions/src/admit\.ts|packages/wire/src/admitted\.ts|packages/wire/src/testing/admitted[^/]*\.ts):' || true)
-if [[ -n "$admitted_casts" ]]; then
-    printf 'error: the Admitted brand is cast only in admitEffect() and wire'"'"'s admitted modules — reshapeAdmitted() is how everything else re-shapes what admission already minted:\n%s\n' \
-        "$admitted_casts" >&2
-    exit 1
-fi
-
-# The SpeechClaim brand is the one authorization to speak a briefing, and
-# claimSpeech() in the speech store module is its one minter: a briefing
-# append takes a claim, so an append that never claimed does not compile, and
-# that holds only while nothing else can spell the brand into being.
-speech_claim_casts=$(grep -rEn --exclude-dir=node_modules --include='*.ts' --include='*.tsx' 'as SpeechClaim\b' \
-    "$SIDECAR_REPO_ROOT/apps" "$SIDECAR_REPO_ROOT/packages" "$SIDECAR_REPO_ROOT/tools" |
-    grep -vE '/apps/web/server/hosted/store/speech\.ts:' || true)
-if [[ -n "$speech_claim_casts" ]]; then
-    printf 'error: the SpeechClaim brand is minted only by claimSpeech() in the speech store module — a briefing is spoken with the claim it answered, never one spelled elsewhere:\n%s\n' \
-        "$speech_claim_casts" >&2
-    exit 1
-fi
-
-# A file ported from OpenClaw stays faithful to the pinned `b7528507`, so a
-# later port of an upstream change reads as a diff of that source and nothing
-# else. Effect reaches these through a sibling `*.effect.ts` beside each one,
-# which is why the list is spelled out rather than matched by a pattern: the
-# sibling imports `effect` and the port never does.
-openclaw_ported_files=(
-    packages/runtime/src/child-records.ts
-    packages/runtime/src/workspace.ts
-    packages/runtime/src/prompt.ts
-    packages/runtime/src/tool-policy.ts
-    packages/runtime/src/storage.ts
-    packages/runtime/src/skills.ts
-    packages/memory/src/defaults.ts
-    packages/memory/src/flush.ts
-)
-openclaw_effect_imports=""
-for ported in "${openclaw_ported_files[@]}"; do
-    if [[ ! -f "$SIDECAR_REPO_ROOT/$ported" ]]; then
-        printf 'error: this check names a file that no longer exists: %s\n' "$ported" >&2
-        exit 1
-    fi
-    openclaw_effect_imports+=$(grep -nE 'from "(effect(/[^"]+)?|@effect/[^"]+)"|require\("(effect(/[^"]+)?|@effect/[^"]+)"\)' \
-        "$SIDECAR_REPO_ROOT/$ported" | sed "s|^|$ported:|" || true)
-done
-if [[ -n "$openclaw_effect_imports" ]]; then
-    printf 'error: these files are ported from OpenClaw b7528507 and must import nothing from effect — put the Effect surface in the sibling *.effect.ts beside each one:\n%s\n' \
-        "$openclaw_effect_imports" >&2
     exit 1
 fi
 

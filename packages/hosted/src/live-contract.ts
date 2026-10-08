@@ -2,10 +2,6 @@ import {
   type InitialItem,
   LIVE_INPUT_BOUNDS,
   LIVE_VOICE_LIST,
-  LiveAudioFormatSchema,
-  OBSERVED_VALUE_LENGTH,
-  PROACTIVE_SPEECH_KIND,
-  ProactiveSpeechKindSchema,
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
@@ -13,21 +9,18 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { planDocumentSchema } from "./plan-wire.js";
+import { codeRefSchema, planDocumentSchema } from "./plan-wire.js";
 import { planActivitySchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
- * A device's contract with the hosted voice service: the three Vercel
- * Functions of Luke's own service that hold the GPT Live project key. Two
- * create a WebRTC session at OpenAI (`POST /v1/live/sessions`) from the
- * device's offer, attach the trusted sideband themselves, and then carry Live
- * events between the device and OpenAI untouched; the third opens a primary
- * WebSocket to OpenAI of the service's own for a device with no WebRTC, and
- * carries that device's audio up and Luke's down over the one socket beside
- * the events. A device reaches each over one WebSocket per function
- * connection, and what travels on that socket before the Live events do is
- * declared here, once, for both ends.
+ * The desktop's contract with the hosted voice service: the Vercel Function
+ * of Luke's own service that holds the GPT Live project key. It creates a
+ * WebRTC session at OpenAI (`POST /v1/live/sessions`) from the desktop's
+ * offer, attaches the trusted sideband itself, and then carries Live events
+ * between the desktop and OpenAI untouched. The desktop reaches it over one
+ * WebSocket per function connection, and what travels on that socket before
+ * the Live events do is declared here, once, for both ends.
  */
 
 /** The origin of Luke's own service, the same one every hosted call is addressed to. */
@@ -110,16 +103,16 @@ export function hostedVoiceServiceOrigin(options: {
  * connection, which the platform closes at the function's maximum duration.
  */
 export const VOICE_SERVICE_FRAME = {
-  /** The device's opening frame for a new session: the offer, the voice, the seed, and the plan a planning call is about; or, on the audio route, the voice and the format. */
+  /** The desktop's opening frame for a new session: the offer, the voice, the seed, and the plan the call is about. */
   SESSION_CREATE: "session.create",
-  /** The service's answer once OpenAI has created the session and the sideband stands, or once the service's own socket to it has started. */
+  /** The service's answer once OpenAI has created the session and the sideband stands. */
   SESSION_CREATED: "session.created",
   /** The desktop's opening frame on a fresh connection to a session this account created. */
   SESSION_ATTACH: "session.attach",
   /** The service's answer once its sideband stands on that session again. */
   SESSION_ATTACHED: "session.attached",
   /**
-   * One of the two frames the desktop sends after the handshake in this
+   * One of the three frames the desktop sends after the handshake in this
    * vocabulary: whether its peer has gone quiet, as the renderer's own idle
    * window reads it. The service's exchange decides the idle close against
    * the appends it made itself, so the report crosses to it; the relay reads
@@ -134,58 +127,35 @@ export const VOICE_SERVICE_FRAME = {
    */
   SESSION_STOP: "session.stop",
   /**
-   * The third: a beat the desktop decided is owed, one of the build-fixed
-   * scripts Luke says unprompted, with the bounded observed values that
-   * script may mention and nothing else. The words are the service's: its
-   * exchange speaks the script through `speakBeat`, so no sentence of the
-   * desktop's composing reaches a session.
-   */
-  SESSION_BEAT: "session.beat",
-  /**
-   * The fourth: the hang-up. The service owns a session's `session.close`,
+   * The third: the hang-up. The service owns a session's `session.close`,
    * as the server-controls guide asks one owner per action, so the desktop
    * asks for the close rather than sending it, and the service's exchange
    * sends the one close and records what `session.closed` reports. The
-   * relay reads it by its type, as it reads a device's own `session.close`
-   * on the same route, so it is no report and nothing past its type is read.
+   * relay reads it by its type, as it reads a device's own `session.close`,
+   * so it is no report and nothing past its type is read.
    */
   SESSION_HANG_UP: "session.hangup",
   /**
-   * The one frame the service sends the desktop after the handshake in this
-   * vocabulary: a proactive turn was spoken to its end, by kind. The
-   * decision and the record of what was spoken are the desktop's, so the
-   * desktop is told rather than left to infer it from the transcript.
-   */
-  SESSION_SPOKEN: "session.spoken",
-  /**
-   * The service's other frame to the desktop after the handshake, on a
-   * planning call alone: the plan's document as its notetaker is writing it,
+   * The service's frame to the desktop after the handshake: the plan's
+   * document as its notetaker is writing it,
    * sent again as the draft grows and once more as saved, so the Plans tab
    * types the plan in while the call goes on rather than waiting for a read.
    */
   PLAN_DRAFT: "plan.draft",
   /**
-   * The service's third frame to the desktop, on a planning call alone: what
-   * each part of Luke is doing now, the voice, the planning model, and the
+   * The service's other frame to the desktop: what each part of Luke is
+   * doing now, the voice, the planning model, and the
    * notetaker, sent whole each time any of them changes, so the Plans tab
    * says each part's own state rather than one word for all of them.
    */
   PLAN_ACTIVITY: "plan.activity",
-} as const;
-
-/**
- * The one header the desktop adds to its `session.create` handshake beside
- * the bearer: the id of its own `devices` row, so the session the service
- * records names the installation that opened it, and a briefing offered to
- * the account can be claimed by that device and spoken into that session.
- * It rides the handshake rather than the frame because the service decides
- * who is asking before any frame is read. A fresh connection's
- * `session.attach` carries none: the session already names its device.
- * Absent, the session names no device, and a briefing on offer is left
- * unclaimed rather than claimed by nobody.
- */
-export const VOICE_SERVICE_HEADER = {
-  DEVICE_ID: "x-luke-device-id",
+  /**
+   * The service's fourth frame to the desktop, on a planning call alone:
+   * code of the plan's folder Luke is about to talk about, by place, sent as
+   * he starts to speak, so the Plans tab's code pane draws it from the
+   * Mac's own folder as he says it.
+   */
+  PLAN_CODE: "plan.code",
 } as const;
 
 /**
@@ -300,21 +270,20 @@ const liveInitialItemSchema = Schema.Union([
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
- * The desktop's opening frame: the offer, the voice, the seed, and, for a
- * call about one saved plan, that plan's id. A plan-bound session is the
- * Plans tab's: the service checks the plan is the account's, creates
- * the session under the planning scene, lands its asks in the plan's
- * conversation, and writes the binding on the session's row, so a later
- * `session.attach` is bound to the same plan by that row and never by
- * anything the attaching connection says. The id names the plan and
- * nothing of its document; the introduction takes none.
+ * The desktop's opening frame: the offer, the voice, the seed, and the id of
+ * the saved plan the call is about. The service checks the plan is the
+ * account's, creates the session under the planning scene, lands its asks in
+ * the plan's conversation, and writes the binding on the session's row, so a
+ * later `session.attach` is bound to the same plan by that row and never by
+ * anything the attaching connection says. The id names the plan and nothing
+ * of its document.
  */
 export const sessionCreateFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
   sdp: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
-  planId: Schema.optionalKey(wireUuidSchema),
+  planId: wireUuidSchema,
 });
 
 export type SessionCreateFrame = typeof sessionCreateFrameSchema.Type;
@@ -323,21 +292,6 @@ export type SessionCreateFrame = typeof sessionCreateFrameSchema.Type;
 const SESSION_ID_CHARS = 256;
 
 const sessionId = text(SESSION_ID_CHARS);
-
-/**
- * The opening frame of a device that has no WebRTC of its own and streams
- * PCM through the service instead: the voice, and the one format the session
- * carries in both directions, chosen from `LIVE_AUDIO_FORMAT`. No offer,
- * since the service's own socket to OpenAI is the transport, and no seed,
- * since the phone seeds nothing and the watch follows it.
- */
-export const sessionAudioCreateFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
-  voice: Schema.Literals(LIVE_VOICE_LIST),
-  format: LiveAudioFormatSchema,
-});
-
-export type SessionAudioCreateFrame = typeof sessionAudioCreateFrameSchema.Type;
 
 /** The desktop's opening frame on a connection to a session it already holds. */
 export const sessionAttachFrameSchema = Schema.Struct({
@@ -377,54 +331,13 @@ export const sessionHangUpFrameSchema = Schema.Struct({
 
 export type SessionHangUpFrame = typeof sessionHangUpFrameSchema.Type;
 
-/** An observed value a beat may mention, bounded here as the append that will carry it is bounded. */
-const beatValue = Schema.optional(text(OBSERVED_VALUE_LENGTH));
-
-/**
- * A beat the desktop asks the service to speak. Each kind names exactly the
- * observed values its script may mention, each bounded as `@sidecar/live`
- * bounds a value before it enters an append; the calendar line mentions
- * nothing observed and carries nothing.
- */
-export const sessionBeatFrameSchema = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
-    kind: Schema.Literal(PROACTIVE_SPEECH_KIND.ARRIVAL),
-    // A working session's title, so the suggested first ask is about the developer's own work.
-    sessionTitle: beatValue,
-    // The talk key worded for a sentence, present only while holding it would open a turn.
-    talkKeyLabel: beatValue,
-  }),
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
-    kind: Schema.Literal(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING),
-  }),
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
-    kind: Schema.Literal(PROACTIVE_SPEECH_KIND.LAUNCH),
-    // The signed-in account's first name, as the account service reported it.
-    firstName: beatValue,
-  }),
-]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
-
-export type SessionBeatFrame = typeof sessionBeatFrameSchema.Type;
-
 /** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
 export const sessionReportFrameSchema = Schema.Union([
   sessionActivityFrameSchema,
   sessionStopFrameSchema,
-  sessionBeatFrameSchema,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
-
-/** The service's word that a proactive turn was spoken to its end: the kind, and nothing of the words. */
-export const sessionSpokenFrameSchema = Schema.Struct({
-  type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_SPOKEN),
-  kind: ProactiveSpeechKindSchema,
-});
-
-export type SessionSpokenFrame = typeof sessionSpokenFrameSchema.Type;
 
 /**
  * The plan's document as the notetaker has it now: a draft while its model is
@@ -450,6 +363,15 @@ export const planActivityFrameSchema = Schema.Struct({
 
 export type PlanActivityFrame = typeof planActivityFrameSchema.Type;
 
+/** Code Luke put on screen on the call about the plan named, by place, as the service sends it to the desktop. */
+export const planCodeFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_CODE),
+  planId: wireUuidSchema,
+  ref: codeRefSchema,
+});
+
+export type PlanCodeFrame = typeof planCodeFrameSchema.Type;
+
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -462,9 +384,7 @@ export type SessionAttachedFrame = typeof sessionAttachedFrameSchema.Type;
  * What the service answered with: the session's opaque id, the SDP answer to
  * set as the remote description, and, for a session an account opened, the
  * store's own id for the session's row, the one a stored spoken row names as
- * its `voice_session_id`, so the device can tell its own rows on the
- * Conversation from another session's. The introduction holds no account and
- * so no row, and is answered none.
+ * its `voice_session_id`.
  */
 const liveSessionCreatedSchema = Schema.Struct({
   sessionId,
@@ -497,12 +417,6 @@ function admittedAnswer<Value, Encoded>(
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
-export function sessionAudioCreateFrameFromWire(
-  value: UnparsedWireValue,
-): SessionAudioCreateFrame | undefined {
-  return admitted(sessionAudioCreateFrameSchema, value);
-}
-
 export function sessionOpeningFrameFromWire(
   value: UnparsedWireValue,
 ): SessionOpeningFrame | undefined {
@@ -522,18 +436,9 @@ export function sessionReportFrameFromWire(
 }
 
 /**
- * The service says a beat was spoken, so the read is the answering one: a key
- * a newer service added is dropped rather than refusing the whole frame. On
- * the v3 side this record carried its own `onExcessProperty: "ignore"`; v4
- * states that grain at the read, which is what {@link admittedAnswer} is.
+ * The service's draft of the open plan, read the answering way: a key a
+ * newer service added is dropped rather than refusing the whole frame.
  */
-export function sessionSpokenFrameFromWire(
-  value: UnparsedWireValue,
-): SessionSpokenFrame | undefined {
-  return admittedAnswer(sessionSpokenFrameSchema, value);
-}
-
-/** The service's draft of the open plan, read the answering way like the spoken frame beside it. */
 export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame | undefined {
   return admittedAnswer(planDraftFrameSchema, value);
 }
@@ -541,6 +446,11 @@ export function planDraftFrameFromWire(value: UnparsedWireValue): PlanDraftFrame
 /** What each part of Luke is doing on a planning call, read the same answering way. */
 export function planActivityFrameFromWire(value: UnparsedWireValue): PlanActivityFrame | undefined {
   return admittedAnswer(planActivityFrameSchema, value);
+}
+
+/** The code Luke put on screen on a planning call, read the same answering way. */
+export function planCodeFrameFromWire(value: UnparsedWireValue): PlanCodeFrame | undefined {
+  return admittedAnswer(planCodeFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(
@@ -574,26 +484,4 @@ export function sessionCreatedFrameFromWire(
   value: UnparsedWireValue,
 ): SessionCreatedFrame | undefined {
   return admittedAnswer(sessionCreatedFrameSchema, value);
-}
-
-/**
- * The service's answer on the audio route: the id `session.started` named,
- * which is the only place a session of the service's own socket names itself,
- * and the allowance the session was spent against. No SDP answer, since
- * nothing negotiated one.
- */
-export const sessionAudioCreatedFrameSchema = omittingUndefinedKeys(
-  Schema.Struct({
-    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATED),
-    sessionId,
-    quota: Schema.optionalKey(droppedField(hostedQuotaSchema)),
-  }),
-);
-
-export type SessionAudioCreatedFrame = typeof sessionAudioCreatedFrameSchema.Type;
-
-export function sessionAudioCreatedFrameFromWire(
-  value: UnparsedWireValue,
-): SessionAudioCreatedFrame | undefined {
-  return admittedAnswer(sessionAudioCreatedFrameSchema, value);
 }

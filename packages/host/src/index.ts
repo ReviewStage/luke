@@ -11,9 +11,7 @@
  * barrel says: every name here has a client that reaches it, and a name a
  * client does not reach yet is added when one arrives.
  */
-export type { MachinePresence } from "./device-presence.js";
 export type { HostSeams } from "./host-kernel.js";
-export { INTRODUCTION_HANDOFF_READY_MS } from "./introduction-flow.js";
 export { jsonStateFile } from "./json-state-file.js";
 export {
   HOST_NATIVE_NODE_ID,
@@ -22,5 +20,4 @@ export {
   HOST_OPERATOR_CLIENT_ID,
 } from "./node-capabilities.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
-export { OPEN_REFUSAL } from "./session-opens.js";
 export { openSocketOverWs } from "./voice/socket-over-ws.js";

@@ -1,9 +1,4 @@
 import {
-  CONVERSATION_VIEW_TOOL_KIND,
-  type ConversationViewToolKinds,
-  type NamedConversationViewToolKind,
-} from "@sidecar/session";
-import {
   EXCESS_KEYS,
   jsonRoundTrip,
   type UnparsedWireValue,
@@ -11,21 +6,16 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { jsonSchema, type Tool, type ToolSet, tool } from "ai";
+import { jsonSchema, type Tool, tool } from "ai";
 import { Result, type Schema } from "effect";
-import { brainToolCatalog, brainToolRegistry, TOOL_GROUP } from "./tools.js";
 
 /**
- * The brain's catalog as the two things a reader of stored messages needs
- * from it, behind a door of its own because the SDK's `tool()` is a run-time
- * reach the barrel keeps to types alone. The registry is the `ToolSet` a row
- * is held to: every catalog tool under its name, its input read under the
- * wire schema the model was offered, so a part naming a tool this build does
- * not register is refused and a part whose input the schema refuses is
- * refused with it. The kinds are the Conversation view's classification: the
- * speak group's tool is the announcement, the actions group's are the
- * actions, and every other tool is a detail of its turn. Both are fixed by
- * the build, so a caller builds each once and holds it.
+ * A tool as a reader of stored messages needs it, behind a door of its own
+ * because the SDK's `tool()` is a run-time reach the barrel keeps to types
+ * alone. A `ToolSet` of these is what a row is held to: every tool under its
+ * name, its input read under the wire schema the model was offered, so a part
+ * naming a tool this build does not register is refused and a part whose
+ * input the schema refuses is refused with it.
  */
 
 function validatedInput(schema: Schema.Codec<unknown, UnparsedWireValue>) {
@@ -55,35 +45,11 @@ function validatedInput(schema: Schema.Codec<unknown, UnparsedWireValue>) {
 
 /**
  * One tool as a stored row is held to it: its words, and its input read under
- * the wire schema the model was offered. The catalog's tools are built this
- * way, and so is a tool a hosted conversation is offered from outside the
- * catalog, so a row naming either reads back the same way.
+ * the wire schema the model was offered.
  */
 export function wireValidatedTool(
   description: string,
   inputSchema: Schema.Codec<unknown, UnparsedWireValue>,
 ): Tool {
   return tool({ description, inputSchema: validatedInput(inputSchema) });
-}
-
-/** The registry stored rows are read under: the catalog's tools by name, inputs validated by their wire schemas. */
-export function catalogToolSet(): ToolSet {
-  const tools: Record<string, Tool> = {};
-  for (const [name, registration] of brainToolRegistry()) {
-    tools[name] = wireValidatedTool(registration.description, registration.inputSchema);
-  }
-  return tools;
-}
-
-/** Which catalog tools the Conversation view draws as announcements and which as actions. */
-export function catalogViewToolKinds(): ConversationViewToolKinds {
-  const kinds = new Map<string, NamedConversationViewToolKind>();
-  for (const descriptor of brainToolCatalog()) {
-    if (descriptor.groups.includes(TOOL_GROUP.SPEAK)) {
-      kinds.set(descriptor.schema.name, CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE);
-    } else if (descriptor.groups.includes(TOOL_GROUP.ACTIONS)) {
-      kinds.set(descriptor.schema.name, CONVERSATION_VIEW_TOOL_KIND.ACTION);
-    }
-  }
-  return kinds;
 }

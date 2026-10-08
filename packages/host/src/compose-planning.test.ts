@@ -8,10 +8,10 @@ import {
   type GatewayMethod,
 } from "@sidecar/gateway";
 import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
-import { GITHUB_FAILURE } from "@sidecar/hosted/github-wire";
+import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
-  type GitHubCallFailure,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanActivity,
@@ -56,11 +56,7 @@ interface FakeService extends PlanningClient {
   deleteFails: boolean;
   /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
   listGate: Effect.Effect<void>;
-  createAnswer: PlanCallResult<Plan, GitHubCallFailure>;
-  repositoriesAnswer: PlanCallResult<
-    { repositories: { owner: string; name: string; private: boolean }[]; truncated: boolean },
-    GitHubCallFailure
-  >;
+  createAnswer: PlanCallResult<Plan, typeof PLAN_CALL_FAILURE.UNANSWERED>;
   /** Every read the service answered, in order, so a test can see that nothing reads on a clock. */
   readonly reads: string[];
   /** The commands waiting for this Mac to claim, oldest first. */
@@ -69,6 +65,8 @@ interface FakeService extends PlanningClient {
   readonly settled: { planId: string; commandId: string; result: PlanCommandResult }[];
   /** Done once the first result is posted back. */
   readonly firstSettle: Deferred.Deferred<void>;
+  /** Each plan's board, by plan id; a plan with none answers no board, as a service that did not answer. */
+  boards: Record<string, Board>;
 }
 
 function fakeService(plans: Plan[]): FakeService {
@@ -78,11 +76,19 @@ function fakeService(plans: Plan[]): FakeService {
     deleteFails: false,
     listGate: Effect.void,
     createAnswer: { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED },
-    repositoriesAnswer: { ok: true, answer: { repositories: [], truncated: false } },
     reads: [],
     commands: [],
     settled: [],
     firstSettle: Deferred.makeUnsafe<void>(),
+    boards: {},
+    readBoard: (planId) => Effect.sync(() => service.boards[planId]),
+    // The service keeps the last scene written, beside whatever drawing it holds.
+    saveBoard: (planId, elements, appliedDrawing) =>
+      Effect.sync(() => {
+        const board = { ...service.boards[planId], elements, appliedDrawing };
+        service.boards[planId] = board;
+        return board;
+      }),
     // An empty queue holds the claim open, as the service does, rather than answering at once.
     claimCommand: () =>
       Effect.suspend(() => {
@@ -121,7 +127,6 @@ function fakeService(plans: Plan[]): FakeService {
         service.plans = service.plans.filter((candidate) => candidate.id !== planId);
         return true;
       }),
-    repositories: () => Effect.sync(() => service.repositoriesAnswer),
   };
   return service;
 }
@@ -147,13 +152,13 @@ interface StandingCall {
   closing?: Effect.Effect<void>;
 }
 
-const SERVICE_BASE_URL = "https://luke.test";
-const ACCOUNT_ID = "user-mac";
-
 function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
   return Effect.gen(function* () {
     const told: PlanningView[] = [];
-    const opened: string[] = [];
+    const waiters: {
+      wanted: (view: PlanningView) => boolean;
+      seen: Deferred.Deferred<PlanningView>;
+    }[] = [];
     const standing = options.call ?? { about: undefined };
     const recordedFolders = folderRecord();
     const planning = yield* composePlanning({
@@ -164,6 +169,10 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           const read = readEither(planningViewSchema)(payload);
           assert.ok(Result.isSuccess(read), "the planning event carries a view");
           told.push(read.success);
+          for (const waiter of waiters) {
+            if (waiter.wanted(read.success))
+              Deferred.doneUnsafe(waiter.seen, Effect.succeed(read.success));
+          }
         },
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
@@ -176,11 +185,6 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           yield* standing.closing ?? Effect.void;
           standing.about = undefined;
         }),
-      connectGitHub: {
-        serviceBaseUrl: SERVICE_BASE_URL,
-        accountId: () => Effect.succeed(ACCOUNT_ID),
-        openExternal: (url) => Effect.sync(() => void opened.push(url)),
-      },
     });
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = planning.methods[method];
@@ -188,7 +192,14 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       return Effect.orDie(handler(params, context));
     };
     const last = () => told.at(-1);
-    return { planning, call, told, last, opened };
+    /** The first view told, from now on, that `wanted` holds of. */
+    const viewWhere = (wanted: (view: PlanningView) => boolean) =>
+      Effect.gen(function* () {
+        const seen = yield* Deferred.make<PlanningView>();
+        waiters.push({ wanted, seen });
+        return yield* Deferred.await(seen);
+      });
+    return { planning, call, told, last, viewWhere };
   });
 }
 
@@ -477,9 +488,9 @@ it.effect(
       const { call, last } = yield* subject(service);
       const request = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
 
-      service.createAnswer = { ok: false, failure: GITHUB_FAILURE.EMPTY_REPOSITORY };
+      service.createAnswer = { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED };
       assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_START, request), {
-        failure: GITHUB_FAILURE.EMPTY_REPOSITORY,
+        failure: PLAN_CALL_FAILURE.UNANSWERED,
       });
       assert.equal(last()?.activePlanId, undefined);
 
@@ -490,45 +501,6 @@ it.effect(
       assert.deepEqual(last()?.folders, { [INVITES]: "/Users/dev/relay" });
       assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: started });
       assert.deepEqual(last()?.plans, [summary(started)]);
-    }),
-);
-
-it.effect("the repository picker hears the list, or why the connection could not be read", () =>
-  Effect.gen(function* () {
-    const service = fakeService([]);
-    const { call } = yield* subject(service);
-    const answer = {
-      repositories: [{ owner: "acme", name: "relay", private: true }],
-      truncated: true,
-    };
-
-    service.repositoriesAnswer = { ok: true, answer };
-    assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REPOSITORIES), answer);
-
-    service.repositoriesAnswer = { ok: false, failure: GITHUB_FAILURE.NOT_CONNECTED };
-    assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REPOSITORIES), {
-      failure: GITHUB_FAILURE.NOT_CONNECTED,
-    });
-  }),
-);
-
-it.effect(
-  "Connect GitHub opens the page for this Mac's account, and nothing behind a closed gate",
-  () =>
-    Effect.gen(function* () {
-      const signedIn = yield* subject(fakeService([]));
-      const signedOut = yield* subject(fakeService([]), { signedIn: false });
-
-      assert.deepEqual(yield* signedIn.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB), {
-        opened: true,
-      });
-      assert.deepEqual(yield* signedOut.call(GATEWAY_METHOD.PLANNING_CONNECT_GITHUB), {
-        opened: false,
-      });
-      assert.deepEqual(signedIn.opened, [
-        `${SERVICE_BASE_URL}/connect-github.html?account=${ACCOUNT_ID}`,
-      ]);
-      assert.deepEqual(signedOut.opened, []);
     }),
 );
 
@@ -800,4 +772,182 @@ it.effect("a command for a plan this Mac holds no folder for runs nothing and sa
       assert.match(settled?.result.stderr ?? "", /no folder is chosen for this plan on this Mac/u);
     }),
   ),
+);
+
+/** A box as the canvas holds one. */
+function box(id: string): BoardElement {
+  return { id, type: BOARD_ELEMENT_TYPE.RECTANGLE, x: 0, y: 0, width: 200, height: 80 };
+}
+
+/** Luke's drawing of one box, as the service holds it under its number. */
+function drawing(number: number) {
+  return {
+    number,
+    elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
+  };
+}
+
+it.effect(
+  "opening a plan draws its board, and a drawing the planning model settled on the call is read again",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        service.boards[INVITES] = { elements: [box("note")], appliedDrawing: 0 };
+        const { call, last, planning } = yield* subject(service);
+        yield* planning.lifetime;
+
+        yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+        assert.deepEqual(last()?.board, service.boards[INVITES]);
+
+        const drawn = { elements: [box("note")], appliedDrawing: 0, drawing: drawing(1) };
+        service.boards[INVITES] = drawn;
+        planning.showActivity(
+          activityFrame(INVITES, { planner: { action: DRAW_ON_BOARD_TOOL_NAME }, notes: false }),
+        );
+        planning.showActivity(activityFrame(INVITES, { planner: {}, notes: false }));
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+        assert.deepEqual(last()?.board, drawn);
+      }),
+    ),
+);
+
+it.effect(
+  "the planning model going quiet reads the board again, in case a drawing settled unseen",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        const { call, last, planning } = yield* subject(service);
+        yield* planning.lifetime;
+        yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+        planning.showActivity(activityFrame(INVITES, { planner: {}, notes: false }));
+
+        const drawn = { elements: [], appliedDrawing: 0, drawing: drawing(1) };
+        service.boards[INVITES] = drawn;
+        planning.showActivity(activityFrame(INVITES, { notes: false }));
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+        assert.deepEqual(last()?.board, drawn);
+      }),
+    ),
+);
+
+it.effect(
+  "the panel's scene is saved for the open plan, and the board drawn is what the service kept",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.boards[INVITES] = { elements: [], appliedDrawing: 0, drawing: drawing(1) };
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const scene = [box("api"), box("note")];
+      const saved = yield* call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
+        planId: INVITES,
+        elements: scene,
+        appliedDrawing: 1,
+      });
+      const elsewhere = yield* call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
+        planId: BILLING,
+        elements: scene,
+        appliedDrawing: 0,
+      });
+
+      assert.deepEqual(saved, { saved: true });
+      assert.deepEqual(elsewhere, { saved: false });
+      assert.equal(service.boards[BILLING], undefined);
+      assert.deepEqual(last()?.board, { elements: scene, appliedDrawing: 1, drawing: drawing(1) });
+    }),
+);
+
+it.effect("leaving the open plan drops the board drawn for it", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    service.boards[INVITES] = { elements: [box("note")], appliedDrawing: 0 };
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
+
+    assert.equal(last()?.board, undefined);
+  }),
+);
+
+const INVITE_SOURCE = "export function acceptInvite(token: string) {\n  return token;\n}\n";
+
+/** The open plan on a folder holding one source file, with its code loop running. */
+function planOnFolder(service: FakeService) {
+  return Effect.gen(function* () {
+    const folder = yield* temporaryDirectoryScoped("luke-plan-code-");
+    const fs = yield* FileSystem.FileSystem;
+    yield* Effect.orDie(fs.writeFileString(`${folder}/invite.ts`, INVITE_SOURCE));
+    const opened = yield* subject(service);
+    yield* opened.call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+    yield* opened.call(GATEWAY_METHOD.PLANNING_SET_FOLDER, { planId: INVITES, folderPath: folder });
+    yield* opened.planning.lifetime;
+    return opened;
+  });
+}
+
+it.effect("code Luke names on the open plan's call is read from its folder and drawn", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { planning, viewWhere } = yield* planOnFolder(service);
+      const drawn = viewWhere((view) => view.code !== undefined);
+
+      planning.showCode(INVITES, { path: "invite.ts", startLine: 1, endLine: 2 });
+
+      const { code } = yield* drawn;
+      assert.deepEqual(code?.ref, { path: "invite.ts", startLine: 1, endLine: 2 });
+      assert.equal(
+        code?.lines?.[0]?.map((token) => token.text).join(""),
+        "export function acceptInvite(token: string) {",
+      );
+    }),
+  ).pipe(Effect.provide(nodeFiles)),
+);
+
+it.effect("the call's end clears the code it put on screen, and so does leaving the plan", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning, viewWhere, last } = yield* planOnFolder(service);
+      const ref = { path: "invite.ts" };
+
+      const first = viewWhere((view) => view.code !== undefined);
+      planning.showCode(INVITES, ref);
+      yield* first;
+      planning.callEnded(INVITES);
+      assert.equal(last()?.code, undefined);
+
+      const second = viewWhere((view) => view.code !== undefined);
+      planning.showCode(INVITES, ref);
+      yield* second;
+      yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
+      assert.equal(last()?.code, undefined);
+    }),
+  ).pipe(Effect.provide(nodeFiles)),
+);
+
+it.effect("code named about a plan that is not open is not drawn", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { planning, told, viewWhere } = yield* planOnFolder(service);
+
+      planning.showCode(BILLING, { path: "invite.ts" });
+      // Note that the plan's own code, named after, is drawn, so the other was dropped rather than still out.
+      const drawn = viewWhere((view) => view.code !== undefined);
+      planning.showCode(INVITES, { path: "invite.ts", startLine: 3, endLine: 3 });
+      yield* drawn;
+
+      assert.deepEqual(
+        told.flatMap((view) => (view.code === undefined ? [] : [view.code.ref])),
+        [{ path: "invite.ts", startLine: 3, endLine: 3 }],
+      );
+    }),
+  ).pipe(Effect.provide(nodeFiles)),
 );

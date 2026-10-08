@@ -13,11 +13,6 @@ two streams below reach the project without passing it. So the guarantee is
 "nothing observed can travel in a counted event" — never "nothing observed reaches
 the project." Do not let this file's promise be read as covering them.
 
-The iOS and watchOS apps emit through a hand-kept Swift transcription of this
-vocabulary. **This file stays the source of truth**: the service reads every batch
-against this allowlist whoever posted it, so a transcription that drifts shows up
-as a refused batch, never as a value that traveled.
-
 A value set another package already declares is imported where the graph allows
 it, so there is no second list to drift. Where the edge would close a loop, a total
 `Record` bridge in the package that reads this one closes the gap, so a new member
@@ -33,13 +28,12 @@ The session-replay client in each app runs on its library's own configuration, a
 nothing here governs a byte of it. Three things leave that way, none validated
 here:
 
-- **The recording** — the rendered panel, except the Conversation tab's blocked
-  subtree. A session's title, branch, and error line, the account's name and
-  address, and a screenshot attached to the feedback composer all travel because
-  they are drawn. Only typed-into fields are masked, and that is the library's
+- **The recording** — the rendered panel. The account's name and address, and
+  a screenshot attached to the feedback composer travel because they are
+  drawn. Only typed-into fields are masked, and that is the library's
   default rather than a posture the app keeps.
-- **Autocaptured events** — the text of whatever was clicked. Pressing a session
-  row sends that row's words.
+- **Autocaptured events** — the text of whatever was clicked. Pressing a row
+  sends that row's words.
 - **Unhandled exceptions**, with their message and stack.
 
 `productEventFromWire` never sees any of them, so a change here cannot make them

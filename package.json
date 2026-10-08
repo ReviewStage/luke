@@ -11,7 +11,6 @@
     "build": "pnpm --recursive --if-present run build",
     "check": "node scripts/check.mjs",
     "discarded-effect": "node scripts/discarded-effect.mjs",
-    "evidence:record": "node scripts/record-evidence.mjs",
     "format": "biome format --write .",
     "knip": "knip --no-config-hints",
     "lint": "biome check . && pnpm oxlint",
@@ -23,7 +22,7 @@
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
     "test": "pnpm test:harness && node scripts/test-shards.mjs",
-    "test:harness": "node --test scripts/*.test.mjs apps/ios/*.test.mjs tools/oxlint/anti-slop/*.test.mjs",
+    "test:harness": "node --test scripts/*.test.mjs tools/oxlint/anti-slop/*.test.mjs",
     "trace:export": "tsx tools/trace-export/src/cli.ts",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
