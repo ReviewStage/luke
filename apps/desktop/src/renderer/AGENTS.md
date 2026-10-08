@@ -63,11 +63,14 @@ Read it first. What it does not cover is the Electron window under the surface:
 
 ## Confirms
 
-Any action that cannot be undone from inside the panel asks first, through
-`<ConfirmSwap>` over `confirm-state.ts`. A question does not outlive its subject —
-one left standing where a key used to be would point at whatever is stored there
-next — and does not outlive the surface it was asked on. `useConfirm` keeps both;
-a row holding a bare `useState(false)` keeps neither.
+Any action that cannot be undone asks first, over `confirm-state.ts`. In the
+desktop window it asks through `<ConfirmDialog>`, a modal over the window held by
+`useConfirmDialog`: title, what goes, Cancel focused and the act in red. A
+settings row still asks in place through `<ConfirmSwap>`. A question does not
+outlive its subject — one left standing where a key used to be would point at
+whatever is stored there next — and does not outlive the surface it was asked on.
+`useConfirm` keeps both, and `useConfirmDialog` keeps them for the refusal the
+dialog goes on showing; a row holding a bare `useState(false)` keeps neither.
 
 ## Brand artwork
 

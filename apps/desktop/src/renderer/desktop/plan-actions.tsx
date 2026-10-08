@@ -1,11 +1,10 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { EllipsisIcon } from "@sidecar/panel";
+import { CopyIcon, EllipsisIcon, FolderIcon, FolderOpenIcon, TrashIcon } from "@sidecar/panel";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DOCUMENT_REGION, folderLine } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { confirmAsked, type HeldConfirm, useConfirm } from "../settings/confirm-state";
-import { ConfirmSwap } from "../settings/confirm-swap";
+import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 
 /**
  * plan-actions.tsx -- one plan's actions, offered alike from the toolbar's ⋯ button and from a right-click on the plan in the sidebar.
@@ -18,9 +17,8 @@ import { ConfirmSwap } from "../settings/confirm-swap";
  * between items, and Escape, Tab, a press elsewhere, or the window losing the
  * keyboard closing it with focus back where it was.
  *
- * Delete cannot be undone, so choosing it asks first where the door stands —
- * the ⋯ button or the plan's row turns into the question — through the same
- * confirm every irreversible act in the panel asks through.
+ * Delete cannot be undone, so choosing it asks first in a dialog over the
+ * window that names the plan, whichever door it was chosen from.
  */
 
 /** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
@@ -46,6 +44,8 @@ interface MenuPlacement {
 
 interface MenuAction {
   label: string;
+  /** The glyph leading the label, drawn in a column every item keeps whether or not it has one. */
+  icon?: React.JSX.Element;
   onSelect: () => void;
   /** Drawn red: the action cannot be taken back. */
   danger?: boolean;
@@ -91,28 +91,44 @@ function planActionGroups(
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
   const chooseFolder = () => plans.onChooseFolder(planId);
   const groups: MenuAction[][] = [
-    drawn ? [{ label: "Copy plan", onSelect: plans.copy.onPress }] : [],
+    drawn ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }] : [],
     plans.folders[planId] === undefined
-      ? [{ label: "Choose folder…", onSelect: chooseFolder }]
+      ? [{ label: "Choose folder", icon: <FolderIcon />, onSelect: chooseFolder }]
       : [
-          { label: "Reveal in Finder", onSelect: () => plans.onRevealFolder(planId) },
-          { label: "Change folder…", onSelect: chooseFolder },
+          {
+            label: "Reveal in Finder",
+            icon: <FolderOpenIcon />,
+            onSelect: () => plans.onRevealFolder(planId),
+          },
+          { label: "Change folder", icon: <FolderIcon />, onSelect: chooseFolder },
         ],
-    [{ label: "Delete plan…", onSelect: askDelete, danger: true }],
+    [{ label: "Delete plan", icon: <TrashIcon />, onSelect: askDelete, danger: true }],
   ];
   return groups.filter((group) => group.length > 0);
 }
 
-/** The question Delete asks where its door stood. */
-function deleteQuestion(deletion: HeldConfirm) {
+/**
+ * The question Delete asks, naming the plan. Deleting a plan removes its
+ * document and its board and clears the conversation its transcript is read
+ * from, which nothing in the app brings back.
+ */
+function deleteQuestion(name: string): DialogQuestion {
   return {
-    question: "Delete this plan? This cannot be undone.",
-    stage: deletion.stage,
-    verb: "Delete plan",
+    title: "Delete plan?",
+    body: `“${name}” will be permanently deleted, along with its board and transcript. This can’t be undone.`,
+    verb: "Delete",
     running: "Deleting…",
-    onKeep: deletion.keep,
-    onAct: deletion.run,
   };
+}
+
+/**
+ * Whether the plan is still there to delete: in the list, or drawn as the
+ * open plan while the list has yet to catch up with it.
+ */
+function planStands(plans: PlansControl, planId: string): boolean {
+  const { region } = plans;
+  if (region.kind === DOCUMENT_REGION.READY && region.plan.id === planId) return true;
+  return plans.plans.some((plan) => plan.id === planId);
 }
 
 /**
@@ -220,6 +236,7 @@ function ActionMenu({
                 action.onSelect();
               }}
             >
+              <span className="plan-menu-icon">{action.icon}</span>
               {action.label}
             </button>
           ))}
@@ -232,13 +249,15 @@ function ActionMenu({
 
 /**
  * One plan's menu and its delete question, held for whichever door offers
- * them. Neither outlives the tab going off screen: the question is withdrawn
- * and the menu closed in the render that finds it gone, so neither is left
- * standing over another surface or waiting for the next time the panel opens.
+ * them. Neither outlives the tab going off screen, and the question does not
+ * outlive the plan: each is taken down in the render that finds it gone, so
+ * neither is left standing over another surface, over a plan deleted
+ * elsewhere, or waiting for the next time the panel opens.
  */
-function usePlanMenu(plans: PlansControl, planId: string) {
-  const deletion = useConfirm({ subject: true, surfaceOpen: plans.shown }, () =>
-    plans.onDeletePlan(planId),
+function usePlanMenu(plans: PlansControl, planId: string, name: string) {
+  const deletion = useConfirmDialog(
+    { subject: planStands(plans, planId), surfaceOpen: plans.shown },
+    () => plans.onDeletePlan(planId),
   );
   const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
   if (open !== undefined && !plans.shown) setOpen(undefined);
@@ -259,53 +278,45 @@ function usePlanMenu(plans: PlansControl, planId: string) {
         onClose={close}
       />
     );
-  return { deletion, open: open !== undefined, show, close, menu };
+  const dialog = <ConfirmDialog confirm={deletion} question={deleteQuestion(name)} />;
+  return { deletion, open: open !== undefined, show, close, menu, dialog };
 }
 
 /** The open plan's ⋯ button in the toolbar, and the menu it drops. */
 export function PlanActionsButton({
   plans,
-  planId,
+  plan,
 }: {
   plans: PlansControl;
-  planId: string;
+  plan: PlanSummary;
 }): React.JSX.Element {
-  const actions = usePlanMenu(plans, planId);
-  const { deletion } = actions;
+  const actions = usePlanMenu(plans, plan.id, plan.name);
   return (
     <>
-      {deletion.rejection ? (
-        <p className="desktop-toolbar-note" role="alert">
-          {deletion.rejection}
-        </p>
-      ) : null}
-      {/* The question is mounted only while it is asked, so the toolbar keeps
-          no room for an answer nobody has asked for beside the ⋯. */}
-      <ConfirmSwap {...(confirmAsked(deletion.stage) ? { confirm: deleteQuestion(deletion) } : {})}>
-        <button
-          type="button"
-          className="toolbar-button toolbar-icon-button"
-          aria-label="Plan actions"
-          title="Plan actions"
-          aria-haspopup="menu"
-          aria-expanded={actions.open}
-          disabled={deletion.busy}
-          onClick={(event) => {
-            if (actions.open) {
-              actions.close(true);
-              return;
-            }
-            const bounds = event.currentTarget.getBoundingClientRect();
-            actions.show(
-              { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END },
-              event.currentTarget,
-            );
-          }}
-        >
-          <EllipsisIcon />
-        </button>
-      </ConfirmSwap>
+      <button
+        type="button"
+        className="toolbar-button toolbar-icon-button"
+        aria-label="Plan actions"
+        title="Plan actions"
+        aria-haspopup="menu"
+        aria-expanded={actions.open}
+        disabled={actions.deletion.busy}
+        onClick={(event) => {
+          if (actions.open) {
+            actions.close(true);
+            return;
+          }
+          const bounds = event.currentTarget.getBoundingClientRect();
+          actions.show(
+            { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END },
+            event.currentTarget,
+          );
+        }}
+      >
+        <EllipsisIcon />
+      </button>
       {actions.menu}
+      {actions.dialog}
     </>
   );
 }
@@ -323,42 +334,35 @@ export function SidebarPlan({
   current: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const actions = usePlanMenu(plans, plan.id);
-  const { deletion } = actions;
+  const actions = usePlanMenu(plans, plan.id, plan.name);
   const folderPath = plans.folders[plan.id];
   return (
     <li>
-      <ConfirmSwap confirm={deleteQuestion(deletion)}>
-        <button
-          type="button"
-          className="sidebar-plan"
-          aria-current={current ? "page" : undefined}
-          data-menu-open={String(actions.open)}
-          disabled={deletion.busy}
-          onClick={() => {
-            actions.close(false);
-            onOpen();
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            actions.show(
-              { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START },
-              event.currentTarget,
-            );
-          }}
-        >
-          <span className="sidebar-plan-name">{plan.name}</span>
-          {folderPath !== undefined ? (
-            <span className="sidebar-plan-repository">{folderLine(folderPath)}</span>
-          ) : null}
-        </button>
-      </ConfirmSwap>
-      {deletion.rejection ? (
-        <p className="sidebar-note" role="alert">
-          {deletion.rejection}
-        </p>
-      ) : null}
+      <button
+        type="button"
+        className="sidebar-plan"
+        aria-current={current ? "page" : undefined}
+        data-menu-open={String(actions.open)}
+        disabled={actions.deletion.busy}
+        onClick={() => {
+          actions.close(false);
+          onOpen();
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          actions.show(
+            { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START },
+            event.currentTarget,
+          );
+        }}
+      >
+        <span className="sidebar-plan-name">{plan.name}</span>
+        {folderPath !== undefined ? (
+          <span className="sidebar-plan-repository">{folderLine(folderPath)}</span>
+        ) : null}
+      </button>
       {actions.menu}
+      {actions.dialog}
     </li>
   );
 }

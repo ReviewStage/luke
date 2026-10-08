@@ -15,6 +15,9 @@
   --sidebar-toggle-clearance: 124px;
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
+  /* A destructive act's own button, filled: deep enough to carry white words,
+     where the panel's lighter red is drawn as text. */
+  --danger-fill: #d4373a;
 }
 
 html,
@@ -516,8 +519,9 @@ body,
 .plan-menu-item {
   display: flex;
   align-items: center;
+  gap: 8px;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 10px 0 8px;
   border-radius: 6px;
   background: none;
   color: var(--text-primary);
@@ -534,6 +538,25 @@ body,
 
 .plan-menu-item[data-danger="true"] {
   color: var(--danger-text);
+}
+
+/* Every item keeps the icon's column, drawn or not, so the labels start in
+   one line down the menu. Muted beside its label, and red with it on Delete. */
+.plan-menu-icon {
+  display: flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.plan-menu-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.plan-menu-item[data-danger="true"] .plan-menu-icon {
+  color: inherit;
 }
 
 .plan-menu-item[data-danger="true"]:hover,
@@ -558,25 +581,6 @@ body,
   box-shadow:
     inset 2px 0 0 var(--voice-luke),
     inset 0 0 0 1px var(--selected-edge);
-}
-
-/* A sidebar plan asks its Delete question in its own row: the row and the
-   question share the row's cell, the row full width and the answers at its
-   end. */
-.sidebar-plans .credential-actions {
-  justify-items: stretch;
-}
-
-.sidebar-plans .credential-controls > .sidebar-plan {
-  min-width: 0;
-  flex: 1;
-}
-
-.sidebar-plans .credential-confirm {
-  align-self: center;
-  justify-self: end;
-  padding-right: 6px;
-  -webkit-app-region: no-drag;
 }
 
 .primary-button {
@@ -1435,4 +1439,109 @@ body,
 
 .side-panel-toggle[data-open="true"] {
   color: var(--text-primary);
+}
+
+/* Confirm dialog -------------------------------------------------------------- */
+
+/* An irreversible act asks the way every desktop app asks: the window dims
+   behind a centred card. Over the menu and the window's drag strip alike, so
+   it claims its own presses back from the frame. Its motion is spent from the
+   tokens, which reduced motion and a capture run already hold still. */
+.confirm-dialog-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  animation: confirm-dialog-dim var(--duration-quick) ease-out;
+  -webkit-app-region: no-drag;
+}
+
+.confirm-dialog {
+  display: flex;
+  width: min(400px, 100%);
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 14px;
+  background: var(--desktop-sidebar);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  color: var(--text-primary);
+  font-size: 13px;
+  animation: confirm-dialog-rise var(--duration-fast) var(--spring-fast);
+}
+
+.confirm-dialog:focus {
+  outline: none;
+}
+
+.confirm-dialog-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.confirm-dialog-body {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.confirm-dialog-error {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 12px;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.confirm-dialog-button {
+  height: 32px;
+  min-width: 80px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.confirm-dialog-button:hover:not(:disabled) {
+  background: var(--raised-strong);
+}
+
+.confirm-dialog-button[data-danger="true"] {
+  background: var(--danger-fill);
+  color: #fff;
+}
+
+.confirm-dialog-button[data-danger="true"]:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.confirm-dialog-button:disabled {
+  opacity: 0.5;
+}
+
+@keyframes confirm-dialog-dim {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes confirm-dialog-rise {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
