@@ -1,28 +1,31 @@
+import type { DrawingFault, DrawingRequest } from "@sidecar/hosted/board-drawing";
 import {
   type Board,
   type BoardElement,
   boardElementsSchema,
-  type DrawingElement,
-  drawingElementsSchema,
+  type Drawing,
+  drawingSchema,
 } from "@sidecar/hosted/board-wire";
-import { and, eq, sql } from "drizzle-orm";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { and, eq } from "drizzle-orm";
+import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { plan, planBoard } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import type { PlanStoreEffect } from "./plan-store.js";
 
 /**
- * board-store.ts -- a plan's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
+ * board-store.ts -- a plan's whiteboard: read it, write the Mac's scene, and add Luke's drawing.
  *
- * Two writers share a board and never write the same column. The Mac writes
- * the scene with the number of Luke's drawing it holds; Luke writes his
- * drawing, which takes the next number. Each write is whole and the last one
- * wins: the planning call is one conversation, so the two rarely write in the
- * same moment, and when they do the cost is one edit of the developer's
- * written over by a scene the Mac read a moment before. Each write runs under
- * the plan row's own lock, so a plan deleted meanwhile reads as gone rather
- * than written back into being. Every statement names the account beside the
+ * The Mac writes the scene whole with the number of Luke's drawing it holds,
+ * the last write winning: the planning call is one conversation, so the two
+ * writers rarely write in the same moment, and when they do the cost is one
+ * edit of the developer's written over by a scene the Mac read a moment
+ * before. Luke adds a drawing, which takes the next number, to the drawings
+ * the scene does not hold yet; a scene's write drops the drawings it says it
+ * holds. A drawing is held to the board as it will stand before it is added
+ * (`board-drawing.ts`), and both writes read the board under the plan row's
+ * own lock, so a plan deleted meanwhile reads as gone rather than written back
+ * into being, and a drawing is checked against the board it is added to. Every statement names the account beside the
  * plan, so a plan another account owns reads and writes as no plan, exactly
  * as in `plan-store.ts`.
  */
@@ -32,7 +35,7 @@ const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.Stri
 const BoardRowSchema = Schema.Struct({
   elements: Schema.NullOr(boardElementsSchema),
   appliedDrawing: Schema.NullOr(Schema.Int),
-  drawing: Schema.NullOr(drawingElementsSchema),
+  drawings: Schema.NullOr(Schema.Array(drawingSchema)),
   drawingNumber: Schema.NullOr(Schema.Int),
 });
 
@@ -41,7 +44,7 @@ type BoardRow = typeof BoardRowSchema.Type;
 const BOARD_COLUMNS = {
   elements: planBoard.elements,
   appliedDrawing: planBoard.appliedDrawing,
-  drawing: planBoard.drawing,
+  drawings: planBoard.drawings,
   drawingNumber: planBoard.drawingNumber,
 };
 
@@ -71,63 +74,77 @@ const lockPlan = SqlSchema.findOneOption({
     db.select({ id: plan.id }).from(plan).where(ownedPlan(userId, planId)).for("update"),
 });
 
+/** The board's row as a write leaves it. */
+interface BoardWrite {
+  readonly elements: readonly BoardElement[];
+  readonly appliedDrawing: number;
+  readonly drawings: readonly Drawing[];
+  readonly drawingNumber: number;
+}
+
 /**
- * The scene written whole. Note that the elements are closed over rather
+ * The board's row written whole. Note that the values are closed over rather
  * than carried in the request, because the request is handed to the
  * statement encoded and an element's encoded side is any wire value.
  */
-function upsertScene(elements: readonly BoardElement[]) {
-  return SqlSchema.findOne({
-    Request: Schema.Struct({ planId: Schema.String, appliedDrawing: Schema.Int, now: Schema.Date }),
-    Result: BoardRowSchema,
-    execute: ({ planId, appliedDrawing, now }) =>
-      db
-        .insert(planBoard)
-        .values({ planId, elements, appliedDrawing, updatedAt: now })
-        .onConflictDoUpdate({
-          target: planBoard.planId,
-          set: { elements, appliedDrawing, updatedAt: now },
-        })
-        .returning(BOARD_COLUMNS),
-  });
-}
-
-/** Luke's drawing written whole, as the next number. */
-function upsertDrawing(drawing: readonly DrawingElement[]) {
+function upsertBoard(write: BoardWrite) {
   return SqlSchema.findOne({
     Request: Schema.Struct({ planId: Schema.String, now: Schema.Date }),
     Result: BoardRowSchema,
     execute: ({ planId, now }) =>
       db
         .insert(planBoard)
-        .values({ planId, drawing, drawingNumber: 1, updatedAt: now })
-        .onConflictDoUpdate({
-          target: planBoard.planId,
-          set: { drawing, drawingNumber: sql`${planBoard.drawingNumber} + 1`, updatedAt: now },
-        })
+        .values({ planId, ...write, updatedAt: now })
+        .onConflictDoUpdate({ target: planBoard.planId, set: { ...write, updatedAt: now } })
         .returning(BOARD_COLUMNS),
   });
 }
 
 /** The board a joined row holds; the empty board where the plan has none yet. */
 function boardOf(row: BoardRow): Board {
-  const board = { elements: row.elements ?? [], appliedDrawing: row.appliedDrawing ?? 0 };
-  if (row.drawing === null || row.drawingNumber === null || row.drawingNumber === 0) return board;
-  return { ...board, drawing: { number: row.drawingNumber, elements: row.drawing } };
+  const appliedDrawing = row.appliedDrawing ?? 0;
+  return {
+    elements: row.elements ?? [],
+    appliedDrawing,
+    latestDrawing: row.drawingNumber ?? 0,
+    drawings: (row.drawings ?? []).filter((drawing) => drawing.number > appliedDrawing),
+  };
 }
 
-/** Runs one write under the plan row's lock; nothing where the account owns no such plan. */
-function underPlanLock<E>(
+/** The row a board is written back as. */
+function writeOf(board: Board): BoardWrite {
+  return {
+    elements: board.elements,
+    appliedDrawing: board.appliedDrawing,
+    drawings: board.drawings,
+    drawingNumber: board.latestDrawing,
+  };
+}
+
+/**
+ * Runs one write under the plan row's lock, handed the board as it stands;
+ * nothing where the account owns no such plan. The write answers the board
+ * to store, or why it stores nothing.
+ */
+function underPlanLock<A>(
   userId: string,
   planId: string,
-  write: (now: Date) => Effect.Effect<BoardRow, E, SqlClient.SqlClient>,
+  write: (board: Board) => Result.Result<Board, A>,
 ) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        if (Option.isNone(yield* lockPlan({ userId, planId }))) return Option.none<Board>();
+        if (Option.isNone(yield* lockPlan({ userId, planId })))
+          return Option.none<Result.Result<Board, A>>();
+        const standing = yield* findBoard({ userId, planId });
+        const next = write(boardOf(Option.getOrThrow(standing)));
+        if (Result.isFailure(next)) return Option.some(next);
         const now = yield* DateTime.nowAsDate;
-        return Option.some(boardOf(yield* write(now)));
+        // An upsert that returned no row is the database breaking its own contract, not an outcome.
+        const row = yield* upsertBoard(writeOf(next.success))({ planId, now }).pipe(
+          Effect.catchTag("NoSuchElementError", Effect.die),
+        );
+        return Option.some(Result.succeed(boardOf(row)));
       }),
     ),
   );
@@ -145,21 +162,35 @@ export function writeScene(
   elements: readonly BoardElement[],
   appliedDrawing: number,
 ): PlanStoreEffect<Option.Option<Board>> {
-  return underPlanLock(userId, planId, (now) =>
-    upsertScene(elements)({ planId, appliedDrawing, now }).pipe(
-      Effect.catchTag("NoSuchElementError", Effect.die),
-    ),
-  );
+  return underPlanLock<never>(userId, planId, (board) =>
+    Result.succeed({
+      ...board,
+      elements,
+      appliedDrawing,
+      drawings: board.drawings.filter((drawing) => drawing.number > appliedDrawing),
+    }),
+  ).pipe(Effect.map(Option.map(Result.getOrThrow)));
 }
 
-/** Luke's drawing, written whole as the next number; the board as written. */
-export function writeDrawing(
+/**
+ * Luke's drawing, added as the next number where `refusalOf` finds nothing
+ * wrong with it on the board as it stands; the board as written, or why the
+ * drawing was refused.
+ */
+export function addDrawing(
   userId: string,
   planId: string,
-  drawing: readonly DrawingElement[],
-): PlanStoreEffect<Option.Option<Board>> {
-  // An upsert that returned no row is the database breaking its own contract, not an outcome.
-  return underPlanLock(userId, planId, (now) =>
-    upsertDrawing(drawing)({ planId, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
-  );
+  request: DrawingRequest,
+  refusalOf: (board: Board) => DrawingFault | undefined,
+): PlanStoreEffect<Option.Option<Result.Result<Board, DrawingFault>>> {
+  return underPlanLock(userId, planId, (board) => {
+    const refusal = refusalOf(board);
+    if (refusal !== undefined) return Result.fail(refusal);
+    const number = board.latestDrawing + 1;
+    return Result.succeed({
+      ...board,
+      latestDrawing: number,
+      drawings: [...board.drawings, { number, ...request }],
+    });
+  });
 }

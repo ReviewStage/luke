@@ -24,3 +24,19 @@ export const BOARD_ELEMENT_TYPE = {
   FREEDRAW: "freedraw",
   FRAME: "frame",
 } as const;
+
+/**
+ * The mark the Mac's canvas sets in `customData` on every element it made
+ * from one of Luke's drawings, so the service and the model can tell his
+ * elements from the developer's.
+ */
+export const LUKE_MARK = { drawnBy: "luke" } as const;
+
+/**
+ * The steps of a drawing that draw nothing themselves, after Excalidraw's own
+ * agent format: one moves the viewport, the other takes elements off.
+ */
+export const DRAWING_STEP_TYPE = {
+  CAMERA: "cameraUpdate",
+  DELETE: "delete",
+} as const;

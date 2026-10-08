@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
-import type { Board } from "@sidecar/hosted/board-wire";
+import { type Board, EMPTY_BOARD } from "@sidecar/hosted/board-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -290,17 +290,19 @@ test("the open plan's call grows the transcript as it is said, and hanging up ke
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_REFRESH);
 });
 
-const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
-
 /** A board holding Luke's drawing of one box, numbered as his `number`th. */
 function drawnBoard(number: number): Board {
   return {
     elements: [],
     appliedDrawing: number - 1,
-    drawing: {
-      number,
-      elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
-    },
+    latestDrawing: number,
+    drawings: [
+      {
+        number,
+        restore: false,
+        elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
+      },
+    ],
   };
 }
 
@@ -382,7 +384,7 @@ test("the developer's own strokes on the board open nothing, and Luke's first dr
     height: 60,
   };
   const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
-  tab.stand({ planning: { ...OPEN, board: { elements: [stroke], appliedDrawing: 0 } } });
+  tab.stand({ planning: { ...OPEN, board: { ...EMPTY_BOARD, elements: [stroke] } } });
   assert.equal(tab.control().sidePanel.open, false);
 
   tab.stand({ planning: { ...OPEN, board: { ...drawnBoard(1), elements: [stroke] } } });

@@ -16,7 +16,7 @@
           "id": {
             "type": "string",
             "maxLength": 64,
-            "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows name to connect it."
+            "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows and `delete` name."
           },
           "x": {
             "type": "number",
@@ -34,13 +34,13 @@
             "type": "number",
             "minimum": 10,
             "maximum": 4000,
-            "description": "Width in pixels; 200 when left out."
+            "description": "Width in pixels; when left out, the shape fits its label."
           },
           "height": {
             "type": "number",
             "minimum": 10,
             "maximum": 4000,
-            "description": "Height in pixels; 80 when left out."
+            "description": "Height in pixels; when left out, the shape fits its label."
           },
           "label": {
             "type": "string",
@@ -55,6 +55,20 @@
           "backgroundColor": {
             "type": "string",
             "description": "A hex color such as \"#1971c2\", or \"transparent\"."
+          },
+          "strokeStyle": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "dashed"
+            ],
+            "description": "The outline: \"solid\" when left out, or \"dashed\"."
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Opacity from 0 to 100; 100 when left out. About 30 for a background zone."
           }
         },
         "required": [
@@ -77,7 +91,7 @@
           "id": {
             "type": "string",
             "maxLength": 64,
-            "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows name to connect it."
+            "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows and `delete` name."
           },
           "x": {
             "type": "number",
@@ -128,17 +142,19 @@
           "id": {
             "type": "string",
             "maxLength": 64,
-            "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows name to connect it."
+            "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows and `delete` name."
           },
           "from": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64,
-            "description": "The id of the shape the arrow starts at."
+            "description": "The id of the shape or text the arrow starts at: one in this drawing, or any on the board."
           },
           "to": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64,
-            "description": "The id of the shape the arrow points to."
+            "description": "The id of the shape or text the arrow points to: one in this drawing, or any on the board."
           },
           "label": {
             "type": "string",
@@ -149,6 +165,14 @@
           "strokeColor": {
             "type": "string",
             "description": "A hex color such as \"#1971c2\", or \"transparent\"."
+          },
+          "strokeStyle": {
+            "type": "string",
+            "enum": [
+              "solid",
+              "dashed"
+            ],
+            "description": "The outline: \"solid\" when left out, or \"dashed\"."
           }
         },
         "required": [
@@ -158,10 +182,80 @@
           "to"
         ],
         "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "cameraUpdate"
+            ]
+          },
+          "x": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000,
+            "description": "Left edge of the area to show, in pixels."
+          },
+          "y": {
+            "type": "number",
+            "minimum": -100000,
+            "maximum": 100000,
+            "description": "Top edge of the area to show, in pixels."
+          },
+          "width": {
+            "type": "number",
+            "minimum": 10,
+            "maximum": 4000,
+            "description": "Width of the area to show, in pixels."
+          },
+          "height": {
+            "type": "number",
+            "minimum": 10,
+            "maximum": 4000,
+            "description": "Height of the area to show, in pixels."
+          }
+        },
+        "required": [
+          "type",
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "additionalProperties": false,
+        "description": "Moves the developer's view to show this area once the drawing is on the board."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "delete"
+            ]
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows and `delete` name."
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "type",
+          "ids"
+        ],
+        "additionalProperties": false,
+        "description": "Takes your elements with these ids off the board, with their labels."
       }
     ]
   },
   "minItems": 1,
   "maxItems": 100,
-  "description": "The whole diagram, every shape, text, and arrow in it."
+  "description": "The drawing's steps in order, back to front: shapes, text, arrows, `delete`, and `cameraUpdate`."
 }

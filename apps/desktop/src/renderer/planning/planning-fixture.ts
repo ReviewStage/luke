@@ -1,5 +1,5 @@
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
-import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
+import { BOARD_ELEMENT_TYPE, DRAWING_STEP_TYPE } from "@sidecar/hosted/board-vocabulary";
+import type { Board, DrawingStep } from "@sidecar/hosted/board-wire";
 import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
@@ -269,11 +269,33 @@ const FIXTURE_OPEN_PLAN: PlanningView = {
  * canvas converting it with Excalidraw's own converter, as a Mac does the
  * first time it reads a new drawing.
  */
-const FIXTURE_DRAWING: readonly DrawingElement[] = [
+const FIXTURE_DRAWING: readonly DrawingStep[] = [
+  { type: DRAWING_STEP_TYPE.CAMERA, x: -80, y: -120, width: 1040, height: 780 },
   { type: BOARD_ELEMENT_TYPE.TEXT, id: "title", x: 0, y: -70, text: "Inviting a teammate" },
-  { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "member", x: 0, y: 0, label: "Member" },
-  { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "invites", x: 320, y: 0, label: "POST /invites" },
-  { type: BOARD_ELEMENT_TYPE.ELLIPSE, id: "email", x: 640, y: 0, label: "Invite email" },
+  {
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    id: "member",
+    x: 0,
+    y: 0,
+    label: "Member",
+    backgroundColor: "#a5d8ff",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    id: "invites",
+    x: 320,
+    y: 0,
+    label: "POST /invites",
+    backgroundColor: "#d0bfff",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.ELLIPSE,
+    id: "email",
+    x: 640,
+    y: 0,
+    label: "Invite email",
+    backgroundColor: "#ffd8a8",
+  },
   {
     type: BOARD_ELEMENT_TYPE.DIAMOND,
     id: "valid",
@@ -282,6 +304,7 @@ const FIXTURE_DRAWING: readonly DrawingElement[] = [
     width: 200,
     height: 110,
     label: "Link still valid?",
+    backgroundColor: "#fff3bf",
   },
   {
     type: BOARD_ELEMENT_TYPE.RECTANGLE,
@@ -289,7 +312,7 @@ const FIXTURE_DRAWING: readonly DrawingElement[] = [
     x: 320,
     y: 195,
     label: "Joins workspace",
-    backgroundColor: "#1971c2",
+    backgroundColor: "#b2f2bb",
   },
   { type: BOARD_ELEMENT_TYPE.ARROW, id: "sends", from: "member", to: "invites", label: "email" },
   { type: BOARD_ELEMENT_TYPE.ARROW, id: "mails", from: "invites", to: "email" },
@@ -300,7 +323,8 @@ const FIXTURE_DRAWING: readonly DrawingElement[] = [
 const FIXTURE_BOARD: Board = {
   elements: [],
   appliedDrawing: 0,
-  drawing: { number: 1, elements: FIXTURE_DRAWING },
+  latestDrawing: 1,
+  drawings: [{ number: 1, restore: false, elements: FIXTURE_DRAWING }],
 };
 
 /** The open plan on its whiteboard, as the planning-board profile captures it. */

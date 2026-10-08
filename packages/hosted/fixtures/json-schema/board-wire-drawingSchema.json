@@ -1,9 +1,12 @@
 {
   "type": "object",
   "properties": {
+    "number": {
+      "type": "integer",
+      "minimum": 1
+    },
     "restore": {
-      "type": "boolean",
-      "description": "true: draw on the board as it stands, your earlier elements kept as the developer left them. Left out or false: your earlier elements are taken off first."
+      "type": "boolean"
     },
     "elements": {
       "type": "array",
@@ -268,6 +271,8 @@
     }
   },
   "required": [
+    "number",
+    "restore",
     "elements"
   ],
   "additionalProperties": false

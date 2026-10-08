@@ -1,20 +1,24 @@
 import { WireValueSchema } from "@sidecar/wire";
 import { declareReader, describeWire, emitJsonSchema, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { BOARD_ELEMENT_TYPE } from "./board-vocabulary.js";
+import { BOARD_ELEMENT_TYPE, DRAWING_STEP_TYPE } from "./board-vocabulary.js";
 
 /**
  * board-wire.ts -- a plan's whiteboard: the Excalidraw scene on it, and Luke's latest drawing for it, as the service stores them and the Plans tab reads them.
  *
  * A board is two things. The scene is the Excalidraw elements the Plans tab
- * shows, written whole by the Mac, the last write winning. Luke's drawing is
- * the diagram the planning model last drew (`draw_on_board`), kept in the
- * small vocabulary below rather than as Excalidraw's own records, because
- * only the Mac's canvas can measure text and lay out what Excalidraw makes of
- * it. Each drawing is numbered, and the scene says which drawing it holds:
- * when the Mac reads a drawing newer than that, it converts the drawing with
- * Excalidraw's own converter, puts it in place of Luke's previous one beside
- * whatever the developer drew, and writes the scene back.
+ * shows, written whole by the Mac, the last write winning. Luke's drawings
+ * are what the planning model drew (`draw_on_board`) that the scene does not
+ * hold yet, kept in the small vocabulary below rather than as Excalidraw's
+ * own records, because only the Mac's canvas can measure text and lay out
+ * what Excalidraw makes of it. The vocabulary follows Excalidraw's own format
+ * for agents (its MCP server's): labelled shapes, text, and arrows, a
+ * `delete` step that takes elements off, a `cameraUpdate` step that moves the
+ * view, and a drawing that either replaces Luke's previous elements or, like
+ * Excalidraw's `restoreCheckpoint`, draws on the board as it stands. Each
+ * drawing is numbered, and the scene says which drawing it holds: the Mac
+ * applies every drawing newer than that, oldest first, with Excalidraw's own
+ * converter, and writes the scene back.
  *
  * A scene element is typed in the fields the service reads (`board-text.ts`
  * renders them for the model) and carries Excalidraw's other fields as opaque
@@ -48,6 +52,11 @@ const pointBindingSchema = EffectSchema.StructWithRest(
   [EffectSchema.Record(EffectSchema.String, WireValueSchema)],
 );
 
+/** Who made an element, as the Mac marks it (`LUKE_MARK`). */
+const customDataFields = EffectSchema.Struct({
+  drawnBy: EffectSchema.optionalKey(EffectSchema.String),
+});
+
 /** The fields of a scene element the service reads. */
 const boardElementFields = EffectSchema.Struct({
   id: elementIdSchema,
@@ -72,6 +81,7 @@ const boardElementFields = EffectSchema.Struct({
       ),
     ),
   ),
+  customData: EffectSchema.optionalKey(EffectSchema.NullOr(customDataFields)),
 });
 
 const readElementRecord = readEither(
@@ -80,6 +90,13 @@ const readElementRecord = readEither(
       ...boardElementFields.fields,
       startBinding: EffectSchema.optionalKey(EffectSchema.NullOr(pointBindingSchema)),
       endBinding: EffectSchema.optionalKey(EffectSchema.NullOr(pointBindingSchema)),
+      customData: EffectSchema.optionalKey(
+        EffectSchema.NullOr(
+          EffectSchema.StructWithRest(customDataFields, [
+            EffectSchema.Record(EffectSchema.String, WireValueSchema),
+          ]),
+        ),
+      ),
     }),
     [EffectSchema.Record(EffectSchema.String, WireValueSchema)],
   ),
@@ -107,13 +124,13 @@ export const boardElementsSchema = EffectSchema.Array(boardElementSchema).check(
   EffectSchema.isMaxLength(BOARD_BOUNDS.MAX_ELEMENTS),
 );
 
-/** The ids Luke gives what he draws, which he names again to connect arrows. */
+/** The ids Luke gives what he draws, which he names again to connect arrows or delete it. */
 const DRAWING_ID = describeWire(
   EffectSchema.String.check(
     EffectSchema.isPattern(/^[a-z0-9][a-z0-9-]*$/),
     EffectSchema.isMaxLength(BOARD_BOUNDS.MAX_ID_CHARS),
   ),
-  'A short kebab-case id, such as "api" or "db", which arrows name to connect it.',
+  'A short kebab-case id, such as "api" or "db", which arrows and `delete` name.',
 );
 
 const COORDINATE = EffectSchema.Finite.check(
@@ -136,6 +153,25 @@ const COLOR = describeWire(
   'A hex color such as "#1971c2", or "transparent".',
 );
 
+/** How an outline is stroked. */
+const DRAWING_STROKE_STYLE = {
+  SOLID: "solid",
+  DASHED: "dashed",
+} as const;
+
+const STROKE_STYLE = describeWire(
+  EffectSchema.Literals(Object.values(DRAWING_STROKE_STYLE)),
+  'The outline: "solid" when left out, or "dashed".',
+);
+
+const OPACITY = describeWire(
+  EffectSchema.Finite.check(
+    EffectSchema.isGreaterThanOrEqualTo(0),
+    EffectSchema.isLessThanOrEqualTo(100),
+  ),
+  "Opacity from 0 to 100; 100 when left out. About 30 for a background zone.",
+);
+
 /** The drawing's shapes: closed outlines that may carry a label. */
 const DRAWING_SHAPE = {
   RECTANGLE: BOARD_ELEMENT_TYPE.RECTANGLE,
@@ -148,11 +184,17 @@ const drawingShapeSchema = EffectSchema.Struct({
   id: DRAWING_ID,
   x: describeWire(COORDINATE, "Left edge, in pixels."),
   y: describeWire(COORDINATE, "Top edge, in pixels."),
-  width: EffectSchema.optionalKey(describeWire(SIZE, "Width in pixels; 200 when left out.")),
-  height: EffectSchema.optionalKey(describeWire(SIZE, "Height in pixels; 80 when left out.")),
+  width: EffectSchema.optionalKey(
+    describeWire(SIZE, "Width in pixels; when left out, the shape fits its label."),
+  ),
+  height: EffectSchema.optionalKey(
+    describeWire(SIZE, "Height in pixels; when left out, the shape fits its label."),
+  ),
   label: EffectSchema.optionalKey(LABEL),
   strokeColor: EffectSchema.optionalKey(COLOR),
   backgroundColor: EffectSchema.optionalKey(COLOR),
+  strokeStyle: EffectSchema.optionalKey(STROKE_STYLE),
+  opacity: EffectSchema.optionalKey(OPACITY),
 });
 
 const drawingTextSchema = EffectSchema.Struct({
@@ -176,11 +218,37 @@ const drawingTextSchema = EffectSchema.Struct({
 const drawingArrowSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(BOARD_ELEMENT_TYPE.ARROW),
   id: DRAWING_ID,
-  from: describeWire(DRAWING_ID, "The id of the shape the arrow starts at."),
-  to: describeWire(DRAWING_ID, "The id of the shape the arrow points to."),
+  from: describeWire(
+    elementIdSchema,
+    "The id of the shape or text the arrow starts at: one in this drawing, or any on the board.",
+  ),
+  to: describeWire(
+    elementIdSchema,
+    "The id of the shape or text the arrow points to: one in this drawing, or any on the board.",
+  ),
   label: EffectSchema.optionalKey(LABEL),
   strokeColor: EffectSchema.optionalKey(COLOR),
+  strokeStyle: EffectSchema.optionalKey(STROKE_STYLE),
 });
+
+const drawingCameraSchema = describeWire(
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(DRAWING_STEP_TYPE.CAMERA),
+    x: describeWire(COORDINATE, "Left edge of the area to show, in pixels."),
+    y: describeWire(COORDINATE, "Top edge of the area to show, in pixels."),
+    width: describeWire(SIZE, "Width of the area to show, in pixels."),
+    height: describeWire(SIZE, "Height of the area to show, in pixels."),
+  }),
+  "Moves the developer's view to show this area once the drawing is on the board.",
+);
+
+const drawingDeleteSchema = describeWire(
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(DRAWING_STEP_TYPE.DELETE),
+    ids: EffectSchema.Array(DRAWING_ID).check(EffectSchema.isMinLength(1)),
+  }),
+  "Takes your elements with these ids off the board, with their labels.",
+);
 
 const drawingElementSchema = EffectSchema.Union([
   drawingShapeSchema,
@@ -188,29 +256,48 @@ const drawingElementSchema = EffectSchema.Union([
   drawingArrowSchema,
 ]);
 
+/** An element Luke draws: a shape, text, or an arrow. */
 export type DrawingElement = typeof drawingElementSchema.Type;
 
-/** One drawing of Luke's: the whole diagram, which replaces his previous one. */
-export const drawingElementsSchema = describeWire(
-  EffectSchema.Array(drawingElementSchema).check(
+const drawingStepSchema = EffectSchema.Union([
+  drawingShapeSchema,
+  drawingTextSchema,
+  drawingArrowSchema,
+  drawingCameraSchema,
+  drawingDeleteSchema,
+]);
+
+/** One step of a drawing: an element drawn, the view moved, or elements taken off. */
+export type DrawingStep = typeof drawingStepSchema.Type;
+
+/** One drawing of Luke's: its steps, in the order they apply, which is back to front. */
+export const drawingStepsSchema = describeWire(
+  EffectSchema.Array(drawingStepSchema).check(
     EffectSchema.isMinLength(1),
     EffectSchema.isMaxLength(BOARD_BOUNDS.MAX_DRAWING_ELEMENTS),
   ),
-  "The whole diagram, every shape, text, and arrow in it.",
+  "The drawing's steps in order, back to front: shapes, text, arrows, `delete`, and `cameraUpdate`.",
 );
+
+/** One numbered drawing of Luke's, as the service keeps it until the scene holds it. */
+export const drawingSchema = EffectSchema.Struct({
+  number: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  /** Whether it draws on the board as it stands rather than replacing Luke's previous elements. */
+  restore: EffectSchema.Boolean,
+  elements: drawingStepsSchema,
+});
+
+export type Drawing = typeof drawingSchema.Type;
 
 /** A plan's board as it stands: the empty scene and no drawing before anything was drawn. */
 export const boardSchema = EffectSchema.Struct({
   elements: boardElementsSchema,
   /** The number of Luke's drawing the scene holds; 0 before it holds any. */
   appliedDrawing: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
-  /** Luke's latest drawing and its number; absent before he drew. */
-  drawing: EffectSchema.optionalKey(
-    EffectSchema.Struct({
-      number: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
-      elements: EffectSchema.Array(drawingElementSchema),
-    }),
-  ),
+  /** The number of Luke's latest drawing; 0 before he drew. */
+  latestDrawing: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+  /** Luke's drawings the scene does not hold yet, oldest first. */
+  drawings: EffectSchema.Array(drawingSchema),
 });
 
 export type Board = typeof boardSchema.Type;
@@ -225,4 +312,9 @@ export const boardSaveRequestSchema = EffectSchema.Struct({
 });
 
 /** The board before anything was drawn on it. */
-export const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
+export const EMPTY_BOARD: Board = {
+  elements: [],
+  appliedDrawing: 0,
+  latestDrawing: 0,
+  drawings: [],
+};

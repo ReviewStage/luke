@@ -1,3 +1,4 @@
+import { isLukes, StandingBoard } from "./board-drawing.js";
 import { BOARD_ELEMENT_TYPE } from "./board-vocabulary.js";
 import type { Board, BoardElement } from "./board-wire.js";
 
@@ -6,7 +7,8 @@ import type { Board, BoardElement } from "./board-wire.js";
  *
  * The model cannot see the canvas, so this is the whole of what it knows of
  * the board: what the developer drew is here on its next turn, beside what
- * it drew itself. A shape is its id, its type, its label, and its box; text
+ * it drew itself, each element of its own marked `(yours)`. A shape is its
+ * id, its type, its label, and its box; text
  * is its words and where it starts; an arrow is the two ends it joins, each
  * a shape's id or a free point; a line is its ends; and freehand strokes,
  * which carry nothing the model could name, are only counted. A label is
@@ -14,8 +16,9 @@ import type { Board, BoardElement } from "./board-wire.js";
  * rounded to whole pixels. The text is cut at `BOARD_TEXT_MAX_CHARS`, saying
  * how many elements were left out, so a crowded board cannot take over the
  * planning turn's context. A drawing of the model's that the developer's Mac
- * has not put on the board yet is said to be on its way, since its elements
- * are not in the scene.
+ * has not put on the board yet is said to be on its way, with the ids it puts
+ * on and takes off, since the scene does not show them yet and the model's
+ * next drawing may name them.
  */
 
 export const BOARD_TEXT_MAX_CHARS = 8_000;
@@ -29,6 +32,7 @@ const SHAPES: ReadonlySet<string> = new Set([
 
 const HEADING = "[board]";
 const PENDING_LINE = "Your latest drawing is not on the board yet; the developer's Mac draws it.";
+const YOURS = " (yours)";
 
 function round(value: number): number {
   return Math.round(value);
@@ -63,6 +67,16 @@ function entryOf(
   labels: ReadonlyMap<string, string>,
   live: ReadonlyMap<string, BoardElement>,
 ): string | undefined {
+  const entry = bareEntryOf(element, labels, live);
+  return entry !== undefined && isLukes(element) ? `${entry}${YOURS}` : entry;
+}
+
+/** An element's entry before it is marked as the model's own. */
+function bareEntryOf(
+  element: BoardElement,
+  labels: ReadonlyMap<string, string>,
+  live: ReadonlyMap<string, BoardElement>,
+): string | undefined {
   const label = labels.get(element.id);
   const labelText = label === undefined ? "" : ` ${quoted(label)}`;
   if (SHAPES.has(element.type)) {
@@ -84,6 +98,17 @@ function entryOf(
   }
 }
 
+/** What the drawings on their way do to the board, for the model to name in its next drawing. */
+function pendingLines(board: Board): readonly string[] {
+  if (board.drawings.length === 0) return [];
+  const standing = StandingBoard.of(board);
+  return [
+    PENDING_LINE,
+    ...(standing.arriving.length > 0 ? [`on its way: ${standing.arriving.join(", ")}`] : []),
+    ...(standing.leaving.length > 0 ? [`coming off: ${standing.leaving.join(", ")}`] : []),
+  ];
+}
+
 const LINE_ORDER = [
   { title: "shapes", has: (element: BoardElement) => SHAPES.has(element.type) },
   { title: "text", has: (element: BoardElement) => element.type === BOARD_ELEMENT_TYPE.TEXT },
@@ -94,8 +119,7 @@ const LINE_ORDER = [
 /** The board as the planning model reads it. */
 export function boardText(board: Board): string {
   const { elements } = board;
-  const pending = board.drawing !== undefined && board.drawing.number > board.appliedDrawing;
-  const lines = pending ? [HEADING, PENDING_LINE] : [HEADING];
+  const lines = [HEADING, ...pendingLines(board)];
   if (elements.length === 0) return [...lines, "The board is empty."].join("\n");
   const live = new Map(elements.map((element) => [element.id, element]));
   const labels = new Map(

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./board-drawing": "./src/board-drawing.js",
     "./board-text": "./src/board-text.js",
     "./board-vocabulary": "./src/board-vocabulary.js",
     "./board-wire": "./src/board-wire.js",

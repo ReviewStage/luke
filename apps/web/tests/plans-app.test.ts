@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
-import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
+import { DRAWING_FAULT } from "@sidecar/hosted/board-drawing";
+import { BOARD_ELEMENT_TYPE, DRAWING_STEP_TYPE, LUKE_MARK } from "@sidecar/hosted/board-vocabulary";
+import { boardAnswerSchema, EMPTY_BOARD } from "@sidecar/hosted/board-wire";
 import { planAnswerSchema, planListAnswerSchema } from "@sidecar/hosted/plan-wire";
 import { planTranscriptAnswerSchema, TRANSCRIPT_BOUNDS } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
@@ -358,7 +359,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a board reads empty, holds Luke's latest drawing for the Mac, and keeps the scene the Mac writes",
+    "a board reads empty, holds Luke's drawings until the Mac's scene holds them, and keeps the scene the Mac writes",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -371,13 +372,13 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             (answered) => readAnswer(boardAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).board,
           );
 
-        assert.deepEqual(yield* read(), { elements: [], appliedDrawing: 0 });
+        assert.deepEqual(yield* read(), EMPTY_BOARD);
         const drawn = yield* runDrawOnBoard({ userId: owner, planId }, unparsedWire(DRAW_API));
         assert.deepEqual(drawn, { status: DRAW_ON_BOARD_STATUS.DRAWN, drawing: 1 });
         assert.deepEqual(yield* read(), {
-          elements: [],
-          appliedDrawing: 0,
-          drawing: { number: 1, elements: DRAW_API.elements },
+          ...EMPTY_BOARD,
+          latestDrawing: 1,
+          drawings: [{ number: 1, restore: false, elements: DRAW_API.elements }],
         });
 
         const written = yield* ask(
@@ -389,12 +390,16 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         );
         assert.equal(written.status, HOSTED_HTTP_STATUS.OK);
 
-        // Luke draws again: the new drawing replaces his last and leaves the scene to the Mac.
+        // The scene holds the first drawing, so the service keeps only the one Luke draws next.
         yield* runDrawOnBoard({ userId: owner, planId }, unparsedWire(DRAW_API));
         const board = yield* read();
         assert.deepEqual(board.elements, [NOTE]);
         assert.equal(board.appliedDrawing, 1);
-        assert.equal(board.drawing?.number, 2);
+        assert.equal(board.latestDrawing, 2);
+        assert.deepEqual(
+          board.drawings.map((drawing) => drawing.number),
+          [2],
+        );
       }),
   );
 
@@ -427,7 +432,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         );
         assert.deepEqual(yield* ask(request(BOARD, owner, { id: planId })), {
           status: HOSTED_HTTP_STATUS.OK,
-          body: { board: { elements: [], appliedDrawing: 0 } },
+          body: { board: EMPTY_BOARD },
         });
       }),
   );
@@ -456,15 +461,59 @@ it.layer(testSqlClient)("the plan routes", (it) => {
 
       assert.deepEqual(dangling, {
         status: DRAW_ON_BOARD_STATUS.NOT_DRAWN,
-        reason: DRAW_ON_BOARD_REFUSAL.NO_END,
+        reason: DRAW_ON_BOARD_REFUSAL[DRAWING_FAULT.NO_END],
       });
-      assert.equal(twice.status, DRAW_ON_BOARD_STATUS.NOT_DRAWN);
+      assert.deepEqual(twice, {
+        status: DRAW_ON_BOARD_STATUS.NOT_DRAWN,
+        reason: DRAW_ON_BOARD_REFUSAL[DRAWING_FAULT.TAKEN_ID],
+      });
       assert.equal(unreadable.status, DRAW_ON_BOARD_STATUS.NOT_DRAWN);
       assert.deepEqual(yield* ask(request(BOARD, owner, { id: planId })), {
         status: HOSTED_HTTP_STATUS.OK,
-        body: { board: { elements: [], appliedDrawing: 0 } },
+        body: { board: EMPTY_BOARD },
       });
     }),
+  );
+
+  it.effect(
+    "a restore draws on the scene as it stands: Luke deletes his own elements, joins the developer's, and deletes none of theirs",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const binding = { userId: owner, planId };
+        yield* runDrawOnBoard(binding, unparsedWire(DRAW_API));
+        const lukes = { ...NOTE, id: "api", customData: LUKE_MARK };
+        yield* ask(
+          request(BOARD, owner, {
+            method: "PUT",
+            id: planId,
+            body: { elements: [lukes, NOTE], appliedDrawing: 1 },
+          }),
+        );
+        const draw = (elements: WireBoundaryInput) =>
+          runDrawOnBoard(binding, unparsedWire({ restore: true, elements }));
+
+        const theirs = yield* draw([{ type: DRAWING_STEP_TYPE.DELETE, ids: [NOTE.id] }]);
+        const taken = yield* draw(DRAW_API.elements);
+        const changed = yield* draw([
+          { type: DRAWING_STEP_TYPE.DELETE, ids: ["api"] },
+          ...DRAW_API.elements,
+          { type: BOARD_ELEMENT_TYPE.ARROW, id: "noted", from: "api", to: NOTE.id },
+        ]);
+
+        assert.deepEqual(theirs, {
+          status: DRAW_ON_BOARD_STATUS.NOT_DRAWN,
+          reason: DRAW_ON_BOARD_REFUSAL[DRAWING_FAULT.NOT_LUKES],
+        });
+        assert.deepEqual(taken, {
+          status: DRAW_ON_BOARD_STATUS.NOT_DRAWN,
+          reason: DRAW_ON_BOARD_REFUSAL[DRAWING_FAULT.TAKEN_ID],
+        });
+        assert.deepEqual(changed, { status: DRAW_ON_BOARD_STATUS.DRAWN, drawing: 2 });
+      }),
   );
 
   it.effect("a deleted plan takes its board with it", () =>

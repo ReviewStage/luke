@@ -10,7 +10,12 @@ import {
 } from "@sidecar/gateway";
 import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
+import {
+  type Board,
+  type BoardElement,
+  type Drawing,
+  EMPTY_BOARD,
+} from "@sidecar/hosted/board-wire";
 import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
@@ -87,10 +92,16 @@ function fakeService(plans: Plan[]): FakeService {
     transcripts: {},
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
-    // The service keeps the last scene written, beside whatever drawing it holds.
+    // The service keeps the last scene written, beside the drawings it does not hold yet.
     saveBoard: (planId, elements, appliedDrawing) =>
       Effect.sync(() => {
-        const board = { ...service.boards[planId], elements, appliedDrawing };
+        const standing = service.boards[planId] ?? EMPTY_BOARD;
+        const board = {
+          ...standing,
+          elements,
+          appliedDrawing,
+          drawings: standing.drawings.filter((drawing) => drawing.number > appliedDrawing),
+        };
         service.boards[planId] = board;
         return board;
       }),
@@ -802,11 +813,19 @@ function box(id: string): BoardElement {
 }
 
 /** Luke's drawing of one box, as the service holds it under its number. */
-function drawing(number: number) {
+function drawing(number: number): Drawing {
   return {
     number,
+    restore: false,
     elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
   };
+}
+
+/** A board of these elements, with Luke's first drawing on its way where `drawn`. */
+function boardOf(elements: readonly BoardElement[], drawn: boolean): Board {
+  return drawn
+    ? { ...EMPTY_BOARD, elements, latestDrawing: 1, drawings: [drawing(1)] }
+    : { ...EMPTY_BOARD, elements };
 }
 
 it.effect(
@@ -815,14 +834,14 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-        service.boards[INVITES] = { elements: [box("note")], appliedDrawing: 0 };
+        service.boards[INVITES] = boardOf([box("note")], false);
         const { call, last, planning } = yield* subject(service);
         yield* planning.lifetime;
 
         yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
         assert.deepEqual(last()?.board, service.boards[INVITES]);
 
-        const drawn = { elements: [box("note")], appliedDrawing: 0, drawing: drawing(1) };
+        const drawn = boardOf([box("note")], true);
         service.boards[INVITES] = drawn;
         planning.showActivity(
           activityFrame(INVITES, { planner: { action: DRAW_ON_BOARD_TOOL_NAME }, notes: false }),
@@ -846,7 +865,7 @@ it.effect(
         yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
         planning.showActivity(activityFrame(INVITES, { planner: {}, notes: false }));
 
-        const drawn = { elements: [], appliedDrawing: 0, drawing: drawing(1) };
+        const drawn = boardOf([], true);
         service.boards[INVITES] = drawn;
         planning.showActivity(activityFrame(INVITES, { notes: false }));
         for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
@@ -861,7 +880,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-      service.boards[INVITES] = { elements: [], appliedDrawing: 0, drawing: drawing(1) };
+      service.boards[INVITES] = boardOf([], true);
       const { call, last } = yield* subject(service);
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
@@ -880,14 +899,19 @@ it.effect(
       assert.deepEqual(saved, { saved: true });
       assert.deepEqual(elsewhere, { saved: false });
       assert.equal(service.boards[BILLING], undefined);
-      assert.deepEqual(last()?.board, { elements: scene, appliedDrawing: 1, drawing: drawing(1) });
+      assert.deepEqual(last()?.board, {
+        ...EMPTY_BOARD,
+        elements: scene,
+        appliedDrawing: 1,
+        latestDrawing: 1,
+      });
     }),
 );
 
 it.effect("leaving the open plan drops the board drawn for it", () =>
   Effect.gen(function* () {
     const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-    service.boards[INVITES] = { elements: [box("note")], appliedDrawing: 0 };
+    service.boards[INVITES] = boardOf([box("note")], false);
     const { call, last } = yield* subject(service);
     yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 

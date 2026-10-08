@@ -170,22 +170,34 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 Each plan has one whiteboard, an Excalidraw scene that Luke and the developer
 both draw on. It shows in the side panel's Board tab, beside the document.
 
-- **Luke draws whole diagrams.** The planning model's `draw_on_board` tool
-  sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
-  text, and arrows between ids. It replaces his previous drawing and leaves
-  what the developer drew. The service only stores it
-  (`apps/web/server/hosted/board-tool.ts`). The voice hands a request to
-  draw to the planning model, as it does any other request.
-- **The Mac converts it.** The canvas turns Luke's drawing into Excalidraw
-  elements with Excalidraw's own converter, marks them as his, and puts them
-  in place of his previous ones, then saves the scene. An element of his that
-  the developer moved goes back where his next drawing says.
+- **Luke draws in Excalidraw's agent format.** The planning model's
+  `draw_on_board` tool follows the format of Excalidraw's own MCP server:
+  labelled boxes, ellipses, and diamonds, text, arrows between ids, a
+  `delete` step, and a `cameraUpdate` step. A drawing replaces Luke's
+  previous elements, or with `restore` draws on the board as it stands, the
+  way Excalidraw's `restoreCheckpoint` does. He may delete only his own
+  elements, and his arrows may join anything on the board. The service holds
+  each drawing to those rules against the board as it will stand, then
+  stores it until the scene holds it (`board-drawing.ts`,
+  `apps/web/server/hosted/board-tool.ts`). The planning prompt carries
+  Excalidraw's layout, sizing, and color guidance. The voice hands a request
+  to draw to the planning model, as it does any other request.
+- **The Mac applies it.** The canvas applies every drawing newer than the
+  one its scene holds, oldest first, with Excalidraw's own converter. It
+  sizes a shape Luke left unsized to its label, but no smaller than 120x60,
+  marks every element as his, lays out and binds his arrows, then saves the
+  scene. Under a restore, an element of his that the developer moved or
+  edited stays as the developer left it. The view then moves to the
+  drawing's `cameraUpdate`, or else to what the drawing added. Elements are
+  not streamed in as the model writes them, as Excalidraw's MCP app does,
+  because a tool call reaches the Mac only once it is whole.
 - **The developer draws with Excalidraw's own tools.** Images, embeds, and
   export are left out. The scene is saved whole once the canvas pauses, and
   the last write wins.
 - **Luke reads the board every turn.** The planning model's standing context
-  carries the scene as text under `[board]` (`board-text.ts`), so whatever
-  the developer drew is in front of it on its next turn.
+  carries the scene as text under `[board]` (`board-text.ts`), each of its
+  own elements marked `(yours)`, so whatever the developer drew is in front
+  of it on its next turn.
 - **The Mac reads the board** when a plan opens, when the tab shows, and when
   the call's activity says a drawing just settled.
 - **Excalidraw is its own bundle** (`whiteboard.js`), loaded the first time a

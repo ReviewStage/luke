@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { LUKE_MARK } from "@sidecar/hosted/board-vocabulary";
 import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
@@ -531,13 +532,14 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
 
         assert.equal(reply, SCRIPTED_DRAWN_REPLY);
         const drawn = Option.getOrThrow(yield* readBoard(userId, planId));
-        assert.equal(drawn.drawing?.number, 1);
+        assert.equal(drawn.latestDrawing, 1);
         assert.deepEqual(
-          drawn.drawing?.elements.map((element) => element.id),
-          [SCRIPTED_DRAWN_ID],
+          drawn.drawings.flatMap((drawing) => drawing.elements.map((element) => element.type)),
+          ["rectangle"],
         );
         const pending = yield* host.standingContext(yield* admitted(host, session));
         assert.ok(pending.includes("Your latest drawing is not on the board yet"));
+        assert.ok(pending.includes(`on its way: ${SCRIPTED_DRAWN_ID}`));
 
         // The developer's Mac puts the drawing on the board beside a note of the developer's own.
         const box = {
@@ -547,6 +549,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           y: 0,
           width: 200,
           height: 80,
+          customData: LUKE_MARK,
         } as const;
         const note = {
           id: "dev-note",
@@ -560,7 +563,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         yield* writeScene(userId, planId, [box, note], 1);
         const context = yield* host.standingContext(yield* admitted(host, session));
 
-        assert.ok(context.includes(`${SCRIPTED_DRAWN_ID} rectangle at 0,0 200x80`));
+        assert.ok(context.includes(`${SCRIPTED_DRAWN_ID} rectangle at 0,0 200x80 (yours)`));
         assert.ok(context.includes('dev-note "Rate limit invites" at 0,200'));
         assert.ok(!context.includes("not on the board yet"));
       }),

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
+import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -12,7 +13,7 @@ test("the whiteboard is drawn under a root the screen recording leaves out", () 
   const markup = renderToStaticMarkup(
     createElement(PlanBoard, {
       planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-      board: { elements: [], appliedDrawing: 0 },
+      board: EMPTY_BOARD,
     }),
   );
 

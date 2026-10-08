@@ -99,6 +99,23 @@
         "minItems": 2,
         "maxItems": 2
       }
+    },
+    "customData": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "drawnBy": {
+              "type": "string"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

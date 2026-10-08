@@ -1,4 +1,4 @@
-import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
+import type { BoardElement, Drawing } from "@sidecar/hosted/board-wire";
 import type { PlanFields } from "@sidecar/hosted/plan-template";
 import type { PlanAssumption, PlanCommandResult } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
@@ -75,10 +75,10 @@ export const planCommand = pgTable("plan_command", {
 
 /**
  * A plan's whiteboard: the Excalidraw scene the Plans tab shows, with the
- * number of Luke's drawing it holds, and Luke's latest drawing with its own
- * number. A plan has no row until its board is first drawn on, and reads as
- * an empty board until then. The Mac writes the scene and Luke writes the
- * drawing, each whole and each the last write winning (`board-store.ts`).
+ * number of Luke's drawing it holds, and Luke's drawings the scene does not
+ * hold yet with the latest one's number. A plan has no row until its board is
+ * first drawn on, and reads as an empty board until then. The Mac writes the
+ * scene, the last write winning, and Luke adds drawings (`board-store.ts`).
  * The row goes with its plan.
  */
 export const planBoard = pgTable("plan_board", {
@@ -88,8 +88,14 @@ export const planBoard = pgTable("plan_board", {
   elements: jsonb("elements").$type<readonly BoardElement[]>().notNull().default(sql`'[]'::jsonb`),
   /** The number of Luke's drawing the scene holds; 0 before it holds any. */
   appliedDrawing: integer("applied_drawing").notNull().default(0),
-  /** Luke's latest drawing; null before he drew. */
-  drawing: jsonb("drawing").$type<readonly DrawingElement[]>(),
+  /**
+   * The whole diagram Luke last drew, before drawings became steps. Read and
+   * written by nothing, and kept until no deployment still reads it, as
+   * `plan.opened_at` was kept until migration 0060 dropped it.
+   */
+  drawing: jsonb("drawing"),
+  /** Luke's drawings the scene does not hold yet, oldest first. */
+  drawings: jsonb("drawings").$type<readonly Drawing[]>().notNull().default(sql`'[]'::jsonb`),
   /** The latest drawing's number, one more for each drawing; 0 before he drew. */
   drawingNumber: integer("drawing_number").notNull().default(0),
   updatedAt: instant("updated_at").notNull().defaultNow(),

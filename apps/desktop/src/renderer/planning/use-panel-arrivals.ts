@@ -89,7 +89,7 @@ function recordArrival(planId: string, tab: ArrivingTab): boolean {
 
 /** Whether Luke has drawn on a board, whether or not its scene holds his drawing yet. */
 function lukeDrew(board: Board): boolean {
-  return (board.drawing?.elements.length ?? 0) > 0;
+  return board.latestDrawing > 0;
 }
 
 /** The unread tabs with one more, the plan's alone: another plan's dots are not this one's. */
