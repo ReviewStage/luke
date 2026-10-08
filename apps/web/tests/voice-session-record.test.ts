@@ -68,6 +68,7 @@ const callWith = (
       userId: input.userId,
       sessionId: liveSessionId,
       planId: input.planId,
+      attachId: randomUUID(),
     });
     assert.ok(voiceSessionId);
     yield* db
