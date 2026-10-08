@@ -29,6 +29,7 @@ import {
   type EveSessionsOptions,
   type EveUnreachable,
 } from "../server/hosted/brain-host/eve-sessions";
+import { listChildren } from "../server/hosted/store/children";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { eveUnreachable } from "./support/no-network";
 import { insertConversation, insertMessage } from "./support/store-rows";
@@ -280,7 +281,7 @@ test("a refused open and an open that never answered each stamp the child they o
 
   // Each stamped row is a cleared conversation: listed by nothing, and admitting no session.
   assert.deepEqual(await childrenOf(fixture.parentId), { standing: 0, stamped: 2 });
-  assert.deepEqual(await database.run(database.store.directory.children(fixture.userId, 10)), []);
+  assert.deepEqual(await database.run(listChildren(fixture.userId, 10)), []);
   const [refusedChild] = refusing.opened;
   assert.ok(refusedChild);
   const auth = principal(fixture.userId, refusedChild.conversationId);

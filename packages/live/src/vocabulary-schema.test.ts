@@ -14,8 +14,6 @@ import {
   LiveServerEventTypeSchema,
   LiveStatusSchema,
 } from "./events.js";
-import { LIVE_SCENE, LiveSceneSchema } from "./instructions.js";
-import { PROACTIVE_SPEECH_KIND, ProactiveSpeechKindSchema } from "./proactive.js";
 import {
   LIVE_DELEGATION_TYPE,
   LIVE_TRANSPORT_TYPE,
@@ -66,14 +64,6 @@ test("a session's close reason and a delegation's target hold their own sets alo
 test("the single-valued transport and delegation constants are schemas of exactly one member", () => {
   settlesVocabulary(LiveTransportTypeSchema, [LIVE_TRANSPORT_TYPE], ["http", "grpc"]);
   settlesVocabulary(LiveDelegationTypeSchema, [LIVE_DELEGATION_TYPE], ["server"]);
-});
-
-test("a scene and its instruction sections hold their own sets alone", () => {
-  settlesVocabulary(LiveSceneSchema, Object.values(LIVE_SCENE));
-});
-
-test("proactive speech is one of the kinds this build knows how to word", () => {
-  settlesVocabulary(ProactiveSpeechKindSchema, Object.values(PROACTIVE_SPEECH_KIND));
 });
 
 test("a voice arriving from storage or IPC is a schema of the SDK's built-in set", () => {

@@ -15,7 +15,6 @@ import { devices } from "./db/devices-schema.js";
 import { db } from "./db/query.js";
 import { observationPass } from "./db/roster-schema.js";
 import { providerKey } from "./db/vault-schema.js";
-import { executeConversationRead } from "./hosted/action-execute.js";
 import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
 import { sweepChildCompletions } from "./hosted/brain-host/child-completion.js";
@@ -30,7 +29,6 @@ import { readHostedRoster } from "./hosted/brain-host/roster.js";
 import { hostedTranscriptReads } from "./hosted/brain-host/transcript.js";
 import { CATALOG_TOOL_SET } from "./hosted/brain-tool-set.js";
 import { cloudSessionPluginFor } from "./hosted/cloud-adapters.js";
-import { handleConversationRead } from "./hosted/conversation-read.js";
 import { deviceSeams } from "./hosted/device-store.js";
 import { payloadKeyRing } from "./hosted/encryption.js";
 import { HostedEnvironment } from "./hosted/environment.js";
@@ -38,9 +36,7 @@ import { type EventsOptions, handleEvents } from "./hosted/events.js";
 import { hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { observeAndSnapshot } from "./hosted/observation-pass.js";
 import { handleObservationTick, type ObservationTickOptions } from "./hosted/observation-tick.js";
-import { handleObserve } from "./hosted/observe.js";
 import type { PosthogPerson } from "./hosted/posthog.js";
-import { handleProjects } from "./hosted/projects.js";
 import { recordVoiceSeconds } from "./hosted/quota.js";
 import { pushSpeech, type SpeechPushOutcome } from "./hosted/speech-push.js";
 import { sweepAbandonedTurns } from "./hosted/store/abandoned-turns.js";
@@ -52,21 +48,18 @@ import {
 } from "./hosted/store/index.js";
 import { readStoredVaultKeys } from "./hosted/vault-key-store.js";
 import { readApiKeyFor } from "./hosted/vault-keys.js";
-import { hostedEncryptionSecretEffect, hostedVaultSeams } from "./hosted/vault-route.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 import { createLiveUpstream } from "./voice/openai.js";
 import { NOTHING_ORPHANED, sweepVoiceOrphans, VOICE_ORPHAN_SWEEP } from "./voice/orphan-sweep.js";
 import { voiceSessionRecord } from "./voice/session-record.js";
 
 /**
- * The observation group: the routes that read and are read from the roster
- * an account's cloud providers stand behind. Each is its own Vercel function
- * on its own path, and every one of them mounts this same group, which is
- * organization rather than dispatch — Vercel already sent each function only
- * the requests for its own path. What differs across them is each handler's
- * own logic, kept exactly as it stood; the group is the `HttpRouter` that
- * carries each handler's answer to an `HttpApp`, and the hosted vocabulary's
- * own `not-found` on any path none of them declares.
+ * The observation group: the scheduled tick and the desktop's analytics
+ * ingest. Each is its own Vercel function on its own path, and both mount
+ * this same group, which is organization rather than dispatch — Vercel
+ * already sent each function only the requests for its own path. The group
+ * is the `HttpRouter` that carries each handler's answer to an `HttpApp`,
+ * and the hosted vocabulary's own `not-found` on any path neither declares.
  */
 
 const CLOUD_PROVIDER_IDS = Object.values(CLOUD_AGENT_PROVIDER_ID);
@@ -155,10 +148,7 @@ export function listEligibleAccounts(
 }
 
 const PATH = {
-  SESSIONS_MESSAGES: "/api/sessions/messages",
-  PROJECTS: "/api/projects",
   EVENTS: "/api/events",
-  OBSERVE: "/api/observe",
   OBSERVATION_TICK: "/api/observation/tick",
 } as const;
 
@@ -201,41 +191,6 @@ const effectPassthrough = /* @__PURE__ */ Effect.fn("web/effectPassthrough")(fun
     ? bodylessAnswer(answer)
     : HttpServerResponse.raw(answer);
 });
-
-/** Reads one observed session's conversation for the caller who opened its screen. */
-const sessionsMessagesEffect = /* @__PURE__ */ Effect.fn("web/sessionsMessagesEffect")(function* (
-  request: Request,
-): Effect.fn.Return<
-  Response,
-  SqlError | Schema.SchemaError,
-  SqlClient.SqlClient | HostedEnvironment
-> {
-  const encryptionSecret = yield* hostedEncryptionSecretEffect;
-  return yield* handleConversationRead({
-    ...hostedVaultSeams,
-    encryptionSecret,
-    request,
-    execute: executeConversationRead,
-  });
-});
-
-/** Lists where the signed-in user's keys can create a workspace. */
-function projectsEffect(
-  request: Request,
-): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient | HostedEnvironment> {
-  return Effect.flatMap(hostedEncryptionSecretEffect, (encryptionSecret) =>
-    handleProjects({ ...hostedVaultSeams, encryptionSecret, request }),
-  );
-}
-
-/** Observes the signed-in user's cloud sessions on demand. */
-function observeEffect(
-  request: Request,
-): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient | HostedEnvironment> {
-  return Effect.flatMap(hostedEncryptionSecretEffect, (encryptionSecret) =>
-    handleObserve({ ...hostedVaultSeams, encryptionSecret, request }),
-  );
-}
 
 /**
  * Records what the signed-in desktop counted about its own use. The logic
@@ -443,10 +398,7 @@ export function observationApp(): WebRoutes<
     // refusal, as it did before conversion, so a request to the right path on
     // the wrong method still answers 405 rather than falling through to the
     // group's own 404.
-    HttpRouter.add(ANY_METHOD, PATH.SESSIONS_MESSAGES, effectPassthrough(sessionsMessagesEffect)),
-    HttpRouter.add(ANY_METHOD, PATH.PROJECTS, effectPassthrough(projectsEffect)),
     HttpRouter.add(ANY_METHOD, PATH.EVENTS, effectPassthrough(eventsEffect)),
-    HttpRouter.add(ANY_METHOD, PATH.OBSERVE, effectPassthrough(observeEffect)),
     HttpRouter.add(ANY_METHOD, PATH.OBSERVATION_TICK, effectPassthrough(observationTickEffect)),
     hostedNotFoundRoute,
   );

@@ -186,7 +186,7 @@ declare const SPEECH_CLAIM: unique symbol;
  * rule to remember. It names what was claimed and by whom, which is what the
  * spoken mark is later written against.
  */
-export interface SpeechClaim {
+interface SpeechClaim {
   readonly [SPEECH_CLAIM]: true;
   readonly userId: string;
   readonly conversationId: string;

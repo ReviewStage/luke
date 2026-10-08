@@ -38,7 +38,7 @@ const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: fa
  * `Result.match` rather than a test of the tag and a reach into the arm it
  * proved.
  */
-export const settingGuardFromEither = <Value>(
+const settingGuardFromEither = <Value>(
   either: Result.Result<Value, Value>,
 ): SettingGuardResult<Value> => Result.match(either, { onSuccess: valid, onFailure: invalid });
 
@@ -77,23 +77,6 @@ const choiceAnalytics = (value: StoredSettingValue): ProductSettingValue =>
 // never travels, whichever shape is reported.
 const hotkeyAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value === VOICE_HOTKEY_NONE ? PRODUCT_SETTING_VALUE.OFF : choiceAnalytics(value);
-
-/**
- * A hand-written entry, for the few settings no builder answers for: values
- * the pages draw no row for at all.
- * An identity function, so the entry is checked against the contract where it
- * is written rather than where it is read.
- */
-export function storedSetting<
-  Field extends string,
-  Value,
-  Id extends AppSettingId,
-  Default extends Value,
->(
-  entry: AppSettingSchemaEntry<Field, Value, Id, Default>,
-): AppSettingSchemaEntry<Field, Value, Id, Default> {
-  return entry;
-}
 
 /**
  * A stored on/off. That it is a toggle is what fixes its guard, its guide

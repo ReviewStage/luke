@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { LIVE_VOICE } from "@sidecar/live";
-import { PROVIDER_ID } from "@sidecar/session";
 import type { AccountPreferences } from "@sidecar/settings";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { type FakeResponder, fakeHttpClientLayer } from "@sidecar/wire/testing";
@@ -166,12 +165,7 @@ function preferencesWriteRequest(
 
 const STORED_PREFERENCES: AccountPreferences = { voice: LIVE_VOICE.CORAL };
 
-const WRITTEN_PREFERENCES = {
-  voice: LIVE_VOICE.MARIN,
-  defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
-  workspaceProjectDefaults: { conductor: "project-1" },
-  workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol", effort: "high" } },
-} satisfies AccountPreferences;
+const WRITTEN_PREFERENCES = { voice: LIVE_VOICE.MARIN } satisfies AccountPreferences;
 
 const WRITE_BODY = { preferences: WRITTEN_PREFERENCES };
 

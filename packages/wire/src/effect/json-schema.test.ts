@@ -36,17 +36,13 @@ const text = (max?: number) =>
 /** An integer at or above its minimum, as a wire declaration reads one. */
 const wholeNumber = (minimum: number) => Schema.Int.check(Schema.isGreaterThanOrEqualTo(minimum));
 
-/** A union of a bounded whole number and a null literal, under `optional`. */
-const presenceInstant = Schema.Union([wholeNumber(0), Schema.Null]);
-
-const changesRequest = Schema.Struct({
-  deviceId: text(36),
-  activeUntil: Schema.optionalKey(presenceInstant),
-  quietUntil: Schema.optionalKey(presenceInstant),
+/** A struct or a null literal: a claim that found no command answers null. */
+const planCommandClaimAnswer = Schema.Struct({
+  command: Schema.NullOr(Schema.Struct({ id: text(36), command: Schema.String })),
 });
 
 const HOSTED_GOLDENS = [
-  ["reads-wire-changesRequestSchema", changesRequest],
+  ["plan-wire-planCommandClaimAnswerSchema", planCommandClaimAnswer],
 ] as const satisfies readonly (readonly [string, Schema.Top])[];
 
 test.for(HOSTED_GOLDENS)(

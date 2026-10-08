@@ -1,6 +1,6 @@
 import { Effect, Redacted } from "effect";
 import { decryptProviderKey } from "./encryption.js";
-import type { VaultKeyRow } from "./vault-route.js";
+import type { VaultKeyRow } from "./vault-key-store.js";
 
 /**
  * Reading a caller's stored keys, which the observation pass, the projects

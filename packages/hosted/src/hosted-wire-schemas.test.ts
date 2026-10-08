@@ -7,23 +7,10 @@ import {
   settleJsonSchemaGoldenSet,
 } from "@sidecar/wire/testing";
 import { test } from "vitest";
-import * as actionWire from "./action-wire.js";
-import * as askWire from "./ask-wire.js";
 import * as boardWire from "./board-wire.js";
-import * as conversationClearWire from "./conversation-clear-wire.js";
-import * as conversationWire from "./conversation-wire.js";
-import * as deviceWire from "./device-wire.js";
-import * as githubWire from "./github-wire.js";
 import * as liveContract from "./live-contract.js";
-import * as notebookWire from "./notebook-wire.js";
-import * as observeWire from "./observe-wire.js";
 import * as planWire from "./plan-wire.js";
-import * as projectsWire from "./projects-wire.js";
-import * as ratingWire from "./rating-wire.js";
-import * as readsWire from "./reads-wire.js";
 import * as serviceWire from "./service-wire.js";
-import * as turnEventsWire from "./turn-events-wire.js";
-import * as vaultWire from "./vault-wire.js";
 
 /**
  * Every schema the hosted wire declares, as the JSON Schema it emits. A wire
@@ -38,15 +25,6 @@ import * as vaultWire from "./vault-wire.js";
 const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 
 const EFFECT_MODULE_SCHEMAS = {
-  "action-wire": {
-    hostedActionAnswerSchema: actionWire.hostedActionAnswerSchema,
-    hostedActionWorkspaceAnswerSchema: actionWire.hostedActionWorkspaceAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof actionWire>,
-  "ask-wire": {
-    hostedBrainAskRequestSchema: askWire.hostedBrainAskRequestSchema,
-    hostedBrainAskAnswerSchema: askWire.hostedBrainAskAnswerSchema,
-    hostedBrainTurnAnswerSchema: askWire.hostedBrainTurnAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof askWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
     boardElementsSchema: boardWire.boardElementsSchema,
@@ -55,50 +33,19 @@ const EFFECT_MODULE_SCHEMAS = {
     boardSaveRequestSchema: boardWire.boardSaveRequestSchema,
     drawingElementsSchema: boardWire.drawingElementsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
-  "conversation-clear-wire": {
-    conversationClearAnswerSchema: conversationClearWire.conversationClearAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof conversationClearWire>,
-  "conversation-wire": {
-    hostedConversationAnswerSchema: conversationWire.hostedConversationAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof conversationWire>,
-  "device-wire": {
-    deviceWireIdSchema: deviceWire.deviceWireIdSchema,
-    deviceRegisterRequestSchema: deviceWire.deviceRegisterRequestSchema,
-    deviceRegisterAnswerSchema: deviceWire.deviceRegisterAnswerSchema,
-    deviceHeartbeatRequestSchema: deviceWire.deviceHeartbeatRequestSchema,
-    deviceHeartbeatAnswerSchema: deviceWire.deviceHeartbeatAnswerSchema,
-    deviceForgetRequestSchema: deviceWire.deviceForgetRequestSchema,
-    deviceForgetAnswerSchema: deviceWire.deviceForgetAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof deviceWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
-    sessionAudioCreateFrameSchema: liveContract.sessionAudioCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
     sessionOpeningFrameSchema: liveContract.sessionOpeningFrameSchema,
     sessionActivityFrameSchema: liveContract.sessionActivityFrameSchema,
     sessionStopFrameSchema: liveContract.sessionStopFrameSchema,
-    sessionBeatFrameSchema: liveContract.sessionBeatFrameSchema,
     sessionHangUpFrameSchema: liveContract.sessionHangUpFrameSchema,
     sessionReportFrameSchema: liveContract.sessionReportFrameSchema,
-    sessionSpokenFrameSchema: liveContract.sessionSpokenFrameSchema,
     planDraftFrameSchema: liveContract.planDraftFrameSchema,
     planActivityFrameSchema: liveContract.planActivityFrameSchema,
     sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
-    sessionAudioCreatedFrameSchema: liveContract.sessionAudioCreatedFrameSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,
-  "notebook-wire": {
-    notebookFileSchema: notebookWire.notebookFileSchema,
-    notebookAnswerSchema: notebookWire.notebookAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof notebookWire>,
-  "observe-wire": {
-    observeAnswerSchema: observeWire.observeAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof observeWire>,
-  "github-wire": {
-    githubFailureAnswerSchema: githubWire.githubFailureAnswerSchema,
-    githubRepositorySchema: githubWire.githubRepositorySchema,
-    githubRepositoryListAnswerSchema: githubWire.githubRepositoryListAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof githubWire>,
   "plan-wire": {
     planAssumptionSchema: planWire.planAssumptionSchema,
     planDocumentSchema: planWire.planDocumentSchema,
@@ -113,9 +60,6 @@ const EFFECT_MODULE_SCHEMAS = {
     planCommandSettleAnswerSchema: planWire.planCommandSettleAnswerSchema,
     planDeleteAnswerSchema: planWire.planDeleteAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
-  "projects-wire": {
-    hostedProjectsAnswerSchema: projectsWire.hostedProjectsAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof projectsWire>,
   "service-wire": {
     writtenText: serviceWire.writtenText,
     countedNumber: serviceWire.countedNumber,
@@ -123,36 +67,6 @@ const EFFECT_MODULE_SCHEMAS = {
     hostedErrorSchema: serviceWire.hostedErrorSchema,
     wireUuidSchema: serviceWire.wireUuidSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
-  "vault-wire": {
-    vaultKeyStoreAnswerSchema: vaultWire.vaultKeyStoreAnswerSchema,
-    vaultKeysListAnswerSchema: vaultWire.vaultKeysListAnswerSchema,
-    vaultKeyDeleteAnswerSchema: vaultWire.vaultKeyDeleteAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof vaultWire>,
-  "rating-wire": {
-    hostedMessageRatingRequestSchema: ratingWire.hostedMessageRatingRequestSchema,
-    hostedMessageRatingAnswerSchema: ratingWire.hostedMessageRatingAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof ratingWire>,
-  "reads-wire": {
-    sequenceReadCursorSchema: readsWire.sequenceReadCursorSchema,
-    turnReadCursorSchema: readsWire.turnReadCursorSchema,
-    readLimitSchema: readsWire.readLimitSchema,
-    conversationMessagesAnswerSchema: readsWire.conversationMessagesAnswerSchema,
-    historyReadCursorSchema: readsWire.historyReadCursorSchema,
-    conversationHistoryAnswerSchema: readsWire.conversationHistoryAnswerSchema,
-    conversationEventsAnswerSchema: readsWire.conversationEventsAnswerSchema,
-    brainTurnsAnswerSchema: readsWire.brainTurnsAnswerSchema,
-    childrenHeadSchema: readsWire.childrenHeadSchema,
-    childrenAnswerSchema: readsWire.childrenAnswerSchema,
-    agentsHeadSchema: readsWire.agentsHeadSchema,
-    agentsAnswerSchema: readsWire.agentsAnswerSchema,
-    changesRequestSchema: readsWire.changesRequestSchema,
-    changesAnswerSchema: readsWire.changesAnswerSchema,
-    unreadableRowRefusalSchema: readsWire.unreadableRowRefusalSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof readsWire>,
-  "turn-events-wire": {
-    turnEventCursorSchema: turnEventsWire.turnEventCursorSchema,
-    turnEventSchema: turnEventsWire.turnEventSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof turnEventsWire>,
 } as const;
 
 const declaredSchemas = (

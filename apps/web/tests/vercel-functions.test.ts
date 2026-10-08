@@ -206,14 +206,14 @@ test("a route that reaches eve/ fails the reachability guard, naming the bundle 
   timeout: 60_000,
 }, async () => {
   const plan = await functionBundlePlan(WEB);
-  const probe = "devices-reaching-agent";
+  const probe = "events-reaching-agent";
   const { entryPoints: _entryPoints, outdir: _outdir, ...options } = plan.options;
   const result = await build({
     ...options,
     write: false,
     outfile: join(WEB, FUNCTION_BUNDLE_DIRECTORY, `${probe}.js`),
     stdin: {
-      contents: 'import "./devices.ts";\nimport "../../eve/hooks/store.ts";\n',
+      contents: 'import "./events.ts";\nimport "../../eve/hooks/store.ts";\n',
       resolveDir: join(WEB, "server", "routes"),
       sourcefile: `${probe}.ts`,
       loader: "ts",

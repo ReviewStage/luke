@@ -80,10 +80,8 @@ test("every field's own declaration answers for everything read of it", () => {
     for (const id of entry.ids) assert.ok(isAppSettingId(id), `${field} names ${id}`);
 
     // A row `SchemaSettingRows` draws is one the guide describes, since the
-    // guide entry is what it draws from; a field nothing draws describes no
-    // row of its own.
+    // guide entry is what it draws from.
     if (entry.rows === SETTING_ROWS.SCHEMA) assert.ok(entry.ids.length > 0, field);
-    if (entry.rows === SETTING_ROWS.NONE) assert.equal(entry.ids.length, 0, field);
 
     // Nothing is counted that has no id to count under.
     assert.ok(entry.analytics === undefined || entry.ids.length > 0, field);

@@ -1,15 +1,13 @@
-import { LIVE_CLIENT_EVENT, type LiveAppendEvent } from "@sidecar/live";
+import type { LiveAppendEvent } from "@sidecar/live";
 import { Clock, Deferred, Duration, Effect, Exit, Option, Queue } from "effect";
 import type { LiveSideband } from "../live-socket.js";
 
 /**
  * The host's sends on one session, in order, each awaiting the acknowledgment
  * or the error that names it. An error naming no client event is never read
- * as success, silence past the timeout counts as the append not taken, and a
- * commentary that was taken is settled spoken by the first output transcript
- * past its end, as the conversations guide has it. Closing the channel refuses everything still
- * waiting, so a dead session's deliveries are discarded rather than left
- * hanging.
+ * as success, and silence past the timeout counts as the append not taken.
+ * Closing the channel refuses everything still waiting, so a dead session's
+ * deliveries are discarded rather than left hanging.
  */
 
 /** How long an append waits for its acknowledgment or error before it is counted as not taken. */
@@ -31,33 +29,14 @@ export const APPEND_OUTCOME = {
 
 export type AppendOutcome = (typeof APPEND_OUTCOME)[keyof typeof APPEND_OUTCOME];
 
-type Acknowledgment =
-  | { outcome: typeof APPEND_OUTCOME.TAKEN; endMs: number }
-  | { outcome: typeof APPEND_OUTCOME.REFUSED | typeof APPEND_OUTCOME.CLOSED };
-
-const REFUSED: Acknowledgment = { outcome: APPEND_OUTCOME.REFUSED };
-const CLOSED: Acknowledgment = { outcome: APPEND_OUTCOME.CLOSED };
-
-/** A commentary append acknowledged and not yet heard: settled by the first output transcript past its end. */
-interface AwaitingSpeech {
-  endMs: number;
-  onSpoken: () => void;
-}
-
-interface PendingAck {
-  acknowledged: Deferred.Deferred<Acknowledgment>;
-  /** For a commentary append: registered to await its speech the instant the acknowledgment lands, before any output delta can follow it. */
-  onSpoken: (() => void) | undefined;
-}
+/** What settles a waiting append before its timeout: an acknowledgment, an error, or the close. */
+type Acknowledgment = Exclude<AppendOutcome, typeof APPEND_OUTCOME.UNANSWERED>;
 
 /**
- * What a send may ask of the channel beside the append itself: the callback a
- * commentary's speech settles, and whether the send is one the session should
- * be kept alive for. Both default to what an ordinary reply wants.
+ * What a send may ask of the channel beside the append itself: whether the
+ * send is one the session should be kept alive for, which by default it is.
  */
 interface SendOptions {
-  /** For a commentary append: called once its speech has settled. */
-  onSpoken?: () => void;
   /** Whether this send moves the idle clock. The stop instruction does not. */
   countsForIdle?: boolean;
 }
@@ -69,8 +48,7 @@ interface AppendChannelOptions {
 
 export class AppendChannel {
   readonly #options: AppendChannelOptions;
-  readonly #pending = new Map<string, PendingAck>();
-  #awaiting: AwaitingSpeech[] = [];
+  readonly #pending = new Map<string, Deferred.Deferred<Acknowledgment>>();
   readonly #work: Queue.Queue<Effect.Effect<void>>;
   /** Settled by `close`, so the fiber serializing the sends ends where it waits rather than outliving the session. */
   readonly #closed = Deferred.makeUnsafe<void>();
@@ -81,12 +59,6 @@ export class AppendChannel {
    * instruction the host writes cannot hold a quiet session open forever.
    */
   lastSentAt: number | undefined;
-  /**
-   * Whether a commentary has left on this channel: Luke has been asked to
-   * say something into this session, whatever became of it. A greeting reads
-   * this to know the conversation is already open.
-   */
-  commentarySent = false;
 
   private constructor(options: AppendChannelOptions, work: Queue.Queue<Effect.Effect<void>>) {
     this.#options = options;
@@ -128,17 +100,10 @@ export class AppendChannel {
   deliver(event: LiveAppendEvent, options: SendOptions = {}): Effect.Effect<AppendOutcome> {
     return Effect.gen({ self: this }, function* () {
       if (this.#shut) return APPEND_OUTCOME.CLOSED;
-      const { onSpoken, countsForIdle = true } = options;
-      const speech =
-        event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND
-          ? () => {
-              onSpoken?.();
-            }
-          : undefined;
+      const { countsForIdle = true } = options;
       const acknowledged = yield* Deferred.make<Acknowledgment>();
-      this.#pending.set(event.event_id, { acknowledged, onSpoken: speech });
+      this.#pending.set(event.event_id, acknowledged);
       if (countsForIdle) this.lastSentAt = yield* Clock.currentTimeMillis;
-      if (speech !== undefined) this.commentarySent = true;
       yield* this.#options.sideband.send(event);
       const settled = yield* Effect.timeoutOption(
         Deferred.await(acknowledged),
@@ -148,36 +113,27 @@ export class AppendChannel {
         this.#pending.delete(event.event_id);
         return APPEND_OUTCOME.UNANSWERED;
       }
-      return settled.value.outcome;
+      return settled.value;
     });
   }
 
   /** The `*.appended` acknowledgment naming one of this channel's appends. */
-  acknowledge(eventId: string, endMs: number): void {
-    this.#settle(eventId, { outcome: APPEND_OUTCOME.TAKEN, endMs });
+  acknowledge(eventId: string): void {
+    this.#settle(eventId, APPEND_OUTCOME.TAKEN);
   }
 
   /** An error naming one of this channel's appends. */
   refuse(eventId: string): void {
-    this.#settle(eventId, REFUSED);
-  }
-
-  /** Output transcript reached this instant: every commentary whose injection ended before it has been heard. */
-  outputReached(endMs: number): void {
-    const heard = this.#awaiting.filter((awaiting) => endMs > awaiting.endMs);
-    if (heard.length === 0) return;
-    this.#awaiting = this.#awaiting.filter((awaiting) => !heard.includes(awaiting));
-    for (const awaiting of heard) awaiting.onSpoken();
+    this.#settle(eventId, APPEND_OUTCOME.REFUSED);
   }
 
   /** The session is gone: nothing waiting is taken, and nothing further leaves. */
   close(): void {
     this.#shut = true;
-    for (const [eventId, pending] of [...this.#pending]) {
+    for (const [eventId, acknowledged] of [...this.#pending]) {
       this.#pending.delete(eventId);
-      Deferred.doneUnsafe(pending.acknowledged, Effect.succeed(CLOSED));
+      Deferred.doneUnsafe(acknowledged, Effect.succeed(APPEND_OUTCOME.CLOSED));
     }
-    this.#awaiting = [];
     Deferred.doneUnsafe(this.#closed, Exit.void);
   }
 
@@ -210,12 +166,9 @@ export class AppendChannel {
   }
 
   #settle(eventId: string, acknowledgment: Acknowledgment): void {
-    const pending = this.#pending.get(eventId);
-    if (!pending) return;
+    const acknowledged = this.#pending.get(eventId);
+    if (!acknowledged) return;
     this.#pending.delete(eventId);
-    if (acknowledgment.outcome === APPEND_OUTCOME.TAKEN && pending.onSpoken) {
-      this.#awaiting.push({ endMs: acknowledgment.endMs, onSpoken: pending.onSpoken });
-    }
-    Deferred.doneUnsafe(pending.acknowledged, Effect.succeed(acknowledgment));
+    Deferred.doneUnsafe(acknowledged, Effect.succeed(acknowledgment));
   }
 }

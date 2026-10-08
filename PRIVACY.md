@@ -48,10 +48,8 @@ the child said and each tool it called, with its input and its result, is
 stored as a conversation of your account, in the same rows described under
 "Your account" below and on the same terms: stored as written and readable by
 our own operators, and removed at once when you delete your account. A child
-of your own conversation is marked deleted with the rest when you clear the
-conversation and removed thirty days later; a child opened from a
-conversation Luke follows stands with the conversation it was opened from,
-which Clear does not reach, until you delete your account. Each of its turns
+stands as long as the conversation it was opened from and is removed with
+it. Each of its turns
 counts against your daily review
 allowance like any turn of Luke's own.
 
@@ -67,8 +65,7 @@ under "How Luke keeps his notebook" below, which refuse a file past its bound
 rather than cut it, so the file he reads is the file that exists. The file's name and its
 contents are stored as written, bound to your account and readable by our own
 operators, the same way the conversation described below is. Those
-rows are untouched by clearing the conversation and are removed when you
-delete your account. Earlier versions of Luke kept the same files on your Mac,
+rows are removed when you delete your account. Earlier versions of Luke kept the same files on your Mac,
 under his application data (`agents/main/workspace`), and read them into the
 calls they made from here; this version makes no such call, seeds nothing
 there, and reads nothing from it. Files an earlier version left are yours to
@@ -149,8 +146,7 @@ workspace files described above. He skips temporary details and uncertain
 guesses, never records credentials, and records sensitive facts only when you
 explicitly ask. `USER.md` is a workspace row like the others: stored as
 written, bound to your account, edited only by Luke's own workspace tool in his
-turns there, untouched by clearing the conversation, and removed when you
-delete your account. A line a newer one replaces is marked superseded rather
+turns there, and removed when you delete your account. A line a newer one replaces is marked superseded rather
 than silently dropped, so what he knew and since when is on the page for you
 to read. Nothing on your Mac saves or reads one: an earlier version kept them
 as lines of a `USER.md` in the workspace it held here, and a `USER.md` that
@@ -189,7 +185,7 @@ conversation as data and may append what is durable in it — a decision, a
 result, something learned — to the dated note for the day, `memory/YYYY-MM-DD.md`,
 in the same workspace rows, through the same append his turns use; it can
 write nothing else, and appends rather than rewrites. It runs only while you
-are asking Luke something yourself, typed or spoken, never in a turn the
+are asking Luke something yourself, never in a turn the
 scheduled observation opened; at most once each time the
 memory folds; on the same model and under the same daily allowance as his
 turns; and within a minute, or not at all. Nothing it reads or says appears
@@ -235,20 +231,21 @@ summaries of his reasoning, and each tool he called with its input and its
 result, the briefing he offered you among them; the words an observation
 turn opened with, which for a Conductor session include the messages that
 chat gained since he last looked; the turn's model, token counts, and the
-ids of OpenAI's responses; and the events about each message — that a briefing was offered,
-claimed, spoken, pushed, or expired, and each rating you gave or took
-back — naming the device that took part. When you speak with Luke through
+ids of OpenAI's responses; and the events about each message — that a
+briefing was offered, pushed, or expired — naming the device a briefing was
+pushed to. When you speak with Luke through
 your account, what you said is kept as your line and what his voice said as
 his — an answer he gave without running a turn, what he said before and after
-one, a briefing or a reply he read aloud — each written once it has settled,
-so the Conversation shows the words you actually heard beside the turns he
+one, a reply he read aloud — each written once it has settled,
+so the record holds the words you actually heard beside the turns he
 ran and the messages he read from.
 Like his workspace files, the things he
 remembers about you among them, these rows are not sealed: they are stored as
-written, and our own operators can read them. They stand until you clear
-the conversation, which marks it deleted so that every device stops drawing
-it at its next read and the service removes it thirty days later, or until
-you delete your account, which removes it at once.
+written, and our own operators can read them. They stand until you delete
+your account, which removes them at once; the conversation of a plan you
+delete, and that of a session Luke no longer follows (described under
+"Scheduled observation of your Conductor sessions"), are marked deleted and
+removed thirty days later.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
@@ -294,18 +291,20 @@ account; this version neither asks for one nor shows one, and sends no key
 anywhere. A key or a calendar grant an earlier version kept encrypted on this
 Mac stays in its settings file as that version left it, still encrypted: this
 version neither reads nor sends it.
-We store a synced key encrypted in our own database using
+Our service no longer accepts, lists, or deletes a key, and keeps a key an
+earlier version synced encrypted in our own database using
 AES-256-GCM with a server-only secret. It is never returned to any caller:
 there is no endpoint that reads it back, and no code path that decrypts it
 for any purpose other than observing your sessions or carrying the actions
-you explicitly request through that provider. Every key is deleted alongside
+Luke takes on them through that provider. Every key is deleted alongside
 your account if you delete that. Voice holds no key of yours at all: it runs
 through our service on your account, and a key of your own that an earlier
 version of Luke stored for it is removed from your Mac the next time Luke
 opens, without being read.
 
 **Scheduled observation of your Conductor sessions.** While you hold a synced
-Conductor key and have signed in within the last 7 days, our service reads
+Conductor key and a device an earlier version of Luke registered for you was
+last seen within the last 7 days, our service reads
 your Conductor sessions on its own schedule, about once a minute, in a
 read-only pass: your open workspaces,
 their chats, each chat's status, the agent kind running it, and the error
@@ -321,96 +320,57 @@ synced key, and hands them to Luke as one line per message under the speaker's
 name, alongside the chat's title, workspace, and provider from the stored
 roster. A chat that gained only tool activity wakes nothing. We keep the latest
 roster the pass read, encrypted at rest with the same server-only secret as
-your keys, so an earlier version of the Mac app can show your sessions
-without asking Conductor again; beside it we keep one instant per account, the point up to which Luke
+your keys, so Luke's judgment can read it without asking Conductor again;
+beside it we keep one instant per account, the point up to which Luke
 has been told of your chats' changes, and one position per chat marking where
 his last read of it ended. The roster is replaced on every pass; nothing older
 is kept. The conversation Luke keeps for a chat he has been told about stands
 while Conductor lists that chat; once a pass no longer lists it, because you
 archived or deleted the chat or its workspace, that conversation is retired,
-shown on no device from then on, and deleted 30 days later by the same purge
-that follows Clear. A chat listed again gets a fresh conversation.
+skipped by every read from then on, and deleted 30 days later by the same purge
+that removes a deleted plan's conversation. A chat listed again gets a fresh conversation.
 Observation stops, and the stored roster, the instant, and the positions are
-deleted, when you delete the synced key, when you have not signed in for 7
-days, and alongside your account if you delete that.
+deleted, once no such device has been seen for 7 days, and alongside your
+account if you delete that. No version of Luke registers a device or reports
+one seen any more (described under "Devices" below), so observation stops on
+its own within 7 days of the last report an earlier version made.
 
-**Devices.** This version of the Mac app registers no device row and reports
-no presence. When you signed in on an earlier version of the Mac app, the iOS
-app, or the Apple Watch app, that installation registered itself with our
-service as one device row, as follows.
-The row holds which platform it is, when it was last seen (refreshed by
-every poll and heartbeat: on a timer by an earlier Mac app, each time the
-phone comes to the foreground, and by the phone's and the watch's
-Conversation screens while they are open), an optional push token, and two
-instants: a presence instant and a quiet-until instant. An earlier Mac app
-reports both about once a minute: presence set only while your Mac has seen
-input in the last two minutes and its screen is unlocked, and quiet-until as
-an instant that holds Luke quiet while that version's own meeting or
-announcement switches hold him, moved forward by each poll so it lifts on its
-own if the Mac stops polling. The phone and the
-watch each report a presence instant too, on the poll their Conversation screen makes every few
-seconds while it is on screen and the app is in the foreground, each holding
-for thirty seconds; neither observes a meeting, so neither reports a quiet
-instant. Each is an instant and nothing else — not what you typed, not which
-app you were in, not the meeting's title, which never reaches the Mac either
-— and the service records them and decides nothing from them beyond holding
-speech while a quiet instant stands (a briefing already on offer is neither
-spoken nor pushed until it lapses, and a scheduled turn that starts under it
-is not given the tool that decides a briefing, so none is made to wait) and,
-for a Mac alone, waiting before it pushes a briefing, as described next: a phone or watch that is merely present
-is pushed to rather than waited on, since neither opens a call of its own for
-a briefing — though a call you have already placed on either says the
-briefings that arrive while it stands. The
-installation is named by an id the app made up once for itself; it is not a
-credential, and neither is a push token, which only our own Apple key can
-address. Signing into a different account on the same device moves its one
-row to that account rather than leaving a second. The row is deleted when
-you sign out on the device that made it, when the phone and the watch part
-ways with the account, when Apple reports a push token gone, and alongside
-your account if you delete that; a row an earlier Mac app made is not deleted
-by signing out of this version.
+**Devices.** No version of Luke registers a device or reports its presence
+any more, and our service no longer accepts either. When you signed in on an
+earlier version of the Mac app, the iOS app, or the Apple Watch app, that
+installation registered itself with our service as one device row, and the
+rows those versions left stand until Apple reports a row's push token gone or
+you delete your account. Each holds which platform it is, when it was last
+seen, an optional push token, and the last presence instant and quiet-until
+instant that installation reported: an earlier Mac app set presence only
+while your Mac had seen input in the last two minutes and its screen was
+unlocked, and quiet-until as an instant that held Luke quiet while its own
+meeting or announcement switches held him. Each is an instant and nothing
+else — not what you typed, not which app you were in, not the meeting's
+title — and the service decides nothing from them beyond holding a briefing
+while a quiet instant stands (a briefing already on offer is not pushed until
+it lapses, and a scheduled turn that starts under it is not given the tool
+that decides a briefing, so none is made to wait) and, for a Mac alone,
+waiting before it pushes a briefing, as described next. The installation is
+named by an id the app made up once for itself; it is not a credential, and
+neither is a push token, which only our own Apple key can address.
 
 **Briefing notifications.** When Luke decides to tell you something about your
-sessions and no device of yours is placed to say it — no Mac of yours
-reports itself active, or the active one has not taken the briefing within
-two minutes; a phone or watch reporting itself present does not count, since
-neither opens a call of its own to say it —
-our service sends the briefing to the device of yours most recently seen
-holding a push token, as a push notification through Apple's push
-notification service, addressed to the push token that device registered.
-A briefing that arrives while a call of yours is standing on a phone or a
-watch is said in that call, under the same one-claim rule the Mac's call
-follows, and is never pushed; a phone or watch that is merely present, with
-no call standing, is pushed to at once rather than waited on.
-The notification carries Luke's own
+sessions and no Mac of yours is reported active, or two minutes have passed
+since he offered it, our service sends the briefing to the device of yours
+most recently seen holding a push token, as a push notification through
+Apple's push notification service, addressed to the push token an earlier
+version of Luke's iOS app registered. No device of yours says a briefing
+aloud any more. The notification carries Luke's own
 words, the briefing exactly as he chose to say it, and one identifier of
 our own: the briefing's message id, an opaque identifier unique to that
-one message, which is what lets a tap open the Conversation at that briefing
-rather than at whichever arrived last. It carries nothing else: no session
+one message. It carries nothing else: no session
 title, branch, path, or error line beyond what those words themselves
 contain, and the id names none of them and means nothing to anyone but
 Luke. It is shown on the lock screen, so it is readable on a locked phone
 without unlocking it, and Apple carries it under its own terms on the way.
-A briefing is pushed at most once; one a device is already saying is never
-pushed; and while any of your devices reports a quiet-until instant,
-nothing is pushed until it lifts. Because a device's row moves with its
-sign-in, no briefing for the account you left is addressed to that device
-afterwards; one already handed to Apple at the moment you switched still
-arrives on its lock screen, and nothing we send can stop its display. That
-is the one window in which a briefing can reach a device signed in as
-someone else, and it holds only a briefing no device of the account had
-claimed. The iOS app asks for notification
-permission in the system's own dialog at its first launch, before you sign
-in; it asks Apple for a push token only where you allowed it, holds that
-token on the phone until a sign-in lands, and registers it with our service
-only while alerts stay allowed: a
-permission you later withdraw in Settings clears the token from your device
-row the next time the app comes to the foreground, so no briefing is
-settled as pushed to a phone that would show nothing. Tapping the
-notification opens the app's Conversation screen at that briefing; on a
-phone that has since signed out it opens nothing but the sign-in screen,
-and where the briefing is no longer in the thread the Conversation opens at
-its end and says so.
+A briefing is pushed at most once, and while any of your devices reports a
+quiet-until instant, nothing is pushed until it lifts.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached; they reach us
@@ -468,22 +428,21 @@ only when you press Send.
   such switch and writes none.
 - Coding agent providers you connected in an earlier version (Conductor),
   using the key you supplied. The vault holds Conductor keys only.
-  Luke reads your sessions, and sends something back
-  only when you ask it to, such as a message you wrote.
-  With a Conductor key in the vault, our service also reads your Conductor sessions
+  With a Conductor key in the vault, our service reads your Conductor sessions
   about once a minute on the schedule described above, under that key.
   The observation turn our service runs when a chat's status changes reads
   what that chat gained from Conductor, under the synced key, as described under "Scheduled observation of
   your Conductor sessions"; nothing on your Mac reads a Conductor chat's
-  messages. A message or a workspace Luke sends to a Conductor session at
-  your ask travels the same way, admitted by our service against the
-  sessions it last showed you.
+  messages. A message or a workspace Luke sends to a Conductor session in a
+  turn of his own travels the same way, admitted by our service against the
+  sessions it last observed.
 - PostHog, for usage data and screen recordings, from the Mac app. The
   counts go through our own service; the recordings go from Luke to PostHog
   directly.
 - Apple, for briefing notifications. When no device of yours is placed to
   say a briefing, our service hands Luke's words to Apple's push notification
-  service, addressed to the push token your device registered, and Apple
+  service, addressed to the push token an earlier version of the app
+  registered, and Apple
   delivers them to the lock screen, where they are readable without
   unlocking. The notification carries those words and the briefing's own
   opaque message id, and nothing else about you or your sessions.
@@ -531,9 +490,8 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   coding agent, keeping his notes, on a look
   — within the tool policy his configuration sets; his conversation records
   such an action as his own, never as your request.
-- What you type or say to Luke goes to his main conversation; the
-  conversation an ask is for is fixed at the moment you send it and never
-  moved afterwards.
+- What you say to Luke on a call goes to that plan's conversation, fixed
+  when the call opens and never moved afterwards.
 - Luke does not listen through your microphone except while you hold the
   talk key. The press opens the microphone and letting go closes it, so
   macOS's microphone indicator is lit exactly while the key is down; the stop

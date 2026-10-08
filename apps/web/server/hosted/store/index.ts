@@ -3,35 +3,12 @@ import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
-import { type AgentRecord, type AgentsHeadPosition, agentsHead, listAgents } from "./agents.js";
-import {
-  type ChildRecord,
-  type ChildrenHeadPosition,
-  childrenHead,
-  listChildren,
-} from "./children.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import {
-  eventsForMessages,
-  type HistoryCursor,
-  type HistoryWindow,
-  latestMessageRating,
-  latestTurnPosition,
-  listEvents,
-  listMessages,
-  listMessagesBefore,
-  listTurns,
-  type MessageCursor,
-  type MessageHistoryRead,
   type MessageListRead,
   readMessageByClientId,
   readMessagesByIds,
-  type SequenceCursor,
-  type StoredEventRecord,
-  type StoredRatingRecord,
   type StoredTurnRecord,
-  type TurnCursor,
-  type TurnCursorPosition,
   turnsNamed,
 } from "./message-reads.js";
 import {
@@ -52,24 +29,12 @@ import {
   rosterSnapshotObservedAt,
   writeRosterSnapshot,
 } from "./roster-snapshot.js";
+import { purgeClearedConversations } from "./soft-delete.js";
 import {
-  type ClearOutcome,
-  clearMainConversation,
-  purgeClearedConversations,
-} from "./soft-delete.js";
-import {
-  openSpeechOffers,
   type RecentBriefingOffer,
   type RecentBriefingOffersQuery,
   recentBriefingOffers,
-  type SpeechOffer,
 } from "./speech.js";
-import {
-  type PagedConversation,
-  pagedConversation,
-  type StandingConversation,
-  standingConversations,
-} from "./standing-conversations.js";
 import { keepTranscriptMark, readTranscriptMark } from "./transcript-mark.js";
 import {
   pruneWorkspaceEmbeddings,
@@ -103,7 +68,7 @@ type HostedStoreEffect<A> = Effect.Effect<A, HostedStoreFailure, SqlClient.SqlCl
 
 /**
  * The hosted store, over Postgres and keyed by user: the conversation rows
- * the store writer writes and the read routes answer, beside the notebook,
+ * the store writer writes and the brain reads, beside the notebook,
  * the roster snapshot, and the speech offers. Every
  * method names the user whose rows it reaches, and nothing here resolves a
  * user: the bearer seam above decides who is asking, and the store takes the
@@ -112,27 +77,8 @@ type HostedStoreEffect<A> = Effect.Effect<A, HostedStoreFailure, SqlClient.SqlCl
  * conversation rows are plain `jsonb`, readable by an operator.
  */
 export interface HostedStore {
-  /**
-   * The conversation rows: cursor reads a device polls, over the `messages`, `events`,
-   * and `turns` tables, and the Clear that stamps the main conversation
-   * rather than erasing it. Every read skips a conversation the Clear
-   * stamped, so a cleared main is gone from the call after it.
-   */
+  /** The conversation rows the brain and the voice read; every read skips a conversation stamped deleted. */
   messages: {
-    /** Messages after `after` (and at or after `since`, where a window is given) in sequence order, read back under the registry; a page with an unreadable row is refused whole. */
-    list(
-      userId: string,
-      conversationId: string,
-      tools: ToolSet,
-      cursor?: MessageCursor,
-    ): HostedStoreEffect<MessageListRead>;
-    /** The view's rows before a position across the windows given, newest first and cut at the bound, answered oldest first with the position to read on from; a page with an unreadable row is refused whole. */
-    listBefore(
-      userId: string,
-      windows: readonly HistoryWindow[],
-      tools: ToolSet,
-      cursor?: HistoryCursor,
-    ): HostedStoreEffect<MessageHistoryRead>;
     /** The one message a writer's client id names — a turn's journal under the turn's id — read back under the registry; an empty page where none stands. */
     byClientId(
       userId: string,
@@ -147,35 +93,14 @@ export interface HostedStore {
       messageIds: readonly string[],
     ): HostedStoreEffect<MessageListRead>;
   };
-  events: {
-    list(
-      userId: string,
-      conversationId: string,
-      cursor?: SequenceCursor,
-    ): HostedStoreEffect<readonly StoredEventRecord[]>;
-    /** The events about the given messages, across their standing conversations, in each conversation's sequence. */
-    forMessages(
-      userId: string,
-      messageIds: readonly string[],
-    ): HostedStoreEffect<readonly StoredEventRecord[]>;
-  };
   turns: {
-    /** The account's turns in the order they last changed, so a settlement is answered again. */
-    list(userId: string, cursor?: TurnCursor): HostedStoreEffect<readonly StoredTurnRecord[]>;
     /** The turn rows the given ids name, over standing conversations, in the order they last changed. */
     named(
       userId: string,
       turnIds: readonly string[],
     ): HostedStoreEffect<readonly StoredTurnRecord[]>;
-    /** The cursor of the turn that changed last, or of the last one at or before `notAfter`; nothing while no such turn stands. */
-    latest(
-      userId: string,
-      notAfter?: TurnCursorPosition,
-    ): HostedStoreEffect<TurnCursorPosition | undefined>;
   };
   directory: {
-    /** The view's conversations: the standing main and every standing observed conversation, with their counters. */
-    standing(userId: string): HostedStoreEffect<readonly StandingConversation[]>;
     /** The observed conversation for one session, opened on its first diff and standing while the roster lists the session, its naming kept level with the roster's where one is handed; a retired session opens a fresh row. */
     observed(
       userId: string,
@@ -183,28 +108,10 @@ export interface HostedStore {
       now: number,
       naming?: ObservedSessionNaming,
     ): HostedStoreEffect<string | undefined>;
-    /** The account's standing children, newest first and at most `limit` of them, each where its latest turn leaves it. */
-    children(userId: string, limit: number): HostedStoreEffect<readonly ChildRecord[]>;
-    /** One of the account's standing child or observed conversations by id, as a page of its own is read against it; nothing for a main, a stamped row, or another account's. */
-    paged(userId: string, conversationId: string): HostedStoreEffect<PagedConversation | undefined>;
-    /** Where the children stand: the child that changed last and the instant it did, rendered to the microsecond, a Clear's stamp counted; nothing while no child was ever opened. */
-    childrenHead(userId: string): HostedStoreEffect<ChildrenHeadPosition | undefined>;
-    /** The account's agents: the standing observed conversations holding a turn, the one that changed last first and at most `limit` of them. */
-    agents(userId: string, limit: number): HostedStoreEffect<readonly AgentRecord[]>;
-    /** Where the agents stand: the agent that changed last and the instant it did, rendered to the microsecond, a stamped row counted; nothing while no agent has a turn. */
-    agentsHead(userId: string): HostedStoreEffect<AgentsHeadPosition | undefined>;
-  };
-  main: {
-    /** Clear: stamps the standing main and its descendants and opens a new main, in one transaction. */
-    clear(userId: string, now: Date): HostedStoreEffect<ClearOutcome>;
   };
   retention: {
     /** The cron's purge of every conversation, of any account, stamped past the retention window. */
     purgeCleared(now: Date): HostedStoreEffect<number>;
-  };
-  ratings: {
-    /** The newest rating on one of the caller's messages, or nothing; ratings are written through `rateMessage` over the store writer. */
-    latest(userId: string, messageId: string): HostedStoreEffect<StoredRatingRecord | undefined>;
   };
   workspace: {
     read(userId: string, path: string): HostedStoreEffect<WorkspaceFileRecord | undefined>;
@@ -279,7 +186,7 @@ export interface HostedStore {
     ): HostedStoreEffect<boolean>;
     /**
      * Retires the conversation of every observed chat the roster no longer
-     * lists, per provider the pass read, on the terms of a Clear: stamped now,
+     * lists, per provider the pass read: stamped now,
      * hidden from every read, purged thirty days on. Answers the ids stamped.
      */
     retireDeparted(
@@ -296,8 +203,6 @@ export interface HostedStore {
     forgetIneligible(eligibility: ObservationEligibility): HostedStoreEffect<void>;
   };
   speech: {
-    /** The account's briefings not yet spoken, pushed, or expired, oldest offer first, each as it stands now; transitions are written through the `speech` module over the store writer. */
-    open(userId: string, limit?: number): HostedStoreEffect<readonly SpeechOffer[]>;
     /** The briefings offered from the account's observed conversations since the instant and since its main opened, newest first and bounded, whatever became of each. */
     recentBriefings(
       query: RecentBriefingOffersQuery,
@@ -309,42 +214,19 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
   const sealFor = (userId: string) => userSeal(keys, userId);
   return {
     messages: {
-      list: (userId, conversationId, tools, cursor) =>
-        listMessages(userId, conversationId, tools, cursor),
-      listBefore: (userId, windows, tools, cursor) =>
-        listMessagesBefore(userId, windows, tools, cursor),
       byClientId: (userId, conversationId, tools, clientId) =>
         readMessageByClientId(userId, conversationId, tools, clientId),
       byIds: (userId, tools, messageIds) => readMessagesByIds(userId, tools, messageIds),
     },
-    events: {
-      list: (userId, conversationId, cursor) => listEvents(userId, conversationId, cursor),
-      forMessages: (userId, messageIds) => eventsForMessages(userId, messageIds),
-    },
     turns: {
-      list: (userId, cursor) => listTurns(userId, cursor),
       named: (userId, turnIds) => turnsNamed(userId, turnIds),
-      latest: (userId, notAfter) => latestTurnPosition(userId, notAfter),
     },
     directory: {
-      standing: (userId) => standingConversations(userId),
       observed: (userId, identity, now, naming) =>
         standingObservedConversation(userId, identity, new Date(now), naming),
-      children: (userId, limit) => listChildren(userId, limit),
-      paged: (userId, conversationId) =>
-        Effect.map(pagedConversation(userId, conversationId), Option.getOrUndefined),
-      childrenHead: (userId) => Effect.map(childrenHead(userId), Option.getOrUndefined),
-      agents: (userId, limit) => listAgents(userId, limit),
-      agentsHead: (userId) => Effect.map(agentsHead(userId), Option.getOrUndefined),
-    },
-    main: {
-      clear: (userId, now) => clearMainConversation(userId, now),
     },
     retention: {
       purgeCleared: (now) => purgeClearedConversations(now),
-    },
-    ratings: {
-      latest: (userId, messageId) => latestMessageRating(userId, messageId),
     },
     workspace: {
       read: (userId, path) => Effect.map(readWorkspaceFile(userId, path), Option.getOrUndefined),
@@ -375,26 +257,20 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       forgetIneligible: (eligibility) => forgetObservationIneligible(eligibility),
     },
     speech: {
-      open: (userId, limit) => openSpeechOffers({ userId, limit }),
       recentBriefings: (query) => recentBriefingOffers(query),
     },
   };
 }
 
-export type { AgentRecord } from "./agents.js";
-export type { ChildRecord } from "./children.js";
 export { promptHashOf } from "./content-addressed.js";
 export type { HostedStoreContext } from "./database.js";
 export {
   findMessageByClientId,
-  type HistoryWindow,
   listRecentMessages,
   readMessageById,
-  type StoredEventRecord,
   type StoredMessageRecord,
   type StoredTurnRecord,
 } from "./message-reads.js";
-export { rateMessage } from "./ratings.js";
 export type { RosterSnapshotRecord } from "./roster-snapshot.js";
 export {
   claimSpeech,
@@ -408,7 +284,6 @@ export {
   type SpeechSweepOutcome,
   sweepSpeech,
 } from "./speech.js";
-export type { PagedConversation, StandingConversation } from "./standing-conversations.js";
 export {
   type VoiceTarget,
   type VoiceWriteResult,

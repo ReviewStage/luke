@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 
 const PREFERENCES_ANSWER = {
-  preferences: { voice: "marin", defaultWorkspaceProvider: "conductor" },
+  preferences: { voice: "marin" },
   updatedAt: 1_800_000_000_000,
 };
 
@@ -82,7 +82,6 @@ it.effect("writes account preferences as a full snapshot", () =>
 
     const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences({
       voice: "marin",
-      defaultWorkspaceProvider: "conductor",
     });
     assert.deepEqual(answer, {
       preferences: PREFERENCES_ANSWER.preferences,
@@ -94,7 +93,7 @@ it.effect("writes account preferences as a full snapshot", () =>
     assert.equal(request?.init?.method, "PUT");
     assert.equal(new Headers(request?.init?.headers).get("content-type"), "application/json");
     assert.deepEqual(JSON.parse(String(request?.init?.body)), {
-      preferences: { voice: "marin", defaultWorkspaceProvider: "conductor" },
+      preferences: { voice: "marin" },
     });
   }),
 );

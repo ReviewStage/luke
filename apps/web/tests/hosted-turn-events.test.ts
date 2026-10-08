@@ -1,18 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
-import {
-  brainTurnEventsPath,
-  decodeTurnEventFrame,
-  HOSTED_API_ERROR,
-  READ_QUERY,
-  TURN_END,
-  TURN_EVENT_KIND,
-  TURN_EVENT_STREAM,
-  TURN_SLOW_STEP,
-  type TurnEvent,
-} from "@sidecar/hosted";
-import { Effect, Option } from "effect";
+import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@sidecar/hosted";
+import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -29,14 +18,6 @@ import {
   UI_PART_TYPE,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { DISPATCH_QUERY } from "../server/function-dispatch";
-import {
-  FUNCTION_GROUP,
-  FUNCTION_MAX_DURATION_SECONDS,
-  routeKeyOf,
-} from "../server/function-durations";
-import { functionPublicPath, webFunctions } from "../server/function-layout";
-import { apiRewrites } from "../server/function-rewrites";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
@@ -50,25 +31,19 @@ import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
-import {
-  handleTurnEventStream,
-  projectTurnEvents,
-  TURN_EVENT_STREAM_BOUNDS,
-  TURN_EVENT_STREAM_PATH,
-  type TurnEventStreamOptions,
-  UNANSWERED_TURN_END_SEQ,
-} from "../server/hosted/turn-event-stream";
+import { projectTurnEvents, UNANSWERED_TURN_END_SEQ } from "../server/hosted/turn-events";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
 
 /**
- * The turn event stream over the real migrations on PGlite, with the turn
- * written the way the hosted brain writes one: eve's events relayed through
- * the store writer. What these tests hold to is the acceptance: a client
- * attached mid-turn hears the remaining events and the end exactly once, and
- * one attached after the end hears the end and closes. Synthetic throughout —
- * no real title, branch, or spoken word.
+ * A turn's events over the real migrations on PGlite, with the turn written
+ * the way the hosted brain writes one: eve's events relayed through the store
+ * writer, and the projection read over the turn row and its journal as they
+ * stand. What these tests hold to is that the projection only grows: what a
+ * reader heard mid-turn stays where it was numbered, and the rest follows
+ * once the turn ends. Synthetic throughout — no real title, branch, or
+ * spoken word.
  */
 
 const NOW = 1_800_000_000_000;
@@ -90,9 +65,6 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-
-/** The stream's bounds narrowed so a poll is milliseconds and an attachment lapses inside a test. */
-const QUICK = { POLL_MS: 5, HEARTBEAT_MS: 20, ATTACHMENT_MS: 150 } as const;
 
 async function conversation(): Promise<ConversationTarget> {
   const userId = await database.createUser();
@@ -226,90 +198,49 @@ function untilRequested(events: readonly MessageStreamEvent[]): number {
   return events.findIndex((event) => event.type === "actions.requested") + 1;
 }
 
-function request(turnId: string, after?: number, method = "GET"): Request {
-  const url = new URL(`https://luke.test${TURN_EVENT_STREAM_PATH}`);
-  url.searchParams.set("id", turnId);
-  if (after !== undefined) url.searchParams.set(READ_QUERY.AFTER, String(after));
-  return new Request(url, { method, headers: { authorization: "Bearer token-1" } });
-}
-
-function options(
-  userId: string | undefined,
-  req: Request,
-  bounds: TurnEventStreamOptions["bounds"] = QUICK,
-): TurnEventStreamOptions {
-  return {
-    request: req,
-    resolveUserId: () => Effect.succeed(Option.fromUndefinedOr(userId)),
-    store: database.store,
-    bounds,
-  };
-}
-
-interface StreamReading {
-  readonly events: readonly TurnEvent[];
-  /** How many frames carried no event: the heartbeats. */
-  readonly heartbeats: number;
-}
-
-/** Reads the stream to its close, decoding every frame as the wire's client would. */
-async function readStream(response: Response): Promise<StreamReading> {
-  assert.equal(response.status, 200);
-  assert.equal(
-    response.headers.get("content-type"),
-    `${TURN_EVENT_STREAM.MEDIA_TYPE}; charset=utf-8`,
+/** The turn's events as its record and journal now stand, read the way the voice session reads them. */
+async function projected(userId: string, turnId: string): Promise<readonly TurnEvent[]> {
+  const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
+  assert.ok(turn);
+  const journal = await database.run(
+    database.store.messages.byClientId(userId, turn.conversationId, CATALOG_TOOL_SET, turn.id),
   );
-  const text = await response.text();
-  const frames = text.split(TURN_EVENT_STREAM.FRAME_END).filter((frame) => frame.length > 0);
-  const events: TurnEvent[] = [];
-  let heartbeats = 0;
-  for (const frame of frames) {
-    const event = decodeTurnEventFrame(`${frame}${TURN_EVENT_STREAM.FRAME_END}`);
-    if (event === undefined) heartbeats += 1;
-    else events.push(event);
-  }
-  return { events, heartbeats };
+  assert.ok(journal.ok);
+  return projectTurnEvents(turn, journal.value[0]?.message);
 }
 
 function kinds(events: readonly TurnEvent[]): readonly string[] {
   return events.map((event) => event.kind);
 }
 
-test("a client attached mid-turn hears the slow step at once, then the settled mark, the sentences, and the end exactly once, numbered in order", async () => {
+test("mid-turn the slow step is told at once, then the settled mark, the sentences, and the end, numbered in order after it", async () => {
   const target = await conversation();
   const standing = standingFor(target);
   const events = spokenTurn(EVE_TURN);
   const turnId = hostTurnId(standing.sessionId, EVE_TURN);
   await play(events.slice(0, untilRequested(events)), standing);
 
-  const response = await database.run(
-    handleTurnEventStream(
-      options(target.userId, request(turnId), { POLL_MS: QUICK.POLL_MS, HEARTBEAT_MS: 60_000 }),
-    ),
-  );
-  const reading = readStream(response);
-  await play(events.slice(untilRequested(events)), standing);
-  const heard = await reading;
+  const midTurn = await projected(target.userId, turnId);
+  assert.deepEqual(midTurn, [
+    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
+  ]);
 
-  assert.deepEqual(kinds(heard.events), [
+  await play(events.slice(untilRequested(events)), standing);
+  const heard = await projected(target.userId, turnId);
+
+  assert.deepEqual(kinds(heard), [
     TURN_EVENT_KIND.SLOW_STEP,
     TURN_EVENT_KIND.ACTIONS_SETTLED,
     TURN_EVENT_KIND.REPLY_SENTENCE,
     TURN_EVENT_KIND.REPLY_SENTENCE,
     TURN_EVENT_KIND.ENDED,
   ]);
+  assert.deepEqual(heard.slice(0, midTurn.length), midTurn);
   assert.deepEqual(
-    heard.events.map((event) => event.seq),
+    heard.map((event) => event.seq),
     [1, 2, 3, 4, 5],
   );
-  assert.deepEqual(new Set(heard.events.map((event) => event.turnId)), new Set([turnId]));
-  const [slow, , first, second, end] = heard.events;
-  assert.deepEqual(slow, {
-    turnId,
-    seq: 1,
-    kind: TURN_EVENT_KIND.SLOW_STEP,
-    step: TURN_SLOW_STEP.TRANSCRIPT_READ,
-  });
+  const [, , first, second, end] = heard;
   assert.equal(
     first?.kind === TURN_EVENT_KIND.REPLY_SENTENCE && first.sentence,
     "One agent finished.",
@@ -319,98 +250,6 @@ test("a client attached mid-turn hears the slow step at once, then the settled m
     "Another is waiting on you.",
   );
   assert.deepEqual(end, { turnId, seq: 5, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED });
-
-  // A fresh client attached after the end hears the same numbered events and closes.
-  const afterwards = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
-  );
-  assert.deepEqual(afterwards.events, heard.events);
-  assert.equal(afterwards.heartbeats, 0);
-});
-
-test("a client that attaches again with its cursor hears only what it had not, and one that took the end hears nothing and closes", async () => {
-  const target = await conversation();
-  const standing = standingFor(target);
-  const events = spokenTurn(EVE_TURN);
-  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
-  await play(events, standing);
-
-  const whole = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
-  );
-  assert.equal(whole.events.length, 5);
-
-  const rest = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 2)))),
-  );
-  assert.deepEqual(rest.events, whole.events.slice(2));
-
-  const done = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 5)))),
-  );
-  assert.deepEqual(done.events, []);
-});
-
-test("an attachment lapses without an end while the turn runs, heartbeats meanwhile, and the next attachment from the cursor hears the rest", async () => {
-  const target = await conversation();
-  const standing = standingFor(target);
-  const events = spokenTurn(EVE_TURN);
-  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
-  await play(events.slice(0, untilRequested(events)), standing);
-
-  const lapsed = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
-  );
-  assert.deepEqual(kinds(lapsed.events), [TURN_EVENT_KIND.SLOW_STEP]);
-  assert.ok(lapsed.heartbeats >= 1);
-
-  await play(events.slice(untilRequested(events)), standing);
-  const resumed = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 1)))),
-  );
-  assert.deepEqual(kinds(resumed.events), [
-    TURN_EVENT_KIND.ACTIONS_SETTLED,
-    TURN_EVENT_KIND.REPLY_SENTENCE,
-    TURN_EVENT_KIND.REPLY_SENTENCE,
-    TURN_EVENT_KIND.ENDED,
-  ]);
-  assert.deepEqual(
-    resumed.events.map((event) => event.seq),
-    [2, 3, 4, 5],
-  );
-});
-
-test("a client that disconnects stops the polling", async () => {
-  const target = await conversation();
-  const standing = standingFor(target);
-  const events = spokenTurn(EVE_TURN);
-  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
-  await play(events.slice(0, untilRequested(events)), standing);
-
-  let polls = 0;
-  const response = await database.run(
-    handleTurnEventStream({
-      ...options(target.userId, request(turnId), {
-        POLL_MS: 5,
-        HEARTBEAT_MS: 60_000,
-        ATTACHMENT_MS: 60_000,
-      }),
-      sleep: (ms) =>
-        Effect.andThen(
-          Effect.sync(() => {
-            polls += 1;
-          }),
-          Effect.sleep(ms),
-        ),
-    }),
-  );
-  assert.ok(response.body);
-  const reader = response.body.getReader();
-  await reader.read();
-  await reader.cancel();
-  const seen = polls;
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  assert.ok(polls <= seen + 1);
 });
 
 test("a sentence that follows only settled calls is heard while the turn still runs, the one still forming waits, and the rest follow with the end", async () => {
@@ -423,20 +262,16 @@ test("a sentence that follows only settled calls is heard while the turn still r
   await play(events.slice(untilFirstSentence(events) - 1, untilFirstSentence(events)), standing);
   assert.deepEqual(await journalText(target, turnId), ["One agent finished."]);
 
-  const running = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
-  );
-  assert.deepEqual(running.events, [
+  const running = await projected(target.userId, turnId);
+  assert.deepEqual(running, [
     { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
     { turnId, seq: 2, kind: TURN_EVENT_KIND.ACTIONS_SETTLED },
     { turnId, seq: 3, kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence: "One agent finished." },
   ]);
 
   await play(events.slice(untilFirstSentence(events)), standing);
-  const rest = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 3)))),
-  );
-  assert.deepEqual(rest.events, [
+  const rest = await projected(target.userId, turnId);
+  assert.deepEqual(rest.slice(running.length), [
     {
       turnId,
       seq: 4,
@@ -447,7 +282,7 @@ test("a sentence that follows only settled calls is heard while the turn still r
   ]);
 });
 
-test("a turn cancelled after a sentence it released keeps none of its words, and a client past that sentence still hears the end", async () => {
+test("a turn cancelled after a sentence it released keeps none of its words, and a reader past that sentence still hears the end", async () => {
   const target = await conversation();
   const standing = standingFor(target);
   const events = streamedTurn(EVE_TURN, 2);
@@ -461,12 +296,22 @@ test("a turn cancelled after a sentence it released keeps none of its words, and
   );
 
   assert.deepEqual(await journalText(target, turnId), []);
-  const heard = await readStream(
-    await database.run(handleTurnEventStream(options(target.userId, request(turnId, 3)))),
+  const heard = await projected(target.userId, turnId);
+  assert.deepEqual(
+    heard.filter((event) => event.seq > 3),
+    [
+      {
+        turnId,
+        seq: UNANSWERED_TURN_END_SEQ,
+        kind: TURN_EVENT_KIND.ENDED,
+        end: TURN_END.CANCELLED,
+      },
+    ],
   );
-  assert.deepEqual(heard.events, [
-    { turnId, seq: UNANSWERED_TURN_END_SEQ, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.CANCELLED },
-  ]);
+  assert.deepEqual(
+    heard.filter((event) => event.seq <= 3),
+    [{ turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ }],
+  );
 });
 
 test("a cancelled turn and a failed one end without a settled mark or a sentence", async () => {
@@ -487,61 +332,10 @@ test("a cancelled turn and a failed one end without a settled mark or a sentence
     await play(events.slice(0, untilRequested(events)), standing);
     await database.run(relay.handle(stamped(ending), standing));
 
-    const heard = await readStream(
-      await database.run(handleTurnEventStream(options(target.userId, request(turnId)))),
-    );
-    assert.deepEqual(heard.events, [
+    assert.deepEqual(await projected(target.userId, turnId), [
       { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.TRANSCRIPT_READ },
       { turnId, seq: UNANSWERED_TURN_END_SEQ, kind: TURN_EVENT_KIND.ENDED, end },
     ]);
-  }
-});
-
-test("the door: the method, the id, the bearer, and ownership are refused before anything streams", async () => {
-  const target = await conversation();
-  const standing = standingFor(target);
-  const events = spokenTurn(EVE_TURN);
-  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
-  await play(events, standing);
-  const other = await database.createUser();
-
-  const refused = async (opts: TurnEventStreamOptions, status: number, error: string) => {
-    const response = await database.run(handleTurnEventStream(opts));
-    assert.equal(response.status, status);
-    assert.deepEqual(await response.json(), { error });
-  };
-
-  await refused(
-    options(target.userId, request(turnId, undefined, "POST")),
-    405,
-    HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-  );
-  await refused(options(undefined, request(turnId)), 401, HOSTED_API_ERROR.INVALID_TOKEN);
-  await refused(options(other, request(turnId)), 404, HOSTED_API_ERROR.NOT_FOUND);
-  await refused(options(target.userId, request(randomUUID())), 404, HOSTED_API_ERROR.NOT_FOUND);
-  await refused(options(target.userId, request("turn-1")), 404, HOSTED_API_ERROR.NOT_FOUND);
-
-  const noId = new Request(`https://luke.test${TURN_EVENT_STREAM_PATH}`, {
-    headers: { authorization: "Bearer token-1" },
-  });
-  await refused(options(target.userId, noId), 400, HOSTED_API_ERROR.INVALID_REQUEST);
-  const twoIds = new URL(`https://luke.test${TURN_EVENT_STREAM_PATH}`);
-  twoIds.searchParams.append("id", turnId);
-  twoIds.searchParams.append("id", turnId);
-  await refused(
-    options(target.userId, new Request(twoIds, { headers: { authorization: "Bearer token-1" } })),
-    400,
-    HOSTED_API_ERROR.INVALID_REQUEST,
-  );
-  for (const after of ["-1", "1.5", "many", "", "0x10", " 3"]) {
-    const url = new URL(`https://luke.test${TURN_EVENT_STREAM_PATH}`);
-    url.searchParams.set("id", turnId);
-    url.searchParams.set(READ_QUERY.AFTER, after);
-    await refused(
-      options(target.userId, new Request(url, { headers: { authorization: "Bearer token-1" } })),
-      400,
-      HOSTED_API_ERROR.INVALID_REQUEST,
-    );
   }
 });
 
@@ -755,34 +549,8 @@ test("the projection: a turn that did not complete tells none of the words its j
   }
 });
 
-test("the stream's words are the brain's own: the event kinds are members of the run stream's set, and the slow step kinds are its", () => {
+test("the events' words are the brain's own: the event kinds are members of the run stream's set, and the slow step kinds are its", () => {
   const runEventKinds = new Set<string>(Object.values(BRAIN_RUN_EVENT));
   for (const kind of Object.values(TURN_EVENT_KIND)) assert.equal(runEventKinds.has(kind), true);
   assert.deepEqual(TURN_SLOW_STEP, SLOW_STEP_KIND);
-});
-
-test("the function's duration outlasts an attachment, the rewrite hands the path's id over, and the route carries the duration", async () => {
-  assert.ok(
-    TURN_EVENT_STREAM_BOUNDS.ATTACHMENT_MS < TURN_EVENT_STREAM_BOUNDS.MAX_DURATION_SECONDS * 1000,
-  );
-  assert.ok(TURN_EVENT_STREAM_BOUNDS.HEARTBEAT_MS < TURN_EVENT_STREAM_BOUNDS.ATTACHMENT_MS);
-  assert.equal(
-    FUNCTION_MAX_DURATION_SECONDS.get(TURN_EVENT_STREAM_PATH),
-    TURN_EVENT_STREAM_BOUNDS.MAX_DURATION_SECONDS,
-  );
-  const functions = await webFunctions(fileURLToPath(new URL("..", import.meta.url)));
-  const rewrite = apiRewrites(functions).find(
-    (candidate) =>
-      new URL(candidate.dest, "http://localhost").searchParams.get(DISPATCH_QUERY.ROUTE) ===
-      routeKeyOf(TURN_EVENT_STREAM_PATH),
-  );
-  assert.ok(rewrite);
-  const turnId = TURN.id;
-  const match = new RegExp(`^${rewrite.src}$`).exec(brainTurnEventsPath(turnId));
-  assert.ok(match);
-  const destination = new URL(rewrite.dest.replace("$1", match[1] ?? ""), "http://localhost");
-  const turnEvents = functions.find((definition) => definition.file === FUNCTION_GROUP.TURN_EVENTS);
-  assert.ok(turnEvents);
-  assert.equal(destination.pathname, `/${functionPublicPath(turnEvents)}`);
-  assert.deepEqual(destination.searchParams.getAll("id"), [turnId]);
 });

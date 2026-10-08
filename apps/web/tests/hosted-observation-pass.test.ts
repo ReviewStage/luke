@@ -25,7 +25,7 @@ import {
   observeAndSnapshot,
   storedRoster,
 } from "../server/hosted/observation-pass";
-import type { VaultKeyRow } from "../server/hosted/vault-route";
+import type { VaultKeyRow } from "../server/hosted/vault-key-store";
 import { runWithoutDatabase } from "./support/no-database";
 import { memoryObservationStore, UNOPENABLE_BODY } from "./support/observation-store";
 

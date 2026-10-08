@@ -40,7 +40,7 @@ const WRITTEN_TABLES: ReadonlySet<string> = new Set(["messages", "turns", "event
 
 const WRITER = "server/hosted/store/writer.ts";
 
-/** The read module: the cursor reads and the rating's authorship and latest-rating reads select from the three tables and insert into none. */
+/** The read module: the message and turn reads the brain and the voice make select from those tables and insert into none. */
 const READER = "server/hosted/store/message-reads.ts";
 
 /** The speech module: folds a briefing's standing from the events on its message and writes every transition through the writer. */
@@ -49,19 +49,15 @@ const SPEECH_READER = "server/hosted/store/speech.ts";
 /** The children module: derives where a child stands from the latest of its turns and its task from its first line, holds a child's open to a message of its parent's, and writes neither table. */
 const CHILDREN_READER = "server/hosted/store/children.ts";
 
-/** The agents module: derives where an observed session stands from the latest of its turns, and writes nothing. */
-const AGENTS_READER = "server/hosted/store/agents.ts";
-
 /** The abandoned-turns module: lists the turns still running past the bound and settles each through the writer. */
 const ABANDONED_TURNS_READER = "server/hosted/store/abandoned-turns.ts";
 
 /** The tables each module reaches at all, in either dialect. */
 const TABLES_REACHED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [WRITER, WRITTEN_TABLES],
-  [READER, WRITTEN_TABLES],
+  [READER, new Set(["messages", "turns"])],
   [SPEECH_READER, new Set(["messages", "events"])],
   [CHILDREN_READER, new Set(["messages", "turns"])],
-  [AGENTS_READER, new Set(["turns"])],
   [ABANDONED_TURNS_READER, new Set(["turns"])],
 ]);
 
@@ -316,7 +312,7 @@ function readable(
   );
 }
 
-test("the writer and the five readers are the server modules that reach the messages, turns, or events table, and only the writer writes one", async () => {
+test("the writer and the four readers are the server modules that reach the messages, turns, or events table, and only the writer writes one", async () => {
   const reach = tableReach(await serverSources());
   const reached = new Map([...reach].map(([file, found]) => [file, found.reached]));
   const writers = [...reach]

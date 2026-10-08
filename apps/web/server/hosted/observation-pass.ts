@@ -18,9 +18,8 @@ import {
   type ObservedRoster,
 } from "./observed-roster.js";
 import type { HostedStore, RosterSnapshotRecord } from "./store/index.js";
-import type { VaultKeyEffect } from "./vault-key-store.js";
+import type { VaultKeyEffect, VaultKeyRow } from "./vault-key-store.js";
 import { readApiKeyFor } from "./vault-keys.js";
-import type { VaultKeyRow } from "./vault-route.js";
 
 /**
  * One observation pass over a user's cloud providers, written down: the

@@ -125,7 +125,7 @@ what `scripts/preview-probe.ts` (`server/preview-probe.ts`) sends to a
 deployment: every caller path, the cron's, the page, and eve's health, failing
 on any answer that is Vercel's own rather than a handler's — the
 `x-vercel-error` header the platform puts on its `NOT_FOUND`, which a
-function's own 404 never carries — with eight of those requests held to
+function's own 404 never carries — with seven of those requests held to
 their exact codes besides, because on 2026-09-11 five production deploys
 failed in a row while nothing in CI could see the deployed shape (LUKE-164).
 Behind Deployment Protection it needs one of two doors, the bypass secret
@@ -194,7 +194,7 @@ a `.func` named `api/default.js.func` answers at `/api/default.js`, the path
 the rewrites already carry. Each function is also emitted at its extensionless
 path, as a `.func` that is a symlink onto the first, because Vercel's own pass
 served both spellings and the clients use the second: the voice sessions open
-at the `VOICE_SERVICE_PATH` paths and the desktop posts feedback to
+at the `VOICE_SERVICE_PATH` path and the desktop posts feedback to
 `/api/feedback`. Reverting the PR that introduced the tree is one
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
@@ -337,8 +337,7 @@ client out of the fiber it runs on rather than holding one of its own, the
 bridged statements of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
 query modules are on it, the store writer, the voice writer, and the speech
-module among them, and `ratings.ts` reaches `message-reads.ts`'s one read the
-same way; `roster-snapshot.ts`'s exported `readRosterSnapshot` is what
+module among them; `roster-snapshot.ts`'s exported `readRosterSnapshot` is what
 `hosted-store.test.ts` runs to prove a sealed row does not open under another
 user's seal. Outside `server/hosted/store/`, `server/hosted/device-store.ts`
 and the provider-key vault's `server/hosted/vault-key-store.ts` are on the
@@ -350,8 +349,8 @@ answering an effect over the live session row rather than running one.
 directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
 `voice/function.ts` hands it, so the registration, the usage snapshot, and the
 close are steps of that effect rather than promises a callback awaited. The
-three meters of `server/voice/accounts.ts` — the account's spend, the
-introduction's, and a closed session's seconds — are on it on the same terms,
+two meters of `server/voice/accounts.ts` — the account's spend and a closed
+session's seconds — are on it on the same terms,
 so the session yields each on its own fiber and a statement any of them was
 refused on ends that session the way its own row failing does, rather than
 becoming a rejected promise the service had to catch.
@@ -359,14 +358,13 @@ becoming a rejected promise the service had to catch.
 `Effect<A, SqlError | Schema.SchemaError, SqlClient>` from every method, so
 the caller composes a store read into whatever it already runs. A route
 group's own seams are effects
-over that same ambient client — the account group's reads and writes, the
-vault group's three key statements, and the meter every brain
-operation spends — so the group yields the seam on the request's own fiber
-and the edge that serves the request is the one place the client behind it is
-provided. What still holds a runner is everything a route composes apart from
-the store and that still hands a promise up — the writers, the speech module,
-the ask record, the brain host's two seams the eve project reaches through a
-promise of its own, and the store route's own secret read — each handed its
+over that same ambient client — the account group's reads and writes and the
+meter every brain operation spends — so the group yields the seam on the
+request's own fiber and the edge that serves the request is the one place the
+client behind it is provided. What still holds a runner is everything a route
+composes apart from the store and that still hands a promise up — the
+writers, the speech module, the ask record, and the brain host's two seams
+the eve project reaches through a promise of its own — each handed its
 edge's own, `runWeb` in a
 function and the store tests'
 runtime in a test; the conversation row lock every write runs under is the
@@ -395,19 +393,16 @@ and `userIdForAuthorization(authorization, userInfo)` each answer
 `Effect<OAuthUserInfo | undefined, UnknownException>`: the auth service's own
 `oauth2UserInfo` is a promise of Better Auth's, so it is wrapped with
 `Effect.tryPromise` once where an endpoint is constructed —
-`hostedVaultUserInfo` in `server/hosted/vault-route.ts`, the voice function's
-own, the brain host's seam, and the observation group's inline one — and
-nowhere else. What that
+`hostedUserInfo` in `server/hosted/bearer.ts` itself, the brain host's seam,
+and the observation group's inline one — and nowhere else. What that
 call throws is still one indistinguishable nothing: the resolution recovers
 it, so a missing header, an expired token, and a refusing auth service are
 the same 401 they always were, and no route repeats the recovery.
 
-Every caller yields it. `HostedStoreRoute.resolveUserId`
-(`server/hosted/store-route.ts`) and the seams of the devices-and-vault
-group are Effect-shaped fields, so `brain-ask.ts`,
-`turn-event-stream.ts`, `conversation-clear.ts`, `change-signal.ts`,
-`resource-reads.ts`, and the group's gate read the bearer on their own
-fiber instead of wrapping a promise in `Effect.promise`. One caller is a
+Every caller yields it. `resolveHostedUserId`, which the account and plans
+groups are handed as their `resolveUserId`, and the voice function's own
+resolver are Effect-shaped, so each reads the bearer on its own fiber instead
+of wrapping a promise in `Effect.promise`. One caller is a
 promise of somebody else's: eve's `AuthFn`, which
 `apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
 that authored file — eve's own edge — rather than keeping a promise-shaped
@@ -426,13 +421,12 @@ warm invocation reaches the services the cold one built. A group's routes are
 a layer rather than a value because that is what an `HttpRouter` registration
 is: the router is a service the layer writes each path into, and the
 requirements a route's own handler has travel as request markers the handler
-provides per request from the context `runWeb` read. The auth group,
-the actions group, the five routes behind the observation group below, the
-account group's `server/routes/account/delete.ts` and
-`server/routes/account/preferences.ts`, the devices and vault group's three
-routes, and the dashboard's five behind the admin group are converted this
-way; every other route still default-exports the promise-shaped handler
-beside it.
+provides per request from the context `runWeb` read. The auth group, the
+two routes behind the observation group below, the account group's
+`server/routes/account/delete.ts` and `server/routes/account/preferences.ts`,
+the plans group's four, and the dashboard's five behind the admin group are
+converted this way; the voice route alone exports something else, the
+`http.Server` described under "Hosted voice service".
 
 `server/hosted/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
@@ -465,57 +459,31 @@ outside the group, and `tests/auth-app.test.ts` answers each twice — through
 the group and by calling the handler the way the route called it before — and
 compares the two.
 
-## The actions group
-
-`server/actions-app.ts` is the actions route group: the six endpoints
-(`message`, `control`, `agent`, `rename-session`, `rename-workspace`,
-`workspace`) through which the phone and desktop ask the hosted tier to act
-on an observed cloud session, or create one, on the developer's behalf (root
-`AGENTS.md` "Acts on a session"). Each endpoint's own handler in
-`server/hosted/action-session.ts` is already the whole of admission, the
-roster read, and dispatch, so the group carries the request across the
-`HttpApi` boundary and back, and the hosted vocabulary's own `not-found`
-answers any path outside the six. Each handler answers an effect over the
-ambient client rather than a promise, so the group hands it the deployment's
-seams — `hostedVaultSeams` and the vault secret read from
-`HostedEnvironment` — on its own fiber and yields the answer; nothing under
-`server/hosted/action-session.ts` reads a runtime, which is why the roster
-read and the delivery are composed there rather than run.
-`fixtures/actions-route/` records one accepted and one rejected answer, and
-`tests/actions-app.test.ts` holds the group to them.
-
 ## The observation group
 
-`server/observation-app.ts` is the observation route group: five Vercel
-functions on five paths — `server/routes/sessions/messages.ts`,
-`server/routes/projects.ts`, `server/routes/events.ts`,
-`server/routes/observe.ts`, and `server/routes/observation/tick.ts` — each
-mounting the same `observationApp()`, which is organization rather than
-dispatch, since `vercel.json` already sends each function only the requests
-for its own path. Every path is declared with `HttpRouter.add` under `ANY_METHOD`
-rather than a method-specific builder, because each handler still enforces its
-own method and answers its own 405 exactly as it did before conversion; only a
-path none of the five declares reaches the group's own wildcard route,
-`hostedNotFoundRoute`, and the hosted vocabulary's `not-found`. Each handler's
-own logic is carried unchanged —
-`server/hosted/conversation-read.ts`, `server/hosted/projects.ts`,
-`server/hosted/events.ts`, `server/hosted/observe.ts`, and
-`server/hosted/observation-tick.ts` — behind a passthrough shaped like the
-auth group's: the `HttpServerRequest` becomes the `Request` the handler always
-took, and its `Response` is carried back with `HttpServerResponse.raw`.
-`server/hosted/vault-route.ts` exports its seams as `hostedVaultSeams`, read
-directly by every `HttpApi` group, so the three routes behind it
-(sessions/messages, projects, observe) read the same resolved bearer and the
-same provider-key queries without a second copy of them. `fixtures/observation-route/` records
-one answer per route, a wrong method on a declared path, and a path outside
-the group, and `tests/observation-app.test.ts` answers each twice — through
-the group and by calling the handler directly — and compares the two.
+`server/observation-app.ts` is the observation route group: two Vercel
+functions on two paths — `server/routes/events.ts` and
+`server/routes/observation/tick.ts` — each mounting the same
+`observationApp()`, which is organization rather than dispatch, since
+`vercel.json` already sends each function only the requests for its own path.
+Every path is declared with `HttpRouter.add` under `ANY_METHOD` rather than a
+method-specific builder, because each handler still enforces its own method
+and answers its own 405 exactly as it did before conversion; only a path
+neither declares reaches the group's own wildcard route, `hostedNotFoundRoute`,
+and the hosted vocabulary's `not-found`. Each handler's own logic is carried
+unchanged — `server/hosted/events.ts` and `server/hosted/observation-tick.ts` —
+behind a passthrough shaped like the auth group's: the `HttpServerRequest`
+becomes the `Request` the handler always took, and its `Response` is carried
+back with `HttpServerResponse.raw`. `fixtures/observation-route/` records one
+answer per route, a wrong method on a declared path, and a path outside the
+group, and `tests/observation-app.test.ts` answers each twice — through the
+group and by calling the handler directly — and compares the two.
 `server/observation-app.ts` holds two queries of its own and no more: the
 events handler's PostHog person read and the tick's eligible-account listing
 across `provider_key`, `devices`, and `observation_pass` are `SqlSchema`
 queries whose builders render against the schema modules and run on the
-ambient `SqlClient` through `runWeb`, and the tick's vault-key read
-now calls `server/hosted/vault-key-store.ts`'s own converted query instead of
+ambient `SqlClient` through `runWeb`, and the tick's vault-key read calls
+`server/hosted/vault-key-store.ts`'s own converted query instead of
 repeating it. `tests/observation-app-queries.test.ts` covers the two queries
 this file still owns directly.
 
@@ -546,65 +514,16 @@ a write, a refused method, an invalid token, an invalid body, and a path
 outside the group, with `content-length` checked against the body it frames and
 then dropped before comparing.
 
-## The devices and vault group
-
-`server/devices-vault-app.ts` is another `HttpApi` group: the device row's
-three writes on `/api/devices` (register, heartbeat, forget) and the provider
-key vault's on `/api/vault/key` (store, delete) and `/api/vault/keys` (list),
-each dispatched by an `Effect.gen` that reads the method off
-`HttpServerRequest`, reads the bearer, checks the device brake or the vault
-secret (`HostedEnvironment`'s `providerKeyEncryptionSecret`, the same
-environment-at-build-time rule the hosted tier's key is read under), reads
-the body through `readJsonBodyEffect`, and decodes it through
-the hosted wire's own Effect declarations
-(`readEither(effectSchema(deviceRegisterRequestSchema))` and its heartbeat and
-forget siblings; the vault's provider id and key are read by hand, the way the
-promise-shaped route always did). Unlike the auth group, this one owns its
-answers rather than carrying someone else's: `server/hosted/devices.ts` is cut
-down to the seams' vocabulary (`DeviceSeams`, `DeviceRegistration`,
-`DeviceHeartbeat`, and the `pushAddress`/`heartbeatFrom` helpers
-`change-signal.ts`'s poll still reaches for), and `server/hosted/vault.ts` is
-gone outright. `server/hosted/vault-route.ts`'s `productionDevicesVaultSeams`
-is the deployment's real wiring — the same account store `hostedVaultSeams`
-carries for the other hosted routes — so each of the three route files is one line
-handing it to `routeFromHttpRouter(devicesVaultApp(...))`.
-`HOSTED_API_ERROR.QUOTA_EXHAUSTED` gained a row in `HOSTED_REFUSAL_STATUS`
-(429), for the device brake's own refusal. Reading a body through
-`readJsonBodyEffect` needed a byte bound neither route held before; both take
-the 8 KiB bound a handful of short fields never approaches, matching the
-bound the rating and change-signal routes already read their own bodies
-under. `fixtures/devices-vault-route/` pins a representative exchange on each
-path — a register, a heartbeat, a forget, a store, a delete, a list, and one
-refusal of each shape — and `tests/devices-vault-app.test.ts` carries every
-gate-order and validation case the promise-shaped handlers were tested
-against, run against the group instead.
-
-## The rating route
-
-`server/rating-app.ts` is the one-endpoint group behind
-`server/routes/conversation/messages/rating.ts`: `PUT
-/api/conversation/messages/{id}/rating`, the path's id rewritten into the
-query the way `server/function-rewrites.ts` moves every segment-captured id.
-`server/hosted/message-rating.ts`'s `handleMessageRating` answers an effect
-now, reading `hostedVaultSeams.resolveUserId` directly instead of through a
-`Route`'s own `Effect.promise` wrap, and its `rate` seam is `rateMessage` over
-a `storeWriter` built with no tool registry, since the route records events
-alone and names no tool; the id parsing, the body's byte bound, and the two
-refusals the store answers (`not_found`, `not_lukes`) are unchanged.
-`tests/hosted-message-rating.test.ts` runs the handler through
-`tests/support/no-database.ts`'s refusing `SqlClient` layer, the same runner
-the events and conversation-read tests use, since every case here mocks its
-`rate` seam and never reaches a real connection.
-
 ## The plans group
 
 `server/plans-app.ts` is the Mac's Plans tab's route group over the account's
 named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, most
-recently opened first, `POST /api/plans` starts one with its name, its
-repository, and an empty document,
+recently opened first, `POST /api/plans` starts one with its name and the
+untouched template as its document,
 `GET /api/plans/{id}` opens one with its saved document and moves it to the
 head of the list, and `DELETE /api/plans/{id}` deletes it, the id moved into
-the query by the segment rewrite the way the rating route's is.
+the query by the rewrite `server/function-rewrites.ts` makes of every
+segment-captured id.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
 `server/hosted/plan-store.ts` names the account beside the plan, so another
@@ -633,14 +552,14 @@ stamps it cleared, so the purge takes its words thirty days on. eve, the
 relay, and the store are unchanged, and for a plan conversation the host
 swaps three things (`server/hosted/brain-host/planning.ts`): the prompt is the
 authored planning instructions, the standing context each turn opens with is
-the plan's repository, commit, and saved document read again from the row,
+the plan's name and saved document read again from the row,
 and the tools are the planning list alone: `run_in_repository` bound to the
 plan the conversation belongs to (`readPlanOfConversation`), with the two
 public research reads beside it, and `queue_question` (`server/hosted/queue-question.ts`),
 which runs nothing: its journaled call is how a question reaches the voice
 while the turn still runs. A resumed session is seeded with the
 conversation so far like any other. A plan conversation primes and flushes no
-notebook, and never reaches the panel's reads, which name their kinds. The
+notebook. The
 writer holds rows to `HOSTED_TOOL_SET`, the catalog and the planning tools,
 so a turn's planning calls are written and read back like any tool's.
 Question choice, agreement, assumption flags, and corrections are the
@@ -674,80 +593,43 @@ uses before it is sent, and a spent allowance is answered as not searched.
 the relay, and the `brain-host` eval runs a plan conversation through eve.
 
 The developer talks to the planning model through the ordinary voice
-session. The Plans tab's call is a `/api/voice/sessions` session whose
+session. Every call is a `/api/voice/sessions` session whose
 `session.create` names the plan (`planId`), which the service checks the
-account holds before anything is spent. It is created under the Live
+account holds before anything is spent; a create naming none is refused. It is created under the Live
 planning scene (`LIVE_SCENE.PLANNING` in `@sidecar/live`), whose delegation
 policy hands the developer's planning words to the backend and says back the
 finding and its one next question. A call just created speaks first: on
 `session.started` the service sends `planningOpeningInstruction()` and, once
-it is acknowledged, the same cue the introduction's greeting gets, so Luke
+it is acknowledged, a cue to begin (`greetingCue`), so Luke
 opens the conversation rather than waiting for the developer, and a
 re-attach opens nothing again. The plan seed's first line says whether the
 plan is new (the untouched template and no assumption) or under way, which
 is what the opening picks its first question from. The exchange lands every spoken ask and
-the session's record in the plan's conversation (`openPlanConversation`)
-rather than the account's standing main, so the delegation reaches the
+the session's record in the plan's conversation (`openPlanConversation`),
+so the delegation reaches the
 planning model with its document, its tools, and the conversation so far.
 The recent words ride the delegation as context, and whether an answer
-agrees to anything is the planning instructions' to judge. A planning call
-speaks nothing of the desk: no briefing look runs over it, so it claims no
-offer and a briefing takes its ordinary way to the phone, and a beat asked
-of it is dropped. The binding is the session's for life. It is written on
-the `voice_sessions` row as a plain `plan_id`, like the device's column,
+agrees to anything is the planning instructions' to judge. No call speaks a
+briefing. The binding is the session's for life. It is written on
+the `voice_sessions` row as a plain `plan_id`,
 and a re-attach reads it from there, so a later connection cannot move a
-session onto another plan, and one whose plan was deleted is refused rather
-than landing in the main. The Mac holds one call at a time and ends a plan's
+session onto another plan, and one whose row names no plan is refused. The Mac holds one call at a time and ends a plan's
 call when the window opens another plan, starts one, or closes, so only one
 plan is ever spoken. `tests/voice-service-exchange.test.ts` drives both
 plans and the re-attach over the real store.
 
-A start names `owner/name` and nothing more: the service resolves the
-repository's default branch to one commit through the account's own GitHub
-connection (`resolveRepository` in `server/hosted/github-source.ts`), so the
-commit a plan reads for its whole life is one GitHub answered to that
-account, and a request naming a branch or a commit is refused. A repository
-the connection cannot read, an empty one, a refused credential, or no
-connection at all starts no plan and answers `github-unavailable` with its
-`GITHUB_FAILURE` reason (`packages/hosted/src/github-wire.ts`).
-`server/github-app.ts`'s `GET /api/github/repositories` is the list a new
-plan picks from, since only the service holds the credential.
-
-The connection is the account's GitHub row in Better Auth's own `account`
-table. Sign-in asks GitHub for `read:user` and `user:email` alone; the
-Connect GitHub page (`src/connect-github.tsx`, `/connect-github.html`), which
-the Mac's new-plan form opens in the browser naming the account it is signed
-in as, links GitHub under the same OAuth App with `repo` on top, through
-Better Auth's `linkSocial` and the browser's own Luke session, refusing to
-link for a browser signed in as another account. Classic OAuth has no
-read-only form of `repo`: the token could write to every repository the
-developer reaches, though Luke only reads. Better Auth seals the token under
-the session secret (`encryptOAuthTokens`), a later sign-in never writes over
-it (`updateAccountOnSignIn: false`), and linking may name a GitHub account
-whose email differs, so an account signed in with Google connects the same
-way (`server/auth-policy.ts`). `server/hosted/github-connection.ts` is the
-production `GitHubAccess`: it opens the token under the same secret when a
-read needs it, and a row without `repo`, a token it cannot open, or GitHub
-answering 401 is `access-denied`, which the window and the model word as
-connect GitHub again. `tests/github-connection.test.ts` holds it against
-rows sealed the way Better Auth seals them.
-
-The planning model reads source through one tool,
-`run_in_repository({ command })` (`server/hosted/repository-shell.ts`), which
-runs the command through eve's own `bash` tool (handed to the host by
-`eve/host.ts`, since no function bundle may import eve) from `/workspace/repo`
-of the session's eve sandbox (`eve/sandbox.ts`, Vercel Sandbox, opened only by
-this tool). eve runs the sandbox's `onSession` hook once as it makes it, and
-for a plan conversation that hook clones the plan's repository at the plan's
-commit: the sandbox starts with no network, the fetch is let out to
-`github.com` under a firewall rule that adds the account's token as the
-request's `Authorization` header, so the token never enters the sandbox, and
-the network is shut again once it lands. A clone that fails leaves eve unable
-to open the sandbox, and the tool answers `not-run` with the clone's reason.
-eve snapshots the sandbox when it idles and resumes it with the clone in
-place; deleting the plan does not yet delete it.
-`tests/repository-shell.test.ts` holds it against a directory of its own and
-a real git repository beside it.
+A start names the plan and nothing more: the folder it reads stays on the
+developer's Mac, and the service never learns its path. The planning model
+reads source through one tool, `run_in_repository({ command })`
+(`server/hosted/repository-shell.ts`), which runs nothing on the service: a
+call is a `plan_command` row the tool inserts and reads until the Mac has
+answered, and the Mac, while the plan is open in its Plans panel, claims the
+oldest unclaimed row through a held request
+(`POST /api/plans/{id}/commands/claim`), runs it in the plan's folder, and
+settles it (`POST /api/plans/{id}/commands/{command}`). Every claim and
+settle names the account beside the plan, so another account's plan answers
+as none, and a command no Mac answers by the deadline answers `not-run`.
+`tests/repository-shell.test.ts` holds it.
 
 ## The admin group
 
@@ -851,11 +733,11 @@ provider code, it decrypts the proxy state and requires both the profile-return
 endpoint and its final page to match that allowlist. A Preview-held key therefore
 cannot turn production into a token relay to an origin outside the project.
 
-The Connect GitHub page's link (`linkSocial`) takes the same road, which the
+An account link (`linkSocial`) takes the same road, which the
 plugin itself does not: its hooks match only the sign-in paths, so a Preview's
 link would send GitHub the Preview's own callback, which the OAuth App refuses
 as not associated with it. `auth-proxy.ts` runs the plugin's two sign-in hooks
-on `/link-social` too, and makes the page's error address absolute on the
+on `/link-social` too, and makes the link's error address absolute on the
 Preview, since production is where GitHub's refusal is answered. Production's
 side is the relay it already was: the link half of the state (the Luke user it
 began signed in as) sits in the Preview's own verification row, and production
@@ -912,123 +794,60 @@ backstop and should be configured with it.
 
 ## Hosted voice service
 
-`server/routes/voice/sessions.ts`, `server/routes/voice/introduction.ts`, and
-`server/routes/voice/audio.ts` are the hosted voice
-service: three Vercel Functions serving WebSockets on Fluid compute, the part of
-this deployment that holds the GPT Live project key and owns each hosted voice
-session (`live-contract.ts` in `@sidecar/hosted` is a device's contract
-with them). Each file exports the `http.Server` that `server/voice/service.ts`'s
+`server/routes/voice/sessions.ts` is the hosted voice service: one Vercel
+Function serving WebSockets on Fluid compute, the part of this deployment
+that holds the GPT Live project key and owns each hosted voice session
+(`live-contract.ts` in `@sidecar/hosted` is the Mac's contract with it). The
+file exports the `http.Server` that `server/voice/service.ts`'s
 `voiceServer()` builds, with `ws` handling the upgrade on it, exactly as
-Vercel's WebSocket guide has it; a device opens `wss://` on this deployment's own origin,
+Vercel's WebSocket guide has it; the Mac opens `wss://` on this deployment's own origin,
 `HOSTED_VOICE_SERVICE_ORIGIN` in `@sidecar/hosted`, at `VOICE_SERVICE_PATH`.
-A plain request to any of the three paths answers 426, since the path is a socket's.
+A plain request to the path answers 426, since the path is a socket's.
 
-On `/api/voice/sessions` a signed-in device's handshake carries its account
+On `/api/voice/sessions` a signed-in Mac's handshake carries its account
 bearer, resolved through the same in-process `/oauth2/userinfo` seam every
 hosted route uses, and its daily allowance is spent by the same `hosted_usage`
-meter before any session exists, so a refused account costs no session. A Mac
-connecting from its main process and a phone connecting from `URLSession` are
-one caller here: each presents that bearer, names its own `devices` row in
-`x-luke-device-id`, and sends the same four frames, and which of them is
-calling is read from the row the handshake resolved
-(`VoiceSessionRecord.heldDevice`) rather than from anything the caller says of
-itself. The
+meter before any session exists, so a refused account costs no session. The
 socket's first frame is `session.create` (the SDP offer, a voice, the seed,
-and, for the Plans tab's call, the id of the plan it is about);
+and the id of the plan the call is about); the opener
+(`server/voice/opening.ts`, which is where the first frame becomes a session
+or a refusal) checks the account holds that plan, and
 the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
-client delegation, and the plan a planning call is bound to), attaches the trusted sideband, stands the hosted
+client delegation, and the plan the call is bound to), attaches the trusted sideband, stands the hosted
 exchange on it (below), and answers `session.created` with the id, the SDP
 answer, the quota, and the store's own id for the `voice_sessions` row
 (`voiceSessionId`), which is what a stored spoken row names as its
-`voice_session_id` and what lets the device tell its own rows on the
-Conversation from another session's. From then on the relay is a pipe: OpenAI frames to the
+`voice_session_id`. From then on the relay is a pipe: OpenAI frames to the
 device untouched except `session.input_audio.append` and
-`session.output_audio.delta`, dropped by type so on this route and the
-introduction's the developer's voice and Luke's never transit the service (the
-audio route below is the one place they do); and from the device nothing
-forwarded at all (`frames.ts`): the hang-up (`SESSIONS_HANG_UP_FRAMES`), a
-Mac's `session.hangup` or a phone's own `session.close`, is read as an ask for
-the close the exchange sends itself (below), and three frames in the
+`session.output_audio.delta`, dropped by type so the developer's voice and
+Luke's never transit the service; and from the device nothing forwarded at
+all (`frames.ts`): the hang-up (`SESSIONS_HANG_UP_FRAMES`), the Mac's
+`session.hangup` or an older build's own `session.close`, is read as an ask
+for the close the exchange sends itself (below), and two frames in the
 service's own vocabulary (`SESSIONS_REPORT_FRAMES`) are read here and handed
-to the exchange rather than forwarded: `session.activity`, the peer's idle report; `session.stop`, the
-stop key, which the exchange answers with the one instruction it appends
-itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone) and by
-blocking every exchange of the session: no reply delegated before the press
-is spoken, and each run still under way is cancelled through `stopAsk`, the
-typed Stop's own path, the voice told silently (`STOPPED_RUN_NOTE`) only once
-the cancel was taken; and
-`session.beat`, an onboarding beat or the launch greeting the device decided
-is owed, carrying the kind and the bounded observed values its script may
-mention (one working session's title, the talk key's label, the account's
-first name), which the exchange speaks from the build's own script
-(`speechAppends`, `speechOpening` in `@sidecar/live`); the launch greeting
-goes ahead of whatever else waits to be said, and one that reaches a session
-already speaking or spoken into — a briefing the exchange claimed the moment
-the session stood, or the developer's first words — is settled as spoken
-without a word rather than cutting that speech off. So no device appends
-anything to a session, and no sentence of a device's composing reaches one
-through this route. One frame goes the other way in that vocabulary,
-`session.spoken`: the exchange's word, by kind alone, that a proactive turn
-was spoken to its end, sent to the device by the service itself (outside the
-relay's counts) because the record of the beats and the counts that follow
-every spoken turn are the device's. Any other device frame — an older build's own append, the
+to the exchange rather than forwarded: `session.activity`, the peer's idle
+report, and `session.stop`, the stop key, which the exchange answers with the
+one instruction it appends itself (`STOP_SPEAKING_INSTRUCTION`, which stands
+on the service alone) and by blocking every exchange of the session: no reply
+delegated before the press is spoken, and each run still under way is
+cancelled through `stopAsk`, the voice told silently (`STOPPED_RUN_NOTE`)
+only once the cancel was taken. So no device appends anything to a session,
+and no sentence of a device's composing reaches one through this route. Any other device frame — an older build's own append, the
 microphone switch that never crosses this socket, an unreadable frame —
 closes that device's socket with a policy violation (`UNPERMITTED_FRAME_REASON`)
 rather than dropping it, so a device still running an exchange of its own is
 refused where it can be seen and never doubles the one standing here; the
 session then ends as a hang-up does, seconds recorded. The relay keeps no
-conversation, reads no frame past its `type` but that one report, and logs
-status codes, outcome names, and counts. Beside a refusal and an exchange's
-own report the line carries one more word, the platform of the device row the
-handshake resolved (`macos`, `ios`, `watchos`), so a failure only one kind of
-caller sees is visible in the counts; a line where no such row was read — every
-upgrade refusal, a handshake naming no device, a claim on a row the account
-does not hold, the introduction, and a re-attach, which proves the session's
-owner rather than a device — carries none.
-
-On `/api/voice/audio` a signed-in device with no WebRTC of its own — the
-watch, once it moves — makes the same handshake as on `/api/voice/sessions`,
-bearer and device header alike, and opens with a `session.create` that names
-a voice and one of the four `LIVE_AUDIO_FORMAT`s and carries no offer and no
-seed (`SessionAudioCreateFrame`). The service's opener (`server/voice/opening.ts`,
-which is where every route's first frame becomes a session or a refusal)
-opens the session's primary WebSocket to OpenAI itself on the deployment's
-key (`openPrimary` in `server/voice/openai.ts`), sends the
-`livePrimarySessionConfig` document
-under that format, and reads the session's id off `session.started`, which is
-the only place a session of this kind names itself; the `voice_sessions` row
-is written then, with the device's id, the exchange is stood on the same
-socket, and the device is answered `session.created` with the id and the
-quota and no SDP answer (`SessionAudioCreatedFrame`). Whatever the socket
-said beside `session.started` in the handshake's own chunk is handed to both
-consumers ahead of anything the socket says next (`replayHeldFrames` for the
-exchange's reader, `VoiceSocketOptions.held` for the pipe's), so no frame is
-heard by nobody, twice, or out of its place. From then on the relay is the same pipe with two arms of its
-own (`frames.ts`, `AUDIO_CLIENT_EVENTS` and `AUDIO_REPORT_FRAMES`): from the
-device, `session.input_audio.append` and `session.close` are forwarded as the
-bytes they arrived as, `session.activity` and `session.stop` are read for the
-exchange, and anything else — the beat included — closes the socket; toward
-the device, `session.output_audio.delta` and what a renderer's own data
-channel is shown are forwarded, and the echo of the device's own appends is
-dropped. So on this one route the developer's voice and Luke's transit the
-service in both directions, a product decision recorded on LUKE-211 and
-disclosed by `PRIVACY.md`'s rewrite under LUKE-221; the record is untouched
-by it, because the sideband reader the exchange and the voice writer stand on
-drops both audio events by type before either sees them. The device's byte
-budget on this route, `SOCKET_BYTE_BUDGET.AUDIO`, is sized for PCM16 at 16 kHz
-as base64 in JSON over the function's whole 800 seconds, and counted on what
-the device sends alone. There is no `session.attach` on this route: the
-service's own socket is the session, so the call ends when the function does,
-and an attach as a first frame is refused as any unadmitted first frame is.
+conversation, reads no frame past its `type` but those reports, and logs
+status codes, outcome names, and counts.
 
 The service itself is a scope. `VoiceService.make(options)` answers
 `Effect<VoiceService, never, Scope>`, and that scope owns the `ws` server, the
 `FiberSet` each session's fiber joins, and the claim on the server the function
 exported; closing it gives up the claim, closes every device socket so each
-sessions-route relay detaches, leaving the WebRTC session for the device to
-re-attach to on another instance, and every other relay runs its graceful
-close upstream, drains those fibers under their own timeouts, and only then closes the `ws` server. Nothing calls a `close` beside
+relay detaches, leaving the WebRTC session for the device to
+re-attach to on another instance, drains those fibers under their own timeouts, and only then closes the `ws` server. Nothing calls a `close` beside
 it, because a Vercel function is frozen between invocations and discarded with
 no shutdown hook: `voice/function.ts` stands the service on `runWeb` in a scope
 held open by `Effect.never` and a test is the only caller that ever ends one.
@@ -1045,36 +864,25 @@ reader the relay then streams the rest from and nothing between the two lands
 nowhere. `server/voice/relay.ts` pipes the two streams, settles on a
 `Deferred`, and arms its graceful-close and opening waits as `Effect.sleep`
 forked into that scope; `server/voice/openai.ts` answers effects for the
-session create, the sideband attach, and the primary socket that is a session
-itself — `openPrimary`, for a device with no WebRTC of its own, which no route
-reaches yet — each socket acquired with `Effect.acquireRelease` so a session
+session create and the sideband attach, each socket acquired with `Effect.acquireRelease` so a session
 that ends, however it ends, leaves no socket standing. A socket handed over by
 `ws` is paused until its reader stands, because `ws` emits a frame to whoever
 listens at that instant and the reader is a fiber away.
 
-`/api/voice/introduction` takes a fresh install with no account, under a
-durable shared daily ceiling of the deployment's own
-(`spendIntroductionMeter`, the `introduction_usage` row), taken only once a
-valid `session.create` has arrived, so an empty handshake costs it
-nothing. There the sideband is
-the function's alone: the caller may send only what a renderer's data channel
-may, is shown only what one is shown, and `greetingInstruction()` goes up once
-on `session.started`. The seed is bounded to one developer message of at most
-1,024 characters, and the socket itself to `SOCKET_BYTE_BUDGET.INTRODUCTION`,
-a mebibyte the caller may send before the service closes the socket. The
-socket's own reader counts it, from its first frame rather than from whenever
-the pipe stood, so what a caller sends while its session is being stood up is
-spent as much as what the pipe later carries, and a frame past the budget is
-not read at all — what the relay sees is the peer going, which is a hangup it
-already knows how to end. The voice never travels here: it is WebRTC's. A
-signed-in device's socket is bounded the same way at eight mebibytes, since
-its account is spent per session and answers for what it sends.
+A device's socket is bounded to `SOCKET_BYTE_BUDGET`, eight mebibytes the
+caller may send before the service closes the socket, since its account is
+spent per session and answers for what it sends. The socket's own reader
+counts it, from its first frame rather than from whenever the pipe stood, so
+what a caller sends while its session is being stood up is spent as much as
+what the pipe later carries, and a frame past the budget is not read at all —
+what the relay sees is the peer going, which is a hangup it already knows how
+to end. The voice never travels here: it is WebRTC's.
 
 ### The live session service, attached to the sessions route
 
 The machinery that owns a session's exchange — the delegation adapter that
 hands each ask to the brain and speaks the reply as commentary once the run's
-actions settle, the append channel, the briefing queue, idle, and the
+actions settle, the append channel, idle, and the
 graceful close — is `@sidecar/voice`'s `LiveSessionService`, behind that
 package's `./live-session` door, which names no socket library so a function
 bundle takes it without `ws`. This service composes it for every signed-in
@@ -1086,12 +894,10 @@ the deployment secret, or eve's origin composes none and refuses every
 session as `unavailable`, since a session with no exchange behind it has no
 one to answer its asks. The desktop composes no exchange of its own since
 E5-3; what it holds is `LiveSessionHolder`, which seeds the session at
-creation, ends it, reports its idle and its stop, and asks for the beats it
-decides are owed, opening a muted session for one when none stands. What stops the
+creation, ends it, and reports its idle and its stop. What stops the
 model's output from becoming an action is not the attachment and not the
 sideband but the brain's own gauntlet: `acceptAsk` on every spoken ask, eve's
-tool policy on every tool a turn reaches for, and `admit()` on every action,
-exactly as a typed ask meets them.
+tool policy on every tool a turn reaches for, and `admit()` on every action.
 
 What stands: `server/voice/live-record.ts` is the `LiveRecord` door over the
 voice writer (`server/hosted/store/voice-writer.ts`). Every server event is
@@ -1104,9 +910,8 @@ inserted on first sight and grown in place after, its words cut from those
 segments over the span the ledger holds it at: the developer's line, and
 every utterance of Luke's as an assistant row authored by the voice model,
 whatever prompted it — an answer it gave itself, what it said around an ask
-handed to the brain, a briefing or the brain's reply read aloud, a greeting
-or a beat spoken from the build's script — so the Conversation shows what the
-developer actually heard, and a reading stands beside the message it was read
+handed to the brain, the brain's reply read aloud, the opening — so the
+record shows what the developer actually heard, and a reading stands beside the message it was read
 from rather than in place of it. A delegation cuts nothing and re-keys
 nothing: the stream's `session.delegation.created` is consumed like any other
 event and leaves nothing, and what puts an ask on record is the service's
@@ -1138,15 +943,14 @@ the live session service, and it reaches Luke's judgment in process and never
 over HTTP. The voice function resolved the account at its handshake and
 dropped the bearer there, so it holds nothing eve's door or this deployment's
 routes would take; what it holds is the ask door itself, `acceptAsk` in
-`server/hosted/brain-ask.ts`, the same function the ask route is a thin
-adapter over, called with the resolved account, the spoken origin, and the
+`server/hosted/brain-ask.ts`, called with the resolved account, the spoken origin, and the
 service's submission id as the client id, under the eve client the
 composition built for the account as the deployment principal
 (`EVE_CALLER.DEPLOYMENT`, admitted for spoken turns by `DEPLOYMENT_TURNS`).
 The run the service keys an exchange by is the ask's id, since eve names a
 turn only once it starts; the brain follows the ask through `askStanding` on
-a schedule, projects its turn's events with the same `projectTurnEvents` C7's
-stream serves, and translates each back to the ask's id. There is no HTTP hop
+a schedule, projects its turn's events with `projectTurnEvents`
+(`server/hosted/turn-events.ts`), and translates each back to the ask's id. There is no HTTP hop
 and so no second function ceiling to re-attach across. Each follow is a fiber of the socket's own scope, so
 the socket detaching interrupts it and nothing is emitted after. What the
 detach cut short is not lost with it: a spoken ask's row carries the voice
@@ -1186,8 +990,7 @@ spoken as the build's own note for it, never composed with the ask. One
 spoken ask leaves one developer line: the transcript's row, cut at the
 delegation by the voice writer under the delegation's id. Eve's received
 message for a spoken turn is the question the service composed around those
-words, which is not written as a user row, where a typed ask's and an
-observation's are;
+words, which is not written as a user row, where an observation's is;
 `BRAIN_HOST_TURN_KIND` says for each kind whose row the received message is,
 so the relay consults the table rather than a branch. The line and the ask
 share one id, the delegation's, which the service submits the ask under, so
@@ -1200,82 +1003,36 @@ voice handed the question over and written while the dispatch was still under
 way — under the same lock, in the order said. The race is removed rather than
 won, and no line of his is left as a group of its own to be placed by its
 instant after the whole turn it belongs to. The store owns the order inside
-the group as it owns the order of the conversation: the sequence a device
-pages by is the sequence a group is drawn in, so the writer places the
-developer's line ahead of the turn's work by that sequence rather than
-leaving a renderer to sort it there. A line the turn takes at its received
-message moves to a fresh position — past every device's cursor and ahead of
-the journal the first step is about to open — so a device that read the line
-early, as its own group, reads it again in the turn's group and lets the
-copy it held go; a line that lands after the first step, the voice writer's
-cut racing eve, is placed at a fresh position and the journal moved behind it
-to another, so a device that previewed the journal reads it again where it
-now stands; and a line the turn takes with a journal already open — a
-received message eve told again after the step — moves the journal behind it
-the same way, so the developer's line precedes the turn's work on every path
-a line enters a turn by, and no renderer sorts a group by anything but the
-sequence. The turn's answer closes the journal behind whatever landed after
+the group as it owns the order of the conversation, so the writer places the
+developer's line ahead of the turn's work by sequence rather than leaving a
+reader to sort it. A line the turn takes at its received message moves to a
+fresh position, ahead of the journal the first step is about to open; a line
+that lands after the first step, the voice writer's cut racing eve, is placed
+at a fresh position and the journal moved behind it to another; and a line
+the turn takes with a journal already open — a received message eve told
+again after the step — moves the journal behind it the same way, so the
+developer's line precedes the turn's work on every path a line enters a turn
+by. The turn's answer closes the journal behind whatever landed after
 it while the turn ran — Luke's words said around the ask as the brain worked,
 an aside, a second line of the developer's — by moving it to a fresh position
 where any row stands past it, and leaves it where it opened where none does,
 so the thread reads as it was heard: what was said while he worked, then what
-he did and thought, then what was said of it. Every device holds a message once, by its id, where its latest
-delivery placed it; `reads-wire.ts` states the rule. A device from before this rule holds the line where it first read it and
-reads it again where it moved, so it draws the line twice until it reads the
-conversation from its beginning; that is the cost of re-delivering by the
-one cursor every device already pages by, against the alternative — a new
-event kind on the events resource — which such a device's fixed reading of
-the kinds would refuse whole, taking every rating and speech mark with it.
-
-### Briefings claimed before they are spoken
-
-`server/voice/live-briefings.ts` is how a briefing reaches the hosted live
-session. The brain's `announce` put it on offer as a `speech.offered` event
-on its own message; while a session stands, the look reads the account's open
-offers on a schedule and, for each still merely offered, reads the
-announcement's words (`server/hosted/briefing-words.ts`, the same read the
-push pass makes), claims the offer as the device the session belongs to
-through `claimSpeech`, and only then hands it to the service to speak. One
-look is an effect its caller composes; the schedule the exchange's start puts
-them on is a fiber of the socket's scope, so that scope's close is what ends
-the looking. The
-order is a rule and the type is what keeps it: the hosted delivery carries the
-`SpeechClaim` that `claimSpeech` alone mints, so a briefing delivered without
-a landed claim does not compile, and `repository-checks.sh` refuses the brand
-spelled anywhere else. A claim the record refuses delivers nothing, since a
-briefing spoken but not recorded as claimed can be pushed again and heard
-twice. **A session whose row names no device claims nothing and speaks no
-briefing**: `voice_sessions.device_id` is null until the handshake that
-creates the row carries a device the account owns, and a path that cannot
-prove which device is speaking must not speak. That is the contract, not a
-gap: the accountless introduction never claims, and a device that sends no
-device id hears its briefings by push instead. A quiet instant on the
-account is a mute and nothing more: the look reads it the way the push does
-and leaves a quiet account's offers unread, so nothing is spoken into a
-meeting, and an offer made under the quiet expires on its own instant. Every
-open offer of the account is read at each look and only the still-offered
-ones are claimed, a bounded few per look, so rows claimed elsewhere cannot
-fill a page ahead of a newer offer; and a briefing is
-handed to the service as decided at its claim, since the record's expiry is
-what says how long an offer stands and the service's staleness rule measures
-only the wait from that decision to the speech.
+he did and thought, then what was said of it.
 
 `server/voice/live-exchange.ts` composes the whole for one account's one
 live session — the brain answered in process, the record over the voice
-writer with the sideband observed once ahead of the service, and the
-briefings above — over one store context, with the eve client handed in as
-the caller composed it. The brain's asks are pinned to the conversation the
-record writes, so an ask and the lines it leaves cannot name two
-conversations once a Clear has moved the standing main: after a Clear the
-ask is refused at the door and eve is not reached, rather than eve taking a
-turn the record cannot write. The service's `onBriefingAppend` seam tells the voice
-writer which message a briefing's last append carries, so the session's own
-voice past the append marks the briefing spoken. The composition is a scope's:
+writer with the sideband observed once ahead of the service — over one
+store context, with the eve client handed in as the caller composed it. The
+brain's asks are pinned to the conversation the record writes, the plan's,
+so an ask and the lines it leaves cannot name two conversations: once the
+plan's deletion has stamped it, the ask is refused at the door and eve is
+not reached, rather than eve taking a turn the record cannot write. The
+composition is a scope's:
 `hostedLiveExchange` answers an effect built in the `Scope` its caller opened
 for the socket, and every fiber the session runs is forked into that scope —
 the one that reports what the record made of each live event, the one that
 makes every record write in arrival order, the brain's follow of each
-accepted ask, and the briefing look on its schedule — so closing the scope
+accepted ask — so closing the scope
 interrupts each of them. The session's graceful close (its release with
 nothing said, `LiveSessionService.release`, where the relay settled detached)
 and the wait on every record write already started are finalizers of the same
@@ -1285,8 +1042,7 @@ below the exchange holds a runner, and none of them runs an effect at all:
 `LiveRecord`'s two utterance writes and `LiveBrain`'s submission answer
 effects themselves, the record's on the fiber that makes every write in
 arrival order and the brain's with the `SqlClient` the scope was built on
-provided to it, as `runTool` provides it to the brain's seams. Nothing
-attaches this to the sessions route; that is the desktop cutover's, by build.
+provided to it, as `runTool` provides it to the brain's seams.
 
 ### The exchange on the sessions route
 
@@ -1295,11 +1051,10 @@ the composition's exchange for a signed-in session, offered once the session
 stands and before the desktop is answered, and adopted over the same sideband
 the relay pipes. The service hands the attachment the socket and reaches
 nothing of the exchange or the live-session door itself; the attachment
-builds the sideband over that socket and adopts, so the voice function's
-bundle gains that edge only in the commit that passes the attachment. One
+builds the sideband over that socket and adopts. One
 socket, one scope: the attachment is an effect the service runs in a scope
-forked from the session's own, building the account's standing main, the
-exchange, its adoption of the sideband, and the briefing look in it, and the
+forked from the session's own, building the plan's conversation, the
+exchange, and its adoption of the sideband in it, and the
 service's stop is that scope's close; a standing that could not be reached
 has the scope closed by the service before the session is refused, so nothing
 an attempt acquired outlives it. The
@@ -1316,29 +1071,23 @@ creates (`LiveSessionService.adoptSession`): the desktop's create frame
 seeded the session, and a second seed would put the recent lines into the
 conversation twice. A fresh connection re-attached to a running session
 adopts it as started, since the session spoke its start to an earlier
-connection and speaks it to no later one; the attachment also starts the
-briefing look, which runs for as long as the session stands and ends with the
-exchange's stop. An exchange offered that cannot stand refuses the session
+connection and speaks it to no later one. An exchange offered that cannot stand refuses the session
 as unavailable rather than running it with no one to answer its asks. When
-the relay settles, the exchange ends its follows and its look, closes the
+the relay settles, the exchange ends its follows, closes the
 session it holds (already gone, which its sideband reports as the close it
 held), and waits for every record write already started, so no line begun
 before the settle is cut; an append not yet sent is dropped with the session
 and never re-sent, and a write that fails after the socket closed is
-reported. `server/voice/exchange-attachment.ts` is what the route would pass:
-the account's standing main resolved at the session's start, the function's
+reported. `server/voice/exchange-attachment.ts` is what the function passes:
+the plan's conversation resolved at the session's start, the function's
 store context and writer, and eve reached as the deployment for the account.
-**The function passes nothing today, by design.** The desktop still runs an
-exchange of its own, and with both live every spoken ask would be delegated
-twice and every reply appended twice; the route passes the seam in the one
-commit that unwires the desktop's, so both-live never exists.
 
 ### One connection is one invocation
 
 A WebSocket connection to a Vercel Function closes when the function reaches
-its maximum duration — `server/function-durations.ts` gives both functions
+its maximum duration — `server/function-durations.ts` gives the function
 800 seconds, the longest generally available — while the WebRTC session between the device
-and OpenAI stands on. A device socket on this route that closes without the
+and OpenAI stands on. A device socket that closes without the
 device's own `session.close` is therefore a detach and not a hang-up: the
 relay sends nothing upstream, settles `detached` at once, closes only its
 sideband, records no close, and the exchange lets go of the session with
@@ -1349,14 +1098,14 @@ the scheduled tick ends (below). So a socket may also open with `session.attach`
 a session id. The function resolves the bearer, checks that this account is
 the one the session was created for (the `voice_sessions` row written at
 creation, indexed over the owner and the live session id for this lookup),
-reads the plan a planning call was bound to off the same row, attaches a fresh
+reads the plan the call was bound to off the same row, refusing a row that
+names none, attaches a fresh
 sideband to OpenAI's `/v1/live/sessions/{id}/attach`, answers
 `session.attached`, and pipes as before. Nothing the session said between the
 two connections is replayed. The desktop's `HostedLiveSessionSource` in
 `@sidecar/voice` does the reconnecting: three tries over about ten seconds,
 sends made in the gap held for the next connection, and only after the last
 failure does the host see the loss it already handles as `connection_lost`.
-The introduction never re-attaches; one connection covers it.
 
 ### How a session ends
 
@@ -1368,10 +1117,10 @@ it, writes the row's `closed_at`, `close_reason`, and
 `recordVoiceSeconds` in `server/hosted/quota.ts`
 — the session row is the idempotency ledger: the seconds land only where none
 stand yet, so a report seen by two connections adds nothing — and closes both
-ends. On this route the session's one `session.close` is the exchange's, as
-the server-controls guide asks one owner per action ("Assign one owner for
-each action"): a device hangs up by asking for it, and the relay hands the ask
-to the exchange's graceful close, the same one its idle decision runs, which
+ends. The session's one `session.close` is the exchange's, as the
+server-controls guide asks one owner per action ("Assign one owner for each
+action"): a device hangs up by asking for it, and the relay hands the ask to
+the exchange's graceful close, the same one its idle decision runs, which
 registers for `session.closed` before it sends and holds the sideband for it
 for 15 seconds, the docs' close sequence. Neither the Mac's voice window, nor
 its host, nor the relay sends a close of its own; the window stops its
@@ -1379,8 +1128,7 @@ microphone at the hang-up and keeps its peer up for `session.closed` under
 the same bound, then closes the peer, which OpenAI ends as `remote_hangup`
 where no close reached it. A device socket that goes after a hang-up, or
 after a refused frame, asks the same owner once more, which sends nothing
-twice. The audio and introduction routes, with no such owner, have
-`session.close` sent on the device's behalf by the relay on the same terms. A sessions-route socket that goes with neither is a
+twice. A socket that goes with neither is a
 detach (above): nothing is sent, nothing is recorded, and the unconfirmed
 snapshot stands until a re-attached connection reads `session.closed`. A
 detached session is bounded all the same, since a caller can drop the socket
@@ -1397,8 +1145,8 @@ gone, and one that never answers is let go of: both are closed as
 swept twice. A deployment without the voice key sweeps nothing. A sideband that ends first closes the device's socket
 with code 1001 and reason `upstream-closed` and records nothing: the last
 unconfirmed snapshot standing with `closed_at` null is the honest record, and
-a re-attached connection's `session.closed` later confirms it. Only these
-functions and the tick's sweep write `voice_sessions`; the seconds ledger and it both cascade with
+a re-attached connection's `session.closed` later confirms it. Only the voice
+function and the tick's sweep write `voice_sessions`; the seconds ledger and it both cascade with
 the user row. The seconds ledger meters nothing on its own: a session still
 spends one call when it opens, until the seconds are what the allowance is
 measured in.
@@ -1407,19 +1155,16 @@ measured in.
 
 Before any socket stands, an HTTP status on the upgrade: `401` for
 `/api/voice/sessions` without a bearer, `403` for a handshake carrying a
-browser `Origin` header (neither caller is a page: the desktop connects from
-its main process and the phone from `URLSession`), `503` while
+browser `Origin` header (the caller is no page: the desktop connects from
+its main process), `503` while
 `OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
 in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
 reason: `invalid-request` for a first frame that is not a valid `session.create`
-or `session.attach`, an attach on the introduction, a plan named on the
-introduction, or, on the audio route, a
-first frame that is not the `session.create` naming a format, an attach
-included; `invalid-token` for a
+or `session.attach`, a create naming no plan, or an attach to a session bound
+to none; `invalid-token` for a
 bearer no account stands behind, and for an attach to a session this account
-did not create; `not-found` for a planning call naming a plan the account
-does not hold, refused before the allowance is spent; `quota-exhausted` for a spent allowance, or an introduction
-past the shared ceiling; `upstream-error` when OpenAI refused the
+did not create; `not-found` for a call naming a plan the account
+does not hold, refused before the allowance is spent; `quota-exhausted` for a spent allowance; `upstream-error` when OpenAI refused the
 creation or the sideband could not attach; `upstream-throttled` when OpenAI
 answered 429.
 
@@ -1430,52 +1175,32 @@ on for the project, and set `OPENAI_API_KEY`; `LUKE_LIVE_MODEL` optionally pins
 the model. Nothing else: no separate service, secret, or origin. Tests run against a fake OpenAI on loopback and an in-memory account side
 (`tests/voice-service.test.ts`, `tests/support/voice-fakes.ts`).
 
-## The turn event stream
+## The turn event projection
 
-`server/routes/brain/turns/events.ts` answers `GET /api/brain/turns/{id}/events`,
-the path's id handed over by a `routes` rewrite as the one `id` query parameter
-the way the rating route's is, as Server-Sent Events for the voice session that
-just asked the turn and wants to speak commentary while it runs. The logic is
-`server/hosted/turn-event-stream.ts`. Nothing is stored for it: the five events
-— a slow step began, a planning turn queued a question, every action settled,
-one sentence of the reply, the turn ended — are a projection over the turn row and the turn's journal, the
-assistant message the store writer opens under the turn's id and amends as each
-call is written ahead of its run, read again every quarter second, and the
-projection only grows while the turn runs, so each event keeps the number it
-was first told under. The frame's `id` is that number and `after` resumes from
-it, so a client attached mid-turn hears the rest and the end exactly once and
-one attached after the end hears the terminal events and closes at once. The
-turn has to be the caller's, refused before anything streams; another
-account's turn and none at all read alike as not found. The function carries a
-300-second duration and one attachment closes without an end at 270 seconds,
-for the client to attach again from its cursor, with a heartbeat frame every
-fifteen quiet seconds so the connection is known to stand. The polling itself
-is a stream: the handler answers a `ReadableStream` built by
-`Stream.toReadableStreamEffect`, which forks a fiber of its own on the runtime
-the request runs on, so the reads outlive the handler's fiber, the client's
-cancel interrupts them, and the request's own abort is seen at the top of each
-read.
+`server/hosted/turn-events.ts`'s `projectTurnEvents` is what the voice's live
+brain hears of a turn while it runs, in process (above). Nothing is stored for
+it: the five events — a slow step began, a planning turn queued a question,
+every action settled, one sentence of the reply, the turn ended — are a
+projection over the turn row and the turn's journal, the assistant message the
+store writer opens under the turn's id and amends as each call is written
+ahead of its run, read again on every poll, and the projection only grows
+while the turn runs, so each event keeps the number it was first told under
+and a reader that has heard some hears the rest and the end exactly once.
 
 ## Provider key vault
 
-`server/routes/vault/key.ts` and `server/routes/vault/keys.ts` store, list, and delete the provider
-API keys a signed-in user syncs for server-side observation, dispatched by the
-devices-and-vault group in `server/devices-vault-app.ts`. Keys are encrypted
-at rest using AES-256-GCM before they touch the database; the plaintext never
-reaches a database column and there is no endpoint that reads it back.
-
-The three endpoints require `PROVIDER_KEY_ENCRYPTION_SECRET`, a 64-character
-hex string (32 bytes). Generate one with:
+`provider_key` holds the provider API keys an earlier version of the Mac
+synced for server-side observation; no route stores, lists, or deletes one
+any more, and a key goes with its account. Keys are encrypted at rest using
+AES-256-GCM (`server/hosted/vault-key-store.ts`); the plaintext never reached
+a database column and there is no endpoint that reads it back. The
+scheduled observation decrypts them under `PROVIDER_KEY_ENCRYPTION_SECRET`, a
+64-character hex string (32 bytes), and a deployment without it observes
+nothing (below). Generate one with:
 
 ```sh
 openssl rand -hex 32
 ```
-
-All three vault endpoints answer 503 if the variable is absent or blank — the
-same kill switch as the OpenAI endpoints — so a Preview deployment with no
-secret simply has no working vault, and no plaintext key can be stored
-accidentally. Set this variable in the Vercel project environment (production
-and any Preview that needs a working vault) alongside `DATABASE_URL`.
 
 ## Hosted conversation store
 
@@ -1486,8 +1211,7 @@ conversation rows the storage rework settled on, the identity workspace and
 daily notes, and the latest roster snapshot with its
 transcript mark and pass record. Every row is keyed by `user_id` and cascades with the
 user row, so `server/routes/account/delete.ts` erases them with the account.
-The roster tables are read and written by the scheduled observation below and
-the routes that serve it. `server/hosted/store/` is the store the brain host
+The roster tables are read and written by the scheduled observation below. `server/hosted/store/` is the store the brain host
 composes against; every module there is an
 `Effect<A, SqlError | Schema.SchemaError, SqlClient>` whose rows a `Schema`
 decodes and whose path rule is that schema too, which `HostedStore`, the store
@@ -1533,8 +1257,8 @@ details, cut to 500 characters by the writer and read by nothing but a query. An
 happened to a message after it was written, numbered by the conversation's
 own event sequence, unique on `(conversation_id, seq)` like a message: a
 briefing's `speech.offered`, `speech.claimed`, `speech.spoken`,
-`speech.pushed`, or `speech.expired`, or a `rating`. The
-partial unique index over `message_id` where the kind is `speech.claimed` is
+`speech.pushed`, or `speech.expired`, or a `rating` an earlier client
+recorded. The partial unique index over `message_id` where the kind is `speech.claimed` is
 the whole guarantee of at most one authorization to speak per briefing,
 carried by the schema alone: two devices claiming at once both insert and
 exactly one insert lands. `server/hosted/store/speech.ts` is the delivery
@@ -1543,12 +1267,10 @@ type refuses a speech kind on a plain event write, so every transition goes
 through that module, carrying the kinds whose standing excludes it for the
 writer to check under the lock. Two races, two mechanisms: a claim losing to
 another claim is the index, a transition losing to a settled one is that
-check. The voice writer marks a briefing spoken through the same door, as
-the device its session belongs to, so only a briefing that device claimed is
-marked. `announce` puts a briefing on offer through
+check. `announce` puts a briefing on offer through
 `speech.offered`, whose payload is the instant the offer expires
-(`SPEECH_OFFER.TTL_MS` after it was made); a device claims it, the claimant
-reports it spoken or the service marks it pushed, and how an offer stands is
+(`SPEECH_OFFER.TTL_MS` after it was made); no device claims or speaks one any
+more, so the service marks it pushed or it expires, and how an offer stands is
 folded from the speech events on its message in sequence order, the latest
 being the state. What is guaranteed is one authorization per briefing and
 never that the words were heard, so a claimed briefing whose device vanished
@@ -1556,22 +1278,18 @@ is never offered to anyone else: it expires like an unclaimed one. The sweep
 on the observation tick writes the one end left: `speech.expired` with the
 reason `due` on an offer past its own instant. A quiet instant a device
 reports (a meeting, or the pause switch restated as an instant) mutes the
-account and writes nothing: the push and the briefing look leave a quiet
-account's offers unread, an offer made under the quiet expires due like any
+account and writes nothing: the push leaves a quiet account's offers unread, an offer made under the quiet expires due like any
 other, and a turn that starts under the quiet is not offered `announce` at all
 (`hostedToolDeclarations` takes the account's quiet beside the trigger, read
 through the same query as each turn starts, and the turn's tool-set hash is
 taken from the same declarations), so nothing is saved for later or decided
-again. The Conversation view marks
-an announcement unspoken when the latest speech event on its message is
-`speech.expired`. A prompt and a tool set are
+again. A prompt and a tool set are
 content-addressed, the hash of the text or the schemas as the key, and the
 turn row carries that hash and nothing else of either, naming no row and
 holding no foreign key. A provider cursor is where the observation of one provider session last
 reached, one row per session per account, advanced in the same transaction as
 the observation message it produced and referenced by no message. Nothing in
-these tables is sealed: the content is readable by an operator, and the read
-routes answer it as rows.
+these tables is sealed: the content is readable by an operator.
 
 The store writer, `server/hosted/store/writer.ts`, is the one path by which a
 `messages`, `turns`, or `events` row is written, and
@@ -1623,117 +1341,32 @@ every message is held to the vocabulary before it lands, through the same
 catalog does not register, an input its schema refuses, or metadata outside
 the set; a message the reader would refuse is refused whole and reported,
 never cut down to the parts that would pass. Every write runs under a lock on
-the conversation row, which no write reaches once Clear has stamped it; the
+the conversation row, which no write reaches once it is stamped deleted; the
 sequences come from the row's counters, each allocation landing on the first
 position no row holds, so the unique `(conversation_id, seq)` constraint is
 the backstop for a writer outside the lock and nothing the writer retries.
-
-The per-resource reads are how a device reads those rows, and there is no
-feed: `server/routes/conversation/messages.ts`, `server/routes/conversation/events.ts`,
-`server/routes/conversation/children/messages.ts` (one child's or observed
-conversation's messages, the conversation named in the query), and
-`server/routes/brain/turns.ts` each answer one resource behind a cursor of the
-device's own (`?after=`, `?limit=`); `server/routes/conversation/children.ts`
-and `server/routes/conversation/agents.ts` answer the account's children (the
-conversations a delegation opened) and its agents (the observed conversations
-holding a turn) as they stand, bounded and with no cursor; and
-`server/routes/changes.ts` is the one change
-signal a device polls between them. The handlers are
-`server/hosted/resource-reads.ts` and `server/hosted/change-signal.ts`, over
-the store alone and never a table, composed by `server/hosted/store-route.ts`
-under the same bearer and the same kill switch the observation tick keeps.
-Beside them stands the one write the Conversation had,
-`api/conversation/clear.ts` (`server/hosted/conversation-clear.ts`): a POST
-carrying nothing, which runs the store's Clear — the standing main and its
-descendants stamped, a new main opened — and answers the main it opened and
-how many conversations the stamp reached, so every Mac on the account sees
-the same empty main on its next poll. No desktop reads any of it now: the
-Mac's Conversation tab and its client are gone.
-The messages read is the Conversation view: the store's `listMessages` over
-the standing main and every standing observed conversation, read back under
-the brain catalog's registry (`server/hosted/brain-tool-set.ts`, the
-`@sidecar/brain/tool-set` door built once for the deployment: every
-catalog tool with its input validated by the wire schema the model was
-offered, the same registry the desktop reads its pages under), then
-`@sidecar/session`'s `selectConversationView` over the page's
-rows with the catalog's own classification of which tools announce and which
-act, so an observed conversation's message crosses into the answer only cut
-to its announcement and action parts. A page holding a row the registry
-cannot read is refused whole with `unreadable-row` and the row's conversation
-and sequence, never answered without it. A cursor is an opaque string the
-service mints and a device echoes: for messages and events one position per
-standing conversation, in conversation-id order so two cursors over the same
-positions are one string, and for turns the store's own `(changedAt, id)` to
-the microsecond; the shapes are `@sidecar/hosted`'s `reads-wire.ts`, pinned
-by the fixtures under `packages/hosted/fixtures/reads/`. A message still being written — the running turn's journal — is
-passed like any other row, and what brings it back is the conversation's
-`journal_revision`: every write to a numbered row in place (`writer.ts`'s
-three, the journal's parts as they stream, its finish at the turn's end, its
-completion by the turn's answer) moves that counter and stamps the row with
-it, in one statement, and the messages head and a messages cursor each carry
-the revision beside the last sequence. A read from an earlier revision
-answers the rows written since, whatever their sequence, first and in the
-order they were written, then the rows past the sequence (`message-reads.ts`,
-under the partial index on stamped rows); so a device is handed the journal
-again exactly when it changed and once more when it finished, holds a stale
-copy of no row for longer than one poll, and reads nothing at all while a
-journal stands open and unwritten, however long it stands (LUKE-199: before
-this, every Mac on the account re-read the resource on every 5-second poll
-for as long as any journal was open, twelve times a minute a device for
-nothing). A cursor from before rows carried a revision stands level with the
-head's, and is re-minted in the new shape on its next read. An empty turns
-page moves that cursor back to the last turn at or before it, since a Clear
-can take the turn a cursor named, and never forward past a turn unread. Every device that reads to the end holds the same rows in the
-same order, which the unique `(conversation_id, seq)` pairs make true rather
-than hoped for; a Clear leaves the next read, the cursor, and the answer's
-list of standing conversations at once, and a device drops what the list no
-longer names. The observed conversations a Clear never stamps — they are the
-brain's own per-session context — are read from the instant the standing
-main was opened, which the main's entry carries as `openedAt`: their rows
-from before it never travel, their rows after it do, and the conversations
-themselves stand untouched. The window is a cut on what a read returns, never
-a rule of the view's selection. A message in the answer carries the developer's latest rating of it,
-folded from the rating events as an announcement's unspoken mark is folded
-from the speech events, so a client reads the current rating from the page
-it is on and never from the events resource's beginning; the events remain
-the record, one row per rating, and a re-rating is a newer row the fold then
-answers. The change signal answers each resource's head as the cursor a
-caught-up device would hold — from the conversation rows' counters and one
-ordered look at the turns, never the rows themselves — beside the roster
-snapshot's instant; the `children` and `agents` heads are the instant each
-list last changed rather than a cursor, since those two reads take none, a
-stamped row counted so a Clear that empties the list moves the head rather
-than removing it; the `children` head is absent while no child was ever
-opened and the `agents` head while no observed conversation ever held a
-turn. The same call is the device's heartbeat: its row
-takes the last-seen instant and the `activeUntil` and `quietUntil` it
-reported. The service records those two and decides nothing from them here.
 
 Voice is stored beside them the way a call platform stores a call, in
 `voice_sessions` and `voice_transcript_segments`.
 A session row is one live session — the Live API's own session id, unique so
 a re-attach on a fresh function instance finds the row it had rather than
 forking it, and indexed with the user so an ownership check is one lookup —
-with the device that opened it, its delegation mode, when it started and
+with its delegation mode, when it started and
 closed, the API's own close reason, and a `usage` payload of billed seconds
 with a flag saying whether the API confirmed them or a lost connection left
 them estimated. A segment is one span of what was actually said, by whom, in
 milliseconds on the session's clock. What is spoken becomes a message as each
 utterance settles: the developer's line and every utterance of Luke's are each
 cut from these segments into a finished row of the conversation, so the
-Conversation keeps the words the developer actually heard. A delegated
+record keeps the words the developer actually heard. A delegated
 exchange's reply is also the assistant message the brain wrote, and Luke's
 reading of it stands beside that message as its own row, whose metadata names
 the voice session and span it was cut from, the delegation it followed, and,
 where the store could tell, `read_from`: the message the words were read
 aloud from — the delegation's turn's journal where that turn had settled
 within two minutes of the write, in which case the row joins the turn, or the
-briefing whose `speech.spoken` began inside the span. The desktop draws the
-reading as the bubble, with the message's rating on it; a briefing read from
-folds as Luke's thinking above the reading, where one nothing said of stays
-his bubble, and the journal of a spoken turn folds the same way whether or
-not a reading names it, since what he said of it is the voice's own row. No
-audio is ever stored.
+briefing whose `speech.spoken` began inside the span. No audio is ever
+stored.
 
 Two writers share those tables and never a column. The voice service's own
 `server/voice/session-record.ts` owns the session row's whole life: it is
@@ -1743,19 +1376,15 @@ live session, overwritten with each unconfirmed usage snapshot while open,
 and closed once with the confirmed seconds, the instant, and the reason. The
 voice writer in `server/hosted/store/voice-writer.ts` only reads that row
 for its id and hangs everything else off it: a segment per transcript delta
-at the next position of the session's own sequence, the `speech.spoken`
-event on a briefing's message once the session's voice follows the
-commentary append that carried it (the first output delta beginning at or
-after the append's acknowledged end), and the developer's spoken ask as a
+at the next position of the session's own sequence, and the developer's spoken ask as a
 user message on the voice channel, cut from the stored user segments between
 the previous ask's end and the delegation's offset or the end of the
 utterance the service's ledger grouped the ask as, whichever is later, and
 named with the session, the delegation, and the span. A row whose `closed_at` is still
 null may keep gaining segments, because an instance that dies at its
 duration bound never sends `session.closed`, its relay detaches rather than
-closing, and the re-attach lands on the same row; the writer reads nothing from the row's state but its id. It
-keeps one thing in memory, which message a commentary append carried until
-its speech lands, and reads everything else back from the record, so a
+closing, and the re-attach lands on the same row; the writer reads nothing from the row's state but its id
+and reads everything else back from the record, so a
 fresh instance continues a session where the last one stopped.
 
 The store tests run the generated migrations on PGlite in process, so
@@ -1835,8 +1464,8 @@ logic lives in `server/hosted/observation-tick.ts` and
 seams and the account query. Vercel crons run only on production deployments.
 
 Four things ride on the tick because it is the one schedule the service
-runs, and none observes anything: the purge of conversations a Clear stamped
-past their retention window; the sweep over turns still running an hour
+runs, and none observes anything: the purge of conversations stamped
+deleted past their retention window; the sweep over turns still running an hour
 after they started (`server/hosted/store/abandoned-turns.ts`,
 `TURN_ABANDON.AFTER_MS`), whose end the relay never heard and which are
 settled as failed for `abandoned` through the same write the relay's own end
@@ -1861,9 +1490,9 @@ Each tick first drops the snapshot, transcript mark, and pass record of every ac
 that no longer holds a cloud provider key or has not been seen within the
 last 7 days, then lists up to 200 accounts that hold one and were seen —
 seen meaning one of the account's `devices` rows has a `last_seen_at` inside
-the window, which every registration and heartbeat moves along; the Mac
-registers no device yet, so until it does the schedule runs for accounts a
-phone or watch has signed into — in order of their last attempted pass, never
+the window; no client registers a device or sends a heartbeat any more, so
+no row's instant moves and an account leaves the window seven days after the
+last one an earlier client wrote — in order of their last attempted pass, never
 attempted first, so a provider that keeps refusing one account cannot starve
 the rest. It observes four accounts at a time inside a 50-second budget,
 starting a batch only while a whole 25-second pass deadline still fits, and
@@ -1897,7 +1526,7 @@ accounts the pass and then the opening, each account under one deadline, and a b
 whole deadline still fits the budget; an opening that outruns it is counted
 failed and what it did not carry waits for the next minute. What wakes it is
 a chat gaining messages, never the roster moving: the snapshot is what the
-Mac panel, the observe endpoint, the envelope, and `list_sessions` draw, and
+envelope and `list_sessions` draw, and
 what names the chats a provider may be asked about, and it is never diffed.
 The opener keeps one instant per account, `transcript_mark`, the point up to
 which every change has been handed to the brain. Each visit it asks each
@@ -1995,49 +1624,24 @@ reaches eve; the tick in particular is invoked by Vercel's cron on that
 protected host, so the origin it was called on is the one origin it must not
 dial (LUKE-250).
 
-`server/routes/observe.ts` answers the stored snapshot, mapped onto the wire rows and
-dated with `observedAt`; a user with no snapshot yet is answered from a live
-pass that seeds one, and `?fresh=true` asks the provider again under the
-endpoint's per-user rate brake. The action routes under `server/routes/actions/` admit
-each ask against the same stored snapshot instead of running a pass, seeding
-one the same way for a user who has none, and `server/routes/projects.ts` lists the
-projects from that snapshot, so a creation can only ever name a project the
-phone was offered. A snapshot observed under a key since replaced is treated
-as none, so a new key never serves or admits against the old key's roster;
-the same key saved again, as the Mac does on every launch, keeps it.
-`server/routes/sessions/messages.ts` is unchanged and still runs its own fresh pass
-before the read.
+A snapshot observed under a key other than the one stored is treated as none,
+so the brain is never served or admitted against another key's roster.
 
 ## Devices
 
-`server/routes/devices.ts` keeps one `devices` row per app installation on every
-platform Luke runs on — `macos`, `ios`, and `watchos` — registered (POST) at
-sign-in, moved along (PUT) by a heartbeat that carries the row's last-seen
-instant and optionally a presence window or a push token change, and
-forgotten (DELETE) at sign-out. The row is keyed by an installation id the
-client minted once and keeps in its own state, so a device that signs into a
-different account moves its one row to that account rather than leaving a
-second, and a notification for one account can never reach a device now
-signed in as another. A push token is unique across rows because Apple issues
-one per installation; a registration or heartbeat that presents a token
-another row holds takes it off that row in the same transaction. The
-installation id and a push token are not credentials. Rows go with the
-account, at sign-out, and when Apple answers that the token is gone. The
-handler is the devices-and-vault group in `server/devices-vault-app.ts`, the
-seams' vocabulary is `server/hosted/devices.ts`, and the writes are
-`server/hosted/device-store.ts`.
-Beside the presence window stands `quiet_until`, the instant a meeting hold
-the device observes ends; both arrive on the change-signal poll
-(`server/routes/changes.ts`), which moves the row exactly as the heartbeat does; the Mac
-reports both on every poll, presence from its idle time and lock state and the
-quiet instant from its calendar hold, and the phone reports neither yet. A poll
-that runs before the Mac's calendars have been observed this run carries no
-quiet instant at all, because an absent field leaves the row's instant and
-`null` clears it: not yet knowing whether a meeting stands is not the same
-fact as knowing none does, and a relaunch mid-meeting must not clear the hold
-the service still rightly holds. A quiet instant holds speech
-and nothing more: a delivery reads it to wait, never to decide, reword, or
-act. The push token reaches the sender below in a later change.
+The `devices` table holds one row per app installation an earlier client
+registered — `macos`, `ios`, and `watchos` — and no route writes one any
+more: nothing registers a device, moves its last-seen instant, or forgets it
+at sign-out. What stands is read by the tick's eligibility above and by the
+briefing push, which also deletes a row whose token Apple answers is gone;
+rows otherwise go with the account. A row is keyed by the installation id
+its client minted, carries its last-seen instant, a presence window and a
+`quiet_until` instant as that client last reported them, and a push token,
+unique across rows because Apple issues one per installation. The
+installation id and a push token are not credentials. A quiet instant holds
+speech and nothing more: a delivery reads it to wait, never to decide,
+reword, or act. The seams' vocabulary is `server/hosted/devices.ts` and the
+statements are `server/hosted/device-store.ts`.
 
 `server/hosted/apns.ts` is the sender behind those rows. It needs the
 deployment's Apple push credential, an APNs auth key from the developer
@@ -2051,7 +1655,7 @@ account, as four variables:
 | `APNS_BUNDLE_ID` | The iOS app's bundle id, sent as the `apns-topic` |
 
 Any one absent or blank means no sender is constructed, the same kill switch
-the OpenAI and vault endpoints keep: a Preview deployment without the
-credential stores registrations and sends nothing. Each row records which
+the OpenAI endpoints keep: a Preview deployment without the credential sends
+nothing. Each row records which
 of Apple's two gateways issued its token, so a build run from Xcode and one
 from TestFlight are addressed at the right host.
