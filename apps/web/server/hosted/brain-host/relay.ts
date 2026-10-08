@@ -36,8 +36,11 @@ import {
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
   RECEIVED_LINE,
+  RELAY_TURN,
+  type RelayTurn,
 } from "./bounds.js";
 import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from "./ids.js";
+import { EVE_DELEGATION_TOOL } from "./planning.js";
 
 /**
  * The relay from eve's stream into the brain's own: every event eve records
@@ -117,7 +120,7 @@ function joinedWords(head: string, tail: string): string {
 }
 
 interface RelayTurnState {
-  readonly kind: BrainHostTurn;
+  readonly kind: RelayTurn;
   readonly sequence: number;
   readonly steps: Readonly<Record<string, RelayStep>>;
   /** Each step's usage under its index, so a step eve replays reports its usage once. */
@@ -131,6 +134,8 @@ interface RelayTurnState {
 /** What one session's relay keeps: the turns still under way, by eve's own turn id. */
 export interface RelayState {
   readonly turns: Readonly<Record<string, RelayTurnState>>;
+  /** Whether the session has delegated to a subagent, so a turn no ask opened is a subagent's wake-up. */
+  readonly delegated?: true;
 }
 
 export const EMPTY_RELAY_STATE: RelayState = { turns: {} };
@@ -195,9 +200,16 @@ interface StreamRelaySeams {
 const TURN_ORIGIN_OF_HOST_TURN = {
   [BRAIN_HOST_TURN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_HOST_TURN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-} as const satisfies Record<BrainHostTurn, TurnOrigin>;
+  [RELAY_TURN.CHILD_COMPLETION]: TURN_ORIGIN.CHILD_COMPLETION,
+} as const satisfies Record<RelayTurn, TurnOrigin>;
 
 const TOOL_CALL_KIND = "tool-call";
+
+/** The tools that delegate to a subagent, whose result eve hands back in a turn of its own. */
+const SUBAGENT_TOOLS: ReadonlySet<string> = new Set([
+  EVE_DELEGATION_TOOL.RESEARCHER,
+  EVE_DELEGATION_TOOL.EXPLORER,
+]);
 const TOOL_RESULT_KIND = "tool-result";
 const EVE_ACTION_COMPLETED = "completed";
 
@@ -300,7 +312,7 @@ function withTurn(
 ): RelayState {
   const turn = state.turns[eveTurnId];
   if (!turn) return state;
-  return { turns: { ...state.turns, [eveTurnId]: next(turn) } };
+  return { ...state, turns: { ...state.turns, [eveTurnId]: next(turn) } };
 }
 
 /** Whether a step already holds a part eve re-emitted: the same call, or the same words at the same place. */
@@ -394,6 +406,10 @@ export class StreamRelay {
         return Effect.gen({ self: this }, function* () {
           for (const action of actions) {
             if (action.kind !== TOOL_CALL_KIND) continue;
+            // A call to a subagent is the session's delegation: its result comes back in a turn no ask opened.
+            if (SUBAGENT_TOOLS.has(action.toolName) && !standing.state.get().delegated) {
+              standing.state.update((state) => ({ ...state, delegated: true }));
+            }
             yield* this.#toolCall(
               turnId,
               stepIndex,
@@ -504,8 +520,15 @@ export class StreamRelay {
   ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
       // A start eve emits again finds its turn already under way and leaves what it accumulated standing.
-      if (standing.state.get().turns[eveTurnId]) return;
-      const kind = standing.turn;
+      const state = standing.state.get();
+      if (state.turns[eveTurnId]) return;
+      // Note that eve marks nothing on the turn it opens to hand a subagent's
+      // result back: it runs under the last request's auth and carries no
+      // delivery, where every ask after the session's opening one carries its
+      // own. So a turn with no delivery, in a session that has delegated, is
+      // that wake-up, and is recorded as the subagent's and not the last ask's.
+      const kind =
+        deliveryIds.length === 0 && state.delegated ? RELAY_TURN.CHILD_COMPLETION : standing.turn;
       if (kind === undefined) {
         this.#seams.report(
           `Turn ${eveTurnId} of session ${standing.sessionId} named no kind of turn and is not recorded.`,
@@ -513,6 +536,7 @@ export class StreamRelay {
         return;
       }
       standing.state.update((state) => ({
+        ...state,
         turns: { ...state.turns, [eveTurnId]: { kind, sequence: 0, steps: {}, usageBySteps: {} } },
       }));
       const { origin, trigger } = BRAIN_HOST_TURN_KIND[kind];
@@ -573,7 +597,7 @@ export class StreamRelay {
 
   #without(state: RelayState, eveTurnId: string): RelayState {
     const { [eveTurnId]: _dropped, ...rest } = state.turns;
-    return { turns: rest };
+    return { ...state, turns: rest };
   }
 
   #received(eveTurnId: string, text: string, standing: RelayStanding): RelayEffect<void> {

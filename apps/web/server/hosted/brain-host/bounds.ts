@@ -118,7 +118,20 @@ export const RECEIVED_LINE = {
 
 export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
 
-/** The run stream's origin and trigger for each kind of turn a request opens, and whose row its received message is. */
+/**
+ * The kinds of turn the relay records: each kind a request opens, and the one
+ * eve opens itself to hand a finished subagent's result back to the session
+ * that delegated it. No request names that last kind: the door admits only
+ * `BRAIN_HOST_TURN`, and the relay alone recognizes a wake-up turn.
+ */
+export const RELAY_TURN = {
+  ...BRAIN_HOST_TURN,
+  CHILD_COMPLETION: "child_completion",
+} as const;
+
+export type RelayTurn = (typeof RELAY_TURN)[keyof typeof RELAY_TURN];
+
+/** The run stream's origin and trigger for each kind of turn the relay records, and whose row its received message is. */
 export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.TYPED]: {
     origin: BRAIN_TURN_ORIGIN.TYPED,
@@ -130,8 +143,13 @@ export const BRAIN_HOST_TURN_KIND = {
     trigger: BRAIN_TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
   },
+  [RELAY_TURN.CHILD_COMPLETION]: {
+    origin: BRAIN_TURN_ORIGIN.CHILD_COMPLETION,
+    trigger: BRAIN_TURN_TRIGGER.CHILD_COMPLETION,
+    receivedLine: RECEIVED_LINE.RELAY,
+  },
 } as const satisfies Record<
-  BrainHostTurn,
+  RelayTurn,
   {
     readonly origin: BrainTurnOrigin;
     readonly trigger: BrainTurnTrigger;

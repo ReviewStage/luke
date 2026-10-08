@@ -12,6 +12,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
   type SpokenAskMetadata,
   TOOL_PART_STATE,
   TURN_ORIGIN,
@@ -276,6 +277,96 @@ it.effect(
       assert.equal(toolPart.toolCallId, "call-1");
       assert.deepEqual(standing.state.get(), { turns: {} });
       assert.deepEqual(refusals, []);
+    }),
+);
+
+/** A turn in which the planning model delegates to the researcher, as eve streams it. */
+function delegatingTurn(turnId: string, sequence: number): MessageStreamEvent[] {
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({
+      type: "step.started",
+      data: { turnId, sequence, stepIndex: 0, modelId: "m" },
+    }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        actions: [
+          {
+            kind: "tool-call",
+            callId: "call-delegate",
+            toolName: EVE_DELEGATION_TOOL.RESEARCHER,
+            input: { message: "Compare the two queue libraries." },
+          },
+        ],
+      },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
+/** The turn eve opens to hand a finished subagent's result back: no delivery, the notification as its message. */
+function wakeUpTurn(turnId: string, sequence: number): MessageStreamEvent[] {
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({
+      type: "message.received",
+      data: {
+        turnId,
+        sequence,
+        message:
+          "Background task task-1 (researcher) is completed.\n\nResult:\nThree sources agree.",
+      },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "stop", message: "Found it." },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
+it.effect(
+  "a turn no ask opened, in a session that has delegated, is the subagent's wake-up: it records as a child completion with the result as the brain's line, while a turn carrying an ask's delivery stays the ask's",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.SPOKEN);
+      await play(delegatingTurn("turn_0", 0), standing);
+      await play(wakeUpTurn("turn_1", 1), standing);
+      await play(
+        [
+          stampedEveEvent({ type: "turn.started", data: { turnId: "turn_2", sequence: 2 } }, NOW, [
+            "delivery-1",
+          ]),
+        ],
+        standing,
+      );
+
+      const { turnRows, messageRows } = await rows(target);
+      const originOf = (turnId: string) =>
+        turnRows.find((row) => row.id === hostTurnId(standing.sessionId, turnId))?.origin;
+      assert.equal(originOf("turn_1"), TURN_ORIGIN.CHILD_COMPLETION);
+      assert.equal(originOf("turn_2"), TURN_ORIGIN.SPOKEN);
+      const woken = messageRows.filter(
+        (row) => row.turnId === hostTurnId(standing.sessionId, "turn_1"),
+      );
+      assert.deepEqual(
+        woken.map((row) => row.role),
+        [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
+      );
+      assert.deepEqual(woken[0]?.metadata, {
+        author: MESSAGE_AUTHOR.BRAIN,
+        source: OBSERVATION_SOURCE.CHILD_COMPLETION,
+      });
     }),
 );
 
