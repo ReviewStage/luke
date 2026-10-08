@@ -183,7 +183,10 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
    * no longer under way answers `no_active_turn` and the session's next turn
    * is left running; there is no form of the call that names the session's
    * turn under way, because between a caller's read and eve's answer that
-   * turn can be the one queued after the one the caller meant.
+   * turn can be the one queued after the one the caller meant. Note that the
+   * cancel takes the session's background tasks with it, because a Stop
+   * means everything Luke is doing, and a subagent the stopped turn handed
+   * work to would otherwise go on and wake the session with its result.
    */
   cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
 }
@@ -192,6 +195,8 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
 interface EvePostBody {
   readonly message?: string;
   readonly turnId?: string;
+  /** Whether a cancel takes every background task the session owns with it. */
+  readonly tasks?: boolean;
 }
 
 /** The deployment acting for an account it names. */
@@ -327,7 +332,7 @@ function sessionsOver<Turn extends BrainHostTurn>(
       ),
     cancel: (sessionId, eveTurnId) =>
       Effect.map(
-        post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId }),
+        post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId, tasks: true }),
         readCancelled,
       ),
   };

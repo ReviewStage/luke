@@ -194,7 +194,7 @@ it.effect(
 );
 
 it.effect(
-  "a cancel posts to the session's cancel route naming eve's turn id, and reads whether eve had that turn to cancel",
+  "a cancel posts to the session's cancel route naming eve's turn id and the session's background tasks, and reads whether eve had that turn to cancel",
   () =>
     Effect.gen(function* () {
       const accepted = answering(200, { ok: true, sessionId: SESSION, status: "accepted" });
@@ -205,7 +205,7 @@ it.effect(
         },
       );
       assert.equal(accepted.seen[0]?.url, `${ORIGIN}/eve/v1/session/${SESSION}/cancel`);
-      assert.deepEqual(accepted.seen[0]?.body, { turnId: "turn_4" });
+      assert.deepEqual(accepted.seen[0]?.body, { turnId: "turn_4", tasks: true });
 
       const idle = answering(200, { ok: true, status: "no_active_turn" });
       assert.deepEqual(
