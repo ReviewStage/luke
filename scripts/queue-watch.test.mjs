@@ -144,24 +144,23 @@ const MERGED = snapshot({
   mergeStateStatus: MERGE_STATE_STATUS.UNKNOWN,
 });
 
-function runWatcher(reads, { press = true } = {}) {
+function runWatcher(reads, { press = true, extraRequiredChecks = EXTRA_REQUIRED_CHECK } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "queue-watch-"));
   try {
     fs.writeFileSync(path.join(directory, "gh"), FAKE_GH, { mode: 0o755 });
     fs.writeFileSync(path.join(directory, READS_FILE), JSON.stringify(reads));
+    const env = {
+      ...process.env,
+      PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+      [FAKE_DIRECTORY_VARIABLE]: directory,
+      QUEUE_WATCH_SETTLE_SECONDS: "0",
+      QUEUE_WATCH_EXTRA_REQUIRED_CHECKS: extraRequiredChecks,
+    };
+    if (extraRequiredChecks === null) delete env.QUEUE_WATCH_EXTRA_REQUIRED_CHECKS;
     const result = spawnSync(
       "bash",
       [scriptPath, ...(press ? ["--press"] : []), "--interval", "0", String(PULL_REQUEST_NUMBER)],
-      {
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          PATH: `${directory}${path.delimiter}${process.env.PATH}`,
-          [FAKE_DIRECTORY_VARIABLE]: directory,
-          QUEUE_WATCH_SETTLE_SECONDS: "0",
-          QUEUE_WATCH_EXTRA_REQUIRED_CHECKS: EXTRA_REQUIRED_CHECK,
-        },
-      },
+      { encoding: "utf8", env },
     );
     const callsPath = path.join(directory, CALLS_FILE);
     const calls = fs.existsSync(callsPath)
@@ -289,5 +288,21 @@ test("a failed check outside the ruleset's list still ends the watch when the bu
 
   assert.equal(run.status, EXIT.BLOCKED);
   assert.deepEqual(run.outcome, [OUTCOME.CHECK_FAILED, ...EXTRA_REQUIRED_CHECK.split(" ")]);
+  assert.deepEqual(run.calls, { reads: 1, enqueues: 0, dequeues: 0 });
+});
+
+test("with no extra checks named, the ruleset's contexts alone gate the press", () => {
+  // Note that the second read fails, because a watcher still waiting on a
+  // check that never reports would otherwise poll until its timeout.
+  const run = runWatcher(
+    [
+      snapshot({ checks: RULESET_CONTEXTS.map((name) => checkRun(name, CONCLUSION.SUCCESS)) }),
+      UNREADABLE_READ,
+    ],
+    { press: false, extraRequiredChecks: null },
+  );
+
+  assert.equal(run.status, EXIT.DONE);
+  assert.deepEqual(run.outcome, [OUTCOME.READY, HEAD_OID]);
   assert.deepEqual(run.calls, { reads: 1, enqueues: 0, dequeues: 0 });
 });
