@@ -47,6 +47,7 @@ const MOTION_DURATION_MS = {
   EXIT: 90,
   QUICK: 140,
   HOVER: 70,
+  PANE: 240,
 };
 const MOTION_DELAY_MS = {
   EXPAND: 200,
@@ -56,6 +57,10 @@ const MOTION_DELAY_MS = {
   HINT: 500,
 };
 const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
+// The desktop window's panes (the sidebar, the side panel) open and close on
+// a plain ease-out rather than the spring: a pane stands on the window's own
+// edge, and a spring's overshoot would part the two for a frame.
+const MOTION_PANE = "cubic-bezier(0.2, 0, 0, 1)";
 const ROW_FAN_PX = 7;
 const ROW_FAN_LIMIT = 5;
 
@@ -155,6 +160,8 @@ function motionTokensCss() {
   --duration-exit: ${ms(MOTION_DURATION_MS.EXIT)};
   --duration-quick: ${ms(MOTION_DURATION_MS.QUICK)};
   --duration-hover: ${ms(MOTION_DURATION_MS.HOVER)};
+  --duration-pane: ${ms(MOTION_DURATION_MS.PANE)};
+  --motion-pane: ${MOTION_PANE};
   --expand-delay: ${ms(MOTION_DELAY_MS.EXPAND)};
   --peek-delay: ${ms(MOTION_DELAY_MS.PEEK)};
   --row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};

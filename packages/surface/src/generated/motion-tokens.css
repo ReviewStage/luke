@@ -70,6 +70,8 @@
   --duration-exit: 90ms;
   --duration-quick: 140ms;
   --duration-hover: 70ms;
+  --duration-pane: 240ms;
+  --motion-pane: cubic-bezier(0.2, 0, 0, 1);
   --expand-delay: 200ms;
   --peek-delay: 60ms;
   --row-stagger: 32ms;

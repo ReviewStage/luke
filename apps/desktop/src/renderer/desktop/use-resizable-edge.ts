@@ -10,14 +10,17 @@
  * ways.
  *
  * A drag past a bound holds the pane at that bound until the pointer has gone
- * on far enough to mean more than the bound: then the pane snaps, shut past
- * its least width or to the whole window past its greatest. The pending snap
- * is answered while the drag lasts, so the pane can draw it before the
- * release commits it.
+ * on far enough to mean more than the bound: then the pane snaps there and
+ * then, shut past its least width or to the whole window past its greatest,
+ * and a drag that comes back undoes the snap as it crosses again, as VS
+ * Code's and ChatGPT's panes do. A release leaves the pane however the drag
+ * left it. Note that the hook is called by whoever outlives the pane, because
+ * a drag that shuts the pane takes its edge away and must still hear the
+ * pointer coming back.
  */
 
 import type React from "react";
-import { useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 /** Which side of its pane the edge stands on: the side panel's left, the sidebar's right. */
 export const EDGE_SIDE = {
@@ -27,25 +30,35 @@ export const EDGE_SIDE = {
 
 type EdgeSide = (typeof EDGE_SIDE)[keyof typeof EDGE_SIDE];
 
-/** What a release would do to the pane, as the drag stands. */
-export const EDGE_SNAP = {
-  /** Keep the width the drag reached. */
+/** Where a drag has taken the pane past its bounds. */
+const EDGE_SNAP = {
+  /** Within them: the pane takes the width the drag asks for. */
   NONE: "none",
-  /** Close the pane, its width kept as it was before the drag. */
+  /** Shut. */
   COLLAPSE: "collapse",
-  /** Grow the pane over the window's work, its width kept as it was before the drag. */
+  /** Grown over the window's work. */
   EXPAND: "expand",
 } as const;
 
 type EdgeSnap = (typeof EDGE_SNAP)[keyof typeof EDGE_SNAP];
 
 /**
- * How far past a bound, in CSS pixels, the pointer goes before a release
- * snaps rather than holds at the bound. Far enough that a drag to the bound
- * that overshoots by a hand's tremor still lands on it, near enough that a
+ * How far past a bound, in CSS pixels, the pointer goes before the pane snaps
+ * rather than holds at the bound. Far enough that a drag to the bound that
+ * overshoots by a hand's tremor still lands on it, near enough that a
  * deliberate fling does not run out of window.
  */
 const SNAP_OVERSHOOT = 80;
+
+/**
+ * How far back past the snap's own threshold, in CSS pixels, the pointer
+ * comes before a snap the drag holds lets go, so a pointer resting on the
+ * threshold does not flicker the pane open and shut.
+ */
+const SNAP_HYSTERESIS = 24;
+
+/** What the document's root wears while a drag lasts; desktop.css draws the resize cursor everywhere under it. */
+const EDGE_DRAG_ATTRIBUTE = "data-edge-drag";
 
 /** How far one arrow press moves the edge, in CSS pixels. */
 const KEY_STEP = 16;
@@ -70,10 +83,10 @@ export interface ResizableEdgeOptions {
   reserve: number;
   label: string;
   onResize: (width: number) => void;
-  /** Closes the pane. Without it a drag past the least width holds there. */
-  onCollapse?: (() => void) | undefined;
-  /** Grows the pane over the window's work. Without it a drag past the greatest width holds there. */
-  onExpand?: (() => void) | undefined;
+  /** Shuts the pane, or opens it again. Without it a drag past the least width holds there. */
+  onToggleCollapsed?: (() => void) | undefined;
+  /** Grows the pane over the window's work, or brings it back. Without it a drag past the greatest width holds there. */
+  onToggleExpanded?: (() => void) | undefined;
 }
 
 /** What the edge's element is spread with. */
@@ -86,23 +99,15 @@ export interface ResizableEdgeProps {
   "aria-valuenow": number;
   tabIndex: 0;
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerUp: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerCancel: (event: React.PointerEvent<HTMLElement>) => void;
   onDoubleClick: () => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
-}
-
-export interface ResizableEdge {
-  /** What releasing the drag under way would do, or {@link EDGE_SNAP.NONE} with no drag. */
-  snap: EdgeSnap;
-  edge: ResizableEdgeProps;
 }
 
 /**
  * A drag under way: the pointer making it, where it began, the width the pane
  * was drawn at and the one its owner kept (wider where the window held it
- * narrower), and the greatest width the pane could take when it began.
+ * narrower), the greatest width the pane could take when it began, and the
+ * snap it holds the pane in now.
  */
 interface Drag {
   pointerId: number;
@@ -110,6 +115,7 @@ interface Drag {
   from: number;
   kept: number;
   max: number;
+  snap: EdgeSnap;
 }
 
 /**
@@ -124,10 +130,13 @@ function roomFor(edge: HTMLElement, bounds: EdgeBounds, reserve: number): number
   return Math.max(bounds.MIN, Math.min(bounds.MAX, Math.round(room - reserve)));
 }
 
-/** The snap a width the pointer asks for would earn on release. */
-function snapFor(asked: number, min: number, max: number, options: ResizableEdgeOptions): EdgeSnap {
-  if (options.onCollapse !== undefined && asked < min - SNAP_OVERSHOOT) return EDGE_SNAP.COLLAPSE;
-  if (options.onExpand !== undefined && asked > max + SNAP_OVERSHOOT) return EDGE_SNAP.EXPAND;
+/** The snap a width the pointer asks for earns, given the one the drag holds. */
+function snapFor(asked: number, drag: Drag, options: ResizableEdgeOptions): EdgeSnap {
+  const give = (snap: EdgeSnap) => (drag.snap === snap ? SNAP_HYSTERESIS : 0);
+  const shutBelow = options.bounds.MIN - SNAP_OVERSHOOT + give(EDGE_SNAP.COLLAPSE);
+  const growAbove = drag.max + SNAP_OVERSHOOT - give(EDGE_SNAP.EXPAND);
+  if (options.onToggleCollapsed !== undefined && asked < shutBelow) return EDGE_SNAP.COLLAPSE;
+  if (options.onToggleExpanded !== undefined && asked > growAbove) return EDGE_SNAP.EXPAND;
   return EDGE_SNAP.NONE;
 }
 
@@ -135,6 +144,31 @@ function snapFor(asked: number, min: number, max: number, options: ResizableEdge
 function askedWidth(drag: Drag, x: number, side: EdgeSide): number {
   const moved = side === EDGE_SIDE.LEFT ? drag.x - x : x - drag.x;
   return drag.from + moved;
+}
+
+/** Toggles the pane into or out of one snap. */
+function toggleSnap(snap: EdgeSnap, options: ResizableEdgeOptions): void {
+  if (snap === EDGE_SNAP.COLLAPSE) options.onToggleCollapsed?.();
+  if (snap === EDGE_SNAP.EXPAND) options.onToggleExpanded?.();
+}
+
+/**
+ * Moves the drag to `x`: the pane leaves the snap it held and takes the one
+ * the pointer has reached, or between its bounds takes the width asked for.
+ * A snap leaves the width as the drag drew it, so the pane shuts or grows
+ * from where it stood.
+ */
+function follow(drag: Drag, x: number, options: ResizableEdgeOptions): void {
+  const asked = askedWidth(drag, x, options.side);
+  const snap = snapFor(asked, drag, options);
+  if (snap !== drag.snap) {
+    toggleSnap(drag.snap, options);
+    toggleSnap(snap, options);
+    drag.snap = snap;
+  }
+  if (snap === EDGE_SNAP.NONE) {
+    options.onResize(Math.min(drag.max, Math.max(options.bounds.MIN, asked)));
+  }
 }
 
 /** The width one key press asks for, or nothing where the key is not the edge's. */
@@ -157,26 +191,61 @@ function keyedWidth(
 }
 
 /**
- * The edge's drag, its pending snap, and its keys. The pointer is captured on
- * press, so a drag that crosses the board's canvas or leaves the window is
- * still the edge's.
+ * The edge's drag and its keys. The pointer is captured on press, so a drag
+ * that crosses the board's canvas or leaves the window is still the edge's,
+ * and the drag is heard at the window rather than the edge, so it outlives
+ * an edge its own snap took away. While it lasts the whole window wears the
+ * resize cursor and selects no text.
  */
-export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdge {
+export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdgeProps {
   const { bounds, width, onResize } = options;
+  const latest = useRef(options);
   const drag = useRef<Drag | undefined>(undefined);
-  const [snap, setSnap] = useState<EdgeSnap>(EDGE_SNAP.NONE);
+  const release = useRef<(() => void) | undefined>(undefined);
 
-  // Note that only the pointer that began the drag moves or ends it, so a
-  // second finger on the trackpad cannot take the drag over.
-  const end = (pointerId: number): Drag | undefined => {
-    const ended = drag.current;
-    if (ended?.pointerId !== pointerId) return undefined;
-    drag.current = undefined;
-    setSnap(EDGE_SNAP.NONE);
-    return ended;
+  useLayoutEffect(() => {
+    latest.current = options;
+  });
+  useEffect(() => () => release.current?.(), []);
+
+  const begin = (event: React.PointerEvent<HTMLElement>, max: number) => {
+    const { pointerId } = event;
+    const held: Drag = {
+      pointerId,
+      x: event.clientX,
+      from: Math.min(width, max),
+      kept: width,
+      max,
+      snap: EDGE_SNAP.NONE,
+    };
+    // Note that only the pointer that began the drag moves or ends it, so a
+    // second finger on the trackpad cannot take the drag over.
+    const move = (moved: PointerEvent) => {
+      if (moved.pointerId === pointerId) follow(held, moved.clientX, latest.current);
+    };
+    const end = (ended: PointerEvent) => {
+      if (ended.pointerId !== pointerId) return;
+      release.current?.();
+      // A snap keeps the width the pane had before the drag, so opening it
+      // again or leaving the whole window gives back the pane the developer had.
+      if (held.snap !== EDGE_SNAP.NONE) latest.current.onResize(held.kept);
+    };
+    drag.current = held;
+    document.documentElement.setAttribute(EDGE_DRAG_ATTRIBUTE, "true");
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
+    release.current = () => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+      document.documentElement.removeAttribute(EDGE_DRAG_ATTRIBUTE);
+      drag.current = undefined;
+      release.current = undefined;
+    };
   };
 
-  const edge: ResizableEdgeProps = {
+  return {
     role: "separator",
     "aria-orientation": "vertical",
     "aria-label": options.label,
@@ -189,41 +258,7 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdge {
       event.currentTarget.setPointerCapture(event.pointerId);
       // The drag starts from the width the pane is drawn at, which the window
       // may hold narrower than the one kept.
-      const max = roomFor(event.currentTarget, bounds, options.reserve);
-      drag.current = {
-        pointerId: event.pointerId,
-        x: event.clientX,
-        from: Math.min(width, max),
-        kept: width,
-        max,
-      };
-    },
-    onPointerMove: (event) => {
-      const held = drag.current;
-      if (held?.pointerId !== event.pointerId) return;
-      const asked = askedWidth(held, event.clientX, options.side);
-      setSnap(snapFor(asked, bounds.MIN, held.max, options));
-      onResize(Math.min(held.max, Math.max(bounds.MIN, asked)));
-    },
-    onPointerUp: (event) => {
-      const held = end(event.pointerId);
-      if (held === undefined) return;
-      const snapped = snapFor(
-        askedWidth(held, event.clientX, options.side),
-        bounds.MIN,
-        held.max,
-        options,
-      );
-      if (snapped === EDGE_SNAP.NONE) return;
-      // A snap keeps the width the pane had before the drag, so reopening it
-      // or leaving the whole window gives back the pane the developer had.
-      onResize(held.kept);
-      if (snapped === EDGE_SNAP.COLLAPSE) options.onCollapse?.();
-      else options.onExpand?.();
-    },
-    onPointerCancel: (event) => {
-      const held = end(event.pointerId);
-      if (held !== undefined) onResize(held.kept);
+      begin(event, roomFor(event.currentTarget, bounds, options.reserve));
     },
     onDoubleClick: () => onResize(bounds.DEFAULT),
     onKeyDown: (event) => {
@@ -235,5 +270,4 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdge {
       onResize(Math.min(max, Math.max(bounds.MIN, asked)));
     },
   };
-  return { snap, edge };
 }

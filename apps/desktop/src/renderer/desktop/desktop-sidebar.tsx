@@ -10,12 +10,7 @@ import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
-import {
-  EDGE_SIDE,
-  type ResizableEdge,
-  type ResizableEdgeProps,
-  useResizableEdge,
-} from "./use-resizable-edge";
+import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
  * What the sidebar leaves the work column beside it, in CSS pixels: the
@@ -29,7 +24,10 @@ const WORK_RESERVE = 360;
  * folds the column away past its least width; without it, as in Settings,
  * where there is no plans' sidebar to fold, the drag holds at the bound.
  */
-export function useSidebarEdge(sidebar: SidebarCollapse, onCollapse?: () => void): ResizableEdge {
+export function useSidebarEdge(
+  sidebar: SidebarCollapse,
+  onToggleCollapsed?: () => void,
+): ResizableEdgeProps {
   return useResizableEdge({
     side: EDGE_SIDE.RIGHT,
     width: sidebar.width,
@@ -37,7 +35,7 @@ export function useSidebarEdge(sidebar: SidebarCollapse, onCollapse?: () => void
     reserve: WORK_RESERVE,
     label: "Resize sidebar",
     onResize: sidebar.onResize,
-    onCollapse,
+    onToggleCollapsed,
   });
 }
 
@@ -171,7 +169,7 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlan();
   };
-  const { snap, edge } = useSidebarEdge(sidebar, sidebar.onToggle);
+  const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   // Moving up and down the list as it reads, New plan at its head: up from
   // the first plan is the new-plan page, and down from that page is the
   // first plan. The ends go no further.
@@ -190,7 +188,7 @@ export function DesktopSidebar({
   );
 
   return (
-    <aside className="desktop-sidebar" inert={sidebar.collapsed} data-snap={snap}>
+    <aside className="desktop-sidebar" inert={sidebar.collapsed}>
       <div className="desktop-drag-strip" />
       <LukeIdentity {...identity} />
 

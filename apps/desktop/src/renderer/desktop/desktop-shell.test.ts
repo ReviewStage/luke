@@ -12,7 +12,6 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopShell } from "./desktop-shell";
 import { SIDEBAR_WIDTH, useSidebarCollapse } from "./sidebar-collapse";
-import { EDGE_SNAP } from "./use-resizable-edge";
 
 const ignore = () => undefined;
 
@@ -85,8 +84,8 @@ function width(column = sidebar()): string | null {
   return edge(column).getAttribute("aria-valuenow");
 }
 
-/** Drags the edge from `from` through each of `through`, releasing at the last, reading the pending snap at each stop. */
-function drag(from: number, through: number[], column = sidebar()): (string | undefined)[] {
+/** Drags the edge from `from` through each of `through`, releasing at the last, reading whether the column is folded at each stop. */
+function drag(from: number, through: number[], column = sidebar()): boolean[] {
   const target = edge(column);
   const pointer = (type: string, clientX: number) =>
     act(() => {
@@ -95,7 +94,7 @@ function drag(from: number, through: number[], column = sidebar()): (string | un
   pointer("pointerdown", from);
   const snaps = through.map((x) => {
     pointer("pointermove", x);
-    return column.dataset.snap;
+    return column.hasAttribute("inert");
   });
   pointer("pointerup", through.at(-1) ?? from);
   return snaps;
@@ -195,26 +194,26 @@ test("a drag on the sidebar's edge sets its width, held at each bound", () => {
   assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT));
 
   // The sidebar is on the left, so the pointer moving right widens it.
-  assert.deepEqual(drag(264, [314]), [EDGE_SNAP.NONE]);
+  assert.deepEqual(drag(264, [314]), [false]);
   assert.equal(width(), "314");
 
   // Far past the greatest width the edge only holds: there is nothing to snap to.
-  assert.deepEqual(drag(314, [900]), [EDGE_SNAP.NONE]);
+  assert.deepEqual(drag(314, [900]), [false]);
   assert.equal(width(), String(SIDEBAR_WIDTH.MAX));
   assert.equal(sidebar().hasAttribute("inert"), false);
 
   // 400 wide at 400: 220 asks for 220, and 180 asks for 180, held at the bound.
-  assert.deepEqual(drag(400, [220, 180]), [EDGE_SNAP.NONE, EDGE_SNAP.NONE]);
+  assert.deepEqual(drag(400, [220, 180]), [false, false]);
   assert.equal(width(), String(SIDEBAR_WIDTH.MIN));
   assert.equal(sidebar().hasAttribute("inert"), false);
 });
 
-test("a drag far past the least width folds the sidebar on release, and it opens again as wide as it was", () => {
+test("a drag far past the least width folds the sidebar as it crosses, the release keeps it folded, and it opens again as wide as it was", () => {
   show(PANEL_TAB.PLANS);
   drag(264, [300]);
 
   // 300 wide at 300: 150 asks for 150, held at the bound; 100 asks for 100.
-  assert.deepEqual(drag(300, [150, 100]), [EDGE_SNAP.NONE, EDGE_SNAP.COLLAPSE]);
+  assert.deepEqual(drag(300, [150, 100]), [false, true]);
   assert.equal(sidebar().hasAttribute("inert"), true);
   assert.equal(toggle()?.getAttribute("aria-label"), "Show sidebar");
 
@@ -227,11 +226,26 @@ test("a drag far past the least width folds the sidebar on release, and it opens
   assert.equal(width(), "300", "Command-B opens it at the same width");
 });
 
-test("a drag that comes back inside the bounds before release does not fold the sidebar", () => {
+test("a drag that comes back unfolds the sidebar as it crosses, and resizes it from there", () => {
   show(PANEL_TAB.PLANS);
-  assert.deepEqual(drag(264, [50, 250]), [EDGE_SNAP.COLLAPSE, EDGE_SNAP.NONE]);
+  assert.deepEqual(drag(264, [50, 250]), [true, false]);
   assert.equal(sidebar().hasAttribute("inert"), false);
   assert.equal(width(), "250");
+});
+
+test("a pointer resting on the fold's threshold does not flicker the sidebar", () => {
+  show(PANEL_TAB.PLANS);
+  // 264 wide at 264, so the pointer asks for its own x: the fold is past
+  // 120, and lets go only once the pointer is back by more than a tremor.
+  assert.deepEqual(drag(264, [119, 121, 119, 130, 143, 150]), [
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+  ]);
+  assert.equal(width(), String(SIDEBAR_WIDTH.MIN));
 });
 
 test("double-clicking the sidebar's edge, or Enter on it, gives back the default width", () => {
@@ -329,7 +343,7 @@ test("Settings' page list resizes from its own edge, one width with the plans' s
 test("a drag far past the least width in Settings holds the page list there and folds nothing", () => {
   show(PANEL_TAB.SETTINGS);
   // 264 wide at 264: 20 asks for 20, far past where the plans' sidebar would fold.
-  assert.deepEqual(drag(264, [20], pages()), [undefined]);
+  assert.deepEqual(drag(264, [20], pages()), [false]);
   assert.equal(width(pages()), String(SIDEBAR_WIDTH.MIN));
 
   key("ArrowLeft", pages());

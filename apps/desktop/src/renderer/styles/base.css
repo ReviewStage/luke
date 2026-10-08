@@ -1590,6 +1590,7 @@ button:disabled {
   --duration-quick: 0s;
   --duration-fast: 0s;
   --duration-hover: 0s;
+  --duration-pane: 0s;
   --expand-delay: 0s;
   --peek-delay: 0s;
   --row-stagger: 0s;
@@ -1616,6 +1617,7 @@ button:disabled {
     --duration-exit: 1ms;
     --duration-quick: 1ms;
     --duration-fast: 1ms;
+    --duration-pane: 1ms;
     --expand-delay: 0ms;
     --peek-delay: 0ms;
     --row-stagger: 0ms;
