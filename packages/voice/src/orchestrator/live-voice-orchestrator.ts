@@ -205,7 +205,9 @@ export class LiveVoiceOrchestrator {
         // Note that a key let go of while the old call closed opens nothing.
         if (!this.#keyDown) return;
       }
-      if ((yield* this.#outlastClosing()) && !this.#keyDown) return;
+      // A press naming no plan spoke into the call that stood; once that call
+      // has gone there is none, and the press opens nothing.
+      if ((yield* this.#outlastClosing()) && (!this.#keyDown || planId === undefined)) return;
       yield* this.#talk(plan);
     });
   }
