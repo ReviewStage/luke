@@ -89,6 +89,8 @@ export const ACT_KIND = {
   PLANNING_CHOOSE_FOLDER: "planning.chooseFolder",
   /** A plan's folder on this Mac, chosen again for a plan this Mac holds none for. */
   PLANNING_SET_FOLDER: "planning.setFolder",
+  /** A plan's folder on this Mac shown in Finder, read from main's own view rather than a path the panel names. */
+  PLANNING_REVEAL_FOLDER: "planning.revealFolder",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -364,6 +366,11 @@ export const ACT = {
     payload: actSchema(planningSetFolderParamsSchema),
     result: answersNothing,
     refusal: "Could not keep that folder on this system.",
+  },
+  [ACT_KIND.PLANNING_REVEAL_FOLDER]: {
+    payload: record({ planId: exactId }),
+    result: answersNothing,
+    refusal: "Could not show that folder in Finder.",
   },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.PLANNING_BOARD_SAVE]: {

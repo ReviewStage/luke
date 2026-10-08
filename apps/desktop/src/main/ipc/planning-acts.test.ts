@@ -35,6 +35,7 @@ interface StartScript {
 function fixture() {
   const asked: string[] = [];
   const talked: string[] = [];
+  const revealed: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
   const picker: FolderPicker = { chosen: "/Users/dev/relay" };
   const start: StartScript = {
@@ -70,6 +71,10 @@ function fixture() {
         asked.push("choose-folder");
         return picker.chosen;
       }),
+    folders: () => ({ [PLAN_ID]: "/Users/dev/relay" }),
+    revealFolder: (folderPath) => {
+      revealed.push(folderPath);
+    },
     activePlanId: () => view.activePlanId,
     talkAboutPlan: (planId) => {
       talked.push(planId);
@@ -79,7 +84,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, view, start, picker };
+  return { router, asked, talked, revealed, view, start, picker };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -128,6 +133,36 @@ it.effect("Choose folder answers the folder picked, or null when the picker was 
     assert.deepEqual(chosen, { status: ACT_OUTCOME_STATUS.DONE, value: "/Users/dev/relay" });
     assert.deepEqual(cancelled, { status: ACT_OUTCOME_STATUS.DONE, value: null });
   }),
+);
+
+it.effect(
+  "Reveal in Finder shows the folder the host holds for the plan named, and is refused for a plan with none",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const OTHER_PLAN_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+
+      const revealed = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_REVEAL_FOLDER, payload: { planId: PLAN_ID } },
+        PANEL,
+      );
+      const folderless = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_REVEAL_FOLDER, payload: { planId: OTHER_PLAN_ID } },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_REVEAL_FOLDER, payload: { planId: PLAN_ID } },
+        VOICE,
+      );
+
+      assert.equal(revealed.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(folderless, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_REVEAL_FOLDER].refusal,
+      });
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.revealed, ["/Users/dev/relay"]);
+    }),
 );
 
 it.effect("the voice window does not reach the plans", () =>

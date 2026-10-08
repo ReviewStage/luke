@@ -32,6 +32,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     code: undefined,
     onSelect: ignore,
     onChooseFolder: ignore,
+    onRevealFolder: ignore,
     onRetryList: ignore,
     onRetryDocument: ignore,
     onNewPlan: ignore,

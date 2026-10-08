@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { Effect } from "effect";
-import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
+import { BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -83,6 +83,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
           ),
           (chosen) => (chosen.canceled ? null : (chosen.filePaths[0] ?? null)),
         ),
+      folders: () => state.snapshot().planning.folders,
+      revealFolder: (folderPath) => shell.showItemInFolder(folderPath),
       activePlanId: () => state.snapshot().planning.activePlanId,
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
