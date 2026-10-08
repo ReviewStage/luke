@@ -6,7 +6,7 @@ import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import {
@@ -87,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
   unmountAll();
+  vi.restoreAllMocks();
   window.localStorage.clear();
 });
 
@@ -164,6 +165,16 @@ test("the next launch opens the panel as this one left it, and a fixture run nei
   assert.equal(tabNamed(after, "Code").getAttribute("aria-selected"), "true");
 });
 
+test("storage that refuses the read opens the page as a first launch would", () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+    throw new DOMException("Storage is disabled.", "SecurityError");
+  });
+
+  const page = mountOpenPlan();
+  assert.ok(documentShown(page));
+  assert.equal(page.querySelector(".side-panel"), null);
+});
+
 test("the panel's edge widens it from the keyboard, no wider than its bound", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -187,4 +198,6 @@ test("the panel's chord is Option-Command-B by its key, though Option makes the 
   assert.equal(isSidePanelChord(new KeyboardEvent("keydown", chord)), true);
   assert.equal(isSidePanelChord(new KeyboardEvent("keydown", { ...chord, altKey: false })), false);
   assert.equal(isSidePanelChord(new KeyboardEvent("keydown", { ...chord, shiftKey: true })), false);
+  // Holding the chord is one press, not one per repeat.
+  assert.equal(isSidePanelChord(new KeyboardEvent("keydown", { ...chord, repeat: true })), false);
 });

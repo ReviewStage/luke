@@ -78,22 +78,33 @@ function clampWidth(width: number): number {
   return Math.min(SIDE_PANEL_WIDTH.MAX, Math.max(SIDE_PANEL_WIDTH.MIN, Math.round(width)));
 }
 
+/** What storage holds under the key, or nothing where it refuses the read. */
+function storedText(): string | null {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 /** The kept preference, or the first launch's where none was kept or it no longer reads. */
 function readStored(): SidePanelState {
-  const stored = Option.getOrElse(
-    decodeStored(window.localStorage.getItem(STORAGE_KEY)),
-    () => FIRST_LAUNCH,
-  );
+  const stored = Option.getOrElse(decodeStored(storedText()), () => FIRST_LAUNCH);
   return { ...stored, width: clampWidth(stored.width) };
 }
 
 /**
  * Whether a key press is the panel's chord. The physical key is read rather
- * than the character, because Option turns B into "∫" on a Mac keyboard.
+ * than the character, because Option turns B into "∫" on a Mac keyboard. A
+ * held chord's repeats are not presses, or holding it would flicker the panel.
  */
 export function isSidePanelChord(event: KeyboardEvent): boolean {
   return (
-    event.code === "KeyB" && event.altKey && (event.metaKey || event.ctrlKey) && !event.shiftKey
+    event.code === "KeyB" &&
+    event.altKey &&
+    (event.metaKey || event.ctrlKey) &&
+    !event.shiftKey &&
+    !event.repeat
   );
 }
 

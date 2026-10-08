@@ -880,13 +880,14 @@ body,
   flex-direction: column;
 }
 
-/* Its width is the developer's, set inline; the document always keeps room
-   to be read beside it. */
+/* Its width is the developer's, set inline. The document keeps room to be
+   read beside it while the window allows, but never at the cost of the
+   panel's own least width. */
 .side-panel {
   position: relative;
   display: flex;
   min-width: 0;
-  max-width: calc(100% - 360px);
+  max-width: max(280px, calc(100% - 360px));
   flex: 0 0 auto;
   flex-direction: column;
   border-left: 1px solid var(--hairline);
