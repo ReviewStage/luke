@@ -38,14 +38,6 @@ export const PLANS_PAGE = {
 
 export type PlansPage = (typeof PLANS_PAGE)[keyof typeof PLANS_PAGE];
 
-/** What the open plan's page shows under its header: the saved document, or the whiteboard. */
-export const PLAN_VIEW = {
-  DOCUMENT: "document",
-  BOARD: "board",
-} as const;
-
-export type PlanView = (typeof PLAN_VIEW)[keyof typeof PLAN_VIEW];
-
 /**
  * The page the tab shows. An open plan is the document page, in every panel
  * alike, because the plan open is the host's and not one panel's: it stands

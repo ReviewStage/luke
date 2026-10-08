@@ -11,7 +11,7 @@ import {
 import { LIVE_STATUS } from "@sidecar/live";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
-import { PLAN_VIEW, type PlanView } from "./planning-model";
+import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH, type SidePanelState } from "./use-side-panel";
 
 /**
  * planning-fixture.ts -- the synthetic plans a fixture run's Plans tab draws in place of the service's.
@@ -282,6 +282,15 @@ const FIXTURE_BOARD: Board = {
 /** The open plan on its whiteboard, as the planning-board profile captures it. */
 const FIXTURE_OPEN_BOARD: PlanningView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_BOARD };
 
+/** The side panels the fixture profiles open their plan with. */
+const FIXTURE_CODE_PANEL: SidePanelState = {
+  open: true,
+  tab: SIDE_PANEL_TAB.CODE,
+  width: SIDE_PANEL_WIDTH.DEFAULT,
+};
+const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
+const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
+
 /** The call a fixture run's status row reads: listening, about the fixture's open plan. */
 export const FIXTURE_PLANNING_CALL: Pick<VoiceView, "voiceStatus" | "callPlanId"> = {
   voiceStatus: LIVE_STATUS.LISTENING,
@@ -303,12 +312,18 @@ export function fixturePlanningView(run: {
   return FIXTURE_PLAN_LIST;
 }
 
-/** Which of the document and the board a fixture run opens its plan on: the board under the planning-board profile. */
-export function fixturePlanView(run: {
+/**
+ * The side panel a fixture run opens its plan with: on the code Luke has on
+ * screen under the planning profile, on the whiteboard under the
+ * planning-board profile, and closed under any other. Nothing for a live
+ * run, which opens the panel as the developer last left it.
+ */
+export function fixtureSidePanel(run: {
   readonly fixtureMode: boolean;
   readonly profile: string;
-}): PlanView {
-  return run.fixtureMode && run.profile === RUN_PROFILE.PLANNING_BOARD
-    ? PLAN_VIEW.BOARD
-    : PLAN_VIEW.DOCUMENT;
+}): SidePanelState | undefined {
+  if (!run.fixtureMode) return undefined;
+  if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_CODE_PANEL;
+  if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_BOARD_PANEL;
+  return FIXTURE_CLOSED_PANEL;
 }

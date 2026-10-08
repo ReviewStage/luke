@@ -20,8 +20,9 @@ import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
 import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { planningCallHoldsPanel } from "./planning/planning-model";
+import { PLANS_PAGE, planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
+import { isSidePanelChord } from "./planning/use-side-panel";
 import { focusSearchField } from "./search-field";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
@@ -421,6 +422,15 @@ export function App(): React.JSX.Element {
         openSettingsSearch();
         return;
       }
+      // The side panel's chord, claimed on the same terms, and only where
+      // there is a panel to show: beside an open plan.
+      if (isSidePanelChord(event)) {
+        if (presentation !== PANEL_PRESENTATION.PANEL) return;
+        if (tab !== PANEL_TAB.PLANS || plans.page !== PLANS_PAGE.DOCUMENT) return;
+        event.preventDefault();
+        plans.sidePanel.onToggle();
+        return;
+      }
       if (event.key !== "Escape") return;
       // Muting an open microphone comes before any of it. Closing the panel
       // or a sheet mid-sentence would strand the microphone open, and the
@@ -484,6 +494,8 @@ export function App(): React.JSX.Element {
     signIn.cancelSignIn,
     listening,
     plans.back,
+    plans.page,
+    plans.sidePanel.onToggle,
     speaking,
     stopSpeaking,
     tab,

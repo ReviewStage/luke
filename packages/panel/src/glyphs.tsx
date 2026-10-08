@@ -325,6 +325,16 @@ export function DocumentIcon(): React.JSX.Element {
   );
 }
 
+/** A window with a pane down its right side: the side panel beside the document, shown or hidden. */
+export function SidePanelIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="3.2" y="4.6" width="17.6" height="14.8" rx="2.6" />
+      <path d="M14.6 4.6v14.8" />
+    </Glyph>
+  );
+}
+
 /** Stops the reply under way, drawn the way every chat surface draws it: a square. */
 export function StopIcon(): React.JSX.Element {
   return (
