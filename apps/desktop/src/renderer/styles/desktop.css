@@ -178,13 +178,11 @@ body,
 }
 
 .sidebar-heading {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
   padding: 0 10px;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .sidebar-note {
@@ -221,7 +219,6 @@ body,
 
 .sidebar-plan[aria-current="page"] {
   background: var(--raised-strong);
-  box-shadow: inset 2px 0 0 var(--voice-luke);
 }
 
 .sidebar-plan-name,
@@ -247,7 +244,6 @@ body,
   display: flex;
   flex-direction: column;
   padding-top: 8px;
-  border-top: 1px solid var(--hairline);
 }
 
 .sidebar-item {
@@ -728,6 +724,16 @@ body,
 
 .settings-page-scroll .settings-header {
   justify-content: flex-end;
+}
+
+/* A section names itself in sentence case, as the sidebar's own heading does;
+   the page's zoom brings this to the sidebar heading's 12px. */
+.settings-page-scroll .settings-section h2 {
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 /* Onboarding ----------------------------------------------------------------- */
