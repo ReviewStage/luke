@@ -2,24 +2,21 @@ import { PLAN_EMPTY_TEXT } from "@sidecar/hosted/plan-template";
 import { diffArrays } from "diff";
 
 /**
- * plan-diff.ts -- where one unit of the plan differs from its newer words: the edits a person would make, word by word, and a line moved whole.
+ * plan-diff.ts -- where one unit of the plan differs from its newer words: the edits a person would make, word by word.
  *
  * The plan's typing plays these edits one at a time, so they are cut the way
- * someone editing a document would make them rather than the shortest way:
- * whole words, a lone shared word between two changes folded into one change,
- * and a line that left one place and arrived unchanged at another paired as
- * a move. The comparison itself is jsdiff's (`diffArrays`, over this file's
- * words); what is here is how its changes are cut for a hand. While a field
- * is still streaming in, its newer words are cut off
- * partway, and `heldWords` says how far they can be trusted. Everything here
+ * someone taking notes would make them rather than the shortest way: whole
+ * words, a lone shared word between two changes folded into one change, and
+ * a line added or struck aligned to whole lines. The comparison itself is
+ * jsdiff's (`diffArrays`, over this file's words); what is here is how its
+ * changes are cut for a hand. The notetaker changes one place at a time
+ * (`notesInProgress` in `@sidecar/hosted/plan-template`), so the words
+ * compared are always final or still growing at their end. Everything here
  * is pure.
  */
 
 /** The most words and spaces a diff may change before the whole unit is taken as one replacement. */
 const MAX_EDIT_TOKENS = 400;
-
-/** The shortest line, without its break, worth playing as a move rather than an erase and a retype. */
-const MOVE_MIN_CHARS = 8;
 
 /**
  * A word, a space, a line break, or a single mark: the units an edit is made
@@ -28,32 +25,17 @@ const MOVE_MIN_CHARS = 8;
  */
 const TOKEN = /\n|[^\S\n]|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu;
 
-/** Which half of a move a hunk is: the line cut from its old place, or the same line where it lands. */
-export const MOVE_HALF = {
-  CUT: "cut",
-  PASTE: "paste",
-} as const;
-
-type MoveHalf = (typeof MOVE_HALF)[keyof typeof MOVE_HALF];
-
 /** One change to the old words: the span from `from` to `to` replaced by `insert`, offsets in the old words. */
 export interface Hunk {
   readonly from: number;
   readonly to: number;
   readonly insert: string;
-  /** Set on both halves of a line moved whole. */
-  readonly move?: MoveHalf;
 }
 
 const PLACEHOLDERS: ReadonlySet<string> = new Set(Object.values(PLAN_EMPTY_TEXT));
 
 function tokens(words: string): readonly string[] {
   return words.match(TOKEN) ?? [];
-}
-
-/** The same text with one line break taken off either end, which is how a line reads wherever it moved. */
-function bareLine(text: string): string {
-  return text.replace(/^\n/u, "").replace(/\n$/u, "");
 }
 
 /** Whether the span from `from` to `to` of the words is one or more whole lines, with a break on one side. */
@@ -69,7 +51,7 @@ function wholeLines(words: string, from: number, to: number): boolean {
  * around it, within `lower` and `upper`, to where it covers whole lines, if
  * there is such a place: the same change, as a hand making it would see it.
  * Note that the words compared see "invite.\n- " as easily as "- ...invite.\n",
- * so a line moved or added is found wherever the comparison happened to cut it.
+ * so a line added or struck is found wherever the comparison happened to cut it.
  */
 function lineAligned(old: string, hunk: Hunk, lower: number, upper: number): Hunk {
   const erasing = hunk.insert === "";
@@ -97,31 +79,6 @@ function wholeInsert(old: string, at: number, words: string): boolean {
   const opens = at === 0 || old[at - 1] === "\n" || words.startsWith("\n");
   const closes = at === old.length || old[at] === "\n" || words.endsWith("\n");
   return opens && closes;
-}
-
-/**
- * Pairs a line erased whole in one place with the same line inserted whole
- * in another, marking both halves, so the typing cuts and pastes it rather
- * than erasing it and typing it again.
- */
-function pairedMoves(old: string, hunks: readonly Hunk[]): readonly Hunk[] {
-  const marked = hunks.map((hunk, index) =>
-    lineAligned(old, hunk, hunks[index - 1]?.to ?? 0, hunks[index + 1]?.from ?? old.length),
-  );
-  marked.forEach((cut, cutIndex) => {
-    if (cut.insert !== "" || !wholeLines(old, cut.from, cut.to)) return;
-    const line = bareLine(old.slice(cut.from, cut.to));
-    if (line.trim().length < MOVE_MIN_CHARS || line.includes("\n")) return;
-    const pasteIndex = marked.findIndex(
-      (paste) =>
-        paste.from === paste.to && paste.move === undefined && bareLine(paste.insert) === line,
-    );
-    if (pasteIndex === -1) return;
-    marked[cutIndex] = { ...cut, move: MOVE_HALF.CUT };
-    const paste = marked[pasteIndex];
-    if (paste !== undefined) marked[pasteIndex] = { ...paste, move: MOVE_HALF.PASTE };
-  });
-  return marked;
 }
 
 /**
@@ -207,29 +164,13 @@ export function diffHunks(old: string, next: string): readonly Hunk[] {
   if (open !== undefined) {
     hunks.push({ from: open.from, to: open.from + open.erased.length, insert: open.typed });
   }
-  return pairedMoves(
-    old,
-    folded(old, hunks).map((hunk) => narrowed(old, hunk)),
+  const cutHunks = folded(old, hunks).map((hunk) => narrowed(old, hunk));
+  return cutHunks.map((hunk, index) =>
+    lineAligned(old, hunk, cutHunks[index - 1]?.to ?? 0, cutHunks[index + 1]?.from ?? old.length),
   );
 }
 
 /** Whether a span of old words is a field's empty placeholder, which is cleared at once rather than kept or erased letter by letter. */
 export function isPlaceholder(words: string): boolean {
   return PLACEHOLDERS.has(words.trim());
-}
-
-/**
- * The words a unit is aimed at while its newer words are still streaming in.
- * The newer words end partway through what the model is writing, so a diff
- * against them would erase every shown line the stream has not reached yet
- * and type it back as the stream catches up, and would read a rewrite cut off
- * partway as a different rewrite. So only growth streams: newer words that
- * carry on from everything shown, a placeholder aside, are typed in as they
- * arrive, and anything else is held as shown until the unit settles and its
- * whole change can be read at once.
- */
-export function heldWords(shown: string, streaming: string): string {
-  const lines = shown.split("\n");
-  const kept = isPlaceholder(lines.at(-1) ?? "") ? lines.slice(0, -1).join("\n") : shown;
-  return streaming.startsWith(kept) ? streaming : shown;
 }

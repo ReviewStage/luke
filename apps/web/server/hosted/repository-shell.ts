@@ -11,7 +11,7 @@ import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { plan, planCommand } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
-import type { PlanDocumentBinding } from "./update-plan-tool.js";
+import type { PlanDocumentBinding } from "./plan-notes.js";
 
 /**
  * repository-shell.ts -- the planning model's one source read: a shell command run on the developer's Mac, in the plan's folder.

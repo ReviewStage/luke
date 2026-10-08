@@ -12,16 +12,16 @@ import { user } from "../server/db/auth-schema";
 import { planCommand } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { runUpdatePlan, UPDATE_PLAN_STATUS } from "../server/hosted/update-plan-tool";
+import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";
-import { INVITATIONS_DRAFT } from "./support/plan-updates";
+import { INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
 
 /**
  * The Plans tab's plan routes, answered by the group the way a
  * function answers them, over a real dialect: the bearer names the account
  * and nothing else does, a plan another account owns answers exactly as one
- * that does not exist, and what `update_plan` saved is what the window opens.
+ * that does not exist, and what the notetaker's notes saved is what the window opens.
  * The path is the one the rewrite hands the group, the plan id moved from
  * the path into the `id` query. Starting a plan names the folder on the Mac
  * it reads, and the Mac claims and settles the planning model's commands
@@ -118,15 +118,15 @@ function startedId(started: Answer): string {
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
 it.layer(testSqlClient)("the plan routes", (it) => {
-  it.effect("a started plan lists, and opens with what update_plan saved", () =>
+  it.effect("a started plan lists, and opens with what its notes saved", () =>
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      const saved = yield* runUpdatePlan(
+      const saved = yield* saveNotes(
         { userId: owner, planId, header: { name: RELAY.name } },
-        unparsedWire(INVITATIONS_DRAFT),
+        notesFor(INVITATIONS_DRAFT),
       );
-      assert.equal(saved.status, UPDATE_PLAN_STATUS.SAVED);
+      assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
 
       const listed = yield* ask(request(PLANS, owner));
       const opened = yield* ask(request(ONE_PLAN, owner, { id: planId }));
@@ -140,7 +140,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       );
       assert.deepEqual(
         readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, opened).plan.document,
-        saved.status === UPDATE_PLAN_STATUS.SAVED ? saved.document : undefined,
+        saved.status === PLAN_SAVE_STATUS.SAVED ? saved.document : undefined,
       );
     }),
   );

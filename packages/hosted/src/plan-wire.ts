@@ -6,8 +6,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  *
  * A plan is its owner's name for it and one current document: a Markdown `body` and an `assumptions` list, each assumption its
  * text (`docs/PLANNING.md`). The
- * document is the whole of what the planning model writes, through
- * `update_plan`, whose typed fields the service formats into the body as the
+ * document is the whole of what the plan's notetaker writes, through notes
+ * the service takes into the plan's fields and formats into the body as the
  * one fixed template (`plan-template.ts`), and it is replaced whole on every
  * save: there is no version, no revision argument, and no per-assumption id.
  * The owning account and the conversation a plan resumes in are the

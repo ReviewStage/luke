@@ -1,0 +1,223 @@
+{
+  "type": "object",
+  "properties": {
+    "notes": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "add"
+                ]
+              },
+              "field": {
+                "type": "string",
+                "enum": [
+                  "problem",
+                  "outcome",
+                  "included",
+                  "excluded",
+                  "constraints",
+                  "rules",
+                  "changeMap",
+                  "contracts",
+                  "patterns",
+                  "order",
+                  "decisions",
+                  "verification",
+                  "leftToAgent",
+                  "openQuestions",
+                  "dataAndMigration",
+                  "assumptions"
+                ],
+                "description": "The field the note is taken under."
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200000,
+                "description": "The new point, added after what the field holds: a Markdown bullet in a text field, one item in a list, one rule's statement in the rules."
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "addExample"
+                ]
+              },
+              "rule": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The rule's number as the document shows it."
+              },
+              "given": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The starting situation. One line. Null while unknown."
+              },
+              "when": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The action. One line. Null while unknown."
+              },
+              "then": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1000
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The observable result. One line. Null while unknown."
+              }
+            },
+            "required": [
+              "kind",
+              "rule",
+              "given",
+              "when",
+              "then"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "replace"
+                ]
+              },
+              "field": {
+                "type": "string",
+                "enum": [
+                  "problem",
+                  "outcome",
+                  "included",
+                  "excluded",
+                  "constraints",
+                  "rules",
+                  "changeMap",
+                  "contracts",
+                  "patterns",
+                  "order",
+                  "decisions",
+                  "verification",
+                  "leftToAgent",
+                  "openQuestions",
+                  "dataAndMigration",
+                  "assumptions"
+                ],
+                "description": "The field the note is taken under."
+              },
+              "find": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "A phrase copied exactly from the field's saved text, long enough to name one place."
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200000,
+                "description": "What the phrase becomes."
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "find",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "remove"
+                ]
+              },
+              "field": {
+                "type": "string",
+                "enum": [
+                  "problem",
+                  "outcome",
+                  "included",
+                  "excluded",
+                  "constraints",
+                  "rules",
+                  "changeMap",
+                  "contracts",
+                  "patterns",
+                  "order",
+                  "decisions",
+                  "verification",
+                  "leftToAgent",
+                  "openQuestions",
+                  "dataAndMigration",
+                  "assumptions"
+                ],
+                "description": "The field the note is taken under."
+              },
+              "find": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "description": "A phrase copied exactly from the line, item, rule, or example to strike."
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "find"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "maxItems": 40,
+      "description": "The notes the latest lines call for, in order; empty when nothing new was said."
+    }
+  },
+  "required": [
+    "notes"
+  ],
+  "additionalProperties": false
+}

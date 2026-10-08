@@ -31,7 +31,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * it touches is one the bearer's account owns: a plan id another account
  * owns answers exactly as one that names nothing, so nothing is learned
  * about plans the caller does not hold. Nothing here writes a document; the
- * planning model's `update_plan` is the one writer (`update-plan-tool.ts`).
+ * planning call's notetaker is the one writer (`hosted/plan-notes.ts`).
  * `GET /api/plans/{id}` is the window opening a plan, so it also moves the
  * plan to the head of the list.
  *

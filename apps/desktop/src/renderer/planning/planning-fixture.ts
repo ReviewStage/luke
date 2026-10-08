@@ -1,4 +1,4 @@
-import { EMPTY_PLAN_UPDATE, type FullPlanUpdate, planBody } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
@@ -24,8 +24,8 @@ import type { VoiceView } from "#shared/messages/voice-view";
  * example still without its outcome, and everything else unanswered, as the
  * fixed template shows a draft.
  */
-const FIXTURE_UPDATE: FullPlanUpdate = {
-  ...EMPTY_PLAN_UPDATE,
+const FIXTURE_FIELDS: PlanFields = {
+  ...EMPTY_PLAN_FIELDS,
   goal: {
     problem:
       "Only an admin can add someone to a workspace, by creating their account by hand, so " +
@@ -57,7 +57,7 @@ const FIXTURE_UPDATE: FullPlanUpdate = {
     },
   ],
   implementation: {
-    ...EMPTY_PLAN_UPDATE.implementation,
+    ...EMPTY_PLAN_FIELDS.implementation,
     changeMap:
       "- `src/db/schema/memberships.ts`: a `pending` state.\n" +
       "- `src/members/invite.ts`: new, sending and accepting an invite.",
@@ -75,7 +75,7 @@ const FIXTURE_PLAN: Plan = {
   updatedAt: 2,
   openedAt: 3,
   document: {
-    body: planBody({ name: "Teammate invitations" }, FIXTURE_UPDATE),
+    body: planBody({ name: "Teammate invitations" }, FIXTURE_FIELDS),
     assumptions: [
       { text: "Invites reuse memberships with a pending state." },
       { text: "Members and admins can both invite." },

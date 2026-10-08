@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { EMPTY_PLAN_UPDATE } from "@sidecar/hosted/plan-template";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -33,12 +32,16 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import {
+  SEARCH_WEB_REFUSAL,
+  SEARCH_WEB_STATUS,
+  SEARCH_WEB_TOOL,
+} from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import type { MessageListRead } from "../server/hosted/store/message-reads";
-import { UPDATE_PLAN_TOOL } from "../server/hosted/update-plan-tool";
 import {
   HOSTED_ASK_REFUSAL_NOTE,
   type HostedLiveBrain,
@@ -87,7 +90,7 @@ const QUICK = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.minutes(1) };
 /** The same cadence with the bound close enough to reach inside a test. */
 const BOUNDED = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.millis(150) };
 
-// The relay's writer holds rows to the hosted set, as production's does, so a planning turn's update_plan is written.
+// The relay's writer holds rows to the hosted set, as production's does, so a planning turn's research call is written.
 const writer = await database.run(
   storeWriter({
     tools: HOSTED_TOOL_SET,
@@ -732,17 +735,21 @@ interface PlanningCall {
   readonly output: unknown;
 }
 
-const UPDATE_PLAN_CALL: PlanningCall = {
-  toolName: UPDATE_PLAN_TOOL.name,
-  input: EMPTY_PLAN_UPDATE,
-  output: { status: "saved", document: { body: "# Teammate invitations", assumptions: [] } },
+const SEARCH_WEB_CALL: PlanningCall = {
+  toolName: SEARCH_WEB_TOOL.name,
+  input: { query: "invite link expiry best practice" },
+  output: {
+    status: SEARCH_WEB_STATUS.NO_RESULTS,
+    reason: SEARCH_WEB_REFUSAL.NO_RESULTS,
+    query: "invite link expiry best practice",
+  },
 };
 
 /** A planning turn as eve streams it: the spoken ask, one call and its result, and the reply. */
 function planningTurn(
   turnId: string,
   now: number,
-  call: PlanningCall = UPDATE_PLAN_CALL,
+  call: PlanningCall = SEARCH_WEB_CALL,
 ): readonly MessageStreamEvent[] {
   const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
     stampedEveEvent(event, now);
@@ -789,7 +796,7 @@ function planningTurn(
         sequence,
         stepIndex: 1,
         finishReason: "stop",
-        message: "Saved. Who can withdraw an invite?",
+        message: "Nothing public settles it. Who can withdraw an invite?",
       },
     }),
     stamped({
@@ -801,7 +808,7 @@ function planningTurn(
 }
 
 it.live(
-  "a planning call's ask lands in its plan's conversation, and a turn that saved the plan is followed to its reply rather than told as failed",
+  "a planning call's ask lands in its plan's conversation, and a turn that ran a planning tool is followed to its reply rather than told as failed",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());

@@ -619,13 +619,18 @@ endpoint resolves the bearer first, and every statement in
 `server/hosted/plan-store.ts` names the account beside the plan, so another
 account's plan answers exactly as none does.
 
-Nothing in the group writes a document. The one writer is the planning
-model's `update_plan({ body, assumptions })` (`server/hosted/update-plan-tool.ts`),
-run under a binding of account and plan the service built rather than
-anything the model sends, and answering the document as saved or why nothing
-was: a malformed call, a plan deleted meanwhile, which a save never
-recreates because it is an `update` over the row that stands, and a store
-that could not be reached, each leaving the prior document in place.
+Nothing in the group writes a document. The one writer is a planning call's
+notetaker (`server/voice/plan-scribe.ts`), whose model answers with notes on
+the fixed template (`packages/hosted/src/plan-template.ts`): a point added
+under a field, an example added to a rule, a phrase corrected, or a line
+struck. `saveNotes` (`server/hosted/plan-notes.ts`) takes them in order over
+the fields the plan holds, passing over a note that names a phrase the plan
+does not hold, formats the body, and saves it under a binding of account and
+plan the service built rather than anything the model sends, answering the
+document as saved or why nothing was: a body past its bound once formatted,
+a plan deleted meanwhile, which a save never recreates because it is an
+`update` over the row that stands, and a store that could not be reached,
+each leaving the prior document in place.
 `readPlan` is the read the planning model starts and resumes from, with the
 conversation `attachPlanConversation` associated, and it moves nothing.
 `tests/hosted-plans.test.ts` and `tests/plans-app.test.ts` hold both halves
@@ -638,16 +643,15 @@ relay, and the store are unchanged, and for a plan conversation the host
 swaps three things (`server/hosted/brain-host/planning.ts`): the prompt is the
 authored planning instructions, the standing context each turn opens with is
 the plan's repository, commit, and saved document read again from the row,
-and the tools are the planning list alone, `update_plan` bound to the plan
-the conversation belongs to (`readPlanOfConversation`), and
-`run_in_repository` under the same binding, with the two public research
-reads beside them, and `queue_question` (`server/hosted/queue-question.ts`),
+and the tools are the planning list alone: `run_in_repository` bound to the
+plan the conversation belongs to (`readPlanOfConversation`), with the two
+public research reads beside it, and `queue_question` (`server/hosted/queue-question.ts`),
 which runs nothing: its journaled call is how a question reaches the voice
 while the turn still runs. A resumed session is seeded with the
 conversation so far like any other. A plan conversation primes and flushes no
 notebook, and never reaches the panel's reads, which name their kinds. The
 writer holds rows to `HOSTED_TOOL_SET`, the catalog and the planning tools,
-so a turn's `update_plan` calls are written and read back like any tool's.
+so a turn's planning calls are written and read back like any tool's.
 Question choice, agreement, assumption flags, and corrections are the
 instructions' alone: no code reads the document for meaning.
 

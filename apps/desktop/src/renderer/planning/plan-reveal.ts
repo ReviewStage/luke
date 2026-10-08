@@ -1,24 +1,28 @@
+import { diffArrays } from "diff";
 import type { MarkdownEdit } from "../markdown-message";
-import { diffHunks, type Hunk, heldWords, isPlaceholder, MOVE_HALF } from "./plan-diff";
+import { diffHunks, type Hunk, isPlaceholder } from "./plan-diff";
 
 /**
- * plan-reveal.ts -- how the open plan writes itself in: one caret moving through the document as a person editing it would.
+ * plan-reveal.ts -- how the open plan writes itself in: one caret taking each note down where it lands, as a person taking notes on a call would.
  *
- * The formatter owns every section and field heading and escapes any heading
- * the model writes, so a line opening `## ` or `### ` outside a fence is
- * always the template's own, and the template's order is fixed, so units line
- * up by position from one document to the next. Each unit holds its newest
- * words and the words shown, and one caret works through the difference an
- * act at a time: it travels to the next change, sweeps a selection over
- * words to erase or a line to cut, backspaces a few letters, types, and
- * pastes, pausing where a hand would. Each act is read from a fresh diff of
- * what is shown against what is aimed at, so a newer document arriving
- * mid-act is simply the next diff. While a unit's words are still streaming,
- * only growth is typed as it arrives; a rewrite waits until the unit settles
- * and its whole change can be read (`heldWords`). The average pace is still a
- * streaming model's: what makes it read as a person is the shape of the
- * edits and the pauses, not slow typing. Everything here is pure; the frame
- * clock is the hook's.
+ * The notetaker changes the plan one note at a time, and the service sends
+ * the document after each (`notesInProgress` in `@sidecar/hosted/plan-template`):
+ * a point growing at the end of a field, a phrase corrected, or a line
+ * struck. Every document is final or still growing at its end, so nothing
+ * here guesses at what the stream means; it plays the difference.
+ *
+ * The body is cut into units at every section and field heading, which the
+ * formatter alone writes. A unit is known from one document to the next by
+ * its heading, and a rule by its statement, never by position, so a rule or
+ * an optional field joining the document moves no other unit's words. A
+ * unit the document no longer holds is erased where it stands before it
+ * goes. One caret works through the differences an act at a time: it
+ * travels to the next change, sweeps a selection over words to erase,
+ * backspaces a few letters, and types, pausing where a hand would. Each act
+ * is read from a fresh diff of what is shown against what is aimed at, so a
+ * newer document arriving mid-act is simply the next diff. The average pace
+ * is a streaming model's, sped up when far behind. Everything here is pure;
+ * the frame clock is the hook's.
  */
 
 /** The pace words are typed at: a model streaming its answer, about 50 tokens a second. */
@@ -32,21 +36,20 @@ export const CHASE_PACE = {
   BACKSPACE_MAX_CHARS: 12,
   /** The pause before the caret jumps to a change somewhere else. */
   TRAVEL_MS: 350,
-  /** How long a finished selection stands before it is erased or cut. */
+  /** How long a finished selection stands before it is erased. */
   SELECT_HOLD_MS: 160,
-  /** The pause before a cut line lands. */
-  PASTE_MS: 250,
   SENTENCE_PAUSE_MS: 180,
   CLAUSE_PAUSE_MS: 80,
   LINE_PAUSE_MS: 120,
   /** The work left, in time at the pace above, past which the whole pace speeds up to keep up with the notetaker. */
   CATCH_UP_LAG_MS: 2_500,
-  /** How long a unit's newest words must stand unchanged before the lines held for the stream are let go. */
-  SETTLE_MS: 1_200,
 } as const;
 
 /** A line the formatter opens a section or a field with. */
 const UNIT_HEADING = /^#{2,3} /u;
+
+/** A rule's heading: its number, then its statement. */
+const RULE_HEADING = /^### Rule \d+: /u;
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
@@ -60,16 +63,7 @@ const ACT = {
   TYPE: "type",
   BACKSPACE: "backspace",
   SELECT: "select",
-  PASTE: "paste",
 } as const;
-
-/** What a finished selection becomes. */
-const SELECTED = {
-  ERASE: "erase",
-  CUT: "cut",
-} as const;
-
-type Selected = (typeof SELECTED)[keyof typeof SELECTED];
 
 /** One act of the caret, offsets in its unit's shown words as they stand when it starts. */
 type Act =
@@ -81,31 +75,25 @@ type Act =
       readonly words: string;
     }
   | {
-      readonly kind: typeof ACT.BACKSPACE;
+      readonly kind: typeof ACT.BACKSPACE | typeof ACT.SELECT;
       readonly unit: number;
       readonly from: number;
       readonly to: number;
-    }
-  | {
-      readonly kind: typeof ACT.SELECT;
-      readonly unit: number;
-      readonly from: number;
-      readonly to: number;
-      readonly becomes: Selected;
-    }
-  | {
-      readonly kind: typeof ACT.PASTE;
-      readonly unit: number;
-      readonly at: number;
-      readonly words: string;
     };
 
-/** One unit: its newest words, the words shown, how long the newest have stood, and whether it is lit. */
+/** What a unit is known by from one document to the next: its heading, and which of the units bearing it it is. */
+interface UnitKey {
+  readonly heading: string;
+  readonly occurrence: number;
+}
+
+/** One unit: who it is, its newest words, the words shown, and whether it is lit. */
 interface ChaseUnit {
+  /** Minted when the unit first appears and kept while it stands, so a view can key it. */
+  readonly id: number;
+  readonly key: UnitKey;
   readonly target: string;
   readonly shown: string;
-  /** How long the target has stood unchanged; settled once past `SETTLE_MS`. */
-  readonly steadyMs: number;
   /** Set when the unit catches up after an edit, cleared when the caret edits it again. */
   readonly fresh: boolean;
 }
@@ -127,14 +115,16 @@ export interface ChaseState {
   readonly progress: number;
   /** A pause owed before the act goes on. */
   readonly waitMs: number;
-  /** A line cut and not yet pasted. */
-  readonly clipboard: string | undefined;
   /** How many times the caret has jumped, so a view can tell a jump from typing. */
   readonly jumps: number;
+  /** The id the next unit to appear is given. */
+  readonly nextId: number;
 }
 
 /** What one unit draws: its words, the edit they are drawn partway through, and how it is marked. */
 export interface UnitView {
+  /** The unit's identity while it stands, for a view to key it by. */
+  readonly id: number;
   readonly words: string;
   /** Absent while the unit is drawn whole with no caret in it. */
   readonly edit: MarkdownEdit | undefined;
@@ -144,16 +134,9 @@ export interface UnitView {
   readonly fresh: boolean;
 }
 
-/** How a newer document lands: shown at once under reduced motion, and whether it lets go of every held line. */
+/** How a newer document lands: shown at once under reduced motion. */
 export interface ChaseAim {
   readonly reduced: boolean;
-  /** Set when the plan was saved or its call ended, so nothing still streams. */
-  readonly settle: boolean;
-}
-
-/** A unit already standing as it should, its target long settled. */
-function standing(words: string): ChaseUnit {
-  return { target: words, shown: words, steadyMs: Number.POSITIVE_INFINITY, fresh: false };
 }
 
 /** Whether a fence line closes the fence standing: the same character, at least as long. */
@@ -161,9 +144,29 @@ function closesFence(marker: string, fence: string): boolean {
   return marker[0] === fence[0] && marker.length >= fence.length;
 }
 
-/** The words a unit is aimed at now: its target once settled, and while it streams, the target with the lines it has not reached held. */
-function aimOf(unit: ChaseUnit): string {
-  return unit.steadyMs >= CHASE_PACE.SETTLE_MS ? unit.target : heldWords(unit.shown, unit.target);
+/** A unit's heading as it is known: the line itself, or for a rule its statement with spaces collapsed, since its number moves with the rules before it. */
+function headingOf(words: string): string {
+  const end = words.indexOf("\n");
+  const line = end === -1 ? words : words.slice(0, end);
+  if (!UNIT_HEADING.test(line)) return "";
+  return RULE_HEADING.test(line)
+    ? line.replace(RULE_HEADING, "### Rule ").replace(/\s+/gu, " ")
+    : line;
+}
+
+/** Each unit's key, a heading borne twice told apart by which of them it is. */
+function keysOf(units: readonly string[]): readonly UnitKey[] {
+  const seen = new Map<string, number>();
+  return units.map((words) => {
+    const heading = headingOf(words);
+    const occurrence = seen.get(heading) ?? 0;
+    seen.set(heading, occurrence + 1);
+    return { heading, occurrence };
+  });
+}
+
+function sameKey(left: UnitKey, right: UnitKey): boolean {
+  return left.heading === right.heading && left.occurrence === right.occurrence;
 }
 
 function spliced(words: string, from: number, to: number, insert: string): string {
@@ -179,20 +182,9 @@ function pauseAfter(letter: string | undefined, next: string | undefined): numbe
   return 0;
 }
 
-/** The pause owed before an act starts. */
-function leadOf(act: Act): number {
-  if (act.kind === ACT.TRAVEL) return CHASE_PACE.TRAVEL_MS;
-  if (act.kind === ACT.PASTE) return CHASE_PACE.PASTE_MS;
-  return 0;
-}
-
 /** The act that works on one change, given where the caret stands in the change's unit. */
 function actFor(unit: number, shown: string, hunk: Hunk, here: number | undefined): Act {
   const travel = (to: number): Act => ({ kind: ACT.TRAVEL, unit, to });
-  if (hunk.move === MOVE_HALF.CUT) {
-    if (here !== hunk.from) return travel(hunk.from);
-    return { kind: ACT.SELECT, unit, from: hunk.from, to: hunk.to, becomes: SELECTED.CUT };
-  }
   const erased = shown.slice(hunk.from, hunk.to);
   if (
     erased.length > 0 &&
@@ -203,45 +195,24 @@ function actFor(unit: number, shown: string, hunk: Hunk, here: number | undefine
     return { kind: ACT.BACKSPACE, unit, from: hunk.from, to: hunk.to };
   }
   if (here !== hunk.from) return travel(hunk.from);
-  if (erased.length > 0) {
-    return { kind: ACT.SELECT, unit, from: hunk.from, to: hunk.to, becomes: SELECTED.ERASE };
-  }
+  if (erased.length > 0) return { kind: ACT.SELECT, unit, from: hunk.from, to: hunk.to };
   return { kind: ACT.TYPE, unit, at: hunk.from, words: hunk.insert };
 }
 
-/** Where the line on the clipboard lands in a unit, if anywhere: the change inserting that same line. */
-function pasteSite(shown: string, aim: string, line: string): Hunk | undefined {
-  return diffHunks(shown, aim).find(
-    (hunk) => hunk.from === hunk.to && hunk.insert.replace(/^\n|\n$/gu, "") === line,
-  );
-}
-
 /**
- * The caret's next act: a held cut lands first, then the caret's own unit is
- * worked from where it stands forward, then every other unit in document
- * order from there, wrapping, so the caret never bounces back and forth.
- * Within a unit the next change is the first ending at or after the caret,
- * and the landing half of a move waits for its cut. Nothing to do answers
- * nothing.
+ * The caret's next act: its own unit worked from where it stands forward,
+ * then every other unit in document order from there, wrapping, so the caret
+ * never bounces back and forth. Within a unit the next change is the first
+ * ending at or after the caret. Nothing to do answers nothing.
  */
 function nextAct(state: ChaseState): Act | undefined {
-  const { units, caret, clipboard } = state;
+  const { units, caret } = state;
   const start = caret?.unit ?? 0;
-  if (clipboard !== undefined && caret !== undefined) {
-    const unit = units[caret.unit];
-    const site = unit === undefined ? undefined : pasteSite(unit.shown, aimOf(unit), clipboard);
-    if (site !== undefined) {
-      if (caret.at !== site.from) return { kind: ACT.TRAVEL, unit: caret.unit, to: site.from };
-      return { kind: ACT.PASTE, unit: caret.unit, at: site.from, words: site.insert };
-    }
-  }
   for (let step = 0; step < units.length; step += 1) {
     const index = (start + step) % units.length;
     const unit = units[index];
     if (unit === undefined) continue;
-    const hunks = diffHunks(unit.shown, aimOf(unit)).filter(
-      (hunk) => hunk.move !== MOVE_HALF.PASTE,
-    );
+    const hunks = diffHunks(unit.shown, unit.target);
     const here = caret?.unit === index ? caret.at : undefined;
     const hunk = hunks.find((candidate) => candidate.to >= (here ?? 0)) ?? hunks[0];
     if (hunk !== undefined) return actFor(index, unit.shown, hunk, here);
@@ -249,17 +220,24 @@ function nextAct(state: ChaseState): Act | undefined {
   return undefined;
 }
 
-/** The state with one unit's shown words changed by a finished act, lit if that caught it up. */
-function edited(state: ChaseState, index: number, shown: string): ChaseState {
-  const units = state.units.map((unit, at) =>
-    at === index ? { ...unit, shown, fresh: shown === unit.target } : unit,
+/**
+ * The state with one unit's shown words changed by a finished act, lit if
+ * that caught it up, and gone if it was leaving and is now erased, the caret
+ * then standing at the end of the unit before it.
+ */
+function edited(state: ChaseState, index: number, shown: string, caret: Caret): ChaseState {
+  const unit = state.units[index];
+  if (unit === undefined) return state;
+  if (shown === "" && unit.target === "") {
+    const units = state.units.filter((_, at) => at !== index);
+    const before = units[index - 1];
+    const placed = before === undefined ? undefined : { unit: index - 1, at: before.shown.length };
+    return { ...state, units, caret: placed, act: undefined, progress: 0 };
+  }
+  const units = state.units.map((standing, at) =>
+    at === index ? { ...standing, shown, fresh: shown === standing.target } : standing,
   );
-  return { ...state, units };
-}
-
-/** The state with the act finished and the caret left where it ends. */
-function finished(state: ChaseState, caret: Caret): ChaseState {
-  return { ...state, act: undefined, progress: 0, caret };
+  return { ...state, units, caret, act: undefined, progress: 0 };
 }
 
 /** Letters an act at `perSecond` gets through in `budgetMs`, up to `limit`, and the time that took. */
@@ -272,12 +250,9 @@ function spent(progress: number, limit: number, perSecond: number, budgetMs: num
 function played(state: ChaseState, act: Act, budgetMs: number): [ChaseState, number] {
   const shown = state.units[act.unit]?.shown ?? "";
   switch (act.kind) {
-    case ACT.TRAVEL:
-      return [{ ...finished(state, { unit: act.unit, at: act.to }), jumps: state.jumps + 1 }, 0];
-    case ACT.PASTE: {
-      const pasted = edited(state, act.unit, spliced(shown, act.at, act.at, act.words));
-      const caret = { unit: act.unit, at: act.at + act.words.length };
-      return [{ ...finished(pasted, caret), clipboard: undefined }, 0];
+    case ACT.TRAVEL: {
+      const caret = { unit: act.unit, at: act.to };
+      return [{ ...state, act: undefined, progress: 0, caret, jumps: state.jumps + 1 }, 0];
     }
     case ACT.TYPE: {
       // Typing runs to the next letter a hand pauses after, and the pause is owed there.
@@ -294,27 +269,23 @@ function played(state: ChaseState, act: Act, budgetMs: number): [ChaseState, num
       if (stop < act.words.length) {
         return [{ ...state, progress: stop, waitMs: pause }, step.usedMs];
       }
-      const typed = edited(state, act.unit, spliced(shown, act.at, act.at, act.words));
+      const typed = spliced(shown, act.at, act.at, act.words);
       const caret = { unit: act.unit, at: act.at + act.words.length };
-      return [{ ...finished(typed, caret), waitMs: pause }, step.usedMs];
+      return [{ ...edited(state, act.unit, typed, caret), waitMs: pause }, step.usedMs];
     }
     case ACT.BACKSPACE: {
       const length = act.to - act.from;
       const step = spent(state.progress, length, CHASE_PACE.BACKSPACE_CHARS_PER_SECOND, budgetMs);
       if (step.progress < length) return [{ ...state, progress: step.progress }, step.usedMs];
-      const erased = edited(state, act.unit, spliced(shown, act.from, act.to, ""));
-      return [finished(erased, { unit: act.unit, at: act.from }), step.usedMs];
+      const erased = spliced(shown, act.from, act.to, "");
+      return [edited(state, act.unit, erased, { unit: act.unit, at: act.from }), step.usedMs];
     }
     case ACT.SELECT: {
       const length = act.to - act.from;
-      // A selection swept whole stands for a beat, and the next play erases or cuts it.
+      // A selection swept whole stands for a beat, and the next play erases it.
       if (state.progress >= length) {
-        const cut = edited(state, act.unit, spliced(shown, act.from, act.to, ""));
-        const clipboard =
-          act.becomes === SELECTED.CUT
-            ? shown.slice(act.from, act.to).replace(/^\n|\n$/gu, "")
-            : state.clipboard;
-        return [{ ...finished(cut, { unit: act.unit, at: act.from }), clipboard }, 0];
+        const erased = spliced(shown, act.from, act.to, "");
+        return [edited(state, act.unit, erased, { unit: act.unit, at: act.from }), 0];
       }
       const step = spent(state.progress, length, CHASE_PACE.SELECT_CHARS_PER_SECOND, budgetMs);
       const waitMs = step.progress >= length ? CHASE_PACE.SELECT_HOLD_MS : 0;
@@ -325,24 +296,58 @@ function played(state: ChaseState, act: Act, budgetMs: number): [ChaseState, num
 
 /**
  * The act standing folded into the shown words where it can stop partway:
- * the letters typed stay typed, the letters erased stay gone. A travel, a
- * selection, or a paste is let finish, since each is short and a newer
- * document arrives every few frames while the notetaker writes.
+ * the letters typed stay typed, the letters erased stay gone. A travel or a
+ * selection is left standing, since each is short.
  */
 function folded(state: ChaseState): ChaseState {
   const { act } = state;
   if (act === undefined) return state;
-  const shown = state.units[act.unit]?.shown ?? "";
+  const unit = state.units[act.unit];
+  if (unit === undefined) return state;
   const done = Math.floor(state.progress);
   if (act.kind === ACT.TYPE) {
-    const typed = edited(state, act.unit, spliced(shown, act.at, act.at, act.words.slice(0, done)));
-    return finished(typed, { unit: act.unit, at: act.at + done });
+    const typed = spliced(unit.shown, act.at, act.at, act.words.slice(0, done));
+    return edited(state, act.unit, typed, { unit: act.unit, at: act.at + done });
   }
   if (act.kind === ACT.BACKSPACE) {
-    const erased = edited(state, act.unit, spliced(shown, act.to - done, act.to, ""));
-    return finished(erased, { unit: act.unit, at: act.to - done });
+    const erased = spliced(unit.shown, act.to - done, act.to, "");
+    return edited(state, act.unit, erased, { unit: act.unit, at: act.to - done });
   }
   return state;
+}
+
+/** Whether a selection begun against older words still sweeps words the newer ones erase. */
+function stillErased(act: Act, unit: ChaseUnit): boolean {
+  if (act.kind === ACT.TRAVEL) return true;
+  if (act.kind !== ACT.SELECT) return false;
+  return diffHunks(unit.shown, unit.target).some(
+    (hunk) => hunk.from <= act.from && act.to <= hunk.to,
+  );
+}
+
+/** The caret carried to where its unit now stands, held within the unit's words, or nothing where its unit went. */
+function movedCaret(
+  caret: Caret | undefined,
+  movedTo: ReadonlyMap<number, number>,
+  units: readonly ChaseUnit[],
+): Caret | undefined {
+  const unit = caret === undefined ? undefined : movedTo.get(caret.unit);
+  const words = unit === undefined ? undefined : units[unit];
+  if (caret === undefined || unit === undefined || words === undefined) return undefined;
+  return { unit, at: Math.min(caret.at, words.shown.length) };
+}
+
+/** The act standing carried to where its unit now stands, while the newer words still want it. */
+function movedAct(
+  act: Act | undefined,
+  movedTo: ReadonlyMap<number, number>,
+  units: readonly ChaseUnit[],
+): Act | undefined {
+  const unit = act === undefined ? undefined : movedTo.get(act.unit);
+  const words = unit === undefined ? undefined : units[unit];
+  if (act === undefined || unit === undefined || words === undefined) return undefined;
+  const moved = { ...act, unit };
+  return stillErased(moved, words) ? moved : undefined;
 }
 
 /** How long the work left would take at the typing pace: every unit's differing stretch, both sides. */
@@ -363,6 +368,63 @@ function backlogMs(units: readonly ChaseUnit[]): number {
     letters += shown.length + target.length - 2 * (head + tail);
   }
   return (letters * 1_000) / CHASE_CHARS_PER_SECOND;
+}
+
+/**
+ * Where each newer unit stood before, and which older units are leaving.
+ * Units are paired by key in document order. A run of older units the newer
+ * document dropped, beside a run it added in the same place, is the same
+ * units renamed, as when a rule's statement is corrected, and pairs one for
+ * one; what is left over on the older side is leaving, and stays where it
+ * stood until it is erased.
+ */
+/** A place in the newer document's order: a newer unit by index, or an older one leaving. */
+type Place = { readonly next: number } | { readonly leaving: number };
+
+/** How a newer document's units line up with the older: every place in the newer order, and where each newer unit stood before. */
+interface UnitPairing {
+  readonly order: readonly Place[];
+  readonly from: ReadonlyMap<number, number>;
+}
+
+function pairedUnits(previous: readonly ChaseUnit[], keys: readonly UnitKey[]): UnitPairing {
+  const changes = diffArrays(
+    previous.map((unit) => unit.key),
+    [...keys],
+    { comparator: sameKey },
+  );
+  const order: Place[] = [];
+  const from = new Map<number, number>();
+  let before = 0;
+  let after = 0;
+  for (let index = 0; index < changes.length; index += 1) {
+    const change = changes[index];
+    if (change === undefined) continue;
+    const count = change.value.length;
+    if (!change.added && !change.removed) {
+      for (let at = 0; at < count; at += 1) {
+        from.set(after, before);
+        order.push({ next: after });
+        before += 1;
+        after += 1;
+      }
+    } else if (change.removed) {
+      // A renamed unit is placed where its newer self stands, when the addition beside it is walked.
+      const beside = changes[index + 1];
+      const renamed = beside?.added === true ? Math.min(count, beside.value.length) : 0;
+      for (let at = 0; at < count; at += 1) {
+        if (at < renamed) from.set(after + at, before);
+        else order.push({ leaving: before });
+        before += 1;
+      }
+    } else {
+      for (let at = 0; at < count; at += 1) {
+        order.push({ next: after });
+        after += 1;
+      }
+    }
+  }
+  return { order, from };
 }
 
 /**
@@ -390,26 +452,35 @@ export function planUnits(body: string): readonly string[] {
 
 /** A plan as it opens: every unit shown whole, since what stood before is the document, not news. */
 export function chaseOpened(body: string): ChaseState {
+  const targets = planUnits(body);
+  const keys = keysOf(targets);
+  const units = targets.map((words, index) => ({
+    id: index,
+    key: keys[index] ?? { heading: "", occurrence: index },
+    target: words,
+    shown: words,
+    fresh: false,
+  }));
   return {
-    units: planUnits(body).map(standing),
+    units,
     freshAssumptions: new Set(),
     caret: undefined,
     act: undefined,
     progress: 0,
     waitMs: 0,
-    clipboard: undefined,
     jumps: 0,
+    nextId: units.length,
   };
 }
 
 /**
  * The same plan's newer document as the next target. What is shown stays,
  * the act standing folded into it, and the caret works toward the newer
- * words from there. A unit whose words changed is streaming until a later
- * document leaves it unchanged, its words stand for `SETTLE_MS`, or a
- * settling document arrives, since the notetaker writes one field at a time. Under
- * reduced motion every change is shown at once and lit, the caret left at
- * the end of the last.
+ * words from there. A unit the newer document added starts empty where it
+ * stands; a unit it dropped stays, aimed at nothing, until it is erased. A
+ * selection the newer words no longer erase is dropped rather than finished.
+ * Under reduced motion every change is shown at once and lit, the caret left
+ * at the end of the last.
  */
 export function chaseRetargeted(
   state: ChaseState,
@@ -418,38 +489,55 @@ export function chaseRetargeted(
   aim: ChaseAim,
 ): ChaseState {
   const held = folded(state);
-  let caret = held.caret;
-  const units = planUnits(body).map((target, index): ChaseUnit => {
-    const previous = held.units[index];
-    const steadyMs = aim.settle ? Number.POSITIVE_INFINITY : 0;
-    if (aim.reduced) {
-      if (previous?.target === target && previous.shown === target) return previous;
-      caret = { unit: index, at: target.length };
-      return { ...standing(target), fresh: true };
+  const targets = planUnits(body);
+  const keys = keysOf(targets);
+  const { order, from } = pairedUnits(held.units, keys);
+  let nextId = held.nextId;
+  const movedTo = new Map<number, number>();
+  const units: ChaseUnit[] = [];
+  let changed: number | undefined;
+  for (const place of order) {
+    if ("leaving" in place) {
+      const leaving = held.units[place.leaving];
+      if (leaving === undefined || leaving.shown === "" || aim.reduced) continue;
+      movedTo.set(place.leaving, units.length);
+      units.push({ ...leaving, target: "" });
+      continue;
     }
-    // A unit this document left unchanged is not the one the stream is writing.
-    if (previous?.target === target) return { ...previous, steadyMs: Number.POSITIVE_INFINITY };
-    return { target, shown: previous?.shown ?? "", steadyMs, fresh: false };
-  });
+    const target = targets[place.next] ?? "";
+    const key = keys[place.next] ?? { heading: "", occurrence: 0 };
+    const before = from.get(place.next);
+    const previous = before === undefined ? undefined : held.units[before];
+    if (before !== undefined) movedTo.set(before, units.length);
+    if (previous?.target !== target) changed = units.length;
+    if (previous === undefined) {
+      const shown = aim.reduced ? target : "";
+      units.push({ id: nextId, key, target, shown, fresh: aim.reduced });
+      nextId += 1;
+    } else if (aim.reduced && previous.shown !== target) {
+      units.push({ ...previous, key, target, shown: target, fresh: true });
+    } else {
+      units.push({ ...previous, key, target });
+    }
+  }
   const before = new Set(added.before);
   const freshAssumptions = new Set<number>();
   added.after.forEach((text, index) => {
     if (!before.has(text)) freshAssumptions.add(index);
   });
-  const caretUnit = caret === undefined ? undefined : units[caret.unit];
-  const placed =
-    caret === undefined || caretUnit === undefined
-      ? undefined
-      : { unit: caret.unit, at: Math.min(caret.at, caretUnit.shown.length) };
-  const act = aim.reduced || placed === undefined ? undefined : held.act;
+  const caret =
+    aim.reduced && changed !== undefined
+      ? { unit: changed, at: units[changed]?.shown.length ?? 0 }
+      : movedCaret(held.caret, movedTo, units);
+  const act = aim.reduced || caret === undefined ? undefined : movedAct(held.act, movedTo, units);
   return {
     ...held,
     units,
     freshAssumptions,
-    caret: placed,
+    caret,
     act,
     progress: act === undefined ? 0 : held.progress,
-    clipboard: aim.reduced ? undefined : held.clipboard,
+    nextId,
   };
 }
 
@@ -463,17 +551,16 @@ export function chaseBehind(state: ChaseState): boolean {
 }
 
 /**
- * One frame of `elapsedMs`: every unit's newest words have stood that much
- * longer, and the caret spends the time on pauses and acts. Far behind the
- * notetaker, the whole pace speeds up in proportion, pauses included, so the
- * document never trails the call by more than a few seconds of work.
+ * One frame of `elapsedMs`: the caret spends the time on pauses and acts.
+ * Far behind the notetaker, the whole pace speeds up in proportion, pauses
+ * included, so the document never trails the call by more than a few
+ * seconds of work.
  */
 export function chaseStepped(state: ChaseState, elapsedMs: number): ChaseState {
   if (!chaseBehind(state)) return state;
-  const elapsed = Math.max(0, elapsedMs);
-  const units = state.units.map((unit) => ({ ...unit, steadyMs: unit.steadyMs + elapsed }));
-  let next: ChaseState = { ...state, units };
-  let budget = elapsed * Math.max(1, backlogMs(units) / CHASE_PACE.CATCH_UP_LAG_MS);
+  let next = state;
+  let budget =
+    Math.max(0, elapsedMs) * Math.max(1, backlogMs(state.units) / CHASE_PACE.CATCH_UP_LAG_MS);
   for (let round = 0; round < MAX_ACTS_PER_FRAME && budget > 0; round += 1) {
     if (next.waitMs > 0) {
       const waited = Math.min(next.waitMs, budget);
@@ -484,11 +571,12 @@ export function chaseStepped(state: ChaseState, elapsedMs: number): ChaseState {
     const act = next.act ?? nextAct(next);
     if (act === undefined) break;
     if (next.act === undefined) {
-      // Starting an act unlights its unit and owes the pause before it.
+      // Starting an act unlights its unit and owes the pause before a jump.
       const unlit = next.units.map((unit, at) =>
         at === act.unit ? { ...unit, fresh: false } : unit,
       );
-      next = { ...next, units: unlit, act, progress: 0, waitMs: leadOf(act) };
+      const waitMs = act.kind === ACT.TRAVEL ? CHASE_PACE.TRAVEL_MS : 0;
+      next = { ...next, units: unlit, act, progress: 0, waitMs };
       continue;
     }
     const [after, usedMs] = played(next, act, budget);
@@ -501,7 +589,7 @@ export function chaseStepped(state: ChaseState, elapsedMs: number): ChaseState {
 /** One act drawn partway in the unit it works on. */
 function actView(unit: ChaseUnit, act: Act, progress: number): UnitView {
   const done = Math.floor(progress);
-  const working = { writing: true, resting: false, fresh: false };
+  const working = { id: unit.id, writing: true, resting: false, fresh: false };
   switch (act.kind) {
     case ACT.TYPE: {
       const words = spliced(unit.shown, act.at, act.at, act.words);
@@ -516,7 +604,7 @@ function actView(unit: ChaseUnit, act: Act, progress: number): UnitView {
       const selection = { from: act.from, to: act.from + done };
       return { words: unit.shown, edit: { selection, caret: act.from + done }, ...working };
     }
-    default:
+    case ACT.TRAVEL:
       return { words: unit.shown, edit: undefined, ...working };
   }
 }
@@ -531,10 +619,11 @@ function actView(unit: ChaseUnit, act: Act, progress: number): UnitView {
 export function chaseView(state: ChaseState, live: boolean): readonly UnitView[] {
   const behind = chaseBehind(state);
   const { act, caret } = state;
-  const drawsAct = act !== undefined && act.kind !== ACT.TRAVEL && act.kind !== ACT.PASTE;
+  const drawsAct = act !== undefined && act.kind !== ACT.TRAVEL;
   return state.units.map((unit, index): UnitView => {
     if (drawsAct && act.unit === index) return actView(unit, act, state.progress);
     const still = {
+      id: unit.id,
       words: unit.shown,
       edit: undefined,
       writing: false,
