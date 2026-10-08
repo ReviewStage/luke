@@ -507,14 +507,6 @@ body,
   flex-direction: column;
 }
 
-/* The whiteboard fills the column edge to edge: the canvas is its own page,
-   so the panel's inset card gives way. */
-.desktop-board .plan-board {
-  margin: 0;
-  border-radius: 0;
-  background: none;
-}
-
 .desktop-document .plan-document-scroll {
   padding: 44px 48px 140px;
   scrollbar-gutter: stable;
@@ -871,16 +863,119 @@ body,
   text-align: left;
 }
 
-/* The call's code pane ----------------------------------------------------- */
+/* The side panel ----------------------------------------------------------- */
 
-.desktop-document {
-  position: relative;
+/* Under the toolbar: the document over its call bar, and the side panel to
+   their right while it is open. */
+.desktop-plan {
+  display: flex;
+  min-height: 0;
+  flex: 1;
 }
 
-.desktop-document .code-pane {
+.desktop-plan-main {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* Its width is the developer's, set inline; the document always keeps room
+   to be read beside it. */
+.side-panel {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  max-width: calc(100% - 360px);
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-left: 1px solid var(--hairline);
+  background: var(--desktop-well);
+}
+
+/* The resize edge straddles the panel's border, wider than it looks. */
+.side-panel-resize {
   position: absolute;
-  right: 24px;
-  bottom: 16px;
-  width: min(640px, calc(100% - 48px));
-  max-height: 58%;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 6px;
+  cursor: col-resize;
+  outline: none;
+  transition: background-color var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
+}
+
+.side-panel-resize:hover,
+.side-panel-resize:active,
+.side-panel-resize:focus-visible {
+  background: color-mix(in srgb, var(--message-sent) 55%, transparent);
+}
+
+.side-panel-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.side-panel-tab {
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.side-panel-tab:hover {
+  color: var(--text-primary);
+}
+
+.side-panel-tab[aria-selected="true"] {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.side-panel-content {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+/* The board and the code fill the tab edge to edge: the panel is their
+   frame, so their own inset card gives way. */
+.side-panel .plan-board,
+.side-panel .code-pane {
+  max-height: none;
+  flex: 1;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.side-panel .plan-board {
+  background: none;
+}
+
+.side-panel-empty {
+  max-width: 260px;
+  margin: auto;
+  padding: 24px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.side-panel-toggle[data-open="true"] {
+  color: var(--text-primary);
 }

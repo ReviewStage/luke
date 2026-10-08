@@ -38,9 +38,10 @@ A reviewer can hold the build to these as easily as to the layout:
 - The assumption list is read-only: plain text, with nothing to click.
 - No conversation transcript pane. Captions show what is being said now; the
   document is the record.
-- One visible view at a time. The open plan shows its document or its
-  whiteboard ("Whiteboard" below), never both side by side, and there are no
-  second documents.
+- The document is always the page. The whiteboard ("Whiteboard" below) and
+  the code Luke has on screen stand beside it in a side panel ("Side panel"
+  below) that the developer opens and closes; nothing opens it on its own,
+  and there are no second documents.
 - No window of its own. Planning lives in Luke's one window (LUKE-347): there
   is no separate planning window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -134,11 +135,11 @@ nothing spoken:
 - `‹`, back to the list, which leaves the plan.
 - The plan's name.
 - The repository line, as `owner/repository · branch @ short commit`.
-- **Document | Board**, the switch between the plan's document and its
-  whiteboard. A plan always opens on its document.
 - **Copy**, the one action on the document. It is always enabled, however
   much of the plan is written. It copies the current document as described in
   "Copy". It never launches an agent and never asks the model anything.
+- The side panel's toggle, last on the toolbar ("Show panel" / "Hide panel",
+  ⌥⌘B).
 
 ### Document
 
@@ -158,8 +159,7 @@ nothing spoken:
 ### Whiteboard
 
 Each plan has one whiteboard, an Excalidraw scene that Luke and the developer
-both draw on. It shows in place of the document, between the header and the
-microphone row.
+both draw on. It shows in the side panel's Board tab, beside the document.
 
 - **Luke draws whole diagrams.** The planning model's `draw_on_board` tool
   sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
@@ -185,6 +185,23 @@ microphone row.
 - **The board is never recorded.** Its root is left out of the screen
   recording, because a canvas draws its words as pixels that the recording's
   text masking cannot reach.
+
+### Side panel
+
+The open plan's supporting views stand in a panel at the window's right,
+beside the document and its microphone row, the way a devtool's secondary
+sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
+
+- **Tabs.** `Board`, the plan's whiteboard, and `Code`, the code Luke has
+  on screen during a call. With none on screen, the Code tab says so quietly
+  rather than going away.
+- **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it;
+  choosing a tab, or Luke putting code up, never opens it. Its left edge
+  drags it between 280 and 720 pixels wide, and the arrow keys move it once
+  it has the focus.
+- **Kept across launches.** Whether it is open, its tab, and its width are
+  this Mac's preference, kept in the window's own storage rather than in
+  anything main holds. A fixture run stages its own and keeps nothing.
 
 ### The notetaker
 

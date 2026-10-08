@@ -130,40 +130,6 @@
   font-size: 12px;
 }
 
-/* The switch between the document and the whiteboard: a segmented control,
-   the chosen view lifted onto the selected fill. */
-.plan-view-switch {
-  display: flex;
-  flex: 0 0 auto;
-  min-width: 0;
-  margin: 0;
-  padding: 3px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--raised);
-}
-.plan-view-option {
-  padding: 4px 9px;
-  border-radius: 7px;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 620;
-  transition:
-    background-color var(--duration-hover) ease,
-    box-shadow var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-  white-space: nowrap;
-}
-.plan-view-option:hover {
-  color: var(--text-primary);
-}
-.plan-view-option[data-active="true"] {
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
-  background: var(--selected);
-  color: var(--text-primary);
-}
-
 /* The whiteboard fills the page between the header and the microphone row;
    Excalidraw draws to the size of the box it is given, so the canvas's box
    is the page's own. */
@@ -487,9 +453,8 @@
   gap: 8px;
 }
 
-/* The call's code pane: a small window showing the code Luke talks about. In
-   the panel it stands between the document and the microphone row; in the
-   desktop window it floats over the document's lower right. */
+/* The call's code pane: the code Luke talks about, filling the side panel's
+   Code tab. */
 .code-pane {
   display: flex;
   min-height: 0;
@@ -501,10 +466,6 @@
   border-radius: 10px;
   background: #0d1117;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-}
-
-.code-pane[data-folded="true"] {
-  max-height: none;
 }
 
 .code-pane-header {
@@ -528,20 +489,6 @@
 .code-pane-range {
   flex: 0 0 auto;
   color: var(--text-secondary);
-}
-
-.code-pane-button {
-  margin-left: auto;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.code-pane-button:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
 }
 
 .code-pane-note {
