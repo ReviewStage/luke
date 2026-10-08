@@ -363,6 +363,32 @@ test("a plan opened with its board already drawn opens no panel, and nothing Luk
   assert.equal(tab.control().sidePanel.open, false);
 });
 
+test("a plan left and opened again reads its board afresh, so a drawing made while it was away opens nothing", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
+  tab.stand({ planning: IDLE_PLANNING_VIEW });
+  tab.stand({ planning: OPEN });
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+
+  assert.equal(tab.control().sidePanel.open, false);
+});
+
+test("the developer's own strokes on the board open nothing, and Luke's first drawing after them still does", () => {
+  const stroke = {
+    id: "box",
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 60,
+  };
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
+  tab.stand({ planning: { ...OPEN, board: { elements: [stroke], appliedDrawing: 0 } } });
+  assert.equal(tab.control().sidePanel.open, false);
+
+  tab.stand({ planning: { ...OPEN, board: { ...drawnBoard(1), elements: [stroke] } } });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+});
+
 test("a plan's first board opens the panel once across a relaunch and a trip to another plan", () => {
   const other = { ...OPEN, activePlanId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
   const first = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });

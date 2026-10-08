@@ -7,10 +7,11 @@ import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-
 /**
  * use-panel-arrivals.ts -- opens the side panel on what Luke first draws on a plan's board or first shows of its code, once per plan and kind, kept across launches.
  *
- * An arrival is live: the open plan's board turning from empty to drawn, or
- * code coming on screen where there was none, while the developer is on
- * that plan. A plan opened with a board already drawn, or with code already
- * on screen, has nothing arriving; what it holds counts as seen, which is
+ * An arrival is live: Luke drawing on the open plan's board where he had
+ * not, or code coming on screen where there was none, while the developer
+ * is on that plan. The developer's own strokes are not Luke's, so they
+ * arrive nothing. A plan opened with Luke's drawing already on its board, or
+ * with code already on screen, has nothing arriving; what it holds counts as seen, which is
  * also how a plan drawn on before this existed is read. Each kind arrives
  * once per plan: after that, the panel is the developer's to open, however
  * often Luke redraws and whether or not they closed it.
@@ -86,9 +87,9 @@ function recordArrival(planId: string, tab: ArrivingTab): boolean {
   return true;
 }
 
-/** Whether a board holds anything: a scene drawn on, or a drawing of Luke's the scene may not hold yet. */
-function boardHolds(board: Board): boolean {
-  return board.elements.length > 0 || (board.drawing?.elements.length ?? 0) > 0;
+/** Whether Luke has drawn on a board, whether or not its scene holds his drawing yet. */
+function lukeDrew(board: Board): boolean {
+  return (board.drawing?.elements.length ?? 0) > 0;
 }
 
 /** The unread tabs with one more, the plan's alone: another plan's dots are not this one's. */
@@ -113,11 +114,16 @@ export function usePanelArrivals(input: {
   const [unread, setUnread] = useState<Unread>({ planId: undefined, tabs: [] });
   // Note that a board not yet read is unknown rather than empty, because the
   // read landing is the plan opening, not anything Luke drew.
-  const board = input.board === undefined ? undefined : boardHolds(input.board);
+  const board = input.board === undefined ? undefined : lukeDrew(input.board);
   const code = input.code !== undefined;
 
   useEffect(() => {
-    if (planId === undefined) return;
+    // Note that a plan left ends its visit, because the plan opened again
+    // is read again, and what it holds by then was drawn while it was away.
+    if (planId === undefined) {
+      visit.current = undefined;
+      return;
+    }
     if (visit.current?.planId !== planId)
       visit.current = { planId, read: new Set(), waiting: new Set() };
     const { read, waiting } = visit.current;
