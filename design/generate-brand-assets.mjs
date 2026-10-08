@@ -1249,17 +1249,27 @@ emitModes("luke-wordmark", wordSvg(wordmark()), "LUKE");
 // for dark mode and porcelain for light. The packaged `.icns` is cut from the
 // dark set — one bundle icon has to serve both modes and space black does —
 // and the running app swaps the Dock image between the two as the theme
-// changes. The glyph spans ~58% of the tile width, centered — typical macOS
+// changes. The tile sits on Apple's macOS icon grid: an 824-unit tile with a
+// 185.4-unit corner, centered on a 1024 canvas, under the grid's drop shadow.
+// Note that the Dock and the app switcher draw the whole canvas at one size,
+// so a tile that filled it would stand a fifth larger than every other app's.
+// The glyph spans ~58% of the tile width, centered — typical macOS
 // glyph-in-tile proportion, measured from the artwork's bounding box.
+const ICON_GRID = { canvas: 1024, tile: 824, radius: 185.4, shadowY: 10, shadowBlur: 10 };
+const gridUnit = 240 / ICON_GRID.canvas;
+const tileSide = ICON_GRID.tile * gridUnit;
+const tileOrigin = (240 - tileSide) / 2;
 const bbox = faceBBox();
-const glyphScale = (224 * 0.58) / bbox.w;
+const glyphScale = (tileSide * 0.58) / bbox.w;
 const gx = 120 - bbox.cx * glyphScale;
 const gy = 120 - bbox.cy * glyphScale;
 for (const [mode, tile] of Object.entries(TILES)) {
   const icon =
     `${svgOpen(240, 240)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
-    `<rect x="8" y="8" width="224" height="224" rx="52" fill="url(#tile)"/>` +
+    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient>` +
+    `<filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">` +
+    `<feDropShadow dx="0" dy="${fmt(ICON_GRID.shadowY * gridUnit)}" stdDeviation="${fmt((ICON_GRID.shadowBlur / 2) * gridUnit)}" flood-color="#000000" flood-opacity="0.3"/></filter></defs>` +
+    `<rect x="${fmt(tileOrigin)}" y="${fmt(tileOrigin)}" width="${fmt(tileSide)}" height="${fmt(tileSide)}" rx="${fmt(ICON_GRID.radius * gridUnit)}" fill="url(#tile)" filter="url(#shadow)"/>` +
     `<g color="${tile.ink}" transform="translate(${fmt(gx)} ${fmt(gy)}) scale(${fmt(glyphScale)})">${face()}</g></svg>`;
   emit(`icon/luke-icon-${mode}.svg`, icon.replaceAll("currentColor", tile.ink), "Luke app icon");
 }

@@ -71,7 +71,11 @@ Dock image between the two.
 
 Asset viewBoxes are computed from the artwork's bounding box, not the drawing canvas:
 static wordmarks are trimmed tight (+6 units padding), and the app-icon glyph
-spans ~58% of the tile width (typical macOS glyph-in-tile proportion). Only the animated
+spans ~58% of the tile width (typical macOS glyph-in-tile proportion). The app
+icon's tile sits on Apple's macOS icon grid, an 824-unit tile centered on a 1024
+canvas under the grid's drop shadow, because the Dock and the app switcher draw
+every icon's whole canvas at one size: a full-bleed tile stands larger than
+every other app's. Only the animated
 `motion/` marks keep the full 240×240 canvas, because they need headroom to move.
 
 ## Files
