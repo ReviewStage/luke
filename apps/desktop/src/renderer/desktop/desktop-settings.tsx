@@ -50,7 +50,7 @@ export function DesktopSettings({
   onBack: () => void;
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
-  const [opened, setOpened] = useState<string>();
+  const [opened, setOpened] = useState<SettingsSearchEntry>();
   const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
   const shown = pageOf(settings.view);
   const rows = settingsRowsInput(settings);
@@ -72,11 +72,14 @@ export function DesktopSettings({
   // The page the result named opens and the view follows to the row itself.
   // Fire-and-forget: the seek gives itself up after its own frame limit.
   const openResult = (entry: SettingsSearchEntry) => {
-    setOpened(entry.id);
+    setOpened(entry);
     settings.onViewChange(entry.page);
     landOnSettingsRow(entry.id);
   };
   const first = search?.groups[0]?.items[0];
+  // The opened result stays marked only while its page is the one showing: a
+  // page turned some other way, Escape or a voice request, leaves it.
+  const marked = opened?.page === settings.view ? opened.id : undefined;
 
   return (
     <div className="desktop-settings">
@@ -97,7 +100,7 @@ export function DesktopSettings({
         />
         <div className="sidebar-section">
           {search ? (
-            <SettingsSearchResults search={search} opened={opened} onOpen={openResult} />
+            <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
           ) : (
             <ul>
               {pages.map((view) => {

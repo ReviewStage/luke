@@ -334,13 +334,16 @@ export function SettingsSearchField({
           }}
           onBlur={() => onEngagedChange(false)}
           onKeyDown={(event) => {
+            // Note that an Escape is stopped even mid-composition, because the
+            // input method spends that press dismissing its candidates, and
+            // the window's own Escape would turn the page behind the field.
+            if (event.key === "Escape") event.stopPropagation();
             if (event.nativeEvent.isComposing) return;
             if (event.key === "Enter") {
               onSubmit();
               return;
             }
             if (event.key !== "Escape") return;
-            event.stopPropagation();
             if (query.length > 0) onQueryChange("");
             else field.current?.blur();
           }}

@@ -71,9 +71,16 @@ function panelProps(
   };
 }
 
+/**
+ * Turns the page from outside Settings, the way the app's Escape or a spoken
+ * request does. Set by the mounted harness.
+ */
+let turnPage: (view: SettingsView) => void = ignore;
+
 /** Settings with the page held the way the app holds it, so a press turns it. */
 function Harness(): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
+  turnPage = setView;
   return createElement(DesktopSettings, {
     settings: panelProps(view, setView),
     onSearchEngaged: ignore,
@@ -115,9 +122,9 @@ function type(input: HTMLInputElement, text: string): void {
   });
 }
 
-function press(input: HTMLInputElement, key: string): void {
+function press(input: HTMLInputElement, key: string, isComposing = false): void {
   act(() => {
-    input.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key, isComposing, bubbles: true }));
   });
 }
 
@@ -204,6 +211,10 @@ test("pressing a result opens its page beside the results, which stay standing",
   assert.equal(field(container).value, "stop luke");
   assert.equal(result(container, "Stop Luke").getAttribute("aria-current"), "location");
 
+  // A page turned some other way leaves the result unmarked.
+  act(() => turnPage(SETTINGS_VIEW.ROOT));
+  assert.equal(result(container, "Stop Luke").getAttribute("aria-current"), null);
+
   // Return opens the first result, so a sure query needs no pointer.
   type(field(container), "dock");
   const [first] = results(container);
@@ -232,6 +243,9 @@ test("clearing the query restores the page list, and Escape clears before it let
   assert.equal(pageList(container).length, 4);
 
   type(input, "voice");
+  // An Escape spent dismissing an input method's candidates leaves the query.
+  press(input, "Escape", true);
+  assert.equal(input.value, "voice");
   press(input, "Escape");
   assert.equal(input.value, "");
   assert.equal(pageList(container).length, 4);
