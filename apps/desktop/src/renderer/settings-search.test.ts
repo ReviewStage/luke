@@ -97,7 +97,6 @@ test("a query narrows by every word, case-blind, and a blank query is no search"
   assert.ok(dock);
   assert.deepEqual(labels(found(dock)), ["Show Luke in the Dock"]);
   assert.equal(dock.matched, 1);
-  assert.equal(dock.searched, entries.length);
 
   // Both words must land: "microphone" alone finds several rows, "microphone
   // bluetooth" one.

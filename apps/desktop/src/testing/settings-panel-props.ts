@@ -60,9 +60,6 @@ export function settingsPanelProps(
       onStopHotkeyChange: accepted,
       onCapture: ignore,
     },
-    searchOpen: false,
-    onSearchClose: ignore,
-    onSearchEngaged: ignore,
     ...overrides,
   };
 }

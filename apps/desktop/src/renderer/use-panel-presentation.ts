@@ -12,8 +12,6 @@ import {
 export interface PanelPresentationOptions {
   /** A planning call in progress, which holds the panel open against the pointer too. */
   planningHeld: () => boolean;
-  /** A search is only ever drawn inside the panel. */
-  onNotPanel: () => void;
 }
 
 export interface PanelPresentationApi {
@@ -76,9 +74,6 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     presentationRef.current = next;
     setPresentation(next);
     if (next !== PANEL_PRESENTATION.PANEL) recededAt.current = undefined;
-    // A search is only ever drawn inside the panel, so any other shape puts
-    // it away.
-    if (next !== PANEL_PRESENTATION.PANEL) optionsRef.current.onNotPanel();
   }, []);
 
   const applyAuthoritativeMode = useCallback(
