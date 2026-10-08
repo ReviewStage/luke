@@ -1,7 +1,8 @@
+import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
 import type { PlanFields } from "@sidecar/hosted/plan-template";
 import type { PlanAssumption, PlanCommandResult } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
 import { conversations } from "./storage-schema.js";
@@ -72,4 +73,26 @@ export const planCommand = pgTable("plan_command", {
   claimedAt: instant("claimed_at"),
   /** What the Mac answered: the exit code, stdout, and stderr; null until it does. */
   result: jsonb("result").$type<PlanCommandResult>(),
+});
+
+/**
+ * A plan's whiteboard: the Excalidraw scene the Plans tab shows, with the
+ * number of Luke's drawing it holds, and Luke's latest drawing with its own
+ * number. A plan has no row until its board is first drawn on, and reads as
+ * an empty board until then. The Mac writes the scene and Luke writes the
+ * drawing, each whole and each the last write winning (`board-store.ts`).
+ * The row goes with its plan.
+ */
+export const planBoard = pgTable("plan_board", {
+  planId: uuid("plan_id")
+    .primaryKey()
+    .references(() => plan.id, { onDelete: "cascade" }),
+  elements: jsonb("elements").$type<readonly BoardElement[]>().notNull().default(sql`'[]'::jsonb`),
+  /** The number of Luke's drawing the scene holds; 0 before it holds any. */
+  appliedDrawing: integer("applied_drawing").notNull().default(0),
+  /** Luke's latest drawing; null before he drew. */
+  drawing: jsonb("drawing").$type<readonly DrawingElement[]>(),
+  /** The latest drawing's number, one more for each drawing; 0 before he drew. */
+  drawingNumber: integer("drawing_number").notNull().default(0),
+  updatedAt: instant("updated_at").notNull().defaultNow(),
 });
