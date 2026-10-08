@@ -42,10 +42,18 @@ export type ConversationAdmission = Result.Result<AdmittedConversation, BrainHos
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
 type ConversationFailure = SqlError | Schema.SchemaError;
 
-/** How a session stands to the conversation's record: it must be the recorded session, or it is the one claiming the record now. */
+/**
+ * How a session stands to the conversation's record: it must be the recorded
+ * session, it is the one claiming the record now, or it is a subagent's child
+ * session, which no record names. A child is admitted on ownership alone where
+ * eve tells a resolver nothing of its lineage; the current-session check for
+ * it stands where its tools run, through the root eve does name there
+ * (`conversationSessionOf`).
+ */
 export const SESSION_STANDING = {
   CURRENT: "current",
   CLAIMING: "claiming",
+  DELEGATED: "delegated",
 } as const;
 
 type SessionStanding = (typeof SESSION_STANDING)[keyof typeof SESSION_STANDING];

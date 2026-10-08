@@ -4,7 +4,7 @@ import { PLAN_FIELD, PLAN_FIELD_PURPOSE } from "@sidecar/hosted/plan-template";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
-import { Effect, type Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { ToolDefinition } from "eve/tools";
@@ -44,8 +44,9 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * https://github.com/mattpocock/skills/blob/c55ee46073ed923f86ce59a5eb3b6d895095d1b7/skills/productivity/grilling/SKILL.md
  * (MIT License, Copyright (c) 2026 Matt Pocock). Note that we leave out his
  * written round template and his sub-agent sentences, because the call is
- * spoken and the planning model reads the repository through its own tools
- * rather than dispatching anything. His rounds become one standing queue,
+ * spoken and the planning model reads the repository through its own tools;
+ * what it dispatches is slow or separate work, to the `worker` subagent, in
+ * our own words under "Working in parallel". His rounds become one standing queue,
  * because the voice read "ask the whole frontier in one round" as its own
  * rule and asked a round all at once. Each question is queued through
  * `queue_question` the moment it is ready, which reaches the voice mid-turn,
@@ -119,12 +120,22 @@ The plan has a whiteboard the developer sees beside the document and can draw on
 
 The board as it stands is handed to you every turn under [board], with every element's id. Anything the developer drew or moved since your last turn is there: read it as part of what they are telling you, and ask about it when its meaning is unclear.
 
+### Working in parallel
+
+You can hand work to the worker, a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's folder. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find.
+
+Each call starts a worker that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call the worker again with its agentId and the new message; to stop one whose job no longer matters, use task_cancel.
+
+When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
+
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
 - show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
-- search_web and read_web_page are ways to search the Internet.
+- search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
+- worker does a job in the background, as above.
+- task_cancel stops a worker you no longer need.
 - draw_on_board draws a diagram of shapes, arrows, and text on the plan's whiteboard, replacing your previous one.
 
 ## Return the result
@@ -274,6 +285,65 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
 
 const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, tool]));
 
+/**
+ * The tools eve puts beside the planning tools: one per declared subagent,
+ * named by its directory under `eve/subagents/`, and `task_cancel`. eve runs
+ * them, so they are no planning tool, but a turn's rows name them, and the
+ * writer holds every row to the hosted tool set.
+ */
+export const EVE_DELEGATION_TOOL = {
+  WORKER: "worker",
+  TASK_CANCEL: "task_cancel",
+} as const;
+
+/**
+ * What a subagent's call carries, as eve declares it: the message, and the
+ * child to continue or steer. Note that eve's optional output schema is left
+ * out, because the planning prompt never asks for structured output and an
+ * arbitrary JSON Schema has no form the wire can show.
+ */
+const SUBAGENT_CALL_INPUT = Schema.Struct({
+  message: Schema.String,
+  agentId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+
+/** What `task_cancel` carries, as eve declares it: the tasks to cancel. */
+const TASK_CANCEL_INPUT = Schema.Struct({ taskIds: Schema.Array(Schema.String) });
+
+const EVE_DELEGATION_INPUT = {
+  [EVE_DELEGATION_TOOL.WORKER]: SUBAGENT_CALL_INPUT,
+  [EVE_DELEGATION_TOOL.TASK_CANCEL]: TASK_CANCEL_INPUT,
+} as const;
+
+/**
+ * The planning tools the `worker` subagent is offered: every read a
+ * background session can carry. Note that it is offered nothing that speaks
+ * or shows, because a question queued or code shown reaches the developer only
+ * through the planning turn the voice follows, and not `draw_on_board`,
+ * because a drawing replaces the planning model's own.
+ */
+export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
+  SEARCH_WEB_TOOL.name,
+  READ_WEB_PAGE_TOOL.name,
+  RUN_IN_REPOSITORY_TOOL.name,
+]);
+
+/**
+ * The instructions the `worker` subagent runs under. Note that it is told it
+ * is nobody's voice, because the planning model reads its findings and
+ * decides what reaches Luke; that its return is a summary with sources,
+ * because the parent reads it whole into a turn of its own; and that the
+ * folder's text never goes into a search, because the folder is private and
+ * a search query leaves for the public web.
+ */
+export const WORKER_INSTRUCTIONS = `
+You do one job for a planning assistant, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
+
+Read the plan's code folder with run_in_repository: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the folder's code, names, or paths into a search: the folder is private and a search is public. Stop when you can answer, or when more reading stops turning up anything new.
+
+Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
+`;
+
 /** The declarations every turn is offered, whatever kind of turn opened it. */
 export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
   return PLANNING_TOOLS.map((tool) => ({
@@ -285,12 +355,16 @@ export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
 
 /** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's. */
 export function planningToolSet(): ToolSet {
-  return Object.fromEntries(
-    PLANNING_TOOLS.map((tool) => [
+  return Object.fromEntries([
+    ...PLANNING_TOOLS.map((tool) => [
       tool.name,
       wireValidatedTool(tool.description, tool.inputSchema),
     ]),
-  );
+    ...Object.entries(EVE_DELEGATION_INPUT).map(([name, inputSchema]) => [
+      name,
+      wireValidatedTool(`eve's own ${name} tool`, inputSchema),
+    ]),
+  ]);
 }
 
 /** Why a planning call ran nothing, in words the model can act on. */

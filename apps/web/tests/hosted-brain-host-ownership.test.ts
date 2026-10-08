@@ -191,12 +191,32 @@ async function hookedEvent(
   return true;
 }
 
-function toolContext(sessionId: string, auth: SessionAuth): EveToolContext {
+/** The lineage eve hands a subagent's child session: the root it was delegated from, and the root's turn. */
+interface ChildOf {
+  readonly rootSessionId: string;
+}
+
+function toolContext(sessionId: string, auth: SessionAuth, childOf?: ChildOf): EveToolContext {
   const unreachable = (): never => {
     throw new Error("not reached in these tests");
   };
+  const turn = { id: "turn_0", sequence: 0 };
+  const session: EveToolContext["session"] =
+    childOf === undefined
+      ? { id: sessionId, auth, turn }
+      : {
+          id: sessionId,
+          auth,
+          turn,
+          parent: {
+            callId: "call-0",
+            rootSessionId: childOf.rootSessionId,
+            sessionId: childOf.rootSessionId,
+            turn,
+          },
+        };
   return {
-    session: { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
+    session,
     abortSignal: new AbortController().signal,
     callId: "call-1",
     toolName: QUEUE_QUESTION_TOOL.name,
@@ -476,4 +496,79 @@ test("a tool call is admitted again as it runs: the current session's lands, and
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: BRAIN_HOST_REFUSAL.NO_CONVERSATION,
   });
+});
+
+test("a subagent's tool call is admitted through the root it was delegated from: it lands while the root is the conversation's session, and is refused once the conversation rotates away from it or for another account's seat", async () => {
+  const SESSION = sessions();
+  const CHILD = "wrun_01MCHILD000000000000000";
+  const userA = await database.createUser();
+  const userB = await database.createUser();
+  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
+  const conversationId = Option.getOrThrow(
+    await database.run(openPlanConversation(userA, started.id)),
+  );
+  const target = { userId: userA, conversationId };
+  const seat = ownSeat(userA, conversationId);
+  const { host } = hostOverTestDatabase();
+  const question = {
+    question: "Should a withdrawn invite tell the invitee who withdrew it?",
+    recommendation: "No: just say the invite is no longer valid.",
+  };
+  const call = (auth: SessionAuth, childOf?: ChildOf) =>
+    database.run(
+      host
+        .runTool(
+          QUEUE_QUESTION_TOOL.name,
+          binding(target, CHILD),
+          question,
+          toolContext(CHILD, auth, childOf),
+        )
+        .pipe(Effect.provide(noNetwork)),
+    );
+
+  assert.equal(await start(host, seat, SESSION.OLDER), true);
+  assert.deepEqual(await call(seat, { rootSessionId: SESSION.OLDER }), {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+  });
+  // The child's own id is no conversation's session: without its lineage it is refused.
+  assert.deepEqual(await call(seat), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION,
+  });
+  const seatB = principal(userB, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: conversationId });
+  assert.deepEqual(
+    await call({ current: seatB, initiator: seatB }, { rootSessionId: SESSION.OLDER }),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: BRAIN_HOST_REFUSAL.NOT_OWNER },
+  );
+
+  assert.equal(await start(host, seat, SESSION.NEWER), true);
+  assert.deepEqual(await call(seat, { rootSessionId: SESSION.OLDER }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION,
+  });
+});
+
+test("a subagent's resolvers are admitted on ownership alone, since eve names its child session no record holds: the owner's child is admitted whichever session the conversation runs in, and another account's seat is refused", async () => {
+  const SESSION = sessions();
+  const CHILD = "wrun_01MCHILD000000000000001";
+  const userA = await database.createUser();
+  const userB = await database.createUser();
+  const target = await ownedConversation(userA);
+  const seat = ownSeat(userA, target.conversationId);
+  const { host } = hostOverTestDatabase();
+  assert.equal(await start(host, seat, SESSION.OLDER), true);
+
+  assert.deepEqual(
+    await database.run(host.admit(seat, CHILD)),
+    Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
+  );
+  const delegated = await database.run(host.admitDelegated(seat, CHILD));
+  assert.ok(Result.isSuccess(delegated));
+  assert.deepEqual(delegated.success.target, target);
+
+  const seatB = principal(userB, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId });
+  assert.deepEqual(
+    await database.run(host.admitDelegated({ current: seatB, initiator: seatB }, CHILD)),
+    Result.fail(BRAIN_HOST_REFUSAL.NOT_OWNER),
+  );
 });

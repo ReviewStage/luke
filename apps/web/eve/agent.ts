@@ -1,5 +1,6 @@
 import { Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
+import type { SessionAuth } from "eve/context";
 import { BRAIN_HOST, BRAIN_HOST_REFUSAL } from "../server/hosted/brain-host/bounds.js";
 import { runWeb } from "../server/runtime.js";
 import { host, seams } from "./host.js";
@@ -15,11 +16,16 @@ import { scriptedModel } from "./scripted-model.js";
  * inference, so the account's daily meter is spent once for each.
  */
 
-export default defineAgent({
-  defaultTools: false,
-  limits: { sessionTimeoutMs: false },
-  compaction: { thresholdPercent: BRAIN_HOST.COMPACTION_THRESHOLD },
-  model: defineDynamic({
+/** How a resolver admits its session: the root's own standing, or a subagent's ownership alone. */
+type Admission = (auth: SessionAuth, sessionId: string) => ReturnType<typeof host.admit>;
+
+/**
+ * The model every inference of this project runs on, the root's and each
+ * subagent's alike, chosen per inference so the account's daily meter is
+ * spent once for each, under the admission the session takes.
+ */
+export function brainModel(admit: Admission) {
+  return defineDynamic({
     events: {
       "step.started": async (_event, ctx) => {
         if (seams.scriptedModel()) {
@@ -28,7 +34,7 @@ export default defineAgent({
             modelContextWindowTokens: BRAIN_HOST.MODEL_CONTEXT_WINDOW_TOKENS,
           };
         }
-        const admitted = await runWeb(host.admit(ctx.session.auth, ctx.session.id));
+        const admitted = await runWeb(admit(ctx.session.auth, ctx.session.id));
         if (Result.isFailure(admitted)) throw new Error(admitted.failure);
         if (host.turnKindOf(ctx.session.auth) === undefined) {
           throw new Error(BRAIN_HOST_REFUSAL.NO_TURN_KIND);
@@ -38,5 +44,12 @@ export default defineAgent({
         return { model, modelContextWindowTokens: BRAIN_HOST.MODEL_CONTEXT_WINDOW_TOKENS };
       },
     },
-  }),
+  });
+}
+
+export default defineAgent({
+  defaultTools: false,
+  limits: { sessionTimeoutMs: false },
+  compaction: { thresholdPercent: BRAIN_HOST.COMPACTION_THRESHOLD },
+  model: brainModel(host.admit),
 });
