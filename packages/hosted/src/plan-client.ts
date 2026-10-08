@@ -15,6 +15,7 @@ import {
   type PlanCommand,
   type PlanCommandResult,
   type PlanCreateRequest,
+  type PlanRenameRequest,
   type PlanSummary,
   planAnswerSchema,
   planCommandClaimAnswerSchema,
@@ -22,6 +23,7 @@ import {
   planCreateRequestSchema,
   planDeleteAnswerSchema,
   planListAnswerSchema,
+  planRenameRequestSchema,
 } from "./plan-wire.js";
 import { PLAN_CALL_FAILURE, type PlanCallFailure } from "./planning-view.js";
 import {
@@ -65,8 +67,8 @@ function succeeded<Answer>(answer: Answer) {
 }
 
 /**
- * The Plans tab's reads and its one write of the service: the list of
- * plans, one plan opened with its document, and a plan started. Each resolves to a
+ * The Plans tab's reads and its writes of the service: the list of plans,
+ * one plan opened with its document, and a plan started, renamed, or deleted. Each resolves to a
  * result rather than failing, because every caller does the same thing with
  * a failure: draws why, and offers to try again.
  */
@@ -206,6 +208,26 @@ export class HostedPlanClient {
         planDeleteAnswerSchema,
       ),
       (answer) => answer?.deleted === true,
+    );
+  }
+
+  /**
+   * Renames one plan, answering it as renamed with its document, or nothing
+   * where the service did not rename it; a name the service would refuse by
+   * shape is refused here without traveling at all.
+   */
+  rename(
+    planId: string,
+    request: PlanRenameRequest,
+  ): Effect.Effect<Plan | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planRenameRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.PATCH, path: planPath(planId), body: JSON.stringify(admitted) },
+        planAnswerSchema,
+      ),
+      (answer) => answer?.plan,
     );
   }
 

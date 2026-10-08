@@ -3,6 +3,7 @@ import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import {
   codeRefSchema,
   planCreateRequestSchema,
+  planRenameRequestSchema,
   planSchema,
   planSummarySchema,
 } from "./plan-wire.js";
@@ -180,6 +181,14 @@ export const planningStartRequestSchema = EffectSchema.Struct({
 });
 
 export type PlanningStartRequest = typeof planningStartRequestSchema.Type;
+
+/** Renaming a plan, as the window asks it: the plan, and the name the service keeps. */
+export const planningRenameParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  ...planRenameRequestSchema.fields,
+});
+
+export type PlanningRenameParams = typeof planningRenameParamsSchema.Type;
 
 /** Choosing a plan's folder again on this Mac. */
 export const planningSetFolderParamsSchema = EffectSchema.Struct({

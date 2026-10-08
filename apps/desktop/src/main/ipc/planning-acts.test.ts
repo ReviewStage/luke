@@ -56,6 +56,11 @@ function fixture() {
           asked.push(`delete:${planId}`);
           return true;
         }),
+      planningRename: (params) =>
+        Effect.sync(() => {
+          asked.push(`rename:${params.planId}:${params.name}`);
+          return true;
+        }),
       planningStart: (request) =>
         Effect.sync(() => {
           asked.push(`start:${request.folderPath}`);
@@ -101,11 +106,16 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       PANEL,
     );
     yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CLOSE }, PANEL);
+    const renamed = yield* f.router.performAct(
+      { kind: ACT_KIND.PLANNING_RENAME, payload: { planId: PLAN_ID, name: " Team invites " } },
+      PANEL,
+    );
     const deleted = yield* f.router.performAct(
       { kind: ACT_KIND.PLANNING_DELETE, payload: { planId: PLAN_ID } },
       PANEL,
     );
 
+    assert.deepEqual(renamed, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(deleted, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(selected, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(started, {
@@ -117,6 +127,7 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       `open:${PLAN_ID}`,
       "start:/Users/dev/relay",
       "close",
+      `rename:${PLAN_ID}:Team invites`,
       `delete:${PLAN_ID}`,
     ]);
   }),

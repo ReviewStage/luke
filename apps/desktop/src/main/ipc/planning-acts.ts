@@ -1,5 +1,6 @@
 import type {
   PlanningBoardSaveParams,
+  PlanningRenameParams,
   PlanningSetFolderParams,
   PlanningStartAnswer,
   PlanningStartRequest,
@@ -23,6 +24,7 @@ export interface PlanningActsDependencies {
     planningOpen(planId: string): Effect.Effect<boolean>;
     planningClose(): Effect.Effect<void>;
     planningDelete(planId: string): Effect.Effect<boolean>;
+    planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
     planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
     planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
     planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
@@ -47,6 +49,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_CLOSE
   | typeof ACT_KIND.PLANNING_START
   | typeof ACT_KIND.PLANNING_DELETE
+  | typeof ACT_KIND.PLANNING_RENAME
   | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
   | typeof ACT_KIND.PLANNING_SET_FOLDER
   | typeof ACT_KIND.PLANNING_REVEAL_FOLDER
@@ -94,6 +97,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_DELETE]: ({ planId }, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_DELETE, sender);
       return host.planningDelete(planId);
+    },
+    [ACT_KIND.PLANNING_RENAME]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_RENAME, sender);
+      return host.planningRename(params);
     },
     [ACT_KIND.PLANNING_CHOOSE_FOLDER]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_CHOOSE_FOLDER, sender);

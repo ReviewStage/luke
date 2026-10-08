@@ -61,6 +61,13 @@ export const planCreateRequestSchema = EffectSchema.Struct({
 
 export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
 
+/** Renaming a plan (PATCH): its new name, under the same rules as the name it started with. */
+export const planRenameRequestSchema = EffectSchema.Struct({
+  name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
+});
+
+export type PlanRenameRequest = typeof planRenameRequestSchema.Type;
+
 const planSummaryFields = {
   id: wireUuidSchema,
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
@@ -96,7 +103,7 @@ export const planListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(planSummarySchema),
 });
 
-/** A started or opened plan (POST, GET), with its document as saved. */
+/** A started, opened, or renamed plan (POST, GET, PATCH), with its document as saved. */
 export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
 
 /** A deleted plan (DELETE): its row, its document, and its association are gone. */

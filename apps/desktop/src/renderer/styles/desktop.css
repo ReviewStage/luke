@@ -300,6 +300,23 @@ body,
   font-weight: 600;
 }
 
+/* A sidebar plan renamed in place keeps its row: the field takes the name's
+   own line and type, ringed, and the folder stays beneath it. */
+.sidebar-plan-field {
+  width: calc(100% + 10px);
+  margin: -2px -5px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--desktop-ground);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+}
+
 .sidebar-plan-repository {
   color: var(--text-secondary);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -447,14 +464,54 @@ body,
   flex: 1;
 }
 
+/* Its room reaches 6px left of the words, so the title's own hover fill and
+   field ring, which start there, are not clipped. */
 .desktop-toolbar-title {
-  margin: 0;
+  margin: 0 0 0 -6px;
+  padding-left: 6px;
   overflow: hidden;
   font-size: 15px;
   font-weight: 680;
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The title is the plan's name and renames it on a press, the way Linear's
+   and Codex's do: no chrome until the pointer is on it, and then the field
+   opens in the same place and type, ringed rather than bordered so nothing
+   moves. */
+.desktop-toolbar-title-button,
+.desktop-toolbar-title-field {
+  max-width: 100%;
+  margin: 0 0 0 -6px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-toolbar-title-button {
+  overflow: hidden;
+  background: none;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.desktop-toolbar-title-button:hover {
+  background: var(--raised);
+}
+
+.desktop-toolbar-title-field {
+  width: calc(100% + 6px);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  outline: none;
 }
 
 .desktop-toolbar-subtitle {
