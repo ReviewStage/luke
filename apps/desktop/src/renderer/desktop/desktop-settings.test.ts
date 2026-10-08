@@ -1,75 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { settingsView } from "@sidecar/settings/testing";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { UPDATE_STATUS } from "#shared/messages/update";
-import type { SettingsPanelProps } from "../settings/settings-panel";
+import { settingsPanelProps } from "#testing/settings-panel-props";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopSettings } from "./desktop-settings";
 
-const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED } as const);
 const ignore = () => undefined;
-
-function panelProps(
-  view: SettingsView,
-  onViewChange: (view: SettingsView) => void,
-): SettingsPanelProps {
-  return {
-    account: { status: ACCOUNT_STATUS.SIGNED_OUT },
-    onSignOut: () => Promise.resolve(),
-    onDeleteAccount: accepted,
-    view,
-    onViewChange,
-    microphone: {
-      status: MICROPHONE_STATUS.GRANTED,
-      voiceAvailable: true,
-      onRequest: ignore,
-      onOpenSettings: ignore,
-    },
-    updates: {
-      update: {
-        status: UPDATE_STATUS.IDLE,
-        currentVersion: "0.0.0",
-        installSupported: false,
-        upToDate: false,
-      },
-      onCheck: () => Promise.resolve(),
-      onInstall: ignore,
-      onOpenLatest: ignore,
-    },
-    settings: settingsView({ voiceAvailable: true }),
-    feedback: {
-      begin: ignore,
-      changeMessage: ignore,
-      changeName: ignore,
-      changeEmail: ignore,
-      attach: ignore,
-      removeImage: ignore,
-      dismiss: ignore,
-      cancel: ignore,
-      commit: ignore,
-    },
-    panelOpen: true,
-    onQuit: ignore,
-    shortcuts: {
-      voiceHotkeyHeld: false,
-      voiceChosen: false,
-      voiceOff: false,
-      onVoiceHotkeyChange: accepted,
-      stopChosen: false,
-      stopOff: false,
-      onStopHotkeyChange: accepted,
-      onCapture: ignore,
-    },
-  };
-}
 
 /**
  * Turns the page from outside Settings, the way the app's Escape or a spoken
@@ -82,7 +22,7 @@ function Harness(): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   turnPage = setView;
   return createElement(DesktopSettings, {
-    settings: panelProps(view, setView),
+    settings: settingsPanelProps({ view, onViewChange: setView }),
     onSearchEngaged: ignore,
     onBack: ignore,
   });
@@ -176,7 +116,7 @@ test("typing in the sidebar search turns the page list into results grouped unde
   type(field(container), "shortcut");
   assert.deepEqual(pageList(container), []);
   assert.deepEqual(results(container), [
-    { page: "Keyboard shortcuts", rows: ["Talk to Luke", "Stop Luke"] },
+    { page: "Keyboard shortcuts", rows: ["Talk to Luke", "Stop Luke", "Show or hide the sidebar"] },
   ]);
 
   // A query landing on more than one page groups its rows under each, in the
