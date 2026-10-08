@@ -225,8 +225,9 @@ under its speaker, `You` or `Luke` (`planning/plan-transcript.tsx`,
   window reports them as they are said (`VoiceView.callTranscript`),
   whatever the captions preference, and the tab grows the call at the
   bottom, marked `Live`. The two are told apart by the store's id for the
-  call's session, so a call is drawn from the record once the record holds
-  it and never twice; hanging up keeps the call's words drawn until then.
+  call's session, so a call is drawn once, from the record once the
+  record's copy has as many words as were heard; hanging up, or calling again
+  at once, keeps the heard words drawn until then.
 - **Following.** The list keeps to its newest line while it is scrolled
   there; scrolling up to read leaves it in place until the developer scrolls
   back down.
