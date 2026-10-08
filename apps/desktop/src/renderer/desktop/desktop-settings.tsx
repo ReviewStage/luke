@@ -92,7 +92,7 @@ export function DesktopSettings({
   // The opened result stays marked only while its page is the one showing: a
   // page turned some other way, Escape or a voice request, leaves it.
   const marked = opened?.page === settings.view ? opened.id : undefined;
-  const { edge } = useSidebarEdge(sidebar);
+  const edge = useSidebarEdge(sidebar);
 
   return (
     <div className="desktop-settings">

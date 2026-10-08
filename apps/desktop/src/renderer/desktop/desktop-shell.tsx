@@ -1,6 +1,7 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@sidecar/credentials/snapshot";
 import { SidebarIcon, WingFace } from "@sidecar/panel";
 import type { FaceMotion } from "@sidecar/surface";
+import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -14,6 +15,7 @@ import { DesktopPlans } from "./desktop-plans";
 import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
 import type { LukeIdentityProps } from "./luke-identity";
+import { PaneGlide } from "./pane-motion";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
 /** What stands between the developer and the window's own content: the account sign-in. */
@@ -111,7 +113,9 @@ function usePlaceCommands(
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
  * keeps its page list whatever the sidebar's collapse says, and hands the
- * plans back folded or not as it found them.
+ * plans back folded or not as it found them. Folding the sidebar, or
+ * opening, shutting, or growing the side panel, glides the work beside them
+ * (pane-motion.tsx).
  */
 export function DesktopShell({
   gates,
@@ -134,6 +138,7 @@ export function DesktopShell({
   onSettingsSearchEngaged: (engaged: boolean) => void;
 }): React.JSX.Element {
   const { account } = settings;
+  const shell = useRef<HTMLDivElement>(null);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   usePlaceCommands(!gated, tab, onTabChange, plans, settings);
   if (gated) {
@@ -167,7 +172,7 @@ export function DesktopShell({
     );
   }
   return (
-    <div className="desktop-shell" data-sidebar-collapsed={String(sidebar.collapsed)}>
+    <div ref={shell} className="desktop-shell" data-sidebar-collapsed={String(sidebar.collapsed)}>
       <DesktopSidebar
         sidebar={sidebar}
         identity={identity}
@@ -182,6 +187,14 @@ export function DesktopShell({
       </main>
       {/* Note that it follows the drag strips it covers, because a later drag region wins. */}
       <SidebarToggle sidebar={sidebar} />
+      <PaneGlide
+        root={shell}
+        layout={{
+          sidebarCollapsed: sidebar.collapsed,
+          panelOpen: plans.sidePanel.open,
+          panelFullScreen: plans.sidePanel.fullScreen,
+        }}
+      />
     </div>
   );
 }

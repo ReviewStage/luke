@@ -14,7 +14,7 @@ import { MicrophoneRow } from "../planning/planning-parts";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { Tooltip } from "../tooltip";
 import { PlanActionsButton } from "./plan-actions";
-import { SidePanel, SidePanelToggle } from "./side-panel";
+import { SidePanel, SidePanelToggle, useSidePanelDrawing } from "./side-panel";
 
 /**
  * The work column while Plans is chosen: the open plan's document, with its
@@ -75,6 +75,7 @@ function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element
 /** The open plan's region: its document, or the state standing in its place. */
 function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { region } = plans;
+  const drawing = useSidePanelDrawing(plans.sidePanel);
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
       region.kind === DOCUMENT_REGION.READING
@@ -111,7 +112,8 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
     <div className="desktop-plan">
       {/* Note that the document is hidden rather than left out while the
-          panel fills the window, so leaving full screen finds it as it was. */}
+          panel fills the window, and keeps its layout beneath the panel, so
+          leaving full screen uncovers it as it was. */}
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
         <Toolbar
           title={plan.name}
@@ -138,9 +140,10 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           <MicrophoneRow status={plans.status} microphone={plans.microphone} stop={plans.stop} />
         </div>
       </div>
-      {sidePanel.open ? (
+      {drawing.panel ? (
         <SidePanel
-          panel={sidePanel}
+          {...drawing}
+          panel={drawing.panel}
           planId={plan.id}
           board={plans.board}
           code={plans.code}

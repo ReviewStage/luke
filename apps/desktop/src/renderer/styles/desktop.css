@@ -74,8 +74,10 @@ body,
 /* Folding the sidebar away moves it rather than narrowing it: the work column
    takes the window at once and the sidebar slides off the left edge over it,
    on transform and opacity alone, so neither column re-wraps a line on the
-   way. Unfolding is the same slide back in beside a column already narrowed.
-   Only the plans' shell folds, so Settings always keeps its page list. */
+   way, while what the column holds glides to its new place on the same beat
+   (pane-motion.tsx). Unfolding is the same slide back in beside a column
+   already narrowed. Only the plans' shell folds, so Settings always keeps its
+   page list. */
 .desktop-shell[data-sidebar-collapsed] {
   overflow: hidden;
 }
@@ -89,8 +91,8 @@ body,
   z-index: 1;
   width: var(--sidebar-width);
   transition:
-    transform var(--duration-quick) var(--motion-exit),
-    opacity var(--duration-quick) var(--motion-exit);
+    transform var(--duration-pane) var(--motion-pane),
+    opacity var(--duration-pane) var(--motion-pane);
 }
 
 .desktop-shell[data-sidebar-collapsed="true"] .desktop-sidebar {
@@ -118,12 +120,6 @@ body,
   padding: 0 12px 12px;
   border-right: 1px solid var(--hairline);
   background: var(--desktop-sidebar);
-}
-
-/* A drag gone far enough past the least width to fold the sidebar on
-   release says so before it does, as the side panel's does. */
-.desktop-sidebar[data-snap="collapse"] {
-  opacity: 0.4;
 }
 
 .luke-identity {
@@ -404,6 +400,7 @@ body,
 }
 
 .desktop-toolbar {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -412,6 +409,24 @@ body,
   padding: 8px 20px 8px 32px;
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
+}
+
+/* A pane sliding in finds the work column already narrowed for it, so the
+   column's bars draw on past both its sides, beneath everything else, and
+   no gap opens between the column and a pane still on its way. */
+.desktop-toolbar::before,
+.desktop-call-bar::before {
+  position: absolute;
+  z-index: -1;
+  right: -100vw;
+  left: -100vw;
+  content: "";
+}
+
+.desktop-toolbar::before {
+  top: 0;
+  bottom: -1px;
+  border-bottom: 1px solid var(--hairline);
 }
 
 .desktop-toolbar-heading {
@@ -633,6 +648,10 @@ body,
 
 .desktop-document .plan-document-scroll {
   padding: 44px 48px 140px;
+  /* Nothing in a plan is wider than the column (its code and tables scroll
+     on their own), so a body gliding in from where a pane displaced it
+     never draws a scrollbar on the way. */
+  overflow-x: hidden;
   scrollbar-gutter: stable;
 }
 
@@ -695,8 +714,16 @@ body,
 /* The call bar ------------------------------------------------------------- */
 
 .desktop-call-bar {
+  position: relative;
   flex: 0 0 auto;
   padding: 14px 32px;
+  border-top: 1px solid var(--hairline);
+  background: var(--desktop-well);
+}
+
+.desktop-call-bar::before {
+  top: -1px;
+  bottom: 0;
   border-top: 1px solid var(--hairline);
   background: var(--desktop-well);
 }
@@ -1277,6 +1304,7 @@ body,
 /* The open plan: its toolbar, document, and call bar in a column, and the side
    panel to their right, the window's full height, while it is open. */
 .desktop-plan {
+  position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
@@ -1288,42 +1316,51 @@ body,
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-/* Hidden, not removed, while the panel fills the window. */
+/* Hidden, not removed, while the panel fills the window: it keeps its layout
+   beneath the panel, and is hidden only once the panel has grown over it. */
 .desktop-plan-main[hidden] {
-  display: none;
+  visibility: hidden;
+  transition: visibility 0s linear var(--duration-pane);
 }
 
 /* Its width is the developer's, set inline. The document keeps room to be
    read beside it while the window allows, but never at the cost of the
    panel's own least width. The 360px is `DOCUMENT_RESERVE` in side-panel.tsx,
-   which a drag is held to. */
-.side-panel {
-  position: relative;
-  display: flex;
+   which a drag is held to. The room full screen keeps beside the document is
+   held the same. */
+.side-panel,
+.side-panel-room {
   min-width: 0;
   max-width: max(280px, calc(100% - 360px));
   flex: 0 0 auto;
+}
+
+.side-panel {
+  position: relative;
+  display: flex;
   flex-direction: column;
   border-left: 1px solid var(--hairline);
   background: var(--desktop-well);
-  transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-/* Full screen, the panel takes the document's place as well as its own. */
+/* Full screen, the panel covers the document as well as its own room. */
 .side-panel[data-full-screen="true"] {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
   max-width: none;
-  flex: 1;
   border-left: 0;
 }
 
-/* A drag gone far enough past a bound to snap on release says so before it
-   does: what the release would take away fades. */
-.side-panel[data-snap="collapse"],
-.desktop-plan:has(> .side-panel[data-snap="expand"]) > .desktop-plan-main {
-  opacity: 0.4;
+/* Shutting, it gives the document its room at once and slides out over it. */
+.side-panel[data-leaving="close"] {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  bottom: 0;
 }
 
 /* A resize edge straddles its pane's border, wider than it looks: the side
@@ -1343,6 +1380,17 @@ body,
 
 .side-panel-resize {
   left: -3px;
+}
+
+/* A drag the edge's snap took away from under the pointer is still the
+   edge's, so the whole window wears its cursor and selects nothing. */
+:root[data-edge-drag] {
+  cursor: col-resize;
+  user-select: none;
+}
+
+:root[data-edge-drag] * {
+  cursor: inherit;
 }
 
 .sidebar-resize {

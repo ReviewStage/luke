@@ -19,7 +19,6 @@ import {
   useSidePanel,
 } from "../planning/use-side-panel";
 import { DesktopPlans } from "./desktop-plans";
-import { EDGE_SNAP } from "./use-resizable-edge";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -37,6 +36,15 @@ const CODE: PlanCode = {
 };
 
 const roots: Root[] = [];
+
+/** How the page draws the panel. */
+const PANEL = {
+  HIDDEN: "hidden",
+  BESIDE: "beside the document",
+  FULL_SCREEN: "full screen",
+} as const;
+
+type PanelDrawn = (typeof PANEL)[keyof typeof PANEL];
 
 /** What the toolbar's Copy was asked to do, across the presses and the chord. */
 let copies = 0;
@@ -117,20 +125,31 @@ function resizeEdge(page: HTMLElement): HTMLElement {
   return edge;
 }
 
-/** Drags the edge from `from` through each of `through`, releasing at the last, reading the panel at each stop. */
-function dragEdge(page: HTMLElement, from: number, through: number[]): (string | undefined)[] {
+function panelDrawn(page: HTMLElement): PanelDrawn {
+  const panel = page.querySelector(".side-panel");
+  if (panel === null) return PANEL.HIDDEN;
+  return panel.getAttribute("data-full-screen") === "true" ? PANEL.FULL_SCREEN : PANEL.BESIDE;
+}
+
+/**
+ * Drags the edge from `from` through each of `through`, releasing at the
+ * last, reading how the panel is drawn at each stop. Once a snap has taken
+ * the edge away, the pointer is over the page, as it would be in the window.
+ */
+function dragEdge(page: HTMLElement, from: number, through: number[]): PanelDrawn[] {
   const edge = resizeEdge(page);
   const pointer = (type: string, clientX: number) =>
     act(() => {
-      edge.dispatchEvent(new PointerEvent(type, { clientX, pointerId: 1, bubbles: true }));
+      const target = edge.isConnected ? edge : page;
+      target.dispatchEvent(new PointerEvent(type, { clientX, pointerId: 1, bubbles: true }));
     });
   pointer("pointerdown", from);
-  const snaps = through.map((x) => {
+  const drawn = through.map((x) => {
     pointer("pointermove", x);
-    return page.querySelector<HTMLElement>(".side-panel")?.dataset.snap;
+    return panelDrawn(page);
   });
   pointer("pointerup", through.at(-1) ?? from);
-  return snaps;
+  return drawn;
 }
 
 /** Lays the plan's area out this wide, the document beside the panel included; jsdom lays out nothing. */
@@ -413,19 +432,19 @@ test("a drag between the bounds sets the width, and one past a bound holds there
   press(page, '[aria-label="Show panel"]');
 
   // The panel is on the right, so the pointer moving left widens it.
-  assert.deepEqual(dragEdge(page, 1000, [900]), [EDGE_SNAP.NONE]);
+  assert.deepEqual(dragEdge(page, 1000, [900]), [PANEL.BESIDE]);
   assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), "500");
 
-  assert.deepEqual(dragEdge(page, 1000, [740]), [EDGE_SNAP.NONE]);
+  assert.deepEqual(dragEdge(page, 1000, [740]), [PANEL.BESIDE]);
   assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), String(SIDE_PANEL_WIDTH.MAX));
 });
 
-test("a drag far past the least width closes the panel on release, which opens again at the width it had", () => {
+test("a drag far past the least width closes the panel as it crosses, the release leaves it closed, and it opens again at the width it had", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
   // 400 wide at 1000: 1150 asks for 250, held at the bound; 1250 asks for 150.
-  assert.deepEqual(dragEdge(page, 1000, [1150, 1250]), [EDGE_SNAP.NONE, EDGE_SNAP.COLLAPSE]);
+  assert.deepEqual(dragEdge(page, 1000, [1150, 1250]), [PANEL.BESIDE, PANEL.HIDDEN]);
   assert.equal(panelShown(page), false);
   assert.ok(documentShown(page));
 
@@ -433,12 +452,12 @@ test("a drag far past the least width closes the panel on release, which opens a
   assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), String(SIDE_PANEL_WIDTH.DEFAULT));
 });
 
-test("a drag far past the greatest width fills the window on release, and leaving it gives back the width it had", () => {
+test("a drag far past the greatest width fills the window as it crosses, and leaving full screen gives back the width it had", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
   // 400 wide at 1000: 650 asks for 750, held at the bound; 550 asks for 850.
-  assert.deepEqual(dragEdge(page, 1000, [650, 550]), [EDGE_SNAP.NONE, EDGE_SNAP.EXPAND]);
+  assert.deepEqual(dragEdge(page, 1000, [650, 550]), [PANEL.BESIDE, PANEL.FULL_SCREEN]);
   assert.equal(documentShown(page), false);
   assert.equal(page.querySelector(".side-panel")?.getAttribute("data-full-screen"), "true");
 
@@ -447,13 +466,46 @@ test("a drag far past the greatest width fills the window on release, and leavin
   assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), String(SIDE_PANEL_WIDTH.DEFAULT));
 });
 
-test("a drag that comes back inside the bounds before release does not snap", () => {
+test("a drag that comes back opens the panel again as it crosses, and resizes it from there", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
-  assert.deepEqual(dragEdge(page, 1000, [1250, 1050]), [EDGE_SNAP.COLLAPSE, EDGE_SNAP.NONE]);
+  assert.deepEqual(dragEdge(page, 1000, [1250, 1050]), [PANEL.HIDDEN, PANEL.BESIDE]);
   assert.ok(panelShown(page));
   assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), "350");
+});
+
+test("a drag that comes back from full screen brings the panel back beside the document as it crosses", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+
+  // 400 wide at 1000: 550 asks for 850, past the greatest width by more than
+  // the overshoot; 700 asks for 700, back inside it.
+  assert.deepEqual(dragEdge(page, 1000, [550, 700]), [PANEL.FULL_SCREEN, PANEL.BESIDE]);
+  assert.ok(documentShown(page));
+  assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), "700");
+});
+
+test("a pointer resting on a snap's threshold does not flicker the panel", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+
+  // Full screen is past asking for 800, and lets go only once the pointer is
+  // back by more than a tremor: 610 asks for 790, 630 for 770.
+  assert.deepEqual(dragEdge(page, 1000, [550, 590, 610, 630]), [
+    PANEL.FULL_SCREEN,
+    PANEL.FULL_SCREEN,
+    PANEL.FULL_SCREEN,
+    PANEL.BESIDE,
+  ]);
+  // Back at 400, shut is past asking for 200, and lets go past 224.
+  key(resizeEdge(page), "Enter");
+  assert.deepEqual(dragEdge(page, 1000, [1210, 1190, 1180, 1170]), [
+    PANEL.HIDDEN,
+    PANEL.HIDDEN,
+    PANEL.HIDDEN,
+    PANEL.BESIDE,
+  ]);
 });
 
 test("in a window too narrow for the panel's greatest width, the drag goes full screen past the document's room", () => {
@@ -462,7 +514,7 @@ test("in a window too narrow for the panel's greatest width, the drag goes full 
   press(page, '[aria-label="Show panel"]');
 
   // The document keeps 360 of the 900, so the panel is held at 540 and snaps past 620.
-  assert.deepEqual(dragEdge(page, 1000, [800, 770]), [EDGE_SNAP.NONE, EDGE_SNAP.EXPAND]);
+  assert.deepEqual(dragEdge(page, 1000, [800, 770]), [PANEL.BESIDE, PANEL.FULL_SCREEN]);
   assert.equal(documentShown(page), false);
 });
 
@@ -473,7 +525,7 @@ test("a snap in a window that holds the panel narrower keeps the width the devel
   narrowPlanArea(900);
 
   // Drawn at 540 of its 720: 900 asks for 640, past the room by more than the overshoot.
-  assert.deepEqual(dragEdge(page, 1000, [900]), [EDGE_SNAP.EXPAND]);
+  assert.deepEqual(dragEdge(page, 1000, [900]), [PANEL.FULL_SCREEN]);
   press(page, '[aria-label="Exit full screen"]');
   assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), String(SIDE_PANEL_WIDTH.MAX));
 });

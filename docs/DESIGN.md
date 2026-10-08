@@ -13,12 +13,16 @@ way to pass that review is to build from them.
 One spring drives everything that needs to travel: `--spring` for the surface
 and anything that travels with it, `--spring-fast` (the same damping ratio at
 a higher frequency) for small elements like switch thumbs. Settings pages
-change at once; task navigation does not travel.
+change at once; task navigation does not travel. The desktop window's panes
+are the one exception to the spring: the sidebar and the side panel open,
+close, and fill the window on `--motion-pane` over `--duration-pane`, a plain
+ease-out, because a pane stands on the window's own edge and a spring's
+overshoot would part the two for a frame.
 Durations and delays come only from the tokens in
 `packages/surface/src/generated/motion-tokens.css` (`--duration-shape`,
 `--duration-exit`, `--duration-quick`, `--duration-fast`, `--duration-hover`,
-`--motion-exit`, `--expand-delay`, `--peek-delay`, `--slot-delay`,
-`--row-stagger`). Never write a literal
+`--duration-pane`, `--motion-exit`, `--motion-pane`, `--expand-delay`,
+`--peek-delay`, `--slot-delay`, `--row-stagger`). Never write a literal
 millisecond into a rule: reduced motion and capture runs zero the tokens, and
 a literal is a motion those runs cannot stop. The one sanctioned exception is
 an endless loop (a spinner, a breathing idle, the face's own motions) whose
@@ -47,6 +51,12 @@ pixels. A scrolling
 content viewport may animate a `mask-image` edge to disclose overflow, because
 the mask neither changes layout nor moves content; no other layered content
 gets a size-animation exception.
+
+The desktop window's panes keep the same rule. A pane opening, closing, or
+filling the window lands in the layout at once, and what it displaced replays
+the journey below on `transform` and `clip-path` (`pane-motion.tsx`); a drag
+between a pane's bounds changes its width alone and plays nothing, so the
+edge stays under the pointer.
 
 No motion is the browser's rather than a transition of ours: nothing on the
 surface borrows a native motion in place of the spring, and
