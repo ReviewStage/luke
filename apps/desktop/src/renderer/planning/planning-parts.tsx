@@ -7,11 +7,7 @@ import {
   MicrophoneOffIcon,
   PlusIcon,
   StopIcon,
-  TrashIcon,
 } from "@sidecar/panel";
-import type { ActionResult } from "@sidecar/wire";
-import { useConfirm } from "../settings/confirm-state";
-import { ConfirmSwap } from "../settings/confirm-swap";
 import { ThinkingDots } from "../thinking-dots";
 import { PlanBody } from "./plan-body";
 import {
@@ -133,51 +129,6 @@ function CopyControl({
   );
 }
 
-/**
- * Delete, which asks first because a deleted plan and its conversation do
- * not come back. A refusal keeps the plan and says so under the button.
- */
-function DeletePlanButton({
-  onDelete,
-  className,
-}: {
-  onDelete: () => Promise<ActionResult>;
-  /** The button class of the bar it stands in. */
-  className: string;
-}): React.JSX.Element {
-  const deletion = useConfirm({ subject: true, surfaceOpen: true }, onDelete);
-  return (
-    <span className="plan-delete">
-      <ConfirmSwap
-        confirm={{
-          question: "Delete this plan? This cannot be undone.",
-          stage: deletion.stage,
-          verb: "Delete plan",
-          running: "Deleting…",
-          onKeep: deletion.keep,
-          onAct: deletion.run,
-        }}
-      >
-        <button
-          type="button"
-          className={className}
-          aria-label="Delete plan…"
-          title="Delete plan…"
-          disabled={deletion.busy}
-          onClick={deletion.ask}
-        >
-          <TrashIcon />
-        </button>
-      </ConfirmSwap>
-      {deletion.rejection ? (
-        <span className="plan-delete-failed" role="alert">
-          {deletion.rejection}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
 /** The folder line of a plan, or nothing where this Mac holds no folder for it. */
 function folderOf(folders: Readonly<Record<string, string>>, planId: string): string | undefined {
   const folderPath = folders[planId];
@@ -190,13 +141,12 @@ function FolderLine({ folderPath }: { folderPath: string | undefined }): React.J
   return <span className="plan-list-repository">{folderLine(folderPath)}</span>;
 }
 
-/** The document page's header: the way back to the list, the plan's name and folder line, Copy, and Delete. */
+/** The document page's header: the way back to the list, the plan's name and folder line, and Copy. */
 function PlanHeader({
   title,
   repository,
   onChooseFolder,
   copy,
-  onDelete,
   onBack,
 }: {
   title: string;
@@ -204,7 +154,6 @@ function PlanHeader({
   /** Offered in place of the folder line where this Mac holds no folder for the plan. */
   onChooseFolder?: (() => void) | undefined;
   copy?: { shown: CopyShown; onPress: () => void } | undefined;
-  onDelete?: (() => Promise<ActionResult>) | undefined;
   onBack: () => void;
 }): React.JSX.Element {
   return (
@@ -228,9 +177,6 @@ function PlanHeader({
         ) : null}
       </div>
       {copy !== undefined ? <CopyControl shown={copy.shown} onPress={copy.onPress} /> : null}
-      {onDelete !== undefined ? (
-        <DeletePlanButton className="icon-button" onDelete={onDelete} />
-      ) : null}
     </header>
   );
 }
@@ -249,13 +195,10 @@ export function PlanDocumentView({
   live,
   folders,
   onChooseFolder,
-  onDelete,
 }: {
   region: DocumentRegion;
   onRetry: () => void;
   onBack: () => void;
-  /** Deletes the plan drawn, offered once its document is read. */
-  onDelete?: (() => Promise<ActionResult>) | undefined;
   /** The folder of this Mac each plan reads, by plan id. */
   folders: Readonly<Record<string, string>>;
   onChooseFolder: () => void;
@@ -306,7 +249,6 @@ export function PlanDocumentView({
             repository={folderOf(folders, plan.id)}
             onChooseFolder={onChooseFolder}
             copy={copy}
-            onDelete={onDelete}
             onBack={onBack}
           />
           <PlanBody plan={plan} live={live} />

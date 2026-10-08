@@ -117,11 +117,11 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
               className="toolbar-button"
               onClick={() => plans.onChooseFolder(plan.id)}
             >
-              Choose folder…
+              Choose folder
             </button>
           ) : null}
           <CopyButton copy={plans.copy} />
-          <PlanActionsButton key={plan.id} plans={plans} planId={plan.id} />
+          <PlanActionsButton key={plan.id} plans={plans} plan={plan} />
           {/* The open panel holds its own toggle in its own top row. */}
           {sidePanel.open ? null : <SidePanelToggle open={false} onToggle={sidePanel.onToggle} />}
         </Toolbar>
