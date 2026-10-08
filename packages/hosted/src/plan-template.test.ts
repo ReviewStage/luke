@@ -125,6 +125,30 @@ test("a note naming what the field does not hold changes nothing and is reported
   );
 });
 
+test("an item written as a bullet is drawn under the list's one marker, not nested under a second", () => {
+  const { content } = applyNotes(EMPTY_PLAN_CONTENT, [
+    add(PLAN_FIELD.OPEN_QUESTIONS, "- Do invites expire?"),
+    add(PLAN_FIELD.OPEN_QUESTIONS, "1. Who can resend an invite?"),
+    add(PLAN_FIELD.ASSUMPTIONS, "* Invites reuse memberships."),
+  ]);
+  const body = planBody(HEADER, content.fields);
+  assert.ok(
+    body.includes("## Open questions\n\n- Do invites expire?\n- Who can resend an invite?\n"),
+    body,
+  );
+  assert.deepEqual(content.assumptions, [{ text: "Invites reuse memberships." }]);
+  // A correction that rewrites a whole question as a bullet is drawn the same way.
+  const corrected = taken(
+    applyNote(content, {
+      kind: NOTE_KIND.REPLACE,
+      field: PLAN_FIELD.OPEN_QUESTIONS,
+      find: "Do invites expire?",
+      text: "- Do invites expire after a week?",
+    }),
+  );
+  assert.equal(corrected.fields.openQuestions[0], "Do invites expire after a week?");
+});
+
 test("striking a line removes that line alone, and striking the last leaves the field unanswered", () => {
   const strike = (find: string): PlanNote => ({
     kind: NOTE_KIND.REMOVE,

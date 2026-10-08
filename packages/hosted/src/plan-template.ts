@@ -568,8 +568,20 @@ const TEXT_FIELD = {
 /** A line that opens a Markdown list item. */
 const LIST_ITEM_LINE = /^\s*(?:[-*+]|\d{1,9}[.)])\s/u;
 
+/** The list markers a list item's text opens with, which the formatter draws itself. */
+const LEADING_LIST_MARKERS = /^(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/u;
+
 /** A trailing line still being written that holds nothing but Markdown markers, whose escaping would change as it grows. */
 const MARKER_ONLY_LINE = /^[\s#>*+=`~<\-\d.)]+$/u;
+
+/**
+ * A note's text as one item of a list. Note that we drop the list markers it
+ * opens with, because the formatter draws each item's own marker and a second
+ * would nest the item one bullet deeper.
+ */
+function itemText(text: string): string {
+  return text.replace(LEADING_LIST_MARKERS, "").trim();
+}
 
 function isTextField(field: PlanField): field is TextField {
   return Object.hasOwn(TEXT_FIELD, field);
@@ -824,12 +836,7 @@ export function applyNote(content: PlanContent, note: PlanNote): PlanContent | u
     return { fields: { ...fields, rules: rules.length === 0 ? null : rules }, assumptions };
   }
   if (field === PLAN_FIELD.OPEN_QUESTIONS) {
-    const questions = itemsNoted(
-      fields.openQuestions,
-      note,
-      (text) => text,
-      (text) => text,
-    );
+    const questions = itemsNoted(fields.openQuestions, note, (text) => text, itemText);
     if (questions === undefined || !withinItems(questions)) return undefined;
     return { fields: { ...fields, openQuestions: questions }, assumptions };
   }
@@ -838,7 +845,7 @@ export function applyNote(content: PlanContent, note: PlanNote): PlanContent | u
       assumptions,
       note,
       (item) => item.text,
-      (text) => ({ text }),
+      (text) => ({ text: itemText(text) }),
     );
     if (noted === undefined || !withinItems(noted)) return undefined;
     return { fields, assumptions: noted };
