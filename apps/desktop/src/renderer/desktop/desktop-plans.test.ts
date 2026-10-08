@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import {
   isSidePanelChord,
   SIDE_PANEL_TAB,
@@ -142,6 +143,58 @@ test("the Code tab draws the code Luke has on screen", () => {
   );
 
   assert.match(markup, /<aside class="side-panel"[\s\S]*class="code-pane"[\s\S]*src\/invite\.ts/u);
+});
+
+test("the Transcript tab draws each call's turns under their speakers, left out of the screen recording", () => {
+  const markup = renderToStaticMarkup(
+    createElement(DesktopPlans, {
+      plans: plansControl({
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT },
+        transcript: {
+          region: {
+            kind: TRANSCRIPT_REGION.READY,
+            earlierOmitted: false,
+            calls: [
+              {
+                key: "call-1",
+                startedAt: 1_000,
+                live: true,
+                lines: [
+                  { key: "0", speaker: "user", text: "Invites should expire." },
+                  { key: "1", speaker: "assistant", text: "After how many days?" },
+                ],
+              },
+            ],
+          },
+          onRetry: () => undefined,
+        },
+      }),
+    }),
+  );
+
+  assert.match(markup, /<section class="plan-transcript ph-no-capture" aria-label="Transcript">/u);
+  assert.match(
+    markup,
+    /data-speaker="user"><span[^>]*>You<\/span><p[^>]*>Invites should expire\.<\/p>/u,
+  );
+  assert.match(
+    markup,
+    /data-speaker="assistant"><span[^>]*>Luke<\/span><p[^>]*>After how many days\?<\/p>/u,
+  );
+  assert.match(markup, />Live</u);
+});
+
+test("the Transcript tab is the panel's third, beside the document", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+
+  act(() => tabNamed(page, "Transcript").click());
+  assert.equal(tabNamed(page, "Transcript").getAttribute("aria-selected"), "true");
+  assert.ok(page.querySelector('.side-panel .plan-transcript[aria-label="Transcript"]'));
+  assert.ok(documentShown(page));
 });
 
 test("the next launch opens the panel as this one left it, and a fixture run neither reads nor writes it", () => {

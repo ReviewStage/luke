@@ -36,12 +36,13 @@ A reviewer can hold the build to these as easily as to the layout:
 - No Approve button, no readiness meter, no progress or coverage score, no
   version history, no diff view, and no separate export or handoff screen.
 - The assumption list is read-only: plain text, with nothing to click.
-- No conversation transcript pane. Captions show what is being said now; the
-  document is the record.
-- The document is always the page. The whiteboard ("Whiteboard" below) and
-  the code Luke has on screen stand beside it in a side panel ("Side panel"
-  below) that the developer opens and closes; nothing opens it on its own,
-  and there are no second documents.
+- The document is the record. What was said on the plan's calls can be read
+  back in the side panel's Transcript tab, but nothing there is a second
+  document: it is never copied, edited, or handed to an agent.
+- The document is always the page. The whiteboard ("Whiteboard" below), the
+  code Luke has on screen, and the transcript stand beside it in a side panel
+  ("Side panel" below) that the developer opens and closes; nothing opens it
+  on its own, and there are no second documents.
 - No window of its own. Planning lives in Luke's one window (LUKE-347): there
   is no separate planning window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -192,8 +193,9 @@ The open plan's supporting views stand in a panel at the window's right,
 beside the document and its microphone row, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 
-- **Tabs.** `Board`, the plan's whiteboard, and `Code`, the code Luke has
-  on screen during a call. With none on screen, the Code tab says so quietly
+- **Tabs.** `Board`, the plan's whiteboard; `Code`, the code Luke has on
+  screen during a call; and `Transcript`, what was said on the plan's calls
+  ("Transcript" below). With none on screen, the Code tab says so quietly
   rather than going away.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it;
   choosing a tab, or Luke putting code up, never opens it. Its left edge
@@ -202,6 +204,35 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 - **Kept across launches.** Whether it is open, its tab, and its width are
   this Mac's preference, kept in the window's own storage rather than in
   anything main holds. A fixture run stages its own and keeps nothing.
+
+### Transcript
+
+The Transcript tab reads back what was said on the plan's calls with Luke,
+as a chat does: each call under its day and time, oldest first, and each turn
+under its speaker, `You` or `Luke` (`planning/plan-transcript.tsx`,
+`planning/transcript-model.ts`).
+
+- **The record.** The service keeps each call's words as timed fragments
+  (`voice_transcript_segments`) and answers them at
+  `GET /api/plans/{id}/transcript` (`hosted/transcript-store.ts`), grouped
+  into turns by the same ledger the captions use, so a call that ended reads
+  back in the lines its captions drew. The newest 4,000 fragments are read;
+  past that, the tab says earlier lines are not shown. The host reads it
+  with the plan's document, and again when a call about the plan ends, once
+  at the end and once more five seconds on, after the call's last words have
+  reached the record.
+- **The call standing now.** Its words are not on record yet, so the voice
+  window reports them as they are said (`VoiceView.callTranscript`),
+  whatever the captions preference, and the tab grows the call at the
+  bottom, marked `Live`. The two are told apart by the store's id for the
+  call's session, so a call is drawn from the record once the record holds
+  it and never twice; hanging up keeps the call's words drawn until then.
+- **Following.** The list keeps to its newest line while it is scrolled
+  there; scrolling up to read leaves it in place until the developer scrolls
+  back down.
+- **States.** Reading, a read that failed with `Try again`, and a plan with
+  nothing said yet: "Nothing said yet — start a call and the transcript
+  appears here."
 
 ### The notetaker
 
@@ -620,7 +651,9 @@ Two existing rules carry over unchanged:
   Plans tab is part of it: every word it draws is masked, as the rest of the
   panel's are, so what leaves the machine is the tab's layout and never the
   plan's words. It draws them with the panel's own text, fields, and
-  attributes, and no new way of drawing words.
+  attributes, and no new way of drawing words. The Transcript tab's root is
+  also left out of the recording (`ph-no-capture`), as a second line behind
+  the masking, since every word in it is the developer's or Luke's.
 - **Secrets.** No credential or account secret enters the document, a caption,
   a counted event, or a trace. The GitHub token lives in connection handling,
   and the model is told to keep secrets out of the plan.
@@ -679,7 +712,9 @@ changes when a check is run, not when one is planned.
   expanded on the Plans tab over a synthetic plan
   (`app-smoke-planning.png`, from `--profile planning --expanded`), on the
   plan's whiteboard (`app-smoke-planning-board.png`, from
-  `--profile planning-board --expanded`), and over
+  `--profile planning-board --expanded`), on its transcript mid-call
+  (`app-smoke-planning-transcript.png`, from
+  `--profile planning-transcript --expanded`), and over
   the synthetic plan list with none open (`app-smoke-expanded.png`, the
   window opening on Plans), but neither
   capture has been taken yet.

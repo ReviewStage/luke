@@ -1,5 +1,6 @@
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
+import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
 import type { PlansControl } from "../renderer/planning/use-plans-tab";
 import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../renderer/planning/use-side-panel";
 
@@ -30,6 +31,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     },
     board: undefined,
     code: undefined,
+    transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     onSelect: ignore,
     onChooseFolder: ignore,
     onRetryList: ignore,

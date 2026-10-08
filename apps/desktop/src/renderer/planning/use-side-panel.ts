@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState } from "react";
  * use-side-panel.ts -- the open plan's side panel: whether it is shown, which of its tabs, and how wide, kept across launches.
  *
  * The plan's document is always the page's main content; what supports it
- * (the whiteboard, the code Luke has on screen) stands in a panel at the
+ * (the whiteboard, the code Luke has on screen, what was said on the plan's
+ * calls) stands in a panel at the
  * window's right that the developer opens and closes, as every devtool
  * window's secondary sidebar does. Nothing opens it on its own. Not to be
  * confused with "the panel", which in this renderer is Luke's whole surface.
@@ -20,6 +21,7 @@ import { useCallback, useEffect, useState } from "react";
 export const SIDE_PANEL_TAB = {
   BOARD: "board",
   CODE: "code",
+  TRANSCRIPT: "transcript",
 } as const;
 
 export type SidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
@@ -28,6 +30,7 @@ export type SidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 export const SIDE_PANEL_TABS = [
   { tab: SIDE_PANEL_TAB.BOARD, label: "Board" },
   { tab: SIDE_PANEL_TAB.CODE, label: "Code" },
+  { tab: SIDE_PANEL_TAB.TRANSCRIPT, label: "Transcript" },
 ] as const satisfies readonly { tab: SidePanelTab; label: string }[];
 
 /** How wide the panel may be dragged, in CSS pixels, and where it starts. */

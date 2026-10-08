@@ -540,3 +540,124 @@
   font: inherit;
   white-space: pre;
 }
+
+/* The open plan's transcript: each call under its day and time, each turn
+   under its speaker, the developer's turns in a bubble as a chat draws them. */
+.plan-transcript {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.plan-transcript-state {
+  display: flex;
+  max-width: 280px;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: auto;
+  padding: 24px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.plan-transcript-state > p {
+  margin: 0;
+}
+
+.plan-transcript-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px 20px;
+}
+
+.plan-transcript-note {
+  margin: 12px 0 0;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.plan-transcript-calls,
+.plan-transcript-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plan-transcript-call-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 8px;
+  background: var(--desktop-well);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.plan-transcript-call-header::after {
+  height: 1px;
+  flex: 1;
+  background: var(--hairline);
+  content: "";
+}
+
+.plan-transcript-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--voice-developer);
+}
+
+.plan-transcript-live::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.plan-transcript-line {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 12px;
+}
+
+.plan-transcript-speaker {
+  color: var(--voice-luke);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.plan-transcript-text {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.plan-transcript-line[data-speaker="user"] {
+  align-items: flex-end;
+}
+
+.plan-transcript-line[data-speaker="user"] .plan-transcript-speaker {
+  color: var(--voice-developer);
+}
+
+.plan-transcript-line[data-speaker="user"] .plan-transcript-text {
+  max-width: 85%;
+  padding: 7px 11px;
+  border-radius: 12px;
+  background: var(--raised-strong);
+}

@@ -4,6 +4,8 @@ import { SidePanelIcon } from "@sidecar/panel";
 import { useRef } from "react";
 import { CodePane } from "../planning/code-pane";
 import { PlanBoard } from "../planning/plan-board";
+import { PlanTranscript } from "../planning/plan-transcript";
+import type { TranscriptRegion } from "../planning/transcript-model";
 import {
   SIDE_PANEL_SHORTCUT_LABEL,
   SIDE_PANEL_TAB,
@@ -101,17 +103,25 @@ function TabStrip({
   );
 }
 
+/** What was said on the open plan's calls, and the retry of a read that failed. */
+interface SidePanelTranscript {
+  region: TranscriptRegion;
+  onRetry: () => void;
+}
+
 /** What the chosen tab shows. */
 function TabContent({
   tab,
   planId,
   board,
   code,
+  transcript,
 }: {
   tab: SidePanelTab;
   planId: string;
   board: Board | undefined;
   code: PlanCode | undefined;
+  transcript: SidePanelTranscript;
 }): React.JSX.Element {
   switch (tab) {
     case SIDE_PANEL_TAB.BOARD:
@@ -122,6 +132,8 @@ function TabContent({
       ) : (
         <CodePane code={code} />
       );
+    case SIDE_PANEL_TAB.TRANSCRIPT:
+      return <PlanTranscript region={transcript.region} onRetry={transcript.onRetry} />;
   }
 }
 
@@ -155,11 +167,13 @@ export function SidePanel({
   planId,
   board,
   code,
+  transcript,
 }: {
   panel: SidePanelControl;
   planId: string;
   board: Board | undefined;
   code: PlanCode | undefined;
+  transcript: SidePanelTranscript;
 }): React.JSX.Element {
   const label = SIDE_PANEL_TABS.find((entry) => entry.tab === panel.tab)?.label;
   return (
@@ -167,7 +181,13 @@ export function SidePanel({
       <ResizeEdge width={panel.width} onResize={panel.onResize} />
       <TabStrip tab={panel.tab} onChoose={panel.onChoose} />
       <div className="side-panel-content" role="tabpanel" aria-label={label}>
-        <TabContent tab={panel.tab} planId={planId} board={board} code={code} />
+        <TabContent
+          tab={panel.tab}
+          planId={planId}
+          board={board}
+          code={code}
+          transcript={transcript}
+        />
       </div>
     </aside>
   );

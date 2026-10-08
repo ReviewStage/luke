@@ -15,11 +15,14 @@ coding agent sessions, and our service reads none either. No part of Luke's
 judgment runs on this Mac, so no transcript, working memory, or inbox of his
 is held here, in memory or on disk.
 
-**Your conversation with Luke.** Nothing on your Mac holds your conversation
-with Luke: no part of his judgment runs here, so no record of what you said,
-what he spoke, or what he did at your ask is kept on this
-machine, in memory or on disk, and the Mac app does not read that record
-back.
+**Your conversation with Luke.** No part of Luke's judgment runs on your
+Mac, so no record of what he did at your ask is kept on this machine, and
+nothing on it writes what you said or what he spoke to disk. The one read of
+those words back is a plan's Transcript tab: while the plan is open, Luke on
+your Mac reads what was said on the plan's calls from our service, the spoken
+words alone and never his judgment's record, and holds them in the window's
+memory to show them, beside the words of the call in progress; they go when
+you leave the plan or quit Luke.
 A voice session on this Mac is a call about one plan, and it opens with
 nothing of your coding agent sessions and no line of your conversation, from
 here or from our service; what Luke knows when he answers a spoken ask he
@@ -164,7 +167,7 @@ name and its document, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. A screenshot
 you attach to the feedback form is left out, since a picture of your screen
 could carry another app's words, and so are the feedback form's message
-field and a plan's whiteboard, as a second line. The whiteboard draws its
+field, a plan's whiteboard, and a plan's transcript, as a second line. The whiteboard draws its
 words as pixels, which the text masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. Luke does
 not report what you clicked.

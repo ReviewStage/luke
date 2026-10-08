@@ -160,6 +160,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             planId={plan.id}
             board={plans.board}
             code={plans.code}
+            transcript={plans.transcript}
           />
         ) : null}
       </div>

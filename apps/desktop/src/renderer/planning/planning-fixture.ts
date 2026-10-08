@@ -8,7 +8,8 @@ import {
   type PlanCode,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
-import { LIVE_STATUS } from "@sidecar/live";
+import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
+import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
 import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH, type SidePanelState } from "./use-side-panel";
@@ -226,6 +227,31 @@ const FIXTURE_CODE: PlanCode = {
   ],
 };
 
+const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
+
+/** What was said on the fixture plan's one earlier call, as the record answers it. */
+const FIXTURE_TRANSCRIPT: PlanTranscript = {
+  calls: [
+    {
+      id: "3c5e7a9b-1d2f-4a6c-8e0b-2d4f6a8c0e1a",
+      startedAt: Date.parse("2026-10-07T16:20:00Z"),
+      lines: [
+        { speaker: USER, text: "I want members to be able to invite a teammate by email." },
+        { speaker: ASSISTANT, text: "Who can invite today — only admins?" },
+        {
+          speaker: USER,
+          text: "Right, an admin creates the account by hand. Any member should be able to.",
+        },
+        {
+          speaker: ASSISTANT,
+          text: "Got it. I'll model an invite as a pending membership, so removing it works like removing a member.",
+        },
+      ],
+    },
+  ],
+  earlierOmitted: false,
+};
+
 /**
  * The open plan mid-call, the planning model running a folder command
  * while the notetaker writes, so the capture shows both of the status row's
@@ -236,6 +262,7 @@ const FIXTURE_OPEN_PLAN: PlanningView = {
   activePlanId: FIXTURE_PLAN.id,
   document: { status: PLANNING_READ.READY, plan: FIXTURE_PLAN },
   activity: { planner: { action: "grep -rn pending src/members" }, notes: true },
+  transcript: { status: PLANNING_READ.READY, transcript: FIXTURE_TRANSCRIPT },
   code: FIXTURE_CODE,
 };
 
@@ -289,12 +316,37 @@ const FIXTURE_CODE_PANEL: SidePanelState = {
   width: SIDE_PANEL_WIDTH.DEFAULT,
 };
 const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
+const FIXTURE_TRANSCRIPT_PANEL: SidePanelState = {
+  ...FIXTURE_CODE_PANEL,
+  tab: SIDE_PANEL_TAB.TRANSCRIPT,
+};
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
 
-/** The call a fixture run's status row reads: listening, about the fixture's open plan. */
-export const FIXTURE_PLANNING_CALL: Pick<VoiceView, "voiceStatus" | "callPlanId"> = {
+/**
+ * The call a fixture run's status row and transcript read: listening, about
+ * the fixture's open plan, with what was said on it so far.
+ */
+export const FIXTURE_PLANNING_CALL: Pick<
+  VoiceView,
+  "voiceStatus" | "callPlanId" | "callTranscript"
+> = {
   voiceStatus: LIVE_STATUS.LISTENING,
   callPlanId: FIXTURE_PLAN.id,
+  callTranscript: {
+    voiceSessionId: "6b8d0f2a-4c6e-4b8d-9f1a-3c5e7a9b1d2f",
+    lines: [
+      {
+        rowId: "fixture-1",
+        speaker: USER,
+        words: "Picking up where we left off: who can withdraw an invite?",
+      },
+      {
+        rowId: "fixture-2",
+        speaker: ASSISTANT,
+        words: "Either the member who sent it or any admin. I'm checking how removal works now.",
+      },
+    ],
+  },
 };
 
 /**
@@ -309,13 +361,15 @@ export function fixturePlanningView(run: {
   if (!run.fixtureMode) return undefined;
   if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_OPEN_PLAN;
   if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_OPEN_BOARD;
+  if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_OPEN_PLAN;
   return FIXTURE_PLAN_LIST;
 }
 
 /**
  * The side panel a fixture run opens its plan with: on the code Luke has on
  * screen under the planning profile, on the whiteboard under the
- * planning-board profile, and closed under any other. Nothing for a live
+ * planning-board profile, on the transcript under the planning-transcript
+ * profile, and closed under any other. Nothing for a live
  * run, which opens the panel as the developer last left it.
  */
 export function fixtureSidePanel(run: {
@@ -325,5 +379,6 @@ export function fixtureSidePanel(run: {
   if (!run.fixtureMode) return undefined;
   if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_CODE_PANEL;
   if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_BOARD_PANEL;
+  if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_TRANSCRIPT_PANEL;
   return FIXTURE_CLOSED_PANEL;
 }
