@@ -451,6 +451,9 @@ body,
   -webkit-app-region: no-drag;
 }
 
+/* Ghost, labelled or not: no fill until the pointer is on it, the way a
+   native window's toolbar draws its buttons, and the platform's focus ring
+   for the keyboard. */
 .toolbar-button {
   display: flex;
   align-items: center;
@@ -458,7 +461,7 @@ body,
   height: 30px;
   padding: 0 12px;
   border-radius: 8px;
-  background: var(--raised-strong);
+  background: none;
   font-size: 12.5px;
   font-weight: 600;
   transition: background-color var(--duration-hover) ease;
@@ -472,7 +475,6 @@ body,
   justify-content: center;
   width: 30px;
   padding: 0;
-  background: none;
   color: var(--text-secondary);
 }
 
