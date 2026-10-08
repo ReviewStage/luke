@@ -57,6 +57,14 @@ export function developerSeedItem(text: string): InitialItem {
   return seedItem(SEED_ROLE.DEVELOPER, text);
 }
 
+/** A line said on an earlier call, carried as the developer's or the voice's own words. */
+export function spokenSeedItem(
+  role: typeof SEED_ROLE.USER | typeof SEED_ROLE.ASSISTANT,
+  text: string,
+): InitialItem {
+  return seedItem(role, text);
+}
+
 /** The estimate the whole list is held under, counted over each message's text. */
 export function seedItemTokens(items: readonly InitialItem[]): number {
   return items.reduce((total, item) => total + startupTokens(item.content[0].text), 0);

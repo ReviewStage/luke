@@ -1,14 +1,16 @@
 import type { Plan } from "@sidecar/hosted/plan-wire";
-import { and, asc, eq, isNotNull, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { db } from "../db/query.js";
-import { voiceSessions } from "../db/voice-schema.js";
+import { voiceSessions, voiceTranscriptSegments } from "../db/voice-schema.js";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
+  VOICE_SEGMENT_ROLE,
   type VoiceCloseReason,
+  type VoiceSegmentRole,
 } from "../db/voice-vocabulary.js";
 import { readPlan } from "../hosted/plan-store.js";
 
@@ -36,7 +38,9 @@ import { readPlan } from "../hosted/plan-store.js";
  * account's before anything is spent, and that binding is what a
  * re-attach reads back: the attaching connection says nothing of a plan, so
  * a session cannot be moved onto another plan, or off its own, by what a
- * later connection sends.
+ * later connection sends. The same binding is what a new call about the
+ * plan reads its earlier calls back by, so a call picks up the conversation
+ * the last one left off.
  */
 /**
  * What every method answers: an effect over the ambient client, so the socket
@@ -71,6 +75,14 @@ interface VoiceSessionOwnership {
 /** A live session the account was shown to have opened: the plan its creation bound it to, where its row names one. */
 interface OwnedVoiceSession {
   readonly planId: string | undefined;
+}
+
+/** One stretch of words on an earlier call, by one speaker, in the order it was said. */
+export interface EarlierCallLine {
+  /** The store's id of the call the words were said on, so lines of two calls are never run together. */
+  readonly voiceSessionId: string;
+  readonly role: VoiceSegmentRole;
+  readonly text: string;
 }
 
 /** A usage snapshot, unconfirmed until the close. */
@@ -113,6 +125,12 @@ export interface VoiceSessionRecord {
   heldPlan(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<Plan | undefined>;
   /** The live session named, where the account created it, with the plan it was bound to: one lookup over the indexed pair. */
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<OwnedVoiceSession | undefined>;
+  /**
+   * What was said on the plan's calls so far, oldest first, adjacent words of
+   * one speaker on one call run together: the newest `EARLIER_CALL_SEGMENTS`
+   * segments, which is more than a session's startup history holds.
+   */
+  earlierCalls(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<EarlierCallLine[]>;
   noteUsage(input: VoiceSessionUsage): VoiceSessionRecordEffect<void>;
   close(input: VoiceSessionClose): VoiceSessionRecordEffect<void>;
   /** Stamps the open session detached now: its device's socket went without a hang-up. */
@@ -124,6 +142,14 @@ export interface VoiceSessionRecord {
   /** Closes an open session as a lost connection, its last unconfirmed snapshot standing: what the sweep writes when the session answered nothing. */
   closeLost(input: VoiceSessionNamed): VoiceSessionRecordEffect<void>;
 }
+
+/**
+ * How many of the newest segments a new call reads back. A segment is a
+ * transcript fragment, often a few words, so this is a bound on the read
+ * rather than on the history: the opener cuts what it keeps to the startup
+ * bound.
+ */
+const EARLIER_CALL_SEGMENTS = 2_000;
 
 const VoiceCloseReasonSchema = Schema.Literals(Object.values(VOICE_CLOSE_REASON));
 
@@ -171,6 +197,57 @@ const findOwnedSession = SqlSchema.findOneOption({
         ),
       ),
 });
+
+const EarlierCallsRequestSchema = Schema.Struct({
+  userId: Schema.String,
+  planId: Schema.String,
+  limit: Schema.Number,
+});
+
+const EarlierSegmentSchema = Schema.Struct({
+  voiceSessionId: Schema.String,
+  role: Schema.Literals(Object.values(VOICE_SEGMENT_ROLE)),
+  text: Schema.String,
+});
+
+/** The newest segments of the plan's calls, newest first: the call by its start, then the segment by its place. */
+const findEarlierSegments = SqlSchema.findAll({
+  Request: EarlierCallsRequestSchema,
+  Result: EarlierSegmentSchema,
+  execute: (request) =>
+    db
+      .select({
+        voiceSessionId: voiceTranscriptSegments.voiceSessionId,
+        role: voiceTranscriptSegments.role,
+        text: voiceTranscriptSegments.text,
+      })
+      .from(voiceTranscriptSegments)
+      .innerJoin(voiceSessions, eq(voiceSessions.id, voiceTranscriptSegments.voiceSessionId))
+      .where(
+        and(eq(voiceSessions.userId, request.userId), eq(voiceSessions.planId, request.planId)),
+      )
+      .orderBy(
+        desc(voiceSessions.startedAt),
+        desc(voiceSessions.id),
+        desc(voiceTranscriptSegments.seq),
+      )
+      .limit(request.limit),
+});
+
+/** Segments read newest first, as lines oldest first: one speaker's adjacent words on one call joined untrimmed, as a spoken row's are. */
+function earlierLines(newestFirst: readonly EarlierCallLine[]): EarlierCallLine[] {
+  const lines: EarlierCallLine[] = [];
+  for (const segment of [...newestFirst].reverse()) {
+    const last = lines.at(-1);
+    const continues =
+      last !== undefined &&
+      last.voiceSessionId === segment.voiceSessionId &&
+      last.role === segment.role;
+    if (continues) lines[lines.length - 1] = { ...last, text: last.text + segment.text };
+    else lines.push({ ...segment });
+  }
+  return lines;
+}
 
 const NoteUsageRequestSchema = Schema.Struct({
   liveSessionId: Schema.String,
@@ -286,6 +363,15 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           onNone: () => undefined,
           onSome: (row) => ({ planId: row.planId ?? undefined }),
         }),
+      ),
+    earlierCalls: (input) =>
+      Effect.map(
+        findEarlierSegments({
+          userId: input.userId,
+          planId: input.planId,
+          limit: EARLIER_CALL_SEGMENTS,
+        }),
+        earlierLines,
       ),
     noteUsage: (input) =>
       noteSessionUsage({

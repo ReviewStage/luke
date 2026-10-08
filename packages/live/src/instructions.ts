@@ -97,7 +97,9 @@ export function planningOpeningInstruction(): string {
     "If the plan above is new, greet the developer in a few words and ask what they have in mind,",
     "making it easy to answer with only a problem or a rough idea rather than a finished design.",
     "If it is under way, say in one sentence where it stands and ask the one question it most",
-    "needs answered next. Ask that question in this same turn: do not say you are looking anything",
+    "needs answered next. If earlier calls about it are shown above, pick up where the last one",
+    "left off instead: say in one sentence what you were discussing and ask the next question from there.",
+    "Ask that question in this same turn: do not say you are looking anything",
     "up, do not ask the developer to wait, and do not wait for the backend first. Then stop and",
     "listen. This shapes the opening alone: once it is said, carry on as your other instructions say.",
   ].join(" ");

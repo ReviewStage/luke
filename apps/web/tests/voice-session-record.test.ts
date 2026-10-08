@@ -5,8 +5,13 @@ import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
-import { voiceSessions } from "../server/db/voice-schema";
-import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
+import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
+import {
+  VOICE_CLOSE_REASON,
+  VOICE_DELEGATION_MODE,
+  VOICE_SEGMENT_ROLE,
+  type VoiceSegmentRole,
+} from "../server/db/voice-vocabulary";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
 import { voiceSessionRecord } from "../server/voice/session-record";
@@ -51,6 +56,31 @@ const readVoiceSession = (liveSessionId: string) =>
     db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)),
     (rows) => rows.map((row) => decodeVoiceSessionRow(row)),
   );
+
+/** A call registered about the plan, started at the instant given, with the segments said on it in order. */
+const callWith = (
+  input: { userId: string; planId: string; startedAt: number },
+  segments: ReadonlyArray<readonly [VoiceSegmentRole, string]>,
+) =>
+  Effect.gen(function* () {
+    const liveSessionId = `live_h_${randomUUID()}`;
+    const voiceSessionId = yield* record.register({
+      userId: input.userId,
+      sessionId: liveSessionId,
+      planId: input.planId,
+    });
+    assert.ok(voiceSessionId);
+    yield* db
+      .update(voiceSessions)
+      .set({ startedAt: new Date(input.startedAt) })
+      .where(eq(voiceSessions.id, voiceSessionId));
+    for (const [seq, [role, text]] of segments.entries()) {
+      yield* db
+        .insert(voiceTranscriptSegments)
+        .values({ voiceSessionId, seq, role, text, startMs: seq * 1000, endMs: seq * 1000 + 900 });
+    }
+    return voiceSessionId;
+  });
 
 it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it) => {
   it.effect(
@@ -123,6 +153,37 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
           planId: plan.id,
         });
         assert.equal(yield* record.heldPlan({ userId: owner, planId: plan.id }), undefined);
+      }),
+  );
+
+  it.effect(
+    "a plan's earlier calls read back oldest first, one speaker's adjacent words on one call run together, and never another plan's or another account's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const other = yield* openUser;
+        const planId = randomUUID();
+        const { USER, ASSISTANT } = VOICE_SEGMENT_ROLE;
+        // Registered newest first, so the order read back is the calls' and not the rows'.
+        const second = yield* callWith({ userId: owner, planId, startedAt: NOW - 60_000 }, [
+          [USER, "Seven days."],
+        ]);
+        const first = yield* callWith({ userId: owner, planId, startedAt: NOW - 3_600_000 }, [
+          [USER, "Invites "],
+          [USER, "should expire."],
+          [ASSISTANT, "After how many days?"],
+        ]);
+        yield* callWith({ userId: owner, planId: randomUUID(), startedAt: NOW }, [
+          [USER, "Another plan's words."],
+        ]);
+        yield* callWith({ userId: other, planId, startedAt: NOW }, [[USER, "Another account's."]]);
+
+        assert.deepEqual(yield* record.earlierCalls({ userId: owner, planId }), [
+          { voiceSessionId: first, role: USER, text: "Invites should expire." },
+          { voiceSessionId: first, role: ASSISTANT, text: "After how many days?" },
+          { voiceSessionId: second, role: USER, text: "Seven days." },
+        ]);
+        assert.deepEqual(yield* record.earlierCalls({ userId: owner, planId: randomUUID() }), []);
       }),
   );
 
