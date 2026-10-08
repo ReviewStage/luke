@@ -28,8 +28,7 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
     plans: plansControl(),
     sidebar,
     settings: settingsPanelProps(),
-    settingsSearchOpen: false,
-    onSettingsSearchToggle: ignore,
+    onSettingsSearchEngaged: ignore,
   });
 }
 

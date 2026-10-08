@@ -1,12 +1,5 @@
-import {
-  ChevronIcon,
-  CloseIcon,
-  DownloadIcon,
-  MegaphoneIcon,
-  PowerIcon,
-  SearchIcon,
-  UserIcon,
-} from "@sidecar/panel";
+import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import {
   APP_SETTING_SCHEMA,
   type SettingsRowsInput,
@@ -14,29 +7,24 @@ import {
   settingGuideEntries,
   settingIdVisible,
 } from "@sidecar/settings";
-import { Fragment, useRef } from "react";
+import { useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
-import {
-  SETTINGS_SUBVIEW_LIST,
-  SETTINGS_VIEW,
-  type SettingsSubview,
-  type SettingsView,
-} from "./settings-views";
+import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "./settings-views";
 
 /**
  * Searching the Settings tab.
  *
- * The pages hold more rows than anyone remembers the address of, so the tab
- * bar carries a magnifier that opens a search field pinned at the head of
- * whichever settings page is showing — the search reads across every page
- * wherever it is opened from. The corpus is everything the pages currently
- * offer: the stored
- * settings come from the same guide entries the voice conversation is handed
+ * The pages hold more rows than anyone remembers the address of, so the
+ * settings sidebar carries a search field above its list of pages, the way
+ * macOS System Settings and an editor's settings do: typing turns the list
+ * into the rows the query found, and clearing it turns the list back. The
+ * search reads across every page wherever it is made from. The corpus is
+ * everything the pages currently offer: the stored settings come from the same guide entries the voice conversation is handed
  * — one description of each setting, so the search and Luke's own account of
  * himself cannot drift apart — and each says for itself whether its row is
  * drawn, so nothing here restates a condition a page branches on. The rows
@@ -46,20 +34,16 @@ import {
  * page without its row is a promise the page cannot keep.
  *
  * Results read the way macOS System Settings reads them: grouped under the
- * page that holds them, the page's own row leading with its glyph, the rows
- * nested beneath it. Pressing the page opens it; pressing a row opens its
- * page and takes the view to the row itself, by the anchor the row wears.
+ * name of the page that holds them. Pressing one opens its page and takes
+ * the view to the row itself, by the anchor the row wears.
  * The search is read-only over names and descriptions the build already
  * fixed — a query narrows what is offered and never widens what can be done.
  */
 
-/** What the field is for, in the words the pages themselves use. */
-const SEARCH_PLACEHOLDER = "Search settings…";
-
 /**
- * How the search field is found from outside the component: the magnifier is
- * answered at the app level, where the page it may have to turn lives, and
- * the field it lands in is here.
+ * How the search field is found from outside the component: Command-F is
+ * answered at the app level, where the panel's keys are, and the field it
+ * lands in is here.
  */
 export const SETTINGS_SEARCH_INPUT_ID = "settings-search-input";
 
@@ -75,8 +59,6 @@ export interface SettingsSearchEntry {
   label: string;
   /** The page the row is drawn on, which is where the result leads. */
   page: SettingsView;
-  /** The small mark the row itself wears, for a result to wear too. */
-  icon?: React.ReactNode;
   /** Every line the query is read against: the label, and words about it. */
   haystack: readonly string[];
 }
@@ -90,13 +72,11 @@ export interface SettingsSearchEntry {
 export type SettingsSearchInput = SettingsRowsInput;
 
 /**
- * The page named the way a group's head says it. A head stands alone, so the
- * front page takes its name capitalized — though its rows are drawn
- * headless, at the top of the results, because a search made from the front
- * page needs no row saying where the front page is.
+ * The page named the way a group's head says it: the names the sidebar's own
+ * list of pages uses, so a result's group and the row it opens agree.
  */
 const RESULT_PAGE_WORD = {
-  [SETTINGS_VIEW.ROOT]: "Front page",
+  [SETTINGS_VIEW.ROOT]: "General",
   [SETTINGS_VIEW.VOICE]: "Voice",
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
@@ -119,21 +99,18 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       id: SETTINGS_SEARCH_ROW.UPDATES,
       label: "Updates",
       page: SETTINGS_VIEW.ROOT,
-      icon: <DownloadIcon />,
       haystack: ["Updates", "version release download check for updates"],
     },
     {
       id: SETTINGS_SEARCH_ROW.CHANGELOG,
       label: "Changelog",
       page: SETTINGS_VIEW.ROOT,
-      icon: <DownloadIcon />,
       haystack: ["Changelog", "release notes version history what's new what changed"],
     },
     {
       id: SETTINGS_SEARCH_ROW.FEEDBACK,
       label: "Feedback",
       page: SETTINGS_VIEW.ROOT,
-      icon: <MegaphoneIcon />,
       haystack: ["Feedback", "send feedback submit a prompt bug idea founders"],
     },
     input.accountDrawn
@@ -141,7 +118,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           id: SETTINGS_SEARCH_ROW.SIGN_OUT,
           label: "Sign out",
           page: SETTINGS_VIEW.ROOT,
-          icon: <UserIcon />,
           haystack: ["Sign out", "account sign out log out"],
         }
       : undefined,
@@ -150,7 +126,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           id: SETTINGS_SEARCH_ROW.DELETE_ACCOUNT,
           label: "Delete account",
           page: SETTINGS_VIEW.ROOT,
-          icon: <UserIcon />,
           haystack: ["Delete account", "account erase remove"],
         }
       : undefined,
@@ -158,7 +133,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       id: SETTINGS_SEARCH_ROW.QUIT,
       label: "Quit Luke",
       page: SETTINGS_VIEW.ROOT,
-      icon: <PowerIcon />,
       haystack: ["Quit Luke", "quit exit close the app"],
     },
     // The Voice page's permission row, drawn once there is a voice to reach.
@@ -239,14 +213,12 @@ export interface SettingsSearchOutcome {
   groups: readonly SettingsSearchGroup[];
   /** How many rows the query kept, across every group. */
   matched: number;
-  /** How many rows the query was read against: everything offered. */
-  searched: number;
 }
 
 /**
  * The query read over the corpus: every word must land somewhere in an
- * entry's haystack. A blank query is no search at all. The kept rows come back grouped by page, because that is
- * how the results are drawn.
+ * entry's haystack. A blank query is no search at all. The kept rows come
+ * back grouped by page, because that is how the results are drawn.
  */
 export function searchSettings(
   entries: readonly SettingsSearchEntry[],
@@ -259,21 +231,29 @@ export function searchSettings(
     const items = kept.filter((entry) => entry.page === page);
     return items.length > 0 ? [{ page, items }] : [];
   });
-  return { tokens, groups, matched: kept.length, searched: entries.length };
+  return { tokens, groups, matched: kept.length };
 }
 
 /** Whether the landing can hold the keyboard, or only be scrolled into view. */
 const FOCUSABLE = "button, select, input, textarea, [tabindex]";
 
 /**
+ * What a landed row wears for the stylesheet to ring it once, so the eye finds
+ * the row the view just moved to. The ring is a one-shot animation in
+ * `settings.css`; the attribute stays until the row is landed on again.
+ */
+const SETTINGS_SEARCH_LANDED_ATTRIBUTE = "data-search-landed";
+
+/**
  * Takes the view to the row a pressed result named, waiting out the page swap
  * the press asked for — the same frame-by-frame seek the session search field
  * needs, because the row is not drawn until React has answered. The row is
- * found by the anchor it wears, and is scrolled to the top of the view — the scroller's own scroll
- * padding keeps it clear of a pinned header — with a control also taking the
- * keyboard, without a second scroll of its own. It lands after the page's own
- * header focus on purpose: the result named a row, so the row is where the
- * view belongs. A row the page is not drawing is given up on quietly.
+ * found by the anchor it wears, and is scrolled to the top of the view — the
+ * scroller's own scroll padding keeps it clear of a pinned header — with a
+ * control also taking the keyboard, without a second scroll of its own, and
+ * the row ringed for a moment. It lands after the page's own header focus on
+ * purpose: the result named a row, so the row is where the view belongs. A
+ * row the page is not drawing is given up on quietly.
  */
 export function landOnSettingsRow(id: string): () => void {
   return focusSeek({
@@ -286,57 +266,59 @@ export function landOnSettingsRow(id: string): () => void {
       // keyboard; a row of several anchors the row and takes none, since
       // choosing among its buttons is not the landing's to do.
       if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
+      // Note that the attribute comes off and back on across a style flush,
+      // because an animation only restarts when its rule is matched afresh,
+      // and a row landed on twice should ring twice.
+      element.removeAttribute(SETTINGS_SEARCH_LANDED_ATTRIBUTE);
+      element.getBoundingClientRect();
+      element.setAttribute(SETTINGS_SEARCH_LANDED_ATTRIBUTE, "");
     },
   });
 }
 
 /**
- * The search field: a pill pinned at the head of whichever page it was
- * opened over, so a scrolled page keeps the field in hand. The count is the
- * pill's honesty about how far the query narrowed what the pages offer.
+ * The search field at the head of the settings sidebar: a magnifier, the
+ * field, and a clear button while a query stands. It stays drawn and keeps its
+ * height whatever is typed, so neither the list under it nor the page beside
+ * it moves as the query changes.
  *
  * Escape unwinds one layer at a time, the way it does everywhere else in the
- * panel: a held query is cleared first, and only an empty field closes the
- * search — both stopped here, so neither press falls through and closes the
- * panel behind the field.
+ * window: a held query is cleared first, and only an empty field lets go of
+ * the caret — both stopped here, so neither press falls through and turns the
+ * page or the tab behind the field. Return opens the first result, so a
+ * query someone is sure of needs no pointer.
  */
-export function SettingsSearch({
+export function SettingsSearchField({
   query,
-  search,
   onQueryChange,
-  onClose,
+  onSubmit,
   onEngagedChange,
 }: {
   query: string;
-  search?: SettingsSearchOutcome | undefined;
   onQueryChange: (query: string) => void;
-  /** The field's own way out — Escape on an empty query — which also clears. */
-  onClose: () => void;
+  /** Return pressed in the field: the first result is the answer. */
+  onSubmit: () => void;
   /**
-   * Reports someone being part-way through a search, which holds the panel
-   * open against the pointer wandering off — the same hold a half-typed ask
-   * has, for the same reason: the caret is the signal that hands are here.
+   * Reports the caret being in the field, which holds the panel open against
+   * the pointer wandering off — the same hold a half-typed ask has, for the
+   * same reason: the caret is the signal that hands are here.
    */
   onEngagedChange: (engaged: boolean) => void;
 }): React.JSX.Element {
   const { tell } = useAct();
   const field = useRef<HTMLInputElement | null>(null);
   return (
-    <div className="settings-search-stand">
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only by design — the keyboard already lands in the field by tabbing, and the click handler only places the caret. */}
-      <search
-        className="search-pill"
-        // The whole pill is the field: a press on its padding or its count is
-        // someone reaching for the caret, so the caret is what they get.
-        onClick={() => field.current?.focus()}
-      >
+    <search className="settings-search">
+      {/* The label is the whole well, so a press on the magnifier or the
+          padding lands the caret the way a press on the text would. */}
+      <label className="settings-search-well">
         <SearchIcon />
         <input
           ref={field}
           id={SETTINGS_SEARCH_INPUT_ID}
-          className="search-pill-input"
+          className="settings-search-input"
           aria-label="Search settings"
-          placeholder={SEARCH_PLACEHOLDER}
+          placeholder="Search"
           autoComplete="off"
           spellCheck={false}
           value={query}
@@ -346,31 +328,34 @@ export function SettingsSearch({
             // field that cannot be typed into is worse than no field.
             tell(ACT_KIND.WINDOW_FOCUS_PANEL);
             onEngagedChange(true);
+            window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
+              search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
+            });
           }}
           onBlur={() => onEngagedChange(false)}
           onKeyDown={(event) => {
+            // Note that an Escape is stopped even mid-composition, because the
+            // input method spends that press dismissing its candidates, and
+            // the window's own Escape would turn the page behind the field.
+            if (event.key === "Escape") event.stopPropagation();
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === "Enter") {
+              onSubmit();
+              return;
+            }
             if (event.key !== "Escape") return;
-            event.stopPropagation();
             if (query.length > 0) onQueryChange("");
-            else onClose();
+            else field.current?.blur();
           }}
         />
-        {search ? (
-          <span className="search-pill-count" aria-live="polite">
-            {search.matched === 0 ? "No matches" : `${search.matched} of ${search.searched}`}
-          </span>
-        ) : null}
-        {search ? (
+        {query.length > 0 ? (
           <button
             type="button"
-            className="search-pill-clear"
+            className="settings-search-clear"
             aria-label="Clear search"
             title="Clear search"
-            onClick={(event) => {
-              // The pill's own click would re-place the caret after this — let
-              // it: a cleared field with the caret in it is ready for the next
-              // question, which is what pressing clear asks for.
-              event.stopPropagation();
+            onClick={() => {
+              // A cleared field keeps the caret, ready for the next question.
               onQueryChange("");
               field.current?.focus();
             }}
@@ -378,84 +363,59 @@ export function SettingsSearch({
             <CloseIcon />
           </button>
         ) : null}
-      </search>
-    </div>
+      </label>
+    </search>
   );
 }
 
 /**
- * What a query left, read the way macOS System Settings reads it: each page
- * that holds a match leads its group — glyph, name, and the chevron that
- * promises a page — with the kept rows nested beneath it, each saying why it
- * matched. The front page's rows stand headless at the top, because the
- * front page is home rather than a destination worth naming. An emptied
- * search says so rather than going blank — there is no filter hiding matches
- * here, so there is nothing to offer but the words.
+ * What a query left, in the sidebar where the list of pages was: each page
+ * that holds a match names itself as a heading, the way the sidebar's other
+ * lists are headed, with the kept rows beneath it, each marking why it
+ * matched. The row last opened stays marked, the way a list marks the page
+ * it opened. An emptied search says so quietly rather than going blank.
  */
 export function SettingsSearchResults({
   search,
-  pageIcon,
-  onOpenPage,
+  opened,
   onOpen,
 }: {
   search: SettingsSearchOutcome;
-  /** The page's own glyph, from the same table the front page's rows draw. */
-  pageIcon: (page: SettingsSubview) => React.JSX.Element;
-  /** A pressed group head, which opens the page itself. */
-  onOpenPage: (page: SettingsSubview) => void;
-  /** A pressed row, which opens the page and lands on the row. */
+  /** The id of the result last pressed, absent until one is. */
+  opened?: string | undefined;
+  /** A pressed row, which opens its page and lands on the row. */
   onOpen: (entry: SettingsSearchEntry) => void;
 }): React.JSX.Element {
   if (search.matched === 0) {
     return (
-      <div className="empty-state">
-        <strong>No settings match</strong>
-      </div>
+      <p className="sidebar-note" role="status">
+        No results
+      </p>
     );
   }
   return (
-    <section className="settings-section settings-index">
-      {search.groups.map((group) => {
-        // The front page heads nothing; every other page is one a row opens.
-        const head = SETTINGS_SUBVIEW_LIST.find((candidate) => candidate === group.page);
-        return (
-          <Fragment key={group.page}>
-            {head ? (
-              <button type="button" className="settings-nav" onClick={() => onOpenPage(head)}>
-                <span className="settings-nav-mark" aria-hidden="true">
-                  {pageIcon(head)}
-                </span>
-                <span className="settings-copy">
-                  <strong>
-                    <Highlighted text={RESULT_PAGE_WORD[head]} tokens={search.tokens} />
-                  </strong>
-                </span>
-                <ChevronIcon />
-              </button>
-            ) : null}
+    <div className="settings-search-results">
+      {search.groups.map((group) => (
+        <section key={group.page} aria-label={RESULT_PAGE_WORD[group.page]}>
+          <h2 className="sidebar-heading">{RESULT_PAGE_WORD[group.page]}</h2>
+          <ul>
             {group.items.map((entry) => (
-              <button
-                type="button"
-                key={entry.id}
-                className="settings-nav settings-result"
-                data-nested={String(group.page !== SETTINGS_VIEW.ROOT)}
-                onClick={() => onOpen(entry)}
-              >
-                {entry.icon ? (
-                  <span className="settings-result-mark" aria-hidden="true">
-                    {entry.icon}
-                  </span>
-                ) : null}
-                <span className="settings-copy">
-                  <strong>
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  className="sidebar-item"
+                  aria-current={entry.id === opened ? "location" : undefined}
+                  onClick={() => onOpen(entry)}
+                >
+                  <span className="settings-search-result">
                     <Highlighted text={entry.label} tokens={search.tokens} />
-                  </strong>
-                </span>
-              </button>
+                  </span>
+                </button>
+              </li>
             ))}
-          </Fragment>
-        );
-      })}
-    </section>
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }

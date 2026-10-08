@@ -5,22 +5,13 @@ import type { SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { FeedbackEntryControl } from "../feedback-entry";
 import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import {
-  landOnSettingsRow,
-  SettingsSearch,
-  type SettingsSearchEntry,
-  SettingsSearchResults,
-  searchSettings,
-  settingsSearchEntries,
-} from "../settings-search";
-import {
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
-  type SettingsSubview,
   type SettingsView,
   settingsNavRowId,
 } from "../settings-views";
@@ -28,7 +19,7 @@ import { AccountSection } from "./account-section";
 import { AppearanceSection } from "./appearance-page";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./controls";
 import { FeedbackSection } from "./feedback-section";
-import { SETTINGS_PAGE, SettingsNavRow, SettingsPageHeader } from "./pages";
+import { SettingsNavRow, SettingsPageHeader } from "./pages";
 import { pageResetControl } from "./reset";
 import { ShortcutSection } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
@@ -68,21 +59,32 @@ export interface SettingsPanelProps {
   panelOpen: boolean;
   onQuit: () => void;
   shortcuts: ShortcutControl;
-  /**
-   * Whether the search field stands at the head of the settings surface,
-   * above whichever page is showing. Held by the app rather than here because
-   * the magnifier that answers for it lives beside the tab bar, above this
-   * panel.
-   */
-  searchOpen: boolean;
-  /** The field's own way out — Escape on an empty query — which also clears. */
-  onSearchClose: () => void;
-  /**
-   * Reports someone being part-way through a settings search, which holds the
-   * panel open against the pointer wandering off: the caret is the signal that
-   * hands are here.
-   */
-  onSearchEngaged: (engaged: boolean) => void;
+}
+
+/**
+ * What the pages currently offer, read afresh each render: every row's own
+ * condition is judged from this one record, by the rows the pages draw and by
+ * the search corpus alike, so a result never leads to a page without its row.
+ * Absent until the settings have arrived.
+ */
+export function settingsRowsInput({
+  settings,
+  microphone,
+  account,
+}: {
+  settings?: AppSettingsView | undefined;
+  microphone: MicrophoneControl;
+  account: AccountSnapshot;
+}): SettingsRowsInput | undefined {
+  if (!settings) return undefined;
+  return {
+    settings,
+    voiceControlsDrawn: microphoneAccessRow({
+      voiceAvailable: microphone.voiceAvailable,
+      status: microphone.status,
+    }).ready,
+    accountDrawn: account.status === ACCOUNT_STATUS.SIGNED_IN,
+  };
 }
 
 export function SettingsPanel({
@@ -98,9 +100,6 @@ export function SettingsPanel({
   panelOpen,
   onQuit,
   shortcuts,
-  searchOpen,
-  onSearchClose,
-  onSearchEngaged,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
   // Why the front page's Voice row wears its mark, or nothing while voice is
@@ -112,48 +111,7 @@ export function SettingsPanel({
   const voiceNote = microphone.voiceAvailable
     ? voiceAttentionNote({ voiceAvailable: true, status: microphone.status })
     : undefined;
-  // The query someone typed into the search field. Held here rather than
-  // above because nothing else answers to it — and corrected during the
-  // render that discovers the field closed or the panel gone, the way the
-  // removal confirm is, because a query belongs to the field it was typed in.
-  const [searchQuery, setSearchQuery] = useState("");
-  if (searchQuery !== "" && (!panelOpen || !searchOpen)) setSearchQuery("");
-  // What the pages currently offer, read afresh each render: every row's own
-  // condition is judged from this one record, by the rows the pages draw and
-  // by the search corpus alike, so a result never leads to a page without
-  // its row.
-  const panelView: SettingsRowsInput | undefined = settings
-    ? {
-        settings,
-        voiceControlsDrawn: microphoneAccessRow({
-          voiceAvailable: microphone.voiceAvailable,
-          status: microphone.status,
-        }).ready,
-        accountDrawn: account.status === ACCOUNT_STATUS.SIGNED_IN,
-      }
-    : undefined;
-  // Built only while a query stands: an empty field searches nothing.
-  const search =
-    panelView && searchOpen && searchQuery !== ""
-      ? searchSettings(settingsSearchEntries(panelView), searchQuery)
-      : undefined;
-  // A pressed result is the search answered: the field closes, the page the
-  // result named opens, and the view follows to the row itself — its control
-  // focused where it has one, the row scrolled into view where it does not.
-  // Fire-and-forget like the session search's summons — the seek gives
-  // itself up after its own frame limit.
-  const openSearchResult = (entry: SettingsSearchEntry) => {
-    onSearchClose();
-    onViewChange(entry.page);
-    landOnSettingsRow(entry.id);
-  };
-  // A pressed group head is the same answer one level up: the page itself.
-  // A front-page row pressed under an open, empty field is the same press —
-  // the field was reached for and not used, and the page is the answer.
-  const openPage = (page: SettingsSubview) => {
-    onSearchClose();
-    onViewChange(page);
-  };
+  const panelView = settingsRowsInput({ settings, microphone, account });
   // Moving between pages moves the keyboard with it: into a page, onto its
   // back button; back out, onto the row that opened the page just left. Keyed
   // to the page, because the control being reached for only exists once the
@@ -178,20 +136,6 @@ export function SettingsPanel({
   const pageReset = pageResetControl(view, settings, writes);
   return (
     <div className="settings">
-      {/* The search stands first, above a page's own head: it reads across
-          every page, so it is the surface's field rather than the page's,
-          the way a desktop settings window keeps its search above whichever
-          pane is showing. */}
-      {settings && searchOpen ? (
-        <SettingsSearch
-          query={searchQuery}
-          search={search}
-          onQueryChange={setSearchQuery}
-          onClose={onSearchClose}
-          onEngagedChange={onSearchEngaged}
-        />
-      ) : null}
-
       {view !== SETTINGS_VIEW.ROOT ? (
         <SettingsPageHeader
           view={view}
@@ -201,16 +145,7 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {search ? (
-        <SettingsSearchResults
-          search={search}
-          pageIcon={(page) => SETTINGS_PAGE[page].icon}
-          onOpenPage={openPage}
-          onOpen={openSearchResult}
-        />
-      ) : null}
-
-      {view === SETTINGS_VIEW.ROOT && !search ? (
+      {view === SETTINGS_VIEW.ROOT ? (
         /* A newer release waiting is marked on the tab rather than given a
            section of its own here: a section that changed places as its own
            check found news would rearrange the page under the hand that
@@ -223,7 +158,7 @@ export function SettingsPanel({
             <SettingsNavRow
               key={subview}
               view={subview}
-              onOpen={openPage}
+              onOpen={onViewChange}
               {...(subview === SETTINGS_VIEW.VOICE && voiceNote
                 ? { attention: voiceNote }
                 : undefined)}
@@ -232,15 +167,15 @@ export function SettingsPanel({
         </section>
       ) : null}
 
-      {view === SETTINGS_VIEW.VOICE && panelView && !search ? (
+      {view === SETTINGS_VIEW.VOICE && panelView ? (
         <VoiceSection view={panelView} writes={writes} microphone={microphone} />
       ) : null}
 
-      {view === SETTINGS_VIEW.APPEARANCE && panelView && !search ? (
+      {view === SETTINGS_VIEW.APPEARANCE && panelView ? (
         <AppearanceSection view={panelView} writes={writes} />
       ) : null}
 
-      {view === SETTINGS_VIEW.SHORTCUTS && !search ? (
+      {view === SETTINGS_VIEW.SHORTCUTS ? (
         <ShortcutSection
           shortcuts={shortcuts}
           writes={writes}
@@ -249,7 +184,7 @@ export function SettingsPanel({
         />
       ) : null}
 
-      {view !== SETTINGS_VIEW.ROOT || search ? null : (
+      {view !== SETTINGS_VIEW.ROOT ? null : (
         <>
           <UpdatesSection control={updates} rowIndex={2} />
 

@@ -82,8 +82,7 @@ export function DesktopShell({
   plans,
   sidebar,
   settings,
-  settingsSearchOpen,
-  onSettingsSearchToggle,
+  onSettingsSearchEngaged,
 }: {
   gates: DesktopGates;
   identity: LukeIdentityProps;
@@ -92,8 +91,8 @@ export function DesktopShell({
   plans: PlansControl;
   sidebar: SidebarCollapse;
   settings: SettingsPanelProps;
-  settingsSearchOpen: boolean;
-  onSettingsSearchToggle: () => void;
+  /** The caret entering or leaving the settings search, which holds the panel open. */
+  onSettingsSearchEngaged: (engaged: boolean) => void;
 }): React.JSX.Element {
   const { account } = settings;
   if (gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN) {
@@ -119,8 +118,7 @@ export function DesktopShell({
       <div className="desktop-shell">
         <DesktopSettings
           settings={settings}
-          searchOpen={settingsSearchOpen}
-          onSearchToggle={onSettingsSearchToggle}
+          onSearchEngaged={onSettingsSearchEngaged}
           onBack={() => onTabChange(PANEL_TAB.PLANS)}
         />
       </div>

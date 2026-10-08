@@ -210,8 +210,7 @@ body,
 .sidebar-new-plan svg,
 .sidebar-item svg,
 .toolbar-button svg,
-.primary-button svg,
-.settings-pages-search svg {
+.primary-button svg {
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
@@ -319,7 +318,8 @@ body,
   color: var(--text-primary);
 }
 
-.sidebar-item[aria-current="page"] {
+.sidebar-item[aria-current="page"],
+.sidebar-item[aria-current="location"] {
   background: var(--raised-strong);
   color: var(--text-primary);
 }
@@ -801,24 +801,92 @@ body,
   letter-spacing: -0.015em;
 }
 
-.settings-pages-search {
+/* The search field: a well the height of a sidebar row, holding the
+   magnifier, the field, and a clear button while a query stands. Every part
+   has a fixed size, so typing, clearing, and focusing never move the list
+   beneath it. */
+.settings-search {
+  flex: 0 0 auto;
+  margin-bottom: 14px;
+}
+
+.settings-search-well {
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 32px;
-  margin-bottom: 12px;
-  padding: 0 10px;
+  gap: 7px;
+  height: 30px;
+  padding: 0 6px 0 9px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
   background: var(--raised);
   color: var(--text-tertiary);
-  font-size: 12.5px;
-  text-align: left;
+  cursor: text;
+  transition: border-color var(--duration-hover) ease;
 }
 
-.settings-pages-search[aria-pressed="true"] {
+.settings-search-well:focus-within {
   border-color: var(--selected-edge);
+}
+
+.settings-search-well .search-glyph {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.settings-search-input {
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.settings-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.settings-search-clear {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  place-items: center;
+  transition: color var(--duration-hover) ease;
+}
+
+.settings-search-clear:hover {
+  color: var(--text-primary);
+}
+
+.settings-search-clear .icon-button-glyph {
+  width: 9px;
+  height: 9px;
+}
+
+/* What a query found, in the list's place: each page's heading, then its
+   rows. A row's label ellipsizes rather than wrapping, so a long setting name
+   keeps the row the height of every other. */
+.settings-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-search-result {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-pages ul {
@@ -842,6 +910,9 @@ body,
   flex: 1;
   overflow-y: auto;
   padding: 28px 40px 60px;
+  /* A landed search result scrolls to the top of this column, clear of the
+     page's pinned reset line and with the column's own top margin above it. */
+  scroll-padding-top: 56px;
 }
 
 /* The page scrolls with the column rather than inside a scroller of its own. */

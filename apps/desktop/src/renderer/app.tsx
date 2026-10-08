@@ -1,4 +1,4 @@
-import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
+import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
@@ -74,10 +74,6 @@ export function App(): React.JSX.Element {
   // Whether the Plans tab is on its new-plan form; an open plan is the host's
   // and outlasts the tab, but a half-filled form is this panel's alone.
   const [plansComposing, setPlansComposing] = useState(false);
-  // The settings search's field: the magnifier in the settings header answers
-  // for it, and its query lives with the field in the settings panel —
-  // closing here is what lets that query go.
-  const [settingsSearchOpen, setSettingsSearchOpen] = useState(false);
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -158,9 +154,6 @@ export function App(): React.JSX.Element {
     expand,
   } = usePanelPresentation({
     planningHeld: () => planningHeld.current,
-    // The settings search closes with the shape it was opened on, taking its
-    // query with it: no search survives the panel closing.
-    onNotPanel: () => setSettingsSearchOpen(false),
   });
 
   /**
@@ -230,28 +223,6 @@ export function App(): React.JSX.Element {
     // is not this one, so the recording is reported there to be honored.
     window.sidecar.setShortcutCapturing(capturing);
   }, []);
-
-  /**
-   * The settings search summons, from its magnifier in the settings header.
-   * The field opens at the head of whichever settings page is showing — the
-   * search reads across every page wherever it is opened from, so there is
-   * no reason to take anyone away from the page they were on — and the caret
-   * follows a frame-by-frame seek, since the field mounts on the same press.
-   */
-  const openSettingsSearch = useCallback(() => {
-    setSettingsSearchOpen(true);
-    focusSearchField(SETTINGS_SEARCH_INPUT_ID);
-    window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
-      search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
-    });
-  }, []);
-
-  /**
-   * Closing the settings search lets go of its query: the query lives with
-   * the field in the settings panel, which clears it the render it finds the
-   * field closed.
-   */
-  const closeSettingsSearch = useCallback(() => setSettingsSearchOpen(false), []);
 
   // A capture run stages its conversation from the launch profile, since no
   // voice window stands in one: who is heard, and for the muted run the hint
@@ -421,12 +392,14 @@ export function App(): React.JSX.Element {
       // as Command-comma: only while the panel has the keyboard. The lowercase
       // key is deliberate — with Shift held this is some other app's chord.
       // Only Settings has a search, so the chord answers there alone rather
-      // than turning the tab under the press.
+      // than turning the tab under the press. The field stands in the
+      // settings sidebar for as long as Settings does, so the chord only
+      // puts the caret in it.
       if (event.key === "f" && (event.metaKey || event.ctrlKey)) {
         if (presentation !== PANEL_PRESENTATION.PANEL) return;
         if (tab !== PANEL_TAB.SETTINGS) return;
         event.preventDefault();
-        openSettingsSearch();
+        focusSearchField(SETTINGS_SEARCH_INPUT_ID);
         return;
       }
       // The side panel's chord, claimed on the same terms, and only where
@@ -469,16 +442,12 @@ export function App(): React.JSX.Element {
       }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: the search field, then a settings page back to the front page,
-      // then the settings tab back to Plans, then an open plan back to the
-      // list, then the panel itself.
-      // The search field answers its own Escapes while the caret is in it —
-      // clearing before closing — so the press that lands here is one made
-      // from elsewhere in the panel, and it closes the field outright. It
-      // stands on whichever page it was opened over, so it is the nearer
-      // layer than the page itself.
-      if (tab === PANEL_TAB.SETTINGS && settingsSearchOpen) closeSettingsSearch();
-      else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
+      // time: a settings page back to the front page, then the settings tab
+      // back to Plans, then an open plan back to the list, then the panel
+      // itself. The settings search answers its own Escapes while the caret
+      // is in it — clearing, then letting go of the caret — so it is no
+      // layer here.
+      if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.PLANS);
       // An open plan unwinds to the list, which leaves it and ends its call,
@@ -491,11 +460,8 @@ export function App(): React.JSX.Element {
   }, [
     changeMode,
     changeTab,
-    closeSettingsSearch,
     feedback.control.dismiss,
-    openSettingsSearch,
     presentation,
-    settingsSearchOpen,
     setSettingsView,
     settingsView,
     signIn.cancelSignIn,
@@ -598,10 +564,8 @@ export function App(): React.JSX.Element {
           onTabChange={changeTab}
           plans={plans}
           sidebar={sidebar}
-          settingsSearchOpen={settingsSearchOpen}
-          onSettingsSearchToggle={() =>
-            settingsSearchOpen ? closeSettingsSearch() : openSettingsSearch()
-          }
+          // One caret anywhere in the panel is hands being here.
+          onSettingsSearchEngaged={changeAskEngagement}
           settings={{
             account: state.account,
             onSignOut: async () => {
@@ -630,10 +594,6 @@ export function App(): React.JSX.Element {
             panelOpen,
             onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
             shortcuts,
-            searchOpen: settingsSearchOpen,
-            onSearchClose: closeSettingsSearch,
-            // One caret anywhere in the panel is hands being here.
-            onSearchEngaged: changeAskEngagement,
           }}
         />
       </div>
