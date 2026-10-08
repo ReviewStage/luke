@@ -279,6 +279,7 @@ export function fakeSessionRecord(): FakeSessionRecord {
         const owner = owners.get(input.sessionId);
         return owner?.userId === input.userId ? { planId: owner.planId } : undefined;
       }),
+    earlierCalls: () => Effect.succeed([]),
     noteUsage: (input) =>
       Effect.sync(() => {
         fake.usage.push(input);

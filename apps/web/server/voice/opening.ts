@@ -15,6 +15,7 @@ import {
   sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
+import { VOICE_SEGMENT_ROLE } from "../db/voice-vocabulary.js";
 import {
   decodeLivePayload,
   developerSeedItem,
@@ -24,14 +25,17 @@ import {
   liveSessionConfig,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
+  SEED_ROLE,
   seedItemTokens,
+  spokenSeedItem,
   startupPrefix,
+  startupTokens,
   withinStartupBound,
 } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { LOG_EVENT } from "./log.js";
 import type { LiveUpstream } from "./openai.js";
-import type { VoiceSessionRecord } from "./session-record.js";
+import type { EarlierCallLine, VoiceSessionRecord } from "./session-record.js";
 import { frameText, type VoiceSocket } from "./socket.js";
 
 /**
@@ -140,20 +144,32 @@ function planUntouched(plan: Plan): boolean {
   );
 }
 
+/** What the history of earlier calls opens with, read the same way as the plan seed. */
+const EARLIER_CALLS_MARKER = "[earlier calls]";
+
+/**
+ * The tokens the plan seed keeps however much was said on earlier calls, so
+ * a long conversation never crowds the document out; the plan takes more
+ * wherever the history leaves room.
+ */
+const PLAN_SEED_FLOOR_TOKENS = 5_000;
+
 /**
  * The plan a planning call is about, as one developer message: its name and
- * the saved document as the developer sees it. Note that a call is seeded with the plan and nothing else, because the voice otherwise
- * opens knowing no plan at all and reads its role as a new task; what was
- * said on an earlier call is the planning model's, which the voice asks.
- * The first line says whether the plan has just been started or is under
- * way, because a voice told every plan continues one opened a brand-new
- * plan by looking for the progress it was told stood.
+ * the saved document as the developer sees it. Note that the voice otherwise
+ * opens knowing no plan at all and reads its role as a new task. The first
+ * line says whether the plan has just been started, is under way, or is
+ * under way with earlier calls about it, because a voice told every plan
+ * continues one opened a brand-new plan by looking for the progress it was
+ * told stood.
  */
-function planSeedText(plan: Plan): string {
+function planSeedText(plan: Plan, talkedAbout: boolean): string {
   const assumptions = plan.document.assumptions.map((assumption) => `- ${assumption.text}`);
-  const standing = planUntouched(plan)
-    ? "This call starts the new plan below. Nothing in it is answered yet."
-    : "This call continues the saved plan below. It is not a new plan.";
+  const standing = talkedAbout
+    ? "This call continues the saved plan below and the conversation about it after it. It is not a new plan."
+    : planUntouched(plan)
+      ? "This call starts the new plan below. Nothing in it is answered yet."
+      : "This call continues the saved plan below. It is not a new plan.";
   return [
     `${PLAN_SEED_MARKER} ${standing}`,
     `Name: ${plan.name}`,
@@ -163,17 +179,75 @@ function planSeedText(plan: Plan): string {
   ].join("\n");
 }
 
+const EARLIER_CALLS_NOTE = `${EARLIER_CALLS_MARKER} What was said on earlier calls about this plan, oldest first. This call picks up where the last one left off.`;
+
+/** An earlier call's line as the history a session is created with: the developer's words as the user's, Luke's as the assistant's. */
+function earlierItem(line: EarlierCallLine): InitialItem {
+  return spokenSeedItem(
+    line.role === VOICE_SEGMENT_ROLE.USER ? SEED_ROLE.USER : SEED_ROLE.ASSISTANT,
+    line.text,
+  );
+}
+
 /**
- * The device's own input with the plan's seed ahead of it, the seed cut from
- * its end to what the API's token bound leaves beside the device's items, so
- * the name and the top of the document are what a long plan keeps. Nothing is
- * added where there is no room.
+ * The newest of the earlier lines that fit within the tokens and messages
+ * given, oldest first. The GPT Live guide's way to continue a conversation
+ * in a new session is the saved text history at startup, and the end of it
+ * is what the next words follow from, so the oldest lines are the ones left out.
  */
-function withPlanSeed(input: readonly InitialItem[], plan: Plan): readonly InitialItem[] {
+function newestWithin(
+  lines: readonly EarlierCallLine[],
+  tokens: number,
+  messages: number,
+): InitialItem[] {
+  const kept: InitialItem[] = [];
+  let spent = 0;
+  for (const line of [...lines].reverse()) {
+    if (kept.length >= messages) break;
+    if (line.text.trim().length === 0) continue;
+    const item = earlierItem(line);
+    const cost = seedItemTokens([item]);
+    if (spent + cost > tokens) {
+      // Note that a newest line too long for the room is cut rather than
+      // dropped, because one long stretch of talk would otherwise leave the
+      // call with no history at all.
+      const cut = kept.length === 0 ? startupPrefix(line.text, tokens) : "";
+      if (cut.trim().length > 0) kept.push(earlierItem({ ...line, text: cut }));
+      break;
+    }
+    kept.push(item);
+    spent += cost;
+  }
+  return kept.reverse();
+}
+
+/**
+ * The input a call is created with, under the API's bounds: the plan's seed
+ * first, then what was said on its earlier calls, then the device's own
+ * input. The device's input is kept whole, and the plan takes what is left
+ * beside it down to `PLAN_SEED_FLOOR_TOKENS` when the history wants the
+ * room, cut from its end so the name and the top of the document are what a
+ * long plan keeps. The history takes the rest, newest lines first. Nothing
+ * is added where there is no room.
+ */
+function startupInput(
+  input: readonly InitialItem[],
+  plan: Plan,
+  earlier: readonly EarlierCallLine[],
+): readonly InitialItem[] {
   if (input.length >= LIVE_INPUT_BOUNDS.MESSAGES) return input;
-  const seed = startupPrefix(planSeedText(plan), LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input));
-  if (seed.length <= PLAN_SEED_MARKER.length) return input;
-  return [developerSeedItem(seed), ...input];
+  const room = LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input);
+  const note = developerSeedItem(EARLIER_CALLS_NOTE);
+  const planFloor = Math.min(room, PLAN_SEED_FLOOR_TOKENS, startupTokens(planSeedText(plan, true)));
+  const said = newestWithin(
+    earlier,
+    room - planFloor - seedItemTokens([note]),
+    LIVE_INPUT_BOUNDS.MESSAGES - input.length - 2,
+  );
+  const history = said.length === 0 ? [] : [note, ...said];
+  const seed = startupPrefix(planSeedText(plan, said.length > 0), room - seedItemTokens(history));
+  const planItems = seed.length <= PLAN_SEED_MARKER.length ? [] : [developerSeedItem(seed)];
+  return [...planItems, ...history, ...input];
 }
 
 /**
@@ -280,10 +354,14 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       if (input === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const account = yield* admitAccount(admission, frame.planId);
       if ("refusal" in account) return account;
+      const earlier = yield* record.earlierCalls({
+        userId: account.accountId,
+        planId: frame.planId,
+      });
       const config = liveSessionConfig({
         model: options.model,
         voice: frame.voice,
-        input: withPlanSeed(input, account.plan),
+        input: startupInput(input, account.plan, earlier),
         clientEvents: RENDERER_CLIENT_EVENTS,
         serverEvents: RENDERER_SERVER_EVENTS,
       });

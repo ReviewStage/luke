@@ -380,7 +380,8 @@ class ServiceLiveSessionSource {
         type: VOICE_SERVICE_FRAME.SESSION_CREATE,
         sdp: input.sdpOffer,
         voice: this.#voice,
-        // A planning call is seeded with nothing: what it knows is the plan's.
+        // A planning call is seeded with nothing from here: the service seeds
+        // it with the plan and what was said on the plan's earlier calls.
         input: [],
         planId: input.planId,
       };

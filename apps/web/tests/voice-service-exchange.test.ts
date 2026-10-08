@@ -10,6 +10,7 @@ import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../server/core";
+import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
@@ -62,6 +63,7 @@ import {
   thinkingAppended,
 } from "./support/live-events";
 import {
+  insertVoiceTranscriptSegment,
   readMessagesByConversationTyped,
   readVoiceSessionsByUserTyped,
 } from "./support/store-rows";
@@ -1288,6 +1290,136 @@ it.effect(
 
       const firstLine = (seed: { text: unknown } | undefined) => String(seed?.text).split("\n")[0];
       assert.notEqual(firstLine(freshSeed), firstLine(savedSeed));
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+        () => `both calls to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a call picks up the plan's earlier calls: it opens on the plan, then what was said on them oldest first, and a call about another plan opens on none of it",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const first = await openSession(context, plan.id);
+      await sendText(first.attach.socket, JSON.stringify(heard("Invites ", 1000, 1400)));
+      await sendText(first.attach.socket, JSON.stringify(heard("should expire.", 1400, 2000)));
+      await sendText(first.attach.socket, JSON.stringify(said("After how many days?", 2200, 3000)));
+      await hangUpConnection(first.desktop, first.attach, first.upstream);
+      // The call is reported ended only once every record write it started has landed.
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the first call to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+
+      const second = await openSession(context, plan.id);
+      const [seed, note, ...history] = seededTexts(context, 1);
+      assert.equal(seed?.role, SEED_ROLE.DEVELOPER);
+      assert.ok(String(seed?.text).includes(PLAN.name));
+      assert.equal(note?.role, SEED_ROLE.DEVELOPER);
+      assert.deepEqual(history, [
+        { role: SEED_ROLE.USER, text: "Invites should expire." },
+        { role: SEED_ROLE.ASSISTANT, text: "After how many days?" },
+      ]);
+      // A plan with earlier calls is told so, not as the new plan its untouched document reads as.
+      const firstLine = (item: { text: unknown } | undefined) => String(item?.text).split("\n")[0];
+      assert.notEqual(firstLine(seed), firstLine(seededTexts(context, 0)[0]));
+      await hangUpConnection(second.desktop, second.attach, second.upstream);
+
+      const other = await database.run(
+        createPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
+      );
+      const otherCall = await openSession(context, other.id);
+      assert.deepEqual(seededTexts(context, 2).slice(1), []);
+      await hangUpConnection(otherCall.desktop, otherCall.attach, otherCall.upstream);
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 3,
+        () => `all three calls to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "earlier calls past the startup bound keep their newest lines and the plan's seed, and the whole stays under the bound",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      await database.run(
+        savePlanDocument(context.target.userId, plan.id, {
+          body: `# Teammate invitations\n\n${"Owners invite teammates by email. ".repeat(2_000)}\n`,
+          assumptions: [],
+        }),
+      );
+      const first = await openSession(context, plan.id);
+      const voiceSessionId = String(first.created.voiceSessionId);
+      await hangUpConnection(first.desktop, first.attach, first.upstream);
+      const roles = [VOICE_SEGMENT_ROLE.USER, VOICE_SEGMENT_ROLE.ASSISTANT] as const;
+      for (let seq = 0; seq < 300; seq += 1) {
+        await insertVoiceTranscriptSegment(database.run, {
+          voiceSessionId,
+          seq,
+          role: roles[seq % 2] ?? VOICE_SEGMENT_ROLE.USER,
+          text: `Line ${seq}. ${"We talked about invitations at length. ".repeat(4)}`,
+          startMs: seq * 1000,
+          endMs: seq * 1000 + 900,
+        });
+      }
+
+      const second = await openSession(context, plan.id);
+      const seeded = seededTexts(context, 1);
+      const [seed, , ...history] = seeded;
+      assert.ok(String(seed?.text).includes(PLAN.name));
+      assert.ok(String(history.at(-1)?.text).startsWith("Line 299."));
+      assert.ok(!history.some((item) => String(item.text).startsWith("Line 0.")));
+      assert.ok(seeded.length <= LIVE_INPUT_BOUNDS.MESSAGES);
+      const tokens = seeded.reduce((total, item) => total + startupTokens(String(item.text)), 0);
+      assert.ok(
+        tokens <= LIVE_INPUT_BOUNDS.TOKENS,
+        `the seed to hold the bound; it took ${tokens}`,
+      );
+      await hangUpConnection(second.desktop, second.attach, second.upstream);
+      await until(
+        () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
+        () => `both calls to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a newest line on an earlier call too long for the startup bound is cut to fit rather than leaving the call no history",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const first = await openSession(context, plan.id);
+      const voiceSessionId = String(first.created.voiceSessionId);
+      await hangUpConnection(first.desktop, first.attach, first.upstream);
+      await insertVoiceTranscriptSegment(database.run, {
+        voiceSessionId,
+        seq: 0,
+        role: VOICE_SEGMENT_ROLE.USER,
+        text: `The long stretch begins. ${"Invitations go out by email. ".repeat(2_000)}`,
+        startMs: 0,
+        endMs: 900,
+      });
+
+      const second = await openSession(context, plan.id);
+      const seeded = seededTexts(context, 1);
+      const [, , ...history] = seeded;
+      assert.equal(history.length, 1);
+      assert.ok(String(history[0]?.text).startsWith("The long stretch begins."));
+      const tokens = seeded.reduce((total, item) => total + startupTokens(String(item.text)), 0);
+      assert.ok(
+        tokens <= LIVE_INPUT_BOUNDS.TOKENS,
+        `the seed to hold the bound; it took ${tokens}`,
+      );
+      await hangUpConnection(second.desktop, second.attach, second.upstream);
       await until(
         () => context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_ENDED).length === 2,
         () => `both calls to be reported ended; log ${JSON.stringify(context.log)}`,
