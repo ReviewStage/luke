@@ -107,6 +107,17 @@ the same way the conversation described below is. A save
 replaces the document and no earlier version is kept; deleting a plan removes
 it at once, and deleting your account removes every plan.
 
+**A plan's whiteboard.** Each plan has a whiteboard that Luke's planning model
+and you can both draw on. Our service stores it with the plan, under your
+account: every shape, arrow, line, freehand stroke, and piece of text on it,
+with where each stands, and the planning model's latest drawing. It is stored
+as drawn and readable by our own operators, like the plan's document. Luke on
+your Mac sends our service the whole board each time it changes. The planning
+model reads the board as text at the start of each of its turns. Each drawing
+call it makes, with what it drew, is stored in the plan's planning
+conversation, under the terms described for that conversation. The board can
+hold no image or file. Deleting the plan deletes its whiteboard.
+
 **How the planning model reads your folder.** While a plan is open in Luke
 on your Mac, Luke's planning model, which runs on our service, can ask your
 Mac to run a shell command (such as `ls`, `grep`, or `cat`) in the plan's

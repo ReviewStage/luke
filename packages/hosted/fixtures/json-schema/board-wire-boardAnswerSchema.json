@@ -1,0 +1,318 @@
+{
+  "type": "object",
+  "properties": {
+    "board": {
+      "type": "object",
+      "properties": {
+        "elements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "rectangle",
+                  "ellipse",
+                  "diamond",
+                  "text",
+                  "arrow",
+                  "line",
+                  "freedraw",
+                  "frame"
+                ]
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "containerId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "startBinding": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "elementId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    },
+                    "required": [
+                      "elementId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "endBinding": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "elementId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    },
+                    "required": [
+                      "elementId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 2,
+                  "maxItems": 2
+                }
+              }
+            },
+            "required": [
+              "id",
+              "type",
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 2000
+        },
+        "appliedDrawing": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "drawing": {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "elements": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "rectangle",
+                          "ellipse",
+                          "diamond"
+                        ]
+                      },
+                      "id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows name to connect it."
+                      },
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "description": "Left edge, in pixels."
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "description": "Top edge, in pixels."
+                      },
+                      "width": {
+                        "type": "number",
+                        "minimum": 10,
+                        "maximum": 4000,
+                        "description": "Width in pixels; 200 when left out."
+                      },
+                      "height": {
+                        "type": "number",
+                        "minimum": 10,
+                        "maximum": 4000,
+                        "description": "Height in pixels; 80 when left out."
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "description": "Words drawn inside it."
+                      },
+                      "strokeColor": {
+                        "type": "string",
+                        "description": "A hex color such as \"#1971c2\", or \"transparent\"."
+                      },
+                      "backgroundColor": {
+                        "type": "string",
+                        "description": "A hex color such as \"#1971c2\", or \"transparent\"."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id",
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "text"
+                        ]
+                      },
+                      "id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows name to connect it."
+                      },
+                      "x": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "description": "Left edge, in pixels."
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -100000,
+                        "maximum": 100000,
+                        "description": "Top edge, in pixels."
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 2000
+                      },
+                      "fontSize": {
+                        "type": "number",
+                        "minimum": 8,
+                        "maximum": 96,
+                        "description": "Font size in pixels; 20 when left out."
+                      },
+                      "strokeColor": {
+                        "type": "string",
+                        "description": "A hex color such as \"#1971c2\", or \"transparent\"."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id",
+                      "x",
+                      "y",
+                      "text"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "arrow"
+                        ]
+                      },
+                      "id": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows name to connect it."
+                      },
+                      "from": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "description": "The id of the shape the arrow starts at."
+                      },
+                      "to": {
+                        "type": "string",
+                        "maxLength": 64,
+                        "description": "The id of the shape the arrow points to."
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500,
+                        "description": "Words drawn inside it."
+                      },
+                      "strokeColor": {
+                        "type": "string",
+                        "description": "A hex color such as \"#1971c2\", or \"transparent\"."
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "id",
+                      "from",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "number",
+            "elements"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "elements",
+        "appliedDrawing"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "board"
+  ],
+  "additionalProperties": false
+}

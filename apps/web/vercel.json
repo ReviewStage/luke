@@ -37,6 +37,10 @@
           "dest": "/api/default.js?route=plans/commands/command&id=$1&command=$2"
         },
         {
+          "src": "/api/plans/([^/]+)/board",
+          "dest": "/api/default.js?route=plans/board&id=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)",
           "dest": "/api/default.js?route=plans/plan&id=$1"
         },

@@ -5,6 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./board-text": "./src/board-text.js",
+    "./board-vocabulary": "./src/board-vocabulary.js",
+    "./board-wire": "./src/board-wire.js",
     "./connect-github-page": "./src/connect-github-page.js",
     "./github-wire": "./src/github-wire.js",
     "./plan-template": "./src/plan-template.js",
