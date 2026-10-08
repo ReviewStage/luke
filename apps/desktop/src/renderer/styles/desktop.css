@@ -226,8 +226,7 @@ body,
 
 .sidebar-plan-name,
 .sidebar-plan-repository,
-.sidebar-account-name,
-.sidebar-account-email {
+.sidebar-account-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -247,8 +246,7 @@ body,
 .sidebar-foot {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid var(--hairline);
 }
 
@@ -281,45 +279,64 @@ body,
   color: var(--text-primary);
 }
 
-.sidebar-item .tab-note {
-  position: static;
-  margin-left: auto;
-}
-
+/* The account row: photo, name, and the gear Settings opens from, one press
+   target the height of a plan row so the avatar has room to read as a face. */
 .sidebar-account {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px 2px;
+  height: 42px;
+  padding: 0 8px;
+  color: var(--text-primary);
 }
 
 .sidebar-avatar {
   display: grid;
   flex: 0 0 auto;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: linear-gradient(135deg, #3a3f55, #262833);
   font-size: 12px;
   font-weight: 700;
+  object-fit: cover;
 }
 
-.sidebar-account-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
+.sidebar-avatar-neutral {
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.sidebar-avatar-neutral svg {
+  width: 14px;
+  height: 14px;
 }
 
 .sidebar-account-name {
-  font-size: 12.5px;
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
   font-weight: 600;
 }
 
-.sidebar-account-email {
+/* The gear holds the update dot at its corner, where a badge sits on an icon. */
+.sidebar-account-settings {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  transition: color var(--duration-hover) ease;
+}
+
+.sidebar-account:hover .sidebar-account-settings,
+.sidebar-account[aria-current="page"] .sidebar-account-settings {
+  color: var(--text-primary);
+}
+
+.sidebar-account-settings .tab-note {
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  margin: 0;
 }
 
 /* Work column ------------------------------------------------------------- */

@@ -1,13 +1,91 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { OptionsIcon, PlusIcon } from "@sidecar/panel";
+import { OptionsIcon, PlusIcon, UserIcon } from "@sidecar/panel";
+import { useState } from "react";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { folderLine, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 
 /**
+ * The account's face: the provider's photo when one travelled and loads,
+ * otherwise the first letter of who it is, otherwise a person glyph while no
+ * one is signed in. A photo that fails is remembered by its address, so a new
+ * address gets its own chance and the broken one never flashes back.
+ */
+function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
+  const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
+  if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
+    return (
+      <span className="sidebar-avatar sidebar-avatar-neutral" aria-hidden="true">
+        <UserIcon />
+      </span>
+    );
+  }
+  const { pictureUrl } = account;
+  if (pictureUrl !== undefined && pictureUrl !== failedUrl) {
+    return (
+      <img
+        className="sidebar-avatar"
+        src={pictureUrl}
+        alt=""
+        referrerPolicy="no-referrer"
+        draggable={false}
+        onError={() => setFailedUrl(pictureUrl)}
+      />
+    );
+  }
+  return (
+    <span className="sidebar-avatar" aria-hidden="true">
+      {(account.name ?? account.email).slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
+/**
+ * The foot of the column: one row that is who is signed in and the way to
+ * Settings at once, the way every desktop devtool keeps it. Signed out it
+ * names where it leads instead. The update dot rides on the gear, since
+ * Settings is where the waiting release is installed.
+ */
+function AccountButton({
+  account,
+  current,
+  settingsNote,
+  onPress,
+}: {
+  account: AccountSnapshot;
+  current: boolean;
+  settingsNote: string | undefined;
+  onPress: () => void;
+}): React.JSX.Element {
+  const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
+  return (
+    <button
+      type="button"
+      className="sidebar-item sidebar-account"
+      aria-current={current ? "page" : undefined}
+      title="Settings"
+      onClick={onPress}
+    >
+      <AccountAvatar account={account} />
+      <span className="sidebar-account-name">
+        {signedIn ? (account.name ?? account.email) : "Settings"}
+      </span>
+      <span className="sidebar-account-settings">
+        <OptionsIcon />
+        {settingsNote ? (
+          <span className="tab-note" title={settingsNote}>
+            <span className="visually-hidden">({settingsNote})</span>
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+/**
  * The window's left column: Luke, the way to a new plan, every plan the
- * account owns, and Settings with the account under it. It is where the
+ * account owns, and the account's row that leads to Settings. It is where the
  * developer moves between things; what they work on is the column beside it.
  * The strip above Luke is the window's drag handle and the traffic lights'
  * room.
@@ -97,31 +175,12 @@ export function DesktopSidebar({
       </nav>
 
       <div className="sidebar-foot">
-        <button
-          type="button"
-          className="sidebar-item"
-          aria-current={tab === PANEL_TAB.SETTINGS ? "page" : undefined}
-          onClick={() => onTabChange(PANEL_TAB.SETTINGS)}
-        >
-          <OptionsIcon />
-          Settings
-          {settingsNote ? (
-            <span className="tab-note" title={settingsNote}>
-              <span className="visually-hidden">({settingsNote})</span>
-            </span>
-          ) : null}
-        </button>
-        {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
-          <div className="sidebar-account">
-            <span className="sidebar-avatar" aria-hidden="true">
-              {(account.name ?? account.email).slice(0, 1).toUpperCase()}
-            </span>
-            <span className="sidebar-account-copy">
-              <span className="sidebar-account-name">{account.name ?? account.email}</span>
-              {account.name ? <span className="sidebar-account-email">{account.email}</span> : null}
-            </span>
-          </div>
-        ) : null}
+        <AccountButton
+          account={account}
+          current={tab === PANEL_TAB.SETTINGS}
+          settingsNote={settingsNote}
+          onPress={() => onTabChange(PANEL_TAB.SETTINGS)}
+        />
       </div>
     </aside>
   );
