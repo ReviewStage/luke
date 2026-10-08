@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { OptionsIcon, PlusIcon, UserIcon } from "@sidecar/panel";
+import { GearIcon, PlusIcon, UserIcon } from "@sidecar/panel";
 import { useState } from "react";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { folderLine, PLANS_PAGE } from "../planning/planning-model";
@@ -75,7 +75,7 @@ function AccountButton({
         {signedIn ? (account.name ?? account.email) : "Settings"}
       </span>
       <span className="sidebar-account-settings">
-        <OptionsIcon />
+        <GearIcon />
         {settingsNote ? (
           <span className="tab-note" title={settingsNote}>
             <span className="visually-hidden">({settingsNote})</span>
