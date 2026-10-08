@@ -171,9 +171,15 @@ function ActionMenu({
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     // The menu is the nearest open layer, so Escape closes it alone and
     // leaves the plan behind it open.
-    if (event.key === "Escape" || event.key === "Tab") {
+    if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
+      onClose(true);
+      return;
+    }
+    // Note that Tab hands focus back before the browser moves it, because
+    // the browser's own move then goes on from the opener to its neighbour.
+    if (event.key === "Tab") {
       onClose(true);
       return;
     }
@@ -224,12 +230,18 @@ function ActionMenu({
   );
 }
 
-/** One plan's menu and its delete question, held for whichever door offers them. */
+/**
+ * One plan's menu and its delete question, held for whichever door offers
+ * them. Neither outlives the tab going off screen: the question is withdrawn
+ * and the menu closed in the render that finds it gone, so neither is left
+ * standing over another surface or waiting for the next time the panel opens.
+ */
 function usePlanMenu(plans: PlansControl, planId: string) {
-  const deletion = useConfirm({ subject: true, surfaceOpen: true }, () =>
+  const deletion = useConfirm({ subject: true, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
   const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
+  if (open !== undefined && !plans.shown) setOpen(undefined);
   const opener = useRef<HTMLElement | null>(null);
   const close = useCallback((returnFocus: boolean) => {
     setOpen(undefined);
@@ -240,7 +252,7 @@ function usePlanMenu(plans: PlansControl, planId: string) {
     setOpen({ placement, opener: element });
   };
   const menu =
-    open === undefined ? null : (
+    open === undefined || !plans.shown ? null : (
       <ActionMenu
         menu={open}
         groups={planActionGroups(plans, planId, deletion.ask)}

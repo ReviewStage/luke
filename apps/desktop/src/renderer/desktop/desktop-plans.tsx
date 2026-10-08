@@ -110,6 +110,13 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
               Try again
             </button>
           ) : null}
+          {/* A plan that cannot be drawn offers no menu, so its way back to
+              the list is said here. */}
+          {region.kind === DOCUMENT_REGION.FAILED || region.kind === DOCUMENT_REGION.MISSING ? (
+            <button type="button" className="toolbar-button" onClick={plans.onLeavePlan}>
+              Close plan
+            </button>
+          ) : null}
         </section>
       </>
     );

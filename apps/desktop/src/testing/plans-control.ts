@@ -5,10 +5,11 @@ import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../renderer/planning/use-side-
 
 const ignore = () => undefined;
 
-/** A signed-in Plans tab on its list page with no plans, every press ignored. */
+/** A signed-in Plans tab on screen on its list page with no plans, every press ignored. */
 export function plansControl(overrides: Partial<PlansControl> = {}): PlansControl {
   return {
     page: PLANS_PAGE.LIST,
+    shown: true,
     signedIn: true,
     plans: [],
     folders: {},

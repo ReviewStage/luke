@@ -41,6 +41,8 @@ import { type SidePanelControl, useSidePanel } from "./use-side-panel";
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface PlansControl {
   page: PlansPage;
+  /** Whether the tab is on screen: the panel open, on this tab. */
+  shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
   plans: PlanningView["plans"];
@@ -202,6 +204,7 @@ export function usePlansTab(input: {
 
   return {
     page,
+    shown,
     signedIn,
     plans: planning.plans,
     folders: planning.folders,

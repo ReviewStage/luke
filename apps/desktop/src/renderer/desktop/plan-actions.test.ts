@@ -86,19 +86,21 @@ function mountToolbar(plans: PlansControl): HTMLButtonElement {
   return more;
 }
 
-function mountSidebarPlan(plans: PlansControl, plan: PlanSummary, asked: Asked): HTMLButtonElement {
-  const container = mount(
-    createElement(
-      "ul",
-      null,
-      createElement(SidebarPlan, {
-        plans,
-        plan,
-        current: false,
-        onOpen: () => asked.opened.push(plan.id),
-      }),
-    ),
+function sidebarPlan(plans: PlansControl, plan: PlanSummary, asked: Asked): ReactElement {
+  return createElement(
+    "ul",
+    null,
+    createElement(SidebarPlan, {
+      plans,
+      plan,
+      current: false,
+      onOpen: () => asked.opened.push(plan.id),
+    }),
   );
+}
+
+function mountSidebarPlan(plans: PlansControl, plan: PlanSummary, asked: Asked): HTMLButtonElement {
+  const container = mount(sidebarPlan(plans, plan, asked));
   const row = container.querySelector(".sidebar-plan");
   assert.ok(row instanceof HTMLButtonElement);
   return row;
@@ -255,4 +257,63 @@ test("a press outside the menu closes it, and a second press on the ⋯ closes w
   act(() => more.click());
   act(() => more.click());
   assert.deepEqual(menuItems(), []);
+});
+
+test("the tab going off screen closes an open menu and withdraws a Delete question, which the next opening does not bring back", () => {
+  const { plans, asked } = openTab();
+  const row = mountSidebarPlan(plans, OTHER, asked);
+  const root = roots.at(-1);
+  assert.ok(root);
+  const restand = (shown: boolean) => {
+    act(() => root.render(sidebarPlan({ ...plans, shown }, OTHER, asked)));
+  };
+
+  rightClick(row, 40, 60);
+  restand(false);
+  assert.deepEqual(menuItems(), []);
+  restand(true);
+  assert.deepEqual(menuItems(), []);
+
+  rightClick(row, 40, 60);
+  choose("Delete plan…");
+  assert.equal(document.querySelector(DELETE_QUESTION)?.getAttribute("data-drawn"), "true");
+  restand(false);
+  restand(true);
+  assert.equal(document.querySelector(DELETE_QUESTION)?.getAttribute("data-drawn"), "false");
+  assert.deepEqual(asked.deleted, []);
+});
+
+test("Tab closes the menu and leaves the browser's own move to go on from what opened it", () => {
+  const { plans } = openTab();
+  const more = mountToolbar(plans);
+  openMenu(more);
+  const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+
+  act(() => {
+    document.activeElement?.dispatchEvent(tab);
+  });
+
+  assert.deepEqual(menuItems(), []);
+  assert.equal(document.activeElement, more);
+  assert.equal(tab.defaultPrevented, false);
+});
+
+test("a plan that cannot be drawn offers its way back to the list", () => {
+  for (const kind of [DOCUMENT_REGION.FAILED, DOCUMENT_REGION.MISSING] as const) {
+    const left: string[] = [];
+    const plans = plansControl({
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN.id,
+      region: { kind },
+      onLeavePlan: () => left.push(kind),
+    });
+    const container = mount(createElement(DesktopPlans, { plans }));
+    const close = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Close plan",
+    );
+    assert.ok(close, `a ${kind} plan offers Close plan`);
+    act(() => close.click());
+    assert.deepEqual(left, [kind]);
+    unmountAll();
+  }
 });
