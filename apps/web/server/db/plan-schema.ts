@@ -48,12 +48,15 @@ export const plan = pgTable(
     createdAt: instant("created_at").notNull().defaultNow(),
     /** The last save of the document; the start, before any. */
     updatedAt: instant("updated_at").notNull().defaultNow(),
-    /** The last time the window opened the plan, which orders the plan list. */
+    /**
+     * Written and read by nothing: the plan list once ordered by the last
+     * open. It stands only until no deployment still selects it, then goes.
+     */
     openedAt: instant("opened_at").notNull().defaultNow(),
   },
   (table) => [
-    // The plan list reads one account's plans, most recently opened first.
-    index("plan_user_opened").on(table.userId, table.openedAt),
+    // The plan list reads one account's plans, newest started first.
+    index("plan_user_created").on(table.userId, table.createdAt),
   ],
 );
 

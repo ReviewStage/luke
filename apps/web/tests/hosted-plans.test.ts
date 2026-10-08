@@ -28,7 +28,6 @@ import {
   deletePlan,
   listPlans,
   type NewPlan,
-  openPlan,
   readPlan,
 } from "../server/hosted/plan-store";
 import { noDatabase } from "./support/no-database";
@@ -51,8 +50,8 @@ import { testSqlClient } from "./support/sql-client";
  * functions and `saveNotes`, the plan's one write, against a real dialect.
  * Every plan is the fixed template: a new plan shows every section
  * unanswered, each note lands where it names and nowhere else, and what is
- * saved is the canonical Markdown the window (`openPlan`) and the planning
- * model (`readPlan`) both read. Nothing but the binding the service built
+ * saved is the canonical Markdown the window and the planning model both
+ * read (`readPlan`). Nothing but the binding the service built
  * names the account and the plan, so no note can move a save onto another
  * account's plan, bring a deleted plan back, or leave an oversized document
  * saved.
@@ -108,21 +107,12 @@ function savedDocument(result: PlanSaveResult): PlanDocument {
   return result.document;
 }
 
-/** The document the model resumes from, failing the test where the plan does not read. */
+/** The document the window opens and the model resumes from, failing the test where the plan does not read. */
 const resumedDocument = (userId: string, planId: string) =>
   Effect.map(readPlan(userId, planId), (stored) =>
     Option.match(stored, {
       onNone: () => assert.fail("the plan did not read"),
       onSome: (found) => found.plan.document,
-    }),
-  );
-
-/** The document the window opens, failing the test where the plan does not open. */
-const openedDocument = (userId: string, planId: string) =>
-  Effect.map(openPlan(userId, planId), (opened) =>
-    Option.match(opened, {
-      onNone: () => assert.fail("the plan did not open"),
-      onSome: (found) => found.document,
     }),
   );
 
@@ -168,8 +158,8 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       yield* saveNotes(bound(userId, relay.id), notesFor(INVITATIONS_DRAFT));
       yield* saveNotes(bound(userId, ledger.id, LEDGER_PLAN), notesFor(SMALL_FEATURE));
 
-      const relayBody = (yield* openedDocument(userId, relay.id)).body;
-      const ledgerBody = (yield* openedDocument(userId, ledger.id)).body;
+      const relayBody = (yield* resumedDocument(userId, relay.id)).body;
+      const ledgerBody = (yield* resumedDocument(userId, ledger.id)).body;
       const relayProblem = INVITATIONS_DRAFT.fields.goal.problem ?? "?";
       assert.ok(relayBody.startsWith("# Teammate invitations\n"));
       assert.ok(relayBody.includes(relayProblem));
@@ -190,7 +180,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
           yield* saveNotes(bound(userId, planId), notesFor(INVITATIONS_DRAFT)),
         );
 
-        assert.deepEqual(yield* openedDocument(userId, planId), saved);
+        assert.deepEqual(yield* resumedDocument(userId, planId), saved);
         assert.deepEqual(yield* resumedDocument(userId, planId), saved);
         assert.deepEqual(saved.assumptions, INVITATIONS_DRAFT.assumptions);
         const { body } = saved;
@@ -372,7 +362,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
           added(PLAN_FIELD.CONTRACTS, noContract),
           added(PLAN_FIELD.ASSUMPTIONS, noContract),
         ]);
-        const settled = yield* openedDocument(userId, planId);
+        const settled = yield* resumedDocument(userId, planId);
 
         assert.deepEqual(proposed.assumptions, [{ text: everyMember }]);
         assert.ok(proposed.body.includes(`\n### Rule 1: ${everyMember}\n`));
@@ -497,50 +487,30 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
     }),
   );
 
-  it.effect("the list holds only the account's plans, the most recently opened first", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const other = yield* openUser;
-      const relay = yield* createPlan(userId, RELAY_PLAN);
-      yield* TestClock.adjust("1 minute");
-      const ledger = yield* createPlan(userId, LEDGER_PLAN);
-      yield* createPlan(other, RELAY_PLAN);
+  it.effect(
+    "the list holds only the account's plans, newest started first, and reading or saving one moves none",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const other = yield* openUser;
+        const relay = yield* createPlan(userId, RELAY_PLAN);
+        yield* TestClock.adjust("1 minute");
+        const ledger = yield* createPlan(userId, LEDGER_PLAN);
+        yield* createPlan(other, RELAY_PLAN);
+        yield* TestClock.adjust("1 minute");
 
-      const beforeOpening = yield* listPlans(userId);
-      yield* TestClock.adjust("1 minute");
-      yield* openPlan(userId, relay.id);
-      const afterOpening = yield* listPlans(userId);
+        yield* readPlan(userId, relay.id);
+        yield* saveNotes(bound(userId, relay.id), notesFor(INVITATIONS_DRAFT));
 
-      assert.deepEqual(
-        beforeOpening.map((summary) => summary.id),
-        [ledger.id, relay.id],
-      );
-      assert.deepEqual(
-        afterOpening.map((summary) => summary.id),
-        [relay.id, ledger.id],
-      );
-    }),
+        const listed = yield* listPlans(userId);
+        assert.deepEqual(
+          listed.map((summary) => summary.id),
+          [ledger.id, relay.id],
+        );
+      }),
   );
 
-  it.effect("the model's read does not reorder the window's list", () =>
-    Effect.gen(function* () {
-      const userId = yield* openUser;
-      const relay = yield* createPlan(userId, RELAY_PLAN);
-      yield* TestClock.adjust("1 minute");
-      const ledger = yield* createPlan(userId, LEDGER_PLAN);
-      yield* TestClock.adjust("1 minute");
-
-      yield* readPlan(userId, relay.id);
-
-      const listed = yield* listPlans(userId);
-      assert.deepEqual(
-        listed.map((summary) => summary.id),
-        [ledger.id, relay.id],
-      );
-    }),
-  );
-
-  it.effect("a second account cannot read, open, write, or delete another's plan", () =>
+  it.effect("a second account cannot read, write, or delete another's plan", () =>
     Effect.gen(function* () {
       const owner = yield* openUser;
       const intruder = yield* openUser;
@@ -555,7 +525,6 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         reason: PLAN_SAVE_REFUSAL.NO_PLAN,
       });
       assert.equal(Option.isNone(yield* readPlan(intruder, planId)), true);
-      assert.equal(Option.isNone(yield* openPlan(intruder, planId)), true);
       assert.equal(yield* deletePlan(intruder, planId), false);
       assert.deepEqual(yield* listPlans(intruder), []);
       assert.deepEqual(yield* resumedDocument(owner, planId), saved);

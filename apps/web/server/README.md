@@ -264,7 +264,7 @@ const findPlans = SqlSchema.findAll({
       .select(PLAN_COLUMNS)
       .from(plan)
       .where(eq(plan.userId, userId))
-      .orderBy(desc(plan.openedAt), desc(plan.createdAt), desc(plan.id)),
+      .orderBy(desc(plan.createdAt), desc(plan.id)),
 });
 ```
 

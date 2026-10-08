@@ -24,7 +24,7 @@ import { InstantColumnSchema } from "./store/database.js";
  * plan-store.ts -- the named plans an account owns, and the one document each holds.
  *
  * Every statement here names the account it runs for beside the plan, so a
- * plan id another account owns reads, saves, opens, and deletes exactly as an
+ * plan id another account owns reads, saves, and deletes exactly as an
  * id that names nothing: as no plan. A save is one `update` over the row that
  * stands and never an insert, so a plan deleted before a save lands stays
  * deleted, and a save that fails leaves the document as it was. A plan's
@@ -61,7 +61,6 @@ const PLAN_COLUMNS = {
   conversationId: plan.conversationId,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
-  openedAt: plan.openedAt,
 };
 
 const PlanRowSchema = Schema.Struct({
@@ -73,7 +72,6 @@ const PlanRowSchema = Schema.Struct({
   conversationId: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
-  openedAt: InstantColumnSchema,
 });
 
 type PlanRow = typeof PlanRowSchema.Type;
@@ -101,13 +99,18 @@ function storedPlanOf(row: PlanRow): StoredPlan {
   };
 }
 
+/**
+ * The row as one line of the list. Note that `openedAt` is still answered,
+ * as the start, because a desktop through v0.7.1 refuses a summary without it.
+ */
 function summaryOf(row: PlanRow): PlanSummary {
+  const createdAt = row.createdAt.getTime();
   return {
     id: row.id,
     name: row.name,
-    createdAt: row.createdAt.getTime(),
+    createdAt,
     updatedAt: row.updatedAt.getTime(),
-    openedAt: row.openedAt.getTime(),
+    openedAt: createdAt,
   };
 }
 
@@ -132,7 +135,6 @@ const insertPlan = SqlSchema.findOne({
         assumptions: [],
         createdAt: write.now,
         updatedAt: write.now,
-        openedAt: write.now,
       })
       .returning(PLAN_COLUMNS),
 });
@@ -145,7 +147,7 @@ const findPlans = SqlSchema.findAll({
       .select(PLAN_COLUMNS)
       .from(plan)
       .where(eq(plan.userId, userId))
-      .orderBy(desc(plan.openedAt), desc(plan.createdAt), desc(plan.id)),
+      .orderBy(desc(plan.createdAt), desc(plan.id)),
 });
 
 const findPlan = SqlSchema.findOneOption({
@@ -153,13 +155,6 @@ const findPlan = SqlSchema.findOneOption({
   Result: PlanRowSchema,
   execute: ({ userId, planId }) =>
     db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).limit(1),
-});
-
-const stampOpened = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String, now: Schema.Date }),
-  Result: PlanRowSchema,
-  execute: ({ userId, planId, now }) =>
-    db.update(plan).set({ openedAt: now }).where(ownedPlan(userId, planId)).returning(PLAN_COLUMNS),
 });
 
 const replaceDocument = SqlSchema.findOneOption({
@@ -290,7 +285,7 @@ const setConversation = SqlSchema.findOneOption({
 
 /**
  * Starts a plan under the account with the fixed template untouched, every
- * field unanswered and nothing assumed; it opens first in the list.
+ * field unanswered and nothing assumed; it stands first in the list.
  */
 export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Plan> {
   return Effect.gen(function* () {
@@ -307,31 +302,25 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
   });
 }
 
-/** Every plan the account owns, most recently opened first, without their documents. */
+/**
+ * Every plan the account owns, newest started first, without their documents.
+ * Nothing but starting a plan moves the order: opening, reading, and saving
+ * one leave every row where it stood.
+ */
 export function listPlans(userId: string): PlanStoreEffect<readonly PlanSummary[]> {
   return Effect.map(findPlans(userId), (rows) => rows.map(summaryOf));
 }
 
 /**
  * The plan with its saved document and its conversation, or nothing for a
- * plan the account does not own. This is the read the planning model starts
- * and resumes from: it moves nothing, so reading it for the model does not
- * reorder the window's list.
+ * plan the account does not own. This is the read the window opens a plan
+ * through and the planning model starts and resumes from.
  */
 export function readPlan(
   userId: string,
   planId: string,
 ): PlanStoreEffect<Option.Option<StoredPlan>> {
   return Effect.map(findPlan({ userId, planId }), Option.map(storedPlanOf));
-}
-
-/** The window opening a plan: its saved document, with the plan moved to the head of the list. */
-export function openPlan(userId: string, planId: string): PlanStoreEffect<Option.Option<Plan>> {
-  return Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    const row = yield* stampOpened({ userId, planId, now });
-    return Option.map(row, (opened) => storedPlanOf(opened).plan);
-  });
 }
 
 /**

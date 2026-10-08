@@ -28,8 +28,7 @@
     "id",
     "name",
     "createdAt",
-    "updatedAt",
-    "openedAt"
+    "updatedAt"
   ],
   "additionalProperties": false
 }
