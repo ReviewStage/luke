@@ -36,25 +36,33 @@ const CODE: PlanCode = {
 
 const roots: Root[] = [];
 
-/** Mounts the open plan's page over the real side panel, staged where a fixture run would stage it. */
+/** The open plan's page over the real side panel, staged where a fixture run would stage it. */
+function Page({ staged }: { staged: SidePanelState | undefined }) {
+  const sidePanel = useSidePanel(staged);
+  return createElement(DesktopPlans, {
+    plans: plansControl({
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN.id,
+      region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+      sidePanel,
+    }),
+  });
+}
+
 function mountOpenPlan(options: { staged?: SidePanelState } = {}): HTMLElement {
-  function Page() {
-    const sidePanel = useSidePanel(options.staged);
-    return createElement(DesktopPlans, {
-      plans: plansControl({
-        page: PLANS_PAGE.DOCUMENT,
-        activePlanId: PLAN.id,
-        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-        sidePanel,
-      }),
-    });
-  }
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page)));
+  act(() => root.render(createElement(Page, { staged: options.staged })));
   return container;
+}
+
+/** Renders the last mounted page again, as the first state arriving a render in renders it. */
+function restage(staged: SidePanelState | undefined): void {
+  const root = roots.at(-1);
+  assert.ok(root, "no page to render again");
+  act(() => root.render(createElement(Page, { staged })));
 }
 
 function unmountAll(): void {
@@ -78,6 +86,10 @@ function tabNamed(page: HTMLElement, label: string): HTMLElement {
 
 function documentShown(page: HTMLElement): boolean {
   return page.querySelector(`.desktop-document[aria-label="${PLAN.name}"] .plan-body`) !== null;
+}
+
+function panelShown(page: HTMLElement): boolean {
+  return page.querySelector(".side-panel") !== null;
 }
 
 beforeEach(() => {
@@ -211,6 +223,24 @@ test("the next launch opens the panel as this one left it, and a fixture run nei
   });
   assert.equal(staged.querySelector(".side-panel"), null);
   press(staged, '[aria-label="Show panel"]');
+  unmountAll();
+
+  const after = mountOpenPlan();
+  assert.equal(tabNamed(after, "Code").getAttribute("aria-selected"), "true");
+});
+
+test("a fixture run known only a render in still opens the panel it stages, and keeps nothing", () => {
+  const first = mountOpenPlan();
+  press(first, '[aria-label="Show panel"]');
+  act(() => tabNamed(first, "Code").click());
+  unmountAll();
+
+  // The run is known only once the first state arrives, a render in.
+  const staged = mountOpenPlan();
+  restage({ open: false, tab: SIDE_PANEL_TAB.BOARD, width: SIDE_PANEL_WIDTH.DEFAULT });
+  assert.equal(panelShown(staged), false, "the developer's panel is not drawn");
+  press(staged, '[aria-label="Show panel"]');
+  assert.equal(tabNamed(staged, "Board").getAttribute("aria-selected"), "true");
   unmountAll();
 
   const after = mountOpenPlan();

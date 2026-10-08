@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
  *
  * The three facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage and read once at
- * mount. A fixture run neither reads nor writes them: what it draws is
+ * mount. A fixture run neither draws nor writes them: what it draws is
  * staged, and a capture must not depend on how the last run left the panel.
  */
 
@@ -112,32 +112,44 @@ export function isSidePanelChord(event: KeyboardEvent): boolean {
 }
 
 /**
- * The side panel's state, starting from `staged` where a fixture run stages
- * one and from the kept preference otherwise, and kept again on every change
- * outside a fixture run.
+ * The side panel's state: the kept preference, kept again on every change,
+ * or where a fixture run stages one, that staged state and the presses on
+ * it, which are kept nowhere.
  */
 export function useSidePanel(staged: SidePanelState | undefined): SidePanelControl {
-  const [state, setState] = useState<SidePanelState>(() => staged ?? readStored());
+  // Note that the fixture run's panel is a state of its own rather than the
+  // kept one reset, because the run is only known once the first state
+  // arrives, a render after the kept preference was read.
+  const [kept, setKept] = useState<SidePanelState>(readStored);
+  const [moved, setMoved] = useState<SidePanelState | undefined>(undefined);
+  const state = staged === undefined ? kept : (moved ?? staged);
+  const update = useCallback(
+    (change: (held: SidePanelState) => SidePanelState) => {
+      if (staged === undefined) setKept(change);
+      else setMoved((held) => change(held ?? staged));
+    },
+    [staged],
+  );
 
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
   useEffect(() => {
     if (staged !== undefined) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, encodeStored(state));
+      window.localStorage.setItem(STORAGE_KEY, encodeStored(kept));
     } catch {
       // The panel keeps working on the state it holds.
     }
-  }, [staged, state]);
+  }, [staged, kept]);
 
-  const onToggle = useCallback(() => setState((held) => ({ ...held, open: !held.open })), []);
+  const onToggle = useCallback(() => update((held) => ({ ...held, open: !held.open })), [update]);
   const onChoose = useCallback(
-    (tab: SidePanelTab) => setState((held) => ({ ...held, open: true, tab })),
-    [],
+    (tab: SidePanelTab) => update((held) => ({ ...held, open: true, tab })),
+    [update],
   );
   const onResize = useCallback(
-    (width: number) => setState((held) => ({ ...held, width: clampWidth(width) })),
-    [],
+    (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
+    [update],
   );
   return { ...state, onToggle, onChoose, onResize };
 }
