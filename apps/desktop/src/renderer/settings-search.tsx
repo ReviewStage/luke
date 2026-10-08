@@ -17,7 +17,7 @@ import { focusSearchField, Highlighted } from "./search-field";
 import { matchesTokens, searchTokens } from "./search-tokens";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "./settings-anchors";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "./settings-views";
-import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "./tooltip";
+import { commandKeyshortcuts, ShortcutGlyphs } from "./tooltip";
 
 /**
  * Searching the Settings tab.
@@ -357,20 +357,18 @@ export function SettingsSearchField({
         {/* The chord that lands here is printed in the empty field, the way
             a Mac search field says it, and gives way to the caret. */}
         {query.length > 0 ? (
-          <Tooltip label="Clear search">
-            <button
-              type="button"
-              className="settings-search-clear"
-              aria-label="Clear search"
-              onClick={() => {
-                // A cleared field keeps the caret, ready for the next question.
-                onQueryChange("");
-                field.current?.focus();
-              }}
-            >
-              <CloseIcon />
-            </button>
-          </Tooltip>
+          <button
+            type="button"
+            className="settings-search-clear"
+            aria-label="Clear search"
+            onClick={() => {
+              // A cleared field keeps the caret, ready for the next question.
+              onQueryChange("");
+              field.current?.focus();
+            }}
+          >
+            <CloseIcon />
+          </button>
         ) : (
           <ShortcutGlyphs command={APP_COMMAND.FIND} className="settings-search-shortcut" />
         )}

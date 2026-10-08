@@ -9,16 +9,22 @@ import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { PLANS_PAGE, type PlansPage } from "../planning/planning-model";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopShell } from "./desktop-shell";
 import { SIDEBAR_WIDTH, useSidebarCollapse } from "./sidebar-collapse";
 
 const ignore = () => undefined;
 
-/** The window as `App` stands it: the shell over the collapse and the window's keymap. */
+/**
+ * The window as `App` stands it: the shell over the collapse and the window's
+ * keymap, and over plans that open on an empty plan page and turn to the
+ * new-plan page when asked for it.
+ */
 function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JSX.Element {
   const sidebar = useSidebarCollapse(fixture);
   useAppKeymap(true);
+  const [page, setPage] = useState<PlansPage>(PLANS_PAGE.DOCUMENT);
   return createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
     identity: {
@@ -29,7 +35,7 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
     },
     tab,
     onTabChange: ignore,
-    plans: plansControl(),
+    plans: plansControl({ page, onNewPlan: () => setPage(PLANS_PAGE.NEW) }),
     sidebar,
     settings: settingsPanelProps(),
     onSettingsSearchEngaged: ignore,
@@ -102,6 +108,15 @@ function drag(from: number, through: number[], column = sidebar()): boolean[] {
 
 function key(name: string, column = sidebar()): void {
   act(() => edge(column).dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true })));
+}
+
+function titleBarNewPlan(): HTMLButtonElement | null {
+  // The sidebar's own New plan is labelled by its text, so the label finds this one alone.
+  return document.body.querySelector<HTMLButtonElement>("button[aria-label='New plan']");
+}
+
+function composing(): boolean {
+  return document.body.querySelector("button[aria-label='Start plan']") !== null;
 }
 
 /** Command-B (or another B chord) from anywhere in the window, answering whether the window claimed it. */
@@ -499,4 +514,38 @@ test("a command chosen from the menu bar runs as its chord does, and only where 
   act(() => menuListener?.(APP_COMMAND.TOGGLE_SIDEBAR));
   act(() => menuListener?.(APP_COMMAND.BACK));
   assert.equal(sidebar().hasAttribute("inert"), true, "the fold is as the menu left it");
+});
+
+test("a folded sidebar leaves New plan beside its toggle, which opens the new-plan page", () => {
+  show(PANEL_TAB.PLANS);
+  assert.equal(titleBarNewPlan(), null, "the open sidebar holds New plan itself");
+
+  press();
+  const button = titleBarNewPlan();
+  assert.ok(button, "the folded sidebar's New plan stands in the title bar");
+  act(() => {
+    button.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.equal(document.body.querySelector('[role="tooltip"]')?.textContent, "New plan⌘N");
+  assert.equal(composing(), false);
+  act(() => button.click());
+  assert.equal(composing(), true, "the new-plan page is open");
+
+  press();
+  assert.equal(titleBarNewPlan(), null, "unfolding hands New plan back to the sidebar");
+});
+
+test("Settings offers no title-bar New plan even over a folded sidebar, and its way out reads Back", () => {
+  show(PANEL_TAB.PLANS);
+  press();
+
+  show(PANEL_TAB.SETTINGS);
+  assert.equal(titleBarNewPlan(), null);
+  const back = document.body.querySelector<HTMLButtonElement>("button.settings-pages-back");
+  assert.ok(back, "Settings draws its way out");
+  // What it reads, less the chord hint drawn beside it for the eye alone.
+  const read = back.cloneNode(true);
+  assert.ok(read instanceof HTMLElement);
+  for (const hidden of read.querySelectorAll("[aria-hidden='true']")) hidden.remove();
+  assert.equal(read.textContent, "Back");
 });

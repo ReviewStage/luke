@@ -10,9 +10,21 @@
   --desktop-bar-height: 52px;
   /* The sidebar's default width; the app stage carries the dragged one. */
   --sidebar-width: 264px;
+  /* The traffic lights, as main places them (`DESKTOP_WINDOW.TRAFFIC_LIGHTS`):
+     where the green one ends, its x plus the three lights' 61px on macOS 26,
+     and the height their middle sits at, its y plus half a 14px light. */
+  --traffic-lights-end: 79px;
+  --traffic-lights-middle: 25px;
+  /* The title bar's own buttons beside them, each a toolbar icon button and
+     the first this far past the green light: about what the lights leave
+     between themselves. The buttons stand edge to edge, so each glyph is as
+     far from the next as the first is from the light, and the row reads as one. */
+  --title-bar-button: 30px;
+  --title-bar-left: calc(var(--traffic-lights-end) + 8px);
   /* Where the work column's toolbar starts its title while the sidebar is
-     folded: clear of the traffic lights and the sidebar toggle beside them. */
-  --sidebar-toggle-clearance: 124px;
+     folded: clear of the traffic lights and both buttons beside them, by the
+     toolbar's own gap between its items. */
+  --sidebar-toggle-clearance: calc(var(--title-bar-left) + 2 * var(--title-bar-button) + 16px);
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
   /* A destructive act's own button, filled: deep enough to carry white words,
@@ -104,13 +116,14 @@ body,
   padding-left: var(--sidebar-toggle-clearance);
 }
 
-/* Beside the traffic lights, centred on them, in the same place whichever way
-   the sidebar is. */
-.sidebar-toggle {
+/* Beside the traffic lights, centred on them, the sidebar toggle in the same
+   place whichever way the sidebar is and New plan after it while folded. */
+.title-bar-controls {
   position: absolute;
   z-index: 2;
-  top: 10px;
-  left: 80px;
+  top: calc(var(--traffic-lights-middle) - var(--title-bar-button) / 2);
+  left: var(--title-bar-left);
+  display: flex;
 }
 
 .desktop-sidebar {
@@ -494,6 +507,11 @@ body,
 
 .toolbar-button:hover {
   background: var(--selected);
+}
+
+.toolbar-button:disabled {
+  opacity: 0.45;
+  background: none;
 }
 
 .toolbar-icon-button {

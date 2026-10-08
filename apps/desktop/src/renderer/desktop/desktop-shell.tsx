@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@sidecar/credentials/snapshot";
-import { SidebarIcon, WingFace } from "@sidecar/panel";
+import { ComposeIcon, SidebarIcon, WingFace } from "@sidecar/panel";
 import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -64,7 +64,7 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
       <button
         type="button"
-        className="toolbar-button toolbar-icon-button sidebar-toggle"
+        className="toolbar-button toolbar-icon-button"
         aria-label={label}
         onClick={sidebar.onToggle}
       >
@@ -105,6 +105,27 @@ function usePlaceCommands(
           settings.onViewChange(SETTINGS_VIEW.SHORTCUTS);
         }
       : undefined,
+  );
+}
+
+/**
+ * The sidebar's New plan, kept in reach while the sidebar is folded: an icon
+ * beside the toggle, the way a chat app keeps its compose button beside its
+ * own. It asks for exactly what the sidebar's button asks for.
+ */
+function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element {
+  return (
+    <Tooltip label="New plan" command={APP_COMMAND.NEW_PLAN}>
+      <button
+        type="button"
+        className="toolbar-button toolbar-icon-button"
+        aria-label="New plan"
+        disabled={!plans.signedIn}
+        onClick={plans.onNewPlan}
+      >
+        <ComposeIcon />
+      </button>
+    </Tooltip>
   );
 }
 
@@ -185,8 +206,11 @@ export function DesktopShell({
       <main className="desktop-main">
         <DesktopPlans plans={plans} />
       </main>
-      {/* Note that it follows the drag strips it covers, because a later drag region wins. */}
-      <SidebarToggle sidebar={sidebar} />
+      {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
+      <div className="title-bar-controls">
+        <SidebarToggle sidebar={sidebar} />
+        {sidebar.collapsed ? <TitleBarNewPlan plans={plans} /> : null}
+      </div>
       <PaneGlide
         root={shell}
         layout={{

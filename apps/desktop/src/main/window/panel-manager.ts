@@ -53,6 +53,9 @@ const DESKTOP_WINDOW = {
   // Small enough that a 13-inch display's work area still fits the full size.
   MARGIN: 24,
   BACKGROUND: "#0b0b0d",
+  // Where the close button's corner sits. desktop.css's `--traffic-lights-*`
+  // are measured from it, so the title bar's own buttons clear the lights.
+  TRAFFIC_LIGHTS: { x: 18, y: 18 },
 } as const;
 
 /** The first frame of the window, centred in the display's work area. */
@@ -262,7 +265,7 @@ export class PanelManager {
       // The renderer draws its own title bar under the traffic lights, so the
       // window keeps its frame, its shadow, and its buttons, and nothing else.
       titleBarStyle: "hiddenInset",
-      trafficLightPosition: { x: 18, y: 18 },
+      trafficLightPosition: DESKTOP_WINDOW.TRAFFIC_LIGHTS,
       webPreferences: hardenedWebPreferences({
         preloadPath: this.#preloadPath,
         runMode: this.#runMode,

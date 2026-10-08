@@ -15,7 +15,7 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "../planning/use-side-panel";
-import { Tooltip } from "../tooltip";
+import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { paneTiming } from "./pane-motion";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
@@ -70,7 +70,11 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
-/** The strip of tabs across the panel's top. */
+/**
+ * The strip of tabs across the panel's top. A tab's own word is all it needs
+ * to say, so it hangs no pill; its chord is in the View menu and on the
+ * Keyboard shortcuts page.
+ */
 function TabStrip({
   tab,
   unread,
@@ -83,18 +87,18 @@ function TabStrip({
   return (
     <div className="side-panel-tabs" role="tablist" aria-label="Panel">
       {SIDE_PANEL_TABS.map((entry) => (
-        <Tooltip key={entry.tab} label={entry.label} command={TAB_COMMAND[entry.tab]}>
-          <button
-            type="button"
-            role="tab"
-            className="side-panel-tab"
-            aria-selected={entry.tab === tab}
-            onClick={() => onChoose(entry.tab)}
-          >
-            {entry.label}
-            {unread.includes(entry.tab) ? <span className="tab-note" aria-hidden="true" /> : null}
-          </button>
-        </Tooltip>
+        <button
+          key={entry.tab}
+          type="button"
+          role="tab"
+          className="side-panel-tab"
+          aria-selected={entry.tab === tab}
+          aria-keyshortcuts={commandKeyshortcuts(TAB_COMMAND[entry.tab])}
+          onClick={() => onChoose(entry.tab)}
+        >
+          {entry.label}
+          {unread.includes(entry.tab) ? <span className="tab-note" aria-hidden="true" /> : null}
+        </button>
       ))}
     </div>
   );
