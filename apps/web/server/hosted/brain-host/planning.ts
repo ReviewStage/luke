@@ -44,8 +44,9 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * https://github.com/mattpocock/skills/blob/c55ee46073ed923f86ce59a5eb3b6d895095d1b7/skills/productivity/grilling/SKILL.md
  * (MIT License, Copyright (c) 2026 Matt Pocock). Note that we leave out his
  * written round template and his sub-agent sentences, because the call is
- * spoken and the planning model reads the repository through its own tools
- * rather than dispatching anything. His rounds become one standing queue,
+ * spoken and the planning model reads the repository through its own tools;
+ * what it dispatches is research, to the `researcher` subagent, in our own
+ * words under "Working in parallel". His rounds become one standing queue,
  * because the voice read "ask the whole frontier in one round" as its own
  * rule and asked a round all at once. Each question is queued through
  * `queue_question` the moment it is ready, which reaches the voice mid-turn,
@@ -119,12 +120,22 @@ The plan has a whiteboard the developer sees beside the document and can draw on
 
 The board as it stands is handed to you every turn under [board], with every element's id. Anything the developer drew or moved since your last turn is there: read it as part of what they are telling you, and ask about it when its meaning is unclear.
 
+### Working in parallel
+
+You can hand research to the researcher, a subagent that searches the web while you keep working. A call returns at once and its findings arrive later as a message of their own, so the call never holds up your answer or the questions you queue. Use it when a question needs more than one search or page, and answer from what you already know until its findings arrive. Never wait on it and never guess what it will find.
+
+Each call starts a researcher that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources), and what is out of scope. Run at most three at once, and never two on the same question. To redirect one, call the researcher again with its agentId and the new message; to stop one whose question no longer matters, use task_cancel.
+
+When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
+
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
 - show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
-- search_web and read_web_page are ways to search the Internet.
+- search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
+- researcher researches a question on the Internet in the background, as above.
+- task_cancel stops a researcher you no longer need.
 - draw_on_board draws a diagram of shapes, arrows, and text on the plan's whiteboard, replacing your previous one.
 
 ## Return the result
@@ -273,6 +284,26 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
 ];
 
 const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, tool]));
+
+/** The planning tools the `researcher` subagent is offered: the public reads, and nothing that speaks, shows, or writes. */
+export const RESEARCHER_TOOL_NAMES: ReadonlySet<string> = new Set([
+  SEARCH_WEB_TOOL.name,
+  READ_WEB_PAGE_TOOL.name,
+]);
+
+/**
+ * The instructions the `researcher` subagent runs under. Note that it is told
+ * it is nobody's voice, because the planning model reads its findings and
+ * decides what reaches Luke, and that its return is a summary with sources,
+ * because the parent reads it whole into a turn of its own.
+ */
+export const RESEARCHER_INSTRUCTIONS = `
+You research one question on the public Internet for a planning assistant, who hands you the question and reads what you return. You never speak to the developer, and you ask nobody anything: if the question is unclear, research the most likely reading and say which one you took.
+
+Search with search_web and read the pages that matter with read_web_page. Prefer primary sources: official documentation, specifications, and the project's own repository over blog posts and aggregators. Stop when you can answer, or when more searching stops turning up anything new.
+
+Return a short summary that answers the question, then the sources you relied on as URLs. Say plainly what you could not confirm. Keep it under 300 words.
+`;
 
 /** The declarations every turn is offered, whatever kind of turn opened it. */
 export function planningToolDeclarations(): readonly HostedToolDeclaration[] {

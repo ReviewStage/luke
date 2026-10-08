@@ -109,6 +109,20 @@ export function eveTurnIdOf(event: UnparsedWireValue): string | undefined {
   return isWireString(event.data.turnId) ? event.data.turnId : undefined;
 }
 
+/**
+ * The eve session a conversation's record names for this session: its own id
+ * for a root session, and its root's for a subagent's child session. Note that
+ * a child is admitted through its root, because eve mints a child its own
+ * session id that no conversation records, and hands it the root's auth and
+ * lineage, so the root standing as the conversation's current session is what
+ * admits the child's model and tools.
+ */
+export function conversationSessionOf(
+  session: Pick<SessionContext["session"], "id" | "parent">,
+): string {
+  return session.parent?.rootSessionId ?? session.id;
+}
+
 /** What a host function answers: an effect over the ambient client, which eve's own authored files run at the web's edge. */
 type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
@@ -226,7 +240,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         // a conversation that rotated to a newer session mid-turn refuses the
         // old session's calls here, so no effect lands without a turn record.
         const standing = yield* admitConversation(context.session.auth, {
-          id: context.session.id,
+          id: conversationSessionOf(context.session),
           standing: SESSION_STANDING.CURRENT,
         });
         if (Result.isFailure(standing)) {
