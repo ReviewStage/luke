@@ -11,6 +11,7 @@ import * as boardWire from "./board-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as planWire from "./plan-wire.js";
 import * as serviceWire from "./service-wire.js";
+import * as transcriptWire from "./transcript-wire.js";
 
 /**
  * Every schema the hosted wire declares, as the JSON Schema it emits. A wire
@@ -69,6 +70,12 @@ const EFFECT_MODULE_SCHEMAS = {
     hostedErrorSchema: serviceWire.hostedErrorSchema,
     wireUuidSchema: serviceWire.wireUuidSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
+  "transcript-wire": {
+    transcriptLineSchema: transcriptWire.transcriptLineSchema,
+    transcriptCallSchema: transcriptWire.transcriptCallSchema,
+    planTranscriptSchema: transcriptWire.planTranscriptSchema,
+    planTranscriptAnswerSchema: transcriptWire.planTranscriptAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
 } as const;
 
 const declaredSchemas = (

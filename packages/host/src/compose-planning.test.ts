@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isDeepStrictEqual } from "node:util";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import {
@@ -19,6 +20,7 @@ import {
   type PlanningView,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
+import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -67,6 +69,8 @@ interface FakeService extends PlanningClient {
   readonly firstSettle: Deferred.Deferred<void>;
   /** Each plan's board, by plan id; a plan with none answers no board, as a service that did not answer. */
   boards: Record<string, Board>;
+  /** Each plan's transcript, by plan id; a plan with none answers no transcript, as a service that did not answer. */
+  transcripts: Record<string, PlanTranscript>;
 }
 
 function fakeService(plans: Plan[]): FakeService {
@@ -81,7 +85,9 @@ function fakeService(plans: Plan[]): FakeService {
     settled: [],
     firstSettle: Deferred.makeUnsafe<void>(),
     boards: {},
+    transcripts: {},
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
+    readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     // The service keeps the last scene written, beside whatever drawing it holds.
     saveBoard: (planId, elements, appliedDrawing) =>
       Effect.sync(() => {
@@ -950,4 +956,94 @@ it.effect("code named about a plan that is not open is not drawn", () =>
       );
     }),
   ).pipe(Effect.provide(nodeFiles)),
+);
+
+/** A plan's transcript of one call on which the developer said `words`. */
+function transcriptSaying(words: string): PlanTranscript {
+  return {
+    calls: [
+      {
+        id: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
+        startedAt: 1_000,
+        lines: [{ speaker: "user", text: words }],
+      },
+    ],
+    earlierOmitted: false,
+  };
+}
+
+it.effect(
+  "opening a plan draws what was said on its calls, and a read that failed is drawn failed until a refresh lands",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, last } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      assert.deepEqual(last()?.transcript, { status: PLANNING_READ.FAILED });
+
+      service.transcripts[INVITES] = transcriptSaying("Invites should expire.");
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.deepEqual(last()?.transcript, {
+        status: PLANNING_READ.READY,
+        transcript: service.transcripts[INVITES],
+      });
+
+      // A later read that fails keeps the transcript drawn.
+      delete service.transcripts[INVITES];
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.deepEqual(last()?.transcript, {
+        status: PLANNING_READ.READY,
+        transcript: transcriptSaying("Invites should expire."),
+      });
+    }),
+);
+
+it.effect(
+  "a call's end about the open plan reads its transcript again, with the call's words",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        service.transcripts[INVITES] = transcriptSaying("Invites should expire.");
+        const { call, planning, viewWhere } = yield* subject(service);
+        yield* planning.lifetime;
+        yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+        const said = transcriptSaying("Seven days.");
+        service.transcripts[INVITES] = said;
+        const read = viewWhere((view) => isDeepStrictEqual(view.transcript?.transcript, said));
+        planning.callEnded(INVITES);
+
+        assert.deepEqual((yield* read).transcript, {
+          status: PLANNING_READ.READY,
+          transcript: said,
+        });
+      }),
+    ),
+);
+
+it.effect(
+  "leaving the open plan drops its transcript, and a plan just started has said nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.transcripts[INVITES] = transcriptSaying("Invites should expire.");
+      const started = plan(BILLING, "Billing export", "# Billing export", 20);
+      service.createAnswer = { ok: true, answer: started };
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
+      assert.equal(last()?.transcript, undefined);
+
+      yield* call(GATEWAY_METHOD.PLANNING_START, {
+        name: "Billing export",
+        folderPath: "/tmp/billing",
+      });
+      assert.deepEqual(last()?.transcript, {
+        status: PLANNING_READ.READY,
+        transcript: { calls: [], earlierOmitted: false },
+      });
+    }),
 );

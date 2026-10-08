@@ -42,6 +42,11 @@ export function planBoardPath(planId: string): string {
   return `${planPath(planId)}/board`;
 }
 
+/** What was said on one plan's calls (GET). */
+export function planTranscriptPath(planId: string): string {
+  return `${planPath(planId)}/transcript`;
+}
+
 /** The Mac claiming the plan's next command (POST), held open until one arrives or the hold runs out. */
 export function planCommandClaimPath(planId: string): string {
   return `${planPath(planId)}/commands/claim`;

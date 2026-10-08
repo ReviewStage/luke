@@ -6,6 +6,7 @@ import {
   planSchema,
   planSummarySchema,
 } from "./plan-wire.js";
+import { planTranscriptSchema } from "./transcript-wire.js";
 
 /**
  * planning-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
@@ -14,8 +15,9 @@ import {
  * whenever it moves; the desktop writes it into the document the planning
  * window draws from. Exactly one plan is ever active, the one the window has
  * open, and it is the plan a voice session binds to. The view carries plan
- * names and documents from the service, and the folder each plan reads from
- * this Mac's own record, which never leaves it.
+ * names, documents, and what was said on the active plan's calls from the
+ * service, and the folder each plan reads from this Mac's own record, which
+ * never leaves it.
  */
 
 /** macOS's own path bound. */
@@ -53,6 +55,17 @@ const planningDocumentSchema = EffectSchema.Struct({
 });
 
 export type PlanningDocument = typeof planningDocumentSchema.Type;
+
+/**
+ * What was said on the active plan's calls as last read, kept through a
+ * later read that failed, as the document is. The call standing now is not
+ * in it until the call ends and the transcript is read again: its words so
+ * far are the voice window's to report.
+ */
+const planningTranscriptSchema = EffectSchema.Struct({
+  status: planningReadSchema,
+  transcript: EffectSchema.optionalKey(planTranscriptSchema),
+});
 
 /**
  * The two waits on the voice side that no live status names: the voice model
@@ -142,6 +155,8 @@ export const planningViewSchema = EffectSchema.Struct({
   activity: EffectSchema.optionalKey(planActivitySchema),
   /** The active plan's whiteboard as last read or saved; absent with no plan open or before its first read lands. */
   board: EffectSchema.optionalKey(boardSchema),
+  /** What was said on the active plan's calls as last read; absent with no plan open. */
+  transcript: EffectSchema.optionalKey(planningTranscriptSchema),
   /** The code on screen during the call about the active plan; absent with none, and cleared with the activity. */
   code: EffectSchema.optionalKey(planCodeSchema),
   /** The folder of this Mac each plan reads, by plan id; a plan this Mac holds no folder for is absent. */

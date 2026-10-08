@@ -20,6 +20,7 @@ import {
   planningSetFolderParamsSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
+import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Queue, Result, Schema, type Scope, Semaphore } from "effect";
@@ -44,11 +45,14 @@ import type { RunMode } from "./run-mode.js";
  * with its document, and again whenever the call's activity says a draw by
  * the planning model just settled or the planning model stopped working, since
  * a draw happens only inside its turn; the panel saves the board's scene
- * through here and the view takes the board as the service answered it. The
- * loops here are the open plan's folder commands (`planning-commands.ts`),
- * which the planning model asks this Mac to run, those board reads, and the
- * code Luke puts on screen during a call (`plan-code.ts`), read from the
- * plan's folder.
+ * through here and the view takes the board as the service answered it. What
+ * was said on the open plan's calls is read with its document, and again
+ * whenever a call about it ends, which is when the call's words are all on
+ * record; while a call stands, its words are the voice window's to report.
+ * The loops here are the open plan's folder commands
+ * (`planning-commands.ts`), which the planning model asks this Mac to run,
+ * those board and transcript reads, and the code Luke puts on screen during
+ * a call (`plan-code.ts`), read from the plan's folder.
  */
 
 /** Opening or deleting a plan names it and nothing else. */
@@ -95,6 +99,7 @@ export type PlanningClient = Pick<
   | "settleCommand"
   | "readBoard"
   | "saveBoard"
+  | "readTranscript"
 >;
 
 export interface PlanningDependencies {
@@ -136,7 +141,7 @@ export interface PlanningComposer extends Composer {
    * read. An ask about any other plan is dropped.
    */
   showCode: (planId: string, ref: CodeRef) => void;
-  /** The call about `planId` ended: the code it put on screen goes with it. */
+  /** The call about `planId` ended: the code it put on screen goes with it, and its words are read back from the record. */
   callEnded: (planId: string) => void;
 }
 
@@ -192,10 +197,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    */
   let codeGeneration = 0;
 
-  /** The view with no activity, no board, and no code, as a plan left behind leaves it. */
+  /** The view with no activity, no board, no transcript, and no code, as a plan left behind leaves it. */
   function withoutActivity({
     activity: _activity,
     board: _board,
+    transcript: _transcript,
     code: _code,
     ...rest
   }: PlanningView): PlanningView {
@@ -205,6 +211,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
+
+  /** The plans a call just ended about, whose transcript is read again by the loop below. */
+  const transcriptReads = yield* Queue.sliding<string>(1);
 
   /** The document of `planId` as held now, if the held one is that plan's. */
   function heldPlanOf(planId: string): PlanningDocument["plan"] {
@@ -262,6 +271,34 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     });
   }
 
+  /**
+   * Reads what was said on the active plan's calls. A transcript already
+   * held stays drawn while the read is out and through a read that failed,
+   * as the document does; with none held, the failure is what the panel
+   * draws.
+   */
+  function readTranscript(planId: string) {
+    return Effect.gen(function* () {
+      const held = view.transcript?.transcript;
+      if (held === undefined) write({ transcript: { status: PLANNING_READ.READING } });
+      const transcript = yield* Effect.provide(
+        client.readTranscript(planId),
+        FetchHttpClient.layer,
+      );
+      if (view.activePlanId !== planId) return;
+      if (transcript !== undefined) {
+        write({ transcript: { status: PLANNING_READ.READY, transcript } });
+        return;
+      }
+      write({
+        transcript:
+          held === undefined
+            ? { status: PLANNING_READ.FAILED }
+            : { status: PLANNING_READ.READY, transcript: held },
+      });
+    });
+  }
+
   function showDraft(draft: PlanDraftFrame): void {
     const held = heldPlanOf(draft.planId);
     if (held === undefined || view.activePlanId !== draft.planId) return;
@@ -299,7 +336,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   }
 
   function callEnded(planId: string): void {
-    if (view.activePlanId !== planId || view.code === undefined) return;
+    if (view.activePlanId !== planId) return;
+    Queue.offerUnsafe(transcriptReads, planId);
+    if (view.code === undefined) return;
     codeGeneration += 1;
     const { code: _code, ...rest } = view;
     view = rest;
@@ -327,6 +366,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             const planId = view.activePlanId;
             if (planId !== undefined) yield* readDocument(planId);
             if (planId !== undefined) yield* readBoard(planId);
+            if (planId !== undefined) yield* readTranscript(planId);
           }),
         );
         return {};
@@ -354,6 +394,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           Effect.gen(function* () {
             yield* readDocument(planId);
             yield* readBoard(planId);
+            yield* readTranscript(planId);
             // Opening moved the plan to the head of the list.
             yield* readList;
           }),
@@ -390,11 +431,13 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
             const plan = started.answer;
             recordFolder(plan.id, request.folderPath);
-            // Active before the old call's end is waited on, as for opening.
+            // Active before the old call's end is waited on, as for opening;
+            // a plan just started has had no call.
             view = {
               ...withoutActivity(view),
               activePlanId: plan.id,
               document: { status: PLANNING_READ.READY, plan },
+              transcript: { status: PLANNING_READ.READY, transcript: EMPTY_TRANSCRIPT },
             };
             publish();
             yield* endPlanCall(plan.id);
@@ -476,7 +519,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       );
     }),
     // The open plan's folder commands, the board reads a settled draw asks
-    // for, and its code on screen; every other read of the plans is an ask's.
+    // for, the transcript reads a call's end asks for, and its code on
+    // screen; every other read of the plans is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(serveCode);
       yield* servePlanningCommands({
@@ -491,6 +535,13 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (planId) =>
             gate() ? serial(readBoard(planId)) : Effect.void,
+          ),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(transcriptReads), (planId) =>
+            gate() ? serial(readTranscript(planId)) : Effect.void,
           ),
         ),
       );

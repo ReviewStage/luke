@@ -1,6 +1,12 @@
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
-import { LIVE_STATUS, type LiveStatus, liveExchangeActive } from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
+import {
+  LIVE_STATUS,
+  type LiveStatus,
+  liveExchangeActive,
+  TRANSCRIPT_SPEAKER,
+  type TranscriptSpeaker,
+} from "@sidecar/live";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
 import { type Context, Deferred, Effect, Exit, Fiber, type Scope } from "effect";
 import type {
   LiveCaptionRow,
@@ -23,6 +29,24 @@ export interface LiveVoiceSurroundings {
   microphoneGranted: boolean;
 }
 
+/** One line said on the standing call, as its captions group it: the row it grows on, who said it, and the words so far. */
+interface LiveCallLine {
+  readonly rowId: string;
+  readonly speaker: TranscriptSpeaker;
+  readonly words: string;
+}
+
+/**
+ * Everything said on the standing call so far, settled or not and whatever
+ * the captions preference says: the store's id for the call's session, where
+ * an account holds it, and its lines in the order they opened. It is what the
+ * Plans tab's transcript draws until the call ends and the record is read.
+ */
+export interface LiveCallTranscript {
+  readonly voiceSessionId: string | undefined;
+  readonly lines: readonly LiveCallLine[];
+}
+
 /**
  * What a panel needs to draw the live conversation, reported whole on every
  * edge. Both speakers are carried beside the status, which names one of them
@@ -41,6 +65,8 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   developerCaptions: readonly string[] | undefined;
   /** The plan the standing call is about; none while no call stands. */
   callPlanId: string | undefined;
+  /** What was said on the standing call so far; none while no call stands or before its first line. */
+  callTranscript: LiveCallTranscript | undefined;
 }
 
 /** Everything the policy asks of the process that hosts it. */
@@ -62,6 +88,11 @@ interface LiveVoiceOrchestratorOptions {
   services: Context.Context<never>;
 }
 
+const SPEAKER_OF_KIND = {
+  [CONVERSATION_ENTRY_KIND.ASK]: TRANSCRIPT_SPEAKER.USER,
+  [CONVERSATION_ENTRY_KIND.REPLY]: TRANSCRIPT_SPEAKER.ASSISTANT,
+} as const satisfies Record<ConversationEntryKind, TranscriptSpeaker>;
+
 /** Nobody heard on either side, which is what a call that is gone carries. */
 const SILENT: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
 
@@ -78,6 +109,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.lukeCaptions === right.lukeCaptions &&
     left.developerCaptions === right.developerCaptions &&
     left.callPlanId === right.callPlanId &&
+    left.callTranscript === right.callTranscript &&
     left.listening === right.listening &&
     left.lukeSpeaking === right.lukeSpeaking
   );
@@ -126,6 +158,7 @@ export class LiveVoiceOrchestrator {
   #rows: readonly LiveCaptionRow[] = [];
   #lukeCaptions: readonly string[] | undefined;
   #developerCaptions: readonly string[] | undefined;
+  #callTranscript: LiveCallTranscript | undefined;
   #talkOpening = false;
   /** The plan the call standing or opening is about. */
   #callPlan: string | undefined;
@@ -608,6 +641,10 @@ export class LiveVoiceOrchestrator {
     if (!sameWords(this.#developerCaptions, nextDeveloperCaptions)) {
       this.#developerCaptions = nextDeveloperCaptions;
     }
+    const nextTranscript = callTranscriptOf(this.#rows);
+    if (!sameTranscript(this.#callTranscript, nextTranscript)) {
+      this.#callTranscript = nextTranscript;
+    }
   }
 
   #compose(): LiveVoiceView {
@@ -621,6 +658,7 @@ export class LiveVoiceOrchestrator {
       lukeCaptions: this.#lukeCaptions,
       developerCaptions: this.#developerCaptions,
       callPlanId: this.#call === undefined ? undefined : this.#callPlan,
+      callTranscript: this.#call === undefined ? undefined : this.#callTranscript,
     };
   }
 
@@ -655,4 +693,37 @@ function sameWords(
   if (left === right) return true;
   if (!left || !right || left.length !== right.length) return false;
   return left.every((word, index) => word === right[index]);
+}
+
+/** The call's rows as its transcript so far; none before its first row. */
+function callTranscriptOf(rows: readonly LiveCaptionRow[]): LiveCallTranscript | undefined {
+  const [first] = rows;
+  if (first === undefined) return undefined;
+  return {
+    voiceSessionId: first.voiceSessionId,
+    lines: rows.map((row) => ({
+      rowId: row.rowId,
+      speaker: SPEAKER_OF_KIND[row.entry.kind],
+      words: row.entry.words,
+    })),
+  };
+}
+
+/** Note that a row settling moves no line, so it is not reported as a change. */
+function sameTranscript(
+  left: LiveCallTranscript | undefined,
+  right: LiveCallTranscript | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right || left.voiceSessionId !== right.voiceSessionId) return false;
+  if (left.lines.length !== right.lines.length) return false;
+  return left.lines.every((line, index) => {
+    const other = right.lines[index];
+    return (
+      other !== undefined &&
+      line.rowId === other.rowId &&
+      line.speaker === other.speaker &&
+      line.words === other.words
+    );
+  });
 }

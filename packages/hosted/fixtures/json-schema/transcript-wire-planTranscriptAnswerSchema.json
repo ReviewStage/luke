@@ -1,0 +1,68 @@
+{
+  "type": "object",
+  "properties": {
+    "transcript": {
+      "type": "object",
+      "properties": {
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "startedAt": {
+                "type": "number",
+                "minimum": 0
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "speaker": {
+                      "type": "string",
+                      "enum": [
+                        "user",
+                        "assistant"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "speaker",
+                    "text"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "startedAt",
+              "lines"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "earlierOmitted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "calls",
+        "earlierOmitted"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "transcript"
+  ],
+  "additionalProperties": false
+}
