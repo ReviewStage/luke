@@ -45,9 +45,6 @@ export const SIDE_PANEL_WIDTH = {
   DEFAULT: 400,
 } as const;
 
-/** The chord that shows and hides the panel, as its hover says it: VS Code's secondary sidebar's. */
-export const SIDE_PANEL_SHORTCUT_LABEL = "⌥⌘B";
-
 /** Where the preference is kept in the renderer's storage. */
 const STORAGE_KEY = "luke.sidePanel";
 
@@ -103,21 +100,6 @@ function storedText(): string | null {
 function readStored(): SidePanelState {
   const stored = Option.getOrElse(decodeStored(storedText()), () => FIRST_LAUNCH);
   return { ...stored, width: clampWidth(stored.width) };
-}
-
-/**
- * Whether a key press is the panel's chord. The physical key is read rather
- * than the character, because Option turns B into "∫" on a Mac keyboard. A
- * held chord's repeats are not presses, or holding it would flicker the panel.
- */
-export function isSidePanelChord(event: KeyboardEvent): boolean {
-  return (
-    event.code === "KeyB" &&
-    event.altKey &&
-    (event.metaKey || event.ctrlKey) &&
-    !event.shiftKey &&
-    !event.repeat
-  );
 }
 
 /**

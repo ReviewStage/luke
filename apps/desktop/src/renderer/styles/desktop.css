@@ -1035,6 +1035,15 @@ body,
   color: var(--text-tertiary);
 }
 
+/* The search's chord, printed in the empty field until the caret arrives. */
+.settings-search-shortcut {
+  padding-right: 3px;
+}
+
+.settings-search-well:focus-within .settings-search-shortcut {
+  display: none;
+}
+
 .settings-search-clear {
   display: grid;
   width: 18px;

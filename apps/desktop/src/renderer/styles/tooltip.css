@@ -1,0 +1,99 @@
+/* The window's hover hints and the shortcuts it prints beside a control.
+
+   A hint is a small dark pill, light on dark, naming the control and then its
+   chord in muted glyphs; it has no arrow, because it always hangs centred on
+   the control it names. It is hidden for the one layout pass that measures
+   where it fits, then fades in from just short of its size once the pointer
+   has rested `--hint-delay`, or at once while the window is warm. Reduced
+   motion keeps the wait, which is not motion, and drops the fade with the
+   tokens. It takes no presses: it never stands between the pointer and the
+   control beside it. */
+
+.tooltip {
+  position: fixed;
+  z-index: 30;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 7px;
+  background: #0b0b0c;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: tooltip-in var(--duration-quick) var(--motion-exit) var(--hint-delay) both;
+  -webkit-app-region: no-drag;
+}
+
+.tooltip[data-instant="true"] {
+  animation-delay: 0s;
+}
+
+/* A capture run zeroes the motion tokens on its stage, which a pill drawn
+   at the body's end does not stand under, so it is held still here too. */
+body:has(.app-stage[data-capture="true"]) .tooltip {
+  --duration-quick: 0s;
+  --hint-delay: 0s;
+}
+
+.tooltip[data-placed="false"] {
+  visibility: hidden;
+}
+
+/* Grown from the edge facing the control, so it reads as hung from it. */
+.tooltip[data-side="below"] {
+  transform-origin: top center;
+}
+
+.tooltip[data-side="above"] {
+  transform-origin: bottom center;
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+/* A chord as glyphs rather than caps: muted, set close, and in the line of the
+   words beside it, the way a menu prints a key equivalent. */
+.shortcut-glyphs {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.tooltip .shortcut-glyphs {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* A row's own shortcut at its right end, shown while the row is hovered or
+   has the keyboard. It sits in the row's spare width either way, so showing
+   it moves nothing. */
+.row-shortcut {
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+:hover > .row-shortcut,
+:root[data-keyboard="true"] :focus-visible > .row-shortcut {
+  opacity: 1;
+}
+
+:disabled > .row-shortcut {
+  opacity: 0;
+}

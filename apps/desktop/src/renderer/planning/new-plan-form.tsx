@@ -1,5 +1,6 @@
 import { ArrowUpIcon, CheckIcon, FolderIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
+import { Tooltip } from "../tooltip";
 import { folderLine, folderName } from "./planning-model";
 import type { PlansControl } from "./use-plans-tab";
 
@@ -188,16 +189,17 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
             onChooseFolder={props.onChooseFolder}
             onFolder={props.onFolder}
           />
-          <button
-            type="submit"
-            className="plan-compose-start"
-            aria-label="Start plan"
-            title={props.starting ? "Starting…" : "Start plan"}
-            aria-busy={props.starting}
-            disabled={!canStart}
-          >
-            <ArrowUpIcon />
-          </button>
+          <Tooltip label={props.starting ? "Starting…" : "Start plan"}>
+            <button
+              type="submit"
+              className="plan-compose-start"
+              aria-label="Start plan"
+              aria-busy={props.starting}
+              disabled={!canStart}
+            >
+              <ArrowUpIcon />
+            </button>
+          </Tooltip>
         </div>
       </form>
       {props.note !== undefined ? (

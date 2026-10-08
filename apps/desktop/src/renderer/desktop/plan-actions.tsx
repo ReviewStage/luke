@@ -2,9 +2,13 @@ import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { CopyIcon, EllipsisIcon, FolderIcon, FolderOpenIcon, TrashIcon } from "@sidecar/panel";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { useAppCommand } from "../app-commands";
 import { DOCUMENT_REGION, folderLine } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
+import { confirmAsked } from "../settings/confirm-state";
+import { Tooltip } from "../tooltip";
 
 /**
  * plan-actions.tsx -- one plan's actions, offered alike from the toolbar's ⋯ button and from a right-click on the plan in the sidebar.
@@ -282,7 +286,11 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string) {
   return { deletion, open: open !== undefined, show, close, menu, dialog };
 }
 
-/** The open plan's ⋯ button in the toolbar, and the menu it drops. */
+/**
+ * The open plan's ⋯ button in the toolbar, and the menu it drops. It is also
+ * what offers the open plan's Delete and Reveal shortcuts, so each asks or
+ * acts exactly as its menu item would: Delete still asks first.
+ */
 export function PlanActionsButton({
   plans,
   plan,
@@ -291,30 +299,38 @@ export function PlanActionsButton({
   plan: PlanSummary;
 }): React.JSX.Element {
   const actions = usePlanMenu(plans, plan.id, plan.name);
+  const { deletion } = actions;
+  const asking = confirmAsked(deletion.stage);
+  useAppCommand(APP_COMMAND.DELETE_PLAN, asking || deletion.busy ? undefined : deletion.ask);
+  useAppCommand(
+    APP_COMMAND.REVEAL_FOLDER,
+    plans.folders[plan.id] === undefined ? undefined : () => plans.onRevealFolder(plan.id),
+  );
   return (
     <>
-      <button
-        type="button"
-        className="toolbar-button toolbar-icon-button"
-        aria-label="Plan actions"
-        title="Plan actions"
-        aria-haspopup="menu"
-        aria-expanded={actions.open}
-        disabled={actions.deletion.busy}
-        onClick={(event) => {
-          if (actions.open) {
-            actions.close(true);
-            return;
-          }
-          const bounds = event.currentTarget.getBoundingClientRect();
-          actions.show(
-            { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END },
-            event.currentTarget,
-          );
-        }}
-      >
-        <EllipsisIcon />
-      </button>
+      <Tooltip label="Plan actions">
+        <button
+          type="button"
+          className="toolbar-button toolbar-icon-button"
+          aria-label="Plan actions"
+          aria-haspopup="menu"
+          aria-expanded={actions.open}
+          disabled={deletion.busy}
+          onClick={(event) => {
+            if (actions.open) {
+              actions.close(true);
+              return;
+            }
+            const bounds = event.currentTarget.getBoundingClientRect();
+            actions.show(
+              { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END },
+              event.currentTarget,
+            );
+          }}
+        >
+          <EllipsisIcon />
+        </button>
+      </Tooltip>
       {actions.menu}
       {actions.dialog}
     </>

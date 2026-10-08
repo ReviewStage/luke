@@ -5,6 +5,7 @@ import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { settingsPanelProps } from "#testing/settings-panel-props";
+import { useAppKeymap } from "../app-commands";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopSettings } from "./desktop-settings";
@@ -120,10 +121,10 @@ test("typing in the sidebar search turns the page list into results grouped unde
   const pages = pageList(container);
   assert.deepEqual(pages, ["General", "Voice", "Appearance", "Keyboard shortcuts"]);
 
-  type(field(container), "shortcut");
+  type(field(container), "hotkey");
   assert.deepEqual(pageList(container), []);
   assert.deepEqual(results(container), [
-    { page: "Keyboard shortcuts", rows: ["Talk to Luke", "Stop Luke", "Show or hide the sidebar"] },
+    { page: "Keyboard shortcuts", rows: ["Talk to Luke", "Stop Luke"] },
   ]);
 
   // A query landing on more than one page groups its rows under each, in the
@@ -202,4 +203,32 @@ test("clearing the query restores the page list, and Escape clears before it let
   assert.notEqual(document.activeElement, input, "the second Escape lets go of the caret");
   assert.deepEqual(unwound, []);
   window.removeEventListener("keydown", onWindowKey);
+});
+
+test("Command-F puts the caret in the search, whose empty field prints the chord until the caret arrives", () => {
+  function Keyed() {
+    useAppKeymap(true);
+    return createElement(Harness);
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  act(() => {
+    root.render(createElement(Keyed));
+  });
+  const input = field(container);
+  const hint = () => sidebar(container).querySelector(".settings-search-shortcut");
+  assert.equal(input.getAttribute("aria-keyshortcuts"), "Meta+F");
+  assert.equal(hint()?.textContent, "⌘F");
+
+  const event = new KeyboardEvent("keydown", { key: "f", metaKey: true, cancelable: true });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(document.activeElement, input);
+
+  type(input, "voice");
+  assert.equal(hint(), null, "a query takes the chord's place");
+  act(() => root.unmount());
 });

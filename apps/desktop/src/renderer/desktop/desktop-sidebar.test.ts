@@ -7,9 +7,10 @@ import {
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
 import { act, createElement } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
+import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -25,6 +26,16 @@ const DEAN: AccountSnapshot = {
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
 
+const roots: Root[] = [];
+
+/** Takes down every mounted sidebar, so no keymap outlives its test. */
+function unmountAll(): void {
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  document.body.innerHTML = "";
+}
+
 function mount(
   account: AccountSnapshot,
   options: {
@@ -37,9 +48,15 @@ function mount(
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+  roots.push(root);
+  // The window's keymap stands beside the sidebar, as `App` stands it.
+  function Keyed(props: Parameters<typeof DesktopSidebar>[0]) {
+    useAppKeymap(true);
+    return createElement(DesktopSidebar, props);
+  }
   act(() => {
     root.render(
-      createElement(DesktopSidebar, {
+      createElement(Keyed, {
         sidebar: {
           collapsed: false,
           width: SIDEBAR_WIDTH.DEFAULT,
@@ -81,9 +98,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
-  document.body.innerHTML = "";
-});
+afterEach(unmountAll);
 
 test("the account button is the one way to Settings, and pressing it opens Settings", () => {
   const opened: PanelTab[] = [];
@@ -177,4 +192,65 @@ test("New plan from Settings brings the Plans tab forward and asks for the new-p
 
   assert.deepEqual(opened, [PANEL_TAB.PLANS]);
   assert.equal(asked, true);
+});
+
+test("Option-Command-Up and Down walk the list as it reads, New plan at its head, and stop at its ends", () => {
+  const FIRST = {
+    id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+    name: "Invitations",
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const SECOND = {
+    id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
+    name: "Billing",
+    createdAt: 2,
+    updatedAt: 2,
+  };
+  const opened: string[] = [];
+  let home = 0;
+  const step = (activePlanId: string | undefined, key: string): boolean => {
+    unmountAll();
+    mount(DEAN, {
+      plans: {
+        page: activePlanId === undefined ? PLANS_PAGE.NEW : PLANS_PAGE.DOCUMENT,
+        activePlanId,
+        plans: [FIRST, SECOND],
+        onSelect: (planId) => opened.push(planId),
+        onNewPlan: () => {
+          home += 1;
+        },
+      },
+    });
+    const event = new KeyboardEvent("keydown", {
+      key,
+      code: key,
+      metaKey: true,
+      altKey: true,
+      cancelable: true,
+    });
+    act(() => {
+      window.dispatchEvent(event);
+    });
+    return event.defaultPrevented;
+  };
+
+  assert.equal(step(undefined, "ArrowDown"), true);
+  assert.equal(step(FIRST.id, "ArrowDown"), true);
+  assert.deepEqual(opened, [FIRST.id, SECOND.id]);
+  assert.equal(step(SECOND.id, "ArrowDown"), false, "the last plan goes no further");
+
+  assert.equal(step(SECOND.id, "ArrowUp"), true);
+  assert.equal(step(FIRST.id, "ArrowUp"), true);
+  assert.deepEqual(opened, [FIRST.id, SECOND.id, FIRST.id]);
+  assert.equal(home, 1, "up from the first plan is the new-plan page");
+  assert.equal(step(undefined, "ArrowUp"), false, "the new-plan page goes no further");
+});
+
+test("New plan names its chord, which it shows at its end only while hovered or reached from the keyboard", () => {
+  const button = newPlanButton(mount(DEAN));
+  assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+N");
+  const hint = button.querySelector(".row-shortcut");
+  assert.equal(hint?.textContent, "⌘N");
+  assert.equal(hint?.getAttribute("aria-hidden"), "true");
 });

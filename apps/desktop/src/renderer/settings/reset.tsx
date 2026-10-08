@@ -4,6 +4,7 @@ import type { AppSettingsView, SettingsResetScope } from "@sidecar/settings/wire
 import { SETTINGS_RESET_SCOPE } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
+import { Tooltip } from "../tooltip";
 import { useSettingWrite } from "./use-setting-write";
 import type { SettingsWrites } from "./writes";
 
@@ -27,16 +28,17 @@ function ResetGroupButton({
   const { busy, rejection, run } = useSettingWrite(onReset);
   return (
     <>
-      <button
-        type="button"
-        className="icon-button settings-reset"
-        disabled={busy}
-        aria-label={`Reset ${label} to the defaults`}
-        title="Back to the defaults"
-        onClick={() => run(scope)}
-      >
-        <ResetIcon />
-      </button>
+      <Tooltip label="Back to the defaults">
+        <button
+          type="button"
+          className="icon-button settings-reset"
+          disabled={busy}
+          aria-label={`Reset ${label} to the defaults`}
+          onClick={() => run(scope)}
+        >
+          <ResetIcon />
+        </button>
+      </Tooltip>
       {rejection ? (
         <p className="error-message settings-reset-refusal" role="alert">
           {rejection}

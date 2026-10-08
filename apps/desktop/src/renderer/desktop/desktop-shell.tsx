@@ -1,17 +1,20 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@sidecar/credentials/snapshot";
 import { SidebarIcon, WingFace } from "@sidecar/panel";
-import { voiceHotkeyLabel } from "@sidecar/settings";
 import type { FaceMotion } from "@sidecar/surface";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
+import { SETTINGS_VIEW } from "../settings-views";
 import { SignInGate } from "../sign-in-gate";
+import { Tooltip } from "../tooltip";
 import { updateAvailable, updateRow } from "../update-row";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
 import type { LukeIdentityProps } from "./luke-identity";
-import { SIDEBAR_HOTKEY, SIDEBAR_HOTKEY_ARIA, type SidebarCollapse } from "./sidebar-collapse";
+import type { SidebarCollapse } from "./sidebar-collapse";
 
 /** What stands between the developer and the window's own content: the account sign-in. */
 export interface DesktopGates {
@@ -49,21 +52,57 @@ function Onboarding({
 /**
  * Folds the sidebar away and back. It stands beside the traffic lights rather
  * than in the sidebar, so it is in the same place whichever way the sidebar
- * is, and the plan's toolbar leaves it room while the sidebar is folded.
+ * is, and the plan's toolbar leaves it room while the sidebar is folded. It
+ * stands only where there is a sidebar to fold, so it offers the chord too.
  */
 function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Element {
   const label = sidebar.collapsed ? "Show sidebar" : "Hide sidebar";
+  useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
   return (
-    <button
-      type="button"
-      className="toolbar-button toolbar-icon-button sidebar-toggle"
-      aria-label={label}
-      aria-keyshortcuts={SIDEBAR_HOTKEY_ARIA}
-      title={`${label} (${voiceHotkeyLabel(SIDEBAR_HOTKEY)})`}
-      onClick={sidebar.onToggle}
-    >
-      <SidebarIcon />
-    </button>
+    <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
+      <button
+        type="button"
+        className="toolbar-button toolbar-icon-button sidebar-toggle"
+        aria-label={label}
+        onClick={sidebar.onToggle}
+      >
+        <SidebarIcon />
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
+ * The shortcuts that reach a place from anywhere past the sign-in: a new
+ * plan, Settings, and the Keyboard shortcuts page that lists them all.
+ */
+function usePlaceCommands(
+  pastGate: boolean,
+  tab: PanelTab,
+  onTabChange: (tab: PanelTab) => void,
+  plans: PlansControl,
+  settings: SettingsPanelProps,
+): void {
+  useAppCommand(
+    APP_COMMAND.NEW_PLAN,
+    pastGate && plans.signedIn
+      ? () => {
+          if (tab !== PANEL_TAB.PLANS) onTabChange(PANEL_TAB.PLANS);
+          plans.onNewPlan();
+        }
+      : undefined,
+  );
+  useAppCommand(APP_COMMAND.SETTINGS, pastGate ? () => onTabChange(PANEL_TAB.SETTINGS) : undefined);
+  useAppCommand(
+    APP_COMMAND.KEYBOARD_SHORTCUTS,
+    pastGate
+      ? () => {
+          // Arriving at Settings lands on its front page, so the page is
+          // turned after.
+          onTabChange(PANEL_TAB.SETTINGS);
+          settings.onViewChange(SETTINGS_VIEW.SHORTCUTS);
+        }
+      : undefined,
   );
 }
 
@@ -95,7 +134,9 @@ export function DesktopShell({
   onSettingsSearchEngaged: (engaged: boolean) => void;
 }): React.JSX.Element {
   const { account } = settings;
-  if (gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN) {
+  const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
+  usePlaceCommands(!gated, tab, onTabChange, plans, settings);
+  if (gated) {
     return (
       <Onboarding face={gates.signInFace}>
         <SignInGate

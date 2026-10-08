@@ -19,6 +19,7 @@ export const MOTION_DELAY_MS = {
   EXPAND: 200,
   PEEK: 60,
   ROW_STAGGER: 32,
+  HINT: 500,
 } as const;
 
 /** Tallest caption block the window holds — sized past a whole spoken reply,

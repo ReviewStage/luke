@@ -1,21 +1,25 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
+import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopShell } from "./desktop-shell";
 import { SIDEBAR_WIDTH, useSidebarCollapse } from "./sidebar-collapse";
 import { EDGE_SNAP } from "./use-resizable-edge";
 
 const ignore = () => undefined;
 
-/** The window as `App` stands it: the shell over the collapse, whose chord answers on Plans alone. */
+/** The window as `App` stands it: the shell over the collapse and the window's keymap. */
 function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JSX.Element {
-  const sidebar = useSidebarCollapse(tab === PANEL_TAB.PLANS, fixture);
+  const sidebar = useSidebarCollapse(fixture);
+  useAppKeymap(true);
   return createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
     identity: {
@@ -349,4 +353,136 @@ test("the keys step Settings' edge, and a double-click or Enter gives back the d
   drag(264, [214], pages());
   key("Enter", pages());
   assert.equal(width(pages()), String(SIDEBAR_WIDTH.DEFAULT));
+});
+
+/** What the routed window was asked for that it does not draw itself: each new plan. */
+let newPlans = 0;
+
+/** The menu bar's one listener, as the bridge hands it to the window. */
+let menuListener: ((command: AppCommand) => void) | undefined;
+
+/**
+ * The window with its tab and settings page held the way `App` holds them —
+ * arriving at a tab lands on its front page — and the keymap and the menu
+ * bar both wired.
+ */
+function Routed({ start }: { start: PanelTab }): React.JSX.Element {
+  const [tab, setTab] = useState(start);
+  const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
+  const sidebar = useSidebarCollapse(false);
+  useAppKeymap(true);
+  useMenuCommands(true);
+  return createElement(DesktopShell, {
+    gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
+    identity: {
+      speakers: { listening: false, lukeSpeaking: false },
+      voiceActive: { developer: false, luke: false },
+      fixtureSpeaking: false,
+      voiceOpening: false,
+    },
+    tab,
+    onTabChange: (next) => {
+      setTab(next);
+      setView(SETTINGS_VIEW.ROOT);
+    },
+    plans: plansControl({
+      onNewPlan: () => {
+        newPlans += 1;
+      },
+    }),
+    sidebar,
+    settings: settingsPanelProps({ view, onViewChange: setView }),
+    onSettingsSearchEngaged: ignore,
+  });
+}
+
+function route(start: PanelTab): void {
+  act(() => {
+    root ??= createRoot(document.body.appendChild(document.createElement("div")));
+    root.render(createElement(Routed, { start }));
+  });
+}
+
+/** A Command chord pressed anywhere in the window, answering whether the window claimed it. */
+function command(key: string, modifiers: KeyboardEventInit = {}): boolean {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    metaKey: true,
+    cancelable: true,
+    ...modifiers,
+  });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+  return event.defaultPrevented;
+}
+
+/** The title of the settings page standing, or nothing while the plans are. */
+function settingsPage(): string | undefined {
+  return document.body.querySelector(".settings-page")?.getAttribute("aria-label") ?? undefined;
+}
+
+function stubBridge(): void {
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: ignore,
+      act: () => Promise.resolve({ ok: true }),
+      onMenuCommand: (listener: (command: AppCommand) => void) => {
+        menuListener = listener;
+        return () => {
+          menuListener = undefined;
+        };
+      },
+    },
+  });
+}
+
+test("Command-comma opens Settings and Command-slash its Keyboard shortcuts page, from anywhere", () => {
+  stubBridge();
+  route(PANEL_TAB.PLANS);
+  assert.equal(settingsPage(), undefined);
+
+  assert.equal(command(","), true);
+  assert.equal(settingsPage(), "General");
+
+  assert.equal(command("/"), true);
+  assert.equal(settingsPage(), "Keyboard shortcuts");
+  // The page lists the window's own chords beside the two keys.
+  const rows = [...document.body.querySelectorAll(".settings-row strong")].map(
+    (row) => row.textContent,
+  );
+  assert.ok(rows.includes("New plan"));
+  assert.ok(rows.includes("Toggle panel"));
+  assert.ok(rows.includes("Exit full screen"));
+});
+
+test("Command-N leaves Settings for a new plan, and Command-[ backs out of Settings", () => {
+  stubBridge();
+  newPlans = 0;
+  route(PANEL_TAB.SETTINGS);
+
+  assert.equal(command("["), true);
+  assert.equal(settingsPage(), undefined, "the plans are back");
+  assert.equal(command("["), false, "nothing to back out of on the plans");
+
+  command(",");
+  assert.equal(command("n"), true);
+  assert.equal(settingsPage(), undefined);
+  assert.equal(newPlans, 1);
+});
+
+test("a command chosen from the menu bar runs as its chord does, and only where it can", () => {
+  stubBridge();
+  route(PANEL_TAB.PLANS);
+  assert.ok(menuListener, "the window listens to the menu bar");
+
+  act(() => menuListener?.(APP_COMMAND.TOGGLE_SIDEBAR));
+  assert.equal(sidebar().hasAttribute("inert"), true);
+  act(() => menuListener?.(APP_COMMAND.SETTINGS));
+  assert.equal(settingsPage(), "General");
+  // Settings draws no sidebar toggle, so the menu's item there does nothing.
+  act(() => menuListener?.(APP_COMMAND.TOGGLE_SIDEBAR));
+  act(() => menuListener?.(APP_COMMAND.BACK));
+  assert.equal(sidebar().hasAttribute("inert"), true, "the fold is as the menu left it");
 });

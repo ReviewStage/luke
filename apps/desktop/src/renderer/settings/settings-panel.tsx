@@ -21,7 +21,7 @@ import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./contro
 import { FeedbackSection } from "./feedback-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
 import { pageResetControl } from "./reset";
-import { ShortcutSection } from "./shortcuts-page";
+import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { VoiceSection } from "./voice-page";
 import { useSettingsWrites } from "./writes";
@@ -176,12 +176,15 @@ export function SettingsPanel({
       ) : null}
 
       {view === SETTINGS_VIEW.SHORTCUTS ? (
-        <ShortcutSection
-          shortcuts={shortcuts}
-          writes={writes}
-          {...(panelView ? { view: panelView } : undefined)}
-          voiceAvailable={microphone.voiceAvailable}
-        />
+        <>
+          <ShortcutSection
+            shortcuts={shortcuts}
+            writes={writes}
+            {...(panelView ? { view: panelView } : undefined)}
+            voiceAvailable={microphone.voiceAvailable}
+          />
+          <WindowShortcutSections />
+        </>
       ) : null}
 
       {view !== SETTINGS_VIEW.ROOT ? null : (

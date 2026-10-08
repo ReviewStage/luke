@@ -1,9 +1,12 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { GearIcon, PlusIcon, UserIcon } from "@sidecar/panel";
 import { useState } from "react";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
@@ -104,26 +107,27 @@ function AccountButton({
 }): React.JSX.Element {
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
   return (
-    <button
-      type="button"
-      className="sidebar-item sidebar-account"
-      aria-current={current ? "page" : undefined}
-      title="Settings"
-      onClick={onPress}
-    >
-      <AccountAvatar account={account} />
-      <span className="sidebar-account-name">
-        {signedIn ? (account.name ?? account.email) : "Settings"}
-      </span>
-      <span className="sidebar-account-settings">
-        <GearIcon />
-        {settingsNote ? (
-          <span className="tab-note" title={settingsNote}>
-            <span className="visually-hidden">({settingsNote})</span>
-          </span>
-        ) : null}
-      </span>
-    </button>
+    <Tooltip label="Settings" command={APP_COMMAND.SETTINGS}>
+      <button
+        type="button"
+        className="sidebar-item sidebar-account"
+        aria-current={current ? "page" : undefined}
+        onClick={onPress}
+      >
+        <AccountAvatar account={account} />
+        <span className="sidebar-account-name">
+          {signedIn ? (account.name ?? account.email) : "Settings"}
+        </span>
+        <span className="sidebar-account-settings">
+          <GearIcon />
+          {settingsNote ? (
+            <span className="tab-note" title={settingsNote}>
+              <span className="visually-hidden">({settingsNote})</span>
+            </span>
+          ) : null}
+        </span>
+      </button>
+    </Tooltip>
   );
 }
 
@@ -168,6 +172,22 @@ export function DesktopSidebar({
     plans.onNewPlan();
   };
   const { snap, edge } = useSidebarEdge(sidebar, sidebar.onToggle);
+  // Moving up and down the list as it reads, New plan at its head: up from
+  // the first plan is the new-plan page, and down from that page is the
+  // first plan. The ends go no further.
+  const at = composing ? -1 : plans.plans.findIndex((plan) => plan.id === plans.activePlanId);
+  const step = (by: number) => {
+    const next = at + by;
+    if (next === -1) newPlan();
+    const plan = plans.plans[next];
+    if (plan !== undefined) openPlan(plan.id);
+  };
+  const listed = plans.signedIn && plans.plans.length > 0;
+  useAppCommand(APP_COMMAND.PREVIOUS_PLAN, listed && at >= 0 ? () => step(-1) : undefined);
+  useAppCommand(
+    APP_COMMAND.NEXT_PLAN,
+    listed && at < plans.plans.length - 1 ? () => step(1) : undefined,
+  );
 
   return (
     <aside className="desktop-sidebar" inert={sidebar.collapsed} data-snap={snap}>
@@ -178,11 +198,13 @@ export function DesktopSidebar({
         type="button"
         className="sidebar-new-plan"
         aria-current={composing ? "page" : undefined}
+        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_PLAN)}
         disabled={!plans.signedIn}
         onClick={newPlan}
       >
         <PlusIcon />
         New plan
+        <ShortcutGlyphs command={APP_COMMAND.NEW_PLAN} className="row-shortcut" />
       </button>
 
       <nav className="sidebar-section" aria-label="Plans">

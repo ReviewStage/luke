@@ -9,6 +9,7 @@ import {
   StopIcon,
 } from "@sidecar/panel";
 import { ThinkingDots } from "../thinking-dots";
+import { Tooltip } from "../tooltip";
 import { PlanBody } from "./plan-body";
 import {
   type CallStatus,
@@ -284,18 +285,19 @@ export function MicrophoneRow({
   const notes = status?.backend.notes ?? false;
   return (
     <footer className="plan-microphone-row">
-      <button
-        type="button"
-        className="plan-microphone"
-        aria-label={microphone.label}
-        title={microphone.label}
-        aria-pressed={microphone.muted}
-        data-muted={String(microphone.muted)}
-        disabled={!microphone.enabled}
-        onClick={microphone.onPress}
-      >
-        {microphone.muted ? <MicrophoneOffIcon /> : <MicrophoneIcon />}
-      </button>
+      <Tooltip label={microphone.label}>
+        <button
+          type="button"
+          className="plan-microphone"
+          aria-label={microphone.label}
+          aria-pressed={microphone.muted}
+          data-muted={String(microphone.muted)}
+          disabled={!microphone.enabled}
+          onClick={microphone.onPress}
+        >
+          {microphone.muted ? <MicrophoneOffIcon /> : <MicrophoneIcon />}
+        </button>
+      </Tooltip>
       <span className="plan-voice-status">
         <span className="plan-voice-word">{status?.voiceWord ?? microphone.label}</span>
         {planner !== undefined || notes ? (
@@ -319,15 +321,16 @@ export function MicrophoneRow({
         ) : null}
       </span>
       {stop.shown ? (
-        <button
-          type="button"
-          className="plan-stop"
-          aria-label={STOP_CALL_LABEL}
-          title={STOP_CALL_LABEL}
-          onClick={stop.onPress}
-        >
-          <StopIcon />
-        </button>
+        <Tooltip label={STOP_CALL_LABEL}>
+          <button
+            type="button"
+            className="plan-stop"
+            aria-label={STOP_CALL_LABEL}
+            onClick={stop.onPress}
+          >
+            <StopIcon />
+          </button>
+        </Tooltip>
       ) : null}
     </footer>
   );

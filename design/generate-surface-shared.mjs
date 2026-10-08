@@ -52,6 +52,8 @@ const MOTION_DELAY_MS = {
   EXPAND: 200,
   PEEK: 60,
   ROW_STAGGER: 32,
+  // How long a pointer rests on a control before its hover hint shows.
+  HINT: 500,
 };
 const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
 const ROW_FAN_PX = 7;
@@ -156,6 +158,7 @@ function motionTokensCss() {
   --expand-delay: ${ms(MOTION_DELAY_MS.EXPAND)};
   --peek-delay: ${ms(MOTION_DELAY_MS.PEEK)};
   --row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};
+  --hint-delay: ${ms(MOTION_DELAY_MS.HINT)};
   --row-fan: ${ROW_FAN_PX}px;
   --row-fan-limit: ${ROW_FAN_LIMIT};
   --slot-delay: calc(var(--duration-exit) + var(--peek-delay));

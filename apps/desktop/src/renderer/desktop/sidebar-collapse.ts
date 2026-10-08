@@ -27,12 +27,6 @@ export const SIDEBAR_WIDTH = {
 
 const decodeWidth = Schema.decodeUnknownOption(Schema.FiniteFromString);
 
-/** The chord that folds and unfolds the sidebar, as an accelerator `Keycaps` draws. */
-export const SIDEBAR_HOTKEY = "Command+B";
-
-/** The same chord as `aria-keyshortcuts` spells it. */
-export const SIDEBAR_HOTKEY_ARIA = "Meta+B";
-
 /** The kept choice, or open when there is none or storage refuses the read. */
 function readCollapsed(): boolean {
   try {
@@ -67,16 +61,14 @@ export interface SidebarCollapse {
 }
 
 /**
- * The collapse and its chord. `available` is whether the sidebar is on
- * screen to fold — the Plans tab, the panel holding the keyboard — and the
- * chord answers only then, so Command-B in Settings or under a sheet is left
- * to whatever else wants it. The choice itself outlives an absence: Settings
- * hands back the sidebar the way it was left. The width outlives a fold, so
- * the sidebar opens again as wide as it closed. A fixture run starts open at
- * the default width and keeps nothing, so its frames never wear a
- * developer's own fold or width.
+ * The collapse and the width. The chord is the sidebar toggle's to offer,
+ * so it answers only while the toggle stands. The choice itself outlives an
+ * absence: Settings hands back the sidebar the way it was left. The width
+ * outlives a fold, so the sidebar opens again as wide as it closed. A fixture
+ * run starts open at the default width and keeps nothing, so its frames never
+ * wear a developer's own fold or width.
  */
-export function useSidebarCollapse(available: boolean, fixtureMode: boolean): SidebarCollapse {
+export function useSidebarCollapse(fixtureMode: boolean): SidebarCollapse {
   // Note that the fixture run's fold is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
   // arrives, a render after the kept fold was read.
@@ -112,20 +104,6 @@ export function useSidebarCollapse(available: boolean, fixtureMode: boolean): Si
       // The sidebar keeps working at the width it holds.
     }
   }, [keptWidth]);
-
-  useEffect(() => {
-    if (!available) return;
-    const handleKey = (event: KeyboardEvent) => {
-      // The lowercase key is deliberate, as for Command-F: with Shift held
-      // this is some other chord. Command alone, because Control-B is the
-      // text field's own caret-back. A held key toggles once, not per repeat.
-      if (event.key !== "b" || !event.metaKey || event.ctrlKey || event.altKey) return;
-      event.preventDefault();
-      if (!event.repeat) onToggle();
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [available, onToggle]);
 
   return { collapsed, width, onToggle, onResize };
 }

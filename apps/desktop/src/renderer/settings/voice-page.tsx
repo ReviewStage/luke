@@ -11,6 +11,7 @@ import {
   VOICE_KEYLESS_NOTE,
 } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { Tooltip } from "../tooltip";
 import type { MicrophoneControl } from "./controls";
 import { AttentionMark } from "./marks";
 import { SchemaSettingRows } from "./schema-rows";
@@ -91,16 +92,17 @@ export function VoiceSection({
             </span>
             <span className="settings-actions">
               {microphoneRow.offerSystemSettings ? (
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label="Open Privacy & Security in System Settings"
-                  /* The ellipsis is the promise that it opens somewhere else. */
-                  title="System Settings…"
-                  onClick={microphone.onOpenSettings}
-                >
-                  <ExternalIcon />
-                </button>
+                /* The ellipsis is the promise that it opens somewhere else. */
+                <Tooltip label="System Settings…">
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Open Privacy & Security in System Settings"
+                    onClick={microphone.onOpenSettings}
+                  >
+                    <ExternalIcon />
+                  </button>
+                </Tooltip>
               ) : null}
               {microphoneRow.offerAccess ? (
                 <button type="button" className="quiet-button" onClick={microphone.onRequest}>

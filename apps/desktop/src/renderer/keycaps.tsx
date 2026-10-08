@@ -8,15 +8,14 @@
  * one piece and the gaps between the caps are drawn rather than spelled.
  */
 
-import { voiceHotkeyKeycaps } from "@sidecar/settings";
 import type React from "react";
 
 export function Keycaps({
-  accelerator,
+  caps,
   className,
 }: {
-  /** The chord as the system registered it, e.g. `Alt+Space`. */
-  accelerator: string;
+  /** The chord's keys in the order a Mac writes them, e.g. `["⌥", "Space"]`. */
+  caps: readonly string[];
   /** What the surface around the caps calls them, if it needs to say. */
   className?: string;
 }): React.JSX.Element {
@@ -24,7 +23,7 @@ export function Keycaps({
     <kbd className={className ? `keycap-chord ${className}` : "keycap-chord"}>
       {/* A chord holds each modifier once and ends in a key no modifier
           spells, so the cap itself is the identity. */}
-      {voiceHotkeyKeycaps(accelerator).map((cap) => (
+      {caps.map((cap) => (
         <kbd className="keycap" key={cap}>
           {cap}
         </kbd>

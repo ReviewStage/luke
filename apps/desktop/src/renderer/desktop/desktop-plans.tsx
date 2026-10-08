@@ -1,4 +1,6 @@
 import { CheckIcon, CopyIcon } from "@sidecar/panel";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { useAppCommand } from "../app-commands";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import {
@@ -10,6 +12,7 @@ import {
 } from "../planning/planning-model";
 import { MicrophoneRow } from "../planning/planning-parts";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { Tooltip } from "../tooltip";
 import { PlanActionsButton } from "./plan-actions";
 import { SidePanel, SidePanelToggle } from "./side-panel";
 
@@ -46,6 +49,7 @@ function Toolbar({
 /** Copy, the plan's own action and so never folded into its menu, with its refusal said beside it. */
 function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element {
   const copied = copy.shown === COPY_SHOWN.COPIED;
+  useAppCommand(APP_COMMAND.COPY_PLAN, copy.onPress);
   return (
     <>
       {copy.shown === COPY_SHOWN.FAILED ? (
@@ -53,15 +57,17 @@ function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element
           {COPY_FAILED_NOTE}
         </p>
       ) : null}
-      <button
-        type="button"
-        className="toolbar-button"
-        data-copied={copied ? "true" : undefined}
-        onClick={copy.onPress}
-      >
-        {copied ? <CheckIcon /> : <CopyIcon />}
-        {copied ? "Copied" : "Copy plan"}
-      </button>
+      <Tooltip label="Copy plan" command={APP_COMMAND.COPY_PLAN}>
+        <button
+          type="button"
+          className="toolbar-button"
+          data-copied={copied ? "true" : undefined}
+          onClick={copy.onPress}
+        >
+          {copied ? <CheckIcon /> : <CopyIcon />}
+          {copied ? "Copied" : "Copy plan"}
+        </button>
+      </Tooltip>
     </>
   );
 }
@@ -123,7 +129,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           <CopyButton copy={plans.copy} />
           <PlanActionsButton key={plan.id} plans={plans} plan={plan} />
           {/* The open panel holds its own toggle in its own top row. */}
-          {sidePanel.open ? null : <SidePanelToggle open={false} onToggle={sidePanel.onToggle} />}
+          {sidePanel.open ? null : <SidePanelToggle panel={sidePanel} />}
         </Toolbar>
         <section className="desktop-document" aria-label={plan.name}>
           <PlanBody plan={plan} live={plans.live} />

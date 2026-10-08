@@ -7,6 +7,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
+import { useAppKeymap } from "../app-commands";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
@@ -519,4 +520,56 @@ test("a plan that cannot be drawn offers its way back to the list", () => {
     assert.deepEqual(left, [kind]);
     unmountAll();
   }
+});
+
+/** The open plan's toolbar under the window's keymap. */
+function mountToolbarWithKeys(plans: PlansControl): HTMLButtonElement {
+  function Toolbar() {
+    useAppKeymap(true);
+    return createElement(DesktopPlans, { plans });
+  }
+  const container = mount(createElement(Toolbar));
+  const more = container.querySelector('[aria-label="Plan actions"]');
+  assert.ok(more instanceof HTMLButtonElement);
+  return more;
+}
+
+/** A Command chord pressed on a target, answering whether the window claimed it. */
+function chord(target: EventTarget, init: KeyboardEventInit): boolean {
+  const event = new KeyboardEvent("keydown", {
+    metaKey: true,
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  act(() => {
+    target.dispatchEvent(event);
+  });
+  return event.defaultPrevented;
+}
+
+test("Command-Delete asks before the open plan is deleted, and leaves a text field's own Command-Delete alone", async () => {
+  const { plans, asked } = openTab();
+  mountToolbarWithKeys(plans);
+  const field = document.body.appendChild(document.createElement("textarea"));
+
+  assert.equal(chord(field, { key: "Backspace" }), false);
+  assert.equal(dialog(), null);
+
+  assert.equal(chord(window, { key: "Backspace" }), true);
+  assert.deepEqual(asked.deleted, [], "nothing is deleted before the answer");
+  await confirmDelete();
+  assert.deepEqual(asked.deleted, [PLAN.id]);
+});
+
+test("Option-Command-R reveals the open plan's folder, and only once it has one", () => {
+  const folderless = openTab();
+  mountToolbarWithKeys(folderless.plans);
+  assert.equal(chord(window, { key: "®", code: "KeyR", altKey: true }), false);
+  unmountAll();
+
+  const { plans, asked } = openTab({ [PLAN.id]: "/Users/dean/code/luke" });
+  mountToolbarWithKeys(plans);
+  assert.equal(chord(window, { key: "®", code: "KeyR", altKey: true }), true);
+  assert.deepEqual(asked.revealed, [PLAN.id]);
 });
