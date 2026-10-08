@@ -117,6 +117,7 @@ export function DesktopShell({
     return (
       <div className="desktop-shell">
         <DesktopSettings
+          sidebar={sidebar}
           settings={settings}
           onSearchEngaged={onSettingsSearchEngaged}
           onBack={() => onTabChange(PANEL_TAB.PLANS)}

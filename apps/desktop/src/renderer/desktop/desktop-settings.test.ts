@@ -8,6 +8,7 @@ import { settingsPanelProps } from "#testing/settings-panel-props";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopSettings } from "./desktop-settings";
+import { SIDEBAR_WIDTH } from "./sidebar-collapse";
 
 const ignore = () => undefined;
 
@@ -22,6 +23,12 @@ function Harness(): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   turnPage = setView;
   return createElement(DesktopSettings, {
+    sidebar: {
+      collapsed: false,
+      width: SIDEBAR_WIDTH.DEFAULT,
+      onToggle: ignore,
+      onResize: ignore,
+    },
     settings: settingsPanelProps({ view, onViewChange: setView }),
     onSearchEngaged: ignore,
     onBack: ignore,

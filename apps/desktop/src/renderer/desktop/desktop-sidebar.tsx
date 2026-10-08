@@ -7,7 +7,12 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
-import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
+import {
+  EDGE_SIDE,
+  type ResizableEdge,
+  type ResizableEdgeProps,
+  useResizableEdge,
+} from "./use-resizable-edge";
 
 /**
  * What the sidebar leaves the work column beside it, in CSS pixels: the
@@ -16,10 +21,28 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
 const WORK_RESERVE = 360;
 
 /**
- * The sidebar's right edge, dragged to resize it and past its least width to
- * fold it away; double-clicked, it goes back to the default width.
+ * The edge of the window's left column, the plans' sidebar or Settings' page
+ * list, which share one width: resizing either resizes both. `onCollapse`
+ * folds the column away past its least width; without it, as in Settings,
+ * where there is no plans' sidebar to fold, the drag holds at the bound.
  */
-function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
+export function useSidebarEdge(sidebar: SidebarCollapse, onCollapse?: () => void): ResizableEdge {
+  return useResizableEdge({
+    side: EDGE_SIDE.RIGHT,
+    width: sidebar.width,
+    bounds: SIDEBAR_WIDTH,
+    reserve: WORK_RESERVE,
+    label: "Resize sidebar",
+    onResize: sidebar.onResize,
+    onCollapse,
+  });
+}
+
+/**
+ * The left column's right edge, dragged to resize it; double-clicked, it goes
+ * back to the default width.
+ */
+export function SidebarResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   // biome-ignore lint/a11y/useSemanticElements: a resize edge is a focusable separator that takes keys, which an <hr> cannot be.
   return <div className="sidebar-resize" {...edge} />;
 }
@@ -144,15 +167,7 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlan();
   };
-  const { snap, edge } = useResizableEdge({
-    side: EDGE_SIDE.RIGHT,
-    width: sidebar.width,
-    bounds: SIDEBAR_WIDTH,
-    reserve: WORK_RESERVE,
-    label: "Resize sidebar",
-    onResize: sidebar.onResize,
-    onCollapse: sidebar.onToggle,
-  });
+  const { snap, edge } = useSidebarEdge(sidebar, sidebar.onToggle);
 
   return (
     <aside className="desktop-sidebar" inert={sidebar.collapsed} data-snap={snap}>
@@ -206,7 +221,7 @@ export function DesktopSidebar({
         />
       </div>
       {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
-      <ResizeEdge edge={edge} />
+      <SidebarResizeEdge edge={edge} />
     </aside>
   );
 }

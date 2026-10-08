@@ -64,19 +64,26 @@ function press(): void {
   act(() => button.click());
 }
 
-function edge(): HTMLElement {
-  const separator = sidebar().querySelector<HTMLElement>("[role='separator']");
-  assert.ok(separator, "the sidebar's resize edge is drawn");
+/** Settings' page list, which stands where the sidebar does and shares its width. */
+function pages(): HTMLElement {
+  const nav = document.body.querySelector<HTMLElement>("nav[aria-label='Settings pages']");
+  assert.ok(nav, "Settings' page list is drawn");
+  return nav;
+}
+
+function edge(column = sidebar()): HTMLElement {
+  const separator = column.querySelector<HTMLElement>("[role='separator']");
+  assert.ok(separator, "the column's resize edge is drawn");
   return separator;
 }
 
-function width(): string | null {
-  return edge().getAttribute("aria-valuenow");
+function width(column = sidebar()): string | null {
+  return edge(column).getAttribute("aria-valuenow");
 }
 
 /** Drags the edge from `from` through each of `through`, releasing at the last, reading the pending snap at each stop. */
-function drag(from: number, through: number[]): (string | undefined)[] {
-  const target = edge();
+function drag(from: number, through: number[], column = sidebar()): (string | undefined)[] {
+  const target = edge(column);
   const pointer = (type: string, clientX: number) =>
     act(() => {
       target.dispatchEvent(new PointerEvent(type, { clientX, pointerId: 1, bubbles: true }));
@@ -84,14 +91,14 @@ function drag(from: number, through: number[]): (string | undefined)[] {
   pointer("pointerdown", from);
   const snaps = through.map((x) => {
     pointer("pointermove", x);
-    return sidebar().dataset.snap;
+    return column.dataset.snap;
   });
   pointer("pointerup", through.at(-1) ?? from);
   return snaps;
 }
 
-function key(name: string): void {
-  act(() => edge().dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true })));
+function key(name: string, column = sidebar()): void {
+  act(() => edge(column).dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true })));
 }
 
 /** Command-B (or another B chord) from anywhere in the window, answering whether the window claimed it. */
@@ -286,10 +293,60 @@ test("a fixture run draws the default width over a kept one and keeps none of it
   show(PANEL_TAB.PLANS);
   show(PANEL_TAB.PLANS, true);
   assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT), "the developer's width is not drawn");
+  show(PANEL_TAB.SETTINGS, true);
+  assert.equal(width(pages()), String(SIDEBAR_WIDTH.DEFAULT), "nor in Settings");
+  show(PANEL_TAB.PLANS, true);
   drag(264, [220]);
   assert.equal(width(), "220");
   quit();
 
   show(PANEL_TAB.PLANS);
   assert.equal(width(), "340", "the developer's width still stands");
+});
+
+test("Settings' page list resizes from its own edge, one width with the plans' sidebar", () => {
+  show(PANEL_TAB.SETTINGS);
+  assert.equal(width(pages()), String(SIDEBAR_WIDTH.DEFAULT));
+  drag(264, [330], pages());
+  assert.equal(width(pages()), "330");
+
+  show(PANEL_TAB.PLANS);
+  assert.equal(width(), "330", "the plans' sidebar comes back as wide as Settings left it");
+  drag(330, [290]);
+
+  show(PANEL_TAB.SETTINGS);
+  assert.equal(width(pages()), "290");
+  quit();
+
+  show(PANEL_TAB.SETTINGS);
+  assert.equal(width(pages()), "290", "a width set in Settings outlives a relaunch");
+});
+
+test("a drag far past the least width in Settings holds the page list there and folds nothing", () => {
+  show(PANEL_TAB.SETTINGS);
+  // 264 wide at 264: 20 asks for 20, far past where the plans' sidebar would fold.
+  assert.deepEqual(drag(264, [20], pages()), [undefined]);
+  assert.equal(width(pages()), String(SIDEBAR_WIDTH.MIN));
+
+  key("ArrowLeft", pages());
+  assert.equal(width(pages()), String(SIDEBAR_WIDTH.MIN));
+
+  show(PANEL_TAB.PLANS);
+  assert.equal(sidebar().hasAttribute("inert"), false, "the plans' sidebar was not folded");
+  assert.equal(width(), String(SIDEBAR_WIDTH.MIN));
+});
+
+test("the keys step Settings' edge, and a double-click or Enter gives back the default width", () => {
+  show(PANEL_TAB.SETTINGS);
+  key("ArrowRight", pages());
+  assert.equal(width(pages()), String(SIDEBAR_WIDTH.DEFAULT + 16));
+  key("End", pages());
+  assert.equal(width(pages()), String(SIDEBAR_WIDTH.MAX));
+
+  act(() => edge(pages()).dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+  assert.equal(width(pages()), String(SIDEBAR_WIDTH.DEFAULT));
+
+  drag(264, [214], pages());
+  key("Enter", pages());
+  assert.equal(width(pages()), String(SIDEBAR_WIDTH.DEFAULT));
 });

@@ -17,6 +17,8 @@ import {
   settingsSearchEntries,
 } from "../settings-search";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
+import { SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
+import type { SidebarCollapse } from "./sidebar-collapse";
 
 /** The front page's name here, where it is one page among the others rather than their index. */
 const GENERAL_PAGE = { title: "General", icon: <LaptopIcon /> } as const;
@@ -37,12 +39,18 @@ function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } 
  * standing, so the next result is one press away, and clearing the field
  * brings the list back. The query lives here, so it lasts as long as Settings
  * stays open.
+ *
+ * The list is as wide as the plans' sidebar and resizes it from its own edge,
+ * but never folds: a drag past the least width holds there, because Settings
+ * has no other way back to its pages.
  */
 export function DesktopSettings({
+  sidebar,
   settings,
   onSearchEngaged,
   onBack,
 }: {
+  sidebar: SidebarCollapse;
   settings: SettingsPanelProps;
   /** The caret entering or leaving the search field, which holds the panel open. */
   onSearchEngaged: (engaged: boolean) => void;
@@ -80,6 +88,7 @@ export function DesktopSettings({
   // The opened result stays marked only while its page is the one showing: a
   // page turned some other way, Escape or a voice request, leaves it.
   const marked = opened?.page === settings.view ? opened.id : undefined;
+  const { edge } = useSidebarEdge(sidebar);
 
   return (
     <div className="desktop-settings">
@@ -122,6 +131,8 @@ export function DesktopSettings({
             </ul>
           )}
         </div>
+        {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
+        <SidebarResizeEdge edge={edge} />
       </nav>
       <section className="settings-page" aria-label={shown.title}>
         <header className="desktop-toolbar">
