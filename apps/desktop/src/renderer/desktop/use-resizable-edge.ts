@@ -88,7 +88,7 @@ export interface ResizableEdgeProps {
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
   onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
   onPointerUp: (event: React.PointerEvent<HTMLElement>) => void;
-  onPointerCancel: () => void;
+  onPointerCancel: (event: React.PointerEvent<HTMLElement>) => void;
   onDoubleClick: () => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
 }
@@ -99,10 +99,16 @@ export interface ResizableEdge {
   edge: ResizableEdgeProps;
 }
 
-/** A drag under way: where it began, and the greatest width the pane could take when it did. */
+/**
+ * A drag under way: the pointer making it, where it began, the width the pane
+ * was drawn at and the one its owner kept (wider where the window held it
+ * narrower), and the greatest width the pane could take when it began.
+ */
 interface Drag {
+  pointerId: number;
   x: number;
-  width: number;
+  from: number;
+  kept: number;
   max: number;
 }
 
@@ -128,11 +134,16 @@ function snapFor(asked: number, min: number, max: number, options: ResizableEdge
 /** The width the pane asks for when the pointer stands at `x`, by how far it has come and which way widens. */
 function askedWidth(drag: Drag, x: number, side: EdgeSide): number {
   const moved = side === EDGE_SIDE.LEFT ? drag.x - x : x - drag.x;
-  return drag.width + moved;
+  return drag.from + moved;
 }
 
 /** The width one key press asks for, or nothing where the key is not the edge's. */
-function keyedWidth(key: string, width: number, options: ResizableEdgeOptions): number | undefined {
+function keyedWidth(
+  key: string,
+  width: number,
+  max: number,
+  options: ResizableEdgeOptions,
+): number | undefined {
   // Note that the arrow pointing away from the pane widens it, because that
   // is the way the edge moves.
   const widens = options.side === EDGE_SIDE.LEFT ? "ArrowLeft" : "ArrowRight";
@@ -140,7 +151,7 @@ function keyedWidth(key: string, width: number, options: ResizableEdgeOptions): 
   if (key === widens) return width + KEY_STEP;
   if (key === narrows) return width - KEY_STEP;
   if (key === "Home") return options.bounds.MIN;
-  if (key === "End") return options.bounds.MAX;
+  if (key === "End") return max;
   if (key === "Enter") return options.bounds.DEFAULT;
   return undefined;
 }
@@ -155,8 +166,11 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdge {
   const drag = useRef<Drag | undefined>(undefined);
   const [snap, setSnap] = useState<EdgeSnap>(EDGE_SNAP.NONE);
 
-  const end = (): Drag | undefined => {
+  // Note that only the pointer that began the drag moves or ends it, so a
+  // second finger on the trackpad cannot take the drag over.
+  const end = (pointerId: number): Drag | undefined => {
     const ended = drag.current;
+    if (ended?.pointerId !== pointerId) return undefined;
     drag.current = undefined;
     setSnap(EDGE_SNAP.NONE);
     return ended;
@@ -171,22 +185,28 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdge {
     "aria-valuenow": width,
     tabIndex: 0,
     onPointerDown: (event) => {
-      if (event.button !== 0) return;
+      if (event.button !== 0 || drag.current !== undefined) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       // The drag starts from the width the pane is drawn at, which the window
       // may hold narrower than the one kept.
       const max = roomFor(event.currentTarget, bounds, options.reserve);
-      drag.current = { x: event.clientX, width: Math.min(width, max), max };
+      drag.current = {
+        pointerId: event.pointerId,
+        x: event.clientX,
+        from: Math.min(width, max),
+        kept: width,
+        max,
+      };
     },
     onPointerMove: (event) => {
       const held = drag.current;
-      if (held === undefined) return;
+      if (held?.pointerId !== event.pointerId) return;
       const asked = askedWidth(held, event.clientX, options.side);
       setSnap(snapFor(asked, bounds.MIN, held.max, options));
       onResize(Math.min(held.max, Math.max(bounds.MIN, asked)));
     },
     onPointerUp: (event) => {
-      const held = end();
+      const held = end(event.pointerId);
       if (held === undefined) return;
       const snapped = snapFor(
         askedWidth(held, event.clientX, options.side),
@@ -197,20 +217,22 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdge {
       if (snapped === EDGE_SNAP.NONE) return;
       // A snap keeps the width the pane had before the drag, so reopening it
       // or leaving the whole window gives back the pane the developer had.
-      onResize(held.width);
+      onResize(held.kept);
       if (snapped === EDGE_SNAP.COLLAPSE) options.onCollapse?.();
       else options.onExpand?.();
     },
-    onPointerCancel: () => {
-      const held = end();
-      if (held !== undefined) onResize(held.width);
+    onPointerCancel: (event) => {
+      const held = end(event.pointerId);
+      if (held !== undefined) onResize(held.kept);
     },
     onDoubleClick: () => onResize(bounds.DEFAULT),
     onKeyDown: (event) => {
-      const asked = keyedWidth(event.key, width, options);
+      // The keys move the pane the window draws, held to the same room a drag is.
+      const max = roomFor(event.currentTarget, bounds, options.reserve);
+      const asked = keyedWidth(event.key, Math.min(width, max), max, options);
       if (asked === undefined) return;
       event.preventDefault();
-      onResize(Math.min(bounds.MAX, Math.max(bounds.MIN, asked)));
+      onResize(Math.min(max, Math.max(bounds.MIN, asked)));
     },
   };
   return { snap, edge };

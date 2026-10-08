@@ -44,7 +44,6 @@ const DOCUMENT_RESERVE = 360;
  * to the default width.
  */
 function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
-  // biome-ignore lint/a11y/useSemanticElements: a resize edge is a focusable separator that takes keys, which an <hr> cannot be.
   return <div className="side-panel-resize" {...edge} />;
 }
 
