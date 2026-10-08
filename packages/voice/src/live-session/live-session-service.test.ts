@@ -952,6 +952,114 @@ it.effect(
 );
 
 it.effect(
+  "a run the brain opened of its own waits for the asked run under way: its reply is said session-wide once that run's reply has been, and the asked reply is not cut off",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Which queue should we use?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.WOKEN, runId: "woken-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "woken-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "woken-1",
+        sentence: "The research is back: three sources agree.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "woken-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Use the existing job queue.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      // Each commentary waits for the one ahead of it to be taken.
+      sideband.acknowledge(
+        sideband.sent.findIndex((sent) => sent.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND),
+        2000,
+        2600,
+      );
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(
+        commentary.map((append) =>
+          "content" in append ? [append.content, append.delegation_id] : [],
+        ),
+        [
+          ["Use the existing job queue.", "item_1"],
+          ["The research is back: three sources agree.", null],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "a run the brain opened of its own is silenced by the developer's next ask, as any older run is, and a woken run that fails says nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Which queue should we use?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.WOKEN, runId: "woken-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "woken-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "woken-1",
+        sentence: "The research is back.",
+      });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.WOKEN, runId: "woken-2" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "woken-2",
+        end: LIVE_BRAIN_RUN_END.FAILED,
+      });
+      sideband.input("Actually, skip the queue.", 1500, 2300);
+      sideband.delegation("item_2", 2400);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-2" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-2",
+        sentence: "Then we call it inline.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-2",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.deepEqual(
+        commentary.map((append) => ("content" in append ? append.content : undefined)),
+        ["Then we call it inline."],
+      );
+    }),
+);
+
+it.effect(
   "an exchange superseded after a sentence it released while its run went on says no later sentence and no note when that run then fails",
   () =>
     Effect.gen(function* () {

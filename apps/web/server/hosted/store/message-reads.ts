@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -379,6 +379,34 @@ const TurnRowSchema = Schema.Struct({
 export type StoredTurnRecord = typeof TurnRowSchema.Type;
 
 const TurnRowsSchema = Schema.Array(TurnRowSchema);
+
+/**
+ * The turns the brain opened of its own in one standing conversation since
+ * an instant — each a subagent's wake-up, recorded as a child completion —
+ * oldest first, so a live session hears them in the order they came.
+ */
+export function turnsWokenIn(
+  userId: string,
+  conversationId: string,
+  since: Date,
+): Effect.Effect<readonly StoredTurnRecord[], MessageReadFailure, SqlClient.SqlClient> {
+  return Effect.flatMap(
+    db
+      .select(TURN_FIELDS)
+      .from(turns)
+      .innerJoin(conversations, TURN_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(turns.userId, userId),
+          eq(turns.conversationId, conversationId),
+          eq(turns.origin, TURN_ORIGIN.CHILD_COMPLETION),
+          gte(turns.queuedAt, since),
+        ),
+      )
+      .orderBy(asc(turns.queuedAt), asc(turns.id)),
+    (rows) => Schema.decodeUnknownEffect(TurnRowsSchema)(rows),
+  );
+}
 
 /** The turn rows the ids name, whichever standing conversations they ran over, in the order they last changed. */
 export function turnsNamed(

@@ -326,7 +326,10 @@ interface StandingSession {
  */
 interface Exchange {
   readonly runId: string;
-  readonly delegationId: string;
+  /** The delegation the run answers; none for a run the brain opened of its own, which speaks session-wide. */
+  readonly delegationId: LiveDelegationId;
+  /** Whether the brain opened the run of its own, so its reply waits until no asked run of its session is under way. */
+  readonly woken: boolean;
   /** Where the delegation came in the session's order, so an older ask accepted late silences nothing newer. */
   readonly revision: number;
   /** Whether a newer delegation or the stop key has silenced the reply; see the interface. */
@@ -354,13 +357,15 @@ interface Exchange {
 
 function newExchange(
   runId: string,
-  delegationId: string,
+  delegationId: LiveDelegationId,
   revision: number,
   sessionId: string,
+  woken = false,
 ): Exchange {
   return {
     runId,
     delegationId,
+    woken,
     revision,
     silenced: false,
     cancelAsked: false,
@@ -1352,7 +1357,50 @@ export class LiveSessionService {
     this.#options.onStatus?.(status);
   }
 
+  /**
+   * Stands an exchange for a run the brain opened of its own: no delegation,
+   * so it speaks session-wide, at the session's current revision, so the
+   * developer's next ask silences it as it would any older one. Note that it
+   * silences nothing itself, because it answers no request of the
+   * developer's and must not cut off the one they are waiting on.
+   */
+  #registerWoken(runId: string): void {
+    const session = this.#speakable();
+    if (!session || this.#exchanges.has(runId)) return;
+    this.#exchanges.set(
+      runId,
+      newExchange(runId, null, session.revisions, session.sessionId, true),
+    );
+    this.#reportStatus();
+  }
+
+  /** Whether an exchange's reply may be said now: once its actions settled, and for a woken run only while no asked run of its session is under way. */
+  #mayReply(exchange: Exchange): boolean {
+    if (!exchange.settled) return false;
+    if (!exchange.woken) return true;
+    for (const held of this.#exchanges.values()) {
+      if (held.sessionId === exchange.sessionId && !held.woken && held.end === undefined) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Says what each woken exchange of the session held back, once its reply may be said. */
+  #releaseWoken(sessionId: string): void {
+    for (const held of this.#exchanges.values()) {
+      if (held.sessionId !== sessionId || !held.woken || !this.#mayReply(held)) continue;
+      for (const sentence of held.buffered.splice(0)) this.#speakSentence(held, sentence);
+      // A woken run that ended while it waited was kept for this; it ends now.
+      if (held.end !== undefined && held.finalize === undefined) this.#finalize(held);
+    }
+  }
+
   #onRunEvent(event: LiveBrainRunEvent): void {
+    if (event.kind === LIVE_BRAIN_RUN_EVENT.WOKEN) {
+      this.#registerWoken(event.runId);
+      return;
+    }
     const exchange = this.#exchanges.get(event.runId);
     if (!exchange) return;
     if (this.#recordOut(exchange)) {
@@ -1388,10 +1436,11 @@ export class LiveSessionService {
       // below releases the reply earlier without meaning anything weaker.
       case LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED:
         exchange.settled = true;
+        if (!this.#mayReply(exchange)) return;
         for (const sentence of exchange.buffered.splice(0)) this.#speakSentence(exchange, sentence);
         return;
       case LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE:
-        if (exchange.settled) this.#speakSentence(exchange, event.sentence);
+        if (this.#mayReply(exchange)) this.#speakSentence(exchange, event.sentence);
         else exchange.buffered.push(event.sentence);
         return;
       case LIVE_BRAIN_RUN_EVENT.ACTIVITY:
@@ -1405,6 +1454,8 @@ export class LiveSessionService {
         this.#reportStatus();
         this.#cancelDelay(exchange.finalize);
         exchange.finalize = this.#after(EXCHANGE_FINALIZE_MS, () => this.#finalize(exchange));
+        // An asked run ending may be the pause a woken run's reply was waiting for.
+        if (!exchange.woken) this.#releaseWoken(exchange.sessionId);
         return;
       default:
         return;
@@ -1440,10 +1491,17 @@ export class LiveSessionService {
    */
   #finalize(exchange: Exchange): void {
     exchange.finalize = undefined;
+    // A woken reply still waiting for its pause is kept until `#releaseWoken` says it.
+    if (exchange.woken && !exchange.silenced && exchange.buffered.length > 0) return;
     if (this.#exchanges.get(exchange.runId) === exchange) this.#exchanges.delete(exchange.runId);
     // Note that the note follows any sentence the run released while it ran,
-    // because those told only what it had settled so far.
-    if (exchange.end !== undefined && exchange.end !== LIVE_BRAIN_RUN_END.COMPLETED) {
+    // because those told only what it had settled so far. A woken run that did
+    // not complete says nothing, since nobody asked for it.
+    if (
+      !exchange.woken &&
+      exchange.end !== undefined &&
+      exchange.end !== LIVE_BRAIN_RUN_END.COMPLETED
+    ) {
       this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
     }
     // Told after the note is queued, so the planner gives way to Luke about to say it in one change.

@@ -7,6 +7,7 @@ import {
   readMessageByClientId,
   type StoredTurnRecord,
   turnsNamed,
+  turnsWokenIn,
 } from "./message-reads.js";
 import { purgeClearedConversations } from "./soft-delete.js";
 
@@ -44,6 +45,12 @@ export interface HostedStore {
       userId: string,
       turnIds: readonly string[],
     ): HostedStoreEffect<readonly StoredTurnRecord[]>;
+    /** The turns the brain opened of its own in a standing conversation since the instant, oldest first. */
+    wokenIn(
+      userId: string,
+      conversationId: string,
+      since: Date,
+    ): HostedStoreEffect<readonly StoredTurnRecord[]>;
   };
   retention: {
     /** The cron's purge of every conversation, of any account, stamped past the retention window. */
@@ -59,6 +66,7 @@ export function hostedStore(): HostedStore {
     },
     turns: {
       named: (userId, turnIds) => turnsNamed(userId, turnIds),
+      wokenIn: (userId, conversationId, since) => turnsWokenIn(userId, conversationId, since),
     },
     retention: {
       purgeCleared: (now) => purgeClearedConversations(now),
