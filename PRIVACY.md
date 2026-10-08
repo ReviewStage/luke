@@ -293,7 +293,7 @@ you enter a Conductor key, which they sent to our vault under your signed-in
 account; this version neither asks for one nor shows one, and sends no key
 anywhere. A key or a calendar grant an earlier version kept encrypted on this
 Mac stays in its settings file as that version left it, still encrypted: this
-version neither reads, sends, nor removes it.
+version neither reads nor sends it.
 We store a synced key encrypted in our own database using
 AES-256-GCM with a server-only secret. It is never returned to any caller:
 there is no endpoint that reads it back, and no code path that decrypts it
@@ -301,8 +301,8 @@ for any purpose other than observing your sessions or carrying the actions
 you explicitly request through that provider. Every key is deleted alongside
 your account if you delete that. Voice holds no key of yours at all: it runs
 through our service on your account, and a key of your own that an earlier
-version of Luke stored for it stays in the settings file on your Mac with
-the others, neither read nor sent.
+version of Luke stored for it is removed from your Mac the next time Luke
+opens, without being read.
 
 **Scheduled observation of your Conductor sessions.** While you hold a synced
 Conductor key and have signed in within the last 7 days, our service reads
@@ -507,7 +507,7 @@ your network address, as it does for the app's recordings.
 Your settings and your account's sign-in tokens stay on your Mac, the tokens
 encrypted under a key held in the macOS Keychain, beside whatever settings,
 keys, or calendar grants an earlier version kept there, which stay as they
-were. Nothing of your
+were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac. A Conductor key you synced, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored

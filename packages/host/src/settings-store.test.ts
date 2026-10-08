@@ -180,6 +180,7 @@ interface PromisedSettingsStore {
     accountEmail: string,
     preferences: AccountPreferences,
   ): Promise<boolean>;
+  retireStoredApiKeys(): Promise<void>;
 }
 
 function awaitedStoreOf(
@@ -204,6 +205,7 @@ function awaitedStoreOf(
       awaited(store.accountPreferencesSyncBaseline(accountEmail)),
     setAccountPreferencesSyncBaseline: (accountEmail, preferences) =>
       awaited(store.setAccountPreferencesSyncBaseline(accountEmail, preferences)),
+    retireStoredApiKeys: () => awaited(store.retireStoredApiKeys()),
   };
 }
 
@@ -587,6 +589,27 @@ test("a field this build clears stays cleared beside the fields it carries", asy
     expectedPersistedSettings(EARLIER_BUILD_FIELDS),
   );
   assert.equal(await storeIn(directory).readAccount(), undefined);
+});
+
+test("retiring stored API keys drops a provider no build reads and carries the rest", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  await writeSettingsFile(directory, {
+    version: 2,
+    ...EARLIER_BUILD_FIELDS,
+    apiKeys: { conductor: sealed("conductor-key"), openai: sealed("sk-retired") },
+    voiceCaptions: true,
+  });
+  const before = { ...EARLIER_BUILD_FIELDS, voiceCaptions: true };
+  const cipher = countingCipher();
+
+  await storeIn(directory, { cipher }).retireStoredApiKeys();
+
+  assert.deepEqual(
+    JSON.parse(await readSettingsFile(directory)),
+    expectedPersistedSettings(before),
+  );
+  // A ciphertext is dropped as it stands, never opened to be dropped.
+  assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
 test("prefers the chosen voice over the environment, and the environment over the default", async (t) => {

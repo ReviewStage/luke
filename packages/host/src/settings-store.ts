@@ -5,6 +5,7 @@ import {
   isAccountProvider,
 } from "@sidecar/credentials/snapshot";
 import { LIVE_DEFAULTS } from "@sidecar/live";
+import { PROVIDER_ID } from "@sidecar/session";
 import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
   ACTION_RESULT_STATUS,
@@ -46,6 +47,17 @@ const SETTINGS_FIELD = {
   ACCOUNT_PREFERENCES_SYNC: "accountPreferencesSync",
   VERSION: "version",
 } as const;
+
+/** Where an earlier build kept its provider keys, ciphertext by provider id. */
+const STORED_API_KEYS_FIELD = "apiKeys";
+
+/**
+ * The providers whose stored key an earlier build could still use: the set
+ * its credential provider list last named. A ciphertext under any other id
+ * (the developer's own OpenAI key, until LUKE-205) is dropped by
+ * `retireStoredApiKeys`; these are carried.
+ */
+const KEPT_API_KEY_PROVIDERS: ReadonlySet<string> = new Set([PROVIDER_ID.CONDUCTOR]);
 
 /**
  * A credential is only ever written through OS-provided encryption. Electron's
@@ -658,6 +670,24 @@ export class SettingsStore {
       this.readAccount(),
       (account) => this.#credentialsUsable && account !== undefined,
     );
+  }
+
+  /**
+   * Drops the ciphertext of every provider an earlier build no longer named,
+   * so a key nothing would read does not stay on disk, and carries the rest.
+   * A ciphertext is never decrypted to be dropped.
+   */
+  retireStoredApiKeys(): Effect.Effect<void, PlatformError> {
+    return this.#mutate((persisted) => {
+      const apiKeys = this.#carried[STORED_API_KEYS_FIELD];
+      if (!isRecord(apiKeys)) return undefined;
+      const kept = Object.fromEntries(
+        Object.entries(apiKeys).filter(([providerId]) => KEPT_API_KEY_PROVIDERS.has(providerId)),
+      );
+      if (Object.keys(kept).length === Object.keys(apiKeys).length) return undefined;
+      this.#carried = { ...this.#carried, [STORED_API_KEYS_FIELD]: kept };
+      return { ...persisted };
+    });
   }
 
   /**
