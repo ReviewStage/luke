@@ -29,6 +29,8 @@ export const RUN_PROFILE = {
   PLANNING: "planning",
   /** The same plan, opened at launch on the whiteboard Luke drew for it. */
   PLANNING_BOARD: "planning-board",
+  /** The same plan mid-call, opened at launch on the transcript of what was said on its calls. */
+  PLANNING_TRANSCRIPT: "planning-transcript",
 } as const;
 
 export type RunProfile = (typeof RUN_PROFILE)[keyof typeof RUN_PROFILE];

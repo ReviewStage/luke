@@ -25,6 +25,12 @@ import {
   planningCallHoldsPanel,
   plansPage,
 } from "./planning-model";
+import {
+  type HeardCall,
+  heardCalls,
+  type TranscriptRegion,
+  transcriptRegion,
+} from "./transcript-model";
 import { type SidePanelControl, useSidePanel } from "./use-side-panel";
 
 /**
@@ -63,6 +69,8 @@ export interface PlansControl {
   board: Board | undefined;
   /** The code Luke has on screen, drawn only while the open plan's call is in progress. */
   code: PlanCode | undefined;
+  /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
+  transcript: { region: TranscriptRegion; onRetry: () => void };
   onSelect: (planId: string) => void;
   /** Chooses the open plan's folder on this Mac again, through the folder picker. */
   onChooseFolder: () => void;
@@ -194,6 +202,22 @@ export function usePlansTab(input: {
     );
   };
 
+  // The calls heard on the open plan, each held past its end until the
+  // record's copy catches up; a fixture's open plan is drawn with its own
+  // call's words.
+  const reported = fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL;
+  const [heard, setHeard] = useState<readonly HeardCall[]>([]);
+  useEffect(() => {
+    setHeard((held) =>
+      heardCalls({
+        held,
+        voice: { callPlanId: reported.callPlanId, callTranscript: reported.callTranscript },
+        planId: planning.activePlanId,
+        now: Date.now(),
+      }),
+    );
+  }, [reported.callPlanId, reported.callTranscript, planning.activePlanId]);
+
   const back = useCallback((): boolean => {
     if (page === PLANS_PAGE.DOCUMENT) leavePlan();
     else if (page === PLANS_PAGE.NEW) onComposingChange(false);
@@ -227,11 +251,15 @@ export function usePlansTab(input: {
     },
     // A fixture's open plan is drawn on a call with Luke working, read from
     // the fixture's own call rather than a voice window that holds none.
-    status: callStatus(fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL, planning),
+    status: callStatus(reported, planning),
     live,
     sidePanel,
     board: planning.board,
     code: codeShown ? planning.code : undefined,
+    transcript: {
+      region: transcriptRegion({ transcript: planning.transcript, heard }),
+      onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
+    },
     onSelect: select,
     onChooseFolder: chooseFolder,
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),

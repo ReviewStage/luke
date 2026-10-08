@@ -14,8 +14,9 @@ import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
+import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { PLANS_PAGE } from "./planning-model";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 
 const PLAN: Plan = {
@@ -40,6 +41,7 @@ interface Standing {
   planning: PlanningView;
   profile: string;
   fixtureMode: boolean;
+  voice: VoiceView;
 }
 
 /** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order. */
@@ -52,6 +54,7 @@ function mount(initial: Partial<Standing> = {}) {
     planning: IDLE_PLANNING_VIEW,
     profile: RUN_PROFILE.IDLE,
     fixtureMode: false,
+    voice: IDLE_VOICE_VIEW,
     ...initial,
   };
   function Probe() {
@@ -80,7 +83,7 @@ function mount(initial: Partial<Standing> = {}) {
       shown: held.shown,
       composing,
       onComposingChange: setComposing,
-      voice: { view: IDLE_VOICE_VIEW, listening: false, requestMicrophoneAccess: () => undefined },
+      voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
     });
     return null;
   }
@@ -177,4 +180,59 @@ test("the planning profile's fixture shows the planning model's command and the 
     planning: { ...OPEN, activity: { planner: {}, notes: true } },
   });
   assert.equal(live.control().status, undefined);
+});
+
+/** The words of every call the transcript draws, in order, with whether each call stands now. */
+function callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
+  if (region.kind !== TRANSCRIPT_REGION.READY) return [];
+  return region.calls.map((call) => [call.live, call.lines.map((line) => line.text)] as const);
+}
+
+test("the open plan's call grows the transcript as it is said, and hanging up keeps its words until the record holds them", () => {
+  const CALL = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
+  const onCall = (words: string): VoiceView => ({
+    ...IDLE_VOICE_VIEW,
+    callPlanId: PLAN.id,
+    callTranscript: {
+      voiceSessionId: CALL,
+      lines: [{ rowId: "row-1", speaker: "user", words }],
+    },
+  });
+  const empty = { calls: [], earlierOmitted: false };
+  const tab = mount({
+    shown: true,
+    planning: { ...OPEN, transcript: { status: PLANNING_READ.READY, transcript: empty } },
+  });
+  assert.equal(tab.control().transcript.region.kind, TRANSCRIPT_REGION.EMPTY);
+
+  tab.stand({ voice: onCall("Invites should") });
+  tab.stand({ voice: onCall("Invites should expire.") });
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), [
+    [true, ["Invites should expire."]],
+  ]);
+
+  tab.stand({ voice: IDLE_VOICE_VIEW });
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), [
+    [false, ["Invites should expire."]],
+  ]);
+
+  const recorded = {
+    calls: [
+      {
+        id: CALL,
+        startedAt: 1_000,
+        lines: [{ speaker: "user" as const, text: "Invites should expire after a week." }],
+      },
+    ],
+    earlierOmitted: false,
+  };
+  tab.stand({
+    planning: { ...OPEN, transcript: { status: PLANNING_READ.READY, transcript: recorded } },
+  });
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), [
+    [false, ["Invites should expire after a week."]],
+  ]);
+
+  act(() => tab.control().transcript.onRetry());
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_REFRESH);
 });
