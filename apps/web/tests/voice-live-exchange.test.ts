@@ -211,6 +211,7 @@ async function stand(
         userId: target.userId,
         sessionId: liveSessionId,
         planId: target.planId,
+        attachId: randomUUID(),
       }),
     );
   }

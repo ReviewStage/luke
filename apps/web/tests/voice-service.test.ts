@@ -43,6 +43,7 @@ import {
 } from "../server/voice/service";
 import { BUDGET_SPENT_REASON, SOCKET_CLOSE_CODE } from "../server/voice/socket";
 import { runWithoutDatabase } from "./support/no-database";
+import { settled } from "./support/settle";
 import {
   connect,
   FAKE_BEARER,
@@ -1118,7 +1119,12 @@ test("an attach to a session another account created, or one never created, is r
   onTestFinished(() => context.stop());
   const { created } = await openSession(context);
   await runWithoutDatabase(
-    context.record.register({ userId: "user-2", sessionId: "live_theirs", planId: PLAN.id }),
+    context.record.register({
+      userId: "user-2",
+      sessionId: "live_theirs",
+      planId: PLAN.id,
+      attachId: "attach-theirs",
+    }),
   );
 
   for (const sessionId of ["live_theirs", "live_never"]) {
@@ -1179,4 +1185,153 @@ test("an attach to the account's own session whose row names no plan is refused 
   assert.deepEqual(context.accounts.resolved, [BEARER]);
   assert.equal(context.openAi.attaches.length, 0);
   assert.deepEqual(context.record.detachments, []);
+});
+
+/** The row the session's writes left, as the sweep reads it: open and stamped is a session it ends. */
+const LEFT_TO_SWEEP = { closed: false, detached: true } as const;
+
+/** Waits until the service has written the session's end down: the line it logs after every write of its own. */
+function sessionEnded(context: Stand): Promise<void> {
+  return runWithoutDatabase(
+    settled(
+      () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+      "the session to be reported ended",
+    ),
+  );
+}
+
+/**
+ * A desktop that sends its opening frame and goes while the service stands
+ * its session up: the bearer's resolution is held until the socket's close
+ * handshake is done, so the service reads the frame from an open socket and
+ * finds it gone only once the session exists. Answers OpenAI's end of the
+ * sideband the service attached, once the service has released it.
+ */
+async function goneWhileOpening(context: Stand, frame: WireRecord) {
+  const entered = await runWithoutDatabase(Deferred.make<void>());
+  const resolution = await runWithoutDatabase(Deferred.make<void>());
+  const resolveUserId = context.accounts.resolveUserId;
+  context.accounts.resolveUserId = (authorization) =>
+    Effect.andThen(
+      Deferred.succeed(entered, undefined),
+      Effect.andThen(Deferred.await(resolution), resolveUserId(authorization)),
+    );
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, frame);
+  await runWithoutDatabase(Deferred.await(entered));
+  opened.reader.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+  await opened.reader.closed;
+  await runWithoutDatabase(Deferred.succeed(resolution, undefined));
+  const attach = await context.openAi.nextAttach();
+  await readSocket(attach.socket).closed;
+  context.accounts.resolveUserId = resolveUserId;
+  return attach;
+}
+
+test("a desktop gone while its session was created or re-attached leaves the session stamped for the sweep", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+
+  const created = await goneWhileOpening(context, createFrame());
+  assert.deepEqual(context.record.rows.get(created.sessionId), LEFT_TO_SWEEP);
+
+  // The re-attach clears the stamp as it attaches; the desktop it was for has gone.
+  const reattached = await goneWhileOpening(context, {
+    type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
+    sessionId: created.sessionId,
+  });
+  assert.equal(reattached.sessionId, created.sessionId);
+  assert.deepEqual(context.record.rows.get(created.sessionId), LEFT_TO_SWEEP);
+  assert.deepEqual(context.record.closes, []);
+});
+
+test("a detach the replaced connection writes after the desktop re-attached leaves the call the new connection holds unstamped", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  // The first connection's detach is held until the re-attach has landed, as
+  // a function instance slower to wind down than the Mac's retry writes it.
+  const gate = await runWithoutDatabase(Deferred.make<void>());
+  const written = await runWithoutDatabase(Deferred.make<void>());
+  const detach = context.record.detach;
+  context.record.detach = (input) =>
+    Effect.andThen(
+      Deferred.await(gate),
+      Effect.andThen(detach(input), Deferred.succeed(written, undefined)),
+    );
+  const first = await openSession(context);
+  const sessionId = first.created.sessionId;
+
+  first.desktop.socket.terminate();
+  await first.upstream.closed;
+  const second = await reattach(context, sessionId);
+  await runWithoutDatabase(Deferred.succeed(gate, undefined));
+  await runWithoutDatabase(Deferred.await(written));
+
+  assert.deepEqual(context.record.rows.get(sessionId), { closed: false, detached: false });
+  const caption = JSON.stringify({
+    type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+    event_id: "e4",
+    delta: "Still here",
+    start_ms: 0,
+    end_ms: 300,
+  });
+  await sendText(second.upstream.socket, caption);
+  assert.equal(await second.desktop.next(), caption);
+});
+
+test("a hang-up OpenAI never confirms with session.closed leaves the session stamped for the sweep", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { desktop, upstream, created } = await openSession(context);
+
+  await hangUpDevice(desktop.socket, SOCKET_CLOSE_CODE.NORMAL);
+  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  await upstream.closed;
+  await sessionEnded(context);
+  assert.deepEqual(context.record.rows.get(created.sessionId), LEFT_TO_SWEEP);
+});
+
+test("a sideband that drops before session.closed leaves the session stamped for the sweep", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { desktop, upstream, created } = await openSession(context);
+
+  upstream.socket.close(SOCKET_CLOSE_CODE.GOING_AWAY);
+  await desktop.closed;
+  await sessionEnded(context);
+  assert.deepEqual(context.record.rows.get(created.sessionId), LEFT_TO_SWEEP);
+});
+
+test("a confirmed close leaves the session closed and unstamped", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { desktop, upstream, created } = await openSession(context);
+
+  await sendText(
+    upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "e9",
+      reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+      usage: { seconds: 5 },
+    }),
+  );
+  await desktop.closed;
+  await sessionEnded(context);
+  assert.deepEqual(context.record.rows.get(created.sessionId), { closed: true, detached: false });
+});
+
+test("a created session whose sideband OpenAI refuses is refused to the desktop and left stamped for the sweep", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.openAi.attachStatus = 500;
+
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
+  assert.ok("reader" in opened);
+  await send(opened.reader.socket, createFrame());
+  assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.UPSTREAM_ERROR);
+  const [registered] = context.record.registered;
+  assert.ok(registered);
+  assert.deepEqual(context.record.rows.get(registered.sessionId), LEFT_TO_SWEEP);
 });

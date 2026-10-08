@@ -125,7 +125,12 @@ async function target(): Promise<VoiceTarget> {
   const conversationId = await insertConversation(database.run, { userId });
   const liveSessionId = `sess_${randomUUID()}`;
   await database.run(
-    sessionRecord.register({ userId, sessionId: liveSessionId, planId: randomUUID() }),
+    sessionRecord.register({
+      userId,
+      sessionId: liveSessionId,
+      planId: randomUUID(),
+      attachId: randomUUID(),
+    }),
   );
   return { userId, liveSessionId, conversation: { userId, conversationId } };
 }

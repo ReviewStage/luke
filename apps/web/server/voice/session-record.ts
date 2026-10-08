@@ -13,6 +13,7 @@ import {
   type VoiceSegmentRole,
 } from "../db/voice-vocabulary.js";
 import { readPlan } from "../hosted/plan-store.js";
+import { InstantColumnSchema } from "../hosted/store/database.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.
@@ -26,13 +27,20 @@ import { readPlan } from "../hosted/plan-store.js";
  * the honest record, and a later connection's `session.closed` confirms it.
  * The seconds the quota meters are a separate ledger, `recordVoiceSeconds`.
  *
- * A connection whose device socket went without a hang-up
- * stamps `detached_at` on the open row, and a re-attach clears it, so an open
- * row stamped longer ago than the grace is a session no device came back for:
- * the scheduled sweep reads those rows, oldest first and bounded, and ends
- * each one, writing its close here like any other. A session that is gone at
- * OpenAI by then is closed as a lost connection with its last unconfirmed
- * snapshot standing, so no row is read for closing twice.
+ * A connection that ends without `session.closed` — its device socket gone
+ * without a hang-up, a close OpenAI never confirmed, a refusal after the
+ * session stood — stamps `detached_at` on the open row, and a re-attach
+ * clears it, so an open row stamped longer ago than the grace is a session no
+ * connection holds: the scheduled sweep reads those rows, oldest first and
+ * bounded, and ends each one, writing its close here like any other. A
+ * session that is gone at OpenAI by then, or past its duration limit, is
+ * closed with its last unconfirmed snapshot standing, so no row is read for
+ * closing twice. Each connection that holds the session names itself with
+ * an attach id, written at creation and at every re-attach, and a stamp is
+ * written only by the connection that still holds the row: the Mac re-attaches
+ * within seconds, so the connection it replaced may write its detach after
+ * the newer one attached, and that late stamp must not hand a live call to
+ * the sweep.
  *
  * The row also names the plan the call was opened about, checked to be the
  * account's before anything is spent, and that binding is what a
@@ -53,11 +61,12 @@ type VoiceSessionRecordEffect<A> = Effect.Effect<
   SqlClient.SqlClient
 >;
 
-/** The session as its creation names it: the account, the live session, and the plan the call is about. */
+/** The session as its creation names it: the account, the live session, the plan the call is about, and the connection that holds it. */
 interface VoiceSessionRegistration {
   userId: string;
   sessionId: string;
   planId: string;
+  attachId: string;
 }
 
 /** A plan as the account asking for a call about it names it. */
@@ -96,15 +105,24 @@ interface VoiceSessionClose extends VoiceSessionUsage {
   reason: VoiceCloseReason;
 }
 
-/** A live session named by the id alone, for a write that needs nothing else. */
-interface VoiceSessionNamed {
+/** A live session as one connection holding it names it. */
+interface VoiceSessionAttachment {
   sessionId: string;
+  attachId: string;
 }
 
-/** An open session no connection holds, as the orphan sweep reads it: the account billed and the live session. */
+/** The close the sweep writes for a session that answered nothing: lost, or past its duration limit. */
+interface VoiceSessionLost {
+  sessionId: string;
+  reason: typeof VOICE_CLOSE_REASON.CONNECTION_LOST | typeof VOICE_CLOSE_REASON.EXPIRED;
+}
+
+/** An open session no connection holds, as the orphan sweep reads it: the account billed, the live session, and when it started. */
 export interface DetachedVoiceSession {
   readonly userId: string;
   readonly sessionId: string;
+  /** Epoch milliseconds. */
+  readonly startedAt: number;
 }
 
 /** Which open sessions were detached before the instant, oldest first, at most `limit`. */
@@ -132,15 +150,16 @@ export interface VoiceSessionRecord {
    */
   earlierCalls(input: VoiceSessionPlanClaim): VoiceSessionRecordEffect<EarlierCallLine[]>;
   noteUsage(input: VoiceSessionUsage): VoiceSessionRecordEffect<void>;
+  /** Confirms the close of a session still open; a second close changes nothing. */
   close(input: VoiceSessionClose): VoiceSessionRecordEffect<void>;
-  /** Stamps the open session detached now: its device's socket went without a hang-up. */
-  detach(input: VoiceSessionNamed): VoiceSessionRecordEffect<void>;
-  /** Clears the stamp: a connection holds the session again. */
-  attached(input: VoiceSessionNamed): VoiceSessionRecordEffect<void>;
+  /** Stamps the open session detached now, where the connection named still holds it: it ended without `session.closed`. */
+  detach(input: VoiceSessionAttachment): VoiceSessionRecordEffect<void>;
+  /** Clears the stamp and names the connection that holds the session again. */
+  attached(input: VoiceSessionAttachment): VoiceSessionRecordEffect<void>;
   /** The open sessions detached before the instant, oldest first, at most `limit`. */
   detached(input: DetachedVoiceSessionQuery): VoiceSessionRecordEffect<DetachedVoiceSession[]>;
-  /** Closes an open session as a lost connection, its last unconfirmed snapshot standing: what the sweep writes when the session answered nothing. */
-  closeLost(input: VoiceSessionNamed): VoiceSessionRecordEffect<void>;
+  /** Closes an open session for the reason named, its last unconfirmed snapshot standing: what the sweep writes when the session is gone at OpenAI. */
+  closeLost(input: VoiceSessionLost): VoiceSessionRecordEffect<void>;
 }
 
 /**
@@ -164,6 +183,8 @@ const RegisterRequestSchema = Schema.Struct({
   liveSessionId: Schema.String,
   delegationMode: Schema.Literal(VOICE_DELEGATION_MODE.CLIENT),
   planId: Schema.String,
+  attachId: Schema.String,
+  startedAt: Schema.Date,
 });
 
 const registerSession = SqlSchema.void({
@@ -176,6 +197,8 @@ const registerSession = SqlSchema.void({
         liveSessionId: row.liveSessionId,
         delegationMode: row.delegationMode,
         planId: row.planId,
+        attachId: row.attachId,
+        startedAt: row.startedAt,
       })
       .onConflictDoNothing({ target: voiceSessions.liveSessionId }),
 });
@@ -278,14 +301,22 @@ const closeSession = SqlSchema.void({
     db
       .update(voiceSessions)
       .set({ closedAt: row.closedAt, closeReason: row.closeReason, usage: row.usage })
-      .where(eq(voiceSessions.liveSessionId, row.liveSessionId)),
+      .where(
+        and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
+      ),
+});
+
+const AttachmentRequestSchema = Schema.Struct({
+  liveSessionId: Schema.String,
+  attachId: Schema.String,
 });
 
 const DetachRequestSchema = Schema.Struct({
-  liveSessionId: Schema.String,
-  detachedAt: Schema.NullOr(Schema.Date),
+  ...AttachmentRequestSchema.fields,
+  detachedAt: Schema.Date,
 });
 
+/** Note that the attach id is matched, because a connection replaced by a re-attach no longer holds the row it would stamp. */
 const stampDetached = SqlSchema.void({
   Request: DetachRequestSchema,
   execute: (row) =>
@@ -293,19 +324,42 @@ const stampDetached = SqlSchema.void({
       .update(voiceSessions)
       .set({ detachedAt: row.detachedAt })
       .where(
+        and(
+          eq(voiceSessions.liveSessionId, row.liveSessionId),
+          eq(voiceSessions.attachId, row.attachId),
+          isNull(voiceSessions.closedAt),
+        ),
+      ),
+});
+
+const stampAttached = SqlSchema.void({
+  Request: AttachmentRequestSchema,
+  execute: (row) =>
+    db
+      .update(voiceSessions)
+      .set({ detachedAt: null, attachId: row.attachId })
+      .where(
         and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
       ),
 });
 
 const DetachedRequestSchema = Schema.Struct({ before: Schema.Date, limit: Schema.Number });
-const DetachedRowSchema = Schema.Struct({ userId: Schema.String, sessionId: Schema.String });
+const DetachedRowSchema = Schema.Struct({
+  userId: Schema.String,
+  sessionId: Schema.String,
+  startedAt: InstantColumnSchema,
+});
 
 const findDetached = SqlSchema.findAll({
   Request: DetachedRequestSchema,
   Result: DetachedRowSchema,
   execute: (request) =>
     db
-      .select({ userId: voiceSessions.userId, sessionId: voiceSessions.liveSessionId })
+      .select({
+        userId: voiceSessions.userId,
+        sessionId: voiceSessions.liveSessionId,
+        startedAt: voiceSessions.startedAt,
+      })
       .from(voiceSessions)
       .where(
         and(
@@ -345,6 +399,8 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
           liveSessionId: input.sessionId,
           delegationMode: VOICE_DELEGATION_MODE.CLIENT,
           planId: input.planId,
+          attachId: input.attachId,
+          startedAt: new Date(now()),
         }),
         Effect.map(
           findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
@@ -386,18 +442,23 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         usage: usage(input.seconds, true),
       }),
     detach: (input) =>
-      stampDetached({ liveSessionId: input.sessionId, detachedAt: new Date(now()) }),
-    attached: (input) => stampDetached({ liveSessionId: input.sessionId, detachedAt: null }),
+      stampDetached({
+        liveSessionId: input.sessionId,
+        attachId: input.attachId,
+        detachedAt: new Date(now()),
+      }),
+    attached: (input) =>
+      stampAttached({ liveSessionId: input.sessionId, attachId: input.attachId }),
     detached: (input) =>
       Effect.map(
         findDetached({ before: new Date(input.detachedBefore), limit: input.limit }),
-        (rows) => [...rows],
+        (rows) => rows.map((row) => ({ ...row, startedAt: row.startedAt.getTime() })),
       ),
     closeLost: (input) =>
       closeLostSession({
         liveSessionId: input.sessionId,
         closedAt: new Date(now()),
-        closeReason: VOICE_CLOSE_REASON.CONNECTION_LOST,
+        closeReason: input.reason,
       }),
   };
 }

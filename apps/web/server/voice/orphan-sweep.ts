@@ -5,8 +5,9 @@ import {
   SIDEBAND_CLOSE_OUTCOME,
   type SidebandCloseResult,
 } from "@sidecar/voice/live-session";
-import { Deferred, Effect, Exit, type Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Result, type Scope, Stream } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import { VOICE_CLOSE_REASON } from "../db/voice-vocabulary.js";
 import { LIVE_SERVER_EVENT } from "../live.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { upstreamSideband } from "./live-sideband.js";
@@ -23,10 +24,14 @@ import type { DetachedVoiceSession, VoiceSessionRecord } from "./session-record.
  * fresh sideband through the same upstream, sends `session.close` through the
  * same graceful close the exchange runs, and on `session.closed` writes the
  * close and the seconds exactly as the service does, the seconds once
- * through the ledger. A session OpenAI will not attach to is already gone,
- * and one that never answers the close is let go of; both are closed as a
- * lost connection with the last unconfirmed snapshot standing, so no row is
- * swept twice.
+ * through the ledger. A session OpenAI answers the attach for as gone (404
+ * or 410) is closed as a lost connection with the last unconfirmed snapshot
+ * standing, so no row is swept twice. Anything less conclusive — an attach
+ * that timed out, was throttled, or failed at OpenAI, or a close that was
+ * never confirmed — says nothing of whether the session still runs, so the
+ * row is left stamped and the next sweep tries again; only a session past
+ * OpenAI's own duration limit, which has ended whatever it answers, is
+ * closed as expired instead.
  *
  * Each sweep takes at most `MAX_SESSIONS` of the oldest, `CONCURRENCY` at a
  * time, each bounded by the attach's own wait and the close's, so the sweep
@@ -35,6 +40,12 @@ import type { DetachedVoiceSession, VoiceSessionRecord } from "./session-record.
 
 /** How long a detached session waits for its device before the sweep ends it: past the Mac's own re-attach of some ten seconds. */
 export const VOICE_DETACH_GRACE_MS = 60_000;
+
+/** The longest a Live session runs before OpenAI ends it as `expired`: past it, a session that answers nothing is gone. */
+export const VOICE_SESSION_LIMIT_MS = 60 * 60_000;
+
+/** The statuses OpenAI refuses an attach with when the session named no longer stands. */
+const SESSION_GONE_STATUS: ReadonlySet<number> = new Set([404, 410]);
 
 export const VOICE_ORPHAN_SWEEP = {
   MAX_SESSIONS: 20,
@@ -45,22 +56,33 @@ export const VOICE_ORPHAN_SWEEP = {
   CLOSE_TIMEOUT_MS: 5_000,
 } as const;
 
-/** How one orphan ended: its own `session.closed` read and its seconds recorded, or let go of as a lost connection. */
+/** How one orphan ended: its own `session.closed` read and its seconds recorded, closed as gone, or left stamped for the next sweep. */
 const ORPHAN_ENDING = {
   CLOSED: "closed",
   LOST: "lost",
+  PENDING: "pending",
 } as const;
 
 type OrphanEnding = (typeof ORPHAN_ENDING)[keyof typeof ORPHAN_ENDING];
 
-/** What one sweep came to: sessions closed with their seconds, sessions closed as lost, and sessions whose write failed and stand for the next sweep. */
+/**
+ * What one sweep came to: sessions closed with their seconds, sessions closed
+ * as gone, sessions that answered nothing conclusive and stand for the next
+ * sweep, and sessions whose write failed and stand for it as well.
+ */
 export interface VoiceOrphanSweepOutcome {
   closed: number;
   lost: number;
+  pending: number;
   failed: number;
 }
 
-export const NOTHING_ORPHANED: VoiceOrphanSweepOutcome = { closed: 0, lost: 0, failed: 0 };
+export const NOTHING_ORPHANED: VoiceOrphanSweepOutcome = {
+  closed: 0,
+  lost: 0,
+  pending: 0,
+  failed: 0,
+};
 
 export interface VoiceOrphanSweepSeams {
   /** Luke's own upstream, the one the voice functions attach through. */
@@ -91,18 +113,40 @@ function readLastWord(
   });
 }
 
+/**
+ * An orphan that answered nothing conclusive: closed as expired once it is
+ * past OpenAI's duration limit, and otherwise left stamped, since it may be
+ * a call still running that the next sweep can end.
+ */
+const unanswered = (
+  seams: VoiceOrphanSweepSeams,
+  orphan: DetachedVoiceSession,
+  now: number,
+): Effect.Effect<OrphanEnding, unknown, SqlClient.SqlClient> =>
+  now - orphan.startedAt < VOICE_SESSION_LIMIT_MS
+    ? Effect.succeed(ORPHAN_ENDING.PENDING)
+    : Effect.as(
+        seams.record.closeLost({ sessionId: orphan.sessionId, reason: VOICE_CLOSE_REASON.EXPIRED }),
+        ORPHAN_ENDING.LOST,
+      );
+
 /** One orphan ended through a sideband of its own, written down as a connection that read the same ending would. */
 const endOrphan = /* @__PURE__ */ Effect.fn("web/endOrphan")(function* (
   seams: VoiceOrphanSweepSeams,
   orphan: DetachedVoiceSession,
+  now: number,
 ): Effect.fn.Return<OrphanEnding, unknown, SqlClient.SqlClient | Scope.Scope> {
   const { sessionId, userId } = orphan;
-  const attached = yield* Effect.exit(seams.upstream.attach(sessionId));
-  if (Exit.isFailure(attached)) {
-    yield* seams.record.closeLost({ sessionId });
+  const attached = yield* Effect.result(seams.upstream.attach(sessionId));
+  if (Result.isFailure(attached)) {
+    const { status } = attached.failure;
+    if (status === undefined || !SESSION_GONE_STATUS.has(status)) {
+      return yield* unanswered(seams, orphan, now);
+    }
+    yield* seams.record.closeLost({ sessionId, reason: VOICE_CLOSE_REASON.CONNECTION_LOST });
     return ORPHAN_ENDING.LOST;
   }
-  const socket = attached.value;
+  const socket = attached.success;
   const sideband = yield* upstreamSideband(socket);
   const settled = yield* Deferred.make<SidebandCloseResult>();
   yield* Effect.forkScoped(readLastWord(sideband, settled));
@@ -114,10 +158,7 @@ const endOrphan = /* @__PURE__ */ Effect.fn("web/endOrphan")(function* (
     settled: Deferred.await(settled),
     timeoutMs: VOICE_ORPHAN_SWEEP.CLOSE_TIMEOUT_MS,
   });
-  if (ended.outcome !== SIDEBAND_CLOSE_OUTCOME.CLOSED) {
-    yield* seams.record.closeLost({ sessionId });
-    return ORPHAN_ENDING.LOST;
-  }
+  if (ended.outcome !== SIDEBAND_CLOSE_OUTCOME.CLOSED) return yield* unanswered(seams, orphan, now);
   const seconds = ended.closed.usage.seconds;
   yield* seams.record.close({ sessionId, seconds, reason: ended.closed.reason });
   yield* seams.recordSeconds({ userId, sessionId, seconds });
@@ -135,14 +176,13 @@ export const sweepVoiceOrphans = /* @__PURE__ */ Effect.fn("web/sweepVoiceOrphan
   });
   const endings = yield* Effect.forEach(
     orphans,
-    (orphan) => Effect.exit(Effect.scoped(endOrphan(seams, orphan))),
+    (orphan) => Effect.exit(Effect.scoped(endOrphan(seams, orphan, options.now))),
     { concurrency: VOICE_ORPHAN_SWEEP.CONCURRENCY },
   );
   const outcome = { ...NOTHING_ORPHANED };
   for (const ending of endings) {
     if (Exit.isFailure(ending)) outcome.failed += 1;
-    else if (ending.value === ORPHAN_ENDING.CLOSED) outcome.closed += 1;
-    else outcome.lost += 1;
+    else outcome[ending.value] += 1;
   }
   return outcome;
 });

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Schema, type Scope } from "effect";
@@ -88,6 +89,8 @@ type Opened =
       accountId: string;
       /** The plan the call is bound to: the one its creation named and was shown the account holds, or the one a re-attach read off the session's row. */
       planId: string;
+      /** This connection's own name on the session's row, which a detach it writes must still match. */
+      attachId: string;
       /**
        * Whether the session is already running: false for one just created
        * from a WebRTC offer, whose peer has yet to connect; true for one
@@ -368,15 +371,22 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const created = yield* upstream.create(config, frame.sdp);
       if (created.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) return upstreamRefused(created);
       const sessionId = created.answer.session.id;
+      const attachId = randomUUID();
       // The store's id for the session's row rides the answer, so the device
       // can name its own rows.
       const voiceSessionId = yield* record.register({
         userId: account.accountId,
         sessionId,
         planId: frame.planId,
+        attachId,
       });
       const sideband = yield* attach(upstream, sessionId);
-      if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
+      if (sideband === undefined) {
+        // The session stands at OpenAI with no sideband to close it: stamped,
+        // so the sweep ends it on Luke's key.
+        yield* record.detach({ sessionId, attachId });
+        return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
+      }
       const answer: SessionCreatedFrame = {
         type: VOICE_SERVICE_FRAME.SESSION_CREATED,
         sessionId,
@@ -388,6 +398,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         sessionId,
         accountId: account.accountId,
         planId: frame.planId,
+        attachId,
         started: false,
         sideband,
         answer,
@@ -421,8 +432,10 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const accountId = account.value;
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
-      // A connection holds the session again, so the orphan sweep leaves it be.
-      yield* record.attached({ sessionId: frame.sessionId });
+      // A connection holds the session again, so the orphan sweep leaves it be
+      // and a detach the connection it replaced writes late stamps nothing.
+      const attachId = randomUUID();
+      yield* record.attached({ sessionId: frame.sessionId, attachId });
       const answer: SessionAttachedFrame = {
         type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
         sessionId: frame.sessionId,
@@ -431,6 +444,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         sessionId: frame.sessionId,
         accountId,
         planId: owned.planId,
+        attachId,
         started: true,
         sideband,
         answer,
