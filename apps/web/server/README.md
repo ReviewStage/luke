@@ -28,7 +28,12 @@ package), fold the change into the `server/db/*-schema.ts` module that
 declares the table in the same commit, and add whatever query modules under
 `server/` need it. Dropping a column means deleting it from that module: the
 drift check reads the database both ways, so a declaration the database no
-longer carries fails it exactly as a column no module declares does.
+longer carries fails it exactly as a column no module declares does. It takes
+two deployments, because a build migrates while the deployment before it still
+serves and Drizzle names every declared column in an insert: the first deletes
+the declaration and lists the column in the drift check's `PENDING_DROP`, and
+the second, once the first is live, drops it with `DROP COLUMN IF EXISTS` and
+deletes the entry.
 
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
 connection Neon supplies for that deployment. The runner holds a PostgreSQL

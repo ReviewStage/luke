@@ -102,6 +102,8 @@ function storedPlanOf(row: PlanRow): StoredPlan {
 /**
  * The row as one line of the list. Note that `openedAt` is still answered,
  * as the start, because a desktop through v0.7.1 refuses a summary without it.
+ * It goes once a release whose decoder treats it as optional has shipped and
+ * v0.7.1 is no longer supported.
  */
 function summaryOf(row: PlanRow): PlanSummary {
   const createdAt = row.createdAt.getTime();

@@ -66,6 +66,18 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
   "uuid",
 ]);
 
+/**
+ * Columns the database still carries that no module declares, each waiting
+ * on the migration that drops it. Drizzle names every declared column in an
+ * insert, and a deployment migrates while the one before it still serves, so
+ * a column leaves its module one deployment before it leaves the database.
+ * An entry goes in the same PR as its drop, which the last test below holds
+ * by failing on an entry the database no longer carries.
+ */
+const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["plan", new Set(["opened_at"])],
+]);
+
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
 const ARRAY_DATA_TYPE = "ARRAY";
 
@@ -221,6 +233,7 @@ test("the schema modules and the migrated database hold the same columns of each
       drift.push(`${table}.${column}: declared, and not in the migrated database`);
     }
     for (const column of surplus(migrated.keys(), declared)) {
+      if (PENDING_DROP.get(table)?.has(column)) continue;
       drift.push(`${table}.${column}: in the migrated database, and declared by no module`);
     }
   }
@@ -261,4 +274,14 @@ test("every table's primary key is the one the migrated database gives it", () =
     }
   }
   assert.deepEqual(drift, []);
+});
+
+test("every column waiting on its drop is still in the migrated database", () => {
+  const dropped: string[] = [];
+  for (const [table, columns] of PENDING_DROP) {
+    for (const column of columns) {
+      if (!MIGRATED.get(table)?.columns.has(column)) dropped.push(`${table}.${column}`);
+    }
+  }
+  assert.deepEqual(dropped, []);
 });
