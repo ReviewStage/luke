@@ -523,6 +523,10 @@ test("a folded sidebar leaves New plan beside its toggle, which opens the new-pl
   press();
   const button = titleBarNewPlan();
   assert.ok(button, "the folded sidebar's New plan stands in the title bar");
+  act(() => {
+    button.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.equal(document.body.querySelector('[role="tooltip"]')?.textContent, "New plan⌘N");
   assert.equal(composing(), false);
   act(() => button.click());
   assert.equal(composing(), true, "the new-plan page is open");
