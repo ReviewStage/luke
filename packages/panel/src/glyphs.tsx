@@ -396,6 +396,16 @@ export function SidebarIcon(): React.JSX.Element {
   );
 }
 
+/** A pencil over an open square: a new piece of work, as every chat app's compose button draws it. */
+export function ComposeIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M11.2 4.6H6a2.6 2.6 0 0 0-2.6 2.6v10.6A2.6 2.6 0 0 0 6 20.4h10.6a2.6 2.6 0 0 0 2.6-2.6v-5.2" />
+      <path d="M17.5 3.9a2 2 0 0 1 2.8 2.8l-7.6 7.6-3.6.8.8-3.6z" />
+    </Glyph>
+  );
+}
+
 /** Stops the reply under way, drawn the way every chat surface draws it: a square. */
 export function StopIcon(): React.JSX.Element {
   return (

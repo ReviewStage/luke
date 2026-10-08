@@ -105,7 +105,7 @@ export function DesktopSettings({
           onClick={onBack}
         >
           <BackIcon />
-          Back to plans
+          Back
           <ShortcutGlyphs command={APP_COMMAND.BACK} className="row-shortcut" />
         </button>
         <h1 className="settings-pages-title">Settings</h1>
