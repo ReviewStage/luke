@@ -104,8 +104,8 @@ test("the document offers no way to write, confirm, or approve anything", () => 
   const buttons = markup.match(/<button[^>]*>/gu) ?? [];
   assert.deepEqual(buttons, [
     '<button type="button" class="icon-button plan-back" aria-label="Back to plans" title="Back">',
-    '<button type="button" class="sort-option" data-active="true" aria-pressed="true">',
-    '<button type="button" class="sort-option" data-active="false" aria-pressed="false">',
+    '<button type="button" class="plan-view-option" data-active="true" aria-pressed="true">',
+    '<button type="button" class="plan-view-option" data-active="false" aria-pressed="false">',
     '<button type="button" class="plan-button plan-copy-button">',
   ]);
   assert.doesNotMatch(markup, /Approve|Version|History|Ready/u);

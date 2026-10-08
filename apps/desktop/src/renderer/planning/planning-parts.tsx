@@ -210,12 +210,12 @@ export function PlanViewSwitch({
   planView: { shown: PlanView; onChoose: (view: PlanView) => void };
 }): React.JSX.Element {
   return (
-    <fieldset className="sort-group plan-view-switch" aria-label="Show">
+    <fieldset className="plan-view-switch" aria-label="Show">
       {PLAN_VIEW_CHOICES.map(({ view, label }) => (
         <button
           type="button"
           key={view}
-          className="sort-option"
+          className="plan-view-option"
           data-active={String(planView.shown === view)}
           aria-pressed={planView.shown === view}
           onClick={() => planView.onChoose(view)}
