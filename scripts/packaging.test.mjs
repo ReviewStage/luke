@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 import {
   createElectronBuilderConfig,
   ELECTRON_BUILDER_UPDATE_CACHE_DIR_NAME,
@@ -43,6 +44,60 @@ const entitlementsPath = path.join(
 );
 function builderConfig(env = {}) {
   return createElectronBuilderConfig(env);
+}
+
+/** PNG's Paeth predictor: whichever neighbour is nearest left + up - upLeft. */
+function paeth(left, up, upLeft) {
+  const estimate = left + up - upLeft;
+  const [distanceLeft, distanceUp, distanceUpLeft] = [left, up, upLeft].map((value) =>
+    Math.abs(estimate - value),
+  );
+  if (distanceLeft <= distanceUp && distanceLeft <= distanceUpLeft) return left;
+  return distanceUp <= distanceUpLeft ? up : upLeft;
+}
+
+/**
+ * The alpha channel of an 8-bit RGBA PNG, one row per array, for reading the
+ * committed icon artwork without a decoder dependency. Note that this reads
+ * only what the brand rasterizer writes: non-interlaced RGBA at depth 8.
+ */
+function readPngAlpha(pngPath) {
+  const png = fs.readFileSync(pngPath);
+  const width = png.readUInt32BE(16);
+  const height = png.readUInt32BE(20);
+  assert.deepEqual([png[24], png[25], png[28]], [8, 6, 0], `${pngPath} is not 8-bit RGBA`);
+  const chunks = [];
+  for (let offset = 8; offset < png.length; ) {
+    const length = png.readUInt32BE(offset);
+    if (png.toString("ascii", offset + 4, offset + 8) === "IDAT") {
+      chunks.push(png.subarray(offset + 8, offset + 8 + length));
+    }
+    offset += length + 12;
+  }
+  const data = zlib.inflateSync(Buffer.concat(chunks));
+  const stride = width * 4;
+  const rows = [];
+  let previous = Buffer.alloc(stride);
+  for (let y = 0; y < height; y++) {
+    const filter = data[y * (stride + 1)];
+    const row = Buffer.from(data.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)));
+    for (let x = 0; x < stride; x++) {
+      const left = x >= 4 ? row[x - 4] : 0;
+      const up = previous[x];
+      const upLeft = x >= 4 ? previous[x - 4] : 0;
+      const predictor = [0, left, up, (left + up) >> 1, paeth(left, up, upLeft)][filter];
+      row[x] = (row[x] + predictor) & 0xff;
+    }
+    rows.push(Array.from({ length: width }, (_, x) => row[x * 4 + 3]));
+    previous = row;
+  }
+  return rows;
+}
+
+/** The first and last index along a line of alpha values the tile covers. */
+function coveredSpan(alphas) {
+  const covered = (alpha) => alpha > 128;
+  return [alphas.findIndex(covered), alphas.findLastIndex(covered)];
 }
 
 test("workspace package versions agree on v0.7.1", () => {
@@ -213,6 +268,28 @@ test("packaging includes the approved Apple Events description", () => {
     "Luke turns Music and Spotify down while you talk, and back up afterwards",
   );
   assert.equal(config.mac.extendInfo.NSAppleEventsUsageDescription, APPLE_EVENTS_USAGE_DESCRIPTION);
+});
+
+test("every Dock icon draws its tile on Apple's 824-of-1024 macOS grid", () => {
+  const brandIconDirectory = path.join(repoRoot, "design", "brand", "icon");
+  const sources = [...new Set(Object.values(ICONSET_SOURCES)), "luke-icon-light-512.png"];
+
+  for (const sourceName of sources.filter((name) => !/-(16|32|64)\.png$/.test(name))) {
+    const alpha = readPngAlpha(path.join(brandIconDirectory, sourceName));
+    const side = alpha.length;
+    const middle = Math.floor(side / 2);
+    const [left, right] = coveredSpan(alpha[middle]);
+    const [top] = coveredSpan(alpha.map((row) => row[middle]));
+    const expected = { margin: (100 / 1024) * side, tile: (824 / 1024) * side };
+    const tolerance = 2;
+
+    assert.ok(Math.abs(left - expected.margin) <= tolerance, `${sourceName} left margin ${left}`);
+    assert.ok(Math.abs(top - expected.margin) <= tolerance, `${sourceName} top margin ${top}`);
+    assert.ok(
+      Math.abs(right - left + 1 - expected.tile) <= tolerance,
+      `${sourceName} tile width ${right - left + 1}`,
+    );
+  }
 });
 
 test("packaging uses the generated Luke application icon", () => {
