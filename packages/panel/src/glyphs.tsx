@@ -107,6 +107,17 @@ export function CloseIcon(): React.JSX.Element {
   );
 }
 
+/** Three dots in a row: more actions on the thing it sits beside, in a menu. */
+export function EllipsisIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <circle cx="5.5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="18.5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
 /** The up-and-down pair macOS badges a pop-up button with. */
 export function PopUpIcon(): React.JSX.Element {
   return (

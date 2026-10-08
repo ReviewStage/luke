@@ -142,14 +142,14 @@ test("stepping back leaves an open plan, closes the form to the list, and has no
   assert.equal(tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length, 1);
 });
 
-test("deleting asks for the open plan's delete and answers a refusal, and a fixture's plan is deleted nowhere", async () => {
+test("deleting asks for the named plan's delete and answers a refusal, and a fixture's plan is deleted nowhere", async () => {
   const live = mount({ shown: true, planning: OPEN });
-  const refused = await live.control().onDeletePlan();
+  const refused = await live.control().onDeletePlan(PLAN.id);
   assert.equal(live.told.at(-1), ACT_KIND.PLANNING_DELETE);
   assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
 
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
-  await fixture.control().onDeletePlan();
+  await fixture.control().onDeletePlan(PLAN.id);
   assert.deepEqual(fixture.told, []);
 });
 

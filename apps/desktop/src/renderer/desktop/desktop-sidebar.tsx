@@ -2,9 +2,10 @@ import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snaps
 import { GearIcon, PlusIcon, UserIcon } from "@sidecar/panel";
 import { useState } from "react";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { folderLine, PLANS_PAGE } from "../planning/planning-model";
+import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
+import { SidebarPlan } from "./plan-actions";
 
 /**
  * The account's face: the provider's photo when one travelled and loads,
@@ -90,6 +91,7 @@ function AccountButton({
  * The window's left column: Luke, the way to a new plan, every plan the
  * account owns, and the account's row that leads to Settings. It is where the
  * developer moves between things; what they work on is the column beside it.
+ * A plan's actions are a right-click on it away, whether or not it is open.
  * The strip above Luke is the window's drag handle and the traffic lights'
  * room. Folded away, it is inert as well as out of sight, so no key reaches
  * a row nobody can see.
@@ -159,23 +161,13 @@ export function DesktopSidebar({
         {plans.signedIn ? null : <p className="sidebar-note">Sign in to plan a feature.</p>}
         <ul className="sidebar-plans">
           {plans.plans.map((plan) => (
-            <li key={plan.id}>
-              <button
-                type="button"
-                className="sidebar-plan"
-                aria-current={
-                  onPlans && !composing && plan.id === plans.activePlanId ? "page" : undefined
-                }
-                onClick={() => openPlan(plan.id)}
-              >
-                <span className="sidebar-plan-name">{plan.name}</span>
-                {plans.folders[plan.id] !== undefined ? (
-                  <span className="sidebar-plan-repository">
-                    {folderLine(plans.folders[plan.id] ?? "")}
-                  </span>
-                ) : null}
-              </button>
-            </li>
+            <SidebarPlan
+              key={plan.id}
+              plans={plans}
+              plan={plan}
+              current={onPlans && !composing && plan.id === plans.activePlanId}
+              onOpen={() => openPlan(plan.id)}
+            />
           ))}
         </ul>
       </nav>

@@ -1,4 +1,4 @@
-import { CheckIcon, CloseIcon, CopyIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
+import { CheckIcon, CopyIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import {
@@ -8,15 +8,17 @@ import {
   folderLine,
   PLANS_PAGE,
 } from "../planning/planning-model";
-import { DeletePlanButton, MicrophoneRow } from "../planning/planning-parts";
+import { MicrophoneRow } from "../planning/planning-parts";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { PlanActionsButton } from "./plan-actions";
 import { SidePanel, SidePanelToggle } from "./side-panel";
 
 /**
  * The work column while Plans is chosen: the open plan's document, with its
  * toolbar above, the call bar below, and the side panel beside it while that
  * is open; the new-plan form; or the empty state that offers one. The plan
- * list itself is the sidebar's.
+ * list itself is the sidebar's, and so is moving between plans: the toolbar
+ * offers no way out of the open plan, only its actions.
  */
 
 /** The strip across the top of the work column, which is also the window's drag handle. */
@@ -40,7 +42,7 @@ function Toolbar({
   );
 }
 
-/** Copy, the one action on a document, with its refusal said beside it. */
+/** Copy, the plan's own action and so never folded into its menu, with its refusal said beside it. */
 function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element {
   const copied = copy.shown === COPY_SHOWN.COPIED;
   return (
@@ -89,17 +91,6 @@ function EmptyPlans({ plans }: { plans: PlansControl }): React.JSX.Element {
 /** The open plan's region: its document, or the state standing in its place. */
 function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { region } = plans;
-  const closeButton = (
-    <button
-      type="button"
-      className="toolbar-button toolbar-icon-button"
-      aria-label="Close plan"
-      title="Close plan"
-      onClick={plans.onLeavePlan}
-    >
-      <CloseIcon />
-    </button>
-  );
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
       region.kind === DOCUMENT_REGION.READING
@@ -111,12 +102,19 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             : "Choose a plan, or start a new one.";
     return (
       <>
-        <Toolbar title="Plan">{closeButton}</Toolbar>
+        <Toolbar title="Plan" />
         <section className="desktop-empty" aria-busy={region.kind === DOCUMENT_REGION.READING}>
           <p role={region.kind === DOCUMENT_REGION.READING ? undefined : "alert"}>{line}</p>
           {region.kind === DOCUMENT_REGION.FAILED ? (
             <button type="button" className="primary-button" onClick={plans.onRetryDocument}>
               Try again
+            </button>
+          ) : null}
+          {/* A plan that cannot be drawn offers no menu, so its way back to
+              the list is said here. */}
+          {region.kind === DOCUMENT_REGION.FAILED || region.kind === DOCUMENT_REGION.MISSING ? (
+            <button type="button" className="toolbar-button" onClick={plans.onLeavePlan}>
+              Close plan
             </button>
           ) : null}
         </section>
@@ -132,17 +130,16 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
         subtitle={folderPath === undefined ? undefined : folderLine(folderPath)}
       >
         {folderPath === undefined ? (
-          <button type="button" className="toolbar-button" onClick={plans.onChooseFolder}>
+          <button
+            type="button"
+            className="toolbar-button"
+            onClick={() => plans.onChooseFolder(plan.id)}
+          >
             Choose folder…
           </button>
         ) : null}
         <CopyButton copy={plans.copy} />
-        <DeletePlanButton
-          key={plan.id}
-          className="toolbar-button toolbar-icon-button"
-          onDelete={plans.onDeletePlan}
-        />
-        {closeButton}
+        <PlanActionsButton key={plan.id} plans={plans} planId={plan.id} />
         <SidePanelToggle open={plans.sidePanel.open} onToggle={plans.sidePanel.onToggle} />
       </Toolbar>
       <div className="desktop-plan">

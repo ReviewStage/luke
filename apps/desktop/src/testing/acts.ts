@@ -42,6 +42,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_SET_FOLDER,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", folderPath: "/Users/dev/relay" },
   },
+  [ACT_KIND.PLANNING_REVEAL_FOLDER]: {
+    kind: ACT_KIND.PLANNING_REVEAL_FOLDER,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
     kind: ACT_KIND.PLANNING_BOARD_SAVE,

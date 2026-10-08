@@ -47,6 +47,8 @@ import { type SidePanelControl, useSidePanel } from "./use-side-panel";
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
 export interface PlansControl {
   page: PlansPage;
+  /** Whether the tab is on screen: the panel open, on this tab. */
+  shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
   plans: PlanningView["plans"];
@@ -72,8 +74,10 @@ export interface PlansControl {
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
   transcript: { region: TranscriptRegion; onRetry: () => void };
   onSelect: (planId: string) => void;
-  /** Chooses the open plan's folder on this Mac again, through the folder picker. */
-  onChooseFolder: () => void;
+  /** Chooses a plan's folder on this Mac again, through the folder picker. */
+  onChooseFolder: (planId: string) => void;
+  /** Shows a plan's folder on this Mac in Finder. */
+  onRevealFolder: (planId: string) => void;
   onRetryList: () => void;
   onRetryDocument: () => void;
   onNewPlan: () => void;
@@ -81,8 +85,8 @@ export interface PlansControl {
   onCancelNew: () => void;
   /** Leaves the open plan for the list, which ends its call. */
   onLeavePlan: () => void;
-  /** Deletes the open plan, which ends its call and returns to the list; answers whether it was deleted. */
-  onDeletePlan: () => Promise<ActionResult>;
+  /** Deletes a plan, which ends its call and returns to the list if it is the open one; answers whether it was deleted. */
+  onDeletePlan: (planId: string) => Promise<ActionResult>;
   /** Steps back one page, answering whether there was a page to step back from. */
   back: () => boolean;
 }
@@ -150,9 +154,8 @@ export function usePlansTab(input: {
   }, [fixture, tell]);
 
   // A fixture's plans are deleted nowhere, as they are read from nowhere.
-  const deletePlan = async (): Promise<ActionResult> => {
-    const planId = planning.activePlanId;
-    if (planId === undefined || fixture !== undefined) return DELETE_REFUSED;
+  const deletePlan = async (planId: string): Promise<ActionResult> => {
+    if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await act(ACT_KIND.PLANNING_DELETE, { planId }).catch(() => false);
     return deleted ? { status: ACTION_RESULT_STATUS.ACCEPTED } : DELETE_REFUSED;
   };
@@ -191,9 +194,7 @@ export function usePlansTab(input: {
   const codeShown = live || fixture !== undefined;
 
   // A cancelled picker keeps whatever folder the plan had.
-  const chooseFolder = () => {
-    const planId = planning.activePlanId;
-    if (planId === undefined) return;
+  const chooseFolder = (planId: string) => {
     act(ACT_KIND.PLANNING_CHOOSE_FOLDER).then(
       (folderPath) => {
         if (folderPath !== null) tell(ACT_KIND.PLANNING_SET_FOLDER, { planId, folderPath });
@@ -227,6 +228,7 @@ export function usePlansTab(input: {
 
   return {
     page,
+    shown,
     signedIn,
     plans: planning.plans,
     folders: planning.folders,
@@ -262,6 +264,10 @@ export function usePlansTab(input: {
     },
     onSelect: select,
     onChooseFolder: chooseFolder,
+    // A fixture's folders are named nowhere on this Mac, so none is shown.
+    onRevealFolder: (planId) => {
+      if (fixture === undefined) tell(ACT_KIND.PLANNING_REVEAL_FOLDER, { planId });
+    },
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),
     onRetryDocument: () => {
       if (planning.activePlanId !== undefined) select(planning.activePlanId);

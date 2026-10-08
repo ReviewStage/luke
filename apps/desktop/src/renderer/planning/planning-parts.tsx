@@ -137,7 +137,7 @@ function CopyControl({
  * Delete, which asks first because a deleted plan and its conversation do
  * not come back. A refusal keeps the plan and says so under the button.
  */
-export function DeletePlanButton({
+function DeletePlanButton({
   onDelete,
   className,
 }: {

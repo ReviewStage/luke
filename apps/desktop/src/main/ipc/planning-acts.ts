@@ -29,6 +29,10 @@ export interface PlanningActsDependencies {
   };
   /** The folder picker; the chosen folder's absolute path, or null when the developer cancelled. */
   chooseFolder: () => Effect.Effect<string | null>;
+  /** The folder of this Mac each plan reads, by plan id, as main holds the host's view of them. */
+  folders: () => Readonly<Record<string, string>>;
+  /** Shows a folder in Finder, selected in the folder that holds it. */
+  revealFolder: (folderPath: string) => void;
   /** The plan the panel has open, as main holds the host's view of it. */
   activePlanId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
@@ -45,6 +49,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_DELETE
   | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
   | typeof ACT_KIND.PLANNING_SET_FOLDER
+  | typeof ACT_KIND.PLANNING_REVEAL_FOLDER
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE;
 
@@ -97,6 +102,16 @@ export function planningActRows(
     [ACT_KIND.PLANNING_SET_FOLDER]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_SET_FOLDER, sender);
       return host.planningSetFolder(params);
+    },
+    // The press names a plan rather than a path, so the panel can show in
+    // Finder only a folder the host already holds for one of its plans.
+    [ACT_KIND.PLANNING_REVEAL_FOLDER]: ({ planId }, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_REVEAL_FOLDER, sender);
+      const folderPath = dependencies.folders()[planId];
+      if (folderPath === undefined) {
+        throw new ActRefused({ message: ACT[ACT_KIND.PLANNING_REVEAL_FOLDER].refusal });
+      }
+      dependencies.revealFolder(folderPath);
     },
     // The press names no plan: the plan is the one the host has open, read
     // here, so the panel cannot open a call about a plan it is not showing.
