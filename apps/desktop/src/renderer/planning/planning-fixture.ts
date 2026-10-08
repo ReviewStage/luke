@@ -64,11 +64,11 @@ const FIXTURE_UPDATE: FullPlanUpdate = {
     pseudocode:
       "Accepting an invite\n\n" +
       "```text\n" +
-      "1. Find the membership by the link's token\n" +
-      "2. If it is not pending, or older than 7 days:\n" +
-      '     show "This invite is no longer valid" and stop\n' +
-      "3. Set its state to active\n" +
-      "4. Sign the teammate in to the workspace\n" +
+      "1. DO find the membership by the link's token\n" +
+      "2. IF it is not pending, or older than 7 days\n" +
+      '  2.1. FAIL "This invite is no longer valid"\n' +
+      "3. DO set its state to active\n" +
+      "4. DO sign the teammate in to the workspace\n" +
       "```",
   },
   decisions:

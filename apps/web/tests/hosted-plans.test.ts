@@ -27,6 +27,7 @@ import {
 import {
   type PlanDocumentBinding,
   runUpdatePlan,
+  savePseudocode,
   UPDATE_PLAN_REFUSAL,
   UPDATE_PLAN_STATUS,
   type UpdatePlanResult,
@@ -581,6 +582,32 @@ it.layer(testSqlClient)("named plans and the update_plan tool", (it) => {
       assert.deepEqual(yield* resumedDocument(owner, own.id), own.document);
       assert.deepEqual(yield* resumedDocument(victim, victims.id), victims.document);
     }),
+  );
+
+  it.effect(
+    "the notetaker's update cannot write the pseudocode, and its saves keep what Luke showed",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const binding = bound(userId, planId);
+        const shown = "Accepting an invite\n\n```text\n1. DO find the invite\n```";
+        yield* savePseudocode(binding, shown);
+
+        const refused = yield* updatePlan(binding, {
+          implementation: { pseudocode: "We look the invite up and then accept it." },
+        });
+        yield* updatePlan(binding, { goal: { problem: "Only admins can invite." } });
+        const { body } = yield* resumedDocument(userId, planId);
+
+        assert.deepEqual(refused, {
+          status: UPDATE_PLAN_STATUS.NOT_SAVED,
+          reason: UPDATE_PLAN_REFUSAL.UNREADABLE,
+          field: "implementation.pseudocode",
+        });
+        assert.ok(body.includes(`\n### Pseudocode\n\n${shown}\n`));
+        assert.ok(body.includes("Only admins can invite."));
+      }),
   );
 
   it.effect("a malformed call is reported with its field and leaves the saved document", () =>

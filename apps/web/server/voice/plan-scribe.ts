@@ -41,6 +41,7 @@ import { readPlan } from "../hosted/plan-store.js";
 import { spendHostedMeter } from "../hosted/quota.js";
 import { pseudocodeField, type ShownPseudocode } from "../hosted/show-pseudocode.js";
 import {
+  savePseudocode,
   saveUpdate,
   UPDATE_PLAN_STATUS,
   type UpdatePlanResult,
@@ -331,8 +332,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         planId: options.planId,
         header: { name: stored.value.plan.name },
       };
-      const update = { implementation: { pseudocode: pseudocodeField(pseudocode) } };
-      const saved = yield* saving(saveUpdate(binding, update));
+      const saved = yield* saving(savePseudocode(binding, pseudocodeField(pseudocode)));
       yield* announced(saved, "The plan's notetaker could not write the pseudocode");
     }).pipe(
       Effect.provideService(SqlClient.SqlClient, sql),

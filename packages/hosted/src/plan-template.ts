@@ -163,9 +163,10 @@ export const planFieldsSchema = EffectSchema.Struct({
     patterns: answer("Existing code to follow, by path, and what to copy from it."),
     // Note that the key may be missing, because plans saved before it existed hold none.
     pseudocode: EffectSchema.optionalKey(
-      answer(
-        "Pseudocode Luke showed the developer, for logic whose order or branches matter. " +
-          "Written by Luke's own tool; left out of the document while absent.",
+      describeWire(
+        ANSWER,
+        "Pseudocode Luke showed the developer, written only by his own tool; left out of " +
+          "the document while absent.",
       ),
     ),
     order: answer(
@@ -202,13 +203,17 @@ function partialSection<Fields extends EffectSchema.Struct.Fields>(
 /**
  * The whole of an `update_plan` call: any section, any field within it, and
  * the assumptions, each left out to keep what stands. A key the template does
- * not name is refused at every level.
+ * not name is refused at every level. Note that the pseudocode is not among
+ * them, because Luke writes it through his own tool (`withPseudocode`) and a
+ * notetaker that could write it would overwrite what he showed.
  */
 export const planUpdateSchema = EffectSchema.Struct({
   goal: partialSection(planFieldsSchema.fields.goal),
   scope: partialSection(planFieldsSchema.fields.scope),
   rules: EffectSchema.optionalKey(planFieldsSchema.fields.rules),
-  implementation: partialSection(planFieldsSchema.fields.implementation),
+  implementation: partialSection(
+    planFieldsSchema.fields.implementation.mapFields(Struct.omit(["pseudocode"])),
+  ),
   decisions: EffectSchema.optionalKey(planFieldsSchema.fields.decisions),
   verification: EffectSchema.optionalKey(planFieldsSchema.fields.verification),
   leftToAgent: EffectSchema.optionalKey(planFieldsSchema.fields.leftToAgent),
@@ -275,6 +280,11 @@ export function mergePlanFields(stored: PlanFields, update: PlanUpdate): PlanFie
     scope: { ...stored.scope, ...settledFields(scope) },
     implementation: { ...stored.implementation, ...settledFields(implementation) },
   };
+}
+
+/** The fields with the pseudocode Luke showed in place of whatever stood. */
+export function withPseudocode(stored: PlanFields, pseudocode: string): PlanFields {
+  return { ...stored, implementation: { ...stored.implementation, pseudocode } };
 }
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */

@@ -12,6 +12,7 @@ import {
   TURN_SLOW_STEP,
   type TurnEvent,
 } from "@sidecar/hosted";
+import type { WireBoundaryInput } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
@@ -467,7 +468,7 @@ function journal(parts: StoredUIMessage["parts"]): StoredUIMessage {
 function toolPart(
   name: string,
   callId: string,
-  input: Readonly<Record<string, string>> = {},
+  input: WireBoundaryInput = {},
   state = "input-available",
 ): StoredUIMessage["parts"][number] {
   // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one ahead of its run.
@@ -570,23 +571,79 @@ test("the projection: a queued question still streaming in, or one that does not
   );
 });
 
-test("the projection: pseudocode a planning call showed is told once its input is whole, beside the questions queued", () => {
-  const shown = { title: "Accepting an invite", body: "1. Find the invite\n2. Add the membership" };
+test("the projection: pseudocode a planning call showed is told once its input is whole, its steps numbered under their keywords", () => {
+  const steps = [
+    { kind: "do", text: "find the invite by its token" },
+    {
+      kind: "if",
+      text: "it is older than 7 days",
+      steps: [{ kind: "fail", text: '"This invite is no longer valid"' }],
+    },
+    {
+      kind: "for_each",
+      text: "workspace the invite names",
+      steps: [
+        {
+          kind: "if",
+          text: "the teammate is not a member",
+          steps: [{ kind: "do", text: "add the membership" }],
+        },
+      ],
+    },
+  ];
   const question = { question: "Does step 2 match?", recommendation: "Yes." };
   assert.deepEqual(
     projectTurnEvents(
       TURN,
       journal([
         toolPart(SHOW_PSEUDOCODE_TOOL.name, "c1", { title: "Accepting" }, "input-streaming"),
-        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c2", shown),
+        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c2", { title: "Accepting an invite", steps }),
         toolPart(QUEUE_QUESTION_TOOL.name, "c3", question),
-        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c4", { title: "No steps" }),
       ]),
     ),
     [
-      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.PSEUDOCODE_SHOWN, ...shown },
+      {
+        turnId: TURN.id,
+        seq: 1,
+        kind: TURN_EVENT_KIND.PSEUDOCODE_SHOWN,
+        title: "Accepting an invite",
+        body: [
+          "1. DO find the invite by its token",
+          "2. IF it is older than 7 days",
+          '  2.1. FAIL "This invite is no longer valid"',
+          "3. FOR EACH workspace the invite names",
+          "  3.1. IF the teammate is not a member",
+          "    3.1.1. DO add the membership",
+        ].join("\n"),
+      },
       { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...question },
     ],
+  );
+});
+
+test("the projection: pseudocode written as prose is never told", () => {
+  const prose = {
+    title: "Accepting an invite",
+    body: "First we look up the invite, then if it is old we refuse it.",
+  };
+  const paragraph = {
+    title: "Accepting an invite",
+    steps: [{ kind: "do", text: "look up the invite\nthen, if it has expired, refuse it" }],
+  };
+  const unknownKeyword = {
+    title: "Accepting an invite",
+    steps: [{ kind: "note", text: "this part is tricky" }],
+  };
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c1", prose),
+        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c2", paragraph),
+        toolPart(SHOW_PSEUDOCODE_TOOL.name, "c3", unknownKeyword),
+      ]),
+    ),
+    [],
   );
 });
 

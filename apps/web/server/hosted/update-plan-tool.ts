@@ -1,23 +1,26 @@
 import {
   mergePlanFields,
+  type PlanFields,
   type PlanHeader,
   type PlanUpdate,
   planBody,
   planUpdateSchema,
+  withPseudocode,
 } from "@sidecar/hosted/plan-template";
-import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
+import { PLAN_BOUNDS, type PlanAssumption, type PlanDocument } from "@sidecar/hosted/plan-wire";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
-import { readPlan, savePlanDocument } from "./plan-store.js";
+import { type PlanStoreEffect, readPlan, type StoredPlan, savePlanDocument } from "./plan-store.js";
 import { logStoreFailure } from "./store-failure.js";
 
 /**
  * update-plan-tool.ts -- the plan's one write: change a plan's document and read back what was saved.
  *
  * Its one caller is a planning call's notetaker (`voice/plan-scribe.ts`),
- * whose model answers with an update in this tool's input schema. The
+ * whose model answers with an update in this tool's input schema, and which
+ * also writes the pseudocode Luke shows through `savePseudocode`. The
  * update is the fields of the plan's fixed template it changes
  * (`@sidecar/hosted/plan-template`), and the assumptions list where it
  * changes; a field sent `null` is one the update has nothing to say about,
@@ -94,12 +97,21 @@ const NO_PLAN_RESULT: UpdatePlanResult = {
   reason: UPDATE_PLAN_REFUSAL.NO_PLAN,
 };
 
-/** The update merged over what the plan holds, formatted, and saved; a refusal where the plan is gone or the body too long. */
-function saveMerged(binding: PlanDocumentBinding, update: PlanUpdate) {
+/** What one save changes: the fields and the assumptions, each from the plan as stored. */
+interface PlanChange {
+  readonly fields: PlanFields;
+  readonly assumptions: readonly PlanAssumption[];
+}
+
+/** The change merged over what the plan holds, formatted, and saved; a refusal where the plan is gone or the body too long. */
+function saveChanged(
+  binding: PlanDocumentBinding,
+  change: (stored: StoredPlan) => PlanChange,
+): PlanStoreEffect<UpdatePlanResult> {
   return Effect.gen(function* () {
     const stored = yield* readPlan(binding.userId, binding.planId);
     if (Option.isNone(stored)) return NO_PLAN_RESULT;
-    const fields = mergePlanFields(stored.value.fields, update);
+    const { fields, assumptions } = change(stored.value);
     const body = planBody(binding.header, fields);
     if (body.length > PLAN_BOUNDS.MAX_BODY_CHARS) {
       return {
@@ -107,7 +119,6 @@ function saveMerged(binding: PlanDocumentBinding, update: PlanUpdate) {
         reason: UPDATE_PLAN_REFUSAL.TOO_LONG,
       } as const;
     }
-    const assumptions = update.assumptions ?? stored.value.plan.document.assumptions;
     const saved = yield* savePlanDocument(
       binding.userId,
       binding.planId,
@@ -123,6 +134,21 @@ function saveMerged(binding: PlanDocumentBinding, update: PlanUpdate) {
       }),
     });
   });
+}
+
+/** A store failure answered as a refusal the caller can act on, never as a failure. */
+function unavailableOnFailure(
+  save: PlanStoreEffect<UpdatePlanResult>,
+): Effect.Effect<UpdatePlanResult, never, SqlClient.SqlClient> {
+  return save.pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() =>
+      Effect.succeed<UpdatePlanResult>({
+        status: UPDATE_PLAN_STATUS.NOT_SAVED,
+        reason: UPDATE_PLAN_REFUSAL.UNAVAILABLE,
+      }),
+    ),
+  );
 }
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
@@ -142,14 +168,27 @@ export function saveUpdate(
   binding: PlanDocumentBinding,
   update: PlanUpdate,
 ): Effect.Effect<UpdatePlanResult, never, SqlClient.SqlClient> {
-  return saveMerged(binding, update).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.catch(() =>
-      Effect.succeed<UpdatePlanResult>({
-        status: UPDATE_PLAN_STATUS.NOT_SAVED,
-        reason: UPDATE_PLAN_REFUSAL.UNAVAILABLE,
-      }),
-    ),
+  return unavailableOnFailure(
+    saveChanged(binding, (stored) => ({
+      fields: mergePlanFields(stored.fields, update),
+      assumptions: update.assumptions ?? stored.plan.document.assumptions,
+    })),
+  );
+}
+
+/**
+ * Writes the pseudocode Luke showed into the plan, replacing what the field
+ * held, with every other field and the assumptions as they stand.
+ */
+export function savePseudocode(
+  binding: PlanDocumentBinding,
+  pseudocode: string,
+): Effect.Effect<UpdatePlanResult, never, SqlClient.SqlClient> {
+  return unavailableOnFailure(
+    saveChanged(binding, (stored) => ({
+      fields: withPseudocode(stored.fields, pseudocode),
+      assumptions: stored.plan.document.assumptions,
+    })),
   );
 }
 

@@ -286,23 +286,36 @@ evaluations are outside this work.
 
 Some logic can't be checked by ear: the order of steps, a branch, a retry, a
 loop. When a decision turns on logic like that, the planning model calls
-`show_pseudocode` with a title and short plain steps
-(`apps/web/server/hosted/show-pseudocode.ts`), and queues a question that
-points at it. The call does nothing when it runs: like `queue_question`, its
-journaled input is told mid-turn as a `pseudocode_shown` event, and two
-things follow from it.
+`show_pseudocode` (`apps/web/server/hosted/show-pseudocode.ts`) and queues a
+question that points at it. The steps are typed, not free text: each is one
+keyword from a fixed set (`DO`, `IF`, `ELSE`, `FOR EACH`, `WHILE`, `RETURN`,
+`FAIL`) and one line of at most 100 characters, with the steps of a branch or
+a loop nested under it at most three levels deep. A call carrying prose, a
+line break, or another keyword fails to read and is refused, which is what
+keeps the field pseudocode. The steps are drawn numbered within their parent:
+
+```
+1. DO find the membership by the link's token
+2. IF it is not pending, or older than 7 days
+  2.1. FAIL "This invite is no longer valid"
+3. DO set its state to active
+```
+
+The call does nothing when it runs: like `queue_question`, its journaled
+input is told mid-turn as a `pseudocode_shown` event carrying the title and
+the numbered lines, and two things follow from it.
 
 - **The notetaker writes it into the plan** at once, without waiting for the
-  quiet, as the `implementation.pseudocode` field: the title, then the steps
-  in one fence longer than any run of backticks inside them. A new call
-  replaces what the field holds. The save goes out as a `plan.draft`, so the
-  Mac needs nothing new to draw it.
+  quiet, as `implementation.pseudocode`: the title, then the lines in one
+  fence longer than any run of backticks inside them. A new call replaces
+  what the field holds. The save goes out as a `plan.draft`, so the Mac needs
+  nothing new to draw it.
 - **The voice points at it.** Luke is told the title, never the steps, and
   asks whether it matches what the developer means, naming steps by number.
-  Steps read aloud are what the developer could not follow in the first place.
 
-A correction by voice gets a new `show_pseudocode` call, so the planning
-model is the field's only author; the notetaker's own runs leave it alone.
+The field is not in `update_plan`'s schema, so the notetaker's own runs can't
+write it: a correction by voice gets a new `show_pseudocode` call, and the
+planning model is the field's only author.
 
 ### Microphone row and the panel's voice
 
