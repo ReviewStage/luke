@@ -1,4 +1,4 @@
-import { CheckIcon, CopyIcon, DocumentIcon, PlusIcon } from "@sidecar/panel";
+import { CheckIcon, CopyIcon } from "@sidecar/panel";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import {
@@ -16,9 +16,9 @@ import { SidePanel, SidePanelToggle } from "./side-panel";
 /**
  * The work column while Plans is chosen: the open plan's document, with its
  * toolbar above, the call bar below, and the side panel beside it while that
- * is open; the new-plan form; or the empty state that offers one. The plan
- * list itself is the sidebar's, and so is moving between plans: the toolbar
- * offers no way out of the open plan, only its actions.
+ * is open; or, with none open, the new-plan page, which is the window's home.
+ * The plan list itself is the sidebar's, and so is moving between plans: the
+ * toolbar offers no way out of the open plan, only its actions.
  */
 
 /** The strip across the top of the work column, which is also the window's drag handle. */
@@ -65,29 +65,6 @@ function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element
   );
 }
 
-/** Nothing open: what this column is for, and the way to start. */
-function EmptyPlans({ plans }: { plans: PlansControl }): React.JSX.Element {
-  return (
-    <section className="desktop-empty">
-      <span className="desktop-empty-mark" aria-hidden="true">
-        <DocumentIcon />
-      </span>
-      <h1>Plan a feature with Luke</h1>
-      <p>
-        {plans.signedIn
-          ? "Talk it through and Luke writes the plan as you go. Pick a plan on the left, or start a new one."
-          : "Sign in to Luke to plan a feature."}
-      </p>
-      {plans.signedIn ? (
-        <button type="button" className="primary-button" onClick={plans.onNewPlan}>
-          <PlusIcon />
-          New plan
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
 /** The open plan's region: its document, or the state standing in its place. */
 function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { region } = plans;
@@ -111,7 +88,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             </button>
           ) : null}
           {/* A plan that cannot be drawn offers no menu, so its way back to
-              the list is said here. */}
+              the new-plan page is said here. */}
           {region.kind === DOCUMENT_REGION.FAILED || region.kind === DOCUMENT_REGION.MISSING ? (
             <button type="button" className="toolbar-button" onClick={plans.onLeavePlan}>
               Close plan
@@ -169,20 +146,14 @@ export function DesktopPlans({ plans }: { plans: PlansControl }): React.JSX.Elem
   switch (plans.page) {
     case PLANS_PAGE.DOCUMENT:
       return <PlanDocument plans={plans} />;
+    // The page names itself in its heading, so its strip is the drag handle alone.
     case PLANS_PAGE.NEW:
       return (
         <>
-          <Toolbar title="New plan" />
-          <div className="desktop-form">
-            <NewPlanForm onStarted={plans.onCancelNew} onCancel={plans.onCancelNew} />
+          <div className="desktop-drag-strip" />
+          <div className="desktop-compose">
+            <NewPlanForm newPlan={plans.newPlan} />
           </div>
-        </>
-      );
-    case PLANS_PAGE.LIST:
-      return (
-        <>
-          <Toolbar title="Plans" />
-          <EmptyPlans plans={plans} />
         </>
       );
   }

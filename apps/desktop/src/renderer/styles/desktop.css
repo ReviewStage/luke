@@ -184,23 +184,20 @@ body,
   transform: none;
 }
 
+/* New plan reads as a row of the list it heads: no ground at rest, and the
+   plan rows' own hover and selection, since its page is a place like theirs. */
 .sidebar-new-plan {
   display: flex;
   align-items: center;
   gap: 8px;
   height: 36px;
   margin: 0 0 20px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: 9px;
-  background: var(--raised-strong);
+  background: none;
   font-size: 13px;
   font-weight: 600;
   transition: background-color var(--duration-hover) ease;
-}
-
-.sidebar-new-plan:hover:not(:disabled),
-.sidebar-new-plan[data-active="true"] {
-  background: var(--selected);
 }
 
 .sidebar-new-plan:disabled {
@@ -261,11 +258,13 @@ body,
   transition: background-color var(--duration-hover) ease;
 }
 
-.sidebar-plan:hover {
+.sidebar-plan:hover,
+.sidebar-new-plan:hover:not(:disabled) {
   background: var(--raised);
 }
 
-.sidebar-plan[aria-current="page"] {
+.sidebar-plan[aria-current="page"],
+.sidebar-new-plan[aria-current="page"] {
   background: var(--raised-strong);
 }
 
@@ -603,34 +602,11 @@ body,
   text-align: center;
 }
 
-.desktop-empty h1 {
-  margin: 4px 0 0;
-  color: var(--text-primary);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-}
-
 .desktop-empty p {
   max-width: 400px;
   margin: 0 0 8px;
   font-size: 13.5px;
   line-height: 1.55;
-}
-
-.desktop-empty-mark {
-  display: grid;
-  place-items: center;
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-}
-
-.desktop-empty-mark svg {
-  width: 26px;
-  height: 26px;
 }
 
 /* The document ------------------------------------------------------------- */
@@ -754,24 +730,218 @@ body,
   font-size: 12px;
 }
 
-/* The new-plan form ----------------------------------------------------- */
+/* The new-plan page -------------------------------------------------------- */
 
-.desktop-form {
+/* The window's home, drawn as a devtool's new-task page: a heading over one
+   composer, the pair sitting a little above the column's middle. */
+.desktop-compose {
+  display: flex;
   min-height: 0;
   flex: 1;
+  flex-direction: column;
+  justify-content: center;
   overflow-y: auto;
-  padding: 36px 48px 60px;
+  padding: 24px 48px 12vh;
 }
 
-.desktop-form .plan-new {
-  max-width: 560px;
+.plan-compose {
+  display: flex;
+  width: 100%;
+  max-width: 680px;
   margin: 0 auto;
-  zoom: 1.12;
+  flex-direction: column;
+  gap: 22px;
 }
 
-/* The toolbar names the page and the form's Cancel is its way out. */
-.desktop-form .plan-new > .plan-header {
-  display: none;
+.plan-compose-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.plan-compose-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--hairline);
+  border-radius: 22px;
+  background: var(--desktop-sidebar);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  transition: border-color var(--duration-hover) ease;
+}
+
+.plan-compose-card:focus-within {
+  border-color: var(--selected-edge);
+}
+
+.plan-compose-name {
+  width: 100%;
+  padding: 20px 22px 14px;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 17px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.plan-compose-name::placeholder {
+  color: var(--text-tertiary);
+}
+
+.plan-compose-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+.plan-compose-folder {
+  position: relative;
+  min-width: 0;
+}
+
+.plan-compose-chip {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 560;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.plan-compose-chip:hover,
+.plan-compose-chip[aria-expanded="true"] {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.plan-compose-chip-name,
+.plan-compose-menu-name,
+.plan-compose-menu-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The start press is the card's one filled thing, drawn in the text colour
+   the way a composer's send is, and only filled once it can be pressed. */
+.plan-compose-start {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  color: var(--desktop-ground);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.plan-compose-start:disabled {
+  background: var(--raised-strong);
+  color: var(--text-tertiary);
+}
+
+.plan-compose-chip svg,
+.plan-compose-menu-row svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.plan-compose-start svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* The recent folders open under the chip and enter as the settings search
+   does, on the tokens reduced motion zeroes. */
+.plan-compose-menu {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  width: 340px;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-overlay);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  animation: search-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.plan-compose-menu-heading {
+  margin: 4px 8px 6px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.plan-compose-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.plan-compose-menu-row:hover,
+.plan-compose-menu-row:focus-visible {
+  background: var(--raised-strong);
+  outline: none;
+}
+
+.plan-compose-menu-name {
+  flex: 0 1 auto;
+  font-weight: 560;
+}
+
+.plan-compose-menu-path {
+  min-width: 0;
+  flex: 1;
+  color: var(--text-tertiary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.plan-compose-menu hr {
+  width: 100%;
+  margin: 6px 0;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.plan-compose-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-align: center;
 }
 
 /* Settings ------------------------------------------------------------------- */

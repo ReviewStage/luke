@@ -71,9 +71,6 @@ export function App(): React.JSX.Element {
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
-  // Whether the Plans tab is on its new-plan form; an open plan is the host's
-  // and outlasts the tab, but a half-filled form is this panel's alone.
-  const [plansComposing, setPlansComposing] = useState(false);
   /** The settings the panel is drawing: the document's own. */
   const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
@@ -115,7 +112,6 @@ export function App(): React.JSX.Element {
       // a credential entry returning from the key slot, the evidence run that
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
-      setPlansComposing(false);
       // `PanelTab` and the counted tab are the same union: both are the
       // guide's own set, which `PanelTab` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
@@ -276,8 +272,6 @@ export function App(): React.JSX.Element {
     voiceAvailable: state?.settings?.status.voiceAvailable === true,
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
     shown: presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS,
-    composing: plansComposing,
-    onComposingChange: setPlansComposing,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
   });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
@@ -443,16 +437,16 @@ export function App(): React.JSX.Element {
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: a settings page back to the front page, then the settings tab
-      // back to Plans, then an open plan back to the list, then the panel
-      // itself. The settings search answers its own Escapes while the caret
-      // is in it — clearing, then letting go of the caret — so it is no
+      // back to Plans, then an open plan back to the new-plan page, then the
+      // panel itself. The settings search answers its own Escapes while the
+      // caret is in it — clearing, then letting go of the caret — so it is no
       // layer here.
       if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.PLANS);
-      // An open plan unwinds to the list, which leaves it and ends its call,
-      // and the form to the list too. The list is the home tab, so the press
-      // past it closes the panel.
+      // An open plan unwinds to the new-plan page, which leaves it and ends
+      // its call. That page is the home tab, so the press past it closes the
+      // panel.
       else if (!plans.back()) void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);

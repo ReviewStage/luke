@@ -24,6 +24,8 @@ import {
   type PlansPage,
   planningCallHoldsPanel,
   plansPage,
+  recentFolders,
+  START_FAILED_NOTE,
 } from "./planning-model";
 import {
   type HeardCall,
@@ -41,7 +43,8 @@ import { type SidePanelControl, useSidePanel } from "./use-side-panel";
  * plan: the plan's notetaker writes the document, and the tab redraws it in
  * place as the host brings its drafts and its reads. The plan the host has open is the
  * document page in every panel, and it stays open through a tab switch or a
- * collapse; only Back, Escape, another plan, or a sign-out leaves it.
+ * collapse; only Escape, another plan, New plan, a delete, or a sign-out
+ * leaves it. With none open, the tab is the new-plan page.
  */
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -80,12 +83,22 @@ export interface PlansControl {
   onRevealFolder: (planId: string) => void;
   onRetryList: () => void;
   onRetryDocument: () => void;
+  /** Leaves any open plan for the new-plan page, and has that page focus its name field. */
   onNewPlan: () => void;
-  /** The new-plan page's way back, and what a started plan closes it with. */
-  onCancelNew: () => void;
-  /** Leaves the open plan for the list, which ends its call. */
+  /** What the new-plan page offers and the two presses it makes. */
+  newPlan: {
+    /** Counts the presses of New plan, so the page focuses its name field on each. */
+    presses: number;
+    /** The folders this Mac's plans read, the last one used first. */
+    recentFolders: readonly string[];
+    /** Opens the folder picker, answering the chosen folder or null when it is cancelled. */
+    pickFolder: () => Promise<string | null>;
+    /** Starts the plan, which opens it; answers why it did not start, or nothing once it has. */
+    start: (name: string, folderPath: string) => Promise<string | undefined>;
+  };
+  /** Leaves the open plan for the new-plan page, which ends its call. */
   onLeavePlan: () => void;
-  /** Deletes a plan, which ends its call and returns to the list if it is the open one; answers whether it was deleted. */
+  /** Deletes a plan, which ends its call and returns to the new-plan page if it is the open one; answers whether it was deleted. */
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /** Steps back one page, answering whether there was a page to step back from. */
   back: () => boolean;
@@ -107,21 +120,16 @@ export function usePlansTab(input: {
   microphoneStatus: MicrophoneStatus;
   /** Whether the tab is on screen: the panel open, on this tab. */
   shown: boolean;
-  /**
-   * Whether this panel is composing a new plan, held by the panel so that
-   * arriving at the tab, like arriving at any tab, lands on its front page.
-   */
-  composing: boolean;
-  onComposingChange: (composing: boolean) => void;
   voice: {
     view: VoiceView;
     listening: boolean;
     requestMicrophoneAccess: () => void;
   };
 }): PlansControl {
-  const { shown, voice, composing, onComposingChange } = input;
+  const { shown, voice } = input;
   const { act, tell } = input.acts;
   const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
+  const [newPlanPresses, setNewPlanPresses] = useState(0);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
@@ -129,7 +137,7 @@ export function usePlansTab(input: {
   const sidePanel = useSidePanel(fixtureSidePanel(input.run));
   const planning = fixture ?? input.planning;
   const signedIn = fixture !== undefined || input.signedIn;
-  const page = plansPage(planning, composing);
+  const page = plansPage(planning);
   const region = documentRegion(planning);
 
   // The tab showing is what asks the host to read the plans again; the open
@@ -219,12 +227,19 @@ export function usePlansTab(input: {
     );
   }, [reported.callPlanId, reported.callTranscript, planning.activePlanId]);
 
+  // A started plan becomes the host's open one, which turns the page to it.
+  const startPlan = (name: string, folderPath: string): Promise<string | undefined> =>
+    act(ACT_KIND.PLANNING_START, { name, folderPath }).then(
+      (answer) => ("failure" in answer ? START_FAILED_NOTE : undefined),
+      (refused: Error) => refused.message,
+    );
+
+  // The new-plan page is the tab's home, so only an open plan steps back.
   const back = useCallback((): boolean => {
-    if (page === PLANS_PAGE.DOCUMENT) leavePlan();
-    else if (page === PLANS_PAGE.NEW) onComposingChange(false);
-    else return false;
+    if (page !== PLANS_PAGE.DOCUMENT) return false;
+    leavePlan();
     return true;
-  }, [leavePlan, onComposingChange, page]);
+  }, [leavePlan, page]);
 
   return {
     page,
@@ -272,8 +287,16 @@ export function usePlansTab(input: {
     onRetryDocument: () => {
       if (planning.activePlanId !== undefined) select(planning.activePlanId);
     },
-    onNewPlan: () => onComposingChange(true),
-    onCancelNew: () => onComposingChange(false),
+    onNewPlan: () => {
+      if (page === PLANS_PAGE.DOCUMENT) leavePlan();
+      setNewPlanPresses((presses) => presses + 1);
+    },
+    newPlan: {
+      presses: newPlanPresses,
+      recentFolders: recentFolders(planning.plans, planning.folders),
+      pickFolder: () => act(ACT_KIND.PLANNING_CHOOSE_FOLDER),
+      start: startPlan,
+    },
     onLeavePlan: leavePlan,
     onDeletePlan: deletePlan,
     back,

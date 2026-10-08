@@ -122,10 +122,8 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onSelect(planId);
   };
-  // An open plan holds the page over the form, so starting another leaves it.
   const newPlan = () => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
-    if (plans.page === PLANS_PAGE.DOCUMENT) plans.onLeavePlan();
     plans.onNewPlan();
   };
 
@@ -137,7 +135,7 @@ export function DesktopSidebar({
       <button
         type="button"
         className="sidebar-new-plan"
-        data-active={String(composing)}
+        aria-current={composing ? "page" : undefined}
         disabled={!plans.signedIn}
         onClick={newPlan}
       >
