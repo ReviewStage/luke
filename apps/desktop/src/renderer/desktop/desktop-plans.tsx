@@ -144,6 +144,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
         <SidePanel
           {...drawing}
           panel={drawing.panel}
+          unread={plans.unreadTabs}
           planId={plan.id}
           board={plans.board}
           code={plans.code}

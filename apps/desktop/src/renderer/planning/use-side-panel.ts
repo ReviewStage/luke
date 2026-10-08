@@ -8,8 +8,10 @@ import { useCallback, useEffect, useState } from "react";
  * (the whiteboard, the code Luke has on screen, what was said on the plan's
  * calls) stands in a panel at the
  * window's right that the developer opens and closes, as every devtool
- * window's secondary sidebar does. Nothing opens it on its own. Not to be
- * confused with "the panel", which in this renderer is Luke's whole surface.
+ * window's secondary sidebar does. The one thing that opens it on its own is
+ * Luke first drawing on a plan's board or first showing its code
+ * (`use-panel-arrivals.ts`), once per plan and kind. Not to be confused with
+ * "the panel", which in this renderer is Luke's whole surface.
  *
  * The three facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage and read once at

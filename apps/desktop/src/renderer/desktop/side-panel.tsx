@@ -73,9 +73,11 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
 /** The strip of tabs across the panel's top. */
 function TabStrip({
   tab,
+  unread,
   onChoose,
 }: {
   tab: SidePanelTab;
+  unread: readonly SidePanelTab[];
   onChoose: (tab: SidePanelTab) => void;
 }): React.JSX.Element {
   return (
@@ -90,6 +92,7 @@ function TabStrip({
             onClick={() => onChoose(entry.tab)}
           >
             {entry.label}
+            {unread.includes(entry.tab) ? <span className="tab-note" aria-hidden="true" /> : null}
           </button>
         </Tooltip>
       ))}
@@ -337,12 +340,15 @@ export function SidePanel({
   leaving,
   onLeft,
   edge,
+  unread,
   planId,
   board,
   code,
   transcript,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
+  /** The tabs holding something that arrived while another was shown, each dotted until it is shown. */
+  unread: readonly SidePanelTab[];
   planId: string;
   board: Board | undefined;
   code: PlanCode | undefined;
@@ -375,7 +381,7 @@ export function SidePanel({
         {/* The row is a drag region and each control in it is not; Chromium
             takes regions in document order, so the controls follow it. */}
         <div className="side-panel-bar">
-          <TabStrip tab={panel.tab} onChoose={panel.onChoose} />
+          <TabStrip tab={panel.tab} unread={unread} onChoose={panel.onChoose} />
           <div className="side-panel-bar-actions">
             <FullScreenToggle
               fullScreen={panel.fullScreen}

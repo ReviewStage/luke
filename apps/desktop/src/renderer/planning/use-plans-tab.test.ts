@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import type { Board } from "@sidecar/hosted/board-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLANNING_READ,
+  type PlanCode,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
+import { LIVE_STATUS } from "@sidecar/live";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -18,6 +22,7 @@ import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { PLANS_PAGE } from "./planning-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
+import { SIDE_PANEL_TAB } from "./use-side-panel";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -283,4 +288,107 @@ test("the open plan's call grows the transcript as it is said, and hanging up ke
 
   act(() => tab.control().transcript.onRetry());
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_REFRESH);
+});
+
+const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
+
+/** A board holding Luke's drawing of one box, numbered as his `number`th. */
+function drawnBoard(number: number): Board {
+  return {
+    elements: [],
+    appliedDrawing: number - 1,
+    drawing: {
+      number,
+      elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
+    },
+  };
+}
+
+const CODE: PlanCode = {
+  ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
+  firstLine: 1,
+  lineCount: 1,
+  lines: [[{ text: "export function accept() {}" }]],
+};
+
+/** A call in progress about the open plan, which is what puts code on screen. */
+const ON_CALL: VoiceView = {
+  ...IDLE_VOICE_VIEW,
+  callPlanId: PLAN.id,
+  voiceStatus: LIVE_STATUS.LISTENING,
+};
+
+/** The panel as the developer sees it: shown or not, and on which tab. */
+function panelOf(tab: ReturnType<typeof mount>) {
+  const { open, tab: shown } = tab.control().sidePanel;
+  return { open, tab: shown };
+}
+
+test("Luke's first drawing on the open plan's board opens the panel on the board, and none after it does once closed", () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  act(() => tab.control().sidePanel.onToggle());
+  tab.stand({ planning: { ...OPEN, board: EMPTY_BOARD } });
+  assert.deepEqual(panelOf(tab), { open: false, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.equal(tab.control().sidePanel.fullScreen, false);
+
+  act(() => tab.control().sidePanel.onToggle());
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
+  assert.equal(tab.control().sidePanel.open, false);
+});
+
+test("the first code Luke shows on the open plan's call opens the panel on the code, and a later call's code does not once closed", () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  tab.stand({ voice: ON_CALL });
+  assert.equal(tab.control().sidePanel.open, false);
+
+  tab.stand({ planning: { ...OPEN, code: CODE } });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+
+  act(() => tab.control().sidePanel.onToggle());
+  tab.stand({ voice: IDLE_VOICE_VIEW, planning: OPEN });
+  tab.stand({ voice: ON_CALL });
+  tab.stand({ planning: { ...OPEN, code: CODE } });
+  assert.equal(tab.control().sidePanel.open, false);
+});
+
+test("a plan opened with its board already drawn opens no panel, and nothing Luke draws on it later does", () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
+
+  assert.equal(tab.control().sidePanel.open, false);
+});
+
+test("a plan's first board opens the panel once across a relaunch and a trip to another plan", () => {
+  const other = { ...OPEN, activePlanId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
+  const first = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
+  first.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+  assert.equal(first.control().sidePanel.open, true);
+  act(() => first.control().sidePanel.onToggle());
+  document.body.innerHTML = "";
+
+  const relaunched = mount({ shown: true, planning: other });
+  relaunched.stand({ planning: OPEN });
+  relaunched.stand({ planning: { ...OPEN, board: EMPTY_BOARD } });
+  relaunched.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
+  assert.equal(relaunched.control().sidePanel.open, false);
+});
+
+test("an arrival while the panel shows another tab leaves it there and dots the arrival's tab until it is shown", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+  assert.equal(tab.control().sidePanel.fullScreen, true);
+  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.BOARD]);
+
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  assert.deepEqual(tab.control().unreadTabs, []);
 });
