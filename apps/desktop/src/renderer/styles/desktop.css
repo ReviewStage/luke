@@ -8,6 +8,7 @@
   --desktop-sidebar: #111114;
   --desktop-well: #0f0f12;
   --desktop-bar-height: 52px;
+  /* The sidebar's default width; the app stage carries the dragged one. */
   --sidebar-width: 264px;
   /* Where the work column's toolbar starts its title while the sidebar is
      folded: clear of the traffic lights and the sidebar toggle beside them. */
@@ -114,6 +115,12 @@ body,
   padding: 0 12px 12px;
   border-right: 1px solid var(--hairline);
   background: var(--desktop-sidebar);
+}
+
+/* A drag gone far enough past the least width to fold the sidebar on
+   release says so before it does, as the side panel's does. */
+.desktop-sidebar[data-snap="collapse"] {
+  opacity: 0.4;
 }
 
 .luke-identity {
@@ -1305,13 +1312,14 @@ body,
   opacity: 0.4;
 }
 
-/* The resize edge straddles the panel's border, wider than it looks. */
-.side-panel-resize {
+/* A resize edge straddles its pane's border, wider than it looks: the side
+   panel's left border, the sidebar's right. */
+.side-panel-resize,
+.sidebar-resize {
   position: absolute;
   z-index: 2;
   top: 0;
   bottom: 0;
-  left: -3px;
   width: 6px;
   cursor: col-resize;
   outline: none;
@@ -1319,9 +1327,20 @@ body,
   -webkit-app-region: no-drag;
 }
 
+.side-panel-resize {
+  left: -3px;
+}
+
+.sidebar-resize {
+  right: -3px;
+}
+
 .side-panel-resize:hover,
 .side-panel-resize:active,
-.side-panel-resize:focus-visible {
+.side-panel-resize:focus-visible,
+.sidebar-resize:hover,
+.sidebar-resize:active,
+.sidebar-resize:focus-visible {
   background: color-mix(in srgb, var(--message-sent) 55%, transparent);
 }
 

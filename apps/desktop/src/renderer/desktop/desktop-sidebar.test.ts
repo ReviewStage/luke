@@ -14,6 +14,7 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopSidebar } from "./desktop-sidebar";
+import { SIDEBAR_WIDTH } from "./sidebar-collapse";
 
 const PHOTO = "https://avatars.githubusercontent.com/u/1?v=4";
 
@@ -39,7 +40,12 @@ function mount(
   act(() => {
     root.render(
       createElement(DesktopSidebar, {
-        collapsed: false,
+        sidebar: {
+          collapsed: false,
+          width: SIDEBAR_WIDTH.DEFAULT,
+          onToggle: () => undefined,
+          onResize: () => undefined,
+        },
         identity: {
           speakers: { listening: false, lukeSpeaking: false },
           voiceActive: { developer: false, luke: false },

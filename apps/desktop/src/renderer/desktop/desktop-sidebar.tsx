@@ -6,6 +6,23 @@ import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
+import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
+import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
+
+/**
+ * What the sidebar leaves the work column beside it, in CSS pixels: the
+ * sidebar is dragged no wider than the window less this.
+ */
+const WORK_RESERVE = 360;
+
+/**
+ * The sidebar's right edge, dragged to resize it and past its least width to
+ * fold it away; double-clicked, it goes back to the default width.
+ */
+function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
+  // biome-ignore lint/a11y/useSemanticElements: a resize edge is a focusable separator that takes keys, which an <hr> cannot be.
+  return <div className="sidebar-resize" {...edge} />;
+}
 
 /**
  * The account's face: the provider's photo when one travelled and loads,
@@ -93,11 +110,12 @@ function AccountButton({
  * developer moves between things; what they work on is the column beside it.
  * A plan's actions are a right-click on it away, whether or not it is open.
  * The strip above Luke is the window's drag handle and the traffic lights'
- * room. Folded away, it is inert as well as out of sight, so no key reaches
- * a row nobody can see.
+ * room. Its right edge resizes it, and a drag well past its least width
+ * folds it away. Folded away, it is inert as well as out of sight, so no key
+ * reaches a row nobody can see.
  */
 export function DesktopSidebar({
-  collapsed,
+  sidebar,
   identity,
   plans,
   tab,
@@ -105,7 +123,7 @@ export function DesktopSidebar({
   account,
   settingsNote,
 }: {
-  collapsed: boolean;
+  sidebar: SidebarCollapse;
   identity: LukeIdentityProps;
   plans: PlansControl;
   tab: PanelTab;
@@ -126,9 +144,18 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlan();
   };
+  const { snap, edge } = useResizableEdge({
+    side: EDGE_SIDE.RIGHT,
+    width: sidebar.width,
+    bounds: SIDEBAR_WIDTH,
+    reserve: WORK_RESERVE,
+    label: "Resize sidebar",
+    onResize: sidebar.onResize,
+    onCollapse: sidebar.onToggle,
+  });
 
   return (
-    <aside className="desktop-sidebar" inert={collapsed}>
+    <aside className="desktop-sidebar" inert={sidebar.collapsed} data-snap={snap}>
       <div className="desktop-drag-strip" />
       <LukeIdentity {...identity} />
 
@@ -178,6 +205,8 @@ export function DesktopSidebar({
           onPress={() => onTabChange(PANEL_TAB.SETTINGS)}
         />
       </div>
+      {/* Last, so the drag strip above Luke does not take the edge's top from it. */}
+      <ResizeEdge edge={edge} />
     </aside>
   );
 }
