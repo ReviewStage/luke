@@ -1253,8 +1253,8 @@ body,
 
 /* The side panel ----------------------------------------------------------- */
 
-/* Under the toolbar: the document over its call bar, and the side panel to
-   their right while it is open. */
+/* The open plan: its toolbar, document, and call bar in a column, and the side
+   panel to their right, the window's full height, while it is open. */
 .desktop-plan {
   display: flex;
   min-height: 0;
@@ -1264,13 +1264,21 @@ body,
 .desktop-plan-main {
   display: flex;
   min-width: 0;
+  min-height: 0;
   flex: 1;
   flex-direction: column;
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+/* Hidden, not removed, while the panel fills the window. */
+.desktop-plan-main[hidden] {
+  display: none;
 }
 
 /* Its width is the developer's, set inline. The document keeps room to be
    read beside it while the window allows, but never at the cost of the
-   panel's own least width. */
+   panel's own least width. The 360px is `DOCUMENT_RESERVE` in side-panel.tsx,
+   which a drag is held to. */
 .side-panel {
   position: relative;
   display: flex;
@@ -1280,6 +1288,21 @@ body,
   flex-direction: column;
   border-left: 1px solid var(--hairline);
   background: var(--desktop-well);
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+/* Full screen, the panel takes the document's place as well as its own. */
+.side-panel[data-full-screen="true"] {
+  max-width: none;
+  flex: 1;
+  border-left: 0;
+}
+
+/* A drag gone far enough past a bound to snap on release says so before it
+   does: what the release would take away fades. */
+.side-panel[data-snap="collapse"],
+.desktop-plan:has(> .side-panel[data-snap="expand"]) > .desktop-plan-main {
+  opacity: 0.4;
 }
 
 /* The resize edge straddles the panel's border, wider than it looks. */
@@ -1302,16 +1325,42 @@ body,
   background: color-mix(in srgb, var(--message-sent) 55%, transparent);
 }
 
-.side-panel-tabs {
+/* The panel's top row, level with the plan's toolbar and, like it, the
+   window's drag handle wherever no control stands. */
+.side-panel-bar {
   display: flex;
   flex: 0 0 auto;
-  gap: 4px;
-  padding: 8px 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: var(--desktop-bar-height);
+  padding: 8px 20px 8px 10px;
   border-bottom: 1px solid var(--hairline);
+  -webkit-app-region: drag;
+}
+
+/* Full screen with the sidebar folded, the row starts where the plan's
+   toolbar would: clear of the traffic lights and the sidebar toggle. */
+.desktop-shell[data-sidebar-collapsed="true"] .side-panel[data-full-screen="true"] .side-panel-bar {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
+.side-panel-tabs {
+  display: flex;
+  min-width: 0;
+  gap: 4px;
+}
+
+.side-panel-bar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
 }
 
 .side-panel-tab {
   padding: 5px 10px;
+  -webkit-app-region: no-drag;
   border-radius: 7px;
   background: none;
   color: var(--text-secondary);

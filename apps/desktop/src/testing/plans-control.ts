@@ -24,9 +24,11 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     live: false,
     sidePanel: {
       open: false,
+      fullScreen: false,
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
+      onToggleFullScreen: ignore,
       onChoose: ignore,
       onResize: ignore,
     },

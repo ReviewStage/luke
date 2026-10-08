@@ -100,7 +100,11 @@ export interface PlansControl {
   onLeavePlan: () => void;
   /** Deletes a plan, which ends its call and returns to the new-plan page if it is the open one; answers whether it was deleted. */
   onDeletePlan: (planId: string) => Promise<ActionResult>;
-  /** Steps back one page, answering whether there was a page to step back from. */
+  /**
+   * Steps back one layer, answering whether there was one to step back from:
+   * a side panel filling the window back beside the document, else an open
+   * plan back to the new-plan page.
+   */
   back: () => boolean;
 }
 
@@ -234,12 +238,14 @@ export function usePlansTab(input: {
       (refused: Error) => refused.message,
     );
 
-  // The new-plan page is the tab's home, so only an open plan steps back.
+  // The new-plan page is the tab's home, so only an open plan steps back,
+  // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
     if (page !== PLANS_PAGE.DOCUMENT) return false;
-    leavePlan();
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    else leavePlan();
     return true;
-  }, [leavePlan, page]);
+  }, [leavePlan, page, sidePanel.fullScreen, sidePanel.onToggleFullScreen]);
 
   return {
     page,

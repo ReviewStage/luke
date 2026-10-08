@@ -103,6 +103,7 @@ function mount(initial: Partial<Standing> = {}) {
 
 afterEach(() => {
   document.body.innerHTML = "";
+  window.localStorage.clear();
 });
 
 test("each time the tab shows it reads the plans again, and the tab going away leaves the open plan alone", () => {
@@ -116,6 +117,26 @@ test("each time the tab shows it reads the plans again, and the tab going away l
 
   assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_REFRESH]);
   assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT);
+});
+
+test("stepping back from a side panel filling the window brings it back beside the plan, which stays open", () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onToggle());
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+  assert.equal(tab.control().sidePanel.fullScreen, true);
+
+  act(() => {
+    assert.equal(tab.control().back(), true);
+  });
+  assert.equal(tab.control().sidePanel.fullScreen, false);
+  assert.equal(tab.control().sidePanel.open, true);
+  assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT);
+  assert.equal(tab.told.includes(ACT_KIND.PLANNING_CLOSE), false);
+
+  act(() => {
+    assert.equal(tab.control().back(), true);
+  });
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_CLOSE);
 });
 
 test("stepping back leaves an open plan for the new-plan page, which has nothing to step back from", () => {

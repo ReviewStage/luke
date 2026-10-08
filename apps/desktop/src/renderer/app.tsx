@@ -437,8 +437,9 @@ export function App(): React.JSX.Element {
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: a settings page back to the front page, then the settings tab
-      // back to Plans, then an open plan back to the new-plan page, then the
-      // panel itself. The settings search answers its own Escapes while the
+      // back to Plans, then a side panel filling the window back beside its
+      // plan, then an open plan back to the new-plan page, then the panel
+      // itself. The settings search answers its own Escapes while the
       // caret is in it — clearing, then letting go of the caret — so it is no
       // layer here.
       if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {

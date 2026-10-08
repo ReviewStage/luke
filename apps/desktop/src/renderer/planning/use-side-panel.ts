@@ -15,6 +15,11 @@ import { useCallback, useEffect, useState } from "react";
  * holds, so they are kept in the renderer's own storage and read once at
  * mount. A fixture run neither draws nor writes them: what it draws is
  * staged, and a capture must not depend on how the last run left the panel.
+ *
+ * The open panel may also fill the window's work, over the document, as
+ * ChatGPT's canvas does. That is a moment's view rather than a preference,
+ * so it is kept nowhere: a launch, and a panel shown again, start beside
+ * the document.
  */
 
 /** The panel's tabs. A tab is one entry here, one label below, and one case where the panel draws it. */
@@ -68,10 +73,14 @@ const FIRST_LAUNCH: SidePanelState = {
 /** What the panel and its toggle draw, and their presses. */
 export interface SidePanelControl {
   open: boolean;
+  /** Whether the open panel fills the work column in the document's place. */
+  fullScreen: boolean;
   tab: SidePanelTab;
   /** The panel's width in CSS pixels, always within {@link SIDE_PANEL_WIDTH}. */
   width: number;
+  /** Shows or hides the panel; hiding it leaves full screen too. */
   onToggle: () => void;
+  onToggleFullScreen: () => void;
   onChoose: (tab: SidePanelTab) => void;
   /** Asks for a width; it is clamped to the bounds before it is kept. */
   onResize: (width: number) => void;
@@ -122,6 +131,7 @@ export function useSidePanel(staged: SidePanelState | undefined): SidePanelContr
   // arrives, a render after the kept preference was read.
   const [kept, setKept] = useState<SidePanelState>(readStored);
   const [moved, setMoved] = useState<SidePanelState | undefined>(undefined);
+  const [fullScreen, setFullScreen] = useState(false);
   const state = staged === undefined ? kept : (moved ?? staged);
   const update = useCallback(
     (change: (held: SidePanelState) => SidePanelState) => {
@@ -142,7 +152,11 @@ export function useSidePanel(staged: SidePanelState | undefined): SidePanelContr
     }
   }, [staged, kept]);
 
-  const onToggle = useCallback(() => update((held) => ({ ...held, open: !held.open })), [update]);
+  const onToggle = useCallback(() => {
+    update((held) => ({ ...held, open: !held.open }));
+    setFullScreen(false);
+  }, [update]);
+  const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
   const onChoose = useCallback(
     (tab: SidePanelTab) => update((held) => ({ ...held, open: true, tab })),
     [update],
@@ -151,5 +165,12 @@ export function useSidePanel(staged: SidePanelState | undefined): SidePanelContr
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
     [update],
   );
-  return { ...state, onToggle, onChoose, onResize };
+  return {
+    ...state,
+    fullScreen: state.open && fullScreen,
+    onToggle,
+    onToggleFullScreen,
+    onChoose,
+    onResize,
+  };
 }

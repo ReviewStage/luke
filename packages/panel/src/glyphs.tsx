@@ -353,6 +353,30 @@ export function SidePanelIcon(): React.JSX.Element {
   );
 }
 
+/** Two arrows out to opposite corners: a pane grown to fill the window. */
+export function ExpandIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M14 4.8h5.2V10" />
+      <path d="M19.2 4.8 13.4 10.6" />
+      <path d="M10 19.2H4.8V14" />
+      <path d="m4.8 19.2 5.8-5.8" />
+    </Glyph>
+  );
+}
+
+/** Two arrows in from opposite corners: a full-window pane brought back to its place. */
+export function CollapseIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M19.2 10H14V4.8" />
+      <path d="M14 10l5.2-5.2" />
+      <path d="M4.8 14H10v5.2" />
+      <path d="M10 14l-5.2 5.2" />
+    </Glyph>
+  );
+}
+
 /** The window's sidebar, shown or folded away: the side panel's frame with its left column ruled off. */
 export function SidebarIcon(): React.JSX.Element {
   return (
