@@ -405,14 +405,15 @@ const planningTurn = (
 const readDocument = Schema.decodeUnknownSync(Schema.fromJsonString(planDocumentSchema));
 
 /** The line the saved document follows in a standing context, as the model reads it. */
-const DOCUMENT_MARKER = "[saved document]\n";
+const DOCUMENT_MARKER = "[saved document]";
 
-/** The document a standing context hands the model, failing the test where it carries none. */
+/** The document a standing context hands the model, on the line after its marker, failing the test where it carries none. */
 function handedDocument(context: string): PlanDocument {
-  const at = context.indexOf(DOCUMENT_MARKER);
+  const lines = context.split("\n");
+  const at = lines.indexOf(DOCUMENT_MARKER);
   return at === -1
     ? assert.fail("the standing context carries no document")
-    : readDocument(context.slice(at + DOCUMENT_MARKER.length));
+    : readDocument(lines[at + 1]);
 }
 
 /** The document the Plans tab opens, failing the test where the plan does not open. */
