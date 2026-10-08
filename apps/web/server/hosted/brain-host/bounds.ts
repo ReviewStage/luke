@@ -22,6 +22,11 @@ export const BRAIN_HOST = {
   SEED_MESSAGES: 60,
   /** The longest the seed grows, in characters, cut from the front. */
   SEED_CHARS: 40_000,
+  /** How many subagents one turn may start; a later one's child is refused its model. */
+  SUBAGENTS_PER_TURN: 3,
+  /** Each subagent session's own token budget, so one runaway child costs a bounded amount. */
+  SUBAGENT_INPUT_TOKENS: 600_000,
+  SUBAGENT_OUTPUT_TOKENS: 40_000,
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */
@@ -182,6 +187,7 @@ export const BRAIN_HOST_REFUSAL = {
   NOT_DEPLOYMENT_ACT: "Not run: the deployment may only open the turns it is admitted for.",
   NO_MODEL: "Not run: this deployment holds no model key, so the hosted brain is off.",
   NOT_CURRENT_SESSION: "Not run: this conversation runs in another session now.",
+  TOO_MANY_SUBAGENTS: "Not run: this turn already started as many subagents as one turn may.",
 } as const;
 
 export type BrainHostRefusal = (typeof BRAIN_HOST_REFUSAL)[keyof typeof BRAIN_HOST_REFUSAL];

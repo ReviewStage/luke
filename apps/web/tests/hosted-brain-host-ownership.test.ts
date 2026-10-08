@@ -21,6 +21,7 @@ import {
   type HostedToolBinding,
 } from "../server/hosted/brain-host/host";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { EVE_DELEGATION_TOOL } from "../server/hosted/brain-host/planning";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -194,6 +195,8 @@ async function hookedEvent(
 /** The lineage eve hands a subagent's child session: the root it was delegated from, and the root's turn. */
 interface ChildOf {
   readonly rootSessionId: string;
+  /** The root's call that delegated to the child; the first unless a test names another. */
+  readonly callId?: string;
 }
 
 function toolContext(sessionId: string, auth: SessionAuth, childOf?: ChildOf): EveToolContext {
@@ -209,7 +212,7 @@ function toolContext(sessionId: string, auth: SessionAuth, childOf?: ChildOf): E
           auth,
           turn,
           parent: {
-            callId: "call-0",
+            callId: childOf.callId ?? "call-0",
             rootSessionId: childOf.rootSessionId,
             sessionId: childOf.rootSessionId,
             turn,
@@ -571,4 +574,69 @@ test("a subagent's resolvers are admitted on ownership alone, since eve names it
     await database.run(host.admitDelegated({ current: seatB, initiator: seatB }, CHILD)),
     Result.fail(BRAIN_HOST_REFUSAL.NOT_OWNER),
   );
+});
+
+test("a turn may start three subagents: the fourth subagent its turn called is refused every tool call for the cap's reason, and the first three run", async () => {
+  const SESSION = sessions();
+  const CHILD = "wrun_01MCHILD000000000000002";
+  const userA = await database.createUser();
+  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
+  const conversationId = Option.getOrThrow(
+    await database.run(openPlanConversation(userA, started.id)),
+  );
+  const target = { userId: userA, conversationId };
+  const seat = ownSeat(userA, conversationId);
+  const { host } = hostOverTestDatabase();
+  assert.equal(await start(host, seat, SESSION.OLDER), true);
+  const callIds = ["call-1", "call-2", "call-3", "call-4"];
+  const state = memoryRelayState();
+  const turnId = "turn_0";
+  const delegating = [
+    stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
+    stamped({ type: "message.received", data: { turnId, sequence: 0, message: "compare" } }),
+    stamped({ type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence: 0,
+        stepIndex: 0,
+        actions: callIds.map((callId) => ({
+          kind: "tool-call" as const,
+          callId,
+          toolName: EVE_DELEGATION_TOOL.RESEARCHER,
+          input: { message: `Question ${callId}.` },
+        })),
+      },
+    }),
+  ];
+  for (const event of delegating) {
+    assert.equal(await hookedEvent(host, seat, SESSION.OLDER, event, state), true);
+  }
+  const question = {
+    question: "Should a withdrawn invite tell the invitee who withdrew it?",
+    recommendation: "No: just say the invite is no longer valid.",
+  };
+  const outcomes = [];
+  for (const callId of callIds) {
+    outcomes.push(
+      await database.run(
+        host
+          .runTool(
+            QUEUE_QUESTION_TOOL.name,
+            binding(target, CHILD),
+            question,
+            toolContext(CHILD, seat, { rootSessionId: SESSION.OLDER, callId }),
+          )
+          .pipe(Effect.provide(noNetwork)),
+      ),
+    );
+  }
+
+  assert.deepEqual(outcomes, [
+    { status: ACTION_RESULT_STATUS.ACCEPTED },
+    { status: ACTION_RESULT_STATUS.ACCEPTED },
+    { status: ACTION_RESULT_STATUS.ACCEPTED },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: BRAIN_HOST_REFUSAL.TOO_MANY_SUBAGENTS },
+  ]);
 });

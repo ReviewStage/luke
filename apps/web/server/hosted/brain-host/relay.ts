@@ -40,7 +40,7 @@ import {
   type RelayTurn,
 } from "./bounds.js";
 import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from "./ids.js";
-import { EVE_DELEGATION_TOOL } from "./planning.js";
+import { SUBAGENT_TOOL_NAMES } from "./planning.js";
 
 /**
  * The relay from eve's stream into the brain's own: every event eve records
@@ -204,12 +204,6 @@ const TURN_ORIGIN_OF_HOST_TURN = {
 } as const satisfies Record<RelayTurn, TurnOrigin>;
 
 const TOOL_CALL_KIND = "tool-call";
-
-/** The tools that delegate to a subagent, whose result eve hands back in a turn of its own. */
-const SUBAGENT_TOOLS: ReadonlySet<string> = new Set([
-  EVE_DELEGATION_TOOL.RESEARCHER,
-  EVE_DELEGATION_TOOL.EXPLORER,
-]);
 const TOOL_RESULT_KIND = "tool-result";
 const EVE_ACTION_COMPLETED = "completed";
 
@@ -407,7 +401,7 @@ export class StreamRelay {
           for (const action of actions) {
             if (action.kind !== TOOL_CALL_KIND) continue;
             // A call to a subagent is the session's delegation: its result comes back in a turn no ask opened.
-            if (SUBAGENT_TOOLS.has(action.toolName) && !standing.state.get().delegated) {
+            if (SUBAGENT_TOOL_NAMES.has(action.toolName) && !standing.state.get().delegated) {
               standing.state.update((state) => ({ ...state, delegated: true }));
             }
             yield* this.#toolCall(

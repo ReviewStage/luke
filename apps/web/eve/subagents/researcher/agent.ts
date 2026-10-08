@@ -1,4 +1,5 @@
 import { defineAgent } from "eve";
+import { BRAIN_HOST } from "../../../server/hosted/brain-host/bounds.js";
 import { brainModel } from "../../agent.js";
 import { host } from "../../host.js";
 
@@ -13,4 +14,8 @@ export default defineAgent({
     "Research one question on the public Internet in the background and return a short summary with its sources. Returns at once; the findings arrive later.",
   defaultTools: false,
   model: brainModel(host.admitDelegated),
+  limits: {
+    maxInputTokensPerSession: BRAIN_HOST.SUBAGENT_INPUT_TOKENS,
+    maxOutputTokensPerSession: BRAIN_HOST.SUBAGENT_OUTPUT_TOKENS,
+  },
 });

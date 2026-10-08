@@ -11,7 +11,9 @@ import {
   ACTION_RESULT_STATUS,
   type BrainTurnTrigger,
   isRecord,
+  isStoredToolPart,
   isWireString,
+  storedToolName,
   type UnparsedWireValue,
   type WireRecord,
 } from "../../core.js";
@@ -22,10 +24,12 @@ import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import { askRecord } from "../store/asks.js";
 import { toolSetHashOf } from "../store/content-addressed.js";
 import { type ConversationTarget, promptHashOf } from "../store/index.js";
+import { readMessageByClientId } from "../store/message-reads.js";
 import { turnKindOf } from "./auth.js";
 import {
   BRAIN_HOST,
   BRAIN_HOST_MODEL_FIXTURE,
+  BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
 } from "./bounds.js";
@@ -46,6 +50,7 @@ import {
   planningStandingContext,
   planningToolDeclarations,
   runPlanningTool,
+  SUBAGENT_TOOL_NAMES,
 } from "./planning.js";
 import type { BrainHostSeams } from "./production.js";
 import { type RelayStateStore, StreamRelay } from "./relay.js";
@@ -173,6 +178,35 @@ export interface BrainHost {
   >;
 }
 
+/**
+ * Whether a subagent's child stands within its turn's cap: its call is among
+ * the first `SUBAGENTS_PER_TURN` subagent calls the delegating turn made,
+ * read off that turn's journal. Note that a call the journal does not hold
+ * yet stands, because the cap guards against a runaway turn rather than
+ * gating access, and the journal is written as eve tells the hook of the call.
+ */
+function withinSubagentCap(
+  target: ConversationTarget,
+  parent: NonNullable<SessionContext["session"]["parent"]>,
+): Effect.Effect<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.map(
+    readMessageByClientId(
+      target.userId,
+      target.conversationId,
+      HOSTED_TOOL_SET,
+      hostTurnId(parent.sessionId, parent.turn.id),
+    ),
+    (journal) => {
+      const parts = journal.ok ? (journal.value[0]?.message.parts ?? []) : [];
+      const delegations = parts
+        .filter(isStoredToolPart)
+        .filter((part) => SUBAGENT_TOOL_NAMES.has(storedToolName(part)))
+        .map((part) => part.toolCallId);
+      return delegations.indexOf(parent.callId) < BRAIN_HOST.SUBAGENTS_PER_TURN;
+    },
+  );
+}
+
 /** The host over the deployment's seams; the research budget it keeps stands for the host's life. */
 export function brainHost(seams: BrainHostSeams): BrainHost {
   const research = new ResearchBudget();
@@ -249,8 +283,16 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         if (Result.isFailure(standing)) {
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.failure };
         }
-        // The plan is found again as the call runs, so a plan deleted mid-turn saves nothing.
         const { target } = standing.success;
+        // A subagent past its delegating turn's cap is refused every call, so it ends at once and says why.
+        const parent = context.session.parent;
+        if (parent !== undefined && !(yield* withinSubagentCap(target, parent))) {
+          return {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: BRAIN_HOST_REFUSAL.TOO_MANY_SUBAGENTS,
+          };
+        }
+        // The plan is found again as the call runs, so a plan deleted mid-turn saves nothing.
         const plan = yield* planOf(target);
         return yield* runPlanningTool(
           name,

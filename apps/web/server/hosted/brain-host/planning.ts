@@ -122,7 +122,7 @@ The board as it stands is handed to you every turn under [board], with every ele
 
 You have two subagents that work while you keep working: the researcher searches the public Internet, and the explorer reads the plan's folder. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand one a question that needs more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a subagent and never guess what it will find.
 
-Each call starts a subagent that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give two subagents running at once different questions, and run at most three at once. To redirect one, call it again with its agentId and the new message; to stop one whose question no longer matters, use task_cancel.
+Each call starts a subagent that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give two subagents running at once different questions, and start at most three in one turn: a fourth is refused. To redirect one, call it again with its agentId and the new message; to stop one whose question no longer matters, use task_cancel.
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
@@ -296,6 +296,12 @@ export const EVE_DELEGATION_TOOL = {
   EXPLORER: "explorer",
   TASK_CANCEL: "task_cancel",
 } as const;
+
+/** The tools that delegate to a subagent, whose result eve hands back in a turn of its own. */
+export const SUBAGENT_TOOL_NAMES: ReadonlySet<string> = new Set([
+  EVE_DELEGATION_TOOL.RESEARCHER,
+  EVE_DELEGATION_TOOL.EXPLORER,
+]);
 
 /**
  * What a subagent's call carries, as eve declares it: the message, and the
