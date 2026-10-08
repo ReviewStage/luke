@@ -1,3 +1,4 @@
+import type { Board } from "@sidecar/hosted/board-wire";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   BackIcon,
@@ -13,6 +14,7 @@ import type { ActionResult } from "@sidecar/wire";
 import { useConfirm } from "../settings/confirm-state";
 import { ConfirmSwap } from "../settings/confirm-swap";
 import { ThinkingDots } from "../thinking-dots";
+import { PlanBoard } from "./plan-board";
 import { PlanBody } from "./plan-body";
 import {
   type CallStatus,
@@ -22,6 +24,8 @@ import {
   DOCUMENT_REGION,
   type DocumentRegion,
   folderLine,
+  PLAN_VIEW,
+  type PlanView,
 } from "./planning-model";
 
 /**
@@ -191,16 +195,51 @@ function FolderLine({ folderPath }: { folderPath: string | undefined }): React.J
 }
 
 /** The document page's header: the way back to the list, the plan's name and folder line, Copy, and Delete. */
+const PLAN_VIEW_CHOICES = [
+  { view: PLAN_VIEW.DOCUMENT, label: "Document" },
+  { view: PLAN_VIEW.BOARD, label: "Board" },
+] as const;
+
+/**
+ * The open plan's two views, the document and the whiteboard, one shown at a
+ * time.
+ */
+export function PlanViewSwitch({
+  planView,
+}: {
+  planView: { shown: PlanView; onChoose: (view: PlanView) => void };
+}): React.JSX.Element {
+  return (
+    <fieldset className="sort-group plan-view-switch" aria-label="Show">
+      {PLAN_VIEW_CHOICES.map(({ view, label }) => (
+        <button
+          type="button"
+          key={view}
+          className="sort-option"
+          data-active={String(planView.shown === view)}
+          aria-pressed={planView.shown === view}
+          onClick={() => planView.onChoose(view)}
+        >
+          {label}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
 function PlanHeader({
   title,
   repository,
   onChooseFolder,
+  planView,
   copy,
   onDelete,
   onBack,
 }: {
   title: string;
   repository?: string | undefined;
+  /** The switch between the document and the whiteboard, offered once the document is read. */
+  planView?: { shown: PlanView; onChoose: (view: PlanView) => void } | undefined;
   /** Offered in place of the folder line where this Mac holds no folder for the plan. */
   onChooseFolder?: (() => void) | undefined;
   copy?: { shown: CopyShown; onPress: () => void } | undefined;
@@ -227,6 +266,7 @@ function PlanHeader({
           </button>
         ) : null}
       </div>
+      {planView !== undefined ? <PlanViewSwitch planView={planView} /> : null}
       {copy !== undefined ? <CopyControl shown={copy.shown} onPress={copy.onPress} /> : null}
       {onDelete !== undefined ? (
         <DeletePlanButton className="icon-button" onDelete={onDelete} />
@@ -250,8 +290,14 @@ export function PlanDocumentView({
   folders,
   onChooseFolder,
   onDelete,
+  planView,
+  board,
 }: {
   region: DocumentRegion;
+  /** Which of the document and the whiteboard shows, and the switch between them. */
+  planView: { shown: PlanView; onChoose: (view: PlanView) => void };
+  /** The open plan's whiteboard as main holds it; absent before its first read lands. */
+  board: Board | undefined;
   onRetry: () => void;
   onBack: () => void;
   /** Deletes the plan drawn, offered once its document is read. */
@@ -305,11 +351,16 @@ export function PlanDocumentView({
             title={plan.name}
             repository={folderOf(folders, plan.id)}
             onChooseFolder={onChooseFolder}
+            planView={planView}
             copy={copy}
             onDelete={onDelete}
             onBack={onBack}
           />
-          <PlanBody plan={plan} live={live} />
+          {planView.shown === PLAN_VIEW.BOARD ? (
+            <PlanBoard planId={plan.id} board={board} />
+          ) : (
+            <PlanBody plan={plan} live={live} />
+          )}
         </section>
       );
     }

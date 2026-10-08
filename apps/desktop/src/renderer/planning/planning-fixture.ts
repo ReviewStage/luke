@@ -1,9 +1,12 @@
+import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
 import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
+import { PLAN_VIEW, type PlanView } from "./planning-model";
 
 /**
  * planning-fixture.ts -- the synthetic plans a fixture run's Plans tab draws in place of the service's.
@@ -125,6 +128,49 @@ const FIXTURE_OPEN_PLAN: PlanningView = {
   activity: { planner: { action: "grep -rn pending src/members" }, notes: true },
 };
 
+/**
+ * What Luke drew for the fixture's plan, in the vocabulary his
+ * `draw_on_board` call sends, not yet on the board: the capture shows the
+ * canvas converting it with Excalidraw's own converter, as a Mac does the
+ * first time it reads a new drawing.
+ */
+const FIXTURE_DRAWING: readonly DrawingElement[] = [
+  { type: BOARD_ELEMENT_TYPE.TEXT, id: "title", x: 0, y: -70, text: "Inviting a teammate" },
+  { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "member", x: 0, y: 0, label: "Member" },
+  { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "invites", x: 320, y: 0, label: "POST /invites" },
+  { type: BOARD_ELEMENT_TYPE.ELLIPSE, id: "email", x: 640, y: 0, label: "Invite email" },
+  {
+    type: BOARD_ELEMENT_TYPE.DIAMOND,
+    id: "valid",
+    x: 640,
+    y: 180,
+    width: 200,
+    height: 110,
+    label: "Link still valid?",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    id: "joined",
+    x: 320,
+    y: 195,
+    label: "Joins workspace",
+    backgroundColor: "#1971c2",
+  },
+  { type: BOARD_ELEMENT_TYPE.ARROW, id: "sends", from: "member", to: "invites", label: "email" },
+  { type: BOARD_ELEMENT_TYPE.ARROW, id: "mails", from: "invites", to: "email" },
+  { type: BOARD_ELEMENT_TYPE.ARROW, id: "opens", from: "email", to: "valid", label: "opens" },
+  { type: BOARD_ELEMENT_TYPE.ARROW, id: "accepts", from: "valid", to: "joined", label: "yes" },
+];
+
+const FIXTURE_BOARD: Board = {
+  elements: [],
+  appliedDrawing: 0,
+  drawing: { number: 1, elements: FIXTURE_DRAWING },
+};
+
+/** The open plan on its whiteboard, as the planning-board profile captures it. */
+const FIXTURE_OPEN_BOARD: PlanningView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_BOARD };
+
 /** The call a fixture run's status row reads: listening, about the fixture's open plan. */
 export const FIXTURE_PLANNING_CALL: Pick<VoiceView, "voiceStatus" | "callPlanId"> = {
   voiceStatus: LIVE_STATUS.LISTENING,
@@ -141,5 +187,17 @@ export function fixturePlanningView(run: {
   readonly profile: string;
 }): PlanningView | undefined {
   if (!run.fixtureMode) return undefined;
-  return run.profile === RUN_PROFILE.PLANNING ? FIXTURE_OPEN_PLAN : FIXTURE_PLAN_LIST;
+  if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_OPEN_PLAN;
+  if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_OPEN_BOARD;
+  return FIXTURE_PLAN_LIST;
+}
+
+/** Which of the document and the board a fixture run opens its plan on: the board under the planning-board profile. */
+export function fixturePlanView(run: {
+  readonly fixtureMode: boolean;
+  readonly profile: string;
+}): PlanView {
+  return run.fixtureMode && run.profile === RUN_PROFILE.PLANNING_BOARD
+    ? PLAN_VIEW.BOARD
+    : PLAN_VIEW.DOCUMENT;
 }

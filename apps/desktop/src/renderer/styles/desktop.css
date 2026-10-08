@@ -486,6 +486,14 @@ body,
   flex-direction: column;
 }
 
+/* The whiteboard fills the column edge to edge: the canvas is its own page,
+   so the panel's inset card gives way. */
+.desktop-board .plan-board {
+  margin: 0;
+  border-radius: 0;
+  background: none;
+}
+
 .desktop-document .plan-document-scroll {
   padding: 44px 48px 140px;
   scrollbar-gutter: stable;

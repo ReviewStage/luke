@@ -41,6 +41,7 @@
     "@effect/atom-react": "catalog:",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@excalidraw/excalidraw": "0.18.1",
     "@sentry/esbuild-plugin": "5.4.0",
     "@sidecar/actions": "workspace:*",
     "@sidecar/analytics": "workspace:*",

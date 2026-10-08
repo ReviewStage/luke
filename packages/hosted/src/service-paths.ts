@@ -195,6 +195,11 @@ export function planPath(planId: string): string {
   return `${HOSTED_SERVICE_PATH.PLANS}/${encodeURIComponent(planId)}`;
 }
 
+/** One plan's whiteboard: read it with Luke's latest drawing (GET), or write its scene whole (PUT). */
+export function planBoardPath(planId: string): string {
+  return `${planPath(planId)}/board`;
+}
+
 /** The Mac claiming the plan's next command (POST), held open until one arrives or the hold runs out. */
 export function planCommandClaimPath(planId: string): string {
   return `${planPath(planId)}/commands/claim`;

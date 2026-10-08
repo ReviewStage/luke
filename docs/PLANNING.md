@@ -38,7 +38,9 @@ A reviewer can hold the build to these as easily as to the layout:
 - The assumption list is read-only: plain text, with nothing to click.
 - No conversation transcript pane. Captions show what is being said now; the
   document is the record.
-- One visible document. There are no split views or second documents.
+- One visible view at a time. The open plan shows its document or its
+  whiteboard ("Whiteboard" below), never both side by side, and there are no
+  second documents.
 - No window of its own. Planning lives in the notch panel (LUKE-347): there is
   no separate planning window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -150,6 +152,8 @@ same commit, and nothing refreshes it. The header shows it as
 - `‹`, back to the list, which leaves the plan.
 - The plan's name.
 - The repository line, as `owner/repository · branch @ short commit`.
+- **Document | Board**, the switch between the plan's document and its
+  whiteboard. A plan always opens on its document.
 - **Copy**, the one action on the document. It is always enabled, however
   much of the plan is written. It copies the current document as described in
   "Copy". It never launches an agent and never asks the model anything.
@@ -168,6 +172,37 @@ same commit, and nothing refreshes it. The header shows it as
   "None recorded".
 - If the saved document cannot be read, the region shows the failure and a
   `Try again` button. The tab never draws a document it did not read.
+
+### Whiteboard
+
+Each plan has one whiteboard, an Excalidraw scene that Luke and the developer
+both draw on. It shows in place of the document, between the header and the
+microphone row.
+
+- **Luke draws whole diagrams.** The planning model's `draw_on_board` tool
+  sends the whole diagram each time: labelled boxes, ellipses, and diamonds,
+  text, and arrows between ids. It replaces his previous drawing and leaves
+  what the developer drew. The service only stores it
+  (`apps/web/server/hosted/board-tool.ts`). The voice hands a request to
+  draw to the planning model, as it does any other request.
+- **The Mac converts it.** The canvas turns Luke's drawing into Excalidraw
+  elements with Excalidraw's own converter, marks them as his, and puts them
+  in place of his previous ones, then saves the scene. An element of his that
+  the developer moved goes back where his next drawing says.
+- **The developer draws with Excalidraw's own tools.** Images, embeds, and
+  export are left out. The scene is saved whole once the canvas pauses, and
+  the last write wins.
+- **Luke reads the board every turn.** The planning model's standing context
+  carries the scene as text under `[board]` (`board-text.ts`), so whatever
+  the developer drew is in front of it on its next turn.
+- **The Mac reads the board** when a plan opens, when the tab shows, and when
+  the call's activity says a drawing just settled.
+- **Excalidraw is its own bundle** (`whiteboard.js`), loaded the first time a
+  board is shown, with its fonts shipped beside it. The bundle every window
+  parses never carries it.
+- **The board is never recorded.** Its root is left out of the screen
+  recording, because a canvas draws its words as pixels that the recording's
+  text masking cannot reach.
 
 ### The notetaker
 
@@ -644,7 +679,9 @@ changes when a check is run, not when one is planned.
   the microphone row, and the capsule and captions during a planning call
   have never been seen running. `./scripts/evidence.sh` captures the panel
   expanded on the Plans tab over a synthetic plan
-  (`app-smoke-planning.png`, from `--profile planning --expanded`) and over
+  (`app-smoke-planning.png`, from `--profile planning --expanded`), on the
+  plan's whiteboard (`app-smoke-planning-board.png`, from
+  `--profile planning-board --expanded`), and over
   the synthetic plan list with none open (`app-smoke-expanded.png`, the panel
   opening on Plans with Sessions and Conversation hidden), but neither
   capture has been taken yet.

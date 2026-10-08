@@ -24,6 +24,7 @@ import {
 import {
   type PlanningRepositoriesAnswer,
   type PlanningStartAnswer,
+  planningBoardSaveParamsSchema,
   planningRepositoriesAnswerSchema,
   planningSetFolderParamsSchema,
   planningStartAnswerSchema,
@@ -173,6 +174,8 @@ export const ACT_KIND = {
   PLANNING_SET_FOLDER: "planning.setFolder",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
+  /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
+  PLANNING_BOARD_SAVE: "planning.boardSave",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -651,6 +654,11 @@ export const ACT = {
     refusal: "Could not keep that folder on this system.",
   },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
+  [ACT_KIND.PLANNING_BOARD_SAVE]: {
+    payload: actSchema(planningBoardSaveParamsSchema),
+    result: answersNothing,
+    refusal: "Could not save the board on this system.",
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
       command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),

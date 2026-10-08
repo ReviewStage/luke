@@ -1,3 +1,4 @@
+import type { Board } from "@sidecar/hosted/board-wire";
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -5,7 +6,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
-import { FIXTURE_PLANNING_CALL, fixturePlanningView } from "./planning-fixture";
+import { FIXTURE_PLANNING_CALL, fixturePlanningView, fixturePlanView } from "./planning-fixture";
 import {
   type CallStatus,
   COPY_SHOWN,
@@ -19,8 +20,10 @@ import {
   documentRegion,
   MICROPHONE_PRESS,
   microphoneButton,
+  PLAN_VIEW,
   PLANS_PAGE,
   type PlansPage,
+  type PlanView,
   planningCallHoldsPanel,
   plansPage,
 } from "./planning-model";
@@ -55,6 +58,10 @@ export interface PlansControl {
   status: CallStatus | undefined;
   /** Whether the open plan's call is in progress, so the plan is still being written. */
   live: boolean;
+  /** Which of the document and the whiteboard the open plan shows, and the switch between them. */
+  planView: { shown: PlanView; onChoose: (view: PlanView) => void };
+  /** The open plan's whiteboard as main holds it; absent before its first read lands. */
+  board: Board | undefined;
   onSelect: (planId: string) => void;
   /** Chooses the open plan's folder on this Mac again, through the folder picker. */
   onChooseFolder: () => void;
@@ -106,6 +113,7 @@ export function usePlansTab(input: {
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
   const fixture = fixturePlanningView(input.run);
+  const [planView, setPlanView] = useState<PlanView>(fixturePlanView(input.run));
   const planning = fixture ?? input.planning;
   const signedIn = fixture !== undefined || input.signedIn;
   const page = plansPage(planning, composing);
@@ -182,6 +190,15 @@ export function usePlansTab(input: {
     );
   };
 
+  // Each plan opens on its document.
+  const openPlanId = planning.activePlanId;
+  const openedPlan = useRef(openPlanId);
+  useEffect(() => {
+    if (openedPlan.current === openPlanId) return;
+    openedPlan.current = openPlanId;
+    setPlanView(PLAN_VIEW.DOCUMENT);
+  }, [openPlanId]);
+
   const back = useCallback((): boolean => {
     if (page === PLANS_PAGE.DOCUMENT) leavePlan();
     else if (page === PLANS_PAGE.NEW) onComposingChange(false);
@@ -217,6 +234,11 @@ export function usePlansTab(input: {
     // the fixture's own call rather than a voice window that holds none.
     status: callStatus(fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL, planning),
     live,
+    planView: {
+      shown: planView,
+      onChoose: setPlanView,
+    },
+    board: planning.board,
     onSelect: select,
     onChooseFolder: chooseFolder,
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),
