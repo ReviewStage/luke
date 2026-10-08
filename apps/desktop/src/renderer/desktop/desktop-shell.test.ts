@@ -8,7 +8,8 @@ import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DesktopShell } from "./desktop-shell";
-import { useSidebarCollapse } from "./sidebar-collapse";
+import { SIDEBAR_WIDTH, useSidebarCollapse } from "./sidebar-collapse";
+import { EDGE_SNAP } from "./use-resizable-edge";
 
 const ignore = () => undefined;
 
@@ -63,6 +64,36 @@ function press(): void {
   act(() => button.click());
 }
 
+function edge(): HTMLElement {
+  const separator = sidebar().querySelector<HTMLElement>("[role='separator']");
+  assert.ok(separator, "the sidebar's resize edge is drawn");
+  return separator;
+}
+
+function width(): string | null {
+  return edge().getAttribute("aria-valuenow");
+}
+
+/** Drags the edge from `from` through each of `through`, releasing at the last, reading the pending snap at each stop. */
+function drag(from: number, through: number[]): (string | undefined)[] {
+  const target = edge();
+  const pointer = (type: string, clientX: number) =>
+    act(() => {
+      target.dispatchEvent(new PointerEvent(type, { clientX, pointerId: 1, bubbles: true }));
+    });
+  pointer("pointerdown", from);
+  const snaps = through.map((x) => {
+    pointer("pointermove", x);
+    return sidebar().dataset.snap;
+  });
+  pointer("pointerup", through.at(-1) ?? from);
+  return snaps;
+}
+
+function key(name: string): void {
+  act(() => edge().dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true })));
+}
+
 /** Command-B (or another B chord) from anywhere in the window, answering whether the window claimed it. */
 function chord(modifiers: KeyboardEventInit = { metaKey: true }): boolean {
   const event = new KeyboardEvent("keydown", { key: "b", ...modifiers, cancelable: true });
@@ -74,6 +105,8 @@ function chord(modifiers: KeyboardEventInit = { metaKey: true }): boolean {
 
 beforeEach(() => {
   window.localStorage.clear();
+  // jsdom captures no pointer; the drag's own events are dispatched at the edge.
+  HTMLElement.prototype.setPointerCapture = () => undefined;
   // Luke's face asks whether motion is reduced, which jsdom has no answer to.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -83,6 +116,7 @@ beforeEach(() => {
 
 afterEach(() => {
   quit();
+  Reflect.deleteProperty(HTMLElement.prototype, "setPointerCapture");
   document.body.innerHTML = "";
 });
 
@@ -143,4 +177,119 @@ test("a fixture run starts open over a kept fold and keeps none of its own", () 
 
   show(PANEL_TAB.PLANS);
   assert.equal(sidebar().hasAttribute("inert"), true, "the developer's fold still stands");
+});
+
+test("a drag on the sidebar's edge sets its width, held at each bound", () => {
+  show(PANEL_TAB.PLANS);
+  assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT));
+
+  // The sidebar is on the left, so the pointer moving right widens it.
+  assert.deepEqual(drag(264, [314]), [EDGE_SNAP.NONE]);
+  assert.equal(width(), "314");
+
+  // Far past the greatest width the edge only holds: there is nothing to snap to.
+  assert.deepEqual(drag(314, [900]), [EDGE_SNAP.NONE]);
+  assert.equal(width(), String(SIDEBAR_WIDTH.MAX));
+  assert.equal(sidebar().hasAttribute("inert"), false);
+
+  // 400 wide at 400: 220 asks for 220, and 180 asks for 180, held at the bound.
+  assert.deepEqual(drag(400, [220, 180]), [EDGE_SNAP.NONE, EDGE_SNAP.NONE]);
+  assert.equal(width(), String(SIDEBAR_WIDTH.MIN));
+  assert.equal(sidebar().hasAttribute("inert"), false);
+});
+
+test("a drag far past the least width folds the sidebar on release, and it opens again as wide as it was", () => {
+  show(PANEL_TAB.PLANS);
+  drag(264, [300]);
+
+  // 300 wide at 300: 150 asks for 150, held at the bound; 100 asks for 100.
+  assert.deepEqual(drag(300, [150, 100]), [EDGE_SNAP.NONE, EDGE_SNAP.COLLAPSE]);
+  assert.equal(sidebar().hasAttribute("inert"), true);
+  assert.equal(toggle()?.getAttribute("aria-label"), "Show sidebar");
+
+  press();
+  assert.equal(sidebar().hasAttribute("inert"), false);
+  assert.equal(width(), "300");
+
+  assert.equal(chord(), true);
+  assert.equal(chord(), true);
+  assert.equal(width(), "300", "Command-B opens it at the same width");
+});
+
+test("a drag that comes back inside the bounds before release does not fold the sidebar", () => {
+  show(PANEL_TAB.PLANS);
+  assert.deepEqual(drag(264, [50, 250]), [EDGE_SNAP.COLLAPSE, EDGE_SNAP.NONE]);
+  assert.equal(sidebar().hasAttribute("inert"), false);
+  assert.equal(width(), "250");
+});
+
+test("double-clicking the sidebar's edge, or Enter on it, gives back the default width", () => {
+  show(PANEL_TAB.PLANS);
+  drag(264, [364]);
+  act(() => edge().dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+  assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT));
+
+  drag(264, [214]);
+  key("Enter");
+  assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT));
+});
+
+test("the arrows step the sidebar's edge the way they point, within its bounds", () => {
+  show(PANEL_TAB.PLANS);
+  key("ArrowRight");
+  assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT + 16));
+  key("ArrowLeft");
+  key("ArrowLeft");
+  assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT - 16));
+
+  key("Home");
+  key("ArrowLeft");
+  assert.equal(width(), String(SIDEBAR_WIDTH.MIN), "the keyboard never folds the sidebar");
+  assert.equal(sidebar().hasAttribute("inert"), false);
+  key("End");
+  key("ArrowRight");
+  assert.equal(width(), String(SIDEBAR_WIDTH.MAX));
+});
+
+test("the sidebar's width outlives a fold, a visit to Settings, and a relaunch", () => {
+  show(PANEL_TAB.PLANS);
+  drag(264, [320]);
+  press();
+  quit();
+
+  show(PANEL_TAB.PLANS);
+  press();
+  assert.equal(width(), "320");
+
+  show(PANEL_TAB.SETTINGS);
+  show(PANEL_TAB.PLANS);
+  assert.equal(width(), "320");
+});
+
+test("a kept width outside the bounds opens within them, and one that no longer reads opens at the default", () => {
+  window.localStorage.setItem("luke.sidebar-width", "9000");
+  show(PANEL_TAB.PLANS);
+  assert.equal(width(), String(SIDEBAR_WIDTH.MAX));
+  quit();
+
+  window.localStorage.setItem("luke.sidebar-width", "wide");
+  show(PANEL_TAB.PLANS);
+  assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT));
+});
+
+test("a fixture run draws the default width over a kept one and keeps none of its own", () => {
+  show(PANEL_TAB.PLANS);
+  drag(264, [340]);
+  quit();
+
+  // The run is known only once the first state arrives, a render in.
+  show(PANEL_TAB.PLANS);
+  show(PANEL_TAB.PLANS, true);
+  assert.equal(width(), String(SIDEBAR_WIDTH.DEFAULT), "the developer's width is not drawn");
+  drag(264, [220]);
+  assert.equal(width(), "220");
+  quit();
+
+  show(PANEL_TAB.PLANS);
+  assert.equal(width(), "340", "the developer's width still stands");
 });

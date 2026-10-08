@@ -534,6 +534,9 @@ export function App(): React.JSX.Element {
         // The slot follows the height of the sign-in wait drawn in it.
         ...surfaceHeightStyle(signInSlotHeight, feedbackHeight),
         ...caption.style,
+        // The sidebar's width lays out the shell and Settings' page list, and
+        // places the captions over the work column beside it.
+        ...cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` }),
       }}
     >
       <span className="panel-surface" data-hit-region={HIT_REGION.SURFACE} aria-hidden="true" />

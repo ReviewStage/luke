@@ -127,7 +127,7 @@ export function DesktopShell({
   return (
     <div className="desktop-shell" data-sidebar-collapsed={String(sidebar.collapsed)}>
       <DesktopSidebar
-        collapsed={sidebar.collapsed}
+        sidebar={sidebar}
         identity={identity}
         plans={plans}
         tab={tab}
