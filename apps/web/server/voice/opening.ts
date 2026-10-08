@@ -207,7 +207,14 @@ function newestWithin(
     if (line.text.trim().length === 0) continue;
     const item = earlierItem(line);
     const cost = seedItemTokens([item]);
-    if (spent + cost > tokens) break;
+    if (spent + cost > tokens) {
+      // Note that a newest line too long for the room is cut rather than
+      // dropped, because one long stretch of talk would otherwise leave the
+      // call with no history at all.
+      const cut = kept.length === 0 ? startupPrefix(line.text, tokens) : "";
+      if (cut.trim().length > 0) kept.push(earlierItem({ ...line, text: cut }));
+      break;
+    }
     kept.push(item);
     spent += cost;
   }
