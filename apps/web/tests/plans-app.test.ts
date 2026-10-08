@@ -196,10 +196,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      const saved = yield* saveNotes(
-        { userId: owner, planId, header: { name: RELAY.name } },
-        notesFor(INVITATIONS_DRAFT),
-      );
+      const saved = yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
       assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
 
       const listed = yield* ask(request(PLANS, owner));
@@ -294,6 +291,68 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         body: { plans: [] },
       });
     }),
+  );
+
+  it.effect("a rename answers the plan under its new name, trimmed, and it lists that way", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+
+      const renamed = yield* ask(
+        request(ONE_PLAN, owner, {
+          id: planId,
+          method: "PATCH",
+          body: { name: "  Team invites " },
+        }),
+      );
+
+      const { plan } = readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, renamed);
+      assert.equal(plan.name, "Team invites");
+      assert.ok(plan.document.body.startsWith("# Team invites\n"));
+      const listed = readAnswer(
+        planListAnswerSchema,
+        HOSTED_HTTP_STATUS.OK,
+        yield* ask(request(PLANS, owner)),
+      );
+      assert.deepEqual(
+        listed.plans.map(({ name }) => name),
+        ["Team invites"],
+      );
+    }),
+  );
+
+  it.effect(
+    "a blank, overlong, or widened rename is refused, and another account's plan is none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const rename = (userId: string, body: WireBoundaryInput) =>
+          ask(request(ONE_PLAN, userId, { id: planId, method: "PATCH", body }));
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+
+        assert.deepEqual(
+          [
+            yield* rename(owner, { name: "" }),
+            yield* rename(owner, { name: "   " }),
+            yield* rename(owner, { name: "x".repeat(201) }),
+            yield* rename(owner, { name: "Team invites", userId: other }),
+          ],
+          [invalid, invalid, invalid, invalid],
+        );
+        assert.deepEqual(
+          yield* rename(other, { name: "Mine now" }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        const opened = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: planId })),
+        );
+        assert.equal(opened.plan.name, RELAY.name);
+      }),
   );
 
   it.effect("a start that names an account or a repository is refused", () =>

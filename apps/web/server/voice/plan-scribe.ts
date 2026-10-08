@@ -259,7 +259,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       // Notes that change nothing are the model saying nothing new was said, and need no save.
       if (taken.content !== content) {
         const saved = yield* saveNotes(
-          { userId: options.userId, planId: options.planId, header },
+          { userId: options.userId, planId: options.planId },
           output.notes,
         );
         if (saved.status !== PLAN_SAVE_STATUS.SAVED) {

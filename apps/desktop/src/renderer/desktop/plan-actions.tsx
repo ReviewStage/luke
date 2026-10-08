@@ -1,5 +1,12 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { CopyIcon, EllipsisIcon, FolderIcon, FolderOpenIcon, TrashIcon } from "@sidecar/panel";
+import {
+  CopyIcon,
+  EllipsisIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  PencilIcon,
+  TrashIcon,
+} from "@sidecar/panel";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -9,6 +16,7 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
+import { PlanNameField, usePlanRename } from "./plan-name-field";
 
 /**
  * plan-actions.tsx -- one plan's actions, offered alike from the toolbar's ⋯ button and from a right-click on the plan in the sidebar.
@@ -21,8 +29,10 @@ import { Tooltip } from "../tooltip";
  * between items, and Escape, Tab, a press elsewhere, or the window losing the
  * keyboard closing it with focus back where it was.
  *
- * Delete cannot be undone, so choosing it asks first in a dialog over the
- * window that names the plan, whichever door it was chosen from.
+ * Rename edits the name where the door draws it: the sidebar's row turns
+ * into a field, and the toolbar's ⋯ opens its title as one. Delete cannot be
+ * undone, so choosing it asks first in a dialog over the window that names
+ * the plan, whichever door it was chosen from.
  */
 
 /** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
@@ -84,18 +94,21 @@ function itemAfter(key: string, at: number, count: number): number | undefined {
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it; Delete is last and alone.
+ * offers it, ahead of Rename; Delete is last and alone.
  */
 function planActionGroups(
   plans: PlansControl,
   planId: string,
-  askDelete: () => void,
+  doors: { rename: () => void; askDelete: () => void },
 ): MenuAction[][] {
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
   const chooseFolder = () => plans.onChooseFolder(planId);
+  const rename: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: doors.rename };
   const groups: MenuAction[][] = [
-    drawn ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }] : [],
+    drawn
+      ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }, rename]
+      : [rename],
     plans.folders[planId] === undefined
       ? [{ label: "Choose folder", icon: <FolderIcon />, onSelect: chooseFolder }]
       : [
@@ -106,7 +119,7 @@ function planActionGroups(
           },
           { label: "Change folder", icon: <FolderIcon />, onSelect: chooseFolder },
         ],
-    [{ label: "Delete plan", icon: <TrashIcon />, onSelect: askDelete, danger: true }],
+    [{ label: "Delete plan", icon: <TrashIcon />, onSelect: doors.askDelete, danger: true }],
   ];
   return groups.filter((group) => group.length > 0);
 }
@@ -258,7 +271,7 @@ function ActionMenu({
  * neither is left standing over another surface, over a plan deleted
  * elsewhere, or waiting for the next time the panel opens.
  */
-function usePlanMenu(plans: PlansControl, planId: string, name: string) {
+function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: () => void) {
   const deletion = useConfirmDialog(
     { subject: planStands(plans, planId), surfaceOpen: plans.shown },
     () => plans.onDeletePlan(planId),
@@ -278,7 +291,7 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string) {
     open === undefined || !plans.shown ? null : (
       <ActionMenu
         menu={open}
-        groups={planActionGroups(plans, planId, deletion.ask)}
+        groups={planActionGroups(plans, planId, { rename, askDelete: deletion.ask })}
         onClose={close}
       />
     );
@@ -294,11 +307,14 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string) {
 export function PlanActionsButton({
   plans,
   plan,
+  onRename,
 }: {
   plans: PlansControl;
   plan: PlanSummary;
+  /** Opens the toolbar's title as the plan's name field. */
+  onRename: () => void;
 }): React.JSX.Element {
-  const actions = usePlanMenu(plans, plan.id, plan.name);
+  const actions = usePlanMenu(plans, plan.id, plan.name, onRename);
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
   useAppCommand(APP_COMMAND.DELETE_PLAN, asking || deletion.busy ? undefined : deletion.ask);
@@ -337,7 +353,11 @@ export function PlanActionsButton({
   );
 }
 
-/** A plan in the sidebar: a press opens it, and a right-click offers its actions where the pointer is. */
+/**
+ * A plan in the sidebar: a press opens it, and a right-click offers its
+ * actions where the pointer is. Renamed, the row is its name's field until
+ * the edit ends, and a key that ends it hands focus back to the row.
+ */
 export function SidebarPlan({
   plans,
   plan,
@@ -350,33 +370,63 @@ export function SidebarPlan({
   current: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
-  const actions = usePlanMenu(plans, plan.id, plan.name);
+  const rename = usePlanRename(plan.id, plans.onRenamePlan);
+  const actions = usePlanMenu(plans, plan.id, plan.name, rename.begin);
   const folderPath = plans.folders[plan.id];
+  const row = useRef<HTMLButtonElement | null>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (rename.editing || !refocus.current) return;
+    refocus.current = false;
+    row.current?.focus();
+  }, [rename.editing]);
+  const repository =
+    folderPath !== undefined ? (
+      <span className="sidebar-plan-repository">{folderLine(folderPath)}</span>
+    ) : null;
   return (
     <li>
-      <button
-        type="button"
-        className="sidebar-plan"
-        aria-current={current ? "page" : undefined}
-        data-menu-open={String(actions.open)}
-        disabled={actions.deletion.busy}
-        onClick={() => {
-          actions.close(false);
-          onOpen();
-        }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          actions.show(
-            { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START },
-            event.currentTarget,
-          );
-        }}
-      >
-        <span className="sidebar-plan-name">{plan.name}</span>
-        {folderPath !== undefined ? (
-          <span className="sidebar-plan-repository">{folderLine(folderPath)}</span>
-        ) : null}
-      </button>
+      {rename.editing ? (
+        <div className="sidebar-plan" aria-current={current ? "page" : undefined}>
+          <PlanNameField
+            name={plan.name}
+            className="sidebar-plan-field"
+            onEnd={(edit) => {
+              refocus.current = edit.byKey;
+              rename.end(edit);
+            }}
+          />
+          {repository}
+        </div>
+      ) : (
+        <button
+          ref={row}
+          type="button"
+          className="sidebar-plan"
+          aria-current={current ? "page" : undefined}
+          data-menu-open={String(actions.open)}
+          disabled={actions.deletion.busy}
+          onClick={() => {
+            actions.close(false);
+            onOpen();
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            actions.show(
+              { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START },
+              event.currentTarget,
+            );
+          }}
+        >
+          <span className="sidebar-plan-name">{plan.name}</span>
+          {repository}
+        </button>
+      )}
+      {rename.note !== undefined ? (
+        <p className="sidebar-note" role="alert">
+          {rename.note}
+        </p>
+      ) : null}
       {actions.menu}
       {actions.dialog}
     </li>

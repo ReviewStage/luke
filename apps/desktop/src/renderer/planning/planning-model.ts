@@ -165,6 +165,48 @@ export function copyShown(outcome: CopyOutcome | undefined, document: PlanDocume
 /** What the new-plan form says when the service answered no plan. */
 export const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
 
+/** What a plan's name says, where it was edited, when the service refused the rename. */
+export const RENAME_FAILED_NOTE = "The plan could not be renamed. Try again.";
+
+/** The names given to plans that main's view has yet to carry, by plan id. */
+export type PendingRenames = ReadonlyMap<string, string>;
+
+/** The name the view gives a plan: its row's in the list, else the open document's. */
+function viewedName(view: PlanningView, planId: string): string | undefined {
+  const listed = view.plans.find((plan) => plan.id === planId);
+  if (listed !== undefined) return listed.name;
+  const held = view.document.plan;
+  return held?.id === planId ? held.name : undefined;
+}
+
+/** The view with each pending name drawn in place of the one it replaces, in the list and on the open document alike. */
+export function renamedView(view: PlanningView, renames: PendingRenames): PlanningView {
+  if (renames.size === 0) return view;
+  const named = <Named extends { id: string; name: string }>(plan: Named): Named => {
+    const name = renames.get(plan.id);
+    return name === undefined ? plan : { ...plan, name };
+  };
+  const held = view.document.plan;
+  return {
+    ...view,
+    plans: view.plans.map(named),
+    document: held === undefined ? view.document : { ...view.document, plan: named(held) },
+  };
+}
+
+/**
+ * The pending names the view still contradicts. One the view now carries
+ * has landed, and one of a plan the view no longer holds has nothing left
+ * to name, so both are let go.
+ */
+export function unsettledRenames(renames: PendingRenames, view: PlanningView): PendingRenames {
+  const unsettled = [...renames].filter(([planId, name]) => {
+    const viewed = viewedName(view, planId);
+    return viewed !== undefined && viewed !== name;
+  });
+  return unsettled.length === renames.size ? renames : new Map(unsettled);
+}
+
 /** The status word beside the microphone for a call, or nothing where none stands. */
 const STATUS_WORD = {
   [LIVE_STATUS.UNAVAILABLE]: undefined,
