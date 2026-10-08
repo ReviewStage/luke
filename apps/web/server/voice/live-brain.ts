@@ -83,6 +83,8 @@ const LIVE_BRAIN_FOLLOW_BOUNDS = {
   POLL: Duration.millis(250),
   /** How long an ask is followed before it is given up as failed: past eve's own turn deadline, with room for one queued turn ahead of it. */
   FOLLOW: Duration.minutes(10),
+  /** How often the conversation is read for a turn the brain opened of its own: a subagent's result is minutes in the making, so a second is soon enough. */
+  WAKE_POLL: Duration.seconds(1),
 } as const;
 
 type FollowBounds = Readonly<Record<keyof typeof LIVE_BRAIN_FOLLOW_BOUNDS, Duration.Duration>>;
@@ -150,6 +152,12 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
 interface FollowTold {
   action: string | undefined;
   settled: number;
+}
+
+/** What a woken turn's follow has told so far: the activity last said, and the last event's number. */
+interface WokenTold {
+  action: string | undefined;
+  seq: number;
 }
 
 /** No recovered run: the session's revisions start from nothing, and nothing is followed. */
@@ -487,6 +495,100 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     );
     return Effect.asVoid(Effect.forkIn(following, socket));
   }
+
+  /** The turns the brain opened of its own that this socket has taken up, so each is told once. */
+  const woken = new Set<string>();
+
+  /**
+   * One look at a turn the brain opened of its own, told under the turn's own
+   * id since no ask stands for it: its events past those already told, and
+   * what it is doing now. Answers whether the turn has ended. Note that
+   * nothing of how far it was told is written down, because no ask row holds
+   * it: a re-attached connection does not take a woken turn up again.
+   */
+  const lookWoken = Effect.fnUntraced(function* (turnId: string, told: WokenTold) {
+    const [turn] = yield* options.store.turns.named(options.userId, [turnId]);
+    if (turn === undefined) {
+      endFailed(turnId);
+      return true;
+    }
+    const journal = yield* options.store.messages.byClientId(
+      options.userId,
+      turn.conversationId,
+      HOSTED_TOOL_SET,
+      turn.id,
+    );
+    if (!journal.ok) {
+      options.report("A woken turn's journal could not be read; it is told as failed");
+      endFailed(turnId);
+      return true;
+    }
+    const message = journal.value[0]?.message;
+    const events = projectTurnEvents(turn, message);
+    const action = pendingActionOf(message);
+    if (action !== told.action) {
+      told.action = action;
+      emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: turnId, action });
+    }
+    for (const event of events) {
+      if (event.seq <= told.seq && event.kind !== TURN_EVENT_KIND.ENDED) continue;
+      if (event.kind === TURN_EVENT_KIND.ENDED) {
+        emit(runEventOf(event, turnId));
+        return true;
+      }
+      told.seq = event.seq;
+      emit(runEventOf(event, turnId));
+    }
+    return false;
+  });
+
+  /** Follows one woken turn to its end on the follow's own cadence and bound, as `follow` does an ask. */
+  function followWoken(turnId: string) {
+    const told: WokenTold = { action: undefined, seq: 0 };
+    const cadence = Schedule.spaced(bounds.POLL).pipe(
+      Schedule.setInputType<boolean>(),
+      Schedule.while(({ input }) => !input),
+      Schedule.upTo({ duration: bounds.FOLLOW }),
+      Schedule.map(({ input }) => input),
+    );
+    return Effect.repeat(lookWoken(turnId, told), cadence).pipe(
+      Effect.flatMap((done) => (done ? Effect.void : Effect.sync(() => endFailed(turnId)))),
+      Effect.catchCause((cause) => {
+        if (Cause.hasInterruptsOnly(cause)) return Effect.void;
+        return Effect.sync(() => {
+          options.report(`Following a woken turn failed: ${Cause.pretty(cause)}`);
+          endFailed(turnId);
+        });
+      }),
+    );
+  }
+
+  /**
+   * Watches the conversation for the turns the brain opens of its own from
+   * the socket's start — a subagent's result handed back — and takes each up
+   * once: told as woken, so the service stands an exchange for it, then
+   * followed. A read the store refused is reported and read again next time.
+   */
+  const watchingSince = new Date(yield* Clock.currentTimeMillis);
+  const watchWoken = Effect.gen(function* () {
+    const found = yield* options.store.turns.wokenIn(
+      options.userId,
+      options.conversationId,
+      watchingSince,
+    );
+    for (const turn of found) {
+      if (woken.has(turn.id)) continue;
+      woken.add(turn.id);
+      emit({ kind: LIVE_BRAIN_RUN_EVENT.WOKEN, runId: turn.id });
+      yield* Effect.forkIn(followWoken(turn.id), socket);
+    }
+  }).pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() =>
+      Effect.sync(() => options.report("The conversation could not be read for woken turns")),
+    ),
+  );
+  yield* Effect.forkIn(Effect.repeat(watchWoken, Schedule.spaced(bounds.WAKE_POLL)), socket);
 
   return {
     submitAsk(ask) {
