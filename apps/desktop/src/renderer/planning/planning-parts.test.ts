@@ -4,7 +4,6 @@ import type { Plan } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { NewPlanFormView, type NewPlanFormViewProps } from "./new-plan-form";
 import {
   type CallStatus,
   COPY_FAILED_NOTE,
@@ -182,49 +181,6 @@ test("the plan list marks the open plan and names each one's folder", () => {
   assert.match(rows[1] ?? "", /aria-current="true"/u);
   assert.match(rows[1] ?? "", /Billing export[\s\S]*~\/relay/u);
   assert.match(markup, /<\/svg>New plan<\/button>/u);
-});
-
-function form(patch: Partial<NewPlanFormViewProps>): string {
-  const props: NewPlanFormViewProps = {
-    name: "",
-    folder: undefined,
-    starting: false,
-    note: undefined,
-    onName: ignore,
-    onChooseFolder: ignore,
-    onStart: ignore,
-    onCancel: ignore,
-    ...patch,
-  };
-  return renderToStaticMarkup(createElement(NewPlanFormView, props));
-}
-
-test("the empty name field is labelled Plan name and offers an example to replace", () => {
-  const markup = form({});
-
-  assert.match(
-    markup,
-    /<span>Plan name<\/span><input type="text" placeholder="e\.g\. Dark mode toggle"[^>]* value=""\/>/u,
-  );
-});
-
-test("Start plan waits for both a name and a folder, and the chosen folder is shown", () => {
-  const startButton =
-    /<button type="submit" class="plan-button plan-button-primary"( disabled="")?>/u;
-
-  assert.match(form({}), />Choose folder…<\/button>/u);
-  assert.equal(form({ name: "Invites" }).match(startButton)?.[1], ' disabled=""');
-  assert.equal(form({ folder: "/Users/dev/relay" }).match(startButton)?.[1], ' disabled=""');
-  const ready = form({ name: "Invites", folder: "/Users/dev/relay" });
-  assert.equal(ready.match(startButton)?.[1], undefined);
-  assert.match(ready, /~\/relay[\s\S]*>Change folder…<\/button>/u);
-});
-
-test("a refused start keeps the form open with the reason", () => {
-  const markup = form({ note: "Luke's service could not be reached. Try again." });
-
-  assert.match(markup, /role="alert">Luke&#x27;s service could not be reached/u);
-  assert.match(markup, />Start plan<\/button>/u);
 });
 
 function microphoneRowMarkup(

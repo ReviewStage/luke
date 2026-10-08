@@ -58,7 +58,6 @@ function mount(initial: Partial<Standing> = {}) {
   };
   function Probe() {
     const [held, setHeld] = useState(standing);
-    const [composing, setComposing] = useState(false);
     restand = setHeld;
     control = usePlansTab({
       acts: {
@@ -80,8 +79,6 @@ function mount(initial: Partial<Standing> = {}) {
       voiceAvailable: true,
       microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: held.shown,
-      composing,
-      onComposingChange: setComposing,
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
     });
     return null;
@@ -121,7 +118,7 @@ test("each time the tab shows it reads the plans again, and the tab going away l
   assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT);
 });
 
-test("stepping back leaves an open plan, closes the form to the list, and has nothing to do on the list", () => {
+test("stepping back leaves an open plan for the new-plan page, which has nothing to step back from", () => {
   const tab = mount({ shown: true, planning: OPEN });
 
   act(() => {
@@ -130,16 +127,47 @@ test("stepping back leaves an open plan, closes the form to the list, and has no
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_CLOSE);
 
   tab.stand({ planning: IDLE_PLANNING_VIEW });
-  act(() => tab.control().onNewPlan());
   assert.equal(tab.control().page, PLANS_PAGE.NEW);
-  act(() => {
-    assert.equal(tab.control().back(), true);
-  });
-  assert.equal(tab.control().page, PLANS_PAGE.LIST);
   act(() => {
     assert.equal(tab.control().back(), false);
   });
   assert.equal(tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length, 1);
+});
+
+test("New plan leaves an open plan and asks the new-plan page for its name field on every press", () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  const before = tab.control().newPlan.presses;
+
+  act(() => tab.control().onNewPlan());
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_CLOSE);
+
+  tab.stand({ planning: IDLE_PLANNING_VIEW });
+  act(() => tab.control().onNewPlan());
+  assert.equal(tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length, 1);
+  assert.equal(tab.control().newPlan.presses, before + 2);
+});
+
+test("the new-plan page offers the folders of the plans this Mac holds, the last opened first", () => {
+  const second = { ...PLAN, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", name: "Billing export" };
+  const tab = mount({
+    planning: {
+      ...IDLE_PLANNING_VIEW,
+      plans: [second, PLAN],
+      folders: { [PLAN.id]: "/Users/dev/relay", [second.id]: "/Users/dev/billing" },
+    },
+  });
+
+  assert.deepEqual(tab.control().newPlan.recentFolders, ["/Users/dev/billing", "/Users/dev/relay"]);
+});
+
+test("a start the host refuses answers the reason the new-plan page shows", async () => {
+  const tab = mount({ shown: true });
+
+  assert.equal(
+    await tab.control().newPlan.start("Invites", "/Users/dev/relay"),
+    "Not answered in this test.",
+  );
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_START);
 });
 
 test("deleting asks for the named plan's delete and answers a refusal, and a fixture's plan is deleted nowhere", async () => {

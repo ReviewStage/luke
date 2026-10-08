@@ -324,14 +324,21 @@ export function PlusIcon(): React.JSX.Element {
   );
 }
 
-/** A page with lines on it: a transcript, a file, or a history, read. */
-export function DocumentIcon(): React.JSX.Element {
+/** A folder on this Mac: the one a plan reads. */
+export function FolderIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
-      <path d="M6.2 2.9h7.6l4.8 4.8v12.4a1.7 1.7 0 0 1-1.7 1.7H6.2a1.7 1.7 0 0 1-1.7-1.7V4.6a1.7 1.7 0 0 1 1.7-1.7Z" />
-      <path d="M13.8 2.9v4.8h4.8" />
-      <path d="M8.2 12.4h7.6" />
-      <path d="M8.2 16.2h7.6" />
+      <path d="M3.8 7.2a1.7 1.7 0 0 1 1.7-1.7h3.9l2 2.2h7.1a1.7 1.7 0 0 1 1.7 1.7v8.1a1.7 1.7 0 0 1-1.7 1.7H5.5a1.7 1.7 0 0 1-1.7-1.7Z" />
+    </Glyph>
+  );
+}
+
+/** Sends what was composed, drawn the way every composer draws it: an arrow up. */
+export function ArrowUpIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 18.6V5.4" />
+      <path d="m6.4 11 5.6-5.6 5.6 5.6" />
     </Glyph>
   );
 }

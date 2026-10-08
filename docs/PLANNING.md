@@ -78,15 +78,14 @@ sidebar, one page at a time:
           ^ the panel's own caption strip, at its foot
 ```
 
-- **List page**: the tab's front page, with no plan open.
-- **New plan page**: the setup fields, opened from the list.
+- **New plan page**: the tab's home, whenever no plan is open. The plan
+  list is the window's sidebar, so there is no empty page in between.
 - **Document page**: the open plan's saved document. Its header and its
   microphone row hold still, and only the document scrolls between them.
 
 Escape unwinds one page at a time, after any open microphone has been muted
 (Escape mutes first, as it does for any call): the document page back to the
-list, which leaves the plan, the new-plan page back to the list, and the list
-closes the panel. Escape on the Settings tab's front page comes back to Plans.
+new-plan page, which leaves the plan, and the new-plan page closes the panel. Escape on the Settings tab's front page comes back to Plans.
 
 ### Opening, leaving, and the talk key
 
@@ -116,22 +115,29 @@ closes the panel. Escape on the Settings tab's front page comes back to Plans.
   Each row shows the plan's name and its `owner/repository`.
 - Clicking a row opens that plan on the document page (see "Leaving and
   resuming").
-- `New plan` at the head of the list opens the new-plan page.
+- `New plan` at the head of the list leaves any open plan for the new-plan
+  page and focuses its name field. It is drawn as a row of the list, and is
+  the selected row whenever the new-plan page shows.
 - There is no rename, delete, archive, or search in this journey.
 
 ### New plan
 
-A page of ordinary setup fields and buttons under a `‹ New plan` header, and
-nothing spoken:
+A devtool's new-task page: the heading "What are we planning?" over one
+composer card, and nothing spoken. Leaving or deleting a plan lands here.
 
-1. **Plan name**, a single-line field whose placeholder, "e.g. Dark mode
-   toggle", reads as an example to replace rather than a filled value.
-2. **Folder**, chosen with `Choose folder`: the folder of this Mac the plan
-   reads, kept on this Mac alone.
-3. **Start plan**, enabled once both are set. Pressing it saves the plan with
-   its name and the untouched template as its document, records its folder
-   on this Mac, and opens it. If the service cannot be reached, the page
-   stays open with the reason and the button can be pressed again.
+1. **Plan name**, the card's large single-line field, focused on arrival,
+   whose placeholder, "Name the feature, e.g. Dark mode toggle", reads as an
+   example to replace rather than a filled value.
+2. **Folder**, the chip along the card's foot: the folder of this Mac the
+   plan reads, kept on this Mac alone. It starts on the folder of the most
+   recently opened plan this Mac holds one for, and offers up to five recent
+   folders over `Choose another folder…`, the system's picker. With no recent
+   folder it reads `Choose folder` and opens the picker directly.
+3. **Start**, the round arrow at the card's other end, enabled once both are
+   set; Enter presses it. Pressing it saves the plan with its name and the
+   untouched template as its document, records its folder on this Mac, and
+   opens it. If the service cannot be reached, the reason shows under the
+   card and the button can be pressed again.
 
 ### Header
 

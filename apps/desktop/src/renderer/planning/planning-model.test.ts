@@ -14,11 +14,13 @@ import {
   DOCUMENT_REGION,
   documentRegion,
   folderLine,
+  folderName,
   MICROPHONE_PRESS,
   microphoneButton,
   PLANS_PAGE,
   planningCallHoldsPanel,
   plansPage,
+  recentFolders,
 } from "./planning-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -77,12 +79,39 @@ test("the header names the plan's folder, with the home folder as ~", () => {
   assert.equal(folderLine("/Volumes/work/relay"), "/Volumes/work/relay");
 });
 
-test("an open plan is the document page whatever this panel was doing, and the form shows only with none open", () => {
-  assert.equal(plansPage(view({}), false), PLANS_PAGE.LIST);
-  assert.equal(plansPage(view({}), true), PLANS_PAGE.NEW);
-  // A plan another panel opened, or one just started from this form, is the document page here too.
-  assert.equal(plansPage(view({ activePlanId: INVITES }), true), PLANS_PAGE.DOCUMENT);
-  assert.equal(plansPage(view({ activePlanId: INVITES }), false), PLANS_PAGE.DOCUMENT);
+test("an open plan is the document page, and with none open the tab is the new-plan page", () => {
+  assert.equal(plansPage(view({})), PLANS_PAGE.NEW);
+  // A plan another panel opened, or one just started from the new-plan page, is the document page here too.
+  assert.equal(plansPage(view({ activePlanId: INVITES })), PLANS_PAGE.DOCUMENT);
+});
+
+test("a folder chip names the folder by its last segment", () => {
+  assert.equal(folderName("/Users/dev/relay"), "relay");
+  assert.equal(folderName("/Users/dev/relay/"), "relay");
+  assert.equal(folderName("/"), "/");
+});
+
+test("the recent folders follow the plans' order, each once, skipping a plan with no folder here, five at most", () => {
+  const ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
+  const plans = ids.map((id) => ({ ...PLAN, id }));
+  const folders = {
+    a: "/Users/dev/relay",
+    c: "/Users/dev/api",
+    d: "/Users/dev/relay",
+    e: "/Users/dev/web",
+    f: "/Users/dev/docs",
+    g: "/Users/dev/cli",
+    h: "/Users/dev/infra",
+  };
+
+  assert.deepEqual(recentFolders(plans, folders), [
+    "/Users/dev/relay",
+    "/Users/dev/api",
+    "/Users/dev/web",
+    "/Users/dev/docs",
+    "/Users/dev/cli",
+  ]);
+  assert.deepEqual(recentFolders(plans, {}), []);
 });
 
 test("the microphone's word is the open plan's call status with no backend line, and nothing for a desk call or another plan's", () => {

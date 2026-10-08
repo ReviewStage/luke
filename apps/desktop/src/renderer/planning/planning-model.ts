@@ -26,11 +26,12 @@ export const NO_ASSUMPTIONS_LINE = "None recorded";
 /** A macOS home folder at the head of a path, which the header shows as `~`. */
 const HOME_PREFIX = /^\/Users\/[^/]+(?=\/|$)/u;
 
+/** How many recent folders the new-plan page offers. */
+const RECENT_FOLDER_LIMIT = 5;
+
 /** Which of the Plans tab's pages shows. */
 export const PLANS_PAGE = {
-  /** Every plan the account owns, and New plan. */
-  LIST: "list",
-  /** The new plan's name and folder. */
+  /** The new plan's name and folder: the tab's home, whenever no plan is open. */
   NEW: "new",
   /** The open plan's saved document and its microphone. */
   DOCUMENT: "document",
@@ -42,11 +43,11 @@ export type PlansPage = (typeof PLANS_PAGE)[keyof typeof PLANS_PAGE];
  * The page the tab shows. An open plan is the document page, in every panel
  * alike, because the plan open is the host's and not one panel's: it stands
  * until the developer leaves it, whatever tab or shape the panel is in.
- * With none open, the new-plan form shows while this panel is composing one.
+ * With none open, the tab is the new-plan page: the plan list is the
+ * sidebar's, so there is no empty page to stand between them.
  */
-export function plansPage(view: PlanningView, composing: boolean): PlansPage {
-  if (view.activePlanId !== undefined) return PLANS_PAGE.DOCUMENT;
-  return composing ? PLANS_PAGE.NEW : PLANS_PAGE.LIST;
+export function plansPage(view: PlanningView): PlansPage {
+  return view.activePlanId === undefined ? PLANS_PAGE.NEW : PLANS_PAGE.DOCUMENT;
 }
 
 /** Which state the document region draws. */
@@ -86,6 +87,29 @@ export function documentRegion(view: PlanningView): DocumentRegion {
 /** The header's folder line: the folder's path, with the home folder as `~`. */
 export function folderLine(folderPath: string): string {
   return folderPath.replace(HOME_PREFIX, "~");
+}
+
+/** The last segment of a folder's path, the way a chip names it. */
+export function folderName(folderPath: string): string {
+  return folderPath.replace(/\/+$/u, "").split("/").pop() || folderPath;
+}
+
+/**
+ * The folders this Mac's plans read, most recently opened first and each
+ * once, so the new-plan page can offer the last one used and a few before it.
+ * The list is already in that order, and a plan with no folder here adds none.
+ */
+export function recentFolders(
+  plans: PlanningView["plans"],
+  folders: PlanningView["folders"],
+): string[] {
+  const recent: string[] = [];
+  for (const plan of plans) {
+    const folderPath = folders[plan.id];
+    if (folderPath !== undefined && !recent.includes(folderPath)) recent.push(folderPath);
+    if (recent.length === RECENT_FOLDER_LIMIT) break;
+  }
+  return recent;
 }
 
 /** What the Copy button shows: its resting glyph, the check mark, or the failure beside it. */

@@ -11,6 +11,8 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { PLANS_PAGE } from "../planning/planning-model";
+import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopSidebar } from "./desktop-sidebar";
 
 const PHOTO = "https://avatars.githubusercontent.com/u/1?v=4";
@@ -24,7 +26,12 @@ const DEAN: AccountSnapshot = {
 
 function mount(
   account: AccountSnapshot,
-  options: { settingsNote?: string; onTabChange?: (tab: PanelTab) => void } = {},
+  options: {
+    settingsNote?: string;
+    onTabChange?: (tab: PanelTab) => void;
+    tab?: PanelTab;
+    plans?: Partial<PlansControl>;
+  } = {},
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -39,8 +46,8 @@ function mount(
           fixtureSpeaking: false,
           voiceOpening: false,
         },
-        plans: plansControl(),
-        tab: PANEL_TAB.PLANS,
+        plans: plansControl(options.plans),
+        tab: options.tab ?? PANEL_TAB.PLANS,
         onTabChange: options.onTabChange ?? (() => undefined),
         account,
         settingsNote: options.settingsNote,
@@ -128,4 +135,40 @@ test("a waiting release marks the account button with its news", () => {
 
   assert.equal(button.querySelector(".tab-note")?.getAttribute("title"), "Update available");
   assert.match(button.textContent ?? "", /\(Update available\)/u);
+});
+
+function newPlanButton(container: ParentNode): HTMLButtonElement {
+  const button = container.querySelector<HTMLButtonElement>(".sidebar-new-plan");
+  assert.ok(button, "the sidebar draws New plan");
+  return button;
+}
+
+test("New plan is the selected row whenever the Plans tab has no plan open, as a plan row is when it is", () => {
+  const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+  const home = mount(DEAN);
+  const onPlan = mount(DEAN, { plans: { page: PLANS_PAGE.DOCUMENT, activePlanId: PLAN_ID } });
+  const onSettings = mount(DEAN, { tab: PANEL_TAB.SETTINGS });
+
+  assert.equal(newPlanButton(home).getAttribute("aria-current"), "page");
+  assert.equal(newPlanButton(onPlan).getAttribute("aria-current"), null);
+  assert.equal(newPlanButton(onSettings).getAttribute("aria-current"), null);
+});
+
+test("New plan from Settings brings the Plans tab forward and asks for the new-plan page", () => {
+  const opened: PanelTab[] = [];
+  let asked = false;
+  const container = mount(DEAN, {
+    tab: PANEL_TAB.SETTINGS,
+    onTabChange: (tab) => opened.push(tab),
+    plans: {
+      onNewPlan: () => {
+        asked = true;
+      },
+    },
+  });
+
+  act(() => newPlanButton(container).click());
+
+  assert.deepEqual(opened, [PANEL_TAB.PLANS]);
+  assert.equal(asked, true);
 });

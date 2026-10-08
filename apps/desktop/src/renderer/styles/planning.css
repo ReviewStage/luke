@@ -400,59 +400,6 @@
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-.plan-new {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* The form scrolls as a whole under its header when the repository list
-   is long, so Start plan is never pushed past the panel's ceiling unseen. */
-.plan-form {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.plan-form input[type="text"],
-.plan-form input[type="search"] {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  background: var(--raised);
-  color: inherit;
-  font: inherit;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.plan-form-name {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.plan-form-note {
-  color: var(--text-secondary);
-}
-
-.plan-form-note {
-  margin: 0;
-}
-
-.plan-form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
 /* The call's code pane: the code Luke talks about, filling the side panel's
    Code tab. */
 .code-pane {

@@ -283,3 +283,13 @@ test("the panel's chord is Option-Command-B by its key, though Option makes the 
   // Holding the chord is one press, not one per repeat.
   assert.equal(isSidePanelChord(new KeyboardEvent("keydown", { ...chord, repeat: true })), false);
 });
+
+test("with no plan open the work column is the new-plan page, with nothing to go back to", () => {
+  const markup = renderToStaticMarkup(
+    createElement(DesktopPlans, { plans: plansControl({ page: PLANS_PAGE.NEW }) }),
+  );
+
+  assert.match(markup, /<h1 [^>]*>What are we planning\?<\/h1>/u);
+  assert.match(markup, /aria-label="Plan name"/u);
+  assert.doesNotMatch(markup, /desktop-toolbar|Back|Cancel/u);
+});
