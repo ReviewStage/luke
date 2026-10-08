@@ -339,19 +339,10 @@ export interface StoreWriter {
   latestSpokenLine(target: ConversationTarget, query: SpokenLineQuery): Write<SpokenLineResult>;
 }
 
-/**
- * The plan's turn origin for each origin the brain's stream names. The one
- * fold is observation: the hosted tier opens observation turns from a chat's
- * transcript changing alone, having no provider hooks, so the brain's
- * `observation` and the plan's `transcript_change` are one event under two names. Every other origin is
- * written as reported.
- */
+/** The turn row's origin for each origin the brain's stream names, written as reported. */
 const TURN_ORIGIN_OF_BRAIN_ORIGIN = {
   [BRAIN_TURN_ORIGIN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_TURN_ORIGIN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-  [BRAIN_TURN_ORIGIN.OBSERVATION]: TURN_ORIGIN.TRANSCRIPT_CHANGE,
-  [BRAIN_TURN_ORIGIN.CHILD]: TURN_ORIGIN.CHILD,
-  [BRAIN_TURN_ORIGIN.CHILD_COMPLETION]: TURN_ORIGIN.CHILD_COMPLETION,
 } as const satisfies Record<BrainTurnOrigin, TurnOrigin>;
 
 function turnStatusOf(status: BrainRequestStatus): TurnStatus {
@@ -1881,8 +1872,8 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("web/requestTurnCancel")(fun
 export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreWriter> {
   /**
    * Runs one write under the conversation's row lock, or answers that no such
-   * conversation stands for this account: none by that id, or one Clear
-   * already stamped, which is read by nothing and so written by nothing. The
+   * conversation stands for this account: none by that id, or one a plan's
+   * deletion already stamped, which is read by nothing and so written by nothing. The
    * write's instant is read from the clock once the lock is held, so every
    * row one write stamps carries the same one.
    */

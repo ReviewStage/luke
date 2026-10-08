@@ -47,9 +47,7 @@ export interface VoiceSessionUsage {
  * same live session on a fresh function instance finds the row it had rather
  * than forking the record. The pair over the user and that id is indexed
  * because a re-attach is checked against it — the user asking must own the
- * live session named — and an ownership check has to be one lookup. The
- * device is a plain column, as on `events`, because a device row goes at
- * sign-out and a session's record should not go with it.
+ * live session named — and an ownership check has to be one lookup.
  */
 export const voiceSessions = pgTable(
   "voice_sessions",
@@ -58,8 +56,6 @@ export const voiceSessions = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The `devices` row's id an earlier build's session named; nothing writes it any more. */
-    deviceId: text("device_id"),
     /**
      * The plan the call was opened about; null only for a session an
      * earlier build opened with none, which a re-attach refuses. A plain

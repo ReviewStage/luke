@@ -25,7 +25,6 @@ import {
   ASK_ORIGIN,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
   sessionKey,
   UI_PART_TYPE,
 } from "../server/core";
@@ -159,7 +158,6 @@ class TurnOpeningBrain implements LiveBrain {
       yield* store.consume(this.#conversation, {
         kind: BRAIN_RUN_EVENT.TURN_STARTED,
         origin: BRAIN_TURN_ORIGIN.SPOKEN,
-        trigger: BRAIN_TURN_TRIGGER.ASK,
         at: NOW,
         conversationId: sessionKey(this.#conversation.conversationId),
         turnId,

@@ -10,19 +10,16 @@ import {
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
   type BrainRequestFailure,
   type BrainRunEvent,
   type BrainRunEventBody,
   type BrainTurnOrigin,
-  type BrainTurnTrigger,
   COMPACTION_SOURCE,
   isRecord,
   isStoredToolPart,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
-  OBSERVATION_SOURCE,
   readStoredUIMessages,
   SCHEMA_REFUSAL,
   SLOW_STEP_KIND,
@@ -44,7 +41,6 @@ import {
 } from "../server/core";
 import { db } from "../server/db/query";
 import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
@@ -128,7 +124,6 @@ const TOOLS: ToolSet = {
 const TRANSCRIPT_INPUT = { providerId: "conductor", providerSessionId: "s-1" };
 const TRANSCRIPT_OUTPUT = { lines: ["user: fixture ask", "assistant: fixture reply"] };
 const SEND_INPUT = { ...TRANSCRIPT_INPUT, text: "run the tests" };
-const ANNOUNCE_INPUT = { text: "The fixture session finished its turn." };
 
 const TYPED_ASK: UserMessageMetadata = {
   author: MESSAGE_AUTHOR.DEVELOPER,
@@ -142,11 +137,9 @@ function asWire(stored: readonly UIMessage[]): UnparsedWireValue {
   return unparsedWire(JSON.parse(JSON.stringify(stored)));
 }
 
-async function conversation(
-  kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND] = CONVERSATION_KIND.MAIN,
-): Promise<ConversationTarget> {
+async function conversation(): Promise<ConversationTarget> {
   const userId = await database.createUser();
-  const conversationId = await insertConversation(database.run, { userId, kind });
+  const conversationId = await insertConversation(database.run, { userId });
   return { userId, conversationId };
 }
 
@@ -165,8 +158,8 @@ class Stream {
     };
   }
 
-  started(origin: BrainTurnOrigin, trigger: BrainTurnTrigger, at = NOW): BrainRunEvent {
-    return this.event({ kind: BRAIN_RUN_EVENT.TURN_STARTED, origin, trigger, at });
+  started(origin: BrainTurnOrigin, at = NOW): BrainRunEvent {
+    return this.event({ kind: BRAIN_RUN_EVENT.TURN_STARTED, origin, at });
   }
 
   words(id: string, text: string, metadata: UserMessageMetadata): BrainRunEvent {
@@ -285,13 +278,12 @@ async function storedTurn(turnId: string) {
 
 const CountersRowSchema = Schema.Struct({
   message: EpochMillisColumnSchema,
-  event: EpochMillisColumnSchema,
 });
 
 async function counters(target: ConversationTarget) {
   const [row] = await database.run(
     db
-      .select({ message: conversations.nextMessageSeq, event: conversations.nextEventSeq })
+      .select({ message: conversations.nextMessageSeq })
       .from(conversations)
       .where(eq(conversations.id, target.conversationId)),
   );
@@ -330,7 +322,7 @@ const REPLY_PARTS: UIMessage["parts"] = [
 /** A developer's typed ask that reads one transcript and answers, told from start to end. */
 function developerTurn(stream: Stream, askId: string, replyId: string): readonly BrainRunEvent[] {
   return [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.words(askId, "What is the fixture session doing?", TYPED_ASK),
     stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
     stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT),
@@ -376,7 +368,7 @@ test("each write to the journal in place moves the conversation's journal revisi
   const stream = new Stream();
   const askId = randomUUID();
   await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.words(askId, "Read it.", TYPED_ASK),
   ]);
   // The ask is numbered and finished as it lands: no row was written in place.
@@ -419,7 +411,7 @@ test("a turn that ends with its journal open finishes it in place, which moves t
   const target = await conversation();
   const stream = new Stream();
   await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.words(randomUUID(), "Read it.", TYPED_ASK),
     stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
   ]);
@@ -465,7 +457,7 @@ test("a developer turn leaves its ask, its journal closed as the answer told, an
   assert.deepEqual(rows[0]?.metadata, TYPED_ASK);
   assert.deepEqual(rows[1]?.metadata, { author: MESSAGE_AUTHOR.BRAIN });
   assert.deepEqual(rows[1]?.parts, REPLY_PARTS);
-  assert.deepEqual(await counters(target), { message: 3, event: 1 });
+  assert.deepEqual(await counters(target), { message: 3 });
 
   const turn = await storedTurn(stream.turnId);
   assert.deepEqual(
@@ -507,113 +499,11 @@ test("a developer turn leaves its ask, its journal closed as the answer told, an
   assert.equal(read.ok, true);
 });
 
-test("an observation turn on an observed conversation is a transcript-change turn whose words the brain wrote for itself", async () => {
-  const target = await conversation(CONVERSATION_KIND.OBSERVED);
-  const stream = new Stream();
-  const lookId = randomUUID();
-  const announceParts: UIMessage["parts"] = [
-    {
-      type: toolPartType("announce"),
-      toolCallId: "call_a",
-      state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
-      input: ANNOUNCE_INPUT,
-      output: { status: "accepted" },
-    },
-  ];
-  const results = await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.OBSERVATION, BRAIN_TURN_TRIGGER.ROSTER),
-    stream.words(lookId, "[roster look] One session finished.", {
-      author: MESSAGE_AUTHOR.BRAIN,
-      source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
-    }),
-    stream.toolCall("call_a", "announce", ANNOUNCE_INPUT),
-    stream.toolAnswered("call_a", "announce", { status: "accepted" }),
-    stream.answered(randomUUID(), announceParts),
-    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
-  ]);
-  assert.equal(results.every(Result.isSuccess), true);
-
-  const rows = await storedMessages(target);
-  assert.deepEqual(
-    rows.map((row) => [row.seq, row.role, row.metadata]),
-    [
-      [
-        1,
-        MESSAGE_ROLE.USER,
-        { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE },
-      ],
-      [2, MESSAGE_ROLE.ASSISTANT, { author: MESSAGE_AUTHOR.BRAIN }],
-    ],
-  );
-  assert.deepEqual(rows[1]?.parts, announceParts);
-  const turn = await storedTurn(stream.turnId);
-  assert.deepEqual(
-    [turn?.origin, turn?.status, turn?.responseIds],
-    [TURN_ORIGIN.TRANSCRIPT_CHANGE, TURN_STATUS.SETTLED, []],
-  );
-});
-
-test("a child turn on a child conversation is a child-origin turn opened by the delegated task", async () => {
-  const target = await conversation(CONVERSATION_KIND.CHILD);
-  const stream = new Stream();
-  const replyParts: UIMessage["parts"] = [
-    { type: UI_PART_TYPE.TEXT, text: "Two files changed.", state: UI_PART_STATE.DONE },
-  ];
-  const results = await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.CHILD, BRAIN_TURN_TRIGGER.CHILD_TASK),
-    stream.words(randomUUID(), "[delegated task] Summarize the change.", {
-      author: MESSAGE_AUTHOR.BRAIN,
-      source: OBSERVATION_SOURCE.CHILD,
-    }),
-    stream.answered(randomUUID(), replyParts),
-    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED, { responseIds: ["resp_c"] }),
-  ]);
-  assert.equal(results.every(Result.isSuccess), true);
-  const rows = await storedMessages(target);
-  assert.deepEqual(
-    rows.map((row) => [row.seq, row.role, row.turnId, row.finishedAt !== null]),
-    [
-      [1, MESSAGE_ROLE.USER, stream.turnId, true],
-      [2, MESSAGE_ROLE.ASSISTANT, stream.turnId, true],
-    ],
-  );
-  assert.deepEqual(rows[1]?.parts, replyParts);
-  const turn = await storedTurn(stream.turnId);
-  assert.deepEqual([turn?.origin, turn?.status], [TURN_ORIGIN.CHILD, TURN_STATUS.SETTLED]);
-});
-
-test("a child's completion opens a turn of the requester's own, written with the child_completion origin rather than folded onto child", async () => {
-  const target = await conversation();
-  const stream = new Stream();
-  const replyParts: UIMessage["parts"] = [
-    {
-      type: UI_PART_TYPE.TEXT,
-      text: "The child finished; two files changed.",
-      state: UI_PART_STATE.DONE,
-    },
-  ];
-  const results = await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.CHILD_COMPLETION, BRAIN_TURN_TRIGGER.CHILD_COMPLETION),
-    stream.words(randomUUID(), "[child completion] Summarize the change: done.", {
-      author: MESSAGE_AUTHOR.BRAIN,
-      source: OBSERVATION_SOURCE.CHILD_COMPLETION,
-    }),
-    stream.answered(randomUUID(), replyParts),
-    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
-  ]);
-  assert.equal(results.every(Result.isSuccess), true);
-  const turn = await storedTurn(stream.turnId);
-  assert.deepEqual(
-    [turn?.origin, turn?.status],
-    [TURN_ORIGIN.CHILD_COMPLETION, TURN_STATUS.SETTLED],
-  );
-});
-
 test("a writer killed after the calls were told leaves a resumable journal: one call answered, one still pending, the row open", async () => {
   const target = await conversation();
   const stream = new Stream();
   const results = await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.words(randomUUID(), "Read both.", TYPED_ASK),
     stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
     stream.toolCall("call_2", "read_transcript", TRANSCRIPT_INPUT),
@@ -675,14 +565,14 @@ test("every event delivered twice, and the whole stream replayed, writes one row
     rows.map((row) => row.seq),
     [1, 2],
   );
-  assert.deepEqual(await counters(target), { message: 3, event: 1 });
+  assert.deepEqual(await counters(target), { message: 3 });
 });
 
 test("a refused call settles as an error part carrying the refusal's own reason and no output, in the shape the turn's projection keeps", async () => {
   const target = await conversation();
   const stream = new Stream();
   const results = await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.toolCall("call_r", "read_transcript", TRANSCRIPT_INPUT),
     stream.toolFailed(
       "call_r",
@@ -724,7 +614,7 @@ test("an action whose effect is unknown settles as an answer carrying its envelo
     reason: "The node closed before it answered.",
   };
   const results = await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.toolCall("call_u", "send_session_message", SEND_INPUT),
     stream.toolCall("call_f", "send_session_message", SEND_INPUT),
     stream.toolAnswered("call_u", "send_session_message", uncertain),
@@ -759,7 +649,7 @@ test("a turn that ends with a call unanswered settles the call as an answer whos
   const target = await conversation();
   const stream = new Stream();
   await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
     stream.ended(BRAIN_REQUEST_STATUS.CANCELLED),
   ]);
@@ -807,7 +697,7 @@ test("a turn that failed records its failure word and detail cut to the bound, a
   const failed = new Stream();
   const detail = "MODEL_CALL_FAILED: fixture refusal";
   await feed(target, [
-    failed.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
+    failed.started(BRAIN_TURN_ORIGIN.SPOKEN),
     failed.ended(BRAIN_REQUEST_STATUS.FAILED, {
       failure: MODEL_FAILURE,
       failureDetail: detail.padEnd(TURN_FAILURE_DETAIL.CHARS + 40, "."),
@@ -815,7 +705,7 @@ test("a turn that failed records its failure word and detail cut to the bound, a
   ]);
   const timedOut = new Stream();
   await feed(target, [
-    timedOut.started(BRAIN_TURN_ORIGIN.OBSERVATION, BRAIN_TURN_TRIGGER.ROSTER),
+    timedOut.started(BRAIN_TURN_ORIGIN.TYPED),
     timedOut.ended(BRAIN_REQUEST_STATUS.TIMED_OUT),
   ]);
   const failedTurn = await storedTurn(failed.turnId);
@@ -833,7 +723,7 @@ test("a turn that failed records its failure word and detail cut to the bound, a
       timedOutTurn?.failure,
       timedOutTurn?.failureDetail,
     ],
-    [TURN_ORIGIN.TRANSCRIPT_CHANGE, TURN_STATUS.FAILED, BRAIN_REQUEST_STATUS.TIMED_OUT, null],
+    [TURN_ORIGIN.TYPED, TURN_STATUS.FAILED, BRAIN_REQUEST_STATUS.TIMED_OUT, null],
   );
 });
 
@@ -866,10 +756,7 @@ test("a queued turn keeps the origin it was queued under through running to sett
   assert.equal((await storedTurn(stream.turnId))?.status, TURN_STATUS.QUEUED);
 
   const started = await database.run(
-    writer.consume(
-      target,
-      stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK, NOW + 500),
-    ),
+    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, NOW + 500)),
   );
   assert.deepEqual(started, Result.succeed(STORE_WRITE_EFFECT.WRITTEN));
   const running = await storedTurn(stream.turnId);
@@ -880,21 +767,17 @@ test("a queued turn keeps the origin it was queued under through running to sett
   await database.run(writer.consume(target, stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED)));
   assert.equal((await storedTurn(stream.turnId))?.status, TURN_STATUS.SETTLED);
 
-  const minted = await database.run(
-    writer.enqueueTurn(target, { origin: TURN_ORIGIN.TRANSCRIPT_CHANGE }),
-  );
+  const minted = await database.run(writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED }));
   assert.ok(Result.isSuccess(minted));
   if (!Result.isSuccess(minted)) return;
-  assert.equal((await storedTurn(minted.success.turnId))?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
+  assert.equal((await storedTurn(minted.success.turnId))?.origin, TURN_ORIGIN.TYPED);
   assert.equal((await storedTurn(minted.success.turnId))?.eveTurnId, null);
 });
 
 test("a sequence already taken under the counter is the retry signal: the write lands on the next free position and the counter is re-aligned", async () => {
   const target = await conversation();
   const stream = new Stream();
-  await database.run(
-    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
-  );
+  await database.run(writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED)));
   const before = await counters(target);
   assert.ok(before);
   await insertMessage(database.run, {
@@ -918,15 +801,13 @@ test("a sequence already taken under the counter is the retry signal: the write 
       [before.message + 1, askId],
     ],
   );
-  assert.deepEqual(await counters(target), { message: before.message + 2, event: 1 });
+  assert.deepEqual(await counters(target), { message: before.message + 2 });
 });
 
 test("a message the reader would refuse is refused at the write, with the reader's own word and path, and leaves no row", async () => {
   const target = await conversation();
   const stream = new Stream();
-  await database.run(
-    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
-  );
+  await database.run(writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED)));
 
   const unregistered = await database.run(
     writer.consume(target, stream.toolCall("call_x", "list_sessions", {})),
@@ -982,14 +863,14 @@ test("a write for a conversation, turn, or call that is not there is refused by 
   const elsewhere = { userId: target.userId, conversationId: randomUUID() };
   const stream = new Stream();
   const noConversation = await database.run(
-    writer.consume(elsewhere, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
+    writer.consume(elsewhere, stream.started(BRAIN_TURN_ORIGIN.TYPED)),
   );
   assert.deepEqual(noConversation, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
 
   const other = await conversation();
   const otherUser = { userId: other.userId, conversationId: target.conversationId };
   const wrongUser = await database.run(
-    writer.consume(otherUser, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
+    writer.consume(otherUser, stream.started(BRAIN_TURN_ORIGIN.TYPED)),
   );
   assert.deepEqual(wrongUser, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
 
@@ -1010,9 +891,7 @@ test("a write for a conversation, turn, or call that is not there is refused by 
   );
   assert.deepEqual(noTurnEnd, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_TURN }));
 
-  await database.run(
-    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
-  );
+  await database.run(writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED)));
   const noCall = await database.run(
     writer.consume(
       target,
@@ -1028,7 +907,7 @@ test("a cleared conversation is written by nothing, like one that never was", as
   await setConversationDeletedAt(database.run, target.conversationId, new Date(NOW));
   const stream = new Stream();
   const started = await database.run(
-    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
+    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED)),
   );
   assert.deepEqual(started, Result.fail({ refusal: STORE_WRITE_REFUSAL.NO_CONVERSATION }));
   const queued = await database.run(writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED }));
@@ -1039,7 +918,7 @@ test("a turn that ended without a journal opens none after the fact: a late part
   const target = await conversation();
   const stream = new Stream();
   await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.ended(BRAIN_REQUEST_STATUS.FAILED, { failure: MODEL_FAILURE }),
   ]);
   const late = await feed(target, [
@@ -1081,7 +960,7 @@ test("a step joins the journal as one boundary before its parts, a step told twi
   const target = await conversation();
   const stream = new Stream();
   await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.TYPED),
     stream.words("ask-1", "What is the fixture session doing?", TYPED_ASK),
   ]);
   const opened = effects(
@@ -1139,9 +1018,7 @@ test("a step joins the journal as one boundary before its parts, a step told twi
 test("a reasoning item naming no id is not journaled, since nothing could tell its repeat from a second item", async () => {
   const target = await conversation();
   const stream = new Stream();
-  await database.run(
-    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
-  );
+  await database.run(writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED)));
   const unnamed = await database.run(
     writer.consume(
       target,
@@ -1166,14 +1043,12 @@ test("a reasoning item naming no id is not journaled, since nothing could tell i
 test("the relay's own events and the stream's compaction event write nothing", async () => {
   const target = await conversation();
   const stream = new Stream();
-  await database.run(
-    writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK)),
-  );
+  await database.run(writer.consume(target, stream.started(BRAIN_TURN_ORIGIN.TYPED)));
   const results = await feed(target, [
     stream.event({
       kind: BRAIN_RUN_EVENT.SLOW_STEP,
       runId: stream.turnId,
-      step: SLOW_STEP_KIND.TRANSCRIPT_READ,
+      step: SLOW_STEP_KIND.REPOSITORY_READ,
     }),
     stream.event({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: stream.turnId }),
     stream.event({ kind: BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: stream.turnId, sentence: "Done." }),
@@ -1412,7 +1287,7 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
   // A turn that settled long before the words: an aside, standing where it was said under no turn.
   const stale = new Stream();
   await feed(target, [
-    stale.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK, NOW - 11 * 60_000),
+    stale.started(BRAIN_TURN_ORIGIN.SPOKEN, NOW - 11 * 60_000),
     stale.words(randomUUID(), "Anything new?", TYPED_ASK),
     stale.answered(randomUUID(), REPLY_PARTS),
     stale.ended(BRAIN_REQUEST_STATUS.SUCCEEDED, { at: NOW - 10 * 60_000 }),
@@ -1481,7 +1356,7 @@ test("the turn's answer closes the journal behind what landed while the turn ran
     ),
   );
   await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.SPOKEN),
     stream.words(askId, "What is the fixture session doing?", TYPED_ASK),
     stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
   ]);
@@ -1511,7 +1386,7 @@ test("the turn's answer closes the journal behind what landed while the turn ran
     [stream.turnId, 5, stream.turnId, true],
   ]);
   assert.deepEqual(rows[3]?.parts, REPLY_PARTS);
-  assert.deepEqual(await counters(target), { message: 6, event: 1 });
+  assert.deepEqual(await counters(target), { message: 6 });
 
   // The reading of the answer lands after it, read from the journal where it now stands.
   assert.ok(Result.isSuccess(await spoken("reading", 9_000)));
@@ -1534,7 +1409,7 @@ test("the turn's answer closes the journal behind what landed while the turn ran
     (await storedMessages(target)).map((row) => row.seq),
     [1, 3, 4, 5, 6],
   );
-  assert.deepEqual(await counters(target), { message: 7, event: 1 });
+  assert.deepEqual(await counters(target), { message: 7 });
 });
 
 test("Luke's words about an ask said before the ask learned its turn follow the ask's line into the turn at the received message, in the order said, and never stand as a group of their own", async () => {
@@ -1588,7 +1463,7 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
     ),
   );
   await feed(target, [
-    stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
+    stream.started(BRAIN_TURN_ORIGIN.SPOKEN),
     stream.words(askId, "What is the fixture session doing?", TYPED_ASK),
   ]);
   const attached = await database.run(writer.attachAskLines(target, stream.turnId));
@@ -1735,7 +1610,7 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
     }),
   );
   const stream = new Stream();
-  await feed(target, [stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK)]);
+  await feed(target, [stream.started(BRAIN_TURN_ORIGIN.SPOKEN)]);
   await database.run(
     asks.dispatchOnce(target, ask.id, () =>
       Effect.succeed({ sessionId: "wrun_4", turnId: stream.turnId }),

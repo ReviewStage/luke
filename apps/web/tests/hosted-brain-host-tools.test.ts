@@ -3,12 +3,7 @@ import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import {
-  ACTION_RESULT_STATUS,
-  BRAIN_TURN_TRIGGER,
-  isWireString,
-  type WireRecord,
-} from "../server/core";
+import { ACTION_RESULT_STATUS, isWireString, type WireRecord } from "../server/core";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
@@ -115,7 +110,6 @@ async function callerOn(
     target,
     turn: {
       kind: BRAIN_HOST_TURN.TYPED,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
       turnId: hostTurnId(id, "turn_0"),
     },
   };

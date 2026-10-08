@@ -1199,13 +1199,12 @@ whose rows a `Schema` decodes and whose path rule is that schema too, which
 answer as it came, and which a route handler composes into the one effect
 `runWeb` answers for the request.
 
-The database still carries tables and columns nothing reads or writes any
-more — `events`, `provider_cursors`, `provider_key`, `roster_snapshot`,
-`transcript_mark`, `observation_pass`, `workspace_file`,
-`workspace_embedding`, `devices`, `account_workspace_preference`, and
-`introduction_usage`, and the conversation row's observed-session and child
-columns — and their schema modules still declare them, so the drift check
-holds; they go with the migration that drops them.
+Migration `0057_drop_v1_tables` dropped what earlier builds kept beside
+these: the observation, device, vault, notebook, and introduction tables,
+the conversation row's observed-session, child, and memory-flush columns,
+and the event table; it deleted every conversation of a kind other than
+`plan` with its rows, and the retired `luke-mobile` OAuth client with its
+tokens and consents.
 
 The conversation tables are the shape the LUKE-95 storage plan settled on,
 less the `prompts` table it drew and less the `tool_sets` table
@@ -1232,7 +1231,7 @@ The store writer, `server/hosted/store/writer.ts`, is the one path by which a
 `messages` or `turns` row is written, and
 `tests/store-writer-boundary.test.ts` holds the server's own sources to that:
 the writer is the one server module with an insert, an update, or a delete over
-`messages`, `turns`, or `events`, whether as a Drizzle table imported from the schema or in the
+`messages` or `turns`, whether as a Drizzle table imported from the schema or in the
 text of a statement, and the modules that name one at all are the writer and
 the two readers, each listed there by name. It
 consumes the brain's run event stream (`BrainRunEvent`, every kind of turn)

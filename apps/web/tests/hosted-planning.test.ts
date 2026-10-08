@@ -31,7 +31,6 @@ import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
-  BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
 } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
@@ -257,10 +256,8 @@ const planningTurn = (
 ) =>
   Effect.gen(function* () {
     const standing = yield* admitted(host, session);
-    const turnKind = BRAIN_HOST_TURN_KIND[kind];
     const turn = {
       kind,
-      trigger: turnKind.trigger,
       turnId: hostTurnId(session.id, eveTurnId),
     };
     const sequence = 0;

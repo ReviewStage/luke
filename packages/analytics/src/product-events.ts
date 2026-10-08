@@ -1,13 +1,6 @@
 import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
 import { PROVIDER_ID, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
-import {
-  isRecord,
-  isWireNumber,
-  isWireString,
-  RATING_WORD,
-  type RatingWord,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
+import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Schema } from "effect";
 import { parseReleaseVersion } from "./release-version.js";
 
@@ -281,10 +274,23 @@ export type ProductSettingValue =
 export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_SETTING_VALUE));
 
 /**
+ * Every word a rating may say: a verdict, or its withdrawal. No build rates
+ * a message now; the words stay because the counts an older build sends
+ * still name them.
+ */
+export const RATING_WORD = {
+  UP: "up",
+  DOWN: "down",
+  WITHDRAWN: "withdrawn",
+} as const;
+
+type RatingWord = (typeof RATING_WORD)[keyof typeof RATING_WORD];
+
+/**
  * Which kind of Luke's messages a rating landed on, never the message: a
  * reply to the developer, or a briefing he announced on his own. The verdict
- * itself travels as `RATING_WORD`, the stored event's own three words, a
- * withdrawal counted the same way as the verdict it took back; the note a
+ * itself travels as `RATING_WORD`, a withdrawal counted the same way as the
+ * verdict it took back; the note a
  * developer may leave with a rating is their free text and travels in the
  * rating request alone, never here, and no message id travels either.
  */

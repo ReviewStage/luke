@@ -439,7 +439,7 @@ const ConversationLockSchema = Schema.Struct({
   conversationId: Schema.String,
 });
 
-/** The conversation row under its own lock, the lock the writer and Clear take, so one dispatch at a time runs in a conversation. */
+/** The conversation row under its own lock, the lock the writer takes, so one dispatch at a time runs in a conversation. */
 const lockConversation = SqlSchema.findOneOption({
   Request: ConversationLockSchema,
   Result: Schema.Struct({ id: Schema.String }),

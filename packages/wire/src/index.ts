@@ -7,12 +7,6 @@ export {
   type UnknownActionResult,
 } from "./action-result.js";
 export {
-  CONVERSATION_EVENT_KIND,
-  type ConversationEventKind,
-  RATING_WORD,
-  type RatingWord,
-} from "./conversation-event.js";
-export {
   HTTP_METHOD,
   HTTP_STATUS,
   type HttpMethod,
@@ -66,8 +60,6 @@ export {
   MESSAGE_ROLE,
   type MessageRole,
   MessageRoleSchema,
-  OBSERVATION_SOURCE,
-  type ObservationSource,
   type SpokenAskMetadata,
   type StoredMessageMetadata,
   USER_MESSAGE_METADATA,

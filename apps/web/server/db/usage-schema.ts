@@ -23,24 +23,6 @@ export const hostedUsage = pgTable(
 );
 
 /**
- * What the unauthenticated introduction mint spent on one UTC day. The
- * endpoint answers before any account exists, so the caller column is not a
- * user: it is the global sentinel row every request shares, the ceiling that
- * keeps a keyless endpoint from becoming a free relay. Nothing about a
- * request is kept.
- */
-export const introductionUsage = pgTable(
-  "introduction_usage",
-  {
-    caller: text("caller").notNull(),
-    /** The UTC day the counter covers, as YYYY-MM-DD. */
-    day: text("day").notNull(),
-    mints: integer("mints").default(0).notNull(),
-  },
-  (table) => [primaryKey({ columns: [table.caller, table.day] })],
-);
-
-/**
  * One closed GPT Live session's billed seconds, keyed by the session id OpenAI
  * minted, so the voice service's report is taken once however many times it
  * is sent: the row is the idempotency ledger, and a repeated report adds

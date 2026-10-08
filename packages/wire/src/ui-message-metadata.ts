@@ -31,12 +31,11 @@ export type MessageRole = (typeof MESSAGE_ROLE)[keyof typeof MESSAGE_ROLE];
 
 export const MessageRoleSchema = EffectSchema.Literals(Object.values(MESSAGE_ROLE));
 
-/** Who wrote a message: the developer, Luke's own judgment, the voice model, or a child run. */
+/** Who wrote a message: the developer, Luke's own judgment, or the voice model. */
 export const MESSAGE_AUTHOR = {
   DEVELOPER: "developer",
   BRAIN: "brain",
   VOICE_MODEL: "voice_model",
-  CHILD: "child",
 } as const;
 
 /** How a developer's ask arrived. */
@@ -44,33 +43,6 @@ export const MESSAGE_CHANNEL = {
   TYPED: "typed",
   VOICE: "voice",
 } as const;
-
-/**
- * What the brain wrote a user row down for itself about: the words a turn
- * opened with that no developer typed or spoke. The turn's origin names the
- * first three the way the turns table does; the rest are the notes the host
- * hands a turn beside its own words.
- */
-export const OBSERVATION_SOURCE = {
-  /**
-   * A wake opened the turn: an edge the host handed in for one session,
-   * outside the scheduled look. Spelled `hook` because the stored rows an
-   * earlier build wrote carry it, and this build reads those rows.
-   */
-  HOOK: "hook",
-  /** A chat whose transcript changed, handed to the observed conversation on the scheduled tick. */
-  TRANSCRIPT_CHANGE: "transcript_change",
-  /** A child's own turn: the task its requester delegated, as the child reads it. */
-  CHILD: "child",
-  /** A requester's turn opened by a child's completion, with the child's result as its words. */
-  CHILD_COMPLETION: "child_completion",
-  /** Notes the memory provider recalled for the turn. */
-  RECALLED_NOTES: "recalled_notes",
-} as const;
-
-export type ObservationSource = (typeof OBSERVATION_SOURCE)[keyof typeof OBSERVATION_SOURCE];
-
-const ObservationSourceSchema = EffectSchema.Literals(Object.values(OBSERVATION_SOURCE));
 
 /** A text trimmed of its ends, refused when nothing but whitespace remains, the way `s.text` reads one. */
 const trimmedText = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
@@ -88,11 +60,10 @@ const nonNegativeInteger = EffectSchema.Finite.check(
 const spanInstant = nonNegativeInteger;
 
 /**
- * A user row is one of three things, and the shape says which: the
- * developer's typed ask, a spoken ask cut from a voice session, or an
- * observation the brain wrote down for itself. Three structs rather than one
- * with every field optional, so an observation carrying a channel or a typed
- * ask carrying a voice session has no shape to arrive in.
+ * A user row is one of two things, and the shape says which: the
+ * developer's typed ask, or a spoken ask cut from a voice session. Two
+ * structs rather than one with every field optional, so a typed ask carrying
+ * a voice session has no shape to arrive in.
  */
 const TYPED_ASK_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
@@ -126,21 +97,12 @@ function coherentSpan(metadata: SpokenAskMetadata): boolean {
 
 const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(coherentSpan));
 
-/** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
-const OBSERVATION_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.BRAIN),
-  source: ObservationSourceSchema,
-});
-
-type ObservationMetadata = EffectSchema.Schema.Type<typeof OBSERVATION_METADATA>;
-
-export type UserMessageMetadata = TypedAskMetadata | SpokenAskMetadata | ObservationMetadata;
+export type UserMessageMetadata = TypedAskMetadata | SpokenAskMetadata;
 
 /** What a user row says about itself. */
 export const USER_MESSAGE_METADATA = EffectSchema.Union([
   TYPED_ASK_METADATA,
   SPOKEN_ASK_METADATA,
-  OBSERVATION_METADATA,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
@@ -168,11 +130,7 @@ export type CompactionMetadata = EffectSchema.Schema.Type<typeof COMPACTION_META
  * any of those, and its span runs forward or comes together.
  */
 const ASSISTANT_MESSAGE_STRUCT = EffectSchema.Struct({
-  author: EffectSchema.Literals([
-    MESSAGE_AUTHOR.BRAIN,
-    MESSAGE_AUTHOR.VOICE_MODEL,
-    MESSAGE_AUTHOR.CHILD,
-  ]),
+  author: EffectSchema.Literals([MESSAGE_AUTHOR.BRAIN, MESSAGE_AUTHOR.VOICE_MODEL]),
   compaction: EffectSchema.optional(COMPACTION_METADATA),
   channel: EffectSchema.optional(EffectSchema.Literal(MESSAGE_CHANNEL.VOICE)),
   voice_session_id: EffectSchema.optional(identifier),

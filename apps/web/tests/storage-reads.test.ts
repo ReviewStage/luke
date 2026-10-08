@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import {
-  CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -15,25 +14,18 @@ import { afterAll, test } from "vitest";
 import { z } from "zod";
 import { db } from "../server/db/query";
 import { messages as messagesTable, turns } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { listRecentMessages, type StoredMessageRecord } from "../server/hosted/store";
 import type { MessageListRead } from "../server/hosted/store/message-reads";
 import { CLEARED_CONVERSATION_RETENTION_MS } from "../server/hosted/store/soft-delete";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
-  assertRefusedWithCode,
-  type ConversationRow,
   deleteUser,
   insertConversation as insertConversationRow,
-  insertEvent as insertEventRow,
   insertMessage as insertMessageRow,
   insertTurn as insertTurnRow,
   type MessageRow as MessageInsertRow,
-  POSTGRES_ERROR,
   readConversationById,
-  readEventsByConversation,
   readMessagesByConversation,
-  readStandingConversations,
   readTurnsByConversation,
   setConversationDeletedAt,
   type TurnInsertRow,
@@ -94,18 +86,8 @@ const TOOLS: ToolSet = {
 
 const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED } as const;
 
-interface ConversationOverrides {
-  readonly kind?: NonNullable<ConversationRow["kind"]>;
-  readonly providerId?: string | null;
-  readonly providerSessionId?: string | null;
-  readonly parentConversationId?: string | null;
-}
-
-async function insertConversation(
-  userId: string,
-  row: ConversationOverrides = {},
-): Promise<string> {
-  return insertConversationRow(database.run, { userId, ...row });
+async function insertConversation(userId: string): Promise<string> {
+  return insertConversationRow(database.run, { userId });
 }
 
 interface TurnOverrides {
@@ -147,21 +129,6 @@ async function insertMessage(
   });
 }
 
-async function insertEvent(
-  userId: string,
-  conversationId: string,
-  messageId: string,
-  seq: number,
-): Promise<string> {
-  return insertEventRow(database.run, {
-    userId,
-    conversationId,
-    messageId,
-    seq,
-    kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-  });
-}
-
 async function countConversations(id: string): Promise<number> {
   return (await readConversationById(database.run, id)).length;
 }
@@ -171,19 +138,17 @@ function readRecords(read: MessageListRead): readonly StoredMessageRecord[] {
   return read.ok ? read.value : [];
 }
 
-/** A main conversation with three messages, an event on each, and the turn that wrote them. */
-async function populateMain(
+/** A plan's conversation with three messages and the turn that wrote them. */
+async function populatePlan(
   userId: string,
-): Promise<{ main: string; turn: string; ids: string[] }> {
-  const main = await insertConversation(userId);
-  const turn = await insertTurn(userId, main);
+): Promise<{ plan: string; turn: string; ids: string[] }> {
+  const plan = await insertConversation(userId);
+  const turn = await insertTurn(userId, plan);
   const ids: string[] = [];
   for (const seq of [1, 2, 3]) {
-    const id = await insertMessage(userId, main, seq, { turnId: turn });
-    await insertEvent(userId, main, id, seq);
-    ids.push(id);
+    ids.push(await insertMessage(userId, plan, seq, { turnId: turn }));
   }
-  return { main, turn, ids };
+  return { plan, turn, ids };
 }
 
 /** Every read this module answers, of one account's rows in one conversation, each as the ids it answered. */
@@ -201,8 +166,8 @@ async function everyRead(userId: string, conversationId: string, rows: { readonl
 
 test("a message its client id names reads back typed by role, with the row's columns beside it, and a client id naming nothing answers an empty page", async () => {
   const userId = await database.createUser();
-  const { main, turn, ids } = await populateMain(userId);
-  const system = await insertMessage(userId, main, 4, {
+  const { plan, turn, ids } = await populatePlan(userId);
+  const system = await insertMessage(userId, plan, 4, {
     role: MESSAGE_ROLE.SYSTEM,
     metadata: null,
     parts: [{ type: "text", text: "standing instructions" }],
@@ -210,7 +175,7 @@ test("a message its client id names reads back typed by role, with the row's col
   });
   const byClientId = async (clientId: string) =>
     readRecords(
-      await database.run(database.store.messages.byClientId(userId, main, TOOLS, clientId)),
+      await database.run(database.store.messages.byClientId(userId, plan, TOOLS, clientId)),
     );
 
   const [ask] = await byClientId("client-2");
@@ -231,16 +196,16 @@ test("a message its client id names reads back typed by role, with the row's col
 
 test("the recent read answers the newest finished messages of the two speaking roles, oldest first and bounded", async () => {
   const userId = await database.createUser();
-  const main = await insertConversation(userId);
+  const plan = await insertConversation(userId);
   const said = async (seq: number, role: MessageInsertRow["role"], finished: boolean) =>
-    insertMessage(userId, main, seq, {
+    insertMessage(userId, plan, seq, {
       role,
       metadata: role === MESSAGE_ROLE.ASSISTANT ? { author: MESSAGE_AUTHOR.BRAIN } : TYPED_ASK,
       finishedAt: finished ? NOW : null,
     });
   await said(1, MESSAGE_ROLE.USER, true);
   const second = await said(2, MESSAGE_ROLE.ASSISTANT, true);
-  await insertMessage(userId, main, 3, {
+  await insertMessage(userId, plan, 3, {
     role: MESSAGE_ROLE.SYSTEM,
     metadata: null,
     finishedAt: NOW,
@@ -249,7 +214,7 @@ test("the recent read answers the newest finished messages of the two speaking r
   await said(5, MESSAGE_ROLE.ASSISTANT, false);
 
   assert.deepEqual(
-    readRecords(await database.run(listRecentMessages(userId, main, TOOLS, 2))).map(
+    readRecords(await database.run(listRecentMessages(userId, plan, TOOLS, 2))).map(
       (record) => record.id,
     ),
     [second, fourth],
@@ -258,15 +223,15 @@ test("the recent read answers the newest finished messages of the two speaking r
 
 test("turns the ids name read back in the order they last changed, and no turn left unnamed", async () => {
   const userId = await database.createUser();
-  const { main, turn } = await populateMain(userId);
+  const { plan, turn } = await populatePlan(userId);
 
   // A queued row is the opener's inbox and not the record, so the read's order is exercised over started rows.
-  const laterTurn = await insertTurn(userId, main, {
+  const laterTurn = await insertTurn(userId, plan, {
     status: TURN_STATUS.RUNNING,
     queuedAt: new Date(NOW.getTime() + 1000),
     startedAt: new Date(NOW.getTime() + 1000),
   });
-  const unnamed = await insertTurn(userId, main);
+  const unnamed = await insertTurn(userId, plan);
   const named = () => database.run(database.store.turns.named(userId, [laterTurn, turn]));
   assert.deepEqual(
     (await named()).map((row) => row.id),
@@ -296,9 +261,9 @@ test("turns the ids name read back in the order they last changed, and no turn l
 
 test("turns that changed within one millisecond read back in the order they changed, to the microsecond", async () => {
   const userId = await database.createUser();
-  const main = await insertConversation(userId);
-  const [earlier] = await database.run(insertPreciseTurn(userId, main, EARLIER_MICROSECONDS));
-  const [later] = await database.run(insertPreciseTurn(userId, main, LATER_MICROSECONDS));
+  const plan = await insertConversation(userId);
+  const [earlier] = await database.run(insertPreciseTurn(userId, plan, EARLIER_MICROSECONDS));
+  const [later] = await database.run(insertPreciseTurn(userId, plan, LATER_MICROSECONDS));
   assert.ok(earlier && later);
   const named = async () =>
     (await database.run(database.store.turns.named(userId, [later.id, earlier.id]))).map(
@@ -321,10 +286,10 @@ test("turns that changed within one millisecond read back in the order they chan
 test("one account's rows are never read under another's id", async () => {
   const userId = await database.createUser();
   const other = await database.createUser();
-  const rows = await populateMain(userId);
-  await populateMain(other);
+  const rows = await populatePlan(userId);
+  await populatePlan(other);
 
-  assert.deepEqual(await everyRead(other, rows.main, rows), {
+  assert.deepEqual(await everyRead(other, rows.plan, rows), {
     byClientId: [],
     recent: [],
     turns: [],
@@ -333,60 +298,43 @@ test("one account's rows are never read under another's id", async () => {
 
 test("a conversation stamped deleted disappears from every read on the next call, and another standing beside it does not", async () => {
   const userId = await database.createUser();
-  const rows = await populateMain(userId);
+  const rows = await populatePlan(userId);
   await database.run(
     Effect.asVoid(
       db
         .update(messagesTable)
         .set({ finishedAt: NOW })
-        .where(eq(messagesTable.conversationId, rows.main)),
+        .where(eq(messagesTable.conversationId, rows.plan)),
     ),
   );
-  const observed = await insertConversation(userId, {
-    kind: CONVERSATION_KIND.OBSERVED,
-    providerId: "conductor",
-    providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
-  });
-  const observedTurn = await insertTurn(userId, observed);
-  const observedRow = await insertMessage(userId, observed, 1, {
-    turnId: observedTurn,
+  const neighbour = await insertConversation(userId);
+  const neighbourTurn = await insertTurn(userId, neighbour);
+  const neighbourRow = await insertMessage(userId, neighbour, 1, {
+    turnId: neighbourTurn,
     finishedAt: NOW,
   });
 
-  assert.deepEqual(await everyRead(userId, rows.main, rows), {
+  assert.deepEqual(await everyRead(userId, rows.plan, rows), {
     byClientId: [rows.ids[0]],
     recent: rows.ids,
     turns: [rows.turn],
   });
 
-  await setConversationDeletedAt(database.run, rows.main, NOW);
-  assert.deepEqual(await everyRead(userId, rows.main, rows), {
+  await setConversationDeletedAt(database.run, rows.plan, NOW);
+  assert.deepEqual(await everyRead(userId, rows.plan, rows), {
     byClientId: [],
     recent: [],
     turns: [],
   });
-  assert.deepEqual(await everyRead(userId, observed, { turn: observedTurn }), {
-    byClientId: [observedRow],
-    recent: [observedRow],
-    turns: [observedTurn],
+  assert.deepEqual(await everyRead(userId, neighbour, { turn: neighbourTurn }), {
+    byClientId: [neighbourRow],
+    recent: [neighbourRow],
+    turns: [neighbourTurn],
   });
 
   // The stamp hides the rows and erases none of them.
-  assert.equal(await countConversations(rows.main), 1);
-  assert.equal((await readMessagesByConversation(database.run, rows.main)).length, 3);
-});
-
-test("one main stands per account: a second standing main is refused, and a stamped one leaves room for another", async () => {
-  const userId = await database.createUser();
-  const { main } = await populateMain(userId);
-  await assertRefusedWithCode(insertConversation(userId), POSTGRES_ERROR.UNIQUE_VIOLATION);
-  await setConversationDeletedAt(database.run, main, NOW);
-  const next = await insertConversation(userId);
-  const standing = await readStandingConversations(database.run, userId, CONVERSATION_KIND.MAIN);
-  assert.deepEqual(
-    standing.map((row) => row.id),
-    [next],
-  );
+  assert.equal(await countConversations(rows.plan), 1);
+  assert.equal((await readMessagesByConversation(database.run, rows.plan)).length, 3);
 });
 
 test("the purge takes a stamped conversation and everything under it once the window has passed, and nothing sooner", async () => {
@@ -394,29 +342,25 @@ test("the purge takes a stamped conversation and everything under it once the wi
   const base = new Date("2020-01-01T00:00:00.000Z");
   const userId = await database.createUser();
   const other = await database.createUser();
-  const { main } = await populateMain(userId);
-  const child = await insertConversation(userId, {
-    kind: CONVERSATION_KIND.CHILD,
-    parentConversationId: main,
-  });
-  await setConversationDeletedAt(database.run, main, base);
-  await setConversationDeletedAt(database.run, child, base);
-  const kept = await insertConversation(userId, { kind: CONVERSATION_KIND.OBSERVED });
-  const { main: recent } = await populateMain(other);
+  const { plan } = await populatePlan(userId);
+  const alongside = await insertConversation(userId);
+  await setConversationDeletedAt(database.run, plan, base);
+  await setConversationDeletedAt(database.run, alongside, base);
+  const kept = await insertConversation(userId);
+  const { plan: recent } = await populatePlan(other);
   await setConversationDeletedAt(database.run, recent, new Date(base.getTime() + DAY_MS));
-  const standing = await insertConversation(other, { kind: CONVERSATION_KIND.OBSERVED });
+  const standing = await insertConversation(other);
 
   const beforeWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS - 1);
   assert.equal(await database.run(database.store.retention.purgeCleared(beforeWindow)), 0);
-  assert.equal(await countConversations(main), 1);
+  assert.equal(await countConversations(plan), 1);
 
   const atWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS);
   assert.equal(await database.run(database.store.retention.purgeCleared(atWindow)), 2);
-  assert.equal(await countConversations(main), 0);
-  assert.equal(await countConversations(child), 0);
-  assert.equal((await readMessagesByConversation(database.run, main)).length, 0);
-  assert.equal((await readTurnsByConversation(database.run, main)).length, 0);
-  assert.equal((await readEventsByConversation(database.run, main)).length, 0);
+  assert.equal(await countConversations(plan), 0);
+  assert.equal(await countConversations(alongside), 0);
+  assert.equal((await readMessagesByConversation(database.run, plan)).length, 0);
+  assert.equal((await readTurnsByConversation(database.run, plan)).length, 0);
   assert.equal(await countConversations(kept), 1);
   assert.equal(await countConversations(recent), 1);
   assert.equal(await countConversations(standing), 1);
@@ -433,17 +377,17 @@ test("the purge takes a stamped conversation and everything under it once the wi
 
 test("deleting the account takes stamped and standing conversations alike", async () => {
   const userId = await database.createUser();
-  const { main } = await populateMain(userId);
-  await setConversationDeletedAt(database.run, main, NOW);
+  const { plan } = await populatePlan(userId);
+  await setConversationDeletedAt(database.run, plan, NOW);
   const standing = await insertConversation(userId);
   await deleteUser(database.run, userId);
-  assert.equal(await countConversations(main), 0);
+  assert.equal(await countConversations(plan), 0);
   assert.equal(await countConversations(standing), 0);
 });
 
 test("a row naming a tool the catalog has retired reads back without that part, and the page goes on past it", async () => {
   const userId = await database.createUser();
-  const { main } = await populateMain(userId);
+  const { plan } = await populatePlan(userId);
   const retired = {
     type: "tool-nobody_registered",
     toolCallId: "call_4a0000000000000001",
@@ -452,16 +396,16 @@ test("a row naming a tool the catalog has retired reads back without that part, 
     output: {},
   };
   const said = { type: "text", text: "It is done.", state: "done" };
-  const answer = await insertMessage(userId, main, 4, {
+  const answer = await insertMessage(userId, plan, 4, {
     role: MESSAGE_ROLE.ASSISTANT,
     metadata: { author: MESSAGE_AUTHOR.BRAIN },
     parts: [{ type: "step-start" }, retired, said],
     finishedAt: NOW,
   });
-  const after = await insertMessage(userId, main, 5, { finishedAt: NOW });
+  const after = await insertMessage(userId, plan, 5, { finishedAt: NOW });
 
   // The recent read takes the finished rows alone, which here are the answer and the ask after it.
-  const records = readRecords(await database.run(listRecentMessages(userId, main, TOOLS, 10)));
+  const records = readRecords(await database.run(listRecentMessages(userId, plan, TOOLS, 10)));
   assert.deepEqual(
     records.map((record) => record.id),
     [answer, after],
@@ -471,10 +415,10 @@ test("a row naming a tool the catalog has retired reads back without that part, 
 
 test("a row whose parts are not a message's refuses the page as malformed", async () => {
   const userId = await database.createUser();
-  const { main } = await populateMain(userId);
+  const { plan } = await populatePlan(userId);
   await insertMessageRow(database.run, {
     userId,
-    conversationId: main,
+    conversationId: plan,
     seq: 4,
     clientId: "client-4",
     role: MESSAGE_ROLE.USER,
@@ -483,7 +427,7 @@ test("a row whose parts are not a message's refuses the page as malformed", asyn
     metadata: TYPED_ASK,
   });
   const read = await database.run(
-    database.store.messages.byClientId(userId, main, TOOLS, "client-4"),
+    database.store.messages.byClientId(userId, plan, TOOLS, "client-4"),
   );
   assert.equal(read.ok, false);
   if (read.ok) return;

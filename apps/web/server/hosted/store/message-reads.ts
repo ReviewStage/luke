@@ -155,8 +155,8 @@ function pageLimit(cursor: { readonly limit?: number }): number {
 
 /**
  * The join every read here makes to its conversation row, one per table
- * reached: the conversation the row belongs to, stamped by no Clear, so a
- * cleared conversation is read by nothing. It is spelled once per table
+ * reached: the conversation the row belongs to, stamped deleted by nothing,
+ * so a deleted plan's conversation is read by nothing. It is spelled once per table
  * rather than once over a column handed in, because the column the join
  * holds to is what makes each one the join it is.
  */
@@ -361,7 +361,7 @@ const TurnRowSchema = Schema.Struct({
   conversationId: Schema.String,
   origin: TurnOriginSchema,
   status: TurnStatusSchema,
-  /** eve's own id for the turn, `turn_<n>` within its session, where the relay queued the row at eve's start; the opener's inbox row and a row from before the column names none. */
+  /** eve's own id for the turn, `turn_<n>` within its session, where the relay queued the row at eve's start; a row from before the column names none. */
   eveTurnId: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   reasoningEffort: Schema.NullOr(Schema.String),

@@ -515,7 +515,7 @@ export class StreamRelay {
       standing.state.update((state) => ({
         turns: { ...state.turns, [eveTurnId]: { kind, sequence: 0, steps: {}, usageBySteps: {} } },
       }));
-      const { origin, trigger } = BRAIN_HOST_TURN_KIND[kind];
+      const { origin } = BRAIN_HOST_TURN_KIND[kind];
       // The turn row is queued ahead of its start with what it will run under,
       // which is how the row comes to name eve's resolved model; the start
       // then only moves it to running. eve's own turn id rides on the row from
@@ -556,7 +556,6 @@ export class StreamRelay {
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.TURN_STARTED,
         origin,
-        trigger,
         at: this.#seams.now(),
       });
       if (!written) standing.state.update((state) => this.#without(state, eveTurnId));
@@ -580,7 +579,7 @@ export class StreamRelay {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
-      const { trigger, receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
+      const { receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
       if (receivedLine === RECEIVED_LINE.TRANSCRIPT) {
         // The developer's line is the transcript's, under the ask's own id; a row
         // written before the ask learned this turn is taken into it here, moved to
@@ -603,7 +602,6 @@ export class StreamRelay {
           receivedMessageId(standing.sessionId, eveTurnId),
           text,
           userMetadataOf(
-            trigger,
             turn.kind === BRAIN_HOST_TURN.SPOKEN ? BRAIN_REQUEST_ORIGIN.SPOKEN : undefined,
           ),
         ),

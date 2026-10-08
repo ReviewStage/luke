@@ -269,7 +269,7 @@ async function conversation(
         .insert(conversations)
         .values({
           userId,
-          kind: CONVERSATION_KIND.MAIN,
+          kind: CONVERSATION_KIND.PLAN,
           runtimeSessionId: overrides.runtimeSessionId ?? null,
           deletedAt: overrides.deletedAt ?? null,
         })

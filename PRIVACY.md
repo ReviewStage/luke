@@ -162,21 +162,18 @@ evidence runs send no crash reports.
 
 **What earlier versions left on our service.** Earlier versions of Luke
 followed your coding agent sessions, kept a notebook, and pushed briefings to
-a phone; this version does none of that, and our service no longer reads,
-decrypts, or uses anything those versions stored. What they left stays in our
-database, unread, until we remove it: a Conductor key an earlier version
-synced, encrypted with AES-256-GCM under a server-only secret; the latest
-roster of your Conductor sessions it observed, encrypted the same way; Luke's
-workspace files — his operating instructions, the things he remembered about
-you in `USER.md`, his curated and dated notes — and a cache of numeric
-embeddings of their passages; the device rows an earlier Mac app, iOS app, or
-Apple Watch app registered, each with its platform, when it was last seen, an
-optional push token, and the presence and quiet instants it reported; and the
-conversations Luke kept for the sessions he followed and for the helpers he
-delegated to. Every one of them is deleted alongside your account if you
-delete that. A key or a calendar grant an earlier version kept encrypted on
-this Mac is removed from it the next time Luke opens, without being read or
-sent, and so is a key of your own an earlier version stored for voice.
+a phone; this version does none of that, and we have deleted what those
+versions stored on our service: a Conductor key an earlier version synced; the
+latest roster of your Conductor sessions it observed; Luke's workspace files,
+including what he remembered about you in `USER.md`, and the embeddings of
+their passages; the device rows an earlier Mac app, iOS app, or Apple Watch
+app registered, with their push tokens; your workspace defaults; the sign-in
+records of the iOS and Apple Watch apps; and every conversation Luke kept
+other than a plan's, with its turns and its delivery and rating records. Only
+your plans' conversations remain. A key or a calendar grant an earlier
+version kept encrypted on this Mac is removed from it the next time Luke
+opens, without being read or sent, and so is a key of your own an earlier
+version stored for voice.
 
 **Feedback.** If you use the feedback form, we receive what you typed, the name
 and email you signed it with, and any screenshots you attached; they reach us
@@ -253,8 +250,7 @@ Your settings and your account's sign-in tokens stay on your Mac, the tokens
 encrypted under a key held in the macOS Keychain. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac. When Luke runs a turn for you on our service, the conversation it
-writes is stored unsealed in our own database, as described above, beside
-what earlier versions left there.
+writes is stored unsealed in our own database, as described above.
 Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
@@ -262,8 +258,7 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 - Sign out of your Luke account to turn voice off.
 - Delete any workspace file an earlier version of Luke left on your Mac;
-  nothing reads it now. What earlier versions left on our service goes with
-  your account.
+  nothing reads it now.
 - What you say to Luke on a call goes to that plan's conversation, fixed
   when the call opens and never moved afterwards.
 - Luke does not listen through your microphone except while you hold the
@@ -274,9 +269,8 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   presses alone, so one press opens the microphone and the next closes it,
   and the Keyboard shortcuts page says so.
 - Delete your account from the Account section in Settings. This erases your
-  account, your sign-in records, your usage counts, your plans, the
-  conversation our service kept, and everything earlier versions left there
-  (described under "What earlier versions left on our service"), and asks PostHog to erase your usage data
+  account, your sign-in records, your usage counts, your plans, and the
+  conversation our service kept, and asks PostHog to erase your usage data
   and recordings. It does not reach a recording that was never attached to your
   account, as described above. Luke stops recording for the rest of the
   session, and starts again the next time you open it or sign in. Sentry

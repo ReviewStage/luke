@@ -76,7 +76,7 @@ const openConversation = (userId: string) =>
   Effect.map(
     db
       .insert(conversations)
-      .values({ userId, kind: CONVERSATION_KIND.MAIN })
+      .values({ userId, kind: CONVERSATION_KIND.PLAN })
       .returning({ id: conversations.id }),
     (rows) => rows[0]?.id ?? assert.fail("the conversation insert returned no row"),
   );

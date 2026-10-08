@@ -1,8 +1,6 @@
 import type { BrainRunUsage } from "@sidecar/brain";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
-  CONVERSATION_EVENT_KIND,
-  type ConversationEventKind,
   type MessageRole,
   type StoredMessageMetadata,
   TURN_STATUS,
@@ -13,12 +11,10 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
-  boolean,
   index,
   integer,
   jsonb,
   pgTable,
-  primaryKey,
   text,
   unique,
   uniqueIndex,
@@ -26,43 +22,26 @@ import {
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
-import { CONVERSATION_KIND } from "./storage-vocabulary.js";
+import type { CONVERSATION_KIND } from "./storage-vocabulary.js";
 
 /**
  * The conversation storage the LUKE-95 rework settles on: one row per
  * message in the AI SDK's `UIMessage` shape, its parts and metadata as plain
  * `jsonb`, beside the conversation it belongs to and the turn that wrote it.
- * Nothing here is sealed: the payload envelope survives for the roster
- * tables and the vault's own cipher for the provider keys, and the content
- * stored here is readable by an operator.
+ * Nothing here is sealed: the content stored here is readable by an operator.
  *
  * The hosted brain writes here through the store writer and the read routes
  * answer from these rows. Every row is keyed by the user it belongs to and
- * cascades with the user row, so deleting an account is still one statement,
- * and a conversation's children cascade with their parent. Clear is a soft
- * delete here, `deleted_at` stamped on the row, so a cleared conversation's
- * rows stand until the purge.
+ * cascades with the user row, so deleting an account is still one statement.
+ * Deleting a plan is a soft delete of its conversation, `deleted_at` stamped
+ * on the row, so its rows stand until the purge.
  *
- * The two sequence counters on a conversation row are what number its
- * messages and its events; they are allocated under the conversation's own
- * row lock, counted up, and never reused. Instants are `timestamp with time
- * zone`, because these rows are written and read by the service alone and a
- * Postgres instant needs no second clock beside it.
+ * The sequence counter on a conversation row is what numbers its messages;
+ * it is allocated under the conversation's own row lock, counted up, and
+ * never reused. Instants are `timestamp with time zone`, because these rows
+ * are written and read by the service alone and a Postgres instant needs no
+ * second clock beside it.
  */
-
-/**
- * How a conversation's last memory flush ended, as the housekeeping vocabulary
- * that wrote the column named it; nothing writes the column now.
- */
-const MEMORY_FLUSH_OUTCOME = {
-  COMPLETED: "completed",
-  NOTHING_TO_STORE: "nothing-to-store",
-  SKIPPED: "skipped",
-  INTERRUPTED: "interrupted",
-  FAILED: "failed",
-} as const;
-
-type MemoryFlushOutcome = (typeof MEMORY_FLUSH_OUTCOME)[keyof typeof MEMORY_FLUSH_OUTCOME];
 
 type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 
@@ -74,78 +53,22 @@ export const conversations = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     kind: text("kind").$type<ConversationKind>().notNull(),
-    /** The observed session's provider and its id there; set on an observed conversation and on no other kind. */
-    providerId: text("provider_id"),
-    providerSessionId: text("provider_session_id"),
-    /**
-     * What the roster last called the observed session, and the name of the
-     * workspace holding it: written on the open and refreshed on a wake where
-     * either moved, so the Agents page can name a session Conductor no longer
-     * lists. Null on every other kind, on a row opened before migration 0043
-     * kept them, and where the roster reports no name.
-     */
-    title: text("title"),
-    workspace: text("workspace"),
-    /** The conversation a child was delegated from; a child goes with its parent. */
-    parentConversationId: uuid("parent_conversation_id").references(
-      (): AnyPgColumn => conversations.id,
-      { onDelete: "cascade" },
-    ),
-    /** The parent's message whose spawn call opened the child. */
-    spawnedByMessageId: uuid("spawned_by_message_id").references((): AnyPgColumn => messages.id, {
-      onDelete: "cascade",
-    }),
     /** The runtime's own session id for this conversation: ours now, eve's later. */
     runtimeSessionId: text("runtime_session_id"),
     createdAt: instant("created_at").notNull().defaultNow(),
     lastActivityAt: instant("last_activity_at").notNull().defaultNow(),
-    /** Stamped by Clear; a row so stamped is purged later and read by nothing meanwhile. */
+    /** Stamped when its plan is deleted; a row so stamped is purged later and read by nothing meanwhile. */
     deletedAt: instant("deleted_at"),
     /** The next message sequence to hand out; counted up under the conversation's row lock and never reused. */
     nextMessageSeq: bigint("next_message_seq", { mode: "number" }).notNull().default(1),
-    nextEventSeq: bigint("next_event_seq", { mode: "number" }).notNull().default(1),
     /** Counted up whenever a message of the conversation is amended, so a reader can tell a journal it has from one it has not. */
     journalRevision: bigint("journal_revision", { mode: "number" }).notNull().default(0),
-    /** The compaction cycle that claimed the last memory flush; the claim a write of the outcome must still name. */
-    memoryFlushOperationId: text("memory_flush_operation_id"),
-    /** How that flush ended; null while the claimed cycle is still running. */
-    memoryFlushOutcome: text("memory_flush_outcome").$type<MemoryFlushOutcome>(),
-    memoryFlushedAt: instant("memory_flushed_at"),
-    /** A child's own short name, as the spawn call gave it; null on every other kind. */
-    label: text("label"),
-    /** Stamped once a settled child's completion has reached its parent, which is what the sweep reads to leave it alone. */
-    completionDeliveredAt: instant("completion_delivered_at"),
-    /** Whether a settled child owes its parent a completion at all; true on every row the sweep may consider. */
-    expectsCompletion: boolean("expects_completion").notNull().default(true),
   },
   (table) => [
-    // One standing observed conversation per session per account: a stamped row is a session the
-    // pass retired once the roster stopped listing it, and a returning session opens a fresh row
-    // beside it, so the index covers the standing rows alone.
-    uniqueIndex("conversations_observed_session")
-      .on(table.userId, table.providerId, table.providerSessionId)
-      .where(sql`${table.deletedAt} is null`),
-    // One main stands per account at a time: Clear stamps the old one and opens the next in one
-    // transaction, and a first-use creation lands one; this index is what refuses a second standing
-    // main whatever path raced to it, so reads never silently pick one of two. The predicate is
-    // DDL, which takes no bound parameter, so the kind is inlined rather than passed.
-    uniqueIndex("conversations_standing_main")
-      .on(table.userId)
-      .where(
-        sql`${table.kind} = ${sql.raw(`'${CONVERSATION_KIND.MAIN}'`)} and ${table.deletedAt} is null`,
-      ),
     // The purge runs every minute over the stamped rows alone.
     index("conversations_deleted_at")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} is not null`),
-    // The children and agents reads pick one account's rows of one kind.
-    index("conversations_user_kind").on(table.userId, table.kind),
-    // The completion sweep reads one account's settled children that still owe their parent a word.
-    index("conversations_undelivered_children")
-      .on(table.userId)
-      .where(
-        sql`${table.kind} = ${sql.raw(`'${CONVERSATION_KIND.CHILD}'`)} and ${table.completionDeliveredAt} is null and ${table.deletedAt} is null`,
-      ),
   ],
 );
 
@@ -313,67 +236,4 @@ export const asks = pgTable(
       .on(table.userId, table.voiceSessionId)
       .where(sql`${table.voiceSessionId} is not null`),
   ],
-);
-
-/**
- * What happened to a message after it was written, one row per happening,
- * numbered by the conversation's own event sequence under the same unique
- * pair as messages, so every device converges on the same events in the same
- * order. A briefing's delivery is this table alone: `announce` writes
- * `speech.offered`, a device that means to say it writes `speech.claimed`,
- * and the partial unique index over the claim is the whole of the reply-grant
- * ledger's guarantee of at most one authorization to speak per briefing. Two
- * devices claiming at once both insert, and exactly one insert lands; there
- * is no state column to race on and no briefing row to fall back to. The
- * device is a plain column, because a device row goes at sign-out and the
- * event stays what happened. An event goes with its message.
- */
-export const events = pgTable(
-  "events",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    conversationId: uuid("conversation_id")
-      .notNull()
-      .references(() => conversations.id, { onDelete: "cascade" }),
-    seq: bigint("seq", { mode: "number" }).notNull(),
-    messageId: uuid("message_id")
-      .notNull()
-      .references(() => messages.id, { onDelete: "cascade" }),
-    kind: text("kind").$type<ConversationEventKind>().notNull(),
-    /** The device that claimed, spoke, or rated; null for a kind no device took part in. */
-    deviceId: text("device_id"),
-    payload: jsonb("payload"),
-    createdAt: instant("created_at").notNull().defaultNow(),
-  },
-  (table) => [
-    unique("events_conversation_seq").on(table.conversationId, table.seq),
-    // The predicate is DDL, which takes no bound parameter, so the kind is inlined rather than passed.
-    uniqueIndex("events_speech_claimed_message")
-      .on(table.messageId)
-      .where(sql`${table.kind} = ${sql.raw(`'${CONVERSATION_EVENT_KIND.SPEECH_CLAIMED}'`)}`),
-  ],
-);
-
-/**
- * Where an observation of a provider session last reached: the cursor the
- * provider's own read handed back, advanced in the same transaction as the
- * observation message it produced. One row per observed session per account,
- * so the three together are the key. No message references this row: the
- * cursor is the observer's bookmark, not part of what was observed.
- */
-export const providerCursors = pgTable(
-  "provider_cursors",
-  {
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    providerId: text("provider_id").notNull(),
-    providerSessionId: text("provider_session_id").notNull(),
-    cursor: text("cursor").notNull(),
-    updatedAt: instant("updated_at").notNull().defaultNow(),
-  },
-  (table) => [primaryKey({ columns: [table.userId, table.providerId, table.providerSessionId] })],
 );

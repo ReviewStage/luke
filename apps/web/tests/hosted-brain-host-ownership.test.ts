@@ -5,7 +5,7 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "../server/core";
+import { ACTION_RESULT_STATUS } from "../server/core";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_HEADER,
@@ -212,7 +212,6 @@ function binding(target: ConversationTarget, sessionId: string): HostedToolBindi
     target,
     turn: {
       kind: BRAIN_HOST_TURN.TYPED,
-      trigger: BRAIN_TURN_TRIGGER.ASK,
       turnId: hostTurnId(sessionId, "turn_0"),
     },
   };

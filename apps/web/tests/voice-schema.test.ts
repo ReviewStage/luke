@@ -8,10 +8,8 @@ import {
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,
-  deleteDevice,
   deleteUser,
   deleteVoiceSession,
-  insertDevice,
   insertVoiceSession,
   insertVoiceTranscriptSegment,
   POSTGRES_ERROR,
@@ -26,9 +24,8 @@ import {
  * The voice tables have no reader yet, so what these tests hold to is the
  * shape the migration built: a session cascades with its account and its
  * segments with it, one live session is one row however many times it is
- * attached to, a segment's position is taken once, a device's departure
- * leaves the session's record standing, and the usage payload keeps confirmed
- * and unconfirmed seconds apart.
+ * attached to, a segment's position is taken once, and the usage payload
+ * keeps confirmed and unconfirmed seconds apart.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -47,7 +44,6 @@ let liveSessions = 0;
 
 interface SessionOverrides {
   readonly liveSessionId?: string;
-  readonly deviceId?: string | null;
   readonly closedAt?: Date | null;
   readonly closeReason?: VoiceSessionInsertRow["closeReason"];
   readonly usage?: VoiceSessionUsage | null;
@@ -59,7 +55,6 @@ async function insertSession(userId: string, row: SessionOverrides = {}): Promis
     userId,
     liveSessionId: row.liveSessionId ?? `sess_${liveSessions}`,
     delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-    deviceId: row.deviceId,
     closedAt: row.closedAt,
     closeReason: row.closeReason,
     usage: row.usage,
@@ -167,23 +162,6 @@ test("a segment's position is taken once within its session and free in another"
 
   assert.equal(await segmentCount(first), 3);
   assert.equal(await segmentCount(second), 3);
-});
-
-test("a device's departure leaves the session's record standing with the device named", async () => {
-  const userId = await database.createUser();
-  await insertDevice(database.run, {
-    id: "device-1",
-    userId,
-    installationId: `install-${userId}`,
-    platform: "macos",
-  });
-  const id = await insertSession(userId, { deviceId: "device-1" });
-
-  await deleteDevice(database.run, "device-1");
-
-  const row = await readVoiceSessionByIdTyped(database.run, id);
-  assert.ok(row);
-  assert.equal(row.deviceId, "device-1");
 });
 
 test("a new session is open with no close, no reason, and no usage; a closed one keeps all three", async () => {

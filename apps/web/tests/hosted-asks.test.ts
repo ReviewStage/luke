@@ -71,7 +71,7 @@ async function conversation(userId: string): Promise<string> {
     Effect.gen(function* () {
       const rows = yield* db
         .insert(conversations)
-        .values({ userId, kind: CONVERSATION_KIND.MAIN })
+        .values({ userId, kind: CONVERSATION_KIND.PLAN })
         .returning({ id: conversations.id });
       return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),

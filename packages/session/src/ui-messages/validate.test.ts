@@ -5,8 +5,6 @@ import { fileURLToPath } from "node:url";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
-  OBSERVATION_SOURCE,
-  type ObservationSource,
   SCHEMA_REFUSAL,
   type SchemaPath,
   type SchemaRead,
@@ -39,22 +37,8 @@ const FIXTURE = {
   SPOKEN_ASK: "spoken-ask.json",
   REPLY_WITH_TOOL_PART: "reply-with-tool-part.json",
   COMPACTION: "compaction.json",
-  OBSERVATION_HOOK: "observation-hook.json",
-  OBSERVATION_TRANSCRIPT_CHANGE: "observation-transcript-change.json",
-  CHILD_TASK: "child-task.json",
-  CHILD_COMPLETION: "child-completion.json",
-  RECALLED_NOTES: "recalled-notes.json",
   COMPACTION_UNCOUNTED: "compaction-uncounted.json",
 } as const;
-
-/** The fixture that carries each source the brain writes a user row under, one per member of the set. */
-const BRAIN_SOURCE_FIXTURES = {
-  [OBSERVATION_SOURCE.HOOK]: FIXTURE.OBSERVATION_HOOK,
-  [OBSERVATION_SOURCE.TRANSCRIPT_CHANGE]: FIXTURE.OBSERVATION_TRANSCRIPT_CHANGE,
-  [OBSERVATION_SOURCE.CHILD]: FIXTURE.CHILD_TASK,
-  [OBSERVATION_SOURCE.CHILD_COMPLETION]: FIXTURE.CHILD_COMPLETION,
-  [OBSERVATION_SOURCE.RECALLED_NOTES]: FIXTURE.RECALLED_NOTES,
-} as const satisfies Record<ObservationSource, (typeof FIXTURE)[keyof typeof FIXTURE]>;
 
 async function fixture(name: (typeof FIXTURE)[keyof typeof FIXTURE]): Promise<WireRecord> {
   // SAFETY: the fixture files are JSON this repository commits; JSON.parse answers the structured-clone shape the wire boundary takes.
@@ -130,22 +114,20 @@ test("a row is typed by its role, and its tool parts are told by their state", a
   );
 });
 
-test("a brain-authored user row reads back under each source the vocabulary names, and a source it does not name is refused", async () => {
-  for (const [source, name] of Object.entries(BRAIN_SOURCE_FIXTURES)) {
-    const message = await fixture(name);
-    const read = await runTest(readStoredUIMessages([message], TOOLS));
-    assert.ok(read.ok);
-    const [stored] = read.value;
-    assert.equal(stored?.role, MESSAGE_ROLE.USER);
-    assert.deepEqual(stored?.metadata, { author: MESSAGE_AUTHOR.BRAIN, source });
+test("a brain-authored user row an earlier build wrote for an observation or a child is refused", async () => {
+  const spokenAsk = await fixture(FIXTURE.SPOKEN_ASK);
+  for (const source of [
+    "hook",
+    "transcript_change",
+    "child",
+    "child_completion",
+    "recalled_notes",
+  ]) {
+    const observation = withMetadata(spokenAsk, { author: MESSAGE_AUTHOR.BRAIN, source });
+    const read = await runTest(readStoredUIMessages([observation], TOOLS));
+    assert.equal(refusalOf(read), SCHEMA_REFUSAL.MALFORMED);
+    assert.deepEqual(pathOf(read), [0, "metadata"]);
   }
-  const unnamed = withMetadata(await fixture(FIXTURE.OBSERVATION_TRANSCRIPT_CHANGE), {
-    author: MESSAGE_AUTHOR.BRAIN,
-    source: "bulletin",
-  });
-  const read = await runTest(readStoredUIMessages([unnamed], TOOLS));
-  assert.equal(refusalOf(read), SCHEMA_REFUSAL.MALFORMED);
-  assert.deepEqual(pathOf(read), [0, "metadata"]);
 });
 
 test("a message with metadata the vocabulary does not name is refused at the metadata", async () => {
@@ -166,7 +148,7 @@ test("a message with metadata the vocabulary does not name is refused at the met
 test("a role's metadata is held to that role's schema", async () => {
   const spokenAsk = await fixture(FIXTURE.SPOKEN_ASK);
   const compaction = await fixture(FIXTURE.COMPACTION);
-  const childAsUser = withMetadata(spokenAsk, { author: MESSAGE_AUTHOR.CHILD, channel: "typed" });
+  const childAsUser = withMetadata(spokenAsk, { author: "child", channel: "typed" });
   assert.deepEqual(pathOf(await runTest(readStoredUIMessages([childAsUser], TOOLS))), [
     0,
     "metadata",

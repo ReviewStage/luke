@@ -10,7 +10,6 @@ import {
 import type { UIMessage } from "ai";
 import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
 import { spokenProse } from "./spoken-prose.js";
-import type { BrainTurnTrigger } from "./turn.js";
 
 /**
  * What a turn tells whoever is listening, as it happens. Two audiences hear
@@ -63,10 +62,8 @@ export const BRAIN_RUN_EVENT = {
   TURN_ENDED: "turn_ended",
 } as const;
 
-/** The kinds of step that count as slow: a whole transcript read, a write the provider carries, or a planning call's look into its repository. */
+/** The kinds of step that count as slow: a planning call's look into its repository. */
 export const SLOW_STEP_KIND = {
-  TRANSCRIPT_READ: "transcript_read",
-  PROVIDER_WRITE: "provider_write",
   REPOSITORY_READ: "repository_read",
 } as const;
 
@@ -82,12 +79,6 @@ export const BRAIN_TURN_ORIGIN = {
   TYPED: "typed",
   /** A developer's ask spoken, relayed by the voice service. */
   SPOKEN: "spoken",
-  /** A wake for one session, or the roster look on the observation pass. */
-  OBSERVATION: "observation",
-  /** A child's own delegated task. */
-  CHILD: "child",
-  /** A requester's turn opened by a child's completion. */
-  CHILD_COMPLETION: "child_completion",
 } as const;
 
 export type BrainTurnOrigin = (typeof BRAIN_TURN_ORIGIN)[keyof typeof BRAIN_TURN_ORIGIN];
@@ -198,7 +189,6 @@ export type BrainRunEventBody =
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.TURN_STARTED;
       readonly origin: BrainTurnOrigin;
-      readonly trigger: BrainTurnTrigger;
       readonly at: number;
     }
   | {

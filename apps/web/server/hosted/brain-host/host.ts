@@ -8,7 +8,6 @@ import type { SessionAuth, SessionContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
   ACTION_RESULT_STATUS,
-  type BrainTurnTrigger,
   isRecord,
   isWireString,
   type UnparsedWireValue,
@@ -21,12 +20,7 @@ import { askRecord } from "../store/asks.js";
 import { toolSetHashOf } from "../store/content-addressed.js";
 import { type ConversationTarget, promptHashOf } from "../store/index.js";
 import { turnKindOf } from "./auth.js";
-import {
-  BRAIN_HOST,
-  BRAIN_HOST_MODEL_FIXTURE,
-  BRAIN_HOST_TURN_KIND,
-  type BrainHostTurn,
-} from "./bounds.js";
+import { BRAIN_HOST, BRAIN_HOST_MODEL_FIXTURE, type BrainHostTurn } from "./bounds.js";
 import { readRecentMessages } from "./context.js";
 import {
   type AdmittedConversation,
@@ -68,7 +62,6 @@ import { carryStop } from "./stop-carrier.js";
 /** The turn a resolver or a tool runs in, as eve names it and as the store keys it; plain data, so a tool may capture it. */
 interface HostedTurn {
   readonly kind: BrainHostTurn;
-  readonly trigger: BrainTurnTrigger;
   readonly turnId: string;
 }
 
@@ -78,10 +71,9 @@ export interface HostedToolBinding {
   readonly turn: HostedTurn;
 }
 
-/** The kind of turn the current request opened, with the trigger the run stream names it by. */
+/** The kind of turn the current request opened. */
 interface HostedTurnKind {
   readonly kind: BrainHostTurn;
-  readonly trigger: BrainTurnTrigger;
 }
 
 /** The prompt a session runs under and the content address its turns are recorded under. */
@@ -181,7 +173,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     turnKindOf(auth) {
       const kind = turnKindOf(auth.current);
-      return kind === undefined ? undefined : { kind, trigger: BRAIN_HOST_TURN_KIND[kind].trigger };
+      return kind === undefined ? undefined : { kind };
     },
 
     turnOf(auth, sessionId, eveTurnId) {
@@ -189,7 +181,6 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       if (kind === undefined) return undefined;
       return {
         kind,
-        trigger: BRAIN_HOST_TURN_KIND[kind].trigger,
         turnId: hostTurnId(sessionId, eveTurnId),
       };
     },

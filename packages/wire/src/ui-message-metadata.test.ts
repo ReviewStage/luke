@@ -9,7 +9,6 @@ import {
   COMPACTION_METADATA,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
-  OBSERVATION_SOURCE,
   USER_MESSAGE_METADATA,
 } from "./ui-message-metadata.js";
 
@@ -49,7 +48,7 @@ const spokenAsk = unparsedWire({
   to_ms: 4800,
 });
 
-test("a user row is a typed ask, a spoken ask, or an observation, each admitted whole", () => {
+test("a user row is a typed ask or a spoken ask, each admitted whole", () => {
   assert.deepEqual(
     parse(USER_MESSAGE_METADATA, {
       author: MESSAGE_AUTHOR.DEVELOPER,
@@ -72,57 +71,16 @@ test("a user row is a typed ask, a spoken ask, or an observation, each admitted 
     }),
     { author: MESSAGE_AUTHOR.VOICE_MODEL, channel: MESSAGE_CHANNEL.VOICE },
   );
-  assert.deepEqual(
-    parse(USER_MESSAGE_METADATA, {
-      author: MESSAGE_AUTHOR.BRAIN,
-      source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
-    }),
-    { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE },
-  );
 });
 
-test("every way the brain writes a user row for itself is a source, and a source the vocabulary does not name is refused", () => {
-  const sources = Object.values(OBSERVATION_SOURCE);
-  assert.deepEqual(
-    sources.map((source) => parse(USER_MESSAGE_METADATA, { author: MESSAGE_AUTHOR.BRAIN, source })),
-    sources.map((source) => ({ author: MESSAGE_AUTHOR.BRAIN, source })),
-  );
-  assert.deepEqual(
-    new Set(sources),
-    new Set([
-      OBSERVATION_SOURCE.HOOK,
-      OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
-      OBSERVATION_SOURCE.CHILD,
-      OBSERVATION_SOURCE.CHILD_COMPLETION,
-      OBSERVATION_SOURCE.RECALLED_NOTES,
-    ]),
-  );
+test("the authors are bound to their shapes: the brain never writes a user row, the voice model never types, and an earlier build's observation or child rows are refused", () => {
   const refused: UnparsedWireValue[] = [
-    { author: MESSAGE_AUTHOR.BRAIN, source: "bulletin" },
-    { author: MESSAGE_AUTHOR.BRAIN, source: MESSAGE_CHANNEL.TYPED },
-    { author: MESSAGE_AUTHOR.BRAIN, source: "" },
-    { author: MESSAGE_AUTHOR.BRAIN },
-    { author: MESSAGE_AUTHOR.CHILD, source: OBSERVATION_SOURCE.CHILD },
-    { author: MESSAGE_AUTHOR.DEVELOPER, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE },
-  ];
-  for (const value of refused) {
-    assert.equal(refusalOf(USER_MESSAGE_METADATA, value), SCHEMA_REFUSAL.MALFORMED);
-  }
-});
-
-test("the authors are bound to their shapes: a child never speaks as user, the brain never on a channel, the developer never as an observation", () => {
-  const refused: UnparsedWireValue[] = [
-    { author: MESSAGE_AUTHOR.CHILD, channel: MESSAGE_CHANNEL.TYPED },
+    { author: "child", channel: MESSAGE_CHANNEL.TYPED },
     { author: MESSAGE_AUTHOR.BRAIN, channel: MESSAGE_CHANNEL.TYPED },
     { author: MESSAGE_AUTHOR.BRAIN, channel: MESSAGE_CHANNEL.VOICE },
-    { author: MESSAGE_AUTHOR.DEVELOPER, source: OBSERVATION_SOURCE.HOOK },
-    { author: MESSAGE_AUTHOR.VOICE_MODEL, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE },
+    { author: MESSAGE_AUTHOR.BRAIN, source: "transcript_change" },
+    { author: MESSAGE_AUTHOR.DEVELOPER, source: "hook" },
     { author: MESSAGE_AUTHOR.VOICE_MODEL, channel: MESSAGE_CHANNEL.TYPED },
-    {
-      author: MESSAGE_AUTHOR.BRAIN,
-      source: OBSERVATION_SOURCE.HOOK,
-      channel: MESSAGE_CHANNEL.TYPED,
-    },
     { author: MESSAGE_AUTHOR.DEVELOPER },
     { channel: MESSAGE_CHANNEL.TYPED },
     {},
@@ -182,13 +140,14 @@ test("a key the vocabulary does not name is refused", () => {
   );
 });
 
-test("an assistant row's author is the brain, the voice model, or a child, and never the developer", () => {
-  for (const author of [MESSAGE_AUTHOR.BRAIN, MESSAGE_AUTHOR.VOICE_MODEL, MESSAGE_AUTHOR.CHILD]) {
+test("an assistant row's author is the brain or the voice model, and never the developer or an earlier build's child", () => {
+  for (const author of [MESSAGE_AUTHOR.BRAIN, MESSAGE_AUTHOR.VOICE_MODEL]) {
     assert.deepEqual(parse(ASSISTANT_MESSAGE_METADATA, { author }), { author });
   }
   assert.deepEqual(pathOf(ASSISTANT_MESSAGE_METADATA, { author: MESSAGE_AUTHOR.DEVELOPER }), [
     "author",
   ]);
+  assert.deepEqual(pathOf(ASSISTANT_MESSAGE_METADATA, { author: "child" }), ["author"]);
   assert.deepEqual(pathOf(ASSISTANT_MESSAGE_METADATA, {}), ["author"]);
   assert.equal(refusalOf(ASSISTANT_MESSAGE_METADATA, undefined), SCHEMA_REFUSAL.MALFORMED);
 });
@@ -220,14 +179,14 @@ test("a compaction row names the first kept message, and the tokens it folded wh
   assert.deepEqual(pathOf(COMPACTION_METADATA, { tokens_before: 3 }), ["first_kept_message_id"]);
   assert.deepEqual(
     pathOf(ASSISTANT_MESSAGE_METADATA, {
-      author: MESSAGE_AUTHOR.CHILD,
+      author: MESSAGE_AUTHOR.BRAIN,
       compaction: { tokens_before: 3 },
     }),
     ["compaction", "first_kept_message_id"],
   );
 });
 
-test("the emitted schema offers the three user shapes and names only the fields each parser reads", () => {
+test("the emitted schema offers the two user shapes and names only the fields each parser reads", () => {
   const user = emitJsonSchema(USER_MESSAGE_METADATA);
   assert.equal("anyOf" in user, true);
   if (!("anyOf" in user)) return;
@@ -242,7 +201,6 @@ test("the emitted schema offers the three user shapes and names only the fields 
       keys: ["author", "channel", "delegation_id", "from_ms", "to_ms", "voice_session_id"],
       required: ["author", "channel"],
     },
-    { keys: ["author", "source"], required: ["author", "source"] },
   ]);
   const assistant = emitJsonSchema(ASSISTANT_MESSAGE_METADATA);
   assert.equal("type" in assistant && assistant.type, "object");
@@ -261,7 +219,7 @@ test("the emitted schema offers the three user shapes and names only the fields 
   assert.equal(assistant.additionalProperties, false);
 });
 
-test("an assistant row of the voice model's may name the session and span it was cut from, the delegation it followed, and the message it was read from; the brain's and a child's may not", () => {
+test("an assistant row of the voice model's may name the session and span it was cut from, the delegation it followed, and the message it was read from; the brain's may not", () => {
   const spoken = {
     author: MESSAGE_AUTHOR.VOICE_MODEL,
     channel: MESSAGE_CHANNEL.VOICE,
@@ -277,7 +235,7 @@ test("an assistant row of the voice model's may name the session and span it was
   });
   const refused: UnparsedWireValue[] = [
     { author: MESSAGE_AUTHOR.BRAIN, channel: MESSAGE_CHANNEL.VOICE },
-    { author: MESSAGE_AUTHOR.CHILD, read_from: spoken.read_from },
+    { author: MESSAGE_AUTHOR.BRAIN, read_from: spoken.read_from },
     { author: MESSAGE_AUTHOR.BRAIN, delegation_id: "dl_2b8c4d5e" },
     { author: MESSAGE_AUTHOR.VOICE_MODEL, from_ms: 5000, to_ms: 4000 },
     { author: MESSAGE_AUTHOR.VOICE_MODEL, from_ms: 5000 },

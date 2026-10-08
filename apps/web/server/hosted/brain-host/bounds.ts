@@ -1,9 +1,4 @@
-import {
-  BRAIN_TURN_ORIGIN,
-  BRAIN_TURN_TRIGGER,
-  type BrainTurnOrigin,
-  type BrainTurnTrigger,
-} from "../../core.js";
+import { BRAIN_TURN_ORIGIN, type BrainTurnOrigin } from "../../core.js";
 
 /**
  * The bounds and names the hosted brain host runs under: how a request names
@@ -118,23 +113,20 @@ export const RECEIVED_LINE = {
 
 export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
 
-/** The run stream's origin and trigger for each kind of turn a request opens, and whose row its received message is. */
+/** The run stream's origin for each kind of turn a request opens, and whose row its received message is. */
 export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.TYPED]: {
     origin: BRAIN_TURN_ORIGIN.TYPED,
-    trigger: BRAIN_TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.RELAY,
   },
   [BRAIN_HOST_TURN.SPOKEN]: {
     origin: BRAIN_TURN_ORIGIN.SPOKEN,
-    trigger: BRAIN_TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
   },
 } as const satisfies Record<
   BrainHostTurn,
   {
     readonly origin: BrainTurnOrigin;
-    readonly trigger: BrainTurnTrigger;
     readonly receivedLine: ReceivedLine;
   }
 >;
