@@ -579,18 +579,54 @@ function escapedPattern(word: string): string {
   return word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
+/** A stretch of a text, from one offset to another. */
+interface Span {
+  readonly from: number;
+  readonly to: number;
+}
+
 /**
- * Where a phrase stands in a text: exactly, or failing that with any run of
- * whitespace standing for any other, since the model copies a phrase that
- * wrapped as one that did not.
+ * Every place a phrase stands in a text: exactly, or failing that with any
+ * run of whitespace standing for any other, since the model copies a phrase
+ * that wrapped as one that did not.
  */
-function located(text: string, find: string): { from: number; to: number } | undefined {
-  const exact = text.indexOf(find);
-  if (exact !== -1) return { from: exact, to: exact + find.length };
+function spansOf(text: string, find: string): readonly Span[] {
+  const exact: Span[] = [];
+  for (let at = text.indexOf(find); at !== -1; at = text.indexOf(find, at + find.length)) {
+    exact.push({ from: at, to: at + find.length });
+  }
+  if (exact.length > 0) return exact;
   const words = find.split(/\s+/u).filter((word) => word.length > 0);
-  if (words.length === 0) return undefined;
-  const match = new RegExp(words.map(escapedPattern).join("\\s+"), "u").exec(text);
-  return match === null ? undefined : { from: match.index, to: match.index + match[0].length };
+  if (words.length === 0) return [];
+  const pattern = new RegExp(words.map(escapedPattern).join("\\s+"), "gu");
+  return [...text.matchAll(pattern)].map((match) => ({
+    from: match.index,
+    to: match.index + match[0].length,
+  }));
+}
+
+/**
+ * The one place a phrase stands in a text, or nothing where it stands
+ * nowhere or more than once. Note that a phrase standing twice is never read
+ * as its first place, because a correction landing on the wrong line is the
+ * edit a note must never make.
+ */
+function located(text: string, find: string): Span | undefined {
+  const spans = spansOf(text, find);
+  return spans.length === 1 ? spans[0] : undefined;
+}
+
+/** Which one item of a list holds a phrase, where exactly one place in the whole list does; -1 otherwise. */
+function soleHolder<Item>(
+  items: readonly Item[],
+  textsOf: (item: Item) => readonly string[],
+  find: string,
+): number {
+  const counts = items.map((item) =>
+    textsOf(item).reduce((total, text) => total + spansOf(text, find).length, 0),
+  );
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  return total === 1 ? counts.indexOf(1) : -1;
 }
 
 /** A field's text with nothing left in it read as unanswered. */
@@ -608,7 +644,7 @@ function appended(current: string | null, text: string): string {
 }
 
 /** The text with every line the phrase touches struck out. */
-function struck(text: string, at: { from: number; to: number }): string {
+function struck(text: string, at: Span): string {
   const start = text.lastIndexOf("\n", at.from - 1) + 1;
   const newline = text.indexOf("\n", at.to);
   const end = newline === -1 ? text.length : newline + 1;
@@ -621,19 +657,23 @@ function replacedIn(text: string, find: string, replacement: string): string | u
   return at === undefined ? undefined : text.slice(0, at.from) + replacement + text.slice(at.to);
 }
 
-/** A list with its first item holding the phrase changed, or nothing where none holds it. */
+/** A list with the one item holding the phrase changed, or nothing where no item, or more than one place, holds it. */
 function replacedItem<Item>(
   items: readonly Item[],
-  textOf: (item: Item) => string,
-  change: (item: Item, text: string) => Item | undefined,
+  textsOf: (item: Item) => readonly string[],
+  change: (item: Item) => Item | undefined,
   find: string,
 ): readonly Item[] | undefined {
-  const index = items.findIndex((item) => located(textOf(item), find) !== undefined);
+  const index = soleHolder(items, textsOf, find);
   const item = items[index];
   if (item === undefined) return undefined;
-  const changed = change(item, textOf(item));
+  const changed = change(item);
   if (changed === undefined) return undefined;
   return items.map((standing, at) => (at === index ? changed : standing));
+}
+
+function mapDefined<A, B>(value: A | undefined, map: (value: A) => B): B | undefined {
+  return value === undefined ? undefined : map(value);
 }
 
 /** One example's clauses, in the order the document draws them. */
@@ -666,21 +706,30 @@ function correctedRule(rule: Rule, find: string, text: string): Rule | undefined
   return undefined;
 }
 
-/** The rules with the one the phrase names struck: the rule where its statement holds it, else the example holding it. */
+/** Every text of a rule a phrase may stand in: its statement, then each example's clauses. */
+function ruleTexts(rule: Rule): readonly string[] {
+  return [rule.statement, ...(rule.examples ?? []).flatMap(exampleTexts)];
+}
+
+function exampleTexts(example: Example): readonly string[] {
+  return clausesOf(example).filter((clause) => clause !== null);
+}
+
+/**
+ * The rules with the one place the phrase names struck: the rule where it
+ * stands in a statement, the example where it stands in a clause, or
+ * nothing where it stands nowhere or more than once.
+ */
 function rulesStruck(rules: readonly Rule[], find: string): readonly Rule[] | undefined {
-  const ruleAt = rules.findIndex((rule) => located(rule.statement, find) !== undefined);
-  if (ruleAt !== -1) return rules.filter((_, at) => at !== ruleAt);
-  for (const [index, rule] of rules.entries()) {
-    const examples = rule.examples ?? [];
-    const exampleAt = examples.findIndex((example) =>
-      clausesOf(example).some((clause) => clause !== null && located(clause, find) !== undefined),
-    );
-    if (exampleAt === -1) continue;
-    const kept = examples.filter((_, at) => at !== exampleAt);
-    const struckRule = { ...rule, examples: kept.length === 0 ? null : kept };
-    return rules.map((standing, at) => (at === index ? struckRule : standing));
-  }
-  return undefined;
+  const index = soleHolder(rules, ruleTexts, find);
+  const rule = rules[index];
+  if (rule === undefined) return undefined;
+  if (located(rule.statement, find) !== undefined) return rules.filter((_, at) => at !== index);
+  const examples = rule.examples ?? [];
+  const exampleAt = soleHolder(examples, exampleTexts, find);
+  const kept = examples.filter((_, at) => at !== exampleAt);
+  const struckRule = { ...rule, examples: kept.length === 0 ? null : kept };
+  return rules.map((standing, at) => (at === index ? struckRule : standing));
 }
 
 /** The rules with a note applied, or nothing where the note names no rule or no phrase in them. */
@@ -700,7 +749,7 @@ function rulesNoted(rules: readonly Rule[], note: PlanNote): readonly Rule[] | u
     case NOTE_KIND.REPLACE:
       return replacedItem(
         rules,
-        (rule) => [rule.statement, ...(rule.examples ?? []).flatMap(clausesOf)].join("\n"),
+        ruleTexts,
         (rule) => correctedRule(rule, note.find, note.text),
         note.find,
       );
@@ -722,24 +771,18 @@ function itemsNoted<Item>(
     case NOTE_KIND.REPLACE:
       return replacedItem(
         items,
-        textOf,
-        (_, text) => {
-          const changed = replacedIn(text, note.find, note.text);
-          return changed === undefined ? undefined : itemOf(changed.trim());
-        },
+        (item) => [textOf(item)],
+        (item) =>
+          mapDefined(replacedIn(textOf(item), note.find, note.text), (text) => itemOf(text.trim())),
         note.find,
       );
     case NOTE_KIND.REMOVE: {
-      const index = items.findIndex((item) => located(textOf(item), note.find) !== undefined);
+      const index = soleHolder(items, (item) => [textOf(item)], note.find);
       return index === -1 ? undefined : items.filter((_, at) => at !== index);
     }
     case NOTE_KIND.ADD_EXAMPLE:
       return undefined;
   }
-}
-
-function mapDefined<A, B>(value: A | undefined, map: (value: A) => B): B | undefined {
-  return value === undefined ? undefined : map(value);
 }
 
 /** One text field with a note applied, or nothing where the note names no phrase in it. */

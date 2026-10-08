@@ -244,3 +244,29 @@ test("a line still being written as nothing but Markdown markers is held back, s
   assert.equal(growing("Signatures:\n- "), "Signatures:");
   assert.equal(growing("Signatures:\n#tag"), "Signatures:\n#tag");
 });
+
+test("a phrase standing in more than one place names no place, so the note is missed rather than landing on the first", () => {
+  const notes: PlanNote[] = [
+    // "dmin" stands in both lines of the problem, and "invite" in the rule and its example.
+    { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find: "dmin", text: "owner" },
+    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.RULES, find: "invite" },
+    add(PLAN_FIELD.OPEN_QUESTIONS, "Who can resend an invite?"),
+    { kind: NOTE_KIND.REMOVE, field: PLAN_FIELD.OPEN_QUESTIONS, find: "an invite?" },
+  ];
+  const { content, missed } = applyNotes(NOTED, notes);
+  assert.deepEqual(missed, [notes[0], notes[1], notes[3]]);
+  assert.equal(content.fields.goal.problem, PROBLEM);
+  assert.deepEqual(content.fields.rules, NOTED.fields.rules);
+  assert.deepEqual(content.fields.openQuestions, [
+    "Who can withdraw an invite?",
+    "Who can resend an invite?",
+  ]);
+  // Quoted long enough to name one place, the same correction lands.
+  const named = applyNote(content, {
+    kind: NOTE_KIND.REPLACE,
+    field: PLAN_FIELD.PROBLEM,
+    find: "an admin",
+    text: "an owner",
+  });
+  assert.equal(named?.fields.goal.problem, PROBLEM.replace("an admin", "an owner"));
+});
