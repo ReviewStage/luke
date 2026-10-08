@@ -15,8 +15,9 @@ import { SidePanel, SidePanelToggle } from "./side-panel";
 
 /**
  * The work column while Plans is chosen: the open plan's document, with its
- * toolbar above, the call bar below, and the side panel beside it while that
- * is open; or, with none open, the new-plan page, which is the window's home.
+ * toolbar above and the call bar below, and the side panel beside all three,
+ * the window's full height, while that is open (or over them, while it fills
+ * the window); or, with none open, the new-plan page, which is the window's home.
  * The plan list itself is the sidebar's, and so is moving between plans: the
  * toolbar offers no way out of the open plan, only its actions.
  */
@@ -100,45 +101,47 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   }
   const { plan } = region;
   const folderPath = plans.folders[plan.id];
+  const { sidePanel } = plans;
   return (
-    <>
-      <Toolbar
-        title={plan.name}
-        subtitle={folderPath === undefined ? undefined : folderLine(folderPath)}
-      >
-        {folderPath === undefined ? (
-          <button
-            type="button"
-            className="toolbar-button"
-            onClick={() => plans.onChooseFolder(plan.id)}
-          >
-            Choose folder…
-          </button>
-        ) : null}
-        <CopyButton copy={plans.copy} />
-        <PlanActionsButton key={plan.id} plans={plans} planId={plan.id} />
-        <SidePanelToggle open={plans.sidePanel.open} onToggle={plans.sidePanel.onToggle} />
-      </Toolbar>
-      <div className="desktop-plan">
-        <div className="desktop-plan-main">
-          <section className="desktop-document" aria-label={plan.name}>
-            <PlanBody plan={plan} live={plans.live} />
-          </section>
-          <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>
-            <MicrophoneRow status={plans.status} microphone={plans.microphone} stop={plans.stop} />
-          </div>
+    <div className="desktop-plan">
+      {/* Note that the document is hidden rather than left out while the
+          panel fills the window, so leaving full screen finds it as it was. */}
+      <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
+        <Toolbar
+          title={plan.name}
+          subtitle={folderPath === undefined ? undefined : folderLine(folderPath)}
+        >
+          {folderPath === undefined ? (
+            <button
+              type="button"
+              className="toolbar-button"
+              onClick={() => plans.onChooseFolder(plan.id)}
+            >
+              Choose folder…
+            </button>
+          ) : null}
+          <CopyButton copy={plans.copy} />
+          <PlanActionsButton key={plan.id} plans={plans} planId={plan.id} />
+          {/* The open panel holds its own toggle in its own top row. */}
+          {sidePanel.open ? null : <SidePanelToggle open={false} onToggle={sidePanel.onToggle} />}
+        </Toolbar>
+        <section className="desktop-document" aria-label={plan.name}>
+          <PlanBody plan={plan} live={plans.live} />
+        </section>
+        <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>
+          <MicrophoneRow status={plans.status} microphone={plans.microphone} stop={plans.stop} />
         </div>
-        {plans.sidePanel.open ? (
-          <SidePanel
-            panel={plans.sidePanel}
-            planId={plan.id}
-            board={plans.board}
-            code={plans.code}
-            transcript={plans.transcript}
-          />
-        ) : null}
       </div>
-    </>
+      {sidePanel.open ? (
+        <SidePanel
+          panel={sidePanel}
+          planId={plan.id}
+          board={plans.board}
+          code={plans.code}
+          transcript={plans.transcript}
+        />
+      ) : null}
+    </div>
   );
 }
 

@@ -1,7 +1,6 @@
 import type { Board } from "@sidecar/hosted/board-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
-import { SidePanelIcon } from "@sidecar/panel";
-import { useRef } from "react";
+import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
 import { CodePane } from "../planning/code-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
@@ -14,67 +13,39 @@ import {
   type SidePanelControl,
   type SidePanelTab,
 } from "../planning/use-side-panel";
+import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
- * side-panel.tsx -- the open plan's side panel at the window's right: its toolbar toggle, its tab strip, the tab shown, and the edge it is resized by.
+ * side-panel.tsx -- the open plan's side panel at the window's right: its toggle, its tab strip, its full-screen button, the tab shown, and the edge it is resized by.
  *
  * Each part draws what `use-side-panel.ts` holds and hands every press back
  * to it, so the panel decides nothing about when it shows.
+ *
+ * The panel runs the window's full height. Its top row is the window's drag
+ * handle above it, holding the tabs at its left and, at its right, the
+ * full-screen button and the toggle that hides the panel, which stands in the
+ * plan's toolbar only while the panel is hidden. The plan's own actions stay
+ * in the plan's toolbar and never come into the panel.
  */
 
 /** What the Code tab says while Luke has no code on screen. */
 const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
 
-/** How far one arrow press on the resize edge moves it, in CSS pixels. */
-const RESIZE_STEP = 16;
+/**
+ * What the panel leaves the document beside it, in CSS pixels: the panel is
+ * dragged no wider than the plan's area less this. `.side-panel`'s
+ * `max-width` in desktop.css holds the same room while the window narrows.
+ */
+const DOCUMENT_RESERVE = 360;
 
 /**
- * The panel's left edge, dragged to resize it. The pointer is captured on
- * press, so a drag that crosses the board's canvas is still the edge's.
+ * The panel's left edge, dragged to resize it, past its least width to close
+ * it, and past its greatest to fill the window; double-clicked, it goes back
+ * to the default width.
  */
-function ResizeEdge({
-  width,
-  onResize,
-}: {
-  width: number;
-  onResize: (width: number) => void;
-}): React.JSX.Element {
-  const drag = useRef<{ x: number; width: number } | undefined>(undefined);
-  return (
-    // biome-ignore lint/a11y/useSemanticElements: a resize edge is a focusable separator that takes keys, which an <hr> cannot be.
-    <div
-      className="side-panel-resize"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize panel"
-      aria-valuemin={SIDE_PANEL_WIDTH.MIN}
-      aria-valuemax={SIDE_PANEL_WIDTH.MAX}
-      aria-valuenow={width}
-      tabIndex={0}
-      onPointerDown={(event) => {
-        event.currentTarget.setPointerCapture(event.pointerId);
-        drag.current = { x: event.clientX, width };
-      }}
-      onPointerMove={(event) => {
-        if (drag.current !== undefined)
-          onResize(drag.current.width + drag.current.x - event.clientX);
-      }}
-      onPointerUp={() => {
-        drag.current = undefined;
-      }}
-      onPointerCancel={() => {
-        drag.current = undefined;
-      }}
-      onKeyDown={(event) => {
-        // The panel is on the right, so Left widens it.
-        const step =
-          event.key === "ArrowLeft" ? RESIZE_STEP : event.key === "ArrowRight" ? -RESIZE_STEP : 0;
-        if (step === 0) return;
-        event.preventDefault();
-        onResize(width + step);
-      }}
-    />
-  );
+function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
+  // biome-ignore lint/a11y/useSemanticElements: a resize edge is a focusable separator that takes keys, which an <hr> cannot be.
+  return <div className="side-panel-resize" {...edge} />;
 }
 
 /** The strip of tabs across the panel's top. */
@@ -137,7 +108,7 @@ function TabContent({
   }
 }
 
-/** The toolbar's last button, which shows and hides the panel. */
+/** The last button of whichever top row it stands in, which shows and hides the panel. */
 export function SidePanelToggle({
   open,
   onToggle,
@@ -161,6 +132,29 @@ export function SidePanelToggle({
   );
 }
 
+/** Grows the panel over the document, or brings it back beside it. */
+function FullScreenToggle({
+  fullScreen,
+  onToggle,
+}: {
+  fullScreen: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const label = fullScreen ? "Exit full screen" : "Expand panel";
+  return (
+    <button
+      type="button"
+      className="toolbar-button toolbar-icon-button side-panel-full-screen"
+      aria-label={label}
+      aria-pressed={fullScreen}
+      title={label}
+      onClick={onToggle}
+    >
+      {fullScreen ? <CollapseIcon /> : <ExpandIcon />}
+    </button>
+  );
+}
+
 /** The panel itself, drawn only while it is open. */
 export function SidePanel({
   panel,
@@ -176,10 +170,33 @@ export function SidePanel({
   transcript: SidePanelTranscript;
 }): React.JSX.Element {
   const label = SIDE_PANEL_TABS.find((entry) => entry.tab === panel.tab)?.label;
+  const { snap, edge } = useResizableEdge({
+    side: EDGE_SIDE.LEFT,
+    width: panel.width,
+    bounds: SIDE_PANEL_WIDTH,
+    reserve: DOCUMENT_RESERVE,
+    label: "Resize panel",
+    onResize: panel.onResize,
+    onCollapse: panel.onToggle,
+    onExpand: panel.onToggleFullScreen,
+  });
   return (
-    <aside className="side-panel" aria-label="Panel" style={{ width: panel.width }}>
-      <ResizeEdge width={panel.width} onResize={panel.onResize} />
-      <TabStrip tab={panel.tab} onChoose={panel.onChoose} />
+    <aside
+      className="side-panel"
+      aria-label="Panel"
+      data-full-screen={String(panel.fullScreen)}
+      data-snap={snap}
+      style={panel.fullScreen ? undefined : { width: panel.width }}
+    >
+      {/* The row is a drag region and each control in it is not; Chromium
+          takes regions in document order, so the controls follow it. */}
+      <div className="side-panel-bar">
+        <TabStrip tab={panel.tab} onChoose={panel.onChoose} />
+        <div className="side-panel-bar-actions">
+          <FullScreenToggle fullScreen={panel.fullScreen} onToggle={panel.onToggleFullScreen} />
+          <SidePanelToggle open onToggle={panel.onToggle} />
+        </div>
+      </div>
       <div className="side-panel-content" role="tabpanel" aria-label={label}>
         <TabContent
           tab={panel.tab}
@@ -189,6 +206,9 @@ export function SidePanel({
           transcript={transcript}
         />
       </div>
+      {/* Last, so the drag region of the row above does not take the
+          edge's top from it. Full screen has no edge to drag. */}
+      {panel.fullScreen ? null : <ResizeEdge edge={edge} />}
     </aside>
   );
 }
