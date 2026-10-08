@@ -29,7 +29,9 @@ import type { DetachedVoiceSession, VoiceSessionRecord } from "./session-record.
  * standing, so no row is swept twice. Anything less conclusive — an attach
  * that timed out, was throttled, or failed at OpenAI, or a close that was
  * never confirmed — says nothing of whether the session still runs, so the
- * row is left stamped and the next sweep tries again; only a session past
+ * row is stamped again and a sweep a grace later tries again, behind the
+ * orphans stamped meanwhile, so a few that never answer cannot hold every
+ * sweep's bounded batch; only a session past
  * OpenAI's own duration limit, which has ended whatever it answers, is
  * closed as expired instead.
  *
@@ -115,8 +117,8 @@ function readLastWord(
 
 /**
  * An orphan that answered nothing conclusive: closed as expired once it is
- * past OpenAI's duration limit, and otherwise left stamped, since it may be
- * a call still running that the next sweep can end.
+ * past OpenAI's duration limit, and otherwise stamped again, since it may be
+ * a call still running that a sweep a grace later can end.
  */
 const unanswered = (
   seams: VoiceOrphanSweepSeams,
@@ -124,7 +126,7 @@ const unanswered = (
   now: number,
 ): Effect.Effect<OrphanEnding, unknown, SqlClient.SqlClient> =>
   now - orphan.startedAt < VOICE_SESSION_LIMIT_MS
-    ? Effect.succeed(ORPHAN_ENDING.PENDING)
+    ? Effect.as(seams.record.sweepLater({ sessionId: orphan.sessionId }), ORPHAN_ENDING.PENDING)
     : Effect.as(
         seams.record.closeLost({ sessionId: orphan.sessionId, reason: VOICE_CLOSE_REASON.EXPIRED }),
         ORPHAN_ENDING.LOST,

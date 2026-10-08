@@ -210,7 +210,17 @@ it.effect(
       const openAi = await startFakeOpenAi();
       const clocked = clockedRecord();
       const userId = await database.createUser();
-      const running = await orphanOf(clocked, userId);
+      // The whole timeline runs before `NOW`, where no row another test left stamped is due yet.
+      let at = NOW - 10 * VOICE_DETACH_GRACE_MS;
+      const running = `live_${randomUUID()}`;
+      const attachId = randomUUID();
+      clocked.clock.now = at - 2 * VOICE_DETACH_GRACE_MS;
+      await database.run(
+        clocked.record.register({ userId, sessionId: running, planId: randomUUID(), attachId }),
+      );
+      await database.run(clocked.record.noteUsage({ sessionId: running, seconds: 120 }));
+      clocked.clock.now = at - VOICE_DETACH_GRACE_MS - 1_000;
+      await database.run(clocked.record.detach({ sessionId: running, attachId }));
       const seams = sweepSeams(openAi, clocked.record);
       const pending = { ...NOTHING_ORPHANED, pending: 1 };
       const standing = {
@@ -220,15 +230,23 @@ it.effect(
         detached: true,
       };
 
+      // Each sweep that ends nothing stamps the row again, so the next try is a grace later.
+      const sweepAt = (instant: number) => {
+        clocked.clock.now = instant;
+        return database.run(sweepVoiceOrphans(seams, { now: instant }));
+      };
       for (const status of [429, 503]) {
         openAi.attachStatus = status;
-        assert.deepEqual(await database.run(sweepVoiceOrphans(seams, { now: NOW })), pending);
+        assert.deepEqual(await sweepAt(at), pending);
         assert.deepEqual((await rowsOf(userId)).get(running), standing);
+        // Within the grace the row waits behind any orphan stamped since, and is not tried.
+        assert.deepEqual(await sweepAt(at + 1_000), NOTHING_ORPHANED);
+        at += VOICE_DETACH_GRACE_MS + 1_000;
       }
 
       // Attached, but the sideband drops before `session.closed`: the session may still run.
       openAi.attachStatus = undefined;
-      const dropping = database.run(sweepVoiceOrphans(seams, { now: NOW }));
+      const dropping = sweepAt(at);
       const dropped = await openAi.nextAttach();
       assert.equal(
         JSON.parse(await readSocket(dropped.socket).next()).type,
@@ -238,7 +256,8 @@ it.effect(
       assert.deepEqual(await dropping, pending);
       assert.deepEqual((await rowsOf(userId)).get(running), standing);
 
-      const closing = database.run(sweepVoiceOrphans(seams, { now: NOW + 1_000 }));
+      at += VOICE_DETACH_GRACE_MS + 1_000;
+      const closing = sweepAt(at);
       const attach = await openAi.nextAttach();
       assert.equal(
         JSON.parse(await readSocket(attach.socket).next()).type,

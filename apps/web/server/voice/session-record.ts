@@ -112,6 +112,11 @@ interface VoiceSessionAttachment {
 }
 
 /** The close the sweep writes for a session that answered nothing: lost, or past its duration limit. */
+/** A live session named by the id alone, for a write that needs nothing else. */
+interface VoiceSessionNamed {
+  sessionId: string;
+}
+
 interface VoiceSessionLost {
   sessionId: string;
   reason: typeof VOICE_CLOSE_REASON.CONNECTION_LOST | typeof VOICE_CLOSE_REASON.EXPIRED;
@@ -158,6 +163,12 @@ export interface VoiceSessionRecord {
   attached(input: VoiceSessionAttachment): VoiceSessionRecordEffect<void>;
   /** The open sessions detached before the instant, oldest first, at most `limit`. */
   detached(input: DetachedVoiceSessionQuery): VoiceSessionRecordEffect<DetachedVoiceSession[]>;
+  /**
+   * Stamps a detached session again now: the sweep could not end it, so it
+   * waits a grace behind the orphans stamped since rather than taking their
+   * place in every sweep until it expires.
+   */
+  sweepLater(input: VoiceSessionNamed): VoiceSessionRecordEffect<void>;
   /** Closes an open session for the reason named, its last unconfirmed snapshot standing: what the sweep writes when the session is gone at OpenAI. */
   closeLost(input: VoiceSessionLost): VoiceSessionRecordEffect<void>;
 }
@@ -343,6 +354,27 @@ const stampAttached = SqlSchema.void({
       ),
 });
 
+const RestampRequestSchema = Schema.Struct({
+  liveSessionId: Schema.String,
+  detachedAt: Schema.Date,
+});
+
+/** Note that only a row still open and still detached is stamped again, so a re-attach meanwhile keeps its call. */
+const restampDetached = SqlSchema.void({
+  Request: RestampRequestSchema,
+  execute: (row) =>
+    db
+      .update(voiceSessions)
+      .set({ detachedAt: row.detachedAt })
+      .where(
+        and(
+          eq(voiceSessions.liveSessionId, row.liveSessionId),
+          isNull(voiceSessions.closedAt),
+          isNotNull(voiceSessions.detachedAt),
+        ),
+      ),
+});
+
 const DetachedRequestSchema = Schema.Struct({ before: Schema.Date, limit: Schema.Number });
 const DetachedRowSchema = Schema.Struct({
   userId: Schema.String,
@@ -454,6 +486,8 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         findDetached({ before: new Date(input.detachedBefore), limit: input.limit }),
         (rows) => rows.map((row) => ({ ...row, startedAt: row.startedAt.getTime() })),
       ),
+    sweepLater: (input) =>
+      restampDetached({ liveSessionId: input.sessionId, detachedAt: new Date(now()) }),
     closeLost: (input) =>
       closeLostSession({
         liveSessionId: input.sessionId,

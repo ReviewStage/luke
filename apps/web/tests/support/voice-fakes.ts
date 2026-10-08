@@ -330,6 +330,7 @@ export function fakeSessionRecord(): FakeSessionRecord {
         fake.detachments.push({ sessionId: input.sessionId, detached: false });
       }),
     detached: () => Effect.succeed([]),
+    sweepLater: () => Effect.void,
     closeLost: (input) =>
       Effect.sync(() => {
         const row = openRow(input.sessionId);
