@@ -13,8 +13,6 @@
       "!!**/.agents",
       "!.claude/settings.json",
       "!apps/web/fixtures",
-      "!packages/actions/fixtures",
-      "!packages/brain/fixtures",
       "!packages/gateway/fixtures",
       "!packages/hosted/fixtures",
       "!packages/live/fixtures",

@@ -226,9 +226,6 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../../packages/actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
@@ -241,12 +238,6 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../../packages/live
-      '@sidecar/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
-      '@sidecar/providers':
-        specifier: workspace:*
-        version: link:../../packages/providers
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -360,34 +351,6 @@ importers:
         specifier: 0.53.1
         version: 0.53.1(@opentelemetry/api@1.9.1)(ai@7.0.97(zod@4.5.4))
 
-  packages/actions:
-    dependencies:
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
-
   packages/analytics:
     dependencies:
       '@sidecar/guide':
@@ -424,12 +387,6 @@ importers:
 
   packages/brain:
     dependencies:
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../actions
-      '@sidecar/memory':
-        specifier: workspace:*
-        version: link:../memory
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -613,9 +570,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/settings':
         specifier: workspace:*
         version: link:../settings
@@ -692,31 +646,6 @@ importers:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/memory:
-    dependencies:
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
-
   packages/panel:
     dependencies:
       '@sidecar/surface':
@@ -735,37 +664,6 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
-
-  packages/providers:
-    dependencies:
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../actions
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
-      '@sidecar/wire':
-        specifier: workspace:*
-        version: link:../wire
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.2.0
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
-      vitest:
-        specifier: 'catalog:'
-        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/runtime:
     dependencies:
@@ -921,9 +819,6 @@ importers:
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@sidecar/brain':
-        specifier: workspace:*
-        version: link:../../packages/brain
       '@sidecar/devtrace':
         specifier: workspace:*
         version: link:../../packages/devtrace

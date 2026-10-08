@@ -6,18 +6,16 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { jsonSchema, type Tool, type ToolSet, tool } from "ai";
+import { jsonSchema, type Tool, tool } from "ai";
 import { Result, type Schema } from "effect";
-import { brainToolRegistry } from "./tools.js";
 
 /**
- * The brain's catalog as a reader of stored messages needs it, behind a door
- * of its own because the SDK's `tool()` is a run-time reach the barrel keeps
- * to types alone. The registry is the `ToolSet` a row is held to: every
- * catalog tool under its name, its input read under the wire schema the model
- * was offered, so a part naming a tool this build does not register is
- * refused and a part whose input the schema refuses is refused with it. It is
- * fixed by the build, so a caller builds it once and holds it.
+ * A tool as a reader of stored messages needs it, behind a door of its own
+ * because the SDK's `tool()` is a run-time reach the barrel keeps to types
+ * alone. A `ToolSet` of these is what a row is held to: every tool under its
+ * name, its input read under the wire schema the model was offered, so a part
+ * naming a tool this build does not register is refused and a part whose
+ * input the schema refuses is refused with it.
  */
 
 function validatedInput(schema: Schema.Codec<unknown, UnparsedWireValue>) {
@@ -47,22 +45,11 @@ function validatedInput(schema: Schema.Codec<unknown, UnparsedWireValue>) {
 
 /**
  * One tool as a stored row is held to it: its words, and its input read under
- * the wire schema the model was offered. The catalog's tools are built this
- * way, and so is a tool a hosted conversation is offered from outside the
- * catalog, so a row naming either reads back the same way.
+ * the wire schema the model was offered.
  */
 export function wireValidatedTool(
   description: string,
   inputSchema: Schema.Codec<unknown, UnparsedWireValue>,
 ): Tool {
   return tool({ description, inputSchema: validatedInput(inputSchema) });
-}
-
-/** The registry stored rows are read under: the catalog's tools by name, inputs validated by their wire schemas. */
-export function catalogToolSet(): ToolSet {
-  const tools: Record<string, Tool> = {};
-  for (const [name, registration] of brainToolRegistry()) {
-    tools[name] = wireValidatedTool(registration.description, registration.inputSchema);
-  }
-  return tools;
 }

@@ -1,22 +1,11 @@
 import type { WireRecord } from "@sidecar/wire";
-import { Data } from "effect";
 
 /**
- * The seams along which Luke's reasoning is replaceable. A host owns the
- * conversation — accepting asks, recording runs, journaling effects — and
- * reaches a model only through these interfaces: an agent runtime that turns
- * a request into normalized events, a model adapter that carries one
- * inference, and a tool executor the host supplies. Nothing here names a
- * provider: a provider's own vocabulary (an OpenAI Responses item, an
- * encrypted reasoning item) travels as an opaque record.
+ * What one inference reports about itself, as the brain's run stream and
+ * its message builder carry it. Nothing here names a provider: a provider's
+ * own vocabulary (an OpenAI Responses item, an encrypted reasoning item)
+ * travels as an opaque record.
  */
-
-/** A tool as a model is offered it: a name, what it is for, and its JSON-schema parameters. */
-export interface ToolSchema {
-  readonly name: string;
-  readonly description: string;
-  readonly parameters: WireRecord;
-}
 
 /** One tool call a model emitted, as the runtime hands it to the executor. */
 export interface ToolInvocation {
@@ -24,29 +13,6 @@ export interface ToolInvocation {
   readonly name: string;
   readonly argumentsJson: string;
 }
-
-/**
- * The standing a runtime hands the executor with each admitted invocation:
- * which run it belongs to, whether that run still stands, and the signal
- * every wait of the run settles on. The executor asks `isRevoked()` after
- * each step it awaited and once more before an effect, so an action prepared
- * inside a run that ended meanwhile is refused rather than dispatched.
- */
-export interface ToolExecutionContext {
-  readonly runId: string;
-  readonly signal: AbortSignal;
-  isRevoked(): boolean;
-}
-
-/**
- * A seam the host handed a tool could not answer: the store behind it, or
- * the key it opens, was unreachable. It is the one failure a tool contract
- * carries, and it carries no cause, because the host that met the outage
- * logs it where the cause is known; the executor answers the call as a
- * rejected record, so the model is told the call did not run and nothing
- * more.
- */
-export class ToolHostUnavailable extends Data.TaggedError("ToolHostUnavailable") {}
 
 export interface ModelUsage {
   readonly inputTokens?: number;

@@ -324,125 +324,6 @@ export function readMessageByClientId(
   );
 }
 
-const findMessageByIdRow = SqlSchema.findAll({
-  Request: Schema.Struct({
-    conversationId: Schema.String,
-    userId: Schema.String,
-    messageId: Schema.String,
-  }),
-  Result: SelectedMessageRowSchema,
-  execute: (options) =>
-    db
-      .select(MESSAGE_FIELDS)
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.conversationId, options.conversationId),
-          eq(messages.userId, options.userId),
-          eq(messages.id, options.messageId),
-        ),
-      ),
-});
-
-/**
- * The one message of a conversation its own id names, read back under the
- * registry like a page: the announcement a speech offer hangs on is the row
- * the offer's event names. Answers an empty page where none stands.
- */
-export function readMessageById(
-  userId: string,
-  conversationId: string,
-  tools: ToolSet,
-  messageId: string,
-): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(findMessageByIdRow({ conversationId, userId, messageId }), (selected) =>
-    readSelected(selected, tools),
-  );
-}
-
-const findMessagesByIdRows = SqlSchema.findAll({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    messageIds: Schema.Array(Schema.String),
-  }),
-  Result: SelectedMessageRowSchema,
-  execute: (options) =>
-    db
-      .select(MESSAGE_FIELDS)
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(eq(messages.userId, options.userId), inArray(messages.id, [...options.messageIds])),
-      )
-      .orderBy(asc(messages.createdAt), asc(messages.conversationId), asc(messages.seq)),
-});
-
-/**
- * The account's messages the given ids name, across their standing
- * conversations, read back under the registry like a page: the announcing
- * rows a standing context recalls briefings from, in one statement rather
- * than one per row. Nothing for no ids; an id naming no standing row of the
- * account's is absent from the answer rather than refused.
- */
-export function readMessagesByIds(
-  userId: string,
-  tools: ToolSet,
-  messageIds: readonly string[],
-): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
-  if (messageIds.length === 0) return Effect.succeed({ ok: true, value: [] });
-  return Effect.flatMap(findMessagesByIdRows({ userId, messageIds }), (selected) =>
-    readSelected(selected, tools),
-  );
-}
-
-const FoundMessageIdSchema = Schema.Struct({ id: Schema.String });
-
-const findMessageIdByClientId = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    conversationId: Schema.String,
-    userId: Schema.String,
-    clientId: Schema.String,
-  }),
-  Result: FoundMessageIdSchema,
-  execute: (options) =>
-    db
-      .select({ id: messages.id })
-      .from(messages)
-      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
-      .where(
-        and(
-          eq(messages.conversationId, options.conversationId),
-          eq(messages.userId, options.userId),
-          eq(messages.clientId, options.clientId),
-        ),
-      ),
-});
-
-/** The row a writer's own client id names in a conversation, by its id alone; nothing where none stands. */
-export function findMessageByClientId(
-  userId: string,
-  conversationId: string,
-  clientId: string,
-): Effect.Effect<{ readonly id: string } | undefined, MessageReadFailure, SqlClient.SqlClient> {
-  return Effect.map(findMessageIdByClientId({ conversationId, userId, clientId }), (found) =>
-    found._tag === "Some" ? found.value : undefined,
-  );
-}
-
-/**
- * Where a turn stands in the order of change: the latest instant any of its
- * stamps was set, as Postgres renders it to the microsecond, and its id to
- * break a tie. It is the instant's own text rather than a `Date` because a
- * JavaScript instant keeps milliseconds and a stamp set in the same
- * millisecond as the one a device already took would otherwise never read as
- * later; the text round-trips through `::timestamptz` exactly.
- */
-interface TurnCursorPosition {
-  readonly changedAt: string;
-  readonly id: string;
-}
-
 /** A turn row is mutable, so its order is the latest instant any of its stamps was set. */
 const TURN_CHANGED_AT = sql`
   greatest(
@@ -452,13 +333,6 @@ const TURN_CHANGED_AT = sql`
     coalesce(${turns.cancelRequestedAt}, ${turns.queuedAt})
   )
 `;
-
-// The cursor's instant travels as text (a millisecond number cannot tell two
-// stamps in one millisecond apart), and `timestamptz::text` renders in the
-// session's TimeZone, so the same instant would read as two strings on two
-// connections. Rendering the UTC wall clock and spelling the zone ourselves
-// makes the text a property of the query rather than of the connection.
-const TURN_CHANGED_AT_TEXT = sql<string>`((${TURN_CHANGED_AT}) at time zone 'UTC')::text || '+00'`;
 
 /** The columns a turn read selects, in the fields `TurnRowSchema` names. */
 const TURN_FIELDS = {
@@ -479,7 +353,6 @@ const TURN_FIELDS = {
   settledAt: turns.settledAt,
   failure: turns.failure,
   cancelRequestedAt: turns.cancelRequestedAt,
-  changedAt: TURN_CHANGED_AT_TEXT,
 };
 
 const TurnRowSchema = Schema.Struct({
@@ -501,19 +374,9 @@ const TurnRowSchema = Schema.Struct({
   settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
-  changedAt: Schema.String,
 });
 
-type TurnRow = typeof TurnRowSchema.Type;
-
-export type StoredTurnRecord = Omit<TurnRow, "changedAt"> & {
-  /** The row's place in the order of change, handed back as the next read's `after`. */
-  readonly cursor: TurnCursorPosition;
-};
-
-function toStoredTurn({ changedAt, ...turn }: TurnRow): StoredTurnRecord {
-  return { ...turn, cursor: { changedAt, id: turn.id } };
-}
+export type StoredTurnRecord = typeof TurnRowSchema.Type;
 
 const TurnRowsSchema = Schema.Array(TurnRowSchema);
 
@@ -530,9 +393,6 @@ export function turnsNamed(
       .innerJoin(conversations, TURN_CONVERSATION_STANDS)
       .where(and(eq(turns.userId, userId), inArray(turns.id, [...turnIds])))
       .orderBy(asc(TURN_CHANGED_AT), asc(turns.id)),
-    (rows) =>
-      Effect.map(Schema.decodeUnknownEffect(TurnRowsSchema)(rows), (decoded) =>
-        decoded.map(toStoredTurn),
-      ),
+    (rows) => Schema.decodeUnknownEffect(TurnRowsSchema)(rows),
   );
 }

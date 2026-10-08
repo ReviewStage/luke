@@ -1,9 +1,6 @@
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
-import { AUTH_SECRET_ENVIRONMENT } from "../auth-deployment.js";
 import { text } from "../core.js";
-import { APNS_ENVIRONMENT, type ApnsCredentials, apnsCredentialsFromEnvironment } from "./apns.js";
-import { VAULT_ENCRYPTION_ENVIRONMENT } from "./encryption.js";
-import { OBSERVATION_ENVIRONMENT } from "./observation-bounds.js";
+import { CRON_ENVIRONMENT } from "./maintenance-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "./openai.js";
 import { POSTHOG_ENVIRONMENT } from "./posthog.js";
 
@@ -24,23 +21,12 @@ export interface HostedEnvironmentValues {
   readonly posthogProjectId: string | undefined;
   /** The private API host deletion is asked of, which is not the ingestion host. */
   readonly posthogApiHost: string | undefined;
-  /** The provider key vault's AES-256-GCM secret; absent means the vault is off. */
-  readonly providerKeyEncryptionSecret: Redacted.Redacted | undefined;
   /** The analytics project's own ingestion token, for the desktop's counted-event batch; absent means recording is off. */
   readonly posthogProjectApiKey: Redacted.Redacted | undefined;
   /** A deployment-configured ingestion host; the shared default otherwise. */
   readonly posthogIngestHost: string | undefined;
-  /** Vercel's own bearer on every scheduled observation call; absent refuses every tick. */
+  /** Vercel's own bearer on every scheduled call, and the deployment's at eve's door; absent refuses every sweep and every delegation. */
   readonly cronSecret: Redacted.Redacted | undefined;
-  /** The deployment's Apple push credential; absent means no notification is ever sent. */
-  readonly apnsCredentials: ApnsCredentials | undefined;
-  /**
-   * The auth service's own session secret, which Better Auth seals every
-   * stored OAuth token under; the account's GitHub connection is opened with
-   * it. Absent means the auth service refuses everything and no connection
-   * can be read.
-   */
-  readonly authSecret: Redacted.Redacted | undefined;
 }
 
 export class HostedEnvironment extends Context.Service<
@@ -55,7 +41,7 @@ function present(value: Option.Option<string>): string | undefined {
 /**
  * A secret under the same rule as a plain value: trimmed, and a blank one is
  * dropped. The trimming is the one reveal on the way in, so every reveal on
- * the way out — a bearer, a cipher key — sees the same bytes a compare does.
+ * the way out — a bearer, a key — sees the same bytes a compare does.
  */
 function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Redacted | undefined {
   return Option.getOrUndefined(
@@ -63,21 +49,6 @@ function presentRedacted(value: Option.Option<Redacted.Redacted>): Redacted.Reda
       Option.map(Option.fromNullishOr(text(Redacted.value(secret))), Redacted.make),
     ),
   );
-}
-
-/** The four APNs values as {@link apnsCredentialsFromEnvironment} takes them, read through `Config` rather than `process.env` directly. */
-function apnsRecord(
-  read: Record<
-    "apnsTeamId" | "apnsKeyId" | "apnsPrivateKey" | "apnsBundleId",
-    Option.Option<string>
-  >,
-) {
-  return {
-    [APNS_ENVIRONMENT.TEAM_ID]: present(read.apnsTeamId),
-    [APNS_ENVIRONMENT.KEY_ID]: present(read.apnsKeyId),
-    [APNS_ENVIRONMENT.PRIVATE_KEY]: present(read.apnsPrivateKey),
-    [APNS_ENVIRONMENT.BUNDLE_ID]: present(read.apnsBundleId),
-  } as const;
 }
 
 /**
@@ -98,29 +69,18 @@ export const hostedEnvironment = Layer.effect(
       posthogPersonalApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
       posthogProjectId: Config.option(Config.String(POSTHOG_ENVIRONMENT.PROJECT_ID)),
       posthogApiHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.API_HOST)),
-      providerKeyEncryptionSecret: Config.option(
-        Config.Redacted(VAULT_ENCRYPTION_ENVIRONMENT.SECRET),
-      ),
       posthogProjectApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PROJECT_API_KEY)),
       posthogIngestHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.HOST)),
-      cronSecret: Config.option(Config.Redacted(OBSERVATION_ENVIRONMENT.CRON_SECRET)),
-      apnsTeamId: Config.option(Config.String(APNS_ENVIRONMENT.TEAM_ID)),
-      apnsKeyId: Config.option(Config.String(APNS_ENVIRONMENT.KEY_ID)),
-      apnsPrivateKey: Config.option(Config.String(APNS_ENVIRONMENT.PRIVATE_KEY)),
-      apnsBundleId: Config.option(Config.String(APNS_ENVIRONMENT.BUNDLE_ID)),
-      authSecret: Config.option(Config.Redacted(AUTH_SECRET_ENVIRONMENT.SESSION_SECRET)),
+      cronSecret: Config.option(Config.Redacted(CRON_ENVIRONMENT.CRON_SECRET)),
     }),
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
       posthogPersonalApiKey: presentRedacted(read.posthogPersonalApiKey),
       posthogProjectId: present(read.posthogProjectId),
       posthogApiHost: present(read.posthogApiHost),
-      providerKeyEncryptionSecret: presentRedacted(read.providerKeyEncryptionSecret),
       posthogProjectApiKey: presentRedacted(read.posthogProjectApiKey),
       posthogIngestHost: present(read.posthogIngestHost),
       cronSecret: presentRedacted(read.cronSecret),
-      apnsCredentials: apnsCredentialsFromEnvironment(apnsRecord(read)),
-      authSecret: presentRedacted(read.authSecret),
     }),
   ).pipe(
     Effect.provideServiceEffect(

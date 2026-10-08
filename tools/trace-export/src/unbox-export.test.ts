@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, hostedBrainToolCatalog } from "@sidecar/brain";
 import { TRACE_DIRECTION, TRACE_ENTRY_KIND, TRACE_LIVE_EVENT } from "@sidecar/devtrace/vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { isRecord, type WireRecord } from "@sidecar/wire";
@@ -26,11 +25,6 @@ function generations(trace: WireRecord): readonly WireRecord[] {
 function messagesOf(generation: WireRecord | undefined): readonly WireRecord[] {
   const messages = generation?.messages;
   return Array.isArray(messages) ? messages.filter(isRecord) : [];
-}
-
-function toolsOf(generation: WireRecord | undefined): readonly WireRecord[] {
-  const tools = generation?.available_tools;
-  return Array.isArray(tools) ? tools.filter(isRecord) : [];
 }
 
 function rolesAndContent(
@@ -250,87 +244,7 @@ test("a trace cut before the close still shows what was said, and an empty segme
   assert.equal(cut.session_seconds, 0);
 });
 
-test("a brain turn becomes its own generation, and junk lines cost only themselves", () => {
-  const turn = JSON.stringify({
-    at: "2026-08-25T10:05:00.000Z",
-    kind: TRACE_ENTRY_KIND.BRAIN,
-    trigger: BRAIN_TURN_TRIGGER.WAKE,
-    tools: [...hostedBrainToolCatalog().keys()],
-    inputItemKinds: ["message", "function_call_output"],
-    inputTokens: 1_500,
-    transcriptBytes: 4_096,
-    toolCalls: [{ name: BRAIN_TOOL.ANNOUNCE, argumentsChars: 120, outcomeStatus: "accepted" }],
-    outputText: "Checkout is waiting on you.",
-    deliveries: [{ briefingChars: 96 }],
-    elapsedMs: 321,
-    iterations: 1,
-  });
-  const trace = unboxTraceFromLines(["not json", turn]);
-  assert.deepEqual(trace.total_tokens, { input: 1_500, output: 0 });
-  const [generation] = generations(trace);
-  assert.ok(generation);
-  assert.equal(generation.name, "brain-turn");
-  // A hosted turn records no model; the export names the brain's one model.
-  assert.equal(generation.model, "gpt-6.1-sol");
-  assert.deepEqual(generation.metrics, {
-    latency: 0.321,
-    tokens: { input: 1_500, output: 0 },
-    cost: 0,
-  });
-  const toolNames = toolsOf(generation).map((tool) => tool.name);
-  assert.deepEqual(toolNames, [...hostedBrainToolCatalog().keys()]);
-  const announce = toolsOf(generation).find((tool) => tool.name === BRAIN_TOOL.ANNOUNCE);
-  assert.equal(announce?.type, "function");
-  assert.ok(isRecord(announce?.inputSchema));
-  const [input, output] = messagesOf(generation);
-  assert.equal(input?.role, "user");
-  assert.equal(
-    input?.content,
-    ["trigger: wake", "input items: message, function_call_output", "transcript bytes: 4096"].join(
-      "\n",
-    ),
-  );
-  assert.equal(output?.role, "assistant");
-  assert.equal(
-    output?.content,
-    ["Checkout is waiting on you.", "tool call: announce -> accepted", "delivery: 96 chars"].join(
-      "\n",
-    ),
-  );
-});
-
-test("a failed brain turn shows its error", () => {
-  const turn = JSON.stringify({
-    at: "2026-08-25T10:05:00.000Z",
-    kind: TRACE_ENTRY_KIND.BRAIN,
-    trigger: BRAIN_TURN_TRIGGER.ASK,
-    inputItemKinds: [],
-    transcriptBytes: 0,
-    toolCalls: [],
-    deliveries: [],
-    elapsedMs: 100,
-    iterations: 0,
-    error: "request failed with status 500",
-  });
-  const [generation] = generations(unboxTraceFromLines([turn]));
-  const [input, output] = messagesOf(generation);
-  assert.equal(
-    input?.content,
-    ["trigger: ask", "input items: none", "transcript bytes: 0"].join("\n"),
-  );
-  assert.equal(output?.content, "error: request failed with status 500");
-});
-
-test("a brain request entry stays in the raw trace and draws no generation", () => {
-  const request = JSON.stringify({
-    at: "2026-08-25T10:05:00.000Z",
-    kind: TRACE_ENTRY_KIND.BRAIN_REQUEST,
-    inputItems: 3,
-    inputChars: 2_048,
-    outcome: "answered",
-    elapsedMs: 900,
-  });
-  const trace = unboxTraceFromLines([request]);
-  assert.equal(trace.timestamp, "2026-08-25T10:05:00.000Z");
-  assert.deepEqual(generations(trace), []);
+test("junk lines cost only themselves", () => {
+  const trace = unboxTraceFromLines(["not json", "[]", ...ASK_FRAGMENTS]);
+  assert.equal(generations(trace).length, 1);
 });

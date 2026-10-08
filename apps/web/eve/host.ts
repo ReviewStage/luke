@@ -19,14 +19,8 @@ import { runWeb } from "../server/runtime.js";
  * middleware's meter — run on it, so nothing under `server/hosted/` keeps a
  * runner of its own.
  */
-const composed = Effect.runSync(
-  Effect.provide(
-    Effect.flatMap(productionBrainHostSeams(runWeb), (seams) =>
-      Effect.map(brainHost(seams), (host) => ({ seams, host })),
-    ),
-    hostedEnvironment,
-  ),
+export const seams: BrainHostSeams = Effect.runSync(
+  Effect.provide(productionBrainHostSeams(runWeb), hostedEnvironment),
 );
 
-export const seams: BrainHostSeams = composed.seams;
-export const host: BrainHost = composed.host;
+export const host: BrainHost = brainHost(seams);

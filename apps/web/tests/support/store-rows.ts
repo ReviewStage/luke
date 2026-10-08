@@ -366,63 +366,11 @@ export interface DeviceInsertRow {
   readonly userId: string;
   readonly installationId: string;
   readonly platform: string;
-  readonly lastSeenAt?: Date;
-  readonly activeUntil?: Date | null;
-  readonly quietUntil?: Date | null;
-  readonly pushToken?: string | null;
-  readonly pushEnvironment?: string | null;
 }
 
+/** A device row, for a voice session to name: the column the session's `device_id` references. */
 export function insertDevice(run: HostedStoreTestRun, row: DeviceInsertRow): Promise<void> {
-  return run(
-    Effect.asVoid(
-      db.insert(devices).values({
-        id: row.id,
-        userId: row.userId,
-        installationId: row.installationId,
-        platform: row.platform,
-        lastSeenAt: row.lastSeenAt ?? new Date(),
-        activeUntil: row.activeUntil ?? null,
-        quietUntil: row.quietUntil ?? null,
-        pushToken: row.pushToken ?? null,
-        pushEnvironment: row.pushEnvironment ?? null,
-      }),
-    ),
-  );
-}
-
-export function readDevicesByUser(run: HostedStoreTestRun, userId: string) {
-  return run(
-    db.select().from(devices).where(eq(devices.userId, userId)).orderBy(devices.lastSeenAt),
-  );
-}
-
-/** A device row, decoded to the same shape the store's own device seams build it under. */
-export const DeviceRowSchema = Schema.Struct({
-  id: Schema.String,
-  userId: Schema.String,
-  installationId: Schema.String,
-  platform: Schema.String,
-  lastSeenAt: InstantColumnSchema,
-  activeUntil: Schema.NullOr(InstantColumnSchema),
-  quietUntil: Schema.NullOr(InstantColumnSchema),
-  pushToken: Schema.NullOr(Schema.String),
-  pushEnvironment: Schema.NullOr(Schema.String),
-});
-export function setDeviceQuietUntil(
-  run: HostedStoreTestRun,
-  id: string,
-  quietUntil: Date | null,
-): Promise<void> {
-  return run(Effect.asVoid(db.update(devices).set({ quietUntil }).where(eq(devices.id, id))));
-}
-
-export function setDeviceActiveUntil(
-  run: HostedStoreTestRun,
-  id: string,
-  activeUntil: Date | null,
-): Promise<void> {
-  return run(Effect.asVoid(db.update(devices).set({ activeUntil }).where(eq(devices.id, id))));
+  return run(Effect.asVoid(db.insert(devices).values({ ...row, lastSeenAt: new Date() })));
 }
 
 export function readEventsByMessage(run: HostedStoreTestRun, messageId: string) {
@@ -561,7 +509,7 @@ export function deleteUser(run: HostedStoreTestRun, id: string): Promise<void> {
  * belongs to, so one argument names both, and a column renamed under `db/`
  * is a type error at the call site rather than a count that reads zero.
  */
-export function countRows(column: PgColumn, value: string) {
+function countRows(column: PgColumn, value: string) {
   return Effect.map(
     db.select({ count: count() }).from(column.table).where(eq(column, value)),
     (rows) => Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count,

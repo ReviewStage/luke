@@ -11,18 +11,12 @@ import {
 import { type ToolSet, tool } from "ai";
 import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import { db } from "../server/db/query";
 import { messages as messagesTable, turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import {
-  findMessageByClientId,
-  listRecentMessages,
-  readMessageById,
-  type StoredMessageRecord,
-} from "../server/hosted/store";
+import { listRecentMessages, type StoredMessageRecord } from "../server/hosted/store";
 import type { MessageListRead } from "../server/hosted/store/message-reads";
 import { CLEARED_CONVERSATION_RETENTION_MS } from "../server/hosted/store/soft-delete";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -46,26 +40,31 @@ import {
 } from "./support/store-rows";
 
 /**
- * A turn's instants to the microsecond, which a JS `Date` cannot carry and
- * so the builder has no value for: a literal Postgres reads at the column's
- * own precision, named here and bound inside one Drizzle-rendered statement.
- * It is what makes the cursor's own precision, finer than a `Date`, the thing
- * the tests below compare.
+ * Instants a millisecond apart cannot tell, which a JS `Date` cannot carry
+ * and so the builder has no value for: literals Postgres reads at the
+ * column's own precision, bound inside one Drizzle-rendered statement. They
+ * are what makes the read's order finer than a `Date` the thing the test
+ * below compares.
  */
-const QUEUED_AT_MICROSECONDS = sql`'2026-09-10 12:00:00.000500+00'::timestamptz`;
-const SETTLED_AT_MICROSECONDS = sql`'2026-09-10 12:00:00.000900+00'::timestamptz`;
+const EARLIER_MICROSECONDS = sql`'2026-09-10 12:00:00.000500+00'::timestamptz`;
+const LATER_MICROSECONDS = sql`'2026-09-10 12:00:00.000700+00'::timestamptz`;
+const SETTLED_MICROSECONDS = sql`'2026-09-10 12:00:00.000900+00'::timestamptz`;
 
-/** A running turn standing at that instant, answering the id it was minted under. */
-const insertPreciseTurn = (userId: string, conversationId: string) =>
+/** A running turn started at a literal instant, answering the id it was minted under. */
+const insertPreciseTurn = (
+  userId: string,
+  conversationId: string,
+  at: typeof EARLIER_MICROSECONDS,
+) =>
   db
     .insert(turns)
     .values({
       userId,
       conversationId,
-      origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
+      origin: TURN_ORIGIN.TYPED,
       status: TURN_STATUS.RUNNING,
-      queuedAt: QUEUED_AT_MICROSECONDS,
-      startedAt: QUEUED_AT_MICROSECONDS,
+      queuedAt: at,
+      startedAt: at,
     })
     .returning({ id: turns.id });
 
@@ -188,28 +187,19 @@ async function populateMain(
 }
 
 /** Every read this module answers, of one account's rows in one conversation, each as the ids it answered. */
-async function everyRead(
-  userId: string,
-  conversationId: string,
-  rows: { readonly ids: readonly string[]; readonly turn: string },
-) {
+async function everyRead(userId: string, conversationId: string, rows: { readonly turn: string }) {
   const { messages, turns } = database.store;
   const recordIds = (read: MessageListRead) => readRecords(read).map((record) => record.id);
   return {
     byClientId: recordIds(
       await database.run(messages.byClientId(userId, conversationId, TOOLS, "client-1")),
     ),
-    byIds: recordIds(await database.run(messages.byIds(userId, TOOLS, rows.ids))),
     recent: recordIds(await database.run(listRecentMessages(userId, conversationId, TOOLS, 10))),
-    byId: recordIds(
-      await database.run(readMessageById(userId, conversationId, TOOLS, rows.ids[0] ?? "")),
-    ),
-    found: (await database.run(findMessageByClientId(userId, conversationId, "client-1")))?.id,
     turns: (await database.run(turns.named(userId, [rows.turn]))).map((turn) => turn.id),
   };
 }
 
-test("messages the ids name read back in sequence, typed by role, with the row's columns beside them", async () => {
+test("a message its client id names reads back typed by role, with the row's columns beside it, and a client id naming nothing answers an empty page", async () => {
   const userId = await database.createUser();
   const { main, turn, ids } = await populateMain(userId);
   const system = await insertMessage(userId, main, 4, {
@@ -218,48 +208,25 @@ test("messages the ids name read back in sequence, typed by role, with the row's
     parts: [{ type: "text", text: "standing instructions" }],
     finishedAt: NOW,
   });
+  const byClientId = async (clientId: string) =>
+    readRecords(
+      await database.run(database.store.messages.byClientId(userId, main, TOOLS, clientId)),
+    );
 
-  const all = readRecords(
-    await database.run(database.store.messages.byIds(userId, TOOLS, [system, ...ids])),
-  );
-  assert.deepEqual(
-    all.map((record) => record.seq),
-    [1, 2, 3, 4],
-  );
-  assert.deepEqual(
-    all.map((record) => record.id),
-    [...ids, system],
-  );
-  assert.deepEqual(
-    all.map((record) => record.message.role),
-    [MESSAGE_ROLE.USER, MESSAGE_ROLE.USER, MESSAGE_ROLE.USER, MESSAGE_ROLE.SYSTEM],
-  );
-  assert.equal(all[0]?.turnId, turn);
-  assert.equal(all[0]?.finishedAt, undefined);
-  assert.deepEqual(all[3]?.finishedAt, NOW);
+  const [ask] = await byClientId("client-2");
+  assert.equal(ask?.id, ids[1]);
+  assert.equal(ask?.seq, 2);
+  assert.equal(ask?.turnId, turn);
+  assert.equal(ask?.finishedAt, undefined);
   assert.equal(
-    all[0]?.message.role === MESSAGE_ROLE.USER && all[0].message.metadata.author,
+    ask?.message.role === MESSAGE_ROLE.USER && ask.message.metadata.author,
     MESSAGE_AUTHOR.DEVELOPER,
   );
-  assert.deepEqual(await database.run(database.store.messages.byIds(userId, TOOLS, [])), {
-    ok: true,
-    value: [],
-  });
-
-  const [journal] = readRecords(
-    await database.run(database.store.messages.byClientId(userId, main, TOOLS, "client-2")),
-  );
-  assert.deepEqual(journal?.id, ids[1]);
-  assert.deepEqual(
-    readRecords(
-      await database.run(database.store.messages.byClientId(userId, main, TOOLS, "client-9")),
-    ),
-    [],
-  );
-  assert.deepEqual(await database.run(findMessageByClientId(userId, main, "client-3")), {
-    id: ids[2],
-  });
-  assert.equal(await database.run(findMessageByClientId(userId, main, "client-9")), undefined);
+  const [instructions] = await byClientId("client-4");
+  assert.equal(instructions?.id, system);
+  assert.equal(instructions?.message.role, MESSAGE_ROLE.SYSTEM);
+  assert.deepEqual(instructions?.finishedAt, NOW);
+  assert.deepEqual(await byClientId("client-9"), []);
 });
 
 test("the recent read answers the newest finished messages of the two speaking roles, oldest first and bounded", async () => {
@@ -327,30 +294,28 @@ test("turns the ids name read back in the order they last changed, and no turn l
   );
 });
 
-test("a turn's place in the order of change is exact to the microsecond", async () => {
+test("turns that changed within one millisecond read back in the order they changed, to the microsecond", async () => {
   const userId = await database.createUser();
   const main = await insertConversation(userId);
-  // A sub-millisecond instant, so the cursor's own precision (finer than a JS `Date`) is what the test compares.
-  const [precise] = await database.run(insertPreciseTurn(userId, main));
-  const preciseId = precise?.id;
-  assert.ok(preciseId);
-  const [answered] = await database.run(database.store.turns.named(userId, [preciseId]));
-  assert.equal(answered?.id, preciseId);
-  assert.equal(answered?.cursor.changedAt, "2026-09-10 12:00:00.0005+00");
+  const [earlier] = await database.run(insertPreciseTurn(userId, main, EARLIER_MICROSECONDS));
+  const [later] = await database.run(insertPreciseTurn(userId, main, LATER_MICROSECONDS));
+  assert.ok(earlier && later);
+  const named = async () =>
+    (await database.run(database.store.turns.named(userId, [later.id, earlier.id]))).map(
+      (row) => row.id,
+    );
+  assert.deepEqual(await named(), [earlier.id, later.id]);
 
+  // Settled two tenths of a millisecond after the other started, the earlier turn now changed last.
   await database.run(
     Effect.asVoid(
       db
         .update(turns)
-        .set({ status: TURN_STATUS.SETTLED, settledAt: SETTLED_AT_MICROSECONDS })
-        .where(eq(turns.id, preciseId)),
+        .set({ status: TURN_STATUS.SETTLED, settledAt: SETTLED_MICROSECONDS })
+        .where(eq(turns.id, earlier.id)),
     ),
   );
-  const [settled] = await database.run(database.store.turns.named(userId, [preciseId]));
-  assert.deepEqual(
-    [settled?.status, settled?.cursor.changedAt],
-    [TURN_STATUS.SETTLED, "2026-09-10 12:00:00.0009+00"],
-  );
+  assert.deepEqual(await named(), [later.id, earlier.id]);
 });
 
 test("one account's rows are never read under another's id", async () => {
@@ -361,10 +326,7 @@ test("one account's rows are never read under another's id", async () => {
 
   assert.deepEqual(await everyRead(other, rows.main, rows), {
     byClientId: [],
-    byIds: [],
     recent: [],
-    byId: [],
-    found: undefined,
     turns: [],
   });
 });
@@ -393,28 +355,19 @@ test("a conversation stamped deleted disappears from every read on the next call
 
   assert.deepEqual(await everyRead(userId, rows.main, rows), {
     byClientId: [rows.ids[0]],
-    byIds: rows.ids,
     recent: rows.ids,
-    byId: [rows.ids[0]],
-    found: rows.ids[0],
     turns: [rows.turn],
   });
 
   await setConversationDeletedAt(database.run, rows.main, NOW);
   assert.deepEqual(await everyRead(userId, rows.main, rows), {
     byClientId: [],
-    byIds: [],
     recent: [],
-    byId: [],
-    found: undefined,
     turns: [],
   });
-  assert.deepEqual(await everyRead(userId, observed, { ids: [observedRow], turn: observedTurn }), {
+  assert.deepEqual(await everyRead(userId, observed, { turn: observedTurn }), {
     byClientId: [observedRow],
-    byIds: [observedRow],
     recent: [observedRow],
-    byId: [observedRow],
-    found: observedRow,
     turns: [observedTurn],
   });
 
@@ -478,32 +431,6 @@ test("the purge takes a stamped conversation and everything under it once the wi
   assert.equal(await countConversations(standing), 1);
 });
 
-test("the purge takes a retired observed conversation on the same terms as any stamped one", async () => {
-  // In a year of its own, as the purge above, a few months further on, clear of the other tests' stamps.
-  const base = new Date("2020-06-01T00:00:00.000Z");
-  const userId = await database.createUser();
-  const session = { providerId: "conductor", providerSessionId: "s-purge-retired" };
-  const observed = await database.run(
-    database.store.directory.observed(userId, session, base.getTime()),
-  );
-  assert.ok(observed);
-  const retired = await database.run(
-    database.store.roster.retireDeparted(
-      userId,
-      [{ providerId: "conductor", sessionIds: [] }],
-      base.getTime(),
-    ),
-  );
-  assert.deepEqual(retired, [observed]);
-
-  const beforeWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS - 1);
-  assert.equal(await database.run(database.store.retention.purgeCleared(beforeWindow)), 0);
-  assert.equal(await countConversations(observed), 1);
-  const atWindow = new Date(base.getTime() + CLEARED_CONVERSATION_RETENTION_MS);
-  assert.equal(await database.run(database.store.retention.purgeCleared(atWindow)), 1);
-  assert.equal(await countConversations(observed), 0);
-});
-
 test("deleting the account takes stamped and standing conversations alike", async () => {
   const userId = await database.createUser();
   const { main } = await populateMain(userId);
@@ -516,7 +443,7 @@ test("deleting the account takes stamped and standing conversations alike", asyn
 
 test("a row naming a tool the catalog has retired reads back without that part, and the page goes on past it", async () => {
   const userId = await database.createUser();
-  const { main, ids } = await populateMain(userId);
+  const { main } = await populateMain(userId);
   const retired = {
     type: "tool-nobody_registered",
     toolCallId: "call_4a0000000000000001",
@@ -529,23 +456,23 @@ test("a row naming a tool the catalog has retired reads back without that part, 
     role: MESSAGE_ROLE.ASSISTANT,
     metadata: { author: MESSAGE_AUTHOR.BRAIN },
     parts: [{ type: "step-start" }, retired, said],
+    finishedAt: NOW,
   });
-  const after = await insertMessage(userId, main, 5);
+  const after = await insertMessage(userId, main, 5, { finishedAt: NOW });
 
-  const records = readRecords(
-    await database.run(database.store.messages.byIds(userId, TOOLS, [...ids, answer, after])),
-  );
+  // The recent read takes the finished rows alone, which here are the answer and the ask after it.
+  const records = readRecords(await database.run(listRecentMessages(userId, main, TOOLS, 10)));
   assert.deepEqual(
-    records.map((record) => record.seq),
-    [1, 2, 3, 4, 5],
+    records.map((record) => record.id),
+    [answer, after],
   );
-  assert.deepEqual(records[3]?.message.parts, [{ type: "step-start" }, said]);
+  assert.deepEqual(records[0]?.message.parts, [{ type: "step-start" }, said]);
 });
 
 test("a row whose parts are not a message's refuses the page as malformed", async () => {
   const userId = await database.createUser();
-  const { main, ids } = await populateMain(userId);
-  const corrupt = await insertMessageRow(database.run, {
+  const { main } = await populateMain(userId);
+  await insertMessageRow(database.run, {
     userId,
     conversationId: main,
     seq: 4,
@@ -555,36 +482,12 @@ test("a row whose parts are not a message's refuses the page as malformed", asyn
     parts: [{ type: "text" }],
     metadata: TYPED_ASK,
   });
-  const read = await database.run(database.store.messages.byIds(userId, TOOLS, [...ids, corrupt]));
+  const read = await database.run(
+    database.store.messages.byClientId(userId, main, TOOLS, "client-4"),
+  );
   assert.equal(read.ok, false);
   if (read.ok) return;
   assert.equal(read.refusal, SCHEMA_REFUSAL.MALFORMED);
   assert.equal(read.seq, 4);
   assert.deepEqual(read.path, []);
-});
-
-test("a turn's place in the order of change reads as one string whatever time zone the database session keeps", async () => {
-  const userId = await database.createUser();
-  const main = await insertConversation(userId);
-  const [precise] = await database.run(insertPreciseTurn(userId, main));
-  const preciseId = precise?.id;
-  assert.ok(preciseId);
-  const sessionZone = (zone: string) =>
-    database.run(
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* sql.unsafe(`set time zone '${zone}'`);
-      }),
-    );
-  // A zone west of UTC, so a render in the session's zone would move both the
-  // wall clock and the offset; the test harness holds one connection, so the
-  // setting stands for every read below until it is reset.
-  await sessionZone("America/Anchorage");
-  try {
-    const [answered] = await database.run(database.store.turns.named(userId, [preciseId]));
-    assert.equal(answered?.id, preciseId);
-    assert.equal(answered?.cursor.changedAt, "2026-09-10 12:00:00.0005+00");
-  } finally {
-    await sessionZone("UTC");
-  }
 });

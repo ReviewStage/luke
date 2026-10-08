@@ -4,12 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.js",
     "./effect": "./src/effect/index.js",
     "./testing": "./src/testing/index.js",
     "./vocabulary": "./src/vocabulary.js"
   },
-  "types": "./src/index.ts",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --project tsconfig.json"

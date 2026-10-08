@@ -27,8 +27,9 @@ import {
  * current request's. Neither is a permission: the host reads them back and
  * checks the conversation's owner against the principal before anything runs.
  *
- * The deployment itself is the other caller. The scheduled observation holds
- * no account's bearer, so it reaches eve under the deployment's own secret and
+ * The deployment itself is the other caller. The voice function holds no
+ * account's bearer by the time a delegation arrives, so it reaches eve under
+ * the deployment's own secret and
  * names the account it acts for in a header; the door mints a principal of
  * another type for it — the deployment's one id, the account as its
  * attribute, the kind of turn as the role it acted in — admitted for exactly
@@ -40,7 +41,7 @@ import {
  * a person, the attribute for the deployment. Ownership is checked on that
  * answer, so the deployment can open a turn only on a conversation the named
  * account owns, and the deployment's secret can open only the turns the
- * table admits: an observation for the tick, never a cancel or a stream.
+ * table admits: a spoken ask for the voice function, never a stream.
  * Ownership is not scope: the kinds of turn the credential may open are the
  * table's, decided before any principal exists.
  */
@@ -89,17 +90,8 @@ export interface DeploymentActor {
   readonly admits: Readonly<Record<BrainHostTurn, boolean>>;
 }
 
-/** The routes a deployment actor may reach: a message opening a session or following one up, and the cancel of one turn of a session; no other. */
+/** The routes a deployment actor may reach: a message opening a session or following one up; no other. */
 const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
-/**
- * The cancel is admitted because the honour of a waiting ask's Stop runs where
- * the start is seen, in the deployment's hook, which holds no bearer of the
- * account's; it is narrower than the message routes the same principal already
- * holds, since a message makes Luke run a turn and take actions and a cancel
- * can only stop one, and the carrier names the turn it stops. A cancel carries
- * no kind of turn, so the turn table does not apply to it.
- */
-const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
 
 /**
  * The route authenticator for the deployment acting for an account, minted
@@ -108,7 +100,7 @@ const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
  * opened the session reads the deployment, in the role the turn kind names.
  * A request with another bearer is not this caller's and the walk moves on;
  * a request with this secret that names no account, reaches any route but a
- * message or a cancel, or is a message naming a kind of turn the table does
+ * message, or is a message naming a kind of turn the table does
  * not admit is refused here, before any later authenticator could admit it
  * as something else.
  */
@@ -122,14 +114,13 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
     const attributes = requestAttributes(request.headers);
     const turn = attributes[BRAIN_HOST_ATTRIBUTE.TURN];
     const pathname = new URL(request.url).pathname;
-    const cancel = request.method === "POST" && CANCEL_ROUTE.test(pathname);
     const message =
       request.method === "POST" &&
       MESSAGE_ROUTE.test(pathname) &&
       isWireString(turn) &&
       isBrainHostTurn(turn) &&
       actor.admits[turn];
-    if (!cancel && !message) {
+    if (!message) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }
     return {

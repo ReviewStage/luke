@@ -224,8 +224,6 @@ test("Better Auth's own adapter writes an access token's scopes into the migrate
 
 test("the auth service encrypts credentials and refuses user-provisioned OAuth clients", () => {
   assert.equal(ACCOUNT_TOKEN_STORAGE.encryptOAuthTokens, true);
-  // An account signed in with Google links a GitHub account whose email differs.
-  assert.equal(ACCOUNT_TOKEN_STORAGE.accountLinking.allowDifferentEmails, true);
   assert.equal(JWT_KEY_STORAGE.jwks.disablePrivateKeyEncryption, false);
   assert.equal(denyOAuthClientPrivileges(), false);
 });

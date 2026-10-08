@@ -9,7 +9,8 @@ import {
   TURN_STATUS,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { storeWriter } from "../server/hosted/store";
 import { sweepAbandonedTurns, TURN_ABANDON } from "../server/hosted/store/abandoned-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -35,7 +36,7 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = Date.parse("2026-09-16T12:00:00.000Z");
-const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
+const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 
 interface TurnFixture {
   readonly status?: TurnInsertRow["status"];
@@ -48,14 +49,14 @@ async function turnOf(fixture: TurnFixture) {
   const userId = fixture.userId ?? (await database.createUser());
   const conversationId = await insertConversation(database.run, {
     userId,
-    kind: CONVERSATION_KIND.OBSERVED,
+    kind: CONVERSATION_KIND.PLAN,
   });
   const startedAt = new Date(NOW - fixture.startedAgoMs);
   const status = fixture.status ?? TURN_STATUS.RUNNING;
   const turnId = await insertTurn(database.run, {
     userId,
     conversationId,
-    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
+    origin: TURN_ORIGIN.TYPED,
     status,
     queuedAt: startedAt,
     startedAt: status === TURN_STATUS.QUEUED ? null : startedAt,
@@ -70,10 +71,10 @@ async function turnOf(fixture: TurnFixture) {
     role: MESSAGE_ROLE.ASSISTANT,
     parts: [
       {
-        type: "tool-read_transcript",
+        type: `tool-${RUN_IN_REPOSITORY_TOOL.name}`,
         toolCallId: "call-1",
         state: TOOL_PART_STATE.INPUT_AVAILABLE,
-        input: { providerId: "fixture", providerSessionId: "s-1" },
+        input: { command: "ls" },
       },
     ],
     metadata: { author: MESSAGE_AUTHOR.BRAIN },

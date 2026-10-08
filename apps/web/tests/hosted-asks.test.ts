@@ -23,7 +23,7 @@ import {
   type RelayStanding,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
-import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
 import { ASK_DISPATCH_REFUSAL, type AskRow, askRecord } from "../server/hosted/store/asks";
 import { stampedEveEvent } from "./support/eve-events";
@@ -372,7 +372,7 @@ it.effect(
 
       const stops: (readonly [string, string, string, string])[] = [];
       let throwOnce = false;
-      const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
+      const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
       const relay = new StreamRelay({
         writer,
         asks: askEffects,
@@ -384,8 +384,6 @@ it.effect(
             }
             stops.push([stopped.conversationId, session, eveTurnId, turnId]);
           }),
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: () => undefined,
       });
@@ -393,7 +391,6 @@ it.effect(
         sessionId,
         target,
         turn: BRAIN_HOST_TURN.TYPED,
-        kind: CONVERSATION_KIND.MAIN,
         state: memoryRelayState(),
       };
       const start = (turn: string, deliveries: readonly string[]): MessageStreamEvent => {
@@ -480,20 +477,17 @@ it.effect(
       assert.equal(queued?.ask?.turnId, undefined);
       assert.equal(queued?.turn, undefined);
 
-      const writer = await database.run(storeWriter({ tools: CATALOG_TOOL_SET }));
+      const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
       const relay = new StreamRelay({
         writer,
         asks: askEffects,
         stopTurn: () => Effect.void,
-        offer: () => Effect.succeed(true),
-        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: () => undefined,
       });
       const standing: RelayStanding = {
         sessionId,
         target: { userId, conversationId },
-        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.TYPED,
         state: memoryRelayState(),
       };

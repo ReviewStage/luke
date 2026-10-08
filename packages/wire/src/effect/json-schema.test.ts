@@ -24,7 +24,6 @@ const PACKAGES = path.resolve(fileURLToPath(import.meta.url), "../../../..");
 
 const GOLDEN_ROOT = {
   HOSTED: path.join(PACKAGES, "hosted/fixtures/json-schema"),
-  ACTIONS: path.join(PACKAGES, "actions/fixtures/json-schema"),
 } as const;
 
 /** A non-empty string, bounded where a `max` is declared, as a wire declaration reads one. */
@@ -49,70 +48,6 @@ test.for(HOSTED_GOLDENS)(
   "%s is emitted byte for byte from its Effect declaration",
   async ([name, schema]) => {
     await matchJsonSchemaGolden(GOLDEN_ROOT.HOSTED, name, emitJsonSchema(schema));
-  },
-);
-
-const MAXIMUM_IDENTIFIER_LENGTH = 200;
-const MAXIMUM_SESSION_MESSAGE_LENGTH = 4000;
-const MAXIMUM_WORKSPACE_NAME_LENGTH = 80;
-
-const identifier = (description: string) =>
-  describeWire(text(MAXIMUM_IDENTIFIER_LENGTH), description);
-
-const SESSION_IDENTITY_FIELDS = {
-  provider_id: identifier("The session provider ID."),
-  provider_session_id: identifier("The session ID."),
-} as const;
-
-const optionalText = (description: string, max?: number) =>
-  Schema.optionalKey(describeWire(text(max), description));
-
-const sendSessionMessage = Schema.Struct({
-  ...SESSION_IDENTITY_FIELDS,
-  text: describeWire(text(MAXIMUM_SESSION_MESSAGE_LENGTH), "The message to send."),
-});
-
-const createWorkspace = Schema.Struct({
-  provider_id: optionalText("The provider ID; omit it to create in the default provider."),
-  project_id: optionalText("The project ID; omit it to create in that provider's default project."),
-  target_id: optionalText(
-    "The target ID of the host, exactly as the projects list gives it, and only for a " +
-      "project whose line carries a target_id; a project listed without one takes none.",
-  ),
-  name: optionalText(
-    "The workspace's name: the developer's own when they chose one, otherwise a short, " +
-      "specific name composed from what the workspace is for, in a few words with no " +
-      "punctuation. Always supply one, except in a project listed as naming its own " +
-      "workspaces, which takes none.",
-    MAXIMUM_WORKSPACE_NAME_LENGTH,
-  ),
-  task: optionalText("An optional opening task.", MAXIMUM_SESSION_MESSAGE_LENGTH),
-});
-
-const ACTION_GOLDENS = [
-  [
-    "tool-send_session_message",
-    "send_session_message",
-    "Send a message to an observed session.",
-    sendSessionMessage,
-  ],
-  [
-    "tool-create_workspace",
-    "create_workspace",
-    "Create a workspace for a new agent.",
-    createWorkspace,
-  ],
-] as const satisfies readonly (readonly [string, string, string, Schema.Top])[];
-
-test.for(ACTION_GOLDENS)(
-  "%s is emitted byte for byte from its Effect declaration",
-  async ([golden, name, description, request]) => {
-    await matchJsonSchemaGolden(GOLDEN_ROOT.ACTIONS, golden, {
-      type: "function",
-      name,
-      description,
-      parameters: emitJsonSchema(request),
-    });
   },
 );
 

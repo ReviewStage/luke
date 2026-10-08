@@ -12,7 +12,6 @@
     "apps/web/eve/host.ts",
     "apps/web/eve/instructions/prompt.ts",
     "apps/web/eve/instructions/seed.ts",
-    "apps/web/eve/memory/notebook.ts",
     "apps/web/eve/tools/brain.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
@@ -51,7 +50,6 @@
     "apps/desktop/src/renderer/use-feedback-composer.ts",
     "apps/desktop/src/renderer/use-panel-presentation.ts",
     "apps/desktop/src/renderer/use-voice-view.ts",
-    "apps/web/server/hosted/apns.ts",
     "apps/web/src/admin/use-admin-read.ts",
     "apps/web/tests/support/voice-fakes.ts"
   ]

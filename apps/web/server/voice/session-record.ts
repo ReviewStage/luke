@@ -27,7 +27,7 @@ import { readPlan } from "../hosted/plan-store.js";
  * A connection whose device socket went without a hang-up
  * stamps `detached_at` on the open row, and a re-attach clears it, so an open
  * row stamped longer ago than the grace is a session no device came back for:
- * the scheduled tick reads those rows, oldest first and bounded, and ends
+ * the scheduled sweep reads those rows, oldest first and bounded, and ends
  * each one, writing its close here like any other. A session that is gone at
  * OpenAI by then is closed as a lost connection with its last unconfirmed
  * snapshot standing, so no row is read for closing twice.

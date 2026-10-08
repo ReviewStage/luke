@@ -85,4 +85,3 @@ jobs:
       - run: pnpm --filter @luke/web test:agent
         env:
           DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
-          PROVIDER_KEY_ENCRYPTION_SECRET: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
