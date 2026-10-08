@@ -205,6 +205,19 @@ test("clearing the query restores the page list, and Escape clears before it let
   window.removeEventListener("keydown", onWindowKey);
 });
 
+test("the search's clear button hangs no pill, its glyph being the one every search field draws", () => {
+  const container = mount();
+  type(field(container), "voice");
+  const clear = sidebar(container).querySelector<HTMLButtonElement>(
+    "button[aria-label='Clear search']",
+  );
+  assert.ok(clear, "a standing query draws the clear button");
+  act(() => {
+    clear.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.equal(document.body.querySelector('[role="tooltip"]')?.textContent, undefined);
+});
+
 test("Command-F puts the caret in the search, whose empty field prints the chord until the caret arrives", () => {
   function Keyed() {
     useAppKeymap(true);

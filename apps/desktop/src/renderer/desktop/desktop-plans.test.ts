@@ -114,6 +114,14 @@ function tabNamed(page: HTMLElement, label: string): HTMLElement {
   return tab;
 }
 
+/** The pointer arriving on a control, answering the pill it raised, if any. */
+function hover(control: HTMLElement): string | undefined {
+  act(() => {
+    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  return document.body.querySelector('[role="tooltip"]')?.textContent ?? undefined;
+}
+
 function documentShown(page: HTMLElement): boolean {
   const body = page.querySelector(`.desktop-document[aria-label="${PLAN.name}"] .plan-body`);
   return body !== null && body.closest("[hidden]") === null;
@@ -240,6 +248,20 @@ test("the tabs switch the panel between the board and the code, which is quiet w
 
   act(() => tabNamed(page, "Board").click());
   assert.ok(page.querySelector(".side-panel .plan-board"));
+});
+
+test("the panel's tabs hang no pill, their words being enough, while Copy plan still names its chord", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+
+  assert.equal(hover(tabNamed(page, "Code")), undefined);
+  assert.equal(tabNamed(page, "Code").getAttribute("aria-keyshortcuts"), "Meta+Alt+2");
+
+  const copy = [...page.querySelectorAll<HTMLElement>("button")].find(
+    (each) => each.textContent === "Copy plan",
+  );
+  assert.ok(copy, "the toolbar draws Copy plan");
+  assert.equal(hover(copy), "Copy plan⇧⌘C");
 });
 
 test("the Code tab draws the code Luke has on screen", () => {
