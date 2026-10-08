@@ -4,7 +4,7 @@ import { PLAN_FIELD, PLAN_FIELD_PURPOSE } from "@sidecar/hosted/plan-template";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
-import { Effect, type Schema } from "effect";
+import { Effect, Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { ToolDefinition } from "eve/tools";
@@ -283,6 +283,36 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
 
 const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, tool]));
 
+/**
+ * The tools eve puts beside the planning tools: one per declared subagent,
+ * named by its directory under `eve/subagents/`, and `task_cancel`. eve runs
+ * them, so they are no planning tool, but a turn's rows name them, and the
+ * writer holds every row to the hosted tool set.
+ */
+export const EVE_DELEGATION_TOOL = {
+  RESEARCHER: "researcher",
+  TASK_CANCEL: "task_cancel",
+} as const;
+
+/**
+ * What a subagent's call carries, as eve declares it: the message, and the
+ * child to continue or steer. Note that eve's optional output schema is left
+ * out, because the planning prompt never asks for structured output and an
+ * arbitrary JSON Schema has no form the wire can show.
+ */
+const SUBAGENT_CALL_INPUT = Schema.Struct({
+  message: Schema.String,
+  agentId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+
+/** What `task_cancel` carries, as eve declares it: the tasks to cancel. */
+const TASK_CANCEL_INPUT = Schema.Struct({ taskIds: Schema.Array(Schema.String) });
+
+const EVE_DELEGATION_INPUT = {
+  [EVE_DELEGATION_TOOL.RESEARCHER]: SUBAGENT_CALL_INPUT,
+  [EVE_DELEGATION_TOOL.TASK_CANCEL]: TASK_CANCEL_INPUT,
+} as const;
+
 /** The planning tools the `researcher` subagent is offered: the public reads, and nothing that speaks, shows, or writes. */
 export const RESEARCHER_TOOL_NAMES: ReadonlySet<string> = new Set([
   SEARCH_WEB_TOOL.name,
@@ -314,12 +344,16 @@ export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
 
 /** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's. */
 export function planningToolSet(): ToolSet {
-  return Object.fromEntries(
-    PLANNING_TOOLS.map((tool) => [
+  return Object.fromEntries([
+    ...PLANNING_TOOLS.map((tool) => [
       tool.name,
       wireValidatedTool(tool.description, tool.inputSchema),
     ]),
-  );
+    ...Object.entries(EVE_DELEGATION_INPUT).map(([name, inputSchema]) => [
+      name,
+      wireValidatedTool(`eve's own ${name} tool`, inputSchema),
+    ]),
+  ]);
 }
 
 /** Why a planning call ran nothing, in words the model can act on. */
