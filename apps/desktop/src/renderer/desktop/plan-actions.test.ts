@@ -18,7 +18,6 @@ const PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  openedAt: 3,
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
@@ -27,7 +26,6 @@ const OTHER: PlanSummary = {
   name: "Billing export",
   createdAt: 4,
   updatedAt: 5,
-  openedAt: 6,
 };
 
 const DIALOG = '[role="alertdialog"]';

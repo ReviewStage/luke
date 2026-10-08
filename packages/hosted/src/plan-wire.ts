@@ -71,7 +71,9 @@ const planSummaryFields = {
   /**
    * The start again, answered only for a desktop through v0.7.1, which
    * refuses a summary without it; the list once ordered by the last open.
-   * Optional here so no later build needs it, and nothing reads it.
+   * Optional here so no later build needs it, and nothing reads it. It goes
+   * once a release that decodes it as optional has shipped and v0.7.1 is no
+   * longer supported.
    */
   openedAt: EffectSchema.optionalKey(countedNumber),
 };
