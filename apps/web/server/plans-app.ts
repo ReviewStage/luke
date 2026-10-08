@@ -24,6 +24,7 @@ import {
 } from "./hosted/http-effect.js";
 import { createPlan, deletePlan, listPlans, openPlan } from "./hosted/plan-store.js";
 import { claimPlanCommand, settlePlanCommand } from "./hosted/repository-shell.js";
+import { readTranscript } from "./hosted/transcript-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -39,7 +40,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
- * winning (`hosted/board-store.ts`).
+ * winning (`hosted/board-store.ts`). `/api/plans/{id}/transcript` is what was
+ * said on the plan's calls, read and never written here
+ * (`hosted/transcript-store.ts`).
  *
  * Starting a plan names a folder on the developer's Mac and nothing more.
  * The two command paths are the Mac's side of `run_in_repository`
@@ -54,6 +57,8 @@ const PLANS_PATH = {
   ONE: "/api/plans/plan",
   /** GET reads the plan's board, PUT writes it; the rewrite moves the path's id into the `id` query. */
   BOARD: "/api/plans/board",
+  /** GET reads what was said on the plan's calls; the rewrite moves the path's id into the `id` query. */
+  TRANSCRIPT: "/api/plans/transcript",
   /** POST claims the plan's next command, held open until one arrives. */
   COMMAND_CLAIM: "/api/plans/commands/claim",
   /** POST settles one claimed command; the rewrite moves its id into the `command` query. */
@@ -186,6 +191,22 @@ const boardEndpoint = /* @__PURE__ */ Effect.fn("web/planBoardEndpoint")(functio
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { board: written.value });
 });
 
+/** GET reads what was said on the plan's calls. */
+const transcriptEndpoint = /* @__PURE__ */ Effect.fn("web/planTranscriptEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const transcript = yield* hostedStoreOrUnavailable(readTranscript(userId, planId));
+  if (Option.isNone(transcript)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { transcript: transcript.value });
+});
+
 /** POST: the plan's next command, claimed for the caller's Mac, or null once the hold ran out. */
 const commandClaimEndpoint = /* @__PURE__ */ Effect.fn("web/planCommandClaimEndpoint")(function* (
   seams: PlansAppSeams,
@@ -235,6 +256,7 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COLLECTION, refusing(collectionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, refusing(oneEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, refusing(boardEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, refusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COMMAND_CLAIM, refusing(commandClaimEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COMMAND, refusing(commandSettleEndpoint(seams))),
     hostedNotFoundRoute,

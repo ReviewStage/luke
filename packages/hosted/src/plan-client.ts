@@ -30,8 +30,10 @@ import {
   planCommandClaimPath,
   planCommandPath,
   planPath,
+  planTranscriptPath,
 } from "./service-paths.js";
 import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
+import { type PlanTranscript, planTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
  * plan-client.ts -- the Plans tab's side of the named plans and the planning model's folder commands, as the host asks the service for them.
@@ -161,6 +163,19 @@ export class HostedPlanClient {
     return Effect.map(
       this.#call.ask({ method: HTTP_METHOD.GET, path: planBoardPath(planId) }, boardAnswerSchema),
       (answer) => answer?.board,
+    );
+  }
+
+  /** What was said on one plan's calls; nothing where the service did not answer it. */
+  readTranscript(
+    planId: string,
+  ): Effect.Effect<PlanTranscript | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.GET, path: planTranscriptPath(planId) },
+        planTranscriptAnswerSchema,
+      ),
+      (answer) => answer?.transcript,
     );
   }
 

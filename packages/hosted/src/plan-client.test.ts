@@ -130,3 +130,36 @@ it.effect("a service that fails answers unanswered, never an empty list or a pla
     assert.deepEqual(started, { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED });
   }),
 );
+
+it.effect("reads what was said on a plan's calls, and nothing from a service that refused it", () =>
+  Effect.gen(function* () {
+    const transcript = {
+      calls: [
+        {
+          id: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
+          startedAt: 1_800_000_300_000,
+          lines: [
+            { speaker: "user", text: "Invites should expire." },
+            { speaker: "assistant", text: "After how many days?" },
+          ],
+        },
+      ],
+      earlierOmitted: false,
+    };
+    const api = fakeCloudApi({
+      [`GET /api/plans/${PLAN_ID}/transcript`]: { answer: () => ({ transcript }) },
+    });
+    const gone = fakeCloudApi({
+      [`GET /api/plans/${PLAN_ID}/transcript`]: {
+        answer: () => ({ error: "not-found" }),
+        status: HTTP_STATUS.NOT_FOUND,
+      },
+    });
+
+    assert.deepEqual(
+      yield* Effect.provide(client().readTranscript(PLAN_ID), api.layer),
+      transcript,
+    );
+    assert.equal(yield* Effect.provide(client().readTranscript(PLAN_ID), gone.layer), undefined);
+  }),
+);

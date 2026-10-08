@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
-import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
+import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
 import { Context, Deferred, Effect, Fiber } from "effect";
 import type {
@@ -515,6 +515,47 @@ it.effect(
       call.events.onCaptions([row("row-1", CONVERSATION_ENTRY_KIND.ASK, "what needs me", true)]);
       yield* settleFibers();
       assert.equal(f.views.at(-1)?.developerCaptions, undefined);
+    }),
+);
+
+it.effect(
+  "the view carries everything said on the call, captions or not, settling moves nothing, and the call's end takes it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture({ captionsEnabled: false });
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.callTranscript, undefined);
+
+      const said = (settled: boolean): LiveCaptionRow[] =>
+        [
+          row("row-1", CONVERSATION_ENTRY_KIND.ASK, "Invites should expire.", settled),
+          row("row-2", CONVERSATION_ENTRY_KIND.REPLY, "After how many days?", settled),
+        ].map((line) => ({ ...line, voiceSessionId: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81" }));
+      call.events.onCaptions(said(false));
+      yield* settleFibers();
+      assert.deepEqual(f.views.at(-1)?.callTranscript, {
+        voiceSessionId: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
+        lines: [
+          { rowId: "row-1", speaker: TRANSCRIPT_SPEAKER.USER, words: "Invites should expire." },
+          { rowId: "row-2", speaker: TRANSCRIPT_SPEAKER.ASSISTANT, words: "After how many days?" },
+        ],
+      });
+
+      const reports = f.views.length;
+      call.events.onCaptions(said(true));
+      yield* settleFibers();
+      assert.equal(f.views.length, reports);
+
+      yield* f.stopCall();
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.callTranscript, undefined);
     }),
 );
 

@@ -4,6 +4,8 @@ import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import { planAnswerSchema, planListAnswerSchema } from "@sidecar/hosted/plan-wire";
+import { planTranscriptAnswerSchema, TRANSCRIPT_BOUNDS } from "@sidecar/hosted/transcript-wire";
+import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
@@ -13,6 +15,12 @@ import { SqlClient } from "effect/unstable/sql";
 import { user } from "../server/db/auth-schema";
 import { planBoard, planCommand } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
+import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
+import {
+  VOICE_DELEGATION_MODE,
+  VOICE_SEGMENT_ROLE,
+  type VoiceSegmentRole,
+} from "../server/db/voice-vocabulary";
 import {
   DRAW_ON_BOARD_REFUSAL,
   DRAW_ON_BOARD_STATUS,
@@ -41,6 +49,7 @@ const ORIGIN = "https://luke.test";
 const PLANS = "/api/plans";
 const ONE_PLAN = "/api/plans/plan";
 const BOARD = "/api/plans/board";
+const TRANSCRIPT = "/api/plans/transcript";
 const COMMAND_CLAIM = "/api/plans/commands/claim";
 const COMMAND = "/api/plans/commands/command";
 
@@ -136,6 +145,41 @@ const NOTE = {
   text: "Rate limit invites",
   fontFamily: 5,
 } as const;
+
+/** One fragment said on a call: who, the words as the delta carried them, and the span on the call's clock. */
+type Said = readonly [role: VoiceSegmentRole, text: string, startMs: number];
+
+/** A call about the plan, started at the instant given, with the fragments said on it in the order they were written. */
+const callAbout = (
+  input: { userId: string; planId: string; startedAt: number },
+  said: readonly Said[],
+) =>
+  Effect.gen(function* () {
+    const [row] = yield* db
+      .insert(voiceSessions)
+      .values({
+        userId: input.userId,
+        planId: input.planId,
+        liveSessionId: `live_t_${randomUUID()}`,
+        delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+        startedAt: new Date(input.startedAt),
+      })
+      .returning({ id: voiceSessions.id });
+    assert.ok(row);
+    if (said.length > 0) {
+      yield* db.insert(voiceTranscriptSegments).values(
+        said.map(([role, text, startMs], seq) => ({
+          voiceSessionId: row.id,
+          seq,
+          role,
+          text,
+          startMs,
+          endMs: startMs + 500,
+        })),
+      );
+    }
+    return row.id;
+  });
 
 /** Luke's drawing of one labelled box. */
 const DRAW_API = {
@@ -399,6 +443,98 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         (yield* ask(request(BOARD, owner, { id: planId }))).status,
         HOSTED_HTTP_STATUS.NOT_FOUND,
       );
+    }),
+  );
+
+  it.effect(
+    "a transcript reads each call oldest first in the lines its captions drew, and nothing of another plan or account",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const read = () =>
+          Effect.map(
+            ask(request(TRANSCRIPT, owner, { id: planId })),
+            (answered) =>
+              readAnswer(planTranscriptAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).transcript,
+          );
+        const { USER, ASSISTANT } = VOICE_SEGMENT_ROLE;
+
+        assert.deepEqual(yield* read(), { calls: [], earlierOmitted: false });
+        // Made newest first, so the order read back is the calls' starts and not the rows'.
+        const second = yield* callAbout({ userId: owner, planId, startedAt: 2_000_000 }, [
+          [USER, "Seven days.", 0],
+        ]);
+        // Luke's acknowledgment lands inside the developer's sentence, which a
+        // fragment written after it still finishes, as the captions draw it.
+        const first = yield* callAbout({ userId: owner, planId, startedAt: 1_000_000 }, [
+          [USER, "Invites ", 0],
+          [ASSISTANT, "Mm.", 600],
+          [USER, "should expire.", 700],
+          [ASSISTANT, "After how many days?", 9_000],
+        ]);
+        yield* callAbout({ userId: owner, planId, startedAt: 3_000_000 }, []);
+        yield* callAbout({ userId: other, planId, startedAt: 3_000_000 }, [
+          [USER, "Another account's words.", 0],
+        ]);
+        const otherPlan = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* callAbout({ userId: owner, planId: otherPlan, startedAt: 3_000_000 }, [
+          [USER, "Another plan's words.", 0],
+        ]);
+
+        assert.deepEqual(yield* read(), {
+          calls: [
+            {
+              id: first,
+              startedAt: 1_000_000,
+              lines: [
+                { speaker: TRANSCRIPT_SPEAKER.USER, text: "Invites should expire." },
+                { speaker: TRANSCRIPT_SPEAKER.ASSISTANT, text: "Mm." },
+                { speaker: TRANSCRIPT_SPEAKER.ASSISTANT, text: "After how many days?" },
+              ],
+            },
+            {
+              id: second,
+              startedAt: 2_000_000,
+              lines: [{ speaker: TRANSCRIPT_SPEAKER.USER, text: "Seven days." }],
+            },
+          ],
+          earlierOmitted: false,
+        });
+        assert.deepEqual(
+          yield* ask(request(TRANSCRIPT, other, { id: planId })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(TRANSCRIPT, owner, { method: "PUT", id: planId })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect("a transcript past its bound keeps the newest words and says older ones stand", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+      const said = Array.from(
+        { length: TRANSCRIPT_BOUNDS.MAX_SEGMENTS + 1 },
+        (_, index): Said => [VOICE_SEGMENT_ROLE.USER, `${index} `, index * 100],
+      );
+      yield* callAbout({ userId: owner, planId, startedAt: 1_000_000 }, said);
+
+      const transcript = readAnswer(
+        planTranscriptAnswerSchema,
+        HOSTED_HTTP_STATUS.OK,
+        yield* ask(request(TRANSCRIPT, owner, { id: planId })),
+      ).transcript;
+      assert.equal(transcript.earlierOmitted, true);
+      const text = transcript.calls.flatMap((call) => call.lines.map((line) => line.text)).join("");
+      assert.equal(text.startsWith("1 2 "), true);
+      assert.equal(text.endsWith(`${TRANSCRIPT_BOUNDS.MAX_SEGMENTS} `), true);
     }),
   );
 

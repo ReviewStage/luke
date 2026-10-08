@@ -1,4 +1,9 @@
-import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
+import {
+  LIVE_STATUS,
+  type LiveStatus,
+  TRANSCRIPT_SPEAKER,
+  type TranscriptSpeaker,
+} from "@sidecar/live";
 import {
   isOptionalWireString,
   isRecord,
@@ -22,6 +27,23 @@ export interface VoiceSpeakers {
   lukeSpeaking: boolean;
 }
 
+/** One line said on the standing call, as the voice window's captions group it. */
+interface VoiceCallLine {
+  readonly rowId: string;
+  readonly speaker: TranscriptSpeaker;
+  readonly words: string;
+}
+
+/**
+ * Everything said on the standing call so far: the store's id for its
+ * session, which the plan's stored transcript names the call by once it
+ * ends, and its lines in the order they opened.
+ */
+interface VoiceCallTranscript {
+  readonly voiceSessionId: string | undefined;
+  readonly lines: readonly VoiceCallLine[];
+}
+
 export interface VoiceView extends VoiceSpeakers {
   /**
    * The one claim the status names, which the media duck, the exchange count,
@@ -37,6 +59,8 @@ export interface VoiceView extends VoiceSpeakers {
   developerCaptions: readonly string[] | undefined;
   /** The plan the standing call is about, where the panel's open plan opened it; none for no call. */
   callPlanId: string | undefined;
+  /** What was said on the standing call so far, whatever the captions preference; none for no call or before its first line. */
+  callTranscript: VoiceCallTranscript | undefined;
 }
 
 /**
@@ -84,6 +108,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   lukeCaptions: undefined,
   developerCaptions: undefined,
   callPlanId: undefined,
+  callTranscript: undefined,
 };
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
@@ -102,6 +127,28 @@ function isOptionalWireStrings(value: UnparsedWireValue): value is readonly stri
   return value === undefined || (Array.isArray(value) && value.every(isWireString));
 }
 
+const TRANSCRIPT_SPEAKERS: ReadonlySet<string> = new Set(Object.values(TRANSCRIPT_SPEAKER));
+
+function isVoiceCallLine(value: UnparsedWireValue): boolean {
+  return (
+    isRecord(value) &&
+    isWireString(value.rowId) &&
+    isWireString(value.speaker) &&
+    TRANSCRIPT_SPEAKERS.has(value.speaker) &&
+    isWireString(value.words)
+  );
+}
+
+function isOptionalCallTranscript(value: UnparsedWireValue): boolean {
+  if (value === undefined) return true;
+  return (
+    isRecord(value) &&
+    isOptionalWireString(value.voiceSessionId) &&
+    Array.isArray(value.lines) &&
+    value.lines.every(isVoiceCallLine)
+  );
+}
+
 export function isVoiceView(value: UnparsedWireValue): value is VoiceView & WireRecord {
   if (!isRecord(value)) return false;
   if (!isLiveStatus(value.voiceStatus)) return false;
@@ -109,6 +156,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
   if (!isOptionalWireString(value.callPlanId)) return false;
+  if (!isOptionalCallTranscript(value.callTranscript)) return false;
   if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;
   return (
     isOptionalWireStrings(value.lukeCaptions) && isOptionalWireStrings(value.developerCaptions)
