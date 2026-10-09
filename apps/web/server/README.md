@@ -1155,7 +1155,20 @@ before the re-attach, past which the reply is no longer news. Written before it
 is told, a telling the detach cut between the write and the voice is lost and
 never said twice. A turn that
 does not end inside the follow bound, or an ask the record no longer holds,
-is told as a failed end so the exchange settles rather than waiting forever. On the eve
+is told as a failed end so the exchange settles rather than waiting forever.
+The bound is `LIVE_BRAIN_FOLLOW_BOUNDS` in `server/voice/live-brain.ts`: the
+plain `FOLLOW`, ten minutes, past eve's own turn deadline with room for one
+queued turn ahead, until the journal shows the turn handed work to the
+`worker`, which eve runs as a task the planning turn parks on (`turn.waiting`)
+and resumes from in the same turn once the findings land, minutes or longer
+later. From that call on the follow runs under `PARKED_FOLLOW` instead: the
+plain bound plus the sweep's `TURN_ABANDON.AFTER_MS`, an hour, at which a turn
+still running is settled as failed on the record and the follow hears that end,
+so following longer could hear nothing more. The record does not say when the
+task settles — the relay tells nothing for the park and the findings reach the
+journal as the steps after them — so the parked bound covers the turn from its
+delegation, and the follow still stops the moment the turn completes, fails, or
+is cancelled, or the socket's scope closes. On the eve
 path the reply arrives whole at the turn's end; what the follow carries
 mid-turn is the slow step, each question a planning turn queued, the
 actions settling, and, as the live brain's own and no event of the stream,

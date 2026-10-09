@@ -38,9 +38,11 @@ import {
   type StopOutcome,
   stopAsk,
 } from "../hosted/brain-ask.js";
+import { EVE_DELEGATION_TOOL } from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
+import { TURN_ABANDON } from "../hosted/store/abandoned-turns.js";
 import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-events.js";
@@ -54,8 +56,13 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * itself — `acceptAsk` — and the store, so a spoken ask is admitted,
  * recorded, and handed to eve under the eve client the composition built for
  * the account. A turn's events are `projectTurnEvents` over the turn row and
- * its journal, read again on a schedule until the turn ends; there is no
- * HTTP hop and so no function ceiling to re-attach across. The run the
+ * its journal, read again on a schedule until the turn ends or the follow
+ * bound is reached; there is no HTTP hop and so no function ceiling to
+ * re-attach across. The bound is the plain one until the journal shows the
+ * turn handed work to the worker, which eve runs as a task the turn parks
+ * on (`turn.waiting`) and resumes from in the same turn, minutes or longer
+ * later: from that call on the follow runs under the parked bound instead,
+ * so the findings are spoken when they land. The run the
  * service keys an exchange by is the ask's own id, since eve names the turn
  * only once it starts, and every event is translated back to it. A run is
  * cancelled through `stopAsk`, so the voice's stop key stops a turn as eve's
@@ -78,11 +85,24 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * `runTool` provides it to the brain's seams.
  */
 
-const LIVE_BRAIN_FOLLOW_BOUNDS = {
+/** How long an ask is followed before it is given up as failed: past eve's own turn deadline, with room for one queued turn ahead of it. */
+const FOLLOW = Duration.minutes(10);
+
+export const LIVE_BRAIN_FOLLOW_BOUNDS = {
   /** How often the record is read again while an ask's turn runs: the measured step boundary hosted is about 300 ms. */
   POLL: Duration.millis(250),
-  /** How long an ask is followed before it is given up as failed: past eve's own turn deadline, with room for one queued turn ahead of it. */
-  FOLLOW: Duration.minutes(10),
+  FOLLOW,
+  /**
+   * How long an ask whose turn handed work to a task is followed instead.
+   * The record does not say when the task settles — the relay tells nothing
+   * for the park, and the findings reach the journal as the steps after
+   * them — so the bound covers the turn from its delegation to the latest
+   * end the record can give it: the plain bound, which is the room the turn
+   * had to start, and past that the sweep's own abandon bound, at which a
+   * turn still running is settled as failed on the record and the follow
+   * hears that end. Following longer could hear nothing more.
+   */
+  PARKED_FOLLOW: Duration.sum(FOLLOW, Duration.millis(TURN_ABANDON.AFTER_MS)),
 } as const;
 
 type FollowBounds = Readonly<Record<keyof typeof LIVE_BRAIN_FOLLOW_BOUNDS, Duration.Duration>>;
@@ -144,11 +164,21 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
   }
 }
 
-/** What a follow has told of its turn so far: the activity last said, and how many of its calls were told settled. */
+/** What a follow has told of its turn so far: the activity last said, how many of its calls were told settled, and whether the turn handed work to a task. */
 interface FollowTold {
   action: string | undefined;
   settled: number;
+  delegated: boolean;
 }
+
+/** What one look answers the follow: the turn still runs, it ended, or it ran past the bound that applies to it. */
+const FOLLOW_LOOK = {
+  RUNNING: "running",
+  ENDED: "ended",
+  OVERDUE: "overdue",
+} as const;
+
+type FollowLook = (typeof FOLLOW_LOOK)[keyof typeof FOLLOW_LOOK];
 
 /** No recovered run: the session's revisions start from nothing, and nothing is followed. */
 const NO_RECOVERY: LiveBrainRecovery = { revision: 0, runs: [], follow: Effect.void };
@@ -180,6 +210,19 @@ function pendingActionOf(journal: StoredUIMessage | undefined): string | undefin
     : storedToolName(pending);
   if (action.length <= PLAN_ACTIVITY_ACTION_MAX_CHARS) return action;
   return `${action.slice(0, PLAN_ACTIVITY_ACTION_MAX_CHARS - 1)}…`;
+}
+
+/**
+ * Whether the turn handed work to the worker, which eve runs as a task the
+ * turn parks on: its call is on the journal, settled the moment the task
+ * starts with the receipt as its result, so a settled call says nothing of
+ * whether the task has. Note that we read which tool was called and nothing
+ * of its input, so the delegation tells the voice no word of the job.
+ */
+function delegatedOf(journal: StoredUIMessage | undefined): boolean {
+  return (journal?.parts ?? [])
+    .filter(isStoredToolPart)
+    .some((part) => storedToolName(part) === EVE_DELEGATION_TOOL.WORKER);
 }
 
 /**
@@ -366,10 +409,24 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   });
 
   /**
+   * A turn still under way, as the look answers it: running inside the
+   * bound that applies to it, or overdue past that bound. A turn that handed
+   * work to a task is followed under the parked bound; any other under the
+   * plain one, since a turn eve never started has nothing to wait on.
+   */
+  const standingLook = Effect.fnUntraced(function* (told: FollowTold, since: number) {
+    const bound = told.delegated ? bounds.PARKED_FOLLOW : bounds.FOLLOW;
+    const elapsed = (yield* Clock.currentTimeMillis) - since;
+    return elapsed >= Duration.toMillis(bound) ? FOLLOW_LOOK.OVERDUE : FOLLOW_LOOK.RUNNING;
+  });
+
+  /**
    * One look at where the ask stands: the events its turn has produced so
    * far, those past the ones already told emitted under the ask's id, and
    * what it is doing now where that differs from what was last told.
-   * Answers whether the turn has ended. An ask the record no longer holds
+   * Answers whether the turn still runs, has ended, or has run past its
+   * bound: the plain one, or the parked one from the look that finds the
+   * worker's call on the journal. An ask the record no longer holds
    * ends as failed, since nothing of it can be told again, and so does a
    * turn whose journal the store cannot read: its sentences are in that
    * journal, so telling the turn's end without them would be a reply the
@@ -377,14 +434,14 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * another ask was folded into is told by the newest of them; the others
    * hear only the end, so their exchanges still settle.
    */
-  const look = Effect.fnUntraced(function* (askId: string, told: FollowTold) {
+  const look = Effect.fnUntraced(function* (askId: string, told: FollowTold, since: number) {
     const standing = yield* askStanding(reads, options.userId, askId);
     if (standing === undefined) {
       endFailed(askId);
-      return true;
+      return FOLLOW_LOOK.ENDED;
     }
     const { turn } = standing;
-    if (turn === undefined) return false;
+    if (turn === undefined) return yield* standingLook(told, since);
     boundTurn.set(askId, turn.id);
     // A planning call's turns call the planning tools, so the journal is read
     // under every tool a hosted conversation's rows may name.
@@ -397,9 +454,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     if (!journal.ok) {
       options.report("A spoken ask's journal could not be read; its turn is told as failed");
       endFailed(askId);
-      return true;
+      return FOLLOW_LOOK.ENDED;
     }
     const message = journal.value[0]?.message;
+    told.delegated ||= delegatedOf(message);
     const events = projectTurnEvents(turn, message);
     const turnTold = yield* tellerOf(askId, turn.id, events);
     const telling = turnTold.teller === askId;
@@ -424,7 +482,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     }
     if (!telling) {
       if (ended) yield* tell(askId, { seq: 0, ended }, [runEventOf(last, askId)]);
-      return ended;
+      return ended ? FOLLOW_LOOK.ENDED : yield* standingLook(told, since);
     }
     const fresh = events.filter((event) => event.seq > turnTold.seq);
     // A turn told to its end under another ask still ends this one's run, so its exchange settles.
@@ -442,33 +500,37 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       { seq: stored, ended },
       toTell.map((event) => runEventOf(event, askId)),
     );
-    return ended;
+    return ended ? FOLLOW_LOOK.ENDED : yield* standingLook(told, since);
   });
 
   /**
    * Follows one accepted ask to its turn's end on a schedule, on a fiber of
-   * the socket's scope, or until the follow bound or that scope's close. A
-   * bound reached with the turn still unended is told as a failed end, so
-   * the exchange settles and the voice says the standing note rather than
-   * waiting forever on a turn eve never started. A follow the scope's close
-   * interrupted tells nothing: the session it would have told is gone.
+   * the socket's scope, or until the follow bound or that scope's close. The
+   * bound is kept by the look rather than the schedule, because which bound
+   * applies is read off the journal: the plain one, or the parked one once
+   * the turn has handed work to a task. A bound reached with the turn still
+   * unended is told as a failed end, so the exchange settles and the voice
+   * says the standing note rather than waiting forever on a turn eve never
+   * started. A follow the scope's close interrupted tells nothing: the
+   * session it would have told is gone.
    */
   function follow(askId: string, revision: number) {
     if (followed.has(askId)) return Effect.void;
     followed.set(askId, revision);
-    const told: FollowTold = { action: undefined, settled: 0 };
+    const told: FollowTold = { action: undefined, settled: 0, delegated: false };
     const cadence = Schedule.spaced(bounds.POLL).pipe(
-      Schedule.setInputType<boolean>(),
-      Schedule.while(({ input }) => !input),
-      Schedule.upTo({ duration: bounds.FOLLOW }),
-      // Whichever of the two ends the follow — the turn saying it ended or
-      // the bound elapsing — the repeat answers with the last look's own
-      // word on it rather than the schedule's count.
+      Schedule.setInputType<FollowLook>(),
+      Schedule.while(({ input }) => input === FOLLOW_LOOK.RUNNING),
+      // Whichever ends the follow — the turn saying it ended or its bound
+      // elapsing — the repeat answers with the last look's own word on it
+      // rather than the schedule's count.
       Schedule.map(({ input }) => input),
     );
-    const following = Effect.repeat(look(askId, told), cadence).pipe(
-      Effect.flatMap((done) =>
-        done
+    const following = Effect.flatMap(Clock.currentTimeMillis, (since) =>
+      Effect.repeat(look(askId, told, since), cadence),
+    ).pipe(
+      Effect.flatMap((last) =>
+        last === FOLLOW_LOOK.ENDED
           ? Effect.void
           : Effect.sync(() => {
               options.report("A spoken ask's turn did not end inside the follow bound");

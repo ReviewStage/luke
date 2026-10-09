@@ -12,7 +12,8 @@ import {
 import { arrival } from "@sidecar/voice/testing";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Deferred, Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
+import { Deferred, Duration, Effect, Exit, Layer, Option, Redacted, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
@@ -52,9 +53,10 @@ import {
   type HostedLiveBrain,
   type HostedLiveBrainOptions,
   hostedLiveBrain,
+  LIVE_BRAIN_FOLLOW_BOUNDS,
 } from "../server/voice/live-brain";
 import { stampedEveEvent } from "./support/eve-events";
-import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
+import { FIRST_EVE_TURN, parkedTurn, resumedTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { deleteConversation, insertConversation } from "./support/store-rows";
 
@@ -88,7 +90,10 @@ const POLL_MS = 5;
  * The follow keeps time on the store runtime's clock, which is the real one,
  * so this suite runs under `it.live`: a wait for an event is on the event
  * itself (`arrived`), and a wait of several polls after the last one is the
- * suite's one plain sleep, asserting that nothing more arrives.
+ * suite's one plain sleep, asserting that nothing more arrives. The bound
+ * tests at the end are the exception: a bound of minutes is reached only on
+ * the `TestClock`, so those build the brain on the test's own fiber
+ * (`standOnTestClock`) and run under `it.effect`.
  */
 const QUIET_POLLS = { AFTER_END: 6, AFTER_REFUSAL: 4, AFTER_STOP: 8 } as const;
 const QUICK = { POLL: Duration.millis(POLL_MS), FOLLOW: Duration.minutes(1) };
@@ -180,9 +185,7 @@ async function account(): Promise<ConversationTarget> {
   return { userId, conversationId };
 }
 
-interface Stand {
-  readonly eve: FakeEve;
-  readonly brain: HostedLiveBrain;
+interface Listening {
   /** The stream's seams the listener heard, in order. */
   readonly events: LiveBrainRunEvent[];
   /** What the listener heard of the run's activity, apart from the seams. */
@@ -195,39 +198,21 @@ interface Stand {
   readonly active: (count: number) => Effect.Effect<void>;
   /** Settles once at least `count` settled-step events have reached the listener. */
   readonly stepped: (count: number) => Effect.Effect<void>;
+}
+
+interface Stand extends Listening {
+  readonly eve: FakeEve;
+  readonly brain: HostedLiveBrain;
   readonly reports: string[];
   /** The socket's own scope as the attachment opens one; closing it interrupts every follow under way. */
   readonly stop: () => Promise<void>;
 }
 
-async function stand(
-  target: ConversationTarget,
-  bounds: NonNullable<HostedLiveBrainOptions["bounds"]> = QUICK,
-  store: HostedLiveBrainOptions["store"] = database.store,
-  conversationId: string = target.conversationId,
-  record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
-  over?: EveSessions,
-): Promise<Stand> {
-  const eve = fakeEve();
+/** The brain's listener as the service stands one: the seams, the activity, and the settled steps kept apart, each with a wait on its count. */
+function listening(brain: HostedLiveBrain): Listening {
   const events: LiveBrainRunEvent[] = [];
   const activities: LiveBrainRunEvent[] = [];
   const steps: LiveBrainRunEvent[] = [];
-  const reports: string[] = [];
-  const scope = await database.run(Scope.make());
-  const brain = await database.run(
-    Scope.provide(
-      hostedLiveBrain({
-        userId: target.userId,
-        conversationId,
-        asks: { asks: record, eve: over ?? eve },
-        store,
-        writer,
-        report: (message) => reports.push(message),
-        bounds,
-      }),
-      scope,
-    ),
-  );
   brain.onRunEvent((event) => {
     if (event.kind === LIVE_BRAIN_RUN_EVENT.ACTIVITY) activities.push(event);
     else if (event.kind === LIVE_BRAIN_RUN_EVENT.STEP_SETTLED) steps.push(event);
@@ -251,16 +236,39 @@ async function stand(
       () => steps.length >= count,
       `${count} settled steps`,
     );
+  return { events, activities, steps, arrived, active, stepped };
+}
+
+async function stand(
+  target: ConversationTarget,
+  bounds: NonNullable<HostedLiveBrainOptions["bounds"]> = QUICK,
+  store: HostedLiveBrainOptions["store"] = database.store,
+  conversationId: string = target.conversationId,
+  record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
+  over?: EveSessions,
+): Promise<Stand> {
+  const eve = fakeEve();
+  const reports: string[] = [];
+  const scope = await database.run(Scope.make());
+  const brain = await database.run(
+    Scope.provide(
+      hostedLiveBrain({
+        userId: target.userId,
+        conversationId,
+        asks: { asks: record, eve: over ?? eve },
+        store,
+        writer,
+        report: (message) => reports.push(message),
+        bounds,
+      }),
+      scope,
+    ),
+  );
   return {
+    ...listening(brain),
     eve,
     brain,
-    events,
-    activities,
-    steps,
     reports,
-    arrived,
-    active,
-    stepped,
     stop: () => database.run(Scope.close(scope, Exit.void)),
   };
 }
@@ -1253,5 +1261,270 @@ it.live(
         },
       ]);
       yield* Effect.promise(() => back.stop());
+    }),
+);
+
+/**
+ * The follow's cadence on the `TestClock`: a poll a minute, so a bound of
+ * minutes is crossed in tens of looks at the store rather than thousands,
+ * under the production bounds themselves. The number of polls to a bound is
+ * the bound in polls.
+ */
+const POLL = Duration.minutes(1);
+const POLLS_TO_FOLLOW_BOUND =
+  Duration.toMillis(LIVE_BRAIN_FOLLOW_BOUNDS.FOLLOW) / Duration.toMillis(POLL);
+const POLLS_TO_PARKED_BOUND =
+  Duration.toMillis(LIVE_BRAIN_FOLLOW_BOUNDS.PARKED_FOLLOW) / Duration.toMillis(POLL);
+
+interface ClockStand extends Stand {
+  /** Moves the clock one poll at a time, `count` times, waiting out the one look each poll fires. */
+  readonly polls: (count: number) => Effect.Effect<void>;
+  /** How many looks have begun: counted as the look's first read is asked for, before the store answers it. */
+  readonly looks: () => number;
+  /** Lets the first look through: held until the test has played the turn, so every look finds it and reads its journal. */
+  readonly release: Effect.Effect<void>;
+}
+
+/**
+ * The brain on the test's own clock, under the production bounds: built on
+ * the test fiber rather than the store runtime, so every follow it forks
+ * keeps time on the `TestClock` and a bound of minutes is reached by
+ * adjusting it. The record is still the real store on PGlite, whose reads
+ * are promises, so looks are sequenced against the clock rather than
+ * waited out. The clock moves one poll at a time (`polls`): an adjust runs
+ * the one follow it wakes up to its first read before it answers, so
+ * `looks` says whether a look began, and the poll is waited out on the
+ * look's read of the journal, its last, after which what the look tells is
+ * told before the test resumes. The first look, which runs as the ask is
+ * accepted, is held at `release` so it finds the turn the test has played
+ * by then and every look reads the journal.
+ */
+const standOnTestClock = Effect.fnUntraced(function* (target: ConversationTarget) {
+  const eve = fakeEve();
+  const reports: string[] = [];
+  const gate = yield* Deferred.make<void>();
+  let looks = 0;
+  let journals = 0;
+  const journalListeners = new Set<() => void>();
+  const store: HostedLiveBrainOptions["store"] = {
+    turns: {
+      named: (userId, turnIds) =>
+        Effect.suspend(() => {
+          looks += 1;
+          return Effect.andThen(Deferred.await(gate), database.store.turns.named(userId, turnIds));
+        }),
+    },
+    messages: {
+      byClientId: (userId, conversationId, tools, clientId) =>
+        database.store.messages.byClientId(userId, conversationId, tools, clientId).pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              journals += 1;
+              for (const listener of [...journalListeners]) listener();
+            }),
+          ),
+        ),
+    },
+  };
+  const scope = yield* Scope.make();
+  // The client lives as long as the socket's scope: built around the brain alone, a
+  // Postgres pool would close as the brain stood, and every follow's read refused.
+  const sql = yield* Scope.provide(Layer.build(database.sql), scope);
+  const brain = yield* Scope.provide(
+    hostedLiveBrain({
+      userId: target.userId,
+      conversationId: target.conversationId,
+      asks: { asks: askEffects, eve },
+      store,
+      writer,
+      report: (message) => reports.push(message),
+      bounds: { POLL },
+    }),
+    scope,
+  ).pipe(Effect.provide(sql));
+  const journaled = (count: number) =>
+    arrival(
+      (notify) => {
+        journalListeners.add(notify);
+        return () => journalListeners.delete(notify);
+      },
+      () => journals >= count,
+      `${count} journal reads`,
+    );
+  const polls = (count: number) =>
+    Effect.gen(function* () {
+      for (let poll = 0; poll < count; poll += 1) {
+        const [began, read] = [looks, journals];
+        yield* TestClock.adjust(POLL);
+        assert.ok(looks > began, `no look began on poll ${poll + 1}: the follow has ended`);
+        yield* journaled(read + 1);
+      }
+    });
+  const stand: ClockStand = {
+    ...listening(brain),
+    eve,
+    brain,
+    reports,
+    polls,
+    looks: () => looks,
+    release: Deferred.succeed(gate, undefined),
+    stop: () => database.run(Scope.close(scope, Exit.void)),
+  };
+  return stand;
+});
+
+/** A turn parked on the worker's task, played up to the park and found by the follow: the words before the wait are told. */
+const parkedOnTask = Effect.fnUntraced(function* (target: ConversationTarget, f: ClockStand) {
+  const accepted = yield* f.brain.submitAsk(spokenAsk("q"));
+  assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+  if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return assert.fail("not accepted");
+  const standing: RelayStanding = {
+    sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+    target,
+    turn: BRAIN_HOST_TURN.SPOKEN,
+    model: "scripted-model",
+    state: memoryRelayState(),
+  };
+  yield* Effect.promise(() => play(parkedTurn(FIRST_EVE_TURN, 0, NOW), standing));
+  yield* f.release;
+  yield* f.arrived(2);
+  assert.deepEqual(
+    f.events.map((event) =>
+      event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE ? event.sentence : event.kind,
+    ),
+    [LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, "The worker is on it."],
+  );
+  return { runId: accepted.runId, standing };
+});
+
+/** The follow's word on a look past the plain bound, as the events and reports show it. */
+function toldSoFar(f: ClockStand): readonly string[] {
+  return f.events.map((event) =>
+    event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE
+      ? event.sentence
+      : event.kind === LIVE_BRAIN_RUN_EVENT.ENDED
+        ? `${event.kind}:${event.end}`
+        : event.kind,
+  );
+}
+
+it.effect(
+  "a turn parked on the worker's task is followed past the plain bound, and the findings that land after it are spoken",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      const { standing } = yield* parkedOnTask(target, f);
+
+      // The worker runs past the plain bound with the turn still parked.
+      yield* f.polls(POLLS_TO_FOLLOW_BOUND + 1);
+      assert.deepEqual(toldSoFar(f), [
+        LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        "The worker is on it.",
+      ]);
+      assert.deepEqual(f.reports, []);
+
+      yield* Effect.promise(() => play(resumedTurn(FIRST_EVE_TURN, 0, 2, NOW), standing));
+      yield* f.polls(1);
+      yield* f.arrived(4);
+      assert.deepEqual(toldSoFar(f), [
+        LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
+        "The worker is on it.",
+        "Found it.",
+        `${LIVE_BRAIN_RUN_EVENT.ENDED}:${LIVE_BRAIN_RUN_END.COMPLETED}`,
+      ]);
+      assert.deepEqual(f.reports, []);
+
+      // The end ends the follow: a later poll finds no look.
+      const looked = f.looks();
+      yield* TestClock.adjust(Duration.times(POLL, 3));
+      assert.equal(f.looks(), looked);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.effect(
+  "the parked bound is a ceiling: a turn still parked past it is told as failed, once, and the bound is reported",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      yield* parkedOnTask(target, f);
+
+      // One poll short of the parked bound the turn is still followed; the poll at it gives up.
+      yield* f.polls(POLLS_TO_PARKED_BOUND - 1);
+      assert.equal(f.events.length, 2);
+      assert.deepEqual(f.reports, []);
+      yield* f.polls(1);
+      yield* f.arrived(3);
+      assert.deepEqual(toldSoFar(f).slice(2), [
+        `${LIVE_BRAIN_RUN_EVENT.ENDED}:${LIVE_BRAIN_RUN_END.FAILED}`,
+      ]);
+      assert.equal(f.reports.length, 1);
+
+      const looked = f.looks();
+      yield* TestClock.adjust(Duration.times(POLL, 3));
+      assert.equal(f.looks(), looked);
+      assert.equal(f.events.length, 3);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.effect(
+  "a Stop on a parked turn ends the follow as eve cancels it: the cancelled end is told and no look follows",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      const { runId, standing } = yield* parkedOnTask(target, f);
+      yield* f.polls(1);
+
+      // eve's store hook records the session on the conversation as it starts, which is what a Stop reads.
+      yield* Effect.promise(() =>
+        database.run(claimRuntimeSession(target, standing.sessionId, new Date(NOW))),
+      );
+      assert.equal(yield* f.brain.cancelRun(runId), LIVE_BRAIN_CANCEL.CANCELLED);
+      assert.deepEqual(f.eve.cancelled, [[standing.sessionId, FIRST_EVE_TURN]]);
+      yield* Effect.promise(() =>
+        play(
+          [
+            stampedEveEvent(
+              { type: "turn.cancelled", data: { turnId: FIRST_EVE_TURN, sequence: 0 } },
+              NOW,
+            ),
+          ],
+          standing,
+        ),
+      );
+      yield* f.polls(1);
+      yield* f.arrived(3);
+      assert.deepEqual(toldSoFar(f).slice(2), [
+        `${LIVE_BRAIN_RUN_EVENT.ENDED}:${LIVE_BRAIN_RUN_END.CANCELLED}`,
+      ]);
+
+      const looked = f.looks();
+      yield* TestClock.adjust(Duration.times(POLL, 3));
+      assert.equal(f.looks(), looked);
+      assert.equal(f.events.length, 3);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.effect(
+  "the call ending ends the follow of a parked turn: findings that land after the socket's scope closed reach no listener",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      const { standing } = yield* parkedOnTask(target, f);
+      yield* f.polls(1);
+
+      yield* Effect.promise(() => f.stop());
+      yield* Effect.promise(() => play(resumedTurn(FIRST_EVE_TURN, 0, 2, NOW), standing));
+      const looked = f.looks();
+      yield* TestClock.adjust(Duration.times(POLL, 3));
+      assert.equal(f.looks(), looked);
+      assert.equal(f.events.length, 2);
+      assert.deepEqual(f.reports, []);
     }),
 );
