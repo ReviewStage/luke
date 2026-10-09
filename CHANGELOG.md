@@ -81,6 +81,7 @@ tells you its result at a natural pause, and Stop cancels that work too.
 - Fixed answers crossing between two actions run at the same time
 - Fixed Stop not reaching a planning turn
 - Fixed the voice losing track of a planning turn waiting on background work
+- Fixed the window scrolling sideways when the side panel opened on Luke's code
 - Fixed a fade band at the top of Settings pages
 - Fixed all-caps labels left in the app
 
