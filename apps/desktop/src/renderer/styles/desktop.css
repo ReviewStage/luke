@@ -2087,14 +2087,11 @@ body,
   white-space: nowrap;
 }
 
-/* The screenshot button leads the foot, and the answers keep its end. */
-.feedback-dialog-attach {
+/* The screenshot button leads the foot, square like every icon button, and
+   the answers keep its end. */
+.confirm-dialog-actions > .feedback-dialog-attach {
+  min-width: 0;
   margin-right: auto;
-}
-
-/* Send waits for words, and says so by dimming. */
-.feedback-dialog .primary-button:disabled {
-  opacity: 0.5;
 }
 
 /* Send's chord, muted against its own fill rather than the card's. */
