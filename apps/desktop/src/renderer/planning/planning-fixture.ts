@@ -1,4 +1,4 @@
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
 import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
@@ -270,26 +270,57 @@ const FIXTURE_OPEN_PLAN: PlanningView = {
  * first time it reads a new drawing.
  */
 const FIXTURE_DRAWING: readonly DrawingElement[] = [
-  { type: BOARD_ELEMENT_TYPE.TEXT, id: "title", x: 0, y: -70, text: "Inviting a teammate" },
-  { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "member", x: 0, y: 0, label: "Member" },
-  { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "invites", x: 320, y: 0, label: "POST /invites" },
-  { type: BOARD_ELEMENT_TYPE.ELLIPSE, id: "email", x: 640, y: 0, label: "Invite email" },
+  { type: BOARD_ELEMENT_TYPE.TEXT, id: "title", x: 0, y: -110, text: "Inviting a teammate" },
+  {
+    type: DRAWING_ZONE,
+    id: "service",
+    x: 280,
+    y: -60,
+    width: 280,
+    height: 380,
+    title: "Invites service",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    id: "member",
+    x: 0,
+    y: 0,
+    label: "Member",
+    backgroundColor: "#a5d8ff",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    id: "invites",
+    x: 320,
+    y: 0,
+    label: "POST /invites",
+    backgroundColor: "#b2f2bb",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.ELLIPSE,
+    id: "email",
+    x: 640,
+    y: 0,
+    label: "Invite email",
+    backgroundColor: "#d0bfff",
+  },
   {
     type: BOARD_ELEMENT_TYPE.DIAMOND,
     id: "valid",
-    x: 640,
-    y: 180,
-    width: 200,
-    height: 110,
+    x: 620,
+    y: 160,
+    width: 240,
+    height: 140,
     label: "Link still valid?",
+    backgroundColor: "#fff3bf",
   },
   {
     type: BOARD_ELEMENT_TYPE.RECTANGLE,
     id: "joined",
     x: 320,
-    y: 195,
+    y: 190,
     label: "Joins workspace",
-    backgroundColor: "#1971c2",
+    backgroundColor: "#b2f2bb",
   },
   { type: BOARD_ELEMENT_TYPE.ARROW, id: "sends", from: "member", to: "invites", label: "email" },
   { type: BOARD_ELEMENT_TYPE.ARROW, id: "mails", from: "invites", to: "email" },

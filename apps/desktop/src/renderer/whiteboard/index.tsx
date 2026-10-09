@@ -3,6 +3,7 @@ import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
   Excalidraw,
+  ROUNDNESS,
   restoreElements,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
@@ -11,7 +12,7 @@ import type {
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types";
 import type { AppState, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE, LUKE_MARK } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
 import { createRoot } from "react-dom/client";
 import {
@@ -34,7 +35,11 @@ import {
  * (`customData`), so his next drawing takes the place of exactly those, labels
  * included, and leaves whatever the developer drew. An element of his the
  * developer moved is still his, and his next drawing puts it back where he
- * says.
+ * says. His shapes are filled flat and his rectangles rounded, since the
+ * converter's default hatching reads as noise behind a label; a zone is a
+ * dashed outline drawn behind everything else, titled by a text of its own at
+ * its top-left corner, because a label bound to it would sit in its middle
+ * over the shapes it holds.
  *
  * What the board leaves out is everything that could carry a file or a page:
  * the image tool, a pasted file, an embedded page, and every save, export,
@@ -55,9 +60,6 @@ const UI_OPTIONS = {
   tools: { image: false },
 } as const;
 
-/** The mark on every element made from a drawing of Luke's. */
-const LUKE_MARK = { drawnBy: "luke" } as const;
-
 function isLukes(element: ExcalidrawElement): boolean {
   return element.customData?.drawnBy === LUKE_MARK.drawnBy;
 }
@@ -71,6 +73,9 @@ const DRAWING_DEFAULT = {
   BACKGROUND: "transparent",
   /** How far an arrow's end stands off the shape it joins. */
   ARROW_GAP: 8,
+  /** How far a zone's title stands in from its top-left corner. */
+  ZONE_INSET: 16,
+  ZONE_TITLE_SIZE: 16,
 } as const;
 
 /** A label as Excalidraw's converter takes one, or nothing. */
@@ -125,11 +130,15 @@ function arrowRun(from: Box | undefined, to: Box | undefined) {
   return { x: start.x, y: start.y, width: end.x - start.x, height: end.y - start.y };
 }
 
-/** One element of Luke's drawing as Excalidraw's converter takes it. */
-function skeletonOf(
+/**
+ * One element of Luke's drawing as Excalidraw's converter takes it: one
+ * skeleton, or a zone's outline and its title. Note that the title is given
+ * no id, so the converter mints one and nothing Luke names can collide with it.
+ */
+function skeletonsOf(
   element: DrawingElement,
   boxes: ReadonlyMap<string, Box | undefined>,
-): ExcalidrawElementSkeleton {
+): ExcalidrawElementSkeleton[] {
   const common = {
     id: element.id,
     customData: LUKE_MARK,
@@ -137,25 +146,56 @@ function skeletonOf(
   };
   switch (element.type) {
     case BOARD_ELEMENT_TYPE.TEXT:
-      return {
+      return [
+        {
+          ...common,
+          type: "text",
+          x: element.x,
+          y: element.y,
+          text: element.text,
+          fontSize: element.fontSize ?? DRAWING_DEFAULT.FONT_SIZE,
+        },
+      ];
+    case BOARD_ELEMENT_TYPE.ARROW:
+      return [
+        {
+          ...common,
+          type: "arrow",
+          ...arrowRun(boxes.get(element.from), boxes.get(element.to)),
+          start: { id: element.from },
+          end: { id: element.to },
+          ...labelOf(element.label),
+        },
+      ];
+    case DRAWING_ZONE: {
+      const outline: ExcalidrawElementSkeleton = {
         ...common,
-        type: "text",
+        type: "rectangle",
         x: element.x,
         y: element.y,
-        text: element.text,
-        fontSize: element.fontSize ?? DRAWING_DEFAULT.FONT_SIZE,
+        width: element.width,
+        height: element.height,
+        backgroundColor: element.backgroundColor ?? DRAWING_DEFAULT.BACKGROUND,
+        fillStyle: "solid",
+        strokeStyle: "dashed",
+        roundness: { type: ROUNDNESS.ADAPTIVE_RADIUS },
       };
-    case BOARD_ELEMENT_TYPE.ARROW:
-      return {
-        ...common,
-        type: "arrow",
-        ...arrowRun(boxes.get(element.from), boxes.get(element.to)),
-        start: { id: element.from },
-        end: { id: element.to },
-        ...labelOf(element.label),
-      };
-    default:
-      return {
+      if (element.title === undefined) return [outline];
+      return [
+        outline,
+        {
+          type: "text",
+          customData: LUKE_MARK,
+          strokeColor: common.strokeColor,
+          x: element.x + DRAWING_DEFAULT.ZONE_INSET,
+          y: element.y + DRAWING_DEFAULT.ZONE_INSET,
+          text: element.title,
+          fontSize: DRAWING_DEFAULT.ZONE_TITLE_SIZE,
+        },
+      ];
+    }
+    default: {
+      const shape = {
         ...common,
         type: element.type,
         x: element.x,
@@ -163,9 +203,21 @@ function skeletonOf(
         width: element.width ?? DRAWING_DEFAULT.WIDTH,
         height: element.height ?? DRAWING_DEFAULT.HEIGHT,
         backgroundColor: element.backgroundColor ?? DRAWING_DEFAULT.BACKGROUND,
+        fillStyle: "solid",
         ...labelOf(element.label),
-      };
+      } satisfies ExcalidrawElementSkeleton;
+      if (element.type !== BOARD_ELEMENT_TYPE.RECTANGLE) return [shape];
+      return [{ ...shape, roundness: { type: ROUNDNESS.ADAPTIVE_RADIUS } }];
+    }
   }
+}
+
+/** Zones first, so each is drawn behind the shapes it holds whatever order Luke sent them in. */
+function backToFront(drawing: readonly DrawingElement[]): DrawingElement[] {
+  return [
+    ...drawing.filter((element) => element.type === DRAWING_ZONE),
+    ...drawing.filter((element) => element.type !== DRAWING_ZONE),
+  ];
 }
 
 /** The scene with Luke's previous drawing, labels included, taken out and this one put in. */
@@ -174,7 +226,7 @@ function withDrawing(
   drawing: readonly DrawingElement[],
 ): ExcalidrawElement[] {
   const boxes = new Map(drawing.map((element) => [element.id, boxOf(element)]));
-  const skeletons = drawing.map((element) => skeletonOf(element, boxes));
+  const skeletons = backToFront(drawing).flatMap((element) => skeletonsOf(element, boxes));
   const drawn = convertToExcalidrawElements(skeletons, { regenerateIds: false });
   const drawnIds = new Set(drawn.map((element) => element.id));
   const lukes = new Set(scene.filter(isLukes).map((element) => element.id));

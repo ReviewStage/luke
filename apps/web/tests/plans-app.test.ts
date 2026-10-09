@@ -395,6 +395,17 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.deepEqual(board.elements, [NOTE]);
         assert.equal(board.appliedDrawing, 1);
         assert.equal(board.drawing?.number, 2);
+
+        // A drawing laid over the developer's note is drawn, and the answer says what it covers.
+        const over = yield* runDrawOnBoard(
+          { userId: owner, planId },
+          unparsedWire({ elements: [{ ...DRAW_API.elements[0], y: 180 }] }),
+        );
+        assert.equal(over.status, DRAW_ON_BOARD_STATUS.DRAWN);
+        assert.ok(
+          "layout" in over && over.layout?.some((finding) => finding.includes(NOTE.id)),
+          "the answer names the developer's note",
+        );
       }),
   );
 
