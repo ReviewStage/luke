@@ -4,7 +4,9 @@ import {
   ACCOUNT_STATUS,
   type AccountProvider,
 } from "@sidecar/credentials/snapshot";
+import { WingFace } from "@sidecar/panel";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
+import { LoaderCircleIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { GitHubMark, GoogleMark } from "./account-marks";
 
@@ -37,11 +39,8 @@ function signInFaceMotion(step: number): FaceMotion {
 
 /**
  * Walks the introduction cycle: each gesture runs its own generated length,
- * rests, and yields to the next. The face this drives is the one Luke the
- * signed-out surface has — large over the gate, small in the peek's strip —
- * so the cycle keeps walking through the morph between the two. Reduced
- * motion holds the resting face instead — the pose every gesture starts and
- * ends at.
+ * rests, and yields to the next. Reduced motion holds the resting face
+ * instead — the pose every gesture starts and ends at.
  */
 export function useSignInFaceCycle(still: boolean) {
   const [step, setStep] = useState(0);
@@ -60,48 +59,106 @@ export function useSignInFaceCycle(still: boolean) {
   };
 }
 
-export function SignInGate({
-  account,
-  failure,
+/** A provider's button, which says so while it is the sign-in being waited on. */
+function ProviderButton({
+  provider,
+  name,
+  mark,
+  waiting,
+  disabled,
   onBegin,
 }: {
-  account: AccountSnapshot;
-  /** Why the last attempt ended without landing, from the flow's owner. */
-  failure?: string;
-  /** Starts the flow; the app stands the panel down to the waiting popup. */
+  provider: AccountProvider;
+  name: string;
+  mark: React.ReactNode;
+  waiting: boolean;
+  disabled: boolean;
   onBegin: (provider: AccountProvider) => void;
 }): React.JSX.Element {
-  const pending = account.status === ACCOUNT_STATUS.SIGNING_IN;
-
   return (
-    <section className="sign-in-gate" aria-labelledby="sign-in-title">
-      {/* The face's room, not the face: the one signed-out Luke is drawn on
-          the stage above, where he can travel to the peek's strip and back
-          without there ever being a second of him. This box is what he stands
-          over while the panel is the shape on screen. */}
-      <span className="sign-in-face" aria-hidden="true" />
-      <h1 id="sign-in-title">Meet Luke</h1>
+    <button
+      type="button"
+      className="sign-in-provider"
+      data-provider={provider}
+      data-waiting={String(waiting)}
+      disabled={disabled}
+      onClick={() => onBegin(provider)}
+    >
+      {waiting ? <LoaderCircleIcon className="ai-spin account-mark" aria-hidden="true" /> : mark}
+      {waiting ? "Waiting for browser…" : `Continue with ${name}`}
+    </button>
+  );
+}
+
+/**
+ * The sign-in, alone in the window: Luke introducing himself over the two ways
+ * in. A press sends the browser to the provider and the gate waits in place —
+ * the pressed button says so, the other stands disabled, and Cancel takes the
+ * wait back — because the browser holds the actual work and there is nothing
+ * else here to do meanwhile.
+ */
+export function SignInGate({
+  account,
+  face,
+  waiting,
+  failure,
+  onBegin,
+  onCancel,
+}: {
+  account: AccountSnapshot;
+  /** The introduction cycle the face walks while the gate stands. */
+  face: { play: number; motion?: FaceMotion };
+  /** Whose sign-in the gate is waiting on; absent while none was begun here. */
+  waiting?: AccountProvider;
+  /** Why the last attempt ended without landing, from the flow's owner. */
+  failure?: string;
+  /** Sends the browser to the provider; the gate then waits on it. */
+  onBegin: (provider: AccountProvider) => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  // A sign-in begun from no press of this gate still holds both buttons.
+  const busy = waiting !== undefined || account.status === ACCOUNT_STATUS.SIGNING_IN;
+  return (
+    <section className="sign-in-gate" aria-labelledby="sign-in-title" aria-busy={busy}>
+      <span className="sign-in-face" aria-hidden="true">
+        <WingFace key={face.play} {...(face.motion ? { motion: face.motion } : undefined)} />
+      </span>
+      <h1 id="sign-in-title">Welcome to Luke</h1>
+      <p className="sign-in-lede">Talk a feature through and Luke writes the plan.</p>
       <div className="sign-in-actions">
-        <button
-          type="button"
-          className="sign-in-provider"
-          disabled={pending}
-          onClick={() => onBegin(ACCOUNT_PROVIDER.GOOGLE)}
-        >
-          <GoogleMark />
-          Continue with Google
-        </button>
-        <button
-          type="button"
-          className="sign-in-provider"
-          disabled={pending}
-          onClick={() => onBegin(ACCOUNT_PROVIDER.GITHUB)}
-        >
-          <GitHubMark />
-          Continue with GitHub
-        </button>
+        <ProviderButton
+          provider={ACCOUNT_PROVIDER.GOOGLE}
+          name="Google"
+          mark={<GoogleMark />}
+          waiting={waiting === ACCOUNT_PROVIDER.GOOGLE}
+          disabled={busy}
+          onBegin={onBegin}
+        />
+        <ProviderButton
+          provider={ACCOUNT_PROVIDER.GITHUB}
+          name="GitHub"
+          mark={<GitHubMark />}
+          waiting={waiting === ACCOUNT_PROVIDER.GITHUB}
+          disabled={busy}
+          onBegin={onBegin}
+        />
       </div>
-      {failure ? <small className="sign-in-error">{failure}</small> : null}
+      {/* The line under the buttons is held open whether or not it says
+          anything, so beginning a wait does not move the column. */}
+      <div className="sign-in-note">
+        {waiting ? (
+          <p role="status">
+            Finish in your browser.{" "}
+            <button type="button" className="sign-in-cancel" onClick={onCancel}>
+              Cancel
+            </button>
+          </p>
+        ) : failure ? (
+          <p className="sign-in-error" role="alert">
+            {failure}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }

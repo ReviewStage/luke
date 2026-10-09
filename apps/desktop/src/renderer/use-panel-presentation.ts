@@ -32,8 +32,7 @@ export interface PanelPresentationApi {
 }
 
 /**
- * The surface's shape: the panel, or the panel stood down to one thing — the
- * sign-in it waits on, or a note. Main answers every mode request with the
+ * The surface's shape: the panel, or the panel stood down to a note. Main answers every mode request with the
  * panel, so a close asked of the window leaves it open.
  */
 export function usePanelPresentation(options: PanelPresentationOptions): PanelPresentationApi {
@@ -123,9 +122,8 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       // and the next one is the pointer's own action again.
       const receded = recededAt.current !== undefined;
       recededAt.current = undefined;
-      // The slot and the composer stay put — someone is in the middle of
-      // writing, or signing in in a browser — and a search being typed holds
-      // the panel the same way. A panel whose shape has just receded out from
+      // The composer stays put — someone is in the middle of writing — and a
+      // search being typed holds the panel the same way. A panel whose shape has just receded out from
       // under the pointer stays too: entering a settings page shorter than
       // the one it replaces shrinks the shape past a resting hand, and that
       // is the shape leaving the pointer, not the pointer leaving the shape.
@@ -135,7 +133,6 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
       // under a resting cursor, a window standing up beneath one — and
       // closing on it would collapse a panel nobody dismissed.
       const drawn = presentationRef.current;
-      if (drawn === PANEL_PRESENTATION.SLOT) return;
       if (drawn === PANEL_PRESENTATION.FEEDBACK) return;
       if (drawn === PANEL_PRESENTATION.PANEL && (heldAgainstPointer() || receded || !travelled)) {
         return;
@@ -178,7 +175,7 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
   }, [changeMode]);
 
   // Only the panel follows its content down under a resting pointer — the
-  // slot and the composer never close by leaving anyway — and only a pointer
+  // composer never closes by leaving anyway — and only a pointer
   // actually on the shape can be left by it: a shrink with the pointer
   // already away has nobody to protect, and marking it would swallow a later,
   // genuine leave.

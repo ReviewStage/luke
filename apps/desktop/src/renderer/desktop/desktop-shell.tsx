@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@sidecar/credentials/snapshot";
-import { ComposeIcon, SidebarIcon, WingFace } from "@sidecar/panel";
+import { ComposeIcon, SidebarIcon } from "@sidecar/panel";
 import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -24,34 +24,13 @@ import type { SidebarCollapse } from "./sidebar-collapse";
 /** What stands between the developer and the window's own content: the account sign-in. */
 export interface DesktopGates {
   accountRequired: boolean;
+  /** Whose sign-in the gate is waiting on in the browser. */
+  signInWait?: AccountProvider | undefined;
   signInFailure?: string | undefined;
   onBeginSignIn: (provider: AccountProvider) => void;
-  /** The signed-out Luke's introduction cycle, walked over the sign-in card. */
+  onCancelSignIn: () => void;
+  /** The signed-out Luke's introduction cycle, walked over the sign-in. */
   signInFace: { play: number; motion?: FaceMotion };
-}
-
-/**
- * The sign-in, alone in the window: Luke over a card holding it. Nothing
- * else is drawn, because nothing else can run until it is answered.
- */
-function Onboarding({
-  face,
-  children,
-}: {
-  face: { play: number; motion?: FaceMotion };
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="desktop-onboarding">
-      <div className="desktop-drag-strip" />
-      <div className="desktop-onboarding-card">
-        <span className="desktop-onboarding-face" aria-hidden="true">
-          <WingFace key={face.play} {...(face.motion ? { motion: face.motion } : undefined)} />
-        </span>
-        {children}
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -182,13 +161,17 @@ export function DesktopShell({
   usePlaceCommands(!gated, tab, onTabChange, plans, settings, history);
   if (gated) {
     return (
-      <Onboarding face={gates.signInFace}>
+      <div className="desktop-onboarding">
+        <div className="desktop-drag-strip" />
         <SignInGate
           account={account}
+          face={gates.signInFace}
+          {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
           {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
           onBegin={gates.onBeginSignIn}
+          onCancel={gates.onCancelSignIn}
         />
-      </Onboarding>
+      </div>
     );
   }
   // Settings wears the update row's own words, so the dot's hover and the

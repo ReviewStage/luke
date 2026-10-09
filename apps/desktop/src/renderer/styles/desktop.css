@@ -1322,49 +1322,14 @@ body,
 
 /* Onboarding ----------------------------------------------------------------- */
 
+/* The sign-in's whole window: the plain ground under a drag strip, the column
+   sitting a little above the middle the way the new-plan page's does. */
 .desktop-onboarding {
   display: flex;
   height: 100%;
   flex-direction: column;
-  background: radial-gradient(ellipse at 50% 30%, #1a1b22 0%, var(--desktop-ground) 60%);
-}
-
-.desktop-onboarding-card {
-  display: flex;
-  width: 440px;
-  margin: auto;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--space-32);
-  border: 1px solid var(--hairline);
-  border-radius: 20px;
-  background: var(--desktop-sidebar);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
-  transform: translateY(-24px);
-}
-
-.desktop-onboarding-face {
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 22px;
-  background: var(--raised-strong);
-}
-
-.desktop-onboarding-face .luke-face {
-  width: 44px;
-  height: 44px;
-}
-
-.desktop-onboarding-card > section {
-  width: 100%;
-  zoom: 1.1;
-}
-
-/* The face is drawn above the card's step, not in the box the panel kept for it. */
-.desktop-onboarding .sign-in-face {
-  display: none;
+  overflow-y: auto;
+  padding-bottom: 8vh;
 }
 
 /* Entry sheets --------------------------------------------------------------- */
@@ -1381,7 +1346,6 @@ body,
   transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-.app-stage[data-surface="desktop"][data-presentation="slot"] .desktop-scrim,
 .app-stage[data-surface="desktop"][data-presentation="feedback"] .desktop-scrim {
   opacity: 1;
   pointer-events: auto;
@@ -1398,7 +1362,6 @@ body,
   visibility: hidden;
 }
 
-.app-stage[data-surface="desktop"] .slot-stage,
 .app-stage[data-surface="desktop"] .feedback-stage {
   z-index: 9;
 }

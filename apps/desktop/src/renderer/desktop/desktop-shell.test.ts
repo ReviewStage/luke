@@ -27,7 +27,12 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
   useAppKeymap(true);
   const [page, setPage] = useState<PlansPage>(PLANS_PAGE.DOCUMENT);
   return createElement(DesktopShell, {
-    gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+      signInFace: { play: 0 },
+    },
     identity: {
       speakers: { listening: false, lukeSpeaking: false },
       voiceActive: { developer: false, luke: false },
@@ -404,7 +409,12 @@ function Routed({ start }: { start: PanelTab }): React.JSX.Element {
   useAppKeymap(true);
   useMenuCommands(true);
   return createElement(DesktopShell, {
-    gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+      signInFace: { play: 0 },
+    },
     identity: {
       speakers: { listening: false, lukeSpeaking: false },
       voiceActive: { developer: false, luke: false },
