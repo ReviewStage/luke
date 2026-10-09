@@ -4,7 +4,11 @@ import { Option, Redacted, Result, Schema } from "effect";
 import { test } from "vitest";
 import { TURN_STATUS } from "../server/core";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
-import { coderModel, type ProviderKeys } from "../server/hosted/coder-host/model";
+import {
+  type CoderModelSelection,
+  coderModel,
+  type ProviderKeys,
+} from "../server/hosted/coder-host/model";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
 
 /**
@@ -28,7 +32,10 @@ const readModel = Schema.decodeUnknownOption(
 );
 
 /** The model's id and provider, failing the test where the step was told a bare id rather than a provider's handle. */
-function providerModel(model: unknown): { readonly modelId: string; readonly provider: string } {
+function providerModel(model: CoderModelSelection["model"]): {
+  readonly modelId: string;
+  readonly provider: string;
+} {
   return Option.getOrElse(readModel(model), () =>
     assert.fail("the step was told no provider model"),
   );

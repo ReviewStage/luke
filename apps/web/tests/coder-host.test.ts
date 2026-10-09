@@ -22,6 +22,7 @@ import { hostTurnId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
+import type { CoderModelSelection } from "../server/hosted/coder-host/model";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
@@ -226,14 +227,11 @@ function codingTurn(
 const STEP_START = "step-start";
 
 /** The id of the provider's model a step was told, read off the SDK's handle; none for a bare id. */
-const readModelId = Schema.decodeUnknownOption(
-  Schema.Struct({ modelId: Schema.String }).pipe(
-    Schema.decodeTo(Schema.String, {
-      decode: (handle) => handle.modelId,
-      encode: (modelId) => ({ modelId }),
-    }),
-  ),
-);
+const readModelId = (model: CoderModelSelection["model"]) =>
+  Option.map(
+    Schema.decodeUnknownOption(Schema.Struct({ modelId: Schema.String }))(model),
+    (handle) => handle.modelId,
+  );
 
 const TurnRowSchema = Schema.Struct({
   origin: Schema.String,
