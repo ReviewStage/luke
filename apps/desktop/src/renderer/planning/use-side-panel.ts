@@ -17,6 +17,8 @@ import { useCallback, useEffect, useState } from "react";
  * the ones they do not want, and the "+" or a tab's shortcut opens one again
  * at the end of the strip. Closing the chosen tab chooses its neighbour, and
  * closing the last leaves the panel open and empty rather than shutting it.
+ * A tab dragged or moved from the keyboard to another place in the strip is
+ * kept there.
  *
  * These facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage and read once at
@@ -129,6 +131,8 @@ export interface SidePanelControl {
   onAdd: (tab: SidePanelTab) => void;
   /** Closes the tab; closing the chosen one chooses its neighbour, the one after it where there is one. */
   onClose: (tab: SidePanelTab) => void;
+  /** Moves the open tab to the place in the strip's order, leaving the chosen one chosen. */
+  onMove: (tab: SidePanelTab, to: number) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
   onResize: (width: number) => void;
 }
@@ -157,6 +161,15 @@ function withoutTab(held: SidePanelState, tab: SidePanelTab): SidePanelState {
   const tabs = held.tabs.filter((each) => each !== tab);
   if (held.tab !== tab) return { ...held, tabs };
   return { ...held, tabs, tab: tabs[Math.min(at, tabs.length - 1)] };
+}
+
+/** The state with the open tab taken out and put back at `to` in the strip's order. */
+function withTabAt(held: SidePanelState, tab: SidePanelTab, to: number): SidePanelState {
+  const at = held.tabs.indexOf(tab);
+  if (at < 0 || to === at) return held;
+  const tabs = held.tabs.filter((each) => each !== tab);
+  tabs.splice(Math.max(0, Math.min(to, tabs.length)), 0, tab);
+  return { ...held, tabs };
 }
 
 /**
@@ -242,6 +255,10 @@ export function useSidePanel(staged: SidePanelState | undefined): SidePanelContr
     (tab: SidePanelTab) => update((held) => withoutTab(held, tab)),
     [update],
   );
+  const onMove = useCallback(
+    (tab: SidePanelTab, to: number) => update((held) => withTabAt(held, tab, to)),
+    [update],
+  );
   const onResize = useCallback(
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
     [update],
@@ -257,6 +274,7 @@ export function useSidePanel(staged: SidePanelState | undefined): SidePanelContr
     onChoose,
     onAdd,
     onClose,
+    onMove,
     onResize,
   };
 }

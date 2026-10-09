@@ -191,7 +191,9 @@ function AddTabButton({
 /**
  * The strip of tabs across the panel's top, then the "+". A tab's own word
  * is all it needs to say, so it hangs no pill; its chord is in the View menu,
- * the "+" menu, and on the Keyboard shortcuts page.
+ * the "+" menu, and on the Keyboard shortcuts page. The tabs are dragged or
+ * stepped into the order the panel keeps; the "+" stands after them, apart
+ * from the strip, so it is never dragged nor dropped before.
  */
 function PanelTabs({
   panel,
@@ -202,7 +204,13 @@ function PanelTabs({
 }): React.JSX.Element {
   return (
     <div className="side-panel-tabs">
-      <TabStrip label="Panel">
+      <TabStrip
+        label="Panel"
+        onMove={(from, to) => {
+          const tab = panel.tabs[from];
+          if (tab !== undefined) panel.onMove(tab, to);
+        }}
+      >
         {panel.tabs.map((tab) => (
           <Tab
             key={tab}

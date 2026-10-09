@@ -41,6 +41,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onChoose: ignore,
       onAdd: ignore,
       onClose: ignore,
+      onMove: ignore,
       onResize: ignore,
     },
     unreadTabs: [],
