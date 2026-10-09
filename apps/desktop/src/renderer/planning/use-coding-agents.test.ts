@@ -20,6 +20,7 @@ const STARTED: CodingAgentSummary = {
   effort: "high",
   createdAt: 1,
   status: CODING_AGENT_STATUS.STARTING,
+  turnId: null,
 };
 
 interface Standing {

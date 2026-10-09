@@ -117,7 +117,7 @@ export function awaitedDeliveryOf(message: {
   return Result.isSuccess(read) ? read.success.delivery : undefined;
 }
 
-/** One agent as the tabs draw it: what it runs on, when it started, and where it stands. */
+/** One agent as the tabs draw it: what it runs on, when it started, where it stands, and which turn that is. */
 export const codingAgentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   planId: wireUuidSchema,
@@ -127,6 +127,15 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  /**
+   * The newest turn the status is read from, by the service's own id for
+   * it; nothing before the first turn. A message that opens a new turn moves
+   * it once eve starts that turn, so a reader keying an agent's run by
+   * (agent, turn) sees the run after a message as its own; while the
+   * message still awaits its turn the id is the ended turn's and the status
+   * is running on the message's account.
+   */
+  turnId: EffectSchema.NullOr(wireUuidSchema),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

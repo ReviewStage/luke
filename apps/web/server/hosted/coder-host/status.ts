@@ -97,5 +97,6 @@ export function codingAgentSummary(
       now,
       lineAwaits: standing.lineAwaits,
     }),
+    turnId: standing.turn?.id ?? null,
   };
 }

@@ -1744,7 +1744,9 @@ the agent the first Start made, 200 rather than 201, and opens nothing. A
 Start that named a model writes it as the account's default.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
-instant, and status, read from its newest turn (`coder-host/status.ts`):
+instant, status, and `turnId`, the newest turn the status is read from
+(null before the first), so a reader keying an agent's run by agent and
+turn sees the run a message opens as its own (`coder-host/status.ts`):
 `starting` before one, `running`, `completed`, `failed`, or `cancelled`,
 with a running turn carrying a Stop stamp reading as cancelled already, an
 agent still without a turn row five minutes after its Start

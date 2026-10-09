@@ -324,6 +324,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         assert.equal(agent.model, CODING_AGENT_DEFAULT_CHOICE.model);
         assert.equal(agent.effort, CODING_AGENT_DEFAULT_CHOICE.effort);
         assert.equal(agent.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(agent.turnId, null);
         const stored = yield* readCodingAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
         assert.equal(stored.value.planSnapshot, planMarkdown(SAVED));
@@ -808,7 +809,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, plan, agent, ask, target, writer } = yield* startedAgent(eve, {
+        const { owner, plan, agent, ask, target, writer, turnId } = yield* startedAgent(eve, {
           running: false,
         });
         const before = readAnswer(
@@ -829,6 +830,8 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           ),
         );
         assert.equal(answered.agent.status, CODING_AGENT_STATUS.RUNNING);
+        // The turn named is still the ended one until eve opens the next on the line.
+        assert.equal(answered.agent.turnId, turnId);
         assert.equal(eve.sent.length, 1);
         const listed = readAnswer(
           codingAgentListAnswerSchema,
@@ -836,6 +839,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
         );
         assert.equal(listed.agents[0]?.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(listed.agents[0]?.turnId, turnId);
         const page = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -890,6 +894,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
         );
         assert.equal(ended.agents[0]?.status, CODING_AGENT_STATUS.COMPLETED);
+        assert.equal(ended.agents[0]?.turnId, nextTurn);
       }),
   );
 
