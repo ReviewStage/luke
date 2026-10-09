@@ -549,3 +549,28 @@ test("Settings offers no title-bar New plan even over a folded sidebar, and its 
   for (const hidden of read.querySelectorAll("[aria-hidden='true']")) hidden.remove();
   assert.equal(read.textContent, "Back");
 });
+
+test("the panel's toggle stands in the title bar on a plan's page alone, disabled while the plan is not drawn", () => {
+  show(PANEL_TAB.PLANS);
+  const toggle = document.body.querySelector<HTMLButtonElement>(
+    ".title-bar-controls .side-panel-toggle",
+  );
+  assert.ok(toggle, "a plan's page draws the toggle in the title bar");
+  assert.equal(toggle.disabled, true, "no plan is drawn, so there is no panel to show");
+  assert.equal(chord({ altKey: true, metaKey: true, code: "KeyB" }), false, "nor its chord");
+
+  // The folded sidebar's title-bar New plan is the shortest way to the new-plan page.
+  press();
+  const newPlan = titleBarNewPlan();
+  assert.ok(newPlan, "the folded sidebar's New plan stands in the title bar");
+  act(() => newPlan.click());
+  assert.equal(composing(), true);
+  assert.equal(
+    document.body.querySelector(".side-panel-toggle"),
+    null,
+    "the new-plan page has none",
+  );
+
+  show(PANEL_TAB.SETTINGS);
+  assert.equal(document.body.querySelector(".side-panel-toggle"), null, "Settings has none");
+});

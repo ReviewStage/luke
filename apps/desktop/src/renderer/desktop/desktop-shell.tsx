@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SETTINGS_VIEW } from "../settings-views";
@@ -16,6 +17,7 @@ import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
 import type { LukeIdentityProps } from "./luke-identity";
 import { PaneGlide } from "./pane-motion";
+import { SidePanelToggle } from "./side-panel";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
 /** What stands between the developer and the window's own content: the account sign-in. */
@@ -134,7 +136,9 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
  * keeps its page list whatever the sidebar's collapse says, and hands the
- * plans back folded or not as it found them. Folding the sidebar, or
+ * plans back folded or not as it found them. The side panel's toggle is the
+ * mirror of the sidebar's, at the window's top right on a plan's page, so
+ * neither pane carries the button that moves it. Folding the sidebar, or
  * opening, shutting, or growing the side panel, glides the work beside them
  * (pane-motion.tsx).
  */
@@ -211,6 +215,14 @@ export function DesktopShell({
         <SidebarToggle sidebar={sidebar} />
         {sidebar.collapsed ? <TitleBarNewPlan plans={plans} /> : null}
       </div>
+      {plans.page === PLANS_PAGE.DOCUMENT ? (
+        <div className="title-bar-controls" data-edge="end">
+          <SidePanelToggle
+            panel={plans.sidePanel}
+            disabled={plans.region.kind !== DOCUMENT_REGION.READY}
+          />
+        </div>
+      ) : null}
       <PaneGlide
         root={shell}
         layout={{
