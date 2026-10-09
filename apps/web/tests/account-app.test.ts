@@ -51,6 +51,7 @@ const USER_ID = "user-1";
 
 const ENVIRONMENT: HostedEnvironmentValues = {
   openAiKey: undefined,
+  anthropicKey: undefined,
   posthogPersonalApiKey: Redacted.make("posthog-personal-key"),
   posthogProjectId: "posthog-project-1",
   posthogApiHost: undefined,

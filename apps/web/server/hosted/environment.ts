@@ -1,5 +1,6 @@
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
 import { text } from "../core.js";
+import { HOSTED_ANTHROPIC_ENVIRONMENT } from "./anthropic.js";
 import { CRON_ENVIRONMENT } from "./maintenance-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "./openai.js";
 import { POSTHOG_ENVIRONMENT } from "./posthog.js";
@@ -15,6 +16,8 @@ import { POSTHOG_ENVIRONMENT } from "./posthog.js";
 export interface HostedEnvironmentValues {
   /** Luke's own OpenAI key; absent means the hosted tier is off and every endpoint answers 503. */
   readonly openAiKey: Redacted.Redacted | undefined;
+  /** Luke's own Anthropic key, which a coding agent on an Anthropic model runs on; absent means those agents cannot run. */
+  readonly anthropicKey: Redacted.Redacted | undefined;
   /** The analytics processor's own deletion key; absent means there is no person to erase. */
   readonly posthogPersonalApiKey: Redacted.Redacted | undefined;
   /** The analytics project the personal key deletes from; absent means there is nothing to erase it with. */
@@ -66,6 +69,7 @@ export const hostedEnvironment = Layer.effect(
   Effect.map(
     Config.all({
       apiKey: Config.option(Config.Redacted(HOSTED_OPENAI_ENVIRONMENT.API_KEY)),
+      anthropicKey: Config.option(Config.Redacted(HOSTED_ANTHROPIC_ENVIRONMENT.API_KEY)),
       posthogPersonalApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
       posthogProjectId: Config.option(Config.String(POSTHOG_ENVIRONMENT.PROJECT_ID)),
       posthogApiHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.API_HOST)),
@@ -75,6 +79,7 @@ export const hostedEnvironment = Layer.effect(
     }),
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
+      anthropicKey: presentRedacted(read.anthropicKey),
       posthogPersonalApiKey: presentRedacted(read.posthogPersonalApiKey),
       posthogProjectId: present(read.posthogProjectId),
       posthogApiHost: present(read.posthogApiHost),

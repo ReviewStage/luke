@@ -698,6 +698,35 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
+  it.effect(
+    "a write token is minted on the same terms, cut to contents and pull requests write, for a coding agent's push and pull request",
+    () =>
+      Effect.gen(function* () {
+        const fake = githubReaching([
+          { id: 2, login: "octo-org", repositories: [{ owner: "octo-org", name: "relay" }] },
+        ]);
+        const userId = yield* openGithubUser();
+        const app = yield* GitHubApp;
+
+        const minted = yield* app
+          .repositoryWriteToken(userId, "octo-org/relay")
+          .pipe(Effect.provide(fake.layer));
+        const unreached = yield* app
+          .repositoryWriteToken(userId, "octo-org/ledger")
+          .pipe(Effect.provide(fake.layer));
+
+        assert.ok(Option.isSome(minted));
+        assert.equal(Redacted.value(minted.value.token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
+        assert.ok(Option.isNone(unreached));
+        const mints = fake.sent.filter((sent) => sent.url.endsWith("/access_tokens"));
+        assert.equal(mints.length, 1);
+        assert.deepEqual(JSON.parse(mints[0]?.body ?? ""), {
+          repositories: ["relay"],
+          permissions: { contents: "write", pull_requests: "write" },
+        });
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
   it.effect("a mint GitHub refuses is unavailable by status, never a token", () =>
     Effect.gen(function* () {
       const refusing = fakeGitHub((sent) => {

@@ -34,7 +34,10 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/auth/(.*)", route: "auth/[...all]", query: `${DISPATCH_QUERY.PATH}=auth/$1` },
   { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
   { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
   { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
 ];
 
 /** The characters a route key may spell for its exact rewrite to be its own regular expression. */

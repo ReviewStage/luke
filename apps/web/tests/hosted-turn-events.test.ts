@@ -52,8 +52,7 @@ afterAll(() => database.close());
 const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 const relay = new StreamRelay({
   writer,
-  asks: askRecord(),
-  stopTurn: () => Effect.void,
+  asks: { binding: askRecord(), stopTurn: () => Effect.void },
   now: () => NOW,
   report: () => undefined,
 });

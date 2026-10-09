@@ -58,6 +58,8 @@ export const HOSTED_API_ERROR = {
    * written.
    */
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
+  /** The plan names no repository yet, so there is nothing for a coding agent to check out; the developer picks one first. */
+  NO_REPOSITORY: "no-repository",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

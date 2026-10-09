@@ -11,6 +11,7 @@ import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   type CodingAgent,
+  type CodingAgentStarted,
   createCodingAgent,
   listCodingAgents,
   type NewCodingAgent,
@@ -55,9 +56,18 @@ function start(planId: string, overrides: Partial<NewCodingAgent> = {}): NewCodi
   };
 }
 
-/** The agent a Start answered, failing the test where it answered none. */
-function started(answer: Option.Option<CodingAgent>): CodingAgent {
-  return Option.getOrElse(answer, () => assert.fail("the start answered no agent"));
+/** The agent a Start answered and made, failing the test where it answered none or found one. */
+function started(answer: Option.Option<CodingAgentStarted>): CodingAgent {
+  const start = Option.getOrElse(answer, () => assert.fail("the start answered no agent"));
+  assert.equal(start.created, true);
+  return start.agent;
+}
+
+/** The agent a retried Start found, failing the test where it answered none or made one. */
+function found(answer: Option.Option<CodingAgentStarted>): CodingAgent {
+  const start = Option.getOrElse(answer, () => assert.fail("the start answered no agent"));
+  assert.equal(start.created, false);
+  return start.agent;
 }
 
 const agentRows = (userId: string) =>
@@ -104,7 +114,7 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
 
       const first = started(yield* createCodingAgent(userId, asked));
       yield* TestClock.adjust(Duration.minutes(1));
-      const retried = started(
+      const retried = found(
         yield* createCodingAgent(userId, {
           ...asked,
           effort: "max",

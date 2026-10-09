@@ -6,8 +6,10 @@ import { TestClock } from "effect/testing";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_CANCEL_OUTCOME,
+  EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveCaller,
+  type EveMount,
   type EveSessions,
   type EveUnreachable,
   eveSessions,
@@ -61,7 +63,10 @@ async function bodyText(body: RequestInit["body"]): Promise<string> {
  * answered: the fake throws where the network would, and the client's
  * error comes back typed.
  */
-function answeringEach(answers: readonly (Answer | undefined)[]) {
+function answeringEach(
+  answers: readonly (Answer | undefined)[],
+  options: { readonly caller?: EveCaller; readonly mount?: EveMount } = {},
+) {
   const seen: Seen[] = [];
   const client = fakeHttpClientLayer(async (url, init) => {
     seen.push({
@@ -75,7 +80,11 @@ function answeringEach(answers: readonly (Answer | undefined)[]) {
     return new Response(JSON.stringify(answer.body), { status: answer.status });
   });
   const sessions: Effect.Effect<EveSessions> = Effect.provide(
-    eveSessions({ origin: ORIGIN, caller: CALLER }),
+    eveSessions({
+      origin: ORIGIN,
+      caller: options.caller ?? CALLER,
+      ...(options.mount === undefined ? undefined : { mount: options.mount }),
+    }),
     client,
   );
   return { seen, sessions };
@@ -118,6 +127,31 @@ it.effect(
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
       assert.deepEqual(request.body, { message: "hello" });
+    }),
+);
+
+it.effect(
+  "the account's own bearer reaches the coding-agent service at eve's named mount, as it came and with no account beside it",
+  () =>
+    Effect.gen(function* () {
+      const { seen, sessions } = answeringEach(
+        [{ status: 202, body: { ok: true, sessionId: SESSION, status: "accepted" } }],
+        {
+          caller: { authorization: Redacted.make("Bearer developer-token-1") },
+          mount: EVE_MOUNT.CODER,
+        },
+      );
+      const opened = yield* Effect.flatMap(sessions, (eve) => eve.open(MESSAGE));
+      assert.deepEqual(opened, { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: SESSION });
+      yield* Effect.flatMap(sessions, (eve) => eve.cancel(SESSION, "turn_0"));
+      assert.deepEqual(
+        seen.map((request) => request.url),
+        [`${ORIGIN}/eve/coder/v1/session`, `${ORIGIN}/eve/coder/v1/session/${SESSION}/cancel`],
+      );
+      for (const request of seen) {
+        assert.equal(request.headers.get("authorization"), "Bearer developer-token-1");
+        assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), null);
+      }
     }),
 );
 

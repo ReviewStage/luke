@@ -21,8 +21,20 @@
           "dest": "/api/default.js?route=plans/transcript&id=$1"
         },
         {
+          "src": "/api/plans/([^/]+)/agents",
+          "dest": "/api/default.js?route=plans/agents&id=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)",
           "dest": "/api/default.js?route=plans/plan&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/messages",
+          "dest": "/api/default.js?route=agents/messages&id=$1"
+        },
+        {
+          "src": "/api/agents/([^/]+)/stop",
+          "dest": "/api/default.js?route=agents/stop&id=$1"
         },
         {
           "src": "/api/account/delete",
@@ -104,6 +116,25 @@
       "installCommand": "cd .. && pnpm install --frozen-lockfile --filter @luke/web... --filter @luke/eve",
       "buildCommand": "pnpm exec eve build",
       "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json"
+    },
+    "coder": {
+      "root": "coder",
+      "framework": "eve",
+      "installCommand": "cd .. && pnpm install --frozen-lockfile --filter @luke/web... --filter @luke/coder",
+      "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/web :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json",
+      "routes": [
+        {
+          "src": "^/eve/coder/v1/(.*)$",
+          "transforms": [
+            {
+              "type": "request.path",
+              "op": "set",
+              "args": "/eve/v1/$1"
+            }
+          ]
+        }
+      ]
     }
   },
   "crons": [
@@ -113,6 +144,12 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/eve/coder/v1/(.*)",
+      "destination": {
+        "service": "coder"
+      }
+    },
     {
       "source": "/eve/v1/(.*)",
       "destination": {

@@ -280,6 +280,22 @@ only when you press Send.
   directly.
 - Sentry, for the anonymous exception, process-session, and native crash reports
   described above.
+- Anthropic and OpenAI, for a coding agent. When you start a coding agent on
+  a plan, our service runs it in a Vercel Sandbox of its own, with a copy of
+  the plan's GitHub repository checked out in it, and calls the model you
+  chose, or your account's default, directly on our own key: Anthropic's for
+  a Claude model, OpenAI's for a GPT model. Each call carries the plan's
+  text, the agent's conversation so far, and what it read of the repository,
+  and the provider stores the request and its reply under its own retention
+  policy. The agent's transcript, its words, reasoning summaries, and tool
+  calls with their output, is written to your account's Conversation by our
+  service, as described under "Your account" above. Nothing of the sandbox
+  reaches the screen recording.
+- GitHub, through the Luke GitHub App, for a coding agent's work. The agent
+  checks the repository out, pushes its branch, and opens a pull request
+  with an installation token the App mints for that one repository, set at
+  the sandbox's network boundary and never inside it; what GitHub sees is
+  the App acting on a repository you gave it.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 

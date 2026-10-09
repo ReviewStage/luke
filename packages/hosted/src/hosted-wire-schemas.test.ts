@@ -8,6 +8,7 @@ import {
 } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import * as boardWire from "./board-wire.js";
+import * as codingAgentWire from "./coding-agent-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as planWire from "./plan-wire.js";
@@ -35,6 +36,15 @@ const EFFECT_MODULE_SCHEMAS = {
     boardSaveRequestSchema: boardWire.boardSaveRequestSchema,
     drawingElementsSchema: boardWire.drawingElementsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
+  "coding-agent-wire": {
+    codingAgentStartRequestSchema: codingAgentWire.codingAgentStartRequestSchema,
+    codingAgentSummarySchema: codingAgentWire.codingAgentSummarySchema,
+    codingAgentAnswerSchema: codingAgentWire.codingAgentAnswerSchema,
+    codingAgentListAnswerSchema: codingAgentWire.codingAgentListAnswerSchema,
+    codingAgentMessageSchema: codingAgentWire.codingAgentMessageSchema,
+    codingAgentCursorSchema: codingAgentWire.codingAgentCursorSchema,
+    codingAgentMessagesAnswerSchema: codingAgentWire.codingAgentMessagesAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
   "github-repositories-wire": {
     githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,
     githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,

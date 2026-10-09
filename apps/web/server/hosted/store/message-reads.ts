@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -284,6 +284,91 @@ export function listRecentMessages(
     findRecentMessages({ conversationId, userId, limit: pageLimit({ limit }) }),
     (selected) => readSelected([...selected].reverse(), tools),
   );
+}
+
+/** Where a transcript reader stands: the highest message sequence it has, and the journal revision it read at. */
+export interface MessageCursor {
+  readonly seq: number;
+  readonly revision: number;
+}
+
+/** A page of messages past a cursor, and the cursor to read on from. */
+export interface MessagePagePast {
+  readonly read: MessageListRead;
+  readonly cursor: MessageCursor;
+}
+
+const findMessagesPast = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    seq: Schema.Number,
+    revision: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    db
+      .select(MESSAGE_FIELDS)
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+          or(gt(messages.seq, options.seq), gt(messages.revision, options.revision)),
+        ),
+      )
+      .orderBy(asc(messages.seq))
+      .limit(options.limit),
+});
+
+const findJournalRevision = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({ journalRevision: EpochMillisColumnSchema }),
+  execute: (options) =>
+    db
+      .select({ journalRevision: conversations.journalRevision })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, options.conversationId),
+          eq(conversations.userId, options.userId),
+          isNull(conversations.deletedAt),
+        ),
+      ),
+});
+
+/**
+ * The messages a reader has not seen as they now stand: every row past the
+ * cursor's sequence, and every row amended in place past its revision, in
+ * sequence order, read back through the vocabulary. The cursor answered
+ * is the highest sequence on the page or the one asked, and the
+ * conversation's journal revision as it stands now, read before the page
+ * so an amendment that lands between the two is heard again rather than
+ * missed. A conversation that no longer stands answers no rows and the
+ * cursor asked.
+ */
+export function listMessagesPast(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  cursor: MessageCursor,
+): Effect.Effect<MessagePagePast, MessageReadFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const standing = yield* findJournalRevision({ conversationId, userId });
+    if (Option.isNone(standing)) return { read: { ok: true, value: [] }, cursor };
+    const selected = yield* findMessagesPast({
+      conversationId,
+      userId,
+      seq: cursor.seq,
+      revision: cursor.revision,
+      limit: MAXIMUM_READ_PAGE,
+    });
+    const read = yield* readSelected(selected, tools);
+    const seq = selected.reduce((highest, row) => Math.max(highest, row.seq), cursor.seq);
+    return { read, cursor: { seq, revision: standing.value.journalRevision } };
+  });
 }
 
 const findMessageByClientIdRow = SqlSchema.findAll({

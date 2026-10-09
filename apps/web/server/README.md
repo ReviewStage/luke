@@ -1604,7 +1604,7 @@ needs Vercel Sandbox credentials (the build's own `VERCEL_OIDC_TOKEN`, or
 that fails stops the deployment. `tests/eve-layout.test.ts` builds with
 `--skip-sandbox-prewarm`, so it says nothing about the snapshot.
 
-`eve/evals/brain-host.eval.ts` is the one end-to-end eval, and nothing local
+`eve/evals/brain-host.eval.ts` is the planning brain's end-to-end eval, and nothing local
 runs it. `./scripts/check.sh` runs vitest over the workspaces
 `vitest.config.ts` lists, and `@luke/eve` is not one of them; the eval is
 `pnpm --filter @luke/web test:agent`, which writes through the real store
@@ -1613,6 +1613,119 @@ migrations and store" job alone, beside `test:store`, against that job's own
 Postgres service container. A green `check.sh` says nothing about it, which is
 worth knowing before a change to the brain host, the writer, or a schema
 module it reads back through.
+
+## The coding-agent service
+
+`coder/` is the second eve app root, built and deployed as the `coder`
+service beside `eve` on the same terms (`vercel.json`): its own
+`package.json` (`@luke/coder`, whose one dependency is `eve`), a flat layout
+eve resolves as an app root, and a build that prewarms its sandbox snapshot
+under the same Vercel Sandbox credentials. It stands at eve's named mount:
+the public route is `/eve/coder/v1/*`, which the deployment's first rewrite
+carries into the service, whose own one `routes` entry turns it back into
+`/eve/v1/*` with a `request.path` transform before eve's router reads it,
+and whose build exports `EVE_PUBLIC_ROUTE_PREFIX=/eve/coder` so the callback
+URLs eve mints resolve to the public path. The web functions reach it through
+`server/hosted/brain-host/eve-sessions.ts` with `mount: EVE_MOUNT.CODER`.
+`tests/vercel-services.test.ts` holds the three services and that routing,
+and `tests/eve-layout.test.ts` builds both roots.
+
+A coding agent is one eve session over a `coding_agent` conversation
+(`server/hosted/coding-agent-store.ts`), and the host behind the authored
+files is `server/hosted/coder-host/`: the same door and conversation
+admission as the planning brain's (`brain-host/door.ts`,
+`brain-host/conversation.ts`), with the developer's own bearer the only
+caller the channel walks in (`coder-host/channel.ts`): a Start and a Stop
+come from a route still holding it, so no deployment actor acts here, and a
+follow-up queues. The agent (`coder/agent.ts`) runs none of eve's default
+tools and authors its own under `coder/tools/`, which is exactly the set the
+store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
+`write_file`, `glob`, `web_fetch`, and `web_search`, and the code
+extension's `apply_patch` and `grep` from `eve/extensions/code/tools`; the
+extension itself is not mounted, since its `worker` subagent runs on an AI
+Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
+`gh` and `git` run through the shell, authenticated at the firewall. The
+session's input tokens are uncapped and compaction is eve's default.
+
+The model is chosen at every step (`coder-host/model.ts`): the agent's row
+names the catalog id and effort, `providerModelOf` turns the id into the
+provider's own, and the step is told `@ai-sdk/anthropic` on
+`ANTHROPIC_API_KEY` with `providerOptions.anthropic.effort`, or
+`@ai-sdk/openai`'s Responses model on `OPENAI_API_KEY` with
+`providerOptions.openai.reasoningEffort`, with the context window the
+catalog lists for the model (`CatalogModel.contextWindow`) or a fallback
+where it lists none. Nothing goes through AI Gateway. Reading the row every
+step means a later change to it is the next step's model.
+
+The sandbox (`coder/sandbox.ts`) is one Vercel Sandbox per session at the
+platform's 24-hour maximum timeout, prepared with the code extension's
+tooling (`gh`, signed commits, TypeScript diagnostics), pnpm, and Python
+beside the image's Node and git. As it opens, the agent's repository is
+checked out whole at its default branch through the same firewall-scoped
+clone the planning checkout makes (`repository-shell.ts`'s
+`cloneRepository`), on a token `repositoryWriteToken` mints for that one
+repository with contents and pull requests write, and the token is then set
+at the firewall for the session's own `gh` and `git` through eve's
+`authenticateGitHub`; it never enters the sandbox's filesystem or
+environment. A token lasts an hour, so the store hook renews it at the
+firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
+
+The store hook (`coder/hooks/store.ts`) relays every event into the store
+through the relay the planning brain shares (`brain-host/relay.ts`), composed
+with no ask record, so an agent's turns land as `turns` rows naming its
+model and effort and its `messages` rows as `UIMessage`s; it also stops the
+sandbox the moment a turn ends, completed, failed, or cancelled, where a
+sandbox tool ran in the session. The instructions (`coder-host/instructions.ts`)
+tell the agent to read `AGENTS.md` and `CLAUDE.md` first, reread the code the
+plan names and say where it no longer fits, run the repository's checks,
+work on a `luke/<slug>` branch and never push the default branch, and decide
+on a pull request and its draft state itself; the plan is the session's
+first message. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
+`DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
+credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
+selects the scripted model for `coder/evals/coder.eval.ts`, which
+`pnpm --filter @luke/web test:agent` runs beside the planning eval and which
+runs a turn under the scripted model with no tool call, so no sandbox opens.
+
+## The coding-agent routes
+
+`server/coding-agents-app.ts` is the group the desktop starts, lists,
+reads, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
+declares every request and answer, and `service-paths.ts` the addresses.
+`POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort? }`:
+both of the choice or neither, the account's default (`/api/account/preferences`)
+where neither, checked against the catalog with `acceptedModelChoice`, which
+also refuses a stored default that has since left the catalog. It refuses a
+plan with no repository (`no-repository`, 409) and one the account no
+longer reaches through the App (`repository-not-reachable`), snapshots the
+plan's document as the Markdown Copy puts on the clipboard
+(`@sidecar/hosted/plan-markdown`), makes the agent and its conversation
+(`createCodingAgent`), and opens the eve session under the developer's own
+bearer with the snapshot as the first message of a typed turn; an eve that
+did not take it discards the agent again (`discardCodingAgent`) and answers
+`unavailable`, so a retry starts afresh. A retry under the same key answers
+the agent the first Start made, 200 rather than 201, and opens nothing. A
+Start that named a model writes it as the account's default.
+
+`GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
+instant, and status, read from its newest turn (`coder-host/status.ts`):
+`starting` before one, `running`, `completed`, `failed`, or `cancelled`,
+with a running turn carrying a Stop stamp reading as cancelled already.
+`GET /api/agents/{id}/messages?after=<seq>:<revision>` answers the
+conversation's rows past the cursor as `UIMessage`s and the cursor to read
+on from (`coder-host/transcript.ts`): a row is new past a cursor when its
+sequence is higher or it was amended in place at a later journal revision,
+which is how a turn's journal is heard again as it grows; a read with
+nothing new is held open while the newest turn runs, looked at every half
+second and let go at twenty seconds, and an idle agent answers at once.
+`POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
+eve's own id on the row, then the row's stamp; the service's hook stops the
+sandbox as the cancelled turn ends, and anything the agent pushed stays.
+`tests/coding-agents-app.test.ts` answers the routes over a fake eve, a
+scripted GitHub, a fixed catalog, and PGlite; `tests/coder-host.test.ts`
+drives the host, the shared relay, and the held read on the test clock;
+`tests/coder-host-checkout.test.ts` holds the checkout over the sandbox
+double, reading every run for the token and never finding it.
 
 ## The scheduled sweep
 

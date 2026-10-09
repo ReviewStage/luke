@@ -11,6 +11,23 @@ export {
 export { AccountRefreshFailed, type AccountToken } from "./account-token.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_CURSOR_START,
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+  type CodingAgentMessagesAnswer,
+  type CodingAgentStartRequest,
+  type CodingAgentStatus,
+  type CodingAgentSummary,
+  codingAgentAnswerSchema,
+  codingAgentCursorSchema,
+  codingAgentListAnswerSchema,
+  codingAgentMessageSchema,
+  codingAgentMessagesAnswerSchema,
+  codingAgentStartRequestSchema,
+  codingAgentSummarySchema,
+} from "./coding-agent-wire.js";
+export {
   GITHUB_INSTALL_LANDING,
   GITHUB_INSTALL_STATUS,
   type GitHubInstallStatus,
@@ -69,7 +86,14 @@ export {
   type HostedPlanClientOptions,
   type PlanCallResult,
 } from "./plan-client.js";
-export { HOSTED_SERVICE_PATH, planPath, VOICE_SERVICE_PATH } from "./service-paths.js";
+export {
+  agentMessagesPath,
+  agentStopPath,
+  HOSTED_SERVICE_PATH,
+  planAgentsPath,
+  planPath,
+  VOICE_SERVICE_PATH,
+} from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
   type HostedApiError,

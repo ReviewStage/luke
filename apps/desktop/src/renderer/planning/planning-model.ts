@@ -1,3 +1,4 @@
+import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import type { Plan, PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
   PLANNING_READ,
@@ -8,7 +9,6 @@ import {
 import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 import type { VoiceView } from "#shared/messages/voice-view";
-import { planMarkdown } from "#shared/plan-markdown";
 import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
 
 /**

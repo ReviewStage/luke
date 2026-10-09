@@ -19,9 +19,21 @@ interface Route {
   readonly dest: string;
 }
 
+interface Transform {
+  readonly type: string;
+  readonly op: string;
+  readonly args: string;
+}
+
+interface ServiceRoute {
+  readonly src: string;
+  readonly transforms?: readonly Transform[];
+}
+
 interface Service {
   readonly root: string;
-  readonly routes?: readonly Route[];
+  readonly buildCommand?: string;
+  readonly routes?: readonly (Route | ServiceRoute)[];
 }
 
 interface Rewrite {
@@ -46,11 +58,15 @@ const SERVICE_OWNED_KEYS = [
   "functions",
 ] as const;
 
-const SERVICE = { WEB: "web", EVE: "eve" } as const;
+const SERVICE = { WEB: "web", EVE: "eve", CODER: "coder" } as const;
+
+/** Where the coding-agent service's eve routes stand publicly: eve's named mount, which the service's own route turns back into `/eve/v1/*`. */
+const CODER_MOUNT = "/eve/coder";
 
 interface Services {
   readonly [SERVICE.WEB]: Service;
   readonly [SERVICE.EVE]: Service;
+  readonly [SERVICE.CODER]: Service;
 }
 
 // SAFETY: the file is this repository's own vercel.json, read for its deployment shape.
@@ -58,10 +74,11 @@ const vercel = JSON.parse(
   readFileSync(fileURLToPath(new URL("../vercel.json", import.meta.url)), "utf8"),
 ) as { services: Services; rewrites: readonly Rewrite[] };
 
-test("the deployment is the web and eve services, and every build and routing key lives under a service", () => {
-  assert.deepEqual(Object.keys(vercel.services), [SERVICE.WEB, SERVICE.EVE]);
+test("the deployment is the web, eve, and coder services, and every build and routing key lives under a service", () => {
+  assert.deepEqual(Object.keys(vercel.services), [SERVICE.WEB, SERVICE.EVE, SERVICE.CODER]);
   assert.equal(vercel.services[SERVICE.WEB].root, ".");
   assert.equal(vercel.services[SERVICE.EVE].root, "eve");
+  assert.equal(vercel.services[SERVICE.CODER].root, "coder");
   for (const key of SERVICE_OWNED_KEYS) {
     assert.equal(
       key in vercel,
@@ -79,10 +96,22 @@ test("the web service owns the routes, the eve service has none, and every rewri
   const declared = new Set(Object.keys(vercel.services));
   assert.deepEqual(
     vercel.rewrites.map((rewrite) => rewrite.destination.service),
-    [SERVICE.EVE, SERVICE.WEB],
+    [SERVICE.CODER, SERVICE.EVE, SERVICE.WEB],
   );
   for (const rewrite of vercel.rewrites) assert.ok(declared.has(rewrite.destination.service));
   assert.equal(vercel.rewrites.at(-1)?.source, "/(.*)");
+});
+
+test("the coder service stands at eve's named mount: its rewrite comes before the planning brain's, its build names the mount, and its one route turns the mount back into eve's own path", () => {
+  const coder = vercel.services[SERVICE.CODER];
+  assert.equal(vercel.rewrites[0]?.source, `${CODER_MOUNT}/v1/(.*)`);
+  assert.ok(coder.buildCommand?.includes(`EVE_PUBLIC_ROUTE_PREFIX=${CODER_MOUNT}`));
+  assert.deepEqual(coder.routes, [
+    {
+      src: `^${CODER_MOUNT}/v1/(.*)$`,
+      transforms: [{ type: "request.path", op: "set", args: "/eve/v1/$1" }],
+    },
+  ]);
 });
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));

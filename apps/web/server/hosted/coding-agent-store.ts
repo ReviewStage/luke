@@ -1,11 +1,12 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { TURN_STATUS } from "../core.js";
 import { codingAgent } from "../db/coding-agent-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
-import { conversations } from "../db/storage-schema.js";
+import { conversations, turns } from "../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { InstantColumnSchema } from "./store/database.js";
 
@@ -17,11 +18,15 @@ import { InstantColumnSchema } from "./store/database.js";
  * Starting an agent is one transaction under the plan's own row lock: the
  * lock is the ownership check and what serialises two Starts of one plan,
  * so a retry carrying the key of a Start already made finds that agent
- * rather than opening a second conversation beside it. The agent's
- * conversation is a `coding_agent` conversation of the same account, opened
- * here and named on the row; its messages and turns are the relay's to
- * write. Every function is an effect over the ambient `SqlClient` and names
- * no database of its own.
+ * rather than opening a second conversation beside it, and says which it
+ * did, since only a Start that made the agent opens its eve session. The
+ * agent's conversation is a `coding_agent` conversation of the same
+ * account, opened here and named on the row; its messages and turns are the
+ * relay's to write, and the newest turn is what the agent's status is read
+ * from. A Start whose eve session could not be opened discards the agent
+ * again, rows and conversation, so a retry under the same key starts afresh
+ * rather than finding an agent nothing runs. Every function is an effect
+ * over the ambient `SqlClient` and names no database of its own.
  */
 
 type CodingAgentStoreFailure = SqlError | Schema.SchemaError;
@@ -43,6 +48,22 @@ export interface CodingAgent {
   readonly planSnapshot: string;
   readonly repository: string;
   readonly createdAt: Date;
+}
+
+/** What a Start answered: the agent, and whether this Start made it or a retry found it. */
+export interface CodingAgentStarted {
+  readonly agent: CodingAgent;
+  readonly created: boolean;
+}
+
+/** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. */
+export interface CodingAgentLatestTurn {
+  readonly conversationId: string;
+  readonly id: string;
+  readonly status: string;
+  /** eve's own id for the turn, which a Stop names to eve; null for a row eve has not started. */
+  readonly eveTurnId: string | null;
+  readonly cancelRequestedAt: Date | null;
 }
 
 /** A Start: the plan, the request's own key, what to run on, and the plan text and repository as they stand now. */
@@ -168,6 +189,61 @@ const findAgent = SqlSchema.findOneOption({
       .limit(1),
 });
 
+const findAgentOfConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, conversationId }) =>
+    db
+      .select(CODING_AGENT_COLUMNS)
+      .from(codingAgent)
+      .where(and(eq(codingAgent.conversationId, conversationId), eq(codingAgent.userId, userId)))
+      .limit(1),
+});
+
+const deleteAgentRow = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ userId, agentId }) =>
+    db
+      .delete(codingAgent)
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .returning({ conversationId: codingAgent.conversationId }),
+});
+
+const deleteConversationRow = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  execute: ({ userId, conversationId }) =>
+    db
+      .delete(conversations)
+      .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
+});
+
+const LatestTurnRowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  id: Schema.String,
+  status: Schema.String,
+  eveTurnId: Schema.NullOr(Schema.String),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+});
+
+/** The newest turn of each conversation named, by the order the turns were queued; a conversation with none answers no row. */
+const findLatestTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
+  Result: LatestTurnRowSchema,
+  execute: ({ userId, conversationIds }) =>
+    db
+      .selectDistinctOn([turns.conversationId], {
+        conversationId: turns.conversationId,
+        id: turns.id,
+        status: turns.status,
+        eveTurnId: turns.eveTurnId,
+        cancelRequestedAt: turns.cancelRequestedAt,
+      })
+      .from(turns)
+      .where(and(eq(turns.userId, userId), inArray(turns.conversationId, [...conversationIds])))
+      .orderBy(turns.conversationId, desc(turns.queuedAt), desc(turns.id)),
+});
+
 /**
  * Starts an agent on the account's plan: a `coding_agent` conversation and
  * the row that binds it to the plan, with the plan text and repository as
@@ -178,7 +254,7 @@ const findAgent = SqlSchema.findOneOption({
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
-): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+): CodingAgentStoreEffect<Option.Option<CodingAgentStarted>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -188,7 +264,9 @@ export function createCodingAgent(
           userId,
           idempotencyKey: started.idempotencyKey,
         });
-        if (Option.isSome(existing)) return existing;
+        if (Option.isSome(existing)) {
+          return Option.some({ agent: existing.value, created: false });
+        }
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({ userId, now }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -205,7 +283,28 @@ export function createCodingAgent(
           repository: started.repository,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
-        return Option.some(row);
+        return Option.some({ agent: row, created: true });
+      }),
+    ),
+  );
+}
+
+/**
+ * Discards an agent a Start could not open an eve session for: its row and
+ * its conversation, with every message and turn the conversation holds,
+ * which is none. Answers whether the account held such an agent.
+ */
+export function discardCodingAgent(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const [deleted] = yield* deleteAgentRow({ userId, agentId });
+        if (deleted === undefined) return false;
+        yield* deleteConversationRow({ userId, conversationId: deleted.conversationId });
+        return true;
       }),
     ),
   );
@@ -226,3 +325,29 @@ export function readCodingAgent(
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgent({ userId, agentId });
 }
+
+/** The account's agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for another account's or no agent's. */
+export function readCodingAgentOfConversation(
+  userId: string,
+  conversationId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return findAgentOfConversation({ userId, conversationId });
+}
+
+/** The newest turn of each of the account's conversations named, keyed by conversation; a conversation with no turn yet is absent. */
+export function latestTurnsOf(
+  userId: string,
+  conversationIds: readonly string[],
+): CodingAgentStoreEffect<ReadonlyMap<string, CodingAgentLatestTurn>> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLatestTurns({ userId, conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row])),
+  );
+}
+
+/** The turn statuses under which an agent is still at work, which is when a Stop has something to stop. */
+export const RUNNING_TURN_STATUSES: ReadonlySet<string> = new Set([
+  TURN_STATUS.QUEUED,
+  TURN_STATUS.RUNNING,
+]);

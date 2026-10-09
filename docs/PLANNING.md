@@ -446,6 +446,17 @@ repository is no longer reachable through the App, or the checkout failed;
 in every case nothing of the code has been read, and Luke never describes it
 as read.
 
+### From a plan to a pull request
+
+A plan with a repository can be handed to a coding agent: a cloud session of
+Luke's second eve service, which checks the repository out in a Vercel
+Sandbox of its own, implements the plan given as its first message, runs the
+repository's checks, and decides whether to open a pull request. The service,
+its routes, and what it is told are described in
+`apps/web/server/README.md` under "The coding-agent service" and "The
+coding-agent routes"; the desktop's Start button and agent tabs are the
+plan's next step.
+
 ## The journey
 
 The reference plan is "Teammate invitations" on a private repository,

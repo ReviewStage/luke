@@ -299,33 +299,35 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         const eve = yield* eveSessionsComposer;
         const relay = new StreamRelay({
           writer,
-          asks: askRecord(),
-          // A Stop an ask took while it waited is carried the moment its turn starts, by the
-          // deployment acting for the account, since the hook that sees the start holds no bearer
-          // of the account's; a deployment with no secret or no origin for eve reports the Stop it
-          // could not carry.
-          stopTurn: (target, sessionId, eveTurnId, turnId) =>
-            Effect.suspend(() => {
-              const secret = seams.deploymentSecret();
-              const origin = seams.eveOrigin();
-              if (secret === undefined || origin === undefined) {
-                return Effect.logWarning(
-                  `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
+          asks: {
+            binding: askRecord(),
+            // A Stop an ask took while it waited is carried the moment its turn starts, by the
+            // deployment acting for the account, since the hook that sees the start holds no bearer
+            // of the account's; a deployment with no secret or no origin for eve reports the Stop it
+            // could not carry.
+            stopTurn: (target, sessionId, eveTurnId, turnId) =>
+              Effect.suspend(() => {
+                const secret = seams.deploymentSecret();
+                const origin = seams.eveOrigin();
+                if (secret === undefined || origin === undefined) {
+                  return Effect.logWarning(
+                    `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
+                  );
+                }
+                return carryStop(
+                  {
+                    eve: eve({ origin, caller: { secret, account: target.userId } }),
+                    writer,
+                    now: seams.now,
+                    report: (message) => console.warn(message),
+                  },
+                  target,
+                  sessionId,
+                  eveTurnId,
+                  turnId,
                 );
-              }
-              return carryStop(
-                {
-                  eve: eve({ origin, caller: { secret, account: target.userId } }),
-                  writer,
-                  now: seams.now,
-                  report: (message) => console.warn(message),
-                },
-                target,
-                sessionId,
-                eveTurnId,
-                turnId,
-              );
-            }),
+              }),
+          },
           now: seams.now,
           report: (message) => console.warn(message),
         });

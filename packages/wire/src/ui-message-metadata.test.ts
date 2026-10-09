@@ -232,7 +232,7 @@ test("the emitted schema offers the three user shapes and names only the fields 
   assert.equal("anyOf" in user, true);
   if (!("anyOf" in user)) return;
   const shapes = user.anyOf.map((member) =>
-    "type" in member && member.type === "object"
+    "properties" in member
       ? { keys: Object.keys(member.properties).sort(), required: [...member.required].sort() }
       : undefined,
   );
@@ -246,7 +246,7 @@ test("the emitted schema offers the three user shapes and names only the fields 
   ]);
   const assistant = emitJsonSchema(ASSISTANT_MESSAGE_METADATA);
   assert.equal("type" in assistant && assistant.type, "object");
-  if (!("type" in assistant) || assistant.type !== "object") return;
+  if (!("properties" in assistant)) return;
   assert.deepEqual(Object.keys(assistant.properties).sort(), [
     "author",
     "channel",

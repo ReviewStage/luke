@@ -124,7 +124,7 @@ const whereItStands: StandingAsyncContext = (resume) => resume();
  * context it registered its `then` in. Note that no authored file reads
  * eve's session container out of the context a statement leaves standing:
  * under two sessions in one process that context is the other session's,
- * so each pins its own where it is entered (`eve/pinned-state.ts`), and
+ * so each pins its own where it is entered (`hosted/brain-host/pinned-state.ts`), and
  * what the bridge owes is parity with the raw statement and nothing more.
  */
 interface StandingQuery {

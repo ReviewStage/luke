@@ -32,6 +32,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
   [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.NO_REPOSITORY]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -55,6 +56,7 @@ export const GitHubSignInRequiredRefusal = refusalSchema(HOSTED_API_ERROR.GITHUB
 export const RepositoryNotReachableRefusal = refusalSchema(
   HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
 );
+export const NoRepositoryRefusal = refusalSchema(HOSTED_API_ERROR.NO_REPOSITORY);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
@@ -87,6 +89,8 @@ export const HOSTED_REFUSAL = {
   GITHUB_SIGN_IN_REQUIRED: { error: HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED },
   /** The App reaches no such repository for the account; nothing was written. */
   REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
+  /** The plan names no repository, so no coding agent can be started on it; nothing was written. */
+  NO_REPOSITORY: { error: HOSTED_API_ERROR.NO_REPOSITORY },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**

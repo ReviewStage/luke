@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { StateHandle } from "eve/context";
 import { afterAll, test } from "vitest";
-import { pinnedState } from "../eve/pinned-state";
+import { pinnedState } from "../server/hosted/brain-host/pinned-state";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**

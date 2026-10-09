@@ -12,9 +12,11 @@
  * which is both the list the desktop offers and the check a plan's
  * repository passes before it is kept: a repository is reachable only
  * through an installation, and a public repository the token could read
- * without one is deliberately not. The one token the App mints is an
- * installation token for one repository with contents read alone, for the
- * planning sandbox's checkout, and it is minted only where that check passes.
+ * without one is deliberately not. The tokens the App mints are
+ * installation tokens for one repository: with contents read alone for the
+ * planning sandbox's checkout, and with contents and pull requests write for
+ * a coding agent's branch and pull request; each is minted only where that
+ * check passes.
  *
  * Nothing here holds a client: the GitHub reads run on the ambient
  * `HttpClient` and the account row is read on the ambient `SqlClient`, so a
@@ -84,13 +86,23 @@ const USER_TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
 
-/** What the App asks of an installation token: contents read alone, which is what a checkout needs. */
-const INSTALLATION_TOKEN_PERMISSIONS = { contents: "read" } as const;
+/**
+ * What the App asks of an installation token, by what the token is for:
+ * contents read alone, which is what a checkout needs, or contents and pull
+ * requests write, which is what a coding agent's push and pull request need.
+ */
+const INSTALLATION_TOKEN_PERMISSIONS = {
+  READ: { contents: "read" },
+  WRITE: { contents: "write", pull_requests: "write" },
+} as const;
+
+type InstallationTokenPermissions =
+  (typeof INSTALLATION_TOKEN_PERMISSIONS)[keyof typeof INSTALLATION_TOKEN_PERMISSIONS];
 
 /** The mint as GitHub takes it: the repositories by name, and the permissions the token is cut to. */
 interface InstallationTokenRequest {
   readonly repositories: readonly string[];
-  readonly permissions: typeof INSTALLATION_TOKEN_PERMISSIONS;
+  readonly permissions: InstallationTokenPermissions;
 }
 
 const HTTP_STATUS = { UNAUTHORIZED: 401, NOT_FOUND: 404 } as const;
@@ -204,9 +216,9 @@ interface GitHubUserRepositories {
 }
 
 /** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
-interface GitHubRepositoryReadToken {
+interface GitHubRepositoryToken {
   readonly repository: GitHubRepository;
-  /** An installation token limited to this one repository with contents read, good for an hour from its mint. */
+  /** An installation token limited to this one repository, good for an hour from its mint. */
   readonly token: Redacted.Redacted;
 }
 
@@ -263,7 +275,21 @@ export interface GitHubAppService {
     userId: string,
     fullName: string,
   ) => Effect.Effect<
-    Option.Option<GitHubRepositoryReadToken>,
+    Option.Option<GitHubRepositoryToken>,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | SqlClient.SqlClient
+  >;
+  /**
+   * The same mint with contents and pull requests write, which is what a
+   * coding agent's push to its branch and its pull request need, on the same
+   * terms: the user's own reach admits it, and the token reaches that one
+   * repository and no other.
+   */
+  readonly repositoryWriteToken: (
+    userId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubRepositoryToken>,
     GitHubUserReadFailure,
     HttpClient.HttpClient | SqlClient.SqlClient
   >;
@@ -749,6 +775,31 @@ function githubAppService(
       }));
     });
 
+  /** A token minted as the App for the one repository the user reaches, cut to the permissions given; none where they do not reach it. */
+  const repositoryToken = (
+    userId: string,
+    fullName: string,
+    permissions: InstallationTokenPermissions,
+  ) =>
+    Effect.gen(function* () {
+      const reached = yield* reachableRepository(userId, fullName);
+      if (Option.isNone(reached)) return Option.none();
+      const { installation, repository } = reached.value;
+      const jwt = yield* appJwt;
+      const minted = yield* Effect.scoped(
+        Effect.flatMap(
+          send(
+            githubMintAsApp(`/app/installations/${installation.id}/access_tokens`, jwt, {
+              repositories: [repository.name],
+              permissions,
+            }),
+          ),
+          (response) => readBody(response, InstallationTokenSchema),
+        ),
+      );
+      return Option.some({ repository, token: Redacted.make(minted.token) });
+    });
+
   return {
     installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
     appJwt,
@@ -780,24 +831,9 @@ function githubAppService(
         Option.map((reached) => reached.repository),
       ),
     repositoryReadToken: (userId, fullName) =>
-      Effect.gen(function* () {
-        const reached = yield* reachableRepository(userId, fullName);
-        if (Option.isNone(reached)) return Option.none();
-        const { installation, repository } = reached.value;
-        const jwt = yield* appJwt;
-        const minted = yield* Effect.scoped(
-          Effect.flatMap(
-            send(
-              githubMintAsApp(`/app/installations/${installation.id}/access_tokens`, jwt, {
-                repositories: [repository.name],
-                permissions: INSTALLATION_TOKEN_PERMISSIONS,
-              }),
-            ),
-            (response) => readBody(response, InstallationTokenSchema),
-          ),
-        );
-        return Option.some({ repository, token: Redacted.make(minted.token) });
-      }),
+      repositoryToken(userId, fullName, INSTALLATION_TOKEN_PERMISSIONS.READ),
+    repositoryWriteToken: (userId, fullName) =>
+      repositoryToken(userId, fullName, INSTALLATION_TOKEN_PERMISSIONS.WRITE),
     userToken,
   };
 }

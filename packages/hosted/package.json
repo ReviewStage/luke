@@ -8,6 +8,8 @@
     "./board-text": "./src/board-text.js",
     "./board-vocabulary": "./src/board-vocabulary.js",
     "./board-wire": "./src/board-wire.js",
+    "./coding-agent-wire": "./src/coding-agent-wire.js",
+    "./plan-markdown": "./src/plan-markdown.js",
     "./plan-template": "./src/plan-template.js",
     "./plan-wire": "./src/plan-wire.js",
     "./planning-view": "./src/planning-view.js",

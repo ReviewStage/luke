@@ -16,7 +16,8 @@
         "method-not-allowed",
         "not-found",
         "github-sign-in-required",
-        "repository-not-reachable"
+        "repository-not-reachable",
+        "no-repository"
       ]
     }
   },
