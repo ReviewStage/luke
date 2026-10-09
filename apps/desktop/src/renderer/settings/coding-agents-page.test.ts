@@ -198,7 +198,7 @@ test("the model menu opens on its search, lists every model under its mark newes
   assert.equal(document.activeElement, chip(page));
   assert.deepEqual(efforts(page), [
     ["Low", "true"],
-    ["Xhigh", "false"],
+    ["Extra high", "false"],
   ]);
 });
 

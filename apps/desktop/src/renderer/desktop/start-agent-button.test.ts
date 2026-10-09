@@ -97,93 +97,176 @@ function type(field: HTMLInputElement, words: string): void {
 const rowsOf = (menu: HTMLElement) =>
   [...menu.querySelectorAll<HTMLElement>('[role="option"]')].map((row) => row.textContent);
 
-test("the main part starts on the default, naming nothing; the chevron's menu searches the models, newest first under their marks with the default checked, and the efforts and Start with pinned under the list", async () => {
+/** Presses a key on whatever holds focus, the way the keyboard does. */
+function press(key: string): void {
+  act(() => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+/** Moves the pointer over an element. */
+function hover(element: Element | null | undefined): void {
+  act(() => element?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
+}
+
+/** A control over the catalog with Opus at high as the default, every Start and every write recorded. */
+function standing() {
   const presses: (ModelChoice | undefined)[] = [];
+  const writes: ModelChoice[] = [];
   const reads: string[] = [];
-  const page = mount(
-    codingAgentsControl({
-      models: MODELS,
-      readModels: () => reads.push("models"),
-      readDefault: () => {
-        reads.push("default");
-        return Promise.resolve({ choice: { model: "anthropic/claude-opus-5.5", effort: "high" } });
-      },
-      start: {
-        available: true,
-        reason: undefined,
-        busy: false,
-        note: undefined,
-        onPress: (choice) => presses.push(choice),
-      },
-    }),
-  );
+  const control = codingAgentsControl({
+    models: MODELS,
+    readModels: () => reads.push("models"),
+    readDefault: () => {
+      reads.push("default");
+      return Promise.resolve({ choice: { model: "anthropic/claude-opus-5.5", effort: "high" } });
+    },
+    writeDefault: (choice) => {
+      writes.push(choice);
+      return Promise.resolve({ choice });
+    },
+    start: {
+      available: true,
+      reason: undefined,
+      busy: false,
+      note: undefined,
+      onPress: (choice) => presses.push(choice),
+    },
+  });
+  return { presses, writes, reads, control };
+}
+
+/** Opens the chevron's menu and lets its reads land. */
+async function openMenu(page: HTMLElement): Promise<HTMLElement> {
+  act(() => buttonNamed(page, "Choose a model to start with").click());
+  await settle();
+  const menu = page.querySelector<HTMLElement>(".plan-compose-menu");
+  assert.ok(menu);
+  return menu;
+}
+
+const effortRow = (menu: HTMLElement): HTMLButtonElement => {
+  const row = menu.querySelector<HTMLButtonElement>(".plan-compose-menu-foot button");
+  assert.ok(row, "the Effort row is pinned under the list");
+  return row;
+};
+
+const submenuRows = (page: HTMLElement) =>
+  [...page.querySelectorAll<HTMLElement>(".plan-compose-submenu [role=option]")].map((row) => [
+    row.textContent,
+    row.getAttribute("aria-current"),
+  ]);
+
+test("the main part starts on the default, naming nothing; the chevron's menu searches the models, newest first under their marks, the default checked with its effort beside it, and one Effort row pinned under the list in place of any Start", async () => {
+  const { presses, reads, control } = standing();
+  const page = mount(control);
 
   act(() => buttonNamed(page, "Start a coding agent").click());
   assert.deepEqual(presses, [undefined]);
 
-  act(() => buttonNamed(page, "Choose a model to start with").click());
-  await settle();
+  const menu = await openMenu(page);
   assert.deepEqual(reads, ["models", "default"]);
-  const menu = page.querySelector<HTMLElement>(".plan-compose-menu");
-  assert.ok(menu);
   const search = menu.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
   assert.ok(search, "the search is the menu's first row");
   assert.ok(document.activeElement === search, "the search field holds focus");
   // Newest first within the provider, and the check on the default as read, not on the first row.
-  assert.deepEqual(rowsOf(menu), ["Claude Opus 5.5", "Claude Fable 5", "GPT-6.1 Sol"]);
   const rows = [...menu.querySelectorAll<HTMLElement>('[role="option"]')];
+  assert.deepEqual(
+    rows.map((row) => row.querySelector(".plan-compose-menu-name")?.textContent),
+    ["Claude Opus 5.5", "Claude Fable 5", "GPT-6.1 Sol"],
+  );
   assert.ok(rows.every((row) => row.querySelector("svg.provider-mark")));
   assert.deepEqual(
     rows.map((row) => row.getAttribute("aria-current")),
     ["true", null, null],
   );
-  // The efforts and Start with stand in the foot, pinned under the scrolling list.
+  assert.deepEqual(
+    rows.map((row) => row.querySelector(".plan-compose-menu-detail")?.textContent),
+    ["High", undefined, undefined],
+    "the checked row says the effort it runs at, in sentence case",
+  );
+  assert.ok(rows[0]?.querySelector(".plan-compose-menu-end svg.credential-check"));
+
+  // The foot is one Effort row naming the effort, and nothing starts from the menu.
   const foot = menu.querySelector<HTMLElement>(".plan-compose-menu-foot");
   assert.ok(foot, "the foot is drawn");
   assert.equal(foot.closest(".plan-compose-menu-list"), null, "the foot is not in the list");
-  assert.ok(foot.querySelector(".start-agent-efforts"));
-  assert.equal(
-    foot.querySelector(".start-agent-with")?.textContent,
-    "Start with Claude Opus 5.5 · high",
-  );
-  assert.deepEqual(
-    [...menu.querySelectorAll<HTMLElement>(".start-agent-effort")].map((each) => [
-      each.textContent,
-      each.getAttribute("aria-pressed"),
-    ]),
-    [
-      ["low", "false"],
-      ["high", "true"],
-      ["max", "false"],
-    ],
+  assert.equal(foot.querySelectorAll("button").length, 1);
+  assert.equal(effortRow(menu).querySelector(".plan-compose-menu-name")?.textContent, "Effort");
+  assert.equal(effortRow(menu).querySelector(".plan-compose-menu-detail")?.textContent, "High");
+  assert.equal(menu.querySelector(".start-agent-with"), null, "no Start in the menu");
+  assert.equal(menu.querySelector(".start-agent-efforts"), null, "no effort chips");
+  assert.ok(
+    [...menu.querySelectorAll("button")].every((button) => !button.textContent.startsWith("Start")),
   );
 
   // The search finds a model by its name or its provider.
   type(search, "gpt");
   assert.deepEqual(rowsOf(menu), ["GPT-6.1 Sol"]);
   type(search, "anthropic");
-  assert.deepEqual(rowsOf(menu), ["Claude Opus 5.5", "Claude Fable 5"]);
+  assert.deepEqual(rowsOf(menu), ["Claude Opus 5.5High", "Claude Fable 5"]);
   type(search, "zzz");
   assert.deepEqual(rowsOf(menu), []);
   assert.equal(menu.querySelector(".plan-compose-menu-note")?.textContent, "No models match");
-  type(search, "");
+  assert.deepEqual(presses, [undefined], "nothing in the menu started anything");
+});
 
-  // Another model lists its own efforts, falling to its first where it does not list the one chosen.
+test("a pick of a model keeps it as the default at the effort it was running, or the model's first where it lacks that one, and closes the menu", async () => {
+  const { presses, writes, control } = standing();
+  const page = mount(control);
+  const menu = await openMenu(page);
   act(() => menu.querySelectorAll<HTMLElement>('[role="option"]')[2]?.click());
-  assert.ok(document.activeElement === search, "a pick keeps the menu open on the search");
-  assert.deepEqual(
-    [...menu.querySelectorAll<HTMLElement>(".start-agent-effort")].map((each) => each.textContent),
-    ["low", "xhigh"],
+  assert.deepEqual(writes, [{ model: "openai/gpt-6.1-sol", effort: "low" }]);
+  assert.equal(page.querySelector(".plan-compose-menu"), null, "the menu closed");
+  assert.ok(
+    document.activeElement === buttonNamed(page, "Choose a model to start with"),
+    "focus is back on the chevron",
   );
-  act(() => {
-    [...menu.querySelectorAll<HTMLElement>(".start-agent-effort")]
-      .find((each) => each.textContent === "xhigh")
-      ?.click();
-  });
-  const withChoice = menu.querySelector<HTMLElement>(".start-agent-with");
-  assert.equal(withChoice?.textContent, "Start with GPT-6.1 Sol · xhigh");
-  act(() => withChoice?.click());
-  assert.deepEqual(presses, [undefined, { model: "openai/gpt-6.1-sol", effort: "xhigh" }]);
+  assert.deepEqual(presses, [], "a pick starts nothing");
+
+  const again = await openMenu(page);
+  act(() => again.querySelectorAll<HTMLElement>('[role="option"]')[1]?.click());
+  assert.deepEqual(writes.at(-1), { model: "anthropic/claude-fable-5", effort: "high" });
+});
+
+test("the Effort row opens a submenu of the chosen model's efforts in sentence case on Right or the pointer, a pick keeps the effort and closes both, and Left or Escape close only the submenu", async () => {
+  const { writes, control } = standing();
+  const page = mount(control);
+  const menu = await openMenu(page);
+  assert.equal(page.querySelector(".plan-compose-submenu"), null);
+
+  // Up from the first row wraps to the pinned row, and Right opens its submenu.
+  press("ArrowUp");
+  assert.equal(effortRow(menu).dataset["highlighted"], "true");
+  press("ArrowRight");
+  assert.deepEqual(submenuRows(page), [
+    ["Low", null],
+    ["High", "true"],
+    ["Max", null],
+  ]);
+  press("ArrowLeft");
+  assert.equal(page.querySelector(".plan-compose-submenu"), null, "Left closes the submenu");
+  assert.ok(page.querySelector(".plan-compose-menu"), "and not the menu");
+  assert.equal(effortRow(menu).dataset["highlighted"], "true");
+
+  hover(effortRow(menu));
+  assert.ok(page.querySelector(".plan-compose-submenu"), "the pointer opens it");
+  press("Escape");
+  assert.equal(page.querySelector(".plan-compose-submenu"), null, "Escape closes the submenu");
+  assert.ok(page.querySelector(".plan-compose-menu"), "and not the menu");
+
+  press("ArrowRight");
+  press("ArrowDown");
+  press("Enter");
+  assert.deepEqual(writes, [{ model: "anthropic/claude-opus-5.5", effort: "max" }]);
+  assert.equal(page.querySelector(".plan-compose-menu"), null, "a pick closes both");
+
+  press("Escape");
+  const again = await openMenu(page);
+  hover(effortRow(again));
+  const low = page.querySelector<HTMLElement>(".plan-compose-submenu [role=option]");
+  act(() => low?.click());
+  assert.deepEqual(writes.at(-1), { model: "anthropic/claude-opus-5.5", effort: "low" });
   assert.equal(page.querySelector(".plan-compose-menu"), null);
 });
 

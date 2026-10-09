@@ -62,6 +62,9 @@ export function followsAgent(input: { shown: boolean; status: CodingAgentStatus 
 /** What the Start button says while it cannot start: the plan names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
+/** Said beside Start when the model or effort the menu chose could not be kept as the default. */
+export const MODEL_CHANGE_FAILED = "The model could not be changed. Try again.";
+
 /** What a Start that did not start says beside the button. */
 export function startFailureNote(failure: CodingAgentCallFailure): string {
   switch (failure) {
@@ -136,6 +139,22 @@ export function orderedModels(models: readonly CatalogModel[]): readonly Catalog
 /** The efforts a model lists, or nothing for a model the catalog does not offer now. */
 export function effortsOf(models: readonly CatalogModel[], modelId: string): readonly string[] {
   return models.find((model) => model.id === modelId)?.efforts ?? [];
+}
+
+/** The effort a model keeps across a change of model: the one chosen where the model lists it, else the model's first. */
+export function effortFor(
+  efforts: readonly string[],
+  chosen: string | undefined,
+): string | undefined {
+  return chosen !== undefined && efforts.includes(chosen) ? chosen : efforts[0];
+}
+
+/** The catalog's effort names a sentence-case label does not spell by capitalising. */
+const EFFORT_LABEL: ReadonlyMap<string, string> = new Map([["xhigh", "Extra high"]]);
+
+/** The catalog's effort names are lowercase words; a menu and a segment read them in sentence case. */
+export function effortLabel(effort: string): string {
+  return EFFORT_LABEL.get(effort) ?? `${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
 }
 
 /**

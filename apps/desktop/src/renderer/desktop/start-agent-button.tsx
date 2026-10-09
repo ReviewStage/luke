@@ -1,10 +1,10 @@
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { ChevronDownIcon, PlayIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
-import { effortsOf, modelLabel, orderedModels } from "../planning/coding-agent-model";
+import { effortFor, effortLabel, effortsOf, orderedModels } from "../planning/coding-agent-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { ModelProviderMark } from "../provider-marks";
-import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -12,16 +12,18 @@ import { Tooltip } from "../tooltip";
  *
  * The main part starts one on the account's default model and effort, and
  * names neither. The chevron drops the shared searchable menu over the
- * models the service offers, grouped by provider with the newest first,
- * each row under its provider's mark and the default checked; pinned under
- * the list stand the efforts the chosen model lists and one press that
- * starts with that choice, which the service also keeps as the account's
- * default. The menu reads the models and the default as it opens, so it
- * shows the catalog as it stands and the default the last Start wrote. A
- * plan with no repository has nothing for an agent to check out, so Start
- * is unavailable and says why on hover. The menu closes on a Start, on
- * Escape, and on focus leaving it; Escape stops there, so it closes the
- * menu and not the plan behind it.
+ * models the service offers, newest first under their provider's mark,
+ * the default checked with the effort it runs at beside its name; a pick
+ * keeps that model as the account's default, at the effort it was running
+ * or the model's first where it lacks that one, and closes the menu.
+ * Pinned under the list stands one row, Effort, naming the effort chosen
+ * now and opening a submenu of the ones the chosen model lists; a pick
+ * there keeps that effort the same way. The menu reads the models and the
+ * default as it opens, so it shows the catalog as it stands and the
+ * default the last change wrote. A plan with no repository has nothing for
+ * an agent to check out, so Start is unavailable and says why on hover.
+ * The menu closes on a pick, on Escape, and on focus leaving it; Escape
+ * stops there, so it closes the menu and not the plan behind it.
  */
 
 /** What the menu says in the list's place. */
@@ -31,42 +33,20 @@ const MENU_NOTE = {
   NO_MATCH: "No models match",
 } as const;
 
-/** The menu's rows: each model under its mark, found by its name or its provider. */
-function modelRows(models: readonly CatalogModel[]): MenuRow[] {
+/** The rows pinned under the list. */
+const FOOT_ROW = {
+  EFFORT: "effort",
+} as const;
+
+/** The menu's rows: each model under its mark, found by its name or its provider, the chosen one saying its effort. */
+function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefined): MenuRow[] {
   return orderedModels(models).map((model) => ({
     id: model.id,
     label: model.name,
     icon: <ModelProviderMark provider={model.provider} />,
     terms: [model.provider],
+    detail: model.id === chosen?.model ? effortLabel(chosen.effort) : undefined,
   }));
-}
-
-/** The efforts a chosen model lists, as one group of choices of which one is pressed. */
-function EffortChoice({
-  efforts,
-  chosen,
-  onChoose,
-}: {
-  efforts: readonly string[];
-  chosen: string | undefined;
-  onChoose: (effort: string) => void;
-}): React.JSX.Element {
-  return (
-    <fieldset className="start-agent-efforts">
-      <legend className="visually-hidden">Effort</legend>
-      {efforts.map((effort) => (
-        <button
-          key={effort}
-          type="button"
-          aria-pressed={effort === chosen}
-          className="start-agent-effort"
-          onClick={() => onChoose(effort)}
-        >
-          {effort}
-        </button>
-      ))}
-    </fieldset>
-  );
 }
 
 export function StartAgentButton({ control }: { control: CodingAgentsControl }): React.JSX.Element {
@@ -83,7 +63,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   useEffect(() => {
     if (!open) return;
     let live = true;
-    // The menu lands on the default as read now, never on an earlier opening's choice.
+    // The menu lands on the default as read now, never on an earlier opening's.
     setChoice(undefined);
     latest.current.readModels();
     latest.current.readDefault().then((answer) => {
@@ -104,16 +84,22 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const models = control.models;
   const efforts =
     models !== undefined && choice !== undefined ? effortsOf(models, choice.model) : [];
-  // A chosen effort the model does not list, or none yet, falls to the model's first.
-  const effort = efforts.includes(choice?.effort ?? "") ? choice?.effort : efforts[0];
+  // A default effort the model no longer lists falls to the model's first.
+  const effort = effortFor(efforts, choice?.effort);
   const chosen: ModelChoice | undefined =
     choice !== undefined && effort !== undefined ? { model: choice.model, effort } : undefined;
   const label = start.busy ? "Starting…" : "Start";
   const unavailable = !start.available;
 
-  const press = (named?: ModelChoice) => {
+  // A pick closes the menu and keeps the choice as the default the main part starts on.
+  const keep = (next: ModelChoice) => {
+    close();
+    latest.current.writeDefault(next);
+  };
+
+  const press = () => {
     if (unavailable || start.busy) return;
-    start.onPress(named);
+    start.onPress();
   };
 
   const main = (
@@ -122,12 +108,29 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
       className="toolbar-button start-agent-main"
       aria-disabled={unavailable || start.busy ? "true" : undefined}
       aria-label="Start a coding agent"
-      onClick={() => press()}
+      onClick={press}
     >
       <PlayIcon />
       {label}
     </button>
   );
+
+  const foot: FootRow[] | undefined =
+    chosen === undefined
+      ? undefined
+      : [
+          {
+            id: FOOT_ROW.EFFORT,
+            label: "Effort",
+            detail: effortLabel(chosen.effort),
+            submenu: {
+              label: "Effort",
+              rows: efforts.map((each) => ({ id: each, label: effortLabel(each) })),
+              value: chosen.effort,
+              onPick: (picked) => keep({ model: chosen.model, effort: picked }),
+            },
+          },
+        ];
 
   return (
     <div className="start-agent" ref={root} data-unavailable={String(unavailable)}>
@@ -161,8 +164,8 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           label="Model"
           placeholder="Search models"
           className="start-agent-menu"
-          rows={models === undefined ? [] : modelRows(models)}
-          value={choice?.model}
+          rows={models === undefined ? [] : modelRows(models, chosen)}
+          value={chosen?.model}
           note={
             models === undefined ? (
               <p className="plan-compose-menu-note">{MENU_NOTE.READING}</p>
@@ -171,35 +174,16 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
             ) : undefined
           }
           noMatch={MENU_NOTE.NO_MATCH}
-          onPick={(model) => setChoice({ model, effort: choice?.effort ?? "" })}
+          onPick={(model) => {
+            if (models === undefined) return;
+            const next = effortFor(effortsOf(models, model), chosen?.effort);
+            if (next !== undefined) keep({ model, effort: next });
+          }}
           onClose={close}
           onLeave={(left) => {
             if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
           }}
-          foot={
-            chosen !== undefined ? (
-              <>
-                <EffortChoice
-                  efforts={efforts}
-                  chosen={chosen.effort}
-                  onChoose={(picked) => setChoice({ model: chosen.model, effort: picked })}
-                />
-                <button
-                  type="button"
-                  className="plan-compose-menu-row start-agent-with"
-                  onClick={() => {
-                    close();
-                    press(chosen);
-                  }}
-                >
-                  <PlayIcon />
-                  <span className="plan-compose-menu-name">
-                    Start with {modelLabel(chosen.model, models)} · {chosen.effort}
-                  </span>
-                </button>
-              </>
-            ) : undefined
-          }
+          foot={foot}
         />
       ) : null}
     </div>

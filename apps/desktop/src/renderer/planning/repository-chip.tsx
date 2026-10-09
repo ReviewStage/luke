@@ -1,6 +1,6 @@
 import type { GitHubRepository } from "@sidecar/hosted";
 import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
-import { ExternalIcon, LockIcon } from "@sidecar/panel";
+import { ExternalIcon } from "@sidecar/panel";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
@@ -18,7 +18,7 @@ import { repositoryFailureNote } from "./planning-model";
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
  * repository the Luke GitHub App reaches, the repositories the account's
  * plans were about lately first and the rest as GitHub last saw them
- * change, each under the GitHub mark or a lock where it is private, and
+ * change, each under the GitHub mark, and
  * pinned under the list the page on GitHub where the developer chooses
  * which repositories the App reaches, which with the App installed nowhere
  * is the page that installs it. With the App installed nowhere and no
@@ -54,6 +54,11 @@ const CHIP_LABEL = {
   INSTALL: "Install Luke on GitHub",
 } as const;
 
+/** The rows pinned under the list. */
+const FOOT_ROW = {
+  GITHUB: "github",
+} as const;
+
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
   READING: "Reading your repositories…",
@@ -64,23 +69,19 @@ const MENU_NOTE = {
 /**
  * The menu's rows: the recent repositories first, then every other the App
  * reaches as the service ordered them, most recently updated first, each
- * once. A recent repository the App no longer reaches is still offered,
- * under the GitHub mark, since the plan it came from still names it.
+ * once, every one under the GitHub mark whether private or not. A recent
+ * repository the App no longer reaches is still offered, since the plan it
+ * came from still names it.
  */
 function repositoryRows(
   recent: readonly string[],
   reached: readonly GitHubRepository[] | undefined,
 ): MenuRow[] {
-  const privacy = new Map((reached ?? []).map((each) => [each.fullName, each.private]));
   const names = [...recent];
   for (const each of reached ?? []) {
     if (!names.includes(each.fullName)) names.push(each.fullName);
   }
-  return names.map((fullName) => ({
-    id: fullName,
-    label: fullName,
-    icon: privacy.get(fullName) === true ? <LockIcon /> : <GitHubMark />,
-  }));
+  return names.map((fullName) => ({ id: fullName, label: fullName, icon: <GitHubMark /> }));
 }
 
 export function RepositoryChip(props: {
@@ -206,16 +207,16 @@ export function RepositoryChip(props: {
             if (!(left instanceof Node && chip.current?.contains(left))) setOpen(false);
           }}
           foot={
-            installationUrl !== undefined ? (
-              <button
-                type="button"
-                className="plan-compose-menu-row"
-                onClick={() => choose(() => chooser.openGitHub(installationUrl))}
-              >
-                <span className="plan-compose-menu-name">GitHub</span>
-                <ExternalIcon />
-              </button>
-            ) : undefined
+            installationUrl !== undefined
+              ? [
+                  {
+                    id: FOOT_ROW.GITHUB,
+                    label: "GitHub",
+                    mark: <ExternalIcon />,
+                    onPress: () => choose(() => chooser.openGitHub(installationUrl)),
+                  },
+                ]
+              : undefined
           }
         />
       ) : null}

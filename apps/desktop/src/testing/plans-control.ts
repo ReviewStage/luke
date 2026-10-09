@@ -25,6 +25,7 @@ export function codingAgentsControl(
     models: undefined,
     readModels: ignore,
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
     onStop: () => Promise.resolve(),
     onStatus: ignore,

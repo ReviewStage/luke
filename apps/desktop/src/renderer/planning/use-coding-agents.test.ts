@@ -7,7 +7,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
-import { START_NEEDS_REPOSITORY } from "./coding-agent-model";
+import { MODEL_CHANGE_FAILED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -234,4 +234,46 @@ test("a Start that lands after the developer left the plan opens no tab on the p
 
   assert.deepEqual(tab.started, []);
   assert.deepEqual(tab.control().agents, []);
+});
+
+test("a choice written as the default is asked of the service as given, and one that did not take is said beside Start until the next", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_DEFAULT_WRITE,
+    { choice: { model: "anthropic/claude-opus-5.5", effort: "max" } },
+    { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE },
+    { choice: { model: "openai/gpt-6.1-sol", effort: "low" } },
+  );
+  await tab.mount();
+
+  const written = await tab.control().writeDefault({
+    model: "anthropic/claude-opus-5.5",
+    effort: "max",
+  });
+  await settle();
+  assert.deepEqual(written, { choice: { model: "anthropic/claude-opus-5.5", effort: "max" } });
+  assert.deepEqual(
+    tab.asked
+      .filter((each) => each.kind === ACT_KIND.CODING_AGENTS_DEFAULT_WRITE)
+      .map((each) => each.payload),
+    [{ model: "anthropic/claude-opus-5.5", effort: "max" }],
+  );
+  assert.equal(tab.control().start.note, undefined);
+
+  const refused = await tab.control().writeDefault({ model: "openai/gpt-6.1-sol", effort: "low" });
+  await settle();
+  assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE });
+  assert.equal(tab.control().start.note, MODEL_CHANGE_FAILED);
+
+  // The next write that takes clears the note; a service that never answered reads as unanswered.
+  await tab.control().writeDefault({ model: "openai/gpt-6.1-sol", effort: "low" });
+  await settle();
+  assert.equal(tab.control().start.note, undefined);
+  const unanswered = await tab
+    .control()
+    .writeDefault({ model: "openai/gpt-6.1-sol", effort: "low" });
+  await settle();
+  assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.equal(tab.control().start.note, MODEL_CHANGE_FAILED);
 });

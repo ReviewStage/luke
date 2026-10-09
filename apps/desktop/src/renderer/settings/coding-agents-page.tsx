@@ -3,7 +3,13 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
-import { effortsOf, modelLabel, orderedModels } from "../planning/coding-agent-model";
+import {
+  effortFor,
+  effortLabel,
+  effortsOf,
+  modelLabel,
+  orderedModels,
+} from "../planning/coding-agent-model";
 import { ModelProviderMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { PickerRow } from "./picker-row";
@@ -33,16 +39,6 @@ const PAGE_LINE = {
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
-
-/** The catalog's effort names are lowercase words; a segment reads them in sentence case. */
-function effortLabel(effort: string): string {
-  return `${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
-}
-
-/** The effort a model keeps on a change of model: the one chosen where the model lists it, else the model's first. */
-function effortFor(model: CatalogModel, chosen: string): string {
-  return model.efforts.includes(chosen) ? chosen : (model.efforts[0] ?? chosen);
-}
 
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */
 function DefaultRows({
@@ -100,7 +96,10 @@ function DefaultRows({
         onPick={(id) => {
           const model = models?.find((each) => each.id === id);
           if (model === undefined) return;
-          onChange({ model: model.id, effort: effortFor(model, choice.effort) });
+          onChange({
+            model: model.id,
+            effort: effortFor(model.efforts, choice.effort) ?? choice.effort,
+          });
         }}
       />
       {/* The segments wrap under the label where the row is narrow rather than clipping. */}
