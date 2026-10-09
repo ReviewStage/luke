@@ -4,9 +4,13 @@ import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/pl
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   type CodeToken,
+  PLAN_WORK_PART,
+  PLAN_WORK_STATE,
+  PLAN_WORK_TOOL,
   PLANNING_READ,
   type PlanCode,
   type PlanningView,
+  type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import {
   type PlanTranscript,
@@ -351,6 +355,82 @@ const FIXTURE_BOARD: Board = {
 /** The open plan on its whiteboard, as the planning-board profile captures it. */
 const FIXTURE_OPEN_BOARD: PlanningView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_BOARD };
 
+/** A repository command of the fixture's turns, answered with `output`. */
+function fixtureCommand(id: string, command: string, output: string) {
+  return {
+    type: PLAN_WORK_PART.TOOL,
+    id,
+    tool: PLAN_WORK_TOOL.REPOSITORY,
+    name: "run_in_repository",
+    state: PLAN_WORK_STATE.DONE,
+    subject: command,
+    input: JSON.stringify({ command }, null, 2),
+    output,
+  } as const;
+}
+
+/**
+ * What Luke's planning model did on the fixture's calls: an earlier turn
+ * that read the members code and answered, and the turn standing now, which
+ * handed a comparison to the worker and is reading on while it runs.
+ * Synthetic throughout: no real repository, command output, or page.
+ */
+const FIXTURE_WORK: readonly PlanWorkTurn[] = [
+  {
+    turnId: "fixture-turn-1",
+    startedAt: Date.parse("2026-10-07T16:21:00Z"),
+    state: PLAN_WORK_STATE.DONE,
+    earlierOmitted: false,
+    parts: [
+      fixtureCommand("fixture-call-1", "ls src/members", "invite.ts\nmembership.ts\nroles.ts"),
+      fixtureCommand(
+        "fixture-call-2",
+        "grep -rn withdraw src/members",
+        "src/members/invite.ts:42:export function withdrawInvite(invite: Invite, by: Member) {",
+      ),
+      {
+        type: PLAN_WORK_PART.TEXT,
+        text: "Only the member who sent an invite can withdraw it today.",
+      },
+    ],
+  },
+  {
+    turnId: "fixture-turn-2",
+    startedAt: Date.parse("2026-10-07T16:44:00Z"),
+    state: PLAN_WORK_STATE.RUNNING,
+    earlierOmitted: false,
+    parts: [
+      {
+        type: PLAN_WORK_PART.TOOL,
+        id: "fixture-call-3",
+        tool: PLAN_WORK_TOOL.WORKER,
+        name: "worker",
+        state: PLAN_WORK_STATE.RUNNING,
+        subject: "Compare how two invite libraries let an admin revoke a pending invite.",
+        input: "{}",
+      },
+      { type: PLAN_WORK_PART.TEXT, text: "While that runs, I'm checking how removal works now." },
+      fixtureCommand(
+        "fixture-call-4",
+        "sed -n 30,60p src/members/membership.ts",
+        "export function removeMember(member: Member, by: Member) {\n  assertAdmin(by);\n  …",
+      ),
+      {
+        type: PLAN_WORK_PART.TOOL,
+        id: "fixture-call-5",
+        tool: PLAN_WORK_TOOL.REPOSITORY,
+        name: "run_in_repository",
+        state: PLAN_WORK_STATE.RUNNING,
+        subject: "grep -rn pending src/members",
+        input: JSON.stringify({ command: "grep -rn pending src/members" }, null, 2),
+      },
+    ],
+  },
+];
+
+/** The open plan mid-call on its work, as the planning-work profile captures it. */
+const FIXTURE_OPEN_WORK: PlanningView = { ...FIXTURE_OPEN_PLAN, work: FIXTURE_WORK };
+
 /** The side panels the fixture profiles open their plan with. */
 const FIXTURE_CODE_PANEL: SidePanelState = {
   open: true,
@@ -363,6 +443,7 @@ const FIXTURE_TRANSCRIPT_PANEL: SidePanelState = {
   ...FIXTURE_CODE_PANEL,
   tab: SIDE_PANEL_TAB.TRANSCRIPT,
 };
+const FIXTURE_WORK_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.WORK };
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
 
 /**
@@ -405,6 +486,7 @@ export function fixturePlanningView(run: {
   if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_OPEN_PLAN;
   if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_OPEN_BOARD;
   if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_OPEN_PLAN;
+  if (run.profile === RUN_PROFILE.PLANNING_WORK) return FIXTURE_OPEN_WORK;
   return FIXTURE_PLAN_LIST;
 }
 
@@ -412,7 +494,7 @@ export function fixturePlanningView(run: {
  * The side panel a fixture run opens its plan with: on the code Luke has on
  * screen under the planning profile, on the whiteboard under the
  * planning-board profile, on the transcript under the planning-transcript
- * profile, and closed under any other. Nothing for a live
+ * profile, on the work under the planning-work profile, and closed under any other. Nothing for a live
  * run, which opens the panel as the developer last left it.
  */
 export function fixtureSidePanel(run: {
@@ -423,5 +505,6 @@ export function fixtureSidePanel(run: {
   if (run.profile === RUN_PROFILE.PLANNING) return FIXTURE_CODE_PANEL;
   if (run.profile === RUN_PROFILE.PLANNING_BOARD) return FIXTURE_BOARD_PANEL;
   if (run.profile === RUN_PROFILE.PLANNING_TRANSCRIPT) return FIXTURE_TRANSCRIPT_PANEL;
+  if (run.profile === RUN_PROFILE.PLANNING_WORK) return FIXTURE_WORK_PANEL;
   return FIXTURE_CLOSED_PANEL;
 }

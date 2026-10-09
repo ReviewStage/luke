@@ -78,6 +78,9 @@ capture_evidence planning-board --profile planning-board --expanded --capture-ev
 # The same plan mid-call on its transcript: the earlier call from the record,
 # and the call standing now growing under it.
 capture_evidence planning-transcript --profile planning-transcript --expanded --capture-evidence "$SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH"
+# The same plan mid-call on its work: an earlier turn folded to its answer,
+# and the turn standing now with the worker running beside its reads.
+capture_evidence planning-work --profile planning-work --expanded --capture-evidence "$SIDECAR_PLANNING_WORK_EVIDENCE_PATH"
 
 validate_evidence() {
     local evidence_path=$1
@@ -123,7 +126,8 @@ for evidence_path in \
     "$SIDECAR_DUPLEX_EVIDENCE_PATH" \
     "$SIDECAR_PLANNING_EVIDENCE_PATH" \
     "$SIDECAR_PLANNING_BOARD_EVIDENCE_PATH" \
-    "$SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH"; do
+    "$SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH" \
+    "$SIDECAR_PLANNING_WORK_EVIDENCE_PATH"; do
     validate_evidence "$evidence_path" 1280 840
 done
 
@@ -134,3 +138,4 @@ printf 'Duplex visual evidence: %s\n' "$SIDECAR_DUPLEX_EVIDENCE_PATH"
 printf 'Planning visual evidence: %s\n' "$SIDECAR_PLANNING_EVIDENCE_PATH"
 printf 'Planning board visual evidence: %s\n' "$SIDECAR_PLANNING_BOARD_EVIDENCE_PATH"
 printf 'Planning transcript visual evidence: %s\n' "$SIDECAR_PLANNING_TRANSCRIPT_EVIDENCE_PATH"
+printf 'Planning work visual evidence: %s\n' "$SIDECAR_PLANNING_WORK_EVIDENCE_PATH"

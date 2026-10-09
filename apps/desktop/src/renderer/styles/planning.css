@@ -558,3 +558,204 @@
 .plan-transcript-speaker[data-speaker="user"] {
   color: var(--voice-developer);
 }
+
+/* The open plan's Work tab: each planning turn under the time it began, its
+   words as a reply reads, and each call as one quiet line that opens onto
+   its input and its output, as an agent's own transcript draws them. */
+.plan-work {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.work-turns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.work-turn-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 8px;
+  background: var(--desktop-well);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.work-turn-header::after {
+  height: 1px;
+  flex: 1;
+  background: var(--hairline);
+  content: "";
+  order: 1;
+}
+
+.work-turn-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  order: 2;
+}
+
+.work-turn-state[data-state="running"] {
+  color: var(--voice-luke);
+}
+
+.work-note {
+  margin: 0 0 6px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.work-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 8px;
+}
+
+.work-text {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.work-reasoning {
+  margin: 4px 0 0 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* A fold, a call, and a group all open on their own line: a marker that
+   turns, then what the line says. */
+.work-fold > summary,
+.work-call > summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  cursor: default;
+  font-size: 12px;
+  list-style: none;
+}
+
+.work-fold > summary::-webkit-details-marker,
+.work-call > summary::-webkit-details-marker {
+  display: none;
+}
+
+.work-fold > summary::before,
+.work-call > summary::before {
+  width: 0;
+  height: 0;
+  flex: none;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-left: 5px solid currentColor;
+  content: "";
+  opacity: 0.7;
+  transition: transform var(--duration-fast) var(--spring-fast);
+}
+
+.work-fold[open] > summary::before,
+.work-call[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.work-fold > summary:hover,
+.work-call > summary:hover {
+  color: var(--text-primary);
+}
+
+.work-fold-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 2px 12px;
+}
+
+.work-call-mark {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.work-call[data-state="failed"] .work-call-mark {
+  background: var(--error-text);
+}
+
+.work-call-mark[data-running="true"] {
+  background: var(--voice-luke);
+}
+
+.work-call-verb {
+  flex: none;
+}
+
+.work-call-subject {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+code.work-call-subject {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+}
+
+.work-call-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0 4px 12px;
+}
+
+.work-call-heading {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.work-call-text {
+  overflow: auto;
+  max-height: 240px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--text-primary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.work-worker {
+  padding: 6px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
+.work-worker-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0 12px;
+  color: var(--voice-luke);
+  font-size: 11.5px;
+}

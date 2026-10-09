@@ -29,6 +29,7 @@ export const APP_COMMAND = {
   SHOW_BOARD: "show-board",
   SHOW_CODE: "show-code",
   SHOW_TRANSCRIPT: "show-transcript",
+  SHOW_WORK: "show-work",
   SETTINGS: "settings",
   KEYBOARD_SHORTCUTS: "keyboard-shortcuts",
   FIND: "find",
@@ -61,6 +62,7 @@ const SHORTCUT_KEY = {
   ONE: { accelerator: "1", glyph: "1", key: "1", code: "Digit1" },
   TWO: { accelerator: "2", glyph: "2", key: "2", code: "Digit2" },
   THREE: { accelerator: "3", glyph: "3", key: "3", code: "Digit3" },
+  FOUR: { accelerator: "4", glyph: "4", key: "4", code: "Digit4" },
   UP: { accelerator: "Up", glyph: "↑", key: "ArrowUp", code: "ArrowUp" },
   DOWN: { accelerator: "Down", glyph: "↓", key: "ArrowDown", code: "ArrowDown" },
   COMMA: { accelerator: ",", glyph: ",", key: ",", code: "Comma" },
@@ -134,6 +136,7 @@ export const APP_SHORTCUTS = {
     label: "Show transcript",
     chord: { key: SHORTCUT_KEY.THREE, option: true },
   },
+  [APP_COMMAND.SHOW_WORK]: { label: "Show work", chord: { key: SHORTCUT_KEY.FOUR, option: true } },
   [APP_COMMAND.SETTINGS]: { label: "Settings", chord: { key: SHORTCUT_KEY.COMMA } },
   [APP_COMMAND.KEYBOARD_SHORTCUTS]: {
     label: "Keyboard shortcuts",
@@ -166,6 +169,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.SHOW_BOARD,
       APP_COMMAND.SHOW_CODE,
       APP_COMMAND.SHOW_TRANSCRIPT,
+      APP_COMMAND.SHOW_WORK,
     ],
   },
   {

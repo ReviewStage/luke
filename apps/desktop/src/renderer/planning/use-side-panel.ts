@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
  *
  * The plan's document is always the page's main content; what supports it
  * (the whiteboard, the code Luke has on screen, what was said on the plan's
- * calls) stands in a panel at the
+ * calls, and what Luke's planning model wrote and ran on them) stands in a panel at the
  * window's right that the developer opens and closes, as every devtool
  * window's secondary sidebar does. The one thing that opens it on its own is
  * Luke first drawing on a plan's board or first showing its code
@@ -36,6 +36,7 @@ export const SIDE_PANEL_TAB = {
   BOARD: "board",
   CODE: "code",
   TRANSCRIPT: "transcript",
+  WORK: "work",
 } as const;
 
 export type SidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
@@ -56,6 +57,7 @@ export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.BOARD]: { label: "Board", singleInstance: true },
   [SIDE_PANEL_TAB.CODE]: { label: "Code", singleInstance: true },
   [SIDE_PANEL_TAB.TRANSCRIPT]: { label: "Transcript", singleInstance: true },
+  [SIDE_PANEL_TAB.WORK]: { label: "Work", singleInstance: true },
 } as const satisfies Record<SidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order a first launch opens them and the "+" offers them. */
