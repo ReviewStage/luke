@@ -29,7 +29,10 @@ function fakePnpm(directory) {
 function runCheck(directory) {
   return new Promise((resolve) => {
     const chunks = [];
-    const child = spawn(process.execPath, [checkScript], {
+    // Note that only the failing check runs, because another check closing
+    // after it would print its own output last and hide the line under test.
+    const others = ["lint", "knip", "typecheck", "discarded-effect"];
+    const child = spawn(process.execPath, [checkScript, "--without", ...others], {
       env: { ...process.env, PATH: `${directory}${path.delimiter}${process.env.PATH}` },
       stdio: ["ignore", "pipe", "ignore"],
     });
