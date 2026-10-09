@@ -133,18 +133,24 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 2. **Repository**, the chip along the card's foot: the GitHub mark and the
    `owner/name` of the repository the plan is about, which the service keeps
    on the plan (`plan.repository`). It starts on the repository of the newest
-   started plan that has one, and its menu offers up to five recent
-   repositories, then `Search all repositories…`, which filters every
-   repository the Luke GitHub App reaches for the account
-   (`GET /api/github/repositories`), then `Choose which repositories Luke can
-   see ↗`, which opens the App's installation page in the browser. With the
-   App installed nowhere for the account, the chip reads `Install Luke on
-   GitHub ↗` and opens that page directly. With no repository used before it
-   reads `Choose repository`; a plan can start without one and be given one
-   later. The list is read when the chip mounts and again whenever the window
-   takes focus, which is how the chip picks up an App installed in the
-   browser meanwhile; nothing polls. The arrow keys walk the menu, Escape
-   closes it and hands focus back to the chip, and so does focus leaving it.
+   started plan that has one. Its menu is the app's searchable picker
+   (`renderer/searchable-menu.tsx`, which the Start button's model menu is
+   too): a search field as the first row, focused as the menu opens and
+   filtering as it is typed in; under it every repository the Luke GitHub
+   App reaches for the account (`GET /api/github/repositories`), the recent
+   ones first and the rest as GitHub last saw them change, each under the
+   GitHub mark or a lock where it is private, with a check on the chosen
+   one, in a list that scrolls past a bounded height; and pinned under the
+   list, `GitHub ↗`, which opens the App's installation page in the browser,
+   where the developer chooses which repositories Luke can see. With the App
+   installed nowhere for the account, the chip reads `Install Luke on GitHub
+   ↗` and opens that page directly. With no repository used before it reads
+   `Choose repository`; a plan can start without one and be given one later.
+   The list is read when the chip mounts and again whenever the window takes
+   focus, which is how the chip picks up an App installed in the browser
+   meanwhile; nothing polls. The arrows move the highlight while the search
+   field keeps focus, Enter picks, Escape closes the menu and hands focus
+   back to the chip, and so does focus leaving it.
 3. **Start**, the round arrow at the card's other end, enabled once the name
    is set; Enter presses it. Pressing it saves the plan with its name, its
    repository, and the untouched template as its document, and opens it. If
@@ -155,24 +161,28 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 ### Header
 
 - `‹`, back to the list, which leaves the plan.
-- The plan's name.
-- The repository chip under it, reading `owner/repository`, or `Choose
-  repository` for a plan with none yet, the 13 plans from before
-  repositories among them. It is the composer's chip, with the same menu:
-  a pick is saved through `PATCH /api/plans/{id}` and drawn in place, and a
-  refusal is said beside the chip. A plan can be used without a repository;
-  the planning model then says it has none.
+- The plan's name. The toolbar is one row, the side panel's bar's height
+  exactly (`--desktop-bar-height`, the one token both take), so their bottom
+  borders are one line across the window.
+- The plan's repository is the sidebar row's to name, under the plan's name.
+  A plan with none yet, the 13 plans from before repositories among them,
+  shows a compact `Choose repository` chip in the toolbar's actions row, left
+  of Start, with the composer's menu: a pick is saved through
+  `PATCH /api/plans/{id}`, and a refusal is said beside it. A plan can be
+  used without a repository; the planning model then says it has none.
 - **The plan's menu**, from the toolbar's ⋯ and from a right-click on the
   plan in the sidebar alike: Copy plan (the open plan alone), Rename, Change
-  repository… (opens the chip's menu, opening the plan first where it is not
-  the open one), Open on GitHub (`https://github.com/owner/repository`, for a
-  plan with a repository), and Delete plan, last and red.
+  repository… (opens the repository picker, hung from the toolbar, opening
+  the plan first where it is not the open one), Open on GitHub
+  (`https://github.com/owner/repository`, for a plan with a repository), and
+  Delete plan, last and red.
 - **Start**, a split button (`desktop/start-agent-button.tsx`). Its main
   part starts a coding agent on the plan with the account's default model and
-  effort; its chevron drops a menu of the models the service offers, each
-  under its provider's mark, the efforts the chosen model lists, and "Start
-  with <model> · <effort>", which the service also keeps as the account's
-  default. A plan with no repository has Start unavailable, saying why on
+  effort; its chevron drops the searchable picker over the models the service
+  offers, grouped by provider with the newest first, each under its provider's
+  mark and the default checked, with the efforts the chosen model lists and
+  "Start with <model> · <effort>" pinned under the scrolling list, which the
+  service also keeps as the account's default. A plan with no repository has Start unavailable, saying why on
   hover. Each press mints a key of its own, and a press asked again after
   the service did not answer carries the same key, so one press is one agent
   ("From a plan to a pull request" below).

@@ -27,25 +27,24 @@ import { StartAgentButton } from "./start-agent-button";
  * toolbar offers no way out of the open plan, only its actions: Start, which
  * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
  * rest stand. Its title is the plan's name, and a press on it renames the
- * plan in place; under it stands the plan's repository chip, which names the
- * repository and changes it.
+ * plan in place. The toolbar is one row, the side panel's bar's height
+ * exactly; the plan's repository is the sidebar's row's to name, so the
+ * toolbar draws the repository chip only while the plan has none, and
+ * otherwise only the chip's menu, which Change repository… opens.
  */
 
 /** The strip across the top of the work column, which is also the window's drag handle. */
 function Toolbar({
   title,
-  subtitle,
   children,
 }: {
   title: React.ReactNode;
-  subtitle?: React.ReactNode;
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
         <h1 className="desktop-toolbar-title">{title}</h1>
-        {subtitle !== undefined ? <div className="desktop-toolbar-subtitle">{subtitle}</div> : null}
       </div>
       {children ? <div className="desktop-toolbar-actions">{children}</div> : null}
     </header>
@@ -180,19 +179,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
-        <Toolbar
-          title={<PlanTitle plan={plan} rename={rename} />}
-          subtitle={
-            <RepositoryChip
-              key={plan.id}
-              place={CHIP_PLACE.TOOLBAR}
-              value={plan.repository}
-              chooser={plans.repositories}
-              onChoose={chooseRepository}
-              openRequest={menuRequest}
-            />
-          }
-        >
+        <Toolbar title={<PlanTitle plan={plan} rename={rename} />}>
           {rename.note !== undefined ? (
             <p className="desktop-toolbar-note" role="alert">
               {rename.note}
@@ -204,6 +191,14 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             </p>
           ) : null}
           <CopyNote copy={plans.copy} />
+          <RepositoryChip
+            key={plan.id}
+            place={CHIP_PLACE.TOOLBAR}
+            value={plan.repository}
+            chooser={plans.repositories}
+            onChoose={chooseRepository}
+            openRequest={menuRequest}
+          />
           <StartAgentButton control={plans.agents} />
           <PlanActionsButton key={plan.id} plans={plans} plan={plan} onRename={rename.begin} />
           {/* The open panel holds its own toggle in its own top row. */}

@@ -8,7 +8,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 
@@ -103,6 +103,48 @@ export function modelLabel(modelId: string, models?: readonly CatalogModel[]): s
 /** The agent's tab label: its model's name. */
 export function agentTabLabel(agent: CodingAgentSummary, models?: readonly CatalogModel[]): string {
   return modelLabel(agent.model, models);
+}
+
+/** The first run of digits and points in a model's own name, which is its version: `claude-opus-5.5` is 5.5, `gpt-6-astra` is 6. */
+const MODEL_VERSION = /\d+(?:\.\d+)*/u;
+
+/** The version's numbers, most significant first; none for a name that carries no version. */
+function modelVersion(modelId: string): number[] {
+  const separator = modelId.indexOf(CATALOG_ID_SEPARATOR);
+  const name = separator === -1 ? modelId : modelId.slice(separator + 1);
+  const found = MODEL_VERSION.exec(name)?.[0];
+  return found === undefined ? [] : found.split(".").map(Number);
+}
+
+/** Which of two versions is the newer: positive where `a` is, with a missing part counted as 0, so 5.1 is newer than 5. */
+function compareVersions(a: readonly number[], b: readonly number[]): number {
+  for (let part = 0; part < Math.max(a.length, b.length); part += 1) {
+    const difference = (a[part] ?? 0) - (b[part] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
+/** The providers in the order the menu groups them. */
+const PROVIDER_ORDER: readonly string[] = Object.values(MODEL_PROVIDER);
+
+/**
+ * The models as the menus list them: grouped by provider, Anthropic's first,
+ * and within each the newest version first, so a catalog that lists forty
+ * models leads with the ones worth starting on. The catalog carries no
+ * release date, so the version in the id stands for one; models of one
+ * version keep the catalog's own order between them.
+ */
+export function orderedModels(models: readonly CatalogModel[]): readonly CatalogModel[] {
+  return models
+    .map((model, index) => ({ model, index, version: modelVersion(model.id) }))
+    .sort(
+      (a, b) =>
+        PROVIDER_ORDER.indexOf(a.model.provider) - PROVIDER_ORDER.indexOf(b.model.provider) ||
+        compareVersions(b.version, a.version) ||
+        a.index - b.index,
+    )
+    .map((each) => each.model);
 }
 
 /** The efforts a model lists, or nothing for a model the catalog does not offer now. */

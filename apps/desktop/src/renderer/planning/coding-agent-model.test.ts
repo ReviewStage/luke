@@ -11,6 +11,7 @@ import {
   followsAgent,
   modelLabel,
   opensOnGitHub,
+  orderedModels,
   START_NEEDS_REPOSITORY,
   startFailureNote,
 } from "./coding-agent-model";
@@ -124,4 +125,40 @@ test("only a page on GitHub opens from the transcript, and each Start refusal ha
   assert.equal(startFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY), START_NEEDS_REPOSITORY);
   const notes = new Set(Object.values(CODING_AGENT_CALL_FAILURE).map(startFailureNote));
   assert.equal(notes.size, Object.values(CODING_AGENT_CALL_FAILURE).length);
+});
+
+test("the menus list the models by provider, Anthropic first, and newest first within each, the catalog's order kept between one version's models", () => {
+  const model = (
+    id: string,
+    provider: typeof MODEL_PROVIDER.ANTHROPIC | typeof MODEL_PROVIDER.OPENAI,
+  ) => ({
+    id,
+    name: id,
+    provider,
+    efforts: ["high"],
+  });
+  const ordered = orderedModels([
+    model("openai/gpt-5.1-codex-max", MODEL_PROVIDER.OPENAI),
+    model("anthropic/claude-opus-4.5", MODEL_PROVIDER.ANTHROPIC),
+    model("openai/gpt-6-astra", MODEL_PROVIDER.OPENAI),
+    model("anthropic/claude-fable-5.1", MODEL_PROVIDER.ANTHROPIC),
+    model("anthropic/claude-opus-5.5-fast", MODEL_PROVIDER.ANTHROPIC),
+    model("anthropic/claude-opus-5.5", MODEL_PROVIDER.ANTHROPIC),
+    model("anthropic/claude-fable-5", MODEL_PROVIDER.ANTHROPIC),
+    model("openai/gpt-5.6-luna", MODEL_PROVIDER.OPENAI),
+  ]);
+
+  assert.deepEqual(
+    ordered.map((each) => each.id),
+    [
+      "anthropic/claude-opus-5.5-fast",
+      "anthropic/claude-opus-5.5",
+      "anthropic/claude-fable-5.1",
+      "anthropic/claude-fable-5",
+      "anthropic/claude-opus-4.5",
+      "openai/gpt-6-astra",
+      "openai/gpt-5.6-luna",
+      "openai/gpt-5.1-codex-max",
+    ],
+  );
 });

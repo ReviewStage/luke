@@ -4,15 +4,17 @@ import assert from "node:assert/strict";
 import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { NewPlanForm } from "./new-plan-form";
 import type { RepositoryChooser } from "./repository-chip";
 import type { PlansControl } from "./use-plans-tab";
 
 const RELAY = "acme/relay";
 const BILLING = "acme/billing";
+const INSTALLATION_URL = "https://github.com/apps/luke/installations/new";
 
-/** The repositories the account reaches, as the host answers them: the App installed, two of them. */
+/** The repositories the account reaches, as the host answers them: the App installed, two of them, one private. */
 const LISTED: PlanningRepositoriesAnswer = {
   repositories: {
     installed: true,
@@ -22,7 +24,7 @@ const LISTED: PlanningRepositoriesAnswer = {
         name: "relay",
         fullName: RELAY,
         defaultBranch: "main",
-        private: true,
+        private: false,
         updatedAt: 2,
       },
       {
@@ -34,7 +36,7 @@ const LISTED: PlanningRepositoriesAnswer = {
         updatedAt: 1,
       },
     ],
-    installationUrl: "https://github.com/apps/luke/installations/new",
+    installationUrl: INSTALLATION_URL,
   },
 };
 
@@ -76,7 +78,13 @@ function mount(patch: Partial<NewPlan> = {}, chooser: Partial<RepositoryChooser>
     nameField: () => find<HTMLInputElement>("input[aria-label='Plan name']"),
     startButton: () => find<HTMLButtonElement>("button[aria-label='Start plan']"),
     chip: () => find<HTMLButtonElement>(".plan-compose-chip"),
-    rows: () => [...container.querySelectorAll<HTMLButtonElement>("[role=menuitem]")],
+    menu: () => container.querySelector(".plan-compose-menu"),
+    search: () => find<HTMLInputElement>("input[aria-label='Search repositories']"),
+    rows: () => [...container.querySelectorAll<HTMLButtonElement>("[role=option]")],
+    /** The row the arrows stand on. */
+    highlighted: () => container.querySelector("[role=option][aria-selected='true']")?.textContent,
+    note: () => container.querySelector(".plan-compose-menu-note")?.textContent,
+    gitHubRow: () => find<HTMLButtonElement>(".plan-compose-menu-foot button"),
     restand: (next: Partial<NewPlan>) => {
       newPlan = { ...newPlan, ...next };
       act(render);
@@ -93,10 +101,19 @@ function type(field: HTMLInputElement, words: string): void {
   });
 }
 
+/** Presses a key on whatever holds focus, the way the keyboard does. */
+function press(key: string): void {
+  act(() => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
 /** Lets the chip's read of the repositories land. */
 async function settle(): Promise<void> {
   await act(async () => undefined);
 }
+
+beforeEach(installScrollIntoView);
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -124,63 +141,96 @@ test("start waits for a name alone, and submitting starts the plan on the chosen
   await act(async () => page.find<HTMLFormElement>("form").requestSubmit());
   assert.deepEqual(page.started, [["Teammate invitations", null]]);
 
-  // With none recent, the menu lists the repositories Luke reaches.
+  // With none recent, the menu lists the repositories Luke reaches as the service ordered them.
   act(() => page.chip().click());
   assert.deepEqual(
     page.rows().map((row) => row.textContent),
-    [RELAY, BILLING, "Search all repositories…", "Choose which repositories Luke can see"],
+    [RELAY, BILLING],
   );
   act(() => page.rows()[1]?.click());
-  assert.equal(page.container.querySelector("[role=menu]"), null);
+  assert.equal(page.menu(), null);
   assert.equal(page.chip().textContent, BILLING);
   await act(async () => page.find<HTMLFormElement>("form").requestSubmit());
   assert.deepEqual(page.started.at(-1), ["Teammate invitations", BILLING]);
 });
 
-test("the repository starts on the last one used, and the chip's menu offers the recent ones, a search, and GitHub's page", async () => {
-  const page = mount({}, { recent: [RELAY, BILLING] });
+test("the menu is the search, the recent repositories first and the rest after, a lock on a private one, a check on the chosen one, and GitHub pinned last, with no heading", async () => {
+  const page = mount({}, { recent: [BILLING] });
   await settle();
-  assert.equal(page.chip().textContent, RELAY);
+  assert.equal(page.chip().textContent, BILLING);
 
   act(() => page.chip().click());
-  assert.equal(page.find(".plan-compose-menu-heading").textContent, "Recent");
+  const menu = page.menu();
+  assert.ok(menu, "the menu opens");
+  assert.equal(menu.querySelector(".plan-compose-menu-heading"), null, "no heading");
+  assert.equal(menu.firstElementChild, page.search().parentElement, "the search is the first row");
+  assert.ok(document.activeElement === page.search(), "the search field holds focus");
+  assert.equal(page.search().placeholder, "Search repositories");
   assert.deepEqual(
     page.rows().map((row) => row.textContent),
-    [RELAY, BILLING, "Search all repositories…", "Choose which repositories Luke can see"],
+    [BILLING, RELAY],
   );
-  assert.ok(page.rows()[0]?.querySelector("svg + span + svg"), "the chosen row is checked");
+  const [billing, relay] = page.rows();
+  assert.ok(billing?.querySelector("svg.lock-icon"), "the private repository wears a lock");
+  assert.ok(relay?.querySelector("svg.account-mark"), "the public one wears the GitHub mark");
+  assert.equal(billing?.getAttribute("aria-current"), "true");
+  assert.ok(billing?.querySelector("svg.credential-check"), "the chosen row is checked");
+  assert.equal(relay?.querySelector("svg.credential-check"), null);
 
-  act(() => page.rows().at(-1)?.click());
-  assert.deepEqual(page.opened, ["https://github.com/apps/luke/installations/new"]);
-  assert.equal(page.container.querySelector("[role=menu]"), null);
-  assert.equal(page.chip().textContent, RELAY);
+  // The GitHub row is the foot, pinned under the list, and opens the installation page.
+  const gitHub = page.gitHubRow();
+  assert.equal(gitHub.textContent, "GitHub");
+  assert.ok(gitHub.querySelector("svg.link-icon"), "the arrow out");
+  assert.equal(gitHub.closest(".plan-compose-menu-list"), null, "the foot is not in the list");
+  act(() => gitHub.click());
+  assert.deepEqual(page.opened, [INSTALLATION_URL]);
+  assert.equal(page.menu(), null);
+  assert.equal(page.chip().textContent, BILLING);
 });
 
-test("Search all repositories… filters every repository Luke reaches by its name", async () => {
+test("typing filters the repositories by name, the arrows move the highlight while the field keeps focus, and Enter picks", async () => {
   const page = mount({}, { recent: [RELAY] });
   await settle();
 
   act(() => page.chip().click());
-  act(() => page.rows()[1]?.click());
-  const search = page.find<HTMLInputElement>("input[aria-label='Search repositories']");
-  assert.ok(document.activeElement === search, "the search field holds focus");
-  assert.deepEqual(
-    page.rows().map((row) => row.textContent),
-    [RELAY, BILLING],
-  );
-  type(search, "BILL");
+  type(page.search(), "BILL");
   assert.deepEqual(
     page.rows().map((row) => row.textContent),
     [BILLING],
   );
-  type(search, "zzz");
+  type(page.search(), "zzz");
   assert.deepEqual(page.rows(), []);
-  assert.equal(page.find(".plan-compose-menu-note").textContent, "No repositories match.");
+  assert.equal(page.note(), "No repositories match");
 
-  type(search, "billing");
-  act(() => page.rows()[0]?.click());
+  type(page.search(), "acme");
+  assert.deepEqual(
+    page.rows().map((row) => row.textContent),
+    [RELAY, BILLING],
+  );
+  assert.equal(page.highlighted(), RELAY);
+  press("ArrowDown");
+  assert.equal(page.highlighted(), BILLING);
+  assert.ok(document.activeElement === page.search(), "the field keeps focus");
+  press("ArrowDown");
+  assert.equal(page.highlighted(), RELAY, "the arrows wrap");
+  press("ArrowUp");
+  press("Enter");
   assert.equal(page.chip().textContent, BILLING);
-  assert.equal(page.container.querySelector("[role=menu]"), null);
+  assert.equal(page.menu(), null);
+  assert.ok(document.activeElement === page.chip(), "focus is back on the chip");
+});
+
+test("the menu says it is reading while the list is out, with the recent repositories already listed", async () => {
+  const page = mount({}, { recent: [RELAY], read: () => new Promise(() => undefined) });
+  await settle();
+
+  act(() => page.chip().click());
+  assert.deepEqual(
+    page.rows().map((row) => row.textContent),
+    [RELAY],
+  );
+  assert.equal(page.note(), "Reading your repositories…");
+  assert.equal(page.container.querySelector(".plan-compose-menu-foot"), null);
 });
 
 test("with the App installed nowhere, the chip offers installing Luke on GitHub instead of a menu", async () => {
@@ -189,11 +239,7 @@ test("with the App installed nowhere, the chip offers installing Luke on GitHub 
     {
       read: () =>
         Promise.resolve({
-          repositories: {
-            installed: false,
-            repositories: [],
-            installationUrl: "https://github.com/apps/luke/installations/new",
-          },
+          repositories: { installed: false, repositories: [], installationUrl: INSTALLATION_URL },
         }),
     },
   );
@@ -202,35 +248,26 @@ test("with the App installed nowhere, the chip offers installing Luke on GitHub 
   assert.equal(page.chip().textContent, "Install Luke on GitHub");
   assert.equal(page.chip().getAttribute("aria-haspopup"), null);
   act(() => page.chip().click());
-  assert.equal(page.container.querySelector("[role=menu]"), null);
-  assert.deepEqual(page.opened, ["https://github.com/apps/luke/installations/new"]);
+  assert.equal(page.menu(), null);
+  assert.deepEqual(page.opened, [INSTALLATION_URL]);
 });
 
-test("with the App installed and no repository reached, the menu says so beside the page to choose some", async () => {
+test("with the App installed and no repository reached, the menu says so over the GitHub row", async () => {
   const page = mount(
     {},
     {
       read: () =>
         Promise.resolve({
-          repositories: {
-            installed: true,
-            repositories: [],
-            installationUrl: "https://github.com/apps/luke/installations/new",
-          },
+          repositories: { installed: true, repositories: [], installationUrl: INSTALLATION_URL },
         }),
     },
   );
   await settle();
 
   act(() => page.chip().click());
-  assert.equal(
-    page.find(".plan-compose-menu-note").textContent,
-    "Luke can't see any repository yet.",
-  );
-  assert.deepEqual(
-    page.rows().map((row) => row.textContent),
-    ["Search all repositories…", "Choose which repositories Luke can see"],
-  );
+  assert.equal(page.note(), "Luke can't see any repository yet.");
+  assert.deepEqual(page.rows(), []);
+  assert.equal(page.gitHubRow().textContent, "GitHub");
 });
 
 test("a list the host could not read says why in the menu and offers to try again; the list is read again when the window takes focus", async () => {
@@ -250,13 +287,18 @@ test("a list the host could not read says why in the menu and offers to try agai
 
   act(() => page.chip().click());
   assert.match(page.find("[role=alert]").textContent ?? "", /Sign in with GitHub/u);
-  assert.deepEqual(
-    page.rows().map((row) => row.textContent),
-    ["Try again"],
+  assert.deepEqual(page.rows(), []);
+  const again = [...page.container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Try again",
   );
-  await act(async () => page.rows()[0]?.click());
+  assert.ok(again, "the menu offers to try again");
+  await act(async () => again.click());
   assert.equal(page.container.querySelector("[role=alert]"), null);
   assert.equal(reads, 2);
+  assert.deepEqual(
+    page.rows().map((row) => row.textContent),
+    [RELAY, BILLING],
+  );
 
   await act(async () => {
     window.dispatchEvent(new Event("focus"));
@@ -264,7 +306,7 @@ test("a list the host could not read says why in the menu and offers to try agai
   assert.equal(reads, 3);
 });
 
-test("Escape closes the menu, goes no further than it, and hands focus back to the chip; arrows walk its rows", async () => {
+test("Escape closes the menu, goes no further than it, and hands focus back to the chip", async () => {
   const page = mount({}, { recent: [RELAY, BILLING] });
   await settle();
   const escapes: string[] = [];
@@ -274,20 +316,11 @@ test("Escape closes the menu, goes no further than it, and hands focus back to t
   window.addEventListener("keydown", listen);
 
   act(() => page.chip().click());
-  assert.ok(document.activeElement === page.rows()[0], "the first row holds focus");
-  const press = (key: string) =>
-    act(() => {
-      document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
-    });
-  press("ArrowDown");
-  assert.ok(document.activeElement === page.rows()[1]);
-  press("ArrowUp");
-  press("ArrowUp");
-  assert.ok(document.activeElement === page.rows().at(-1), "the arrows wrap");
+  assert.ok(document.activeElement === page.search(), "the search field holds focus");
   press("Escape");
   window.removeEventListener("keydown", listen);
 
-  assert.equal(page.container.querySelector("[role=menu]"), null);
+  assert.equal(page.menu(), null);
   assert.deepEqual(escapes, [], "Escape went no further than the menu");
   assert.ok(document.activeElement === page.chip(), "focus is back on the chip");
 });
