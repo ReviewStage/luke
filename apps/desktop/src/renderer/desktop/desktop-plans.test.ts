@@ -344,47 +344,59 @@ test("a tab with something new on it carries a dot, and the tab shown carries no
 });
 
 test("the Work tab draws each turn's calls as lines that open onto their output, left out of the screen recording", () => {
-  const markup = renderToStaticMarkup(
-    createElement(DesktopPlans, {
-      plans: plansControl({
-        page: PLANS_PAGE.DOCUMENT,
-        activePlanId: PLAN.id,
-        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
-        work: {
-          callLive: true,
-          turns: [
-            {
-              turnId: "turn-1",
-              startedAt: 1_000,
-              state: PLAN_WORK_STATE.RUNNING,
-              earlierOmitted: false,
-              parts: [
-                {
-                  type: PLAN_WORK_PART.TOOL,
-                  id: "call-1",
-                  tool: PLAN_WORK_TOOL.REPOSITORY,
-                  name: "run_in_repository",
-                  state: PLAN_WORK_STATE.DONE,
-                  subject: "ls src",
-                  input: '{ "command": "ls src" }',
-                  output: "invite.ts",
-                },
-              ],
-            },
-          ],
-        },
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(DesktopPlans, {
+        plans: plansControl({
+          page: PLANS_PAGE.DOCUMENT,
+          activePlanId: PLAN.id,
+          region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+          sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
+          work: {
+            callLive: true,
+            turns: [
+              {
+                turnId: "turn-1",
+                startedAt: 1_000,
+                state: PLAN_WORK_STATE.DONE,
+                earlierOmitted: false,
+                parts: [
+                  {
+                    type: PLAN_WORK_PART.TOOL,
+                    id: "call-1",
+                    tool: PLAN_WORK_TOOL.REPOSITORY,
+                    name: "run_in_repository",
+                    state: PLAN_WORK_STATE.DONE,
+                    subject: "ls src",
+                    input: '{ "command": "ls src" }',
+                    output: "invite.ts",
+                  },
+                ],
+              },
+            ],
+          },
+        }),
       }),
-    }),
+    ),
   );
 
-  assert.match(markup, /<section class="plan-work ph-no-capture" aria-label="Work">/u);
-  assert.match(markup, /Ran<\/span><code class="work-call-subject">ls src<\/code>/u);
-  assert.match(
-    markup,
-    /<details[^>]*class="work-call"[^>]*>.*?<pre class="work-call-text">invite\.ts<\/pre>/su,
+  const work = container.querySelector('section[aria-label="Work"]');
+  assert.ok(work);
+  assert.ok(work.classList.contains("ph-no-capture"));
+  const line = [...work.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("ls src"),
   );
-  assert.match(markup, /Working/u);
+  assert.ok(line, "no line for the call");
+  assert.match(line.textContent ?? "", /^Ran\s*ls src/u);
+  assert.equal(work.textContent?.includes("invite.ts"), false);
+
+  act(() => line.click());
+  const output = [...work.querySelectorAll("pre")].map((pre) => pre.textContent);
+  assert.deepEqual(output, ['{ "command": "ls src" }', "invite.ts"]);
 });
 
 test("a worker in the Work tab opens its own session in the tab's place, and the way back returns to every turn", () => {

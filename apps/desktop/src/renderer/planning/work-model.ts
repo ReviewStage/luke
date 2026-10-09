@@ -40,6 +40,8 @@ export const WORK_BLOCK = {
 /** One call as a row: what it did in words, its subject apart, its state, and what opens under it. */
 export interface WorkCallRow {
   id: string;
+  /** Which tool the call was, so the line can wear its icon. */
+  tool: PlanWorkTool;
   verb: string;
   /** The input a reader looks for first; absent for a call that has none. */
   subject?: string;
@@ -127,6 +129,7 @@ function callRowOf(
         : part.subject;
   return {
     id: part.id,
+    tool: part.tool,
     verb: words.verb,
     ...(subject === undefined ? undefined : { subject }),
     subjectIsCode: words.code,

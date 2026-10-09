@@ -26,6 +26,7 @@
   --color-primary: var(--text-primary);
   --color-primary-foreground: var(--surface-fill);
   --color-border: var(--hairline);
+  --color-error: var(--error-text);
   --color-developer: var(--voice-developer);
   --color-luke: var(--voice-luke);
 
