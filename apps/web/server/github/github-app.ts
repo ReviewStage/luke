@@ -16,7 +16,8 @@
  * installation tokens for one repository: with contents read alone for the
  * planning sandbox's checkout, and with contents and pull requests write for
  * a coding agent's branch and pull request; each is minted only where that
- * check passes.
+ * check passes. The user token also reads the user's own record and the
+ * App's bot's, which is what a coding agent's commits are attributed under.
  *
  * Nothing here holds a client: the GitHub reads run on the ambient
  * `HttpClient` and the account row is read on the ambient `SqlClient`, so a
@@ -107,6 +108,12 @@ interface InstallationTokenRequest {
 
 const HTTP_STATUS = { UNAUTHORIZED: 401, NOT_FOUND: 404 } as const;
 
+/** The domain of the address GitHub links to an account while keeping the account's own private. */
+const GITHUB_NOREPLY_DOMAIN = "users.noreply.github.com";
+
+/** The suffix GitHub gives the login of an App's own bot user. */
+const BOT_LOGIN_SUFFIX = "[bot]";
+
 /**
  * GitHub pages a listing at most a hundred to a page. A listing is read page
  * by page until one comes back short, or until the caller has what it came
@@ -136,6 +143,14 @@ interface GitHubInstallation {
   /** The user or organization the App is installed on; absent for an enterprise install, which has no login. */
   readonly accountLogin: string | undefined;
   readonly repositorySelection: GitHubRepositorySelection;
+}
+
+/** One GitHub account as a commit names it: its id and login, which together make its noreply address, and the name it set, if any. */
+export interface GitHubUser {
+  readonly id: number;
+  readonly login: string;
+  /** The display name the account set; absent where it set none. */
+  readonly name: string | undefined;
 }
 
 export const GITHUB_REPOSITORY_SELECTION = {
@@ -294,6 +309,30 @@ export interface GitHubAppService {
     HttpClient.HttpClient | SqlClient.SqlClient
   >;
   /**
+   * The signed-in user as GitHub records them, read on their own token
+   * (`GET /user`): what a commit of theirs is authored as.
+   */
+  readonly signedInUser: (
+    userId: string,
+  ) => Effect.Effect<
+    GitHubUser,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | SqlClient.SqlClient
+  >;
+  /**
+   * The App's own bot user, the account GitHub attributes the App's actions
+   * to, read on the signed-in user's token (`GET /users/<slug>[bot]`) since
+   * the App's JWT reaches no user endpoint; none where GitHub knows no bot
+   * by the App's slug, which is a deployment whose slug is mis-set.
+   */
+  readonly appBot: (
+    userId: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubUser>,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | SqlClient.SqlClient
+  >;
+  /**
    * The user's GitHub App token, refreshed and re-sealed on its row when it
    * is about to expire. The read and the refresh run under a lock on the
    * row, because GitHub retires a refresh token the moment it is used: two
@@ -359,6 +398,14 @@ const RefreshAnswerSchema = Schema.Union([RefreshedTokensSchema, TokenRefusalSch
 
 /** GitHub's answer to a token mint, read for the token alone. */
 const InstallationTokenSchema = Schema.Struct({ token: Schema.String });
+
+/** A user as GitHub records one, read as far as a commit identity goes; the name is null where the account set none. */
+const UserSchema = Schema.Struct({
+  id: Schema.Number,
+  login: Schema.String,
+  name: Schema.optional(Schema.NullOr(Schema.String)),
+});
+type UserRecord = typeof UserSchema.Type;
 
 const AccountTokenRowSchema = Schema.Struct({
   id: Schema.String,
@@ -450,6 +497,20 @@ function installationOf(record: InstallationRecord): GitHubInstallation {
     accountLogin: record.account?.login,
     repositorySelection: record.repository_selection,
   };
+}
+
+/** A blank name is one the account never set. */
+function userOf(record: UserRecord): GitHubUser {
+  return { id: record.id, login: record.login, name: text(record.name ?? undefined) };
+}
+
+/**
+ * The address GitHub links to the account while keeping the account's own
+ * private: `<id>+<login>@users.noreply.github.com`, which is what a commit
+ * by the account is attributed through.
+ */
+export function noreplyAddress(user: GitHubUser): string {
+  return `${user.id}+${user.login}@${GITHUB_NOREPLY_DOMAIN}`;
 }
 
 /** A repository GitHub never dated reads as older than any it did. */
@@ -834,6 +895,22 @@ function githubAppService(
       repositoryToken(userId, fullName, INSTALLATION_TOKEN_PERMISSIONS.READ),
     repositoryWriteToken: (userId, fullName) =>
       repositoryToken(userId, fullName, INSTALLATION_TOKEN_PERMISSIONS.WRITE),
+    signedInUser: (userId) =>
+      Effect.gen(function* () {
+        const token = yield* userToken(userId);
+        const response = yield* sendAsUser(githubRead("/user", token));
+        return userOf(yield* readBody(response, UserSchema));
+      }).pipe(Effect.scoped),
+    appBot: (userId) =>
+      Effect.gen(function* () {
+        const app = yield* ready;
+        const token = yield* userToken(userId);
+        const response = yield* sendAsUser(
+          githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token),
+        );
+        if (response.status === HTTP_STATUS.NOT_FOUND) return Option.none();
+        return Option.some(userOf(yield* readBody(response, UserSchema)));
+      }).pipe(Effect.scoped),
     userToken,
   };
 }

@@ -5,6 +5,7 @@ import { test } from "vitest";
 import agent from "../coder/agent";
 import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
 import { coderChannelInput } from "../server/hosted/coder-host/channel";
+import { coderInstructions } from "../server/hosted/coder-host/instructions";
 import { CODER_TOOL, CODER_TOOL_SET, SANDBOX_TOOLS } from "../server/hosted/coder-host/tool-set";
 
 /**
@@ -12,7 +13,9 @@ import { CODER_TOOL, CODER_TOOL_SET, SANDBOX_TOOLS } from "../server/hosted/code
  * carries: eve's own default tools are off and the tools authored under
  * `coder/tools/` are exactly the set the store writer registers, the
  * session's input tokens are uncapped, a follow-up waits for the turn
- * under way, and the deployment acts for nobody at the service's door.
+ * under way, the deployment acts for nobody at the service's door, and the
+ * session is told its commits are the developer's, whose identity the
+ * checkout set and the session never changes.
  */
 
 const TOOLS_DIRECTORY = join(import.meta.dirname, "..", "coder", "tools");
@@ -45,4 +48,11 @@ test("a follow-up queues behind the turn under way, and the walk is the account'
   });
   assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.QUEUE);
   assert.equal(Array.isArray(channel.auth), false);
+});
+
+test("the session is told the checkout's commit identity is the developer's and never its own to change", () => {
+  const instructions = coderInstructions("Acme/Relay");
+  for (const kept of ["user.name", "user.email", "--author", "luke.commitTrailer"]) {
+    assert.ok(instructions.includes(kept), kept);
+  }
 });

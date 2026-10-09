@@ -68,6 +68,29 @@ const GITHUB_APP_LAYER: Layer.Layer<GitHubApp> = GitHubApp.layer(GITHUB_APP_SETT
 /** The token the fake App mints for a repository, which is what a test reads for at the sandbox's firewall. */
 export const GITHUB_FIXTURE_INSTALLATION_TOKEN = "ghs_fixture_installation_token";
 
+/** One account as GitHub records it, as far as a commit identity reads: the name null where the account set none. */
+export interface UserFixture {
+  readonly id: number;
+  readonly login: string;
+  readonly name?: string | null;
+}
+
+/** The signed-in developer GitHub answers `GET /user` with; the id is the one `openGithubUser` leaves on the account row. */
+export const GITHUB_FIXTURE_USER: UserFixture = { id: 4242, login: "octo-dev", name: "Octo Dev" };
+
+/** The fixture App's own bot user, under the login GitHub gives an App's bot. */
+export const GITHUB_FIXTURE_BOT: UserFixture = {
+  id: 90_001,
+  login: `${GITHUB_FIXTURE.SLUG}[bot]`,
+  name: null,
+};
+
+/** Whom GitHub knows, beside the installations: the signed-in developer, and the App's bot, or none under the App's slug. */
+export interface GitHubPeople {
+  readonly user?: UserFixture;
+  readonly bot?: UserFixture | null;
+}
+
 /** The App over a GitHub nobody reaches: a test whose calls read no repository hands this where production reads GitHub. */
 export const NO_GITHUB: Layer.Layer<GitHubApp | HttpClient.HttpClient> = Layer.suspend(
   () =>
@@ -140,18 +163,41 @@ function sliceOf<A>(items: readonly A[], url: string): readonly A[] {
 
 const INSTALLATION_REPOSITORIES = /^\/user\/installations\/(\d+)\/repositories$/u;
 const INSTALLATION_ACCESS_TOKENS = /^\/app\/installations\/(\d+)\/access_tokens$/u;
+const USER_BY_LOGIN = /^\/users\/([^/]+)$/u;
+
+/** GitHub's own record of a user, as much of it as the service reads and a little it does not. */
+function userJson(fixture: UserFixture) {
+  return {
+    login: fixture.login,
+    id: fixture.id,
+    type: fixture.login.endsWith("[bot]") ? "Bot" : "User",
+    name: fixture.name ?? null,
+    html_url: `https://github.com/${fixture.login}`,
+  };
+}
 
 /**
  * A GitHub on which the user reaches the installations given, paged the way
- * GitHub pages them, and the App mints a token for any of those
- * installations; nothing else: any other request fails.
+ * GitHub pages them, the App mints a token for any of those installations,
+ * and the developer and the App's bot are the people given, the fixture's
+ * own when unsaid; nothing else: any other request fails.
  */
 export function githubReaching(
   installations: readonly InstallationFixture[],
   app: Layer.Layer<GitHubApp> = GITHUB_APP_LAYER,
+  people: GitHubPeople = {},
 ): FakeGitHub {
+  const user = people.user ?? GITHUB_FIXTURE_USER;
+  const bot = people.bot === undefined ? GITHUB_FIXTURE_BOT : people.bot;
   return fakeGitHub((sent) => {
     const { pathname } = new URL(sent.url);
+    if (pathname === "/user") return Response.json(userJson(user));
+    const byLogin = USER_BY_LOGIN.exec(pathname);
+    if (byLogin !== null) {
+      return bot !== null && decodeURIComponent(byLogin[1] ?? "") === bot.login
+        ? Response.json(userJson(bot))
+        : Response.json({ message: "Not Found" }, { status: 404 });
+    }
     const minting = INSTALLATION_ACCESS_TOKENS.exec(pathname);
     if (minting !== null) {
       return installations.some((candidate) => String(candidate.id) === minting[1])

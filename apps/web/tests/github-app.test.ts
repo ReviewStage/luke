@@ -458,6 +458,41 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
+  it.effect(
+    "the signed-in user and the App's bot are read on the user's own token, the bot by the App's slug, and an App GitHub knows no bot under has none",
+    () =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        const fake = githubReaching([], undefined, {
+          user: { id: 15, login: "octocat", name: "  " },
+          bot: { id: 16, login: `${SLUG}[bot]` },
+        });
+        const userId = yield* openGithubUser(standingGithubRow(now));
+        const app = yield* GitHubApp;
+
+        const developer = yield* app.signedInUser(userId).pipe(Effect.provide(fake.layer));
+        const bot = yield* app.appBot(userId).pipe(Effect.provide(fake.layer));
+        const nobody = yield* app
+          .appBot(userId)
+          .pipe(Effect.provide(githubReaching([], undefined, { bot: null }).layer));
+
+        // A blank name is one the account never set.
+        assert.deepEqual(developer, { id: 15, login: "octocat", name: undefined });
+        assert.deepEqual(bot, Option.some({ id: 16, login: `${SLUG}[bot]`, name: undefined }));
+        assert.ok(Option.isNone(nobody));
+        assert.deepEqual(
+          fake.sent.map((sent) => new URL(sent.url).pathname),
+          ["/user", `/users/${SLUG}[bot]`],
+        );
+        for (const sent of fake.sent) {
+          assert.equal(
+            sent.headers.get("authorization"),
+            `Bearer ${standingGithubRow(0).accessToken}`,
+          );
+        }
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
   it.effect("a user with more installations than one page holds gets every page", () =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;

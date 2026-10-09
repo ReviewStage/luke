@@ -42,6 +42,8 @@ export interface SandboxDouble extends RepositorySandbox {
   checkedOut: string | undefined;
   /** The clone's arguments, as the last clone was handed them. */
   readonly clones: { repository: string; branch: string; url: string }[];
+  /** Every commit identity set in the checkout, in order, with the trailer where one was handed in. */
+  readonly identities: { name: string; email: string; trailer: string | undefined }[];
   /** How the next clones end; a clone with nothing scripted succeeds. */
   readonly cloneAnswers: ScriptedClone[];
   /** The door the shell opens the sandbox through, counting each opening. */
@@ -107,6 +109,7 @@ export function sandboxDouble(
     policiesDuringClone: [],
     checkedOut: undefined,
     clones: [],
+    identities: [],
     cloneAnswers: [],
     openings: 0,
     door: () => {
@@ -139,6 +142,16 @@ export function sandboxDouble(
       }
       if (run.workingDirectory === PATH.CHECKOUT && double.checkedOut === undefined) {
         return Promise.resolve(result(EXIT.FAILED, "", "no checkout stands"));
+      }
+      // The commit identity set in the standing checkout.
+      const name = env?.[VARIABLE.GIT_NAME];
+      if (run.workingDirectory === PATH.CHECKOUT && name !== undefined) {
+        double.identities.push({
+          name,
+          email: env?.[VARIABLE.GIT_EMAIL] ?? "",
+          trailer: env?.[VARIABLE.COMMIT_TRAILER],
+        });
+        return Promise.resolve(result(EXIT.OK));
       }
       // A command from the checkout root, from the table.
       const command = env?.[VARIABLE.COMMAND];
