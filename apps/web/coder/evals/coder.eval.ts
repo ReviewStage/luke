@@ -127,6 +127,12 @@ export default defineEval({
         ),
       );
       assert.ok(accepted);
+      // The door admits a session once its first event has recorded it on the conversation row.
+      for (let waited = 0; waited < 40; waited += 1) {
+        const runtimeSessionId = await readConversationRuntimeSessionId(run, agent.conversationId);
+        if (runtimeSessionId === accepted.sessionId) break;
+        await t.sleep(250);
+      }
       const session = await t.target.attachSession(accepted.sessionId);
       session.succeeded();
 
