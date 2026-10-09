@@ -51,6 +51,10 @@
       "entry": ["src/ui-messages/index.ts", "src/testing/index.ts", "src/effect/index.ts"],
       "project": ["src/**"]
     },
+    "apps/web/coder": {
+      "entry": ["instructions/*.ts", "memory/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
+      "project": ["**/*.ts"]
+    },
     "apps/web/eve": {
       "entry": ["instructions/*.ts", "memory/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
       "project": ["**/*.ts"]

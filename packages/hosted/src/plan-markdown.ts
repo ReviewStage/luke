@@ -1,8 +1,8 @@
-import { PLAN_EMPTY_TEXT, PLAN_HEADING } from "@sidecar/hosted/plan-template";
-import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
+import { PLAN_EMPTY_TEXT, PLAN_HEADING } from "./plan-template.js";
+import { PLAN_BOUNDS, type PlanDocument } from "./plan-wire.js";
 
 /**
- * plan-markdown.ts -- a plan's saved document as the readable Markdown Copy puts on the clipboard.
+ * plan-markdown.ts -- a plan's saved document as the readable Markdown Copy puts on the clipboard and a coding agent is handed.
  *
  * Copy is direct formatting of the saved document and nothing else: the body
  * exactly as saved, which carries every section of the fixed template in its

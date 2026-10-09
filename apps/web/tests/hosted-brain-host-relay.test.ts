@@ -87,8 +87,7 @@ async function spokenLine(
 const refusals: string[] = [];
 const relay = new StreamRelay({
   writer,
-  asks: askRecord(),
-  stopTurn: () => Effect.void,
+  asks: { binding: askRecord(), stopTurn: () => Effect.void },
   now: () => NOW,
   report: (message) => refusals.push(message),
 });
@@ -494,11 +493,13 @@ it.effect(
       const stops: string[] = [];
       const carrying = new StreamRelay({
         writer,
-        asks: askRecord(),
-        stopTurn: (_target, _sessionId, eveTurnId) =>
-          Effect.sync(() => {
-            stops.push(eveTurnId);
-          }),
+        asks: {
+          binding: askRecord(),
+          stopTurn: (_target, _sessionId, eveTurnId) =>
+            Effect.sync(() => {
+              stops.push(eveTurnId);
+            }),
+        },
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -1192,8 +1193,7 @@ it.effect(
       const target = await conversation();
       const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
       const refusing = new StreamRelay({
-        asks: askRecord(),
-        stopTurn: () => Effect.void,
+        asks: { binding: askRecord(), stopTurn: () => Effect.void },
         writer: {
           consume: (to, event) =>
             event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
@@ -1223,8 +1223,7 @@ it.effect(
       const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
       let failures = 1;
       const failing = new StreamRelay({
-        asks: askRecord(),
-        stopTurn: () => Effect.void,
+        asks: { binding: askRecord(), stopTurn: () => Effect.void },
         writer: {
           consume: (to, event) => writer.consume(to, event),
           enqueueTurn: (to, enqueue) => {
@@ -1260,8 +1259,7 @@ it.effect(
       const target = await conversation();
       const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
       const refusing = new StreamRelay({
-        asks: askRecord(),
-        stopTurn: () => Effect.void,
+        asks: { binding: askRecord(), stopTurn: () => Effect.void },
         writer: {
           consume: (to, event) =>
             event.kind === BRAIN_RUN_EVENT.MESSAGE_COMPLETED &&
@@ -1302,8 +1300,7 @@ it.effect(
       const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
       let refuseEnds = 1;
       const refusing = new StreamRelay({
-        asks: askRecord(),
-        stopTurn: () => Effect.void,
+        asks: { binding: askRecord(), stopTurn: () => Effect.void },
         writer: {
           consume: (to, event) => {
             if (event.kind === BRAIN_RUN_EVENT.TURN_ENDED && refuseEnds > 0) {

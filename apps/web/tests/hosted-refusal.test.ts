@@ -12,6 +12,7 @@ import {
   InvalidRequestRefusal,
   InvalidTokenRefusal,
   MethodNotAllowedRefusal,
+  NoRepositoryRefusal,
   NotFoundRefusal,
   PromptTooLargeRefusal,
   QuotaExhaustedRefusal,
@@ -113,6 +114,11 @@ const REFUSALS = [
     refusal: HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE,
     schema: RepositoryNotReachableRefusal,
     status: HOSTED_HTTP_STATUS.FORBIDDEN,
+  },
+  {
+    refusal: HOSTED_REFUSAL.NO_REPOSITORY,
+    schema: NoRepositoryRefusal,
+    status: HOSTED_HTTP_STATUS.CONFLICT,
   },
 ] as const;
 

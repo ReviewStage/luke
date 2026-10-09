@@ -16,11 +16,12 @@
     "functions:externals": "tsx scripts/function-externals.ts --write",
     "preview": "vite preview",
     "test": "vitest run && pnpm test:agent",
-    "test:agent": "pnpm --filter @luke/eve run test:agent",
+    "test:agent": "pnpm --filter @luke/eve run test:agent && pnpm --filter @luke/coder run test:agent",
     "test:store": "tsx scripts/store-tests.ts",
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.78",
     "@ai-sdk/openai": "4.0.91",
     "@better-auth/drizzle-adapter": "1.6.29",
     "@better-auth/oauth-provider": "1.6.29",

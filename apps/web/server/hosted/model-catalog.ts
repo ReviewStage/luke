@@ -61,6 +61,8 @@ export interface CatalogModel {
   readonly provider: ModelProvider;
   /** The efforts the model lists, in the catalog's order. */
   readonly efforts: readonly string[];
+  /** The model's context window in tokens, as the catalog lists it, which a coding agent's session is told; absent where the catalog says nothing. */
+  readonly contextWindow?: number;
 }
 
 /** A model and an effort, as a Start names them and the account's default stores them. */
@@ -118,6 +120,7 @@ const CatalogEntrySchema = Schema.Struct({
   name: Schema.String,
   tags: Schema.optionalKey(Schema.Array(Schema.String)),
   reasoning_options: Schema.optionalKey(Schema.NullOr(Schema.Array(ReasoningOptionSchema))),
+  context_window: Schema.optionalKey(Schema.NullOr(Schema.Number)),
 });
 
 const CatalogAnswerSchema = Schema.Struct({
@@ -150,7 +153,14 @@ function offeredModel(entry: CatalogEntry): CatalogModel | undefined {
   const efforts =
     (entry.reasoning_options ?? []).find((option) => option.type === EFFORT_OPTION)?.values ?? [];
   if (efforts.length === 0) return undefined;
-  return { id: entry.id, name: entry.name, provider, efforts };
+  const contextWindow = entry.context_window ?? undefined;
+  return {
+    id: entry.id,
+    name: entry.name,
+    provider,
+    efforts,
+    ...(contextWindow === undefined ? undefined : { contextWindow }),
+  };
 }
 
 /** The catalog's answer filtered to what Luke offers, in the catalog's own order. */

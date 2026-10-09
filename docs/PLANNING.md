@@ -481,6 +481,17 @@ of its own (`packages/host/src/plan-code.ts`). A file that is missing,
 outside the checkout, binary, too large, or secret, and a checkout that
 cannot be reached, answer `rejected` with why, and nothing goes on screen.
 
+### From a plan to a pull request
+
+A plan with a repository can be handed to a coding agent: a cloud session of
+Luke's second eve service, which checks the repository out in a Vercel
+Sandbox of its own, implements the plan given as its first message, runs the
+repository's checks, and decides whether to open a pull request. The service,
+its routes, and what it is told are described in
+`apps/web/server/README.md` under "The coding-agent service" and "The
+coding-agent routes"; the desktop's Start button and agent tabs are the
+plan's next step.
+
 ## The journey
 
 The reference plan is "Teammate invitations" on a private repository,

@@ -88,12 +88,14 @@ const OFFERED: readonly CatalogModel[] = [
     name: "Claude Opus 5.5",
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: OPUS_EFFORTS,
+    contextWindow: 200_000,
   },
   {
     id: "openai/gpt-6.1-sol",
     name: "GPT-6.1 Sol",
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["none", "low", "high"],
+    contextWindow: 200_000,
   },
 ];
 

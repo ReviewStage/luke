@@ -13,6 +13,7 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
+import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
   type PlanningRepositoriesAnswer,
   type PlanningSetRepositoryAnswer,
@@ -47,7 +48,6 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { PLAN_MARKDOWN_MAX_CHARS } from "../plan-markdown";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
 import type { UpdateSnapshot } from "./update";
 import { VOICE_COMMAND } from "./voice-view";

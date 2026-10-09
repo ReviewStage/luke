@@ -66,3 +66,20 @@ export function planBoardPath(planId: string): string {
 export function planTranscriptPath(planId: string): string {
   return `${planPath(planId)}/transcript`;
 }
+
+/** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
+export function planAgentsPath(planId: string): string {
+  return `${planPath(planId)}/agents`;
+}
+
+/** One agent's transcript past a cursor (GET), held open while the agent runs; `coding-agent-wire.ts` declares the answer. */
+export function agentMessagesPath(agentId: string, after: string): string {
+  const path = `/api/agents/${encodeURIComponent(agentId)}/messages`;
+  const query = new URLSearchParams({ after });
+  return `${path}?${query}`;
+}
+
+/** Stops one agent (POST): its turn is cancelled and its sandbox stopped; anything it pushed stays. */
+export function agentStopPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/stop`;
+}

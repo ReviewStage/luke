@@ -12,8 +12,20 @@
     "dest": "/api/default.js?route=plans/transcript&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/agents",
+    "dest": "/api/default.js?route=plans/agents&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)",
     "dest": "/api/default.js?route=plans/plan&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/messages",
+    "dest": "/api/default.js?route=agents/messages&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/stop",
+    "dest": "/api/default.js?route=agents/stop&id=$1"
   },
   {
     "src": "/api/account/delete",

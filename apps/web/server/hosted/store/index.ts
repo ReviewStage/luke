@@ -68,7 +68,9 @@ export function hostedStore(): HostedStore {
 
 export { promptHashOf } from "./content-addressed.js";
 export {
+  listMessagesPast,
   listRecentMessages,
+  type MessageCursor,
   type StoredMessageRecord,
   type StoredTurnRecord,
 } from "./message-reads.js";

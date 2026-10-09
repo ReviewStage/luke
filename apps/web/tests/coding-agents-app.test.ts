@@ -1,0 +1,599 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { it } from "@effect/vitest";
+import {
+  CODING_AGENT_STATUS,
+  codingAgentAnswerSchema,
+  codingAgentListAnswerSchema,
+  codingAgentMessagesAnswerSchema,
+  HOSTED_API_ERROR,
+} from "@sidecar/hosted";
+import { planMarkdown } from "@sidecar/hosted/plan-markdown";
+import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Clock, Duration, Effect, Layer, Option, Redacted, Result, type Schema } from "effect";
+import { TestClock } from "effect/testing";
+import { HttpRouter } from "effect/unstable/http";
+import { SqlClient } from "effect/unstable/sql";
+import { codingAgentsApp } from "../server/coding-agents-app";
+import {
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
+  BRAIN_TURN_TRIGGER,
+  MESSAGE_ROLE,
+  sessionKey,
+  TURN_ORIGIN,
+  userMessage,
+  userMetadataOf,
+} from "../server/core";
+import { readAccountPreferences, writeAccountPreferences } from "../server/hosted/account-store";
+import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_SEND_OUTCOME,
+  type EveMessage,
+  type EveSessions,
+  EveUnreachable,
+} from "../server/hosted/brain-host/eve-sessions";
+import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
+import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
+import { listCodingAgents, readCodingAgent } from "../server/hosted/coding-agent-store";
+import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
+import {
+  type CatalogModel,
+  CODING_AGENT_DEFAULT_CHOICE,
+  MODEL_PROVIDER,
+  modelCatalogOf,
+} from "../server/hosted/model-catalog";
+import { createPlan, savePlanDocument } from "../server/hosted/plan-store";
+import { storeWriter } from "../server/hosted/store";
+import { type FakeGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";
+import { testSqlClient } from "./support/sql-client";
+
+/**
+ * The coding-agent routes, answered by the group the way a function answers
+ * them, over a real dialect: a Start is one agent whose eve session opens
+ * with the plan as its first message, a retry under the same key is that
+ * agent and opens nothing again, the list reads each agent's status from its
+ * newest turn, the transcript answers the conversation's rows past a cursor,
+ * and a Stop is eve's cancel of the turn under way and the row's stamp. eve
+ * is a fake at the client's boundary, GitHub a script, the catalog fixed,
+ * and the store PGlite. Synthetic accounts, bearers, plans, and words
+ * throughout.
+ */
+
+const ORIGIN = "https://luke.test";
+const PLAN_AGENTS = "/api/plans/agents";
+const AGENT_MESSAGES = "/api/agents/messages";
+const AGENT_STOP = "/api/agents/stop";
+
+const RELAY = { owner: "Acme", name: "Relay" } as const;
+const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
+
+const SAVED = {
+  body: "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n",
+  assumptions: [{ text: "Invites expire after 7 days." }],
+};
+
+const CATALOG: readonly CatalogModel[] = [
+  {
+    id: CODING_AGENT_DEFAULT_CHOICE.model,
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "max"],
+  },
+  {
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+  },
+];
+
+interface Answer {
+  readonly status: number;
+  readonly body: WireBoundaryInput;
+}
+
+/** One session opened, as the fake eve saw it. */
+interface Opened {
+  readonly authorization: string;
+  readonly message: EveMessage;
+  readonly sessionId: string;
+}
+
+/** eve as the group reaches it, answering from a script and writing down every open and cancel. */
+function fakeEve(options: { readonly reachable?: boolean; readonly cancels?: boolean } = {}) {
+  const opened: Opened[] = [];
+  const cancelled: (readonly [string, string])[] = [];
+  let sessions = 0;
+  const eve = (authorization: string): EveSessions => ({
+    open: (message) =>
+      Effect.suspend(() => {
+        if (options.reachable === false) {
+          return Effect.fail(
+            new EveUnreachable({
+              // SAFETY: the client's own error shape, built by the fake at the transport it stands for.
+              cause: {
+                _tag: "RequestError",
+                reason: { _tag: "TransportError" },
+                message: "refused",
+              } as never,
+            }),
+          );
+        }
+        sessions += 1;
+        const sessionId = `wrun_01M${String(sessions).padStart(22, "0")}`;
+        opened.push({ authorization, message, sessionId });
+        return Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId });
+      }),
+    send: () => Effect.succeed({ outcome: EVE_SEND_OUTCOME.RETIRED }),
+    cancel: (sessionId, eveTurnId) =>
+      Effect.sync(() => {
+        cancelled.push([sessionId, eveTurnId]);
+        return options.cancels === false
+          ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
+          : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
+      }),
+  });
+  return { eve, opened, cancelled };
+}
+
+/** The group over the test's own database, GitHub, and eve, answering one request. */
+const answer = (
+  bearers: ReadonlyMap<string, string>,
+  github: FakeGitHub,
+  eve: ReturnType<typeof fakeEve>,
+  request: Request,
+) =>
+  Effect.gen(function* () {
+    const client = yield* SqlClient.SqlClient;
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      github.layer,
+      modelCatalogOf(CATALOG),
+    );
+    const { handler, dispose } = HttpRouter.toWebHandler(
+      codingAgentsApp({
+        resolveUserId: (incoming) =>
+          Effect.succeed(
+            Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+          ),
+        eveOrigin: () => ORIGIN,
+        eve: (authorization) => eve.eve(Redacted.value(authorization)),
+      }).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
+    );
+    const response = yield* Effect.promise(() => handler(request));
+    const text = yield* Effect.promise(() => response.text());
+    yield* Effect.promise(() => dispose());
+    // SAFETY: the group answers JSON; the test compares it as the wire value it is, and an answer
+    // with no body is compared as its text so a failure names what came back.
+    const body = (text.length === 0 ? text : JSON.parse(text)) as WireBoundaryInput;
+    return { status: response.status, body } satisfies Answer;
+  });
+
+function request(
+  path: string,
+  bearer: string | undefined,
+  init: { method?: string; body?: WireBoundaryInput; id?: string; after?: string } = {},
+): Request {
+  const url = new URL(path, ORIGIN);
+  if (init.id !== undefined) url.searchParams.set("id", init.id);
+  if (init.after !== undefined) url.searchParams.set("after", init.after);
+  return new Request(url, {
+    method: init.method ?? "GET",
+    headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+    ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
+  });
+}
+
+/** An answer read as the wire declares it, failing the test where it is not one. */
+function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
+  schema: S,
+  status: number,
+  answered: Answer,
+): S["Type"] {
+  assert.equal(answered.status, status, JSON.stringify(answered.body));
+  const read = readEither(schema)(unparsedWire(answered.body));
+  if (Result.isFailure(read))
+    return assert.fail(`the answer is not the wire's: ${read.failure.refusal}`);
+  return read.success;
+}
+
+const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
+
+/**
+ * An owner who signed in with GitHub and holds one plan on the repository,
+ * another account beside them, and the group over a GitHub reaching the
+ * repository and the eve given.
+ */
+const openPlan = (
+  options: { readonly repository?: string | null; readonly eve?: ReturnType<typeof fakeEve> } = {},
+) =>
+  Effect.gen(function* () {
+    const owner = yield* openGithubUser();
+    const other = yield* openGithubUser();
+    const plan = yield* createPlan(owner, {
+      name: "Teammate invitations",
+      repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
+    });
+    yield* savePlanDocument(owner, plan.id, SAVED);
+    const bearers = new Map([
+      [`Bearer ${owner}`, owner],
+      [`Bearer ${other}`, other],
+    ]);
+    const github = githubReaching([INSTALLATION]);
+    const eve = options.eve ?? fakeEve();
+    const ask = (incoming: Request) => answer(bearers, github, eve, incoming);
+    return { owner, other, plan, eve, ask };
+  });
+
+it.layer(testSqlClient)("the coding-agent routes", (it) => {
+  it.effect(
+    "a Start with no choice runs on the account's default, snapshots the plan as Copy would, and opens the session as the developer with the snapshot first",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const key = randomUUID();
+
+        const started = yield* ask(
+          request(PLAN_AGENTS, owner, {
+            method: "POST",
+            id: plan.id,
+            body: { idempotencyKey: key },
+          }),
+        );
+
+        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        assert.equal(agent.planId, plan.id);
+        assert.equal(agent.model, CODING_AGENT_DEFAULT_CHOICE.model);
+        assert.equal(agent.effort, CODING_AGENT_DEFAULT_CHOICE.effort);
+        assert.equal(agent.status, CODING_AGENT_STATUS.STARTING);
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        assert.equal(stored.value.planSnapshot, planMarkdown(SAVED));
+        assert.equal(stored.value.repository, RELAY_FULL_NAME);
+        assert.deepEqual(eve.opened, [
+          {
+            authorization: `Bearer ${owner}`,
+            message: {
+              conversationId: stored.value.conversationId,
+              turn: BRAIN_HOST_TURN.TYPED,
+              message: planMarkdown(SAVED),
+            },
+            sessionId: eve.opened[0]?.sessionId ?? "",
+          },
+        ]);
+        // The default stands: nothing was chosen.
+        assert.equal(yield* readAccountPreferences(owner), undefined);
+      }),
+  );
+
+  it.effect(
+    "a Start naming a model and effort runs on them and makes them the account's default",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const started = yield* ask(
+          request(PLAN_AGENTS, owner, {
+            method: "POST",
+            id: plan.id,
+            body: { idempotencyKey: randomUUID(), model: "openai/gpt-6.1-sol", effort: "low" },
+          }),
+        );
+        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        assert.equal(agent.model, "openai/gpt-6.1-sol");
+        assert.equal(agent.effort, "low");
+        assert.deepEqual((yield* readAccountPreferences(owner))?.codingAgent, {
+          model: "openai/gpt-6.1-sol",
+          effort: "low",
+        });
+      }),
+  );
+
+  it.effect("a retry under the same key is the same agent, and opens no second session", () =>
+    Effect.gen(function* () {
+      const { owner, plan, eve, ask } = yield* openPlan();
+      const key = randomUUID();
+      const first = yield* ask(startAs(owner, plan.id, { idempotencyKey: key }));
+      const again = yield* ask(
+        startAs(owner, plan.id, {
+          idempotencyKey: key,
+          model: "openai/gpt-6.1-sol",
+          effort: "high",
+        }),
+      );
+      const one = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, first);
+      const same = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.OK, again);
+      assert.equal(same.agent.id, one.agent.id);
+      assert.equal(same.agent.model, one.agent.model);
+      assert.equal(eve.opened.length, 1);
+      assert.equal((yield* listCodingAgents(owner, plan.id)).length, 1);
+    }),
+  );
+
+  it.effect(
+    "a Start is refused by name: a model outside the catalog or a stored default that left it, a model without its effort, a plan with no repository, one the developer no longer reaches, another account's plan, and no bearer",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, eve, ask } = yield* openPlan();
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              model: "google/gemini-3",
+              effort: "high",
+            }),
+          ),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              model: CODING_AGENT_DEFAULT_CHOICE.model,
+              effort: "none",
+            }),
+          ),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              model: CODING_AGENT_DEFAULT_CHOICE.model,
+            }),
+          ),
+          invalid,
+        );
+        // A default the account stored while the catalog offered it, which the catalog no longer does.
+        yield* writeAccountPreferences(owner, {
+          codingAgent: { model: "openai/gpt-5", effort: "high" },
+        });
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+          invalid,
+        );
+        yield* writeAccountPreferences(owner, { codingAgent: CODING_AGENT_DEFAULT_CHOICE });
+
+        assert.deepEqual(
+          yield* ask(startAs(other, plan.id, { idempotencyKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(startAs(undefined, plan.id, { idempotencyKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+        const unreachable = yield* createPlan(owner, { name: "Ledger", repository: "Acme/Ledger" });
+        assert.deepEqual(
+          yield* ask(startAs(owner, unreachable.id, { idempotencyKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
+        );
+        const bare = yield* createPlan(owner, { name: "Bare" });
+        assert.deepEqual(
+          yield* ask(startAs(owner, bare.id, { idempotencyKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
+        );
+        assert.deepEqual(eve.opened, []);
+        assert.deepEqual(yield* listCodingAgents(owner, plan.id), []);
+      }),
+  );
+
+  it.effect(
+    "an eve that could not be reached leaves no agent behind, so the retry starts afresh",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan({ eve: fakeEve({ reachable: false }) });
+        const key = randomUUID();
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key })),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.deepEqual(yield* listCodingAgents(owner, plan.id), []);
+      }),
+  );
+
+  it.effect(
+    "the list reads each agent's status from its newest turn, in the order started, and is the owner's alone",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openPlan();
+        const first = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        yield* TestClock.adjust(Duration.minutes(1));
+        const second = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = yield* readCodingAgent(owner, second.id);
+        assert.ok(Option.isSome(stored));
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const target = { userId: owner, conversationId: stored.value.conversationId };
+        yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+        );
+        assert.deepEqual(
+          listed.agents.map((agent) => [agent.id, agent.status]),
+          [
+            [first.id, CODING_AGENT_STATUS.STARTING],
+            [second.id, CODING_AGENT_STATUS.RUNNING],
+          ],
+        );
+        assert.deepEqual(
+          yield* ask(request(PLAN_AGENTS, other, { id: plan.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "the transcript answers the conversation's rows past the cursor, with the cursor to read on from, and a cursor outside its shape is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openPlan();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const target = { userId: owner, conversationId: stored.value.conversationId };
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        // Before any turn the agent is idle, and an empty read answers at once rather than holding.
+        const empty = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0" })),
+        );
+        assert.deepEqual(empty.messages, []);
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.TYPED,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          at: 0,
+        });
+
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 2,
+          message: userMessage(
+            randomUUID(),
+            planMarkdown(SAVED),
+            userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+          ),
+        });
+
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.equal(page.messages.length, 1);
+        assert.equal(page.messages[0]?.role, MESSAGE_ROLE.USER);
+        assert.notEqual(page.cursor, "0:0");
+
+        assert.deepEqual(
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "later" })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a Stop cancels the turn under way at eve by its own id and stamps the row, so the agent reads cancelled; an agent with no turn running is answered as it stands, and an eve that refuses leaves no stamp",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, eve, ask } = yield* openPlan();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        // Nothing runs yet: the Stop has nothing to stop.
+        const starting = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id })),
+        );
+        assert.equal(starting.agent.status, CODING_AGENT_STATUS.STARTING);
+        assert.deepEqual(eve.cancelled, []);
+
+        // The session claimed the conversation and its first turn runs.
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const target = { userId: owner, conversationId: stored.value.conversationId };
+        const sessionId = eve.opened[0]?.sessionId ?? "";
+        assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+
+        assert.deepEqual(
+          yield* ask(request(AGENT_STOP, other, { method: "POST", id: agent.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        const stopped = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id })),
+        );
+        assert.equal(stopped.agent.status, CODING_AGENT_STATUS.CANCELLED);
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        // A second Stop finds the stamp standing and asks eve nothing more.
+        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id }));
+        assert.equal(eve.cancelled.length, 1);
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+        );
+        assert.equal(listed.agents[0]?.status, CODING_AGENT_STATUS.CANCELLED);
+      }),
+  );
+
+  it.effect("a Stop eve refuses is unavailable, and the turn reads as it was", () =>
+    Effect.gen(function* () {
+      const refusing = fakeEve({ cancels: false });
+      const { owner, plan, ask } = yield* openPlan({ eve: refusing });
+      const agent = readAnswer(
+        codingAgentAnswerSchema,
+        HOSTED_HTTP_STATUS.CREATED,
+        yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+      ).agent;
+      const stored = yield* readCodingAgent(owner, agent.id);
+      assert.ok(Option.isSome(stored));
+      const target = { userId: owner, conversationId: stored.value.conversationId };
+      yield* claimRuntimeSession(target, refusing.opened[0]?.sessionId ?? "", new Date());
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+
+      assert.deepEqual(
+        yield* ask(request(AGENT_STOP, owner, { method: "POST", id: agent.id })),
+        refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+      );
+      const listed = readAnswer(
+        codingAgentListAnswerSchema,
+        HOSTED_HTTP_STATUS.OK,
+        yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+      );
+      assert.equal(listed.agents[0]?.status, CODING_AGENT_STATUS.RUNNING);
+    }),
+  );
+});
+
+/** A Start as the owner given, with the body given. */
+function startAs(bearer: string | undefined, planId: string, body: WireBoundaryInput): Request {
+  return request(PLAN_AGENTS, bearer, { method: "POST", id: planId, body });
+}

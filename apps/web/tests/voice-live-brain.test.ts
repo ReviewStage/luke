@@ -101,8 +101,7 @@ const asks = {
 };
 const relay = new StreamRelay({
   writer,
-  asks: askEffects,
-  stopTurn: () => Effect.void,
+  asks: { binding: askEffects, stopTurn: () => Effect.void },
   now: () => NOW,
   report: () => undefined,
 });
@@ -1011,8 +1010,7 @@ const LONG_AGO = 1_700_000_000_000;
 /** A relay whose turns settle long ago, as one a connection lost minutes back would have left. */
 const pastRelay = new StreamRelay({
   writer,
-  asks: askEffects,
-  stopTurn: () => Effect.void,
+  asks: { binding: askEffects, stopTurn: () => Effect.void },
   now: () => LONG_AGO,
   report: () => undefined,
 });

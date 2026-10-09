@@ -375,15 +375,17 @@ it.effect(
       const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
       const relay = new StreamRelay({
         writer,
-        asks: askEffects,
-        stopTurn: (stopped, session, eveTurnId, turnId) =>
-          Effect.sync(() => {
-            if (throwOnce) {
-              throwOnce = false;
-              throw new Error("eve unreachable");
-            }
-            stops.push([stopped.conversationId, session, eveTurnId, turnId]);
-          }),
+        asks: {
+          binding: askEffects,
+          stopTurn: (stopped, session, eveTurnId, turnId) =>
+            Effect.sync(() => {
+              if (throwOnce) {
+                throwOnce = false;
+                throw new Error("eve unreachable");
+              }
+              stops.push([stopped.conversationId, session, eveTurnId, turnId]);
+            }),
+        },
         now: () => NOW,
         report: () => undefined,
       });
@@ -480,8 +482,7 @@ it.effect(
       const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
       const relay = new StreamRelay({
         writer,
-        asks: askEffects,
-        stopTurn: () => Effect.void,
+        asks: { binding: askEffects, stopTurn: () => Effect.void },
         now: () => NOW,
         report: () => undefined,
       });
