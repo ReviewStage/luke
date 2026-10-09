@@ -10,6 +10,7 @@ import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
 import { SANDBOX_TOOLS } from "../../server/hosted/coder-host/tool-set.js";
 import { runWeb } from "../../server/runtime.js";
 import { host, seams } from "../host.js";
+import { environment } from "../sandbox.js";
 import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-prompt.js";
 
 /**
@@ -80,7 +81,8 @@ async function renewCredential(
     ),
   );
   if (minted === undefined) return;
-  const sandbox = await ctx.getSandbox();
+  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
+  const sandbox = await ctx.getSandbox(environment);
   // The token is revealed here alone, into the firewall rules eve sets for github.com.
   await authenticateGitHub(sandbox, { token: Redacted.value(minted), delivery: "firewall" });
   record.update((held) => ({ ...held, credentialAt: now }));
