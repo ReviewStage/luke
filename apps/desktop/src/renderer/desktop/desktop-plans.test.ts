@@ -687,6 +687,21 @@ test("on a wide window the panel is dragged as wide as the document's least widt
   assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), "1720");
 });
 
+test("the panel's edge announces the room the document leaves as its greatest width, and the width drawn in it", () => {
+  layOutPlanArea(1200);
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  act(() => relayout());
+  assert.equal(resizeEdge(page).getAttribute("aria-valuemax"), "920");
+  key(resizeEdge(page), "End");
+  assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), "920");
+
+  layOutPlanArea(900);
+  act(() => relayout());
+  assert.equal(resizeEdge(page).getAttribute("aria-valuemax"), "620");
+  assert.equal(resizeEdge(page).getAttribute("aria-valuenow"), "620");
+});
+
 test("the panel is dragged no wider than the room the stylesheet keeps the document, as folding the sidebar raises it", () => {
   layOutPlanArea(1200);
   const page = mountOpenPlan();

@@ -21,7 +21,7 @@
  */
 
 import type React from "react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /** Which side of its pane the edge stands on: the side panel's left, the sidebar's right. */
 export const EDGE_SIDE = {
@@ -105,6 +105,7 @@ export interface ResizableEdgeOptions {
 
 /** What the edge's element is spread with. */
 export interface ResizableEdgeProps {
+  ref: React.RefCallback<HTMLElement>;
   role: "separator";
   "aria-orientation": "vertical";
   "aria-label": string;
@@ -219,11 +220,27 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdgePr
   const latest = useRef(options);
   const drag = useRef<Drag | undefined>(undefined);
   const release = useRef<(() => void) | undefined>(undefined);
+  const [room, setRoom] = useState<number | undefined>(undefined);
 
   useLayoutEffect(() => {
     latest.current = options;
   });
   useEffect(() => () => release.current?.(), []);
+
+  // The greatest width the container allows, measured again whenever it
+  // resizes, so the separator announces a range its value stands within even
+  // where the pane has no greatest width of its own.
+  const measure = useCallback((edge: HTMLElement | null) => {
+    const container = edge?.parentElement?.parentElement;
+    if (edge == null || container == null) return undefined;
+    const observer = new ResizeObserver(() => {
+      const max = roomFor(edge, latest.current);
+      setRoom(Number.isFinite(max) ? max : undefined);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+  const valueMax = room ?? bounds.MAX;
 
   const begin = (event: React.PointerEvent<HTMLElement>, max: number) => {
     const { pointerId } = event;
@@ -263,12 +280,14 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdgePr
   };
 
   return {
+    ref: measure,
     role: "separator",
     "aria-orientation": "vertical",
     "aria-label": options.label,
     "aria-valuemin": bounds.MIN,
-    "aria-valuemax": bounds.MAX,
-    "aria-valuenow": width,
+    "aria-valuemax": valueMax,
+    // The width drawn, which the window may hold narrower than the one kept.
+    "aria-valuenow": Math.min(width, valueMax ?? width),
     tabIndex: 0,
     onPointerDown: (event) => {
       if (event.button !== 0 || drag.current !== undefined) return;
