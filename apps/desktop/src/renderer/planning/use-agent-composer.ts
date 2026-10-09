@@ -61,8 +61,13 @@ interface Held {
   agentId: string;
   draft: string;
   sending: boolean;
-  /** The last message that did not go: the key it went under, which Retry sends again, and why not. */
-  failed: { clientKey: string; note: string } | undefined;
+  /**
+   * The last message that did not go: the key it went under, which Retry
+   * sends again, the developer's rows the transcript held as it first went,
+   * so the retry's line is read back by the row the first send may already
+   * have written, and why not.
+   */
+  failed: { clientKey: string; known: ReadonlySet<string>; note: string } | undefined;
   closed: string | undefined;
   sent: readonly SentLine[];
   /** The service's rows that have answered a sent line, which no later line is read back by. */
@@ -118,11 +123,14 @@ export function useAgentComposer(input: {
     });
   }, [sent.length, held.sent.length]);
 
-  const sendDraft = (clientKey: string = crypto.randomUUID()) => {
+  const sendDraft = (
+    clientKey: string = crypto.randomUUID(),
+    known: ReadonlySet<string> = knownDeveloperRows(messages),
+  ) => {
     const text = held.draft.trim();
     if (text === "" || held.sending || held.closed !== undefined) return;
     const id = `${SENT_LINE_PREFIX}${held.count + 1}`;
-    const line: SentLine = { id, text, known: knownDeveloperRows(messages) };
+    const line: SentLine = { id, text, known };
     setHeld((was) => ({
       ...was,
       draft: "",
@@ -144,7 +152,7 @@ export function useAgentComposer(input: {
             ...was,
             draft: was.draft === "" ? text : was.draft,
             sending: false,
-            failed: { clientKey, note },
+            failed: { clientKey, known, note },
             closed: closesComposer(answer.failure) ? note : was.closed,
             sent: was.sent.filter((each) => each.id !== id),
           }));
@@ -169,7 +177,7 @@ export function useAgentComposer(input: {
     closed: held.closed,
     send: () => sendDraft(),
     retry: () => {
-      if (held.failed !== undefined) sendDraft(held.failed.clientKey);
+      if (held.failed !== undefined) sendDraft(held.failed.clientKey, held.failed.known);
     },
     sent,
   };

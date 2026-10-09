@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
   type ObservationSource,
@@ -146,6 +147,20 @@ test("a brain-authored user row reads back under each source the vocabulary name
   const read = await runTest(readStoredUIMessages([unnamed], TOOLS));
   assert.equal(refusalOf(read), SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(pathOf(read), [0, "metadata"]);
+});
+
+test("a developer's line written by an earlier build with how it was to be delivered on it reads as the ordinary typed line, the legacy key dropped; any other key the vocabulary does not name is still refused", async () => {
+  const typed = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED };
+  const legacy = withMetadata(await fixture(FIXTURE.SPOKEN_ASK), { ...typed, delivery: "queue" });
+  const read = await runTest(readStoredUIMessages([legacy], TOOLS));
+  assert.ok(read.ok, refusalOf(read));
+  const [stored] = read.value;
+  assert.ok(stored !== undefined && "metadata" in stored);
+  assert.deepEqual(stored.metadata, typed);
+  const refused = await runTest(
+    readStoredUIMessages([withMetadata(legacy, { ...typed, mood: "cheerful" })], TOOLS),
+  );
+  assert.equal(refusalOf(refused), SCHEMA_REFUSAL.MALFORMED);
 });
 
 test("a message with metadata the vocabulary does not name is refused at the metadata", async () => {
