@@ -110,7 +110,8 @@ const readAwaitedDelivery = readEither(awaitedDeliverySchema, { excess: EXCESS_K
 
 /** The delivery a transcript message still awaits its turn under, or nothing for a line the model has and every other row; read off the wire's message or the stored one alike. */
 export function awaitedDeliveryOf(message: {
-  readonly metadata?: WireValue | StoredMessageMetadata;
+  readonly role: string;
+  readonly metadata?: WireValue | StoredMessageMetadata | undefined;
 }): CodingAgentDelivery | undefined {
   const read = readAwaitedDelivery(unparsedWire(message.metadata));
   return Result.isSuccess(read) ? read.success.delivery : undefined;

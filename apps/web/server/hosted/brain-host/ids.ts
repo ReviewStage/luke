@@ -45,6 +45,7 @@ const ID_KIND = {
   RECEIVED: "received",
   ANSWER: "answer",
   REASONING: "reasoning",
+  AWAITING: "awaiting",
 } as const;
 
 /** The store's id for one turn of one eve session. */
@@ -57,6 +58,11 @@ export function receivedMessageId(sessionId: string, eveTurnId: string, ordinal 
   const parts = [ID_KIND.RECEIVED, sessionId, eveTurnId];
   if (ordinal > 0) parts.push(String(ordinal));
   return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate(parts));
+}
+
+/** The developer's line to a coding agent awaiting its turn, under the delivery eve named for it, which is how the turn that receives the line finds its row. */
+export function awaitingLineId(deliveryId: string): string {
+  return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate([ID_KIND.AWAITING, deliveryId]));
 }
 
 /** The client id of the assistant message a turn completes; the turn's id is its journal's client id already, so this is another. */

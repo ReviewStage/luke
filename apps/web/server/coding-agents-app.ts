@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -378,7 +377,10 @@ const REFUSAL_OF_SEND_OUTCOME = {
  * awaiting its turn once eve has taken them. The hand-over runs inside the
  * conversation's lock, so the turn eve opens on the line finds the row
  * standing when its own first write takes the lock, and an eve that did not
- * take the message leaves no row behind.
+ * take the message leaves no row behind; the writer fences the write
+ * against the request going away between the two. A row the store failed
+ * to write after eve took the message is the one gap left, and the relay
+ * still writes the line when the turn receives it, without its marker.
  */
 const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
@@ -424,7 +426,7 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     );
   const written = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
-      write.writeAwaitingLine(target, { clientId: randomUUID(), text, delivery }, dispatch),
+      write.writeAwaitingLine(target, { text, delivery }, dispatch),
     ),
   );
   if (Result.isFailure(written)) {

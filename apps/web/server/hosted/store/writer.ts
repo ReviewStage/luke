@@ -10,7 +10,7 @@ import {
 } from "ai";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -52,6 +52,7 @@ import {
 import { db } from "../../db/query.js";
 import { asks, conversations, messages, turns } from "../../db/storage-schema.js";
 import { voiceSessions } from "../../db/voice-schema.js";
+import { awaitingLineId } from "../brain-host/ids.js";
 import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./database.js";
 
 /**
@@ -290,24 +291,33 @@ type UserMessageWriteResult = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** The developer's line to a coding agent as the message route writes it: its words, how it reaches a turn, and the client id the route minted. */
+/** The developer's line to a coding agent as the message route writes it: its words, and how it reaches a turn. */
 interface AwaitingLineWrite {
-  readonly clientId: string;
   readonly text: string;
   readonly delivery: MessageDelivery;
 }
 
-/** What writing an awaiting line did: the row and what the dispatch answered, or nothing where the dispatch answered nothing; or a refusal. */
-type AwaitingLineWritten<Answer> = Result.Result<
-  Option.Option<{ readonly id: string; readonly answer: Answer }>,
+/** What writing an awaiting line did: the row and the delivery eve named for it, or nothing where the dispatch answered nothing; or a refusal. */
+type AwaitingLineWritten = Result.Result<
+  Option.Option<{ readonly id: string; readonly deliveryId: string }>,
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** The line a turn received, as the relay reads it off eve's stream, and the turn that received it. */
+/** The line a turn received, as the relay reads it off eve's stream: its words, the deliveries the event names, and the turn that received it. */
 interface AwaitingLineTake {
   readonly text: string;
+  readonly deliveryIds: readonly string[];
   readonly turnId: string;
 }
+
+/**
+ * The longest the hand-over to eve inside an awaiting line's write may take
+ * before it is given up: eve answers a follow-up in well under a second and
+ * its own not-ready loop ends at twenty, so one not answered in thirty is
+ * not going to; the planning ask's `ASK_DISPATCH_DEADLINE` is the same
+ * figure for the same reason.
+ */
+const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
 
 /** The row the turn took, by id; none where no line with those words awaited; or the turn does not stand. */
 type AwaitingLineTaken = Result.Result<
@@ -366,24 +376,31 @@ export interface StoreWriter {
   /**
    * Writes the developer's line to a coding agent as a row awaiting its
    * turn, under the conversation's lock and only once the dispatch handed in
-   * has answered: the dispatch is the hand-over to eve, run inside the lock
-   * so the turn eve opens on the line finds the row standing when its own
-   * first write takes the lock, and a dispatch that answers nothing writes
-   * nothing. The row carries its delivery in its metadata until a turn
-   * receives it (`takeAwaitingLine`).
+   * has answered the delivery eve named: the dispatch is the hand-over to
+   * eve, run inside the lock so the turn eve opens on the line finds the
+   * row standing when its own first write takes the lock, and a dispatch
+   * that answers nothing writes nothing. The row stands under eve's
+   * delivery (`awaitingLineId`) and carries its delivery policy in its
+   * metadata until a turn receives it (`takeAwaitingLine`). The whole write
+   * cannot be interrupted, because eve takes the message before the row
+   * records it: a caller that went in between would roll the row back with
+   * eve's turn already on its way, so the dispatch is bounded by a deadline
+   * of its own instead, past which it is read as having answered nothing.
    */
-  writeAwaitingLine<Answer>(
+  writeAwaitingLine(
     target: ConversationTarget,
     line: AwaitingLineWrite,
-    dispatch: Effect.Effect<Option.Option<Answer>>,
-  ): Write<AwaitingLineWritten<Answer>>;
+    dispatch: Effect.Effect<Option.Option<string>>,
+  ): Write<AwaitingLineWritten>;
   /**
-   * Takes into the turn the oldest line awaiting one whose words are the
-   * ones the turn received, dropping the delivery from its metadata in
-   * place at a bumped revision, so a device reading from its revision sees
-   * the line again where it stands, now the turn's. Answers the row taken,
-   * or none where no line with those words awaits, which is every line of
-   * a conversation nothing messages this way.
+   * Takes into the turn the line awaiting one the receipt is of: the row
+   * standing under one of the deliveries the event names, or, where the
+   * event names none of theirs, the oldest whose words are the ones
+   * received. The delivery is dropped from its metadata in place at a
+   * bumped revision, so a device reading from its revision sees the line
+   * again where it stands, now the turn's. Answers the row taken, or none
+   * where no such line awaits, which is every line of a conversation nothing
+   * messages this way.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
 }
@@ -1796,12 +1813,18 @@ const findAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String }),
   Result: Schema.Struct({
     id: Schema.String,
+    clientId: Schema.String,
     parts: StoredPartsColumnSchema,
     metadata: Schema.NullOr(MessageMetadataColumnSchema),
   }),
   execute: (key) =>
     db
-      .select({ id: messages.id, parts: messages.parts, metadata: messages.metadata })
+      .select({
+        id: messages.id,
+        clientId: messages.clientId,
+        parts: messages.parts,
+        metadata: messages.metadata,
+      })
       .from(messages)
       .where(
         and(
@@ -1845,14 +1868,39 @@ function receivedMetadata(metadata: StoredMessageMetadata | null): StoredMessage
   return rest;
 }
 
-const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* <Answer>(
+/**
+ * The dispatch run to its answer or its deadline, from inside the
+ * uninterruptible write: the dispatch is forked as a root fiber of its own,
+ * which is interruptible as the write is not, and a second fiber interrupts
+ * it at the deadline; one interrupted that way answered nothing. The
+ * planning ask's `dispatchedWithinDeadline` is the same shape for the same
+ * reason.
+ */
+function dispatchedWithinDeadline(
+  dispatch: Effect.Effect<Option.Option<string>>,
+): Effect.Effect<Option.Option<string>> {
+  return Effect.gen(function* () {
+    const running = yield* Effect.forkDetach(dispatch);
+    const deadline = yield* Effect.forkDetach(
+      Effect.andThen(Effect.sleep(AWAITING_LINE_DISPATCH_DEADLINE), Fiber.interrupt(running)),
+    );
+    const exit = yield* Fiber.await(running);
+    yield* Fiber.interrupt(deadline);
+    if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return Option.none();
+    return yield* exit;
+  });
+}
+
+const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   line: AwaitingLineWrite,
-  dispatch: Effect.Effect<Option.Option<Answer>>,
-): Effect.fn.Return<AwaitingLineWritten<Answer>, WriteFailure, SqlClient.SqlClient> {
-  // The vocabulary is consulted before eve is, so a line it would refuse is never handed over.
+  dispatch: Effect.Effect<Option.Option<string>>,
+): Effect.fn.Return<AwaitingLineWritten, WriteFailure, SqlClient.SqlClient> {
+  const answered = yield* dispatchedWithinDeadline(dispatch);
+  if (Option.isNone(answered)) return Result.succeed(Option.none());
+  const deliveryId = answered.value;
   const read = yield* admitted(context, {
-    id: line.clientId,
+    id: awaitingLineId(deliveryId),
     role: MESSAGE_ROLE.USER,
     metadata: {
       author: MESSAGE_AUTHOR.DEVELOPER,
@@ -1862,15 +1910,13 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* <Answer>(
     parts: [{ type: UI_PART_TYPE.TEXT, text: line.text, state: UI_PART_STATE.DONE }],
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);
-  const answered = yield* dispatch;
-  if (Option.isNone(answered)) return Result.succeed(Option.none());
   const { id } = yield* insertMessage(context, {
-    clientId: line.clientId,
+    clientId: read.success.id,
     turnId: undefined,
     message: read.success,
     finishedAt: context.now,
   });
-  return Result.succeed(Option.some({ id, answer: answered.value }));
+  return Result.succeed(Option.some({ id, deliveryId }));
 });
 
 const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -1879,9 +1925,13 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AwaitingLineTaken, WriteFailure, SqlClient.SqlClient> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
-  // The words are the match, eve having delivered its lines in the order they were sent, so the
-  // oldest line with these words is the one this receipt is of.
-  const line = awaiting.find((row) => lineText(row.parts) === take.text);
+  // The delivery is the match where the event names it, since two lines may share their words and
+  // a steer sent after a queue is received before it; the words stand in for a stream that names
+  // no delivery, eve having delivered such lines in the order they were sent.
+  const named = new Set(take.deliveryIds.map((deliveryId) => awaitingLineId(deliveryId)));
+  const line =
+    awaiting.find((row) => named.has(row.clientId)) ??
+    awaiting.find((row) => lineText(row.parts) === take.text);
   if (line === undefined) return Result.succeed(Option.none());
   yield* giveLineToTurn({
     id: line.id,
@@ -2071,7 +2121,9 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
     latestSpokenLine: (target, query) =>
       underConversation(target, (context) => latestSpokenLine(context, query)),
     writeAwaitingLine: (target, line, dispatch) =>
-      underConversation(target, (context) => writeAwaitingLine(context, line, dispatch)),
+      Effect.uninterruptible(
+        underConversation(target, (context) => writeAwaitingLine(context, line, dispatch)),
+      ),
     takeAwaitingLine: (target, take) =>
       underConversation(target, (context) => takeAwaitingLine(context, take)),
   };

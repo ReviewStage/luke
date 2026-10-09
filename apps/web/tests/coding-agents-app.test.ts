@@ -17,9 +17,12 @@ import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
+  Cause,
   Clock,
+  Deferred,
   Duration,
   Effect,
+  Exit,
   Fiber,
   Layer,
   Option,
@@ -54,7 +57,9 @@ import {
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
+import { cursorOfWire } from "../server/hosted/coder-host/transcript";
 import {
+  awaitingLinesOf,
   createCodingAgent,
   listCodingAgents,
   readCodingAgent,
@@ -62,7 +67,7 @@ import {
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { CODING_AGENT_DEFAULT_CHOICE, modelCatalogOf } from "../server/hosted/model-catalog";
 import { createPlan, savePlanDocument } from "../server/hosted/plan-store";
-import { storeWriter } from "../server/hosted/store";
+import { listMessagesPast, storeWriter } from "../server/hosted/store";
 import { type FakeGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";
 import { testSqlClient } from "./support/sql-client";
 
@@ -850,6 +855,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         });
         const taken = yield* writer.takeAwaitingLine(target, {
           text: "Now add the tests.",
+          deliveryIds: ["delivery-1"],
           turnId: nextTurn,
         });
         assert.ok(Result.isSuccess(taken) && Option.isSome(taken.success));
@@ -984,6 +990,67 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
         );
         assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
+    "the line's write cannot be interrupted once eve is being asked, so a request that goes away still leaves the accepted line on record, and a hand-over past its deadline is read as refused and writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { target, writer } = yield* startedAgent(eve, { running: true });
+        const line = { text: "Keep going.", delivery: CODING_AGENT_DELIVERY.QUEUE };
+        // eve takes the message only once the test lets it, which is when the request is interrupted.
+        const accepting = yield* Deferred.make<string>();
+        const asked = yield* Deferred.make<void>();
+        const dispatch = Effect.andThen(
+          Deferred.succeed(asked, undefined),
+          Effect.map(Deferred.await(accepting), Option.some),
+        );
+        const writing = yield* Effect.forkChild(writer.writeAwaitingLine(target, line, dispatch));
+        yield* Deferred.await(asked);
+        const interrupting = yield* Effect.forkChild(Fiber.interrupt(writing));
+        yield* Effect.yieldNow;
+        yield* Deferred.succeed(accepting, "delivery-9");
+        yield* Fiber.join(interrupting);
+        // The interrupt is honoured once the write is through, so the fiber ends interrupted with
+        // the row standing; without the fence the transaction would roll the accepted line back.
+        const exit = yield* Fiber.await(writing);
+        assert.ok(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause));
+        assert.ok(
+          (yield* awaitingLinesOf(target.userId, [target.conversationId])).has(
+            target.conversationId,
+          ),
+        );
+
+        // A hand-over that never answers is given up at the deadline, and no row stands for it.
+        const hung = yield* Deferred.make<void>();
+        const never = yield* Effect.forkChild(
+          writer.writeAwaitingLine(
+            target,
+            { text: "Still there?", delivery: CODING_AGENT_DELIVERY.STEER },
+            Effect.andThen(Deferred.succeed(hung, undefined), Effect.never),
+          ),
+        );
+        yield* Deferred.await(hung);
+        yield* TestClock.adjust(Duration.seconds(29));
+        assert.equal(never.pollUnsafe(), undefined);
+        yield* TestClock.adjust(Duration.seconds(1));
+        const givenUp = yield* Fiber.join(never);
+        assert.ok(Result.isSuccess(givenUp) && Option.isNone(givenUp.success));
+        const page = yield* listMessagesPast(
+          target.userId,
+          target.conversationId,
+          CODER_TOOL_SET,
+          cursorOfWire("0:0"),
+        );
+        assert.ok(page.read.ok);
+        assert.deepEqual(
+          page.read.value
+            .filter((record) => record.message.role === MESSAGE_ROLE.USER)
+            .map((record) => awaitedDeliveryOf(record.message)),
+          [undefined, CODING_AGENT_DELIVERY.QUEUE],
+        );
       }),
   );
 

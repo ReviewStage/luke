@@ -436,7 +436,13 @@ export class StreamRelay {
       case "message.received":
         return Effect.andThen(
           this.#joined(event.data.turnId, event.meta.deliveryIds ?? [], standing),
-          this.#received(event.data.turnId, event.data.message, event.meta.id, standing),
+          this.#received(
+            event.data.turnId,
+            event.data.message,
+            event.meta.id,
+            event.meta.deliveryIds ?? [],
+            standing,
+          ),
         );
       case "step.started":
         return this.#stepStarted(event.data.turnId, event.data.stepIndex, standing);
@@ -688,6 +694,7 @@ export class StreamRelay {
     eveTurnId: string,
     text: string,
     eventId: string | undefined,
+    deliveryIds: readonly string[],
     standing: RelayStanding,
   ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
@@ -724,6 +731,7 @@ export class StreamRelay {
       // the turn's own received-line count still moves, so a later line's row keeps its id.
       const taken = yield* this.#seams.writer.takeAwaitingLine(standing.target, {
         text,
+        deliveryIds,
         turnId: hostTurnId(standing.sessionId, eveTurnId),
       });
       if (Result.isSuccess(taken) && Option.isSome(taken.success)) return;
