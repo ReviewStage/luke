@@ -63,10 +63,14 @@ export const SIDE_PANEL_TAB_KIND = {
 /** Every kind of tab, in the order a first launch opens them and the "+" offers them. */
 export const SIDE_PANEL_TABS: readonly SidePanelTab[] = Object.values(SIDE_PANEL_TAB);
 
-/** How wide the panel may be dragged, in CSS pixels, and where it starts. */
+/**
+ * How narrow the panel may be dragged, in CSS pixels, and where it starts. It
+ * has no greatest width of its own: it is dragged as wide as the document
+ * beside it leaves room for (side-panel.tsx), as an editor's secondary side
+ * bar is.
+ */
 export const SIDE_PANEL_WIDTH = {
   MIN: 280,
-  MAX: 720,
   DEFAULT: 400,
 } as const;
 
@@ -114,7 +118,7 @@ export interface SidePanelControl {
   tabs: readonly SidePanelTab[];
   /** The chosen tab, which is none only while no tab is open. */
   tab: SidePanelTab | undefined;
-  /** The panel's width in CSS pixels, always within {@link SIDE_PANEL_WIDTH}. */
+  /** The panel's width in CSS pixels, never under {@link SIDE_PANEL_WIDTH}'s least. */
   width: number;
   /** Shows or hides the panel; hiding it leaves full screen too. */
   onToggle: () => void;
@@ -125,12 +129,12 @@ export interface SidePanelControl {
   onAdd: (tab: SidePanelTab) => void;
   /** Closes the tab; closing the chosen one chooses its neighbour, the one after it where there is one. */
   onClose: (tab: SidePanelTab) => void;
-  /** Asks for a width; it is clamped to the bounds before it is kept. */
+  /** Asks for a width; it is held to the least width before it is kept. */
   onResize: (width: number) => void;
 }
 
 function clampWidth(width: number): number {
-  return Math.min(SIDE_PANEL_WIDTH.MAX, Math.max(SIDE_PANEL_WIDTH.MIN, Math.round(width)));
+  return Math.max(SIDE_PANEL_WIDTH.MIN, Math.round(width));
 }
 
 /** Whether a tab of the kind may be opened beside the tabs open now. */
@@ -157,7 +161,7 @@ function withoutTab(held: SidePanelState, tab: SidePanelTab): SidePanelState {
 
 /**
  * A kept state made whole: each tab open once, the chosen one among them
- * (the first where it is not), and the width within its bounds.
+ * (the first where it is not), and the width no narrower than its least.
  */
 function settled(state: SidePanelState): SidePanelState {
   const tabs = [...new Set(state.tabs)];
