@@ -14,7 +14,7 @@
 
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 
-/** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS}. */
+/** What a shortcut does. A command is one entry here and one row in {@link APP_SHORTCUTS} or {@link MENU_COMMAND_LABELS}. */
 export const APP_COMMAND = {
   NEW_PLAN: "new-plan",
   COPY_PLAN: "copy-plan",
@@ -36,9 +36,25 @@ export const APP_COMMAND = {
   EXIT_SETTINGS: "exit-settings",
   BACK: "back",
   FORWARD: "forward",
+  SEND_FEEDBACK: "send-feedback",
+  SUGGEST_FEATURE: "suggest-feature",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
+
+/**
+ * The commands the menu bar alone offers, by the name it gives them: a
+ * dialog reached now and then, which takes none of the window's keys.
+ */
+export const MENU_COMMAND_LABELS = {
+  [APP_COMMAND.SEND_FEEDBACK]: "Send feedback",
+  [APP_COMMAND.SUGGEST_FEATURE]: "Suggest a feature",
+} as const;
+
+export type MenuCommand = keyof typeof MENU_COMMAND_LABELS;
+
+/** A command a chord reaches: every command the menu bar does not keep to itself. */
+export type KeyedCommand = Exclude<AppCommand, MenuCommand>;
 
 /**
  * A key a chord ends in, spelt each way it is needed: Electron's accelerator,
@@ -153,7 +169,7 @@ export const APP_SHORTCUTS = {
   },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
-} as const satisfies Record<AppCommand, AppShortcut>;
+} as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /** The shortcuts as the Keyboard shortcuts page lists them: in groups, under the group's name. */
 export const APP_SHORTCUT_GROUPS = [
@@ -194,10 +210,17 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.EXIT_SETTINGS,
     ],
   },
-] as const satisfies readonly { title: string; commands: readonly AppCommand[] }[];
+] as const satisfies readonly { title: string; commands: readonly KeyedCommand[] }[];
 
 /** Every command, in the order the table declares them. */
-export const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
+const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
+
+function keyed(command: AppCommand): command is KeyedCommand {
+  return !Object.hasOwn(MENU_COMMAND_LABELS, command);
+}
+
+/** Every command a chord reaches, in the order the table declares them. */
+export const KEYED_COMMANDS: readonly KeyedCommand[] = APP_COMMANDS.filter(keyed);
 
 /** Whether a value that crossed a process boundary names a command this build knows. */
 export function isAppCommand(value: UnparsedWireValue): value is AppCommand {
@@ -256,9 +279,9 @@ function shortcutMatches(chord: ShortcutChord, event: KeyboardEvent): boolean {
 
 /** The command whose chord a key press is, among those given, or nothing. */
 export function commandForKey(
-  commands: readonly AppCommand[],
+  commands: readonly KeyedCommand[],
   event: KeyboardEvent,
-): AppCommand | undefined {
+): KeyedCommand | undefined {
   return commands.find((command) => shortcutMatches(APP_SHORTCUTS[command].chord, event));
 }
 

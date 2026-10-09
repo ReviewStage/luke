@@ -14,11 +14,11 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useState } from "react";
 import {
-  APP_COMMANDS,
   APP_SHORTCUT_GROUPS,
   APP_SHORTCUTS,
-  type AppCommand,
   commandForKey,
+  KEYED_COMMANDS,
+  type KeyedCommand,
   shortcutGlyphs,
 } from "#shared/shortcuts";
 import { Keycaps } from "../keycaps";
@@ -36,7 +36,7 @@ import type { SettingsWrites } from "./writes";
 const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
 
 /** Why a chord the window already answers cannot become a Luke key. */
-function windowChordRefusal(command: AppCommand): string {
+function windowChordRefusal(command: KeyedCommand): string {
   const { label, chord } = APP_SHORTCUTS[command];
   return `${shortcutGlyphs(chord).join("")} is Luke's own shortcut for ${label}. Choose another.`;
 }
@@ -214,7 +214,7 @@ function ShortcutRow({
                 // A system-wide key wins over the window's own chord, so a
                 // key that would take one of them is refused rather than
                 // left to silence it.
-                const taken = commandForKey(APP_COMMANDS, event.nativeEvent);
+                const taken = commandForKey(KEYED_COMMANDS, event.nativeEvent);
                 if (taken !== undefined) {
                   setRejection(windowChordRefusal(taken));
                   return;

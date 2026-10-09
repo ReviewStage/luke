@@ -29,7 +29,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { APP_SHORTCUTS, type AppCommand, shortcutAria, shortcutGlyphs } from "#shared/shortcuts";
+import { APP_SHORTCUTS, type KeyedCommand, shortcutAria, shortcutGlyphs } from "#shared/shortcuts";
 import { useStateWithRef } from "./use-state-with-ref";
 
 /** The gap between a control and its pill, and the pill's least distance from the window's edge, in CSS pixels. */
@@ -103,7 +103,7 @@ export function ShortcutGlyphs({
   command,
   className,
 }: {
-  command: AppCommand;
+  command: KeyedCommand;
   className?: string;
 }): React.JSX.Element {
   return (
@@ -119,7 +119,7 @@ export function ShortcutGlyphs({
 }
 
 /** The chord as `aria-keyshortcuts` spells it, for a control that shows its shortcut without a tooltip. */
-export function commandKeyshortcuts(command: AppCommand): string {
+export function commandKeyshortcuts(command: KeyedCommand): string {
   return shortcutAria(APP_SHORTCUTS[command].chord);
 }
 
@@ -138,7 +138,7 @@ function TooltipPill({
   id: string;
   shown: Shown;
   label: string;
-  command: AppCommand | undefined;
+  command: KeyedCommand | undefined;
 }): React.JSX.Element {
   const element = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState<PillPlace | undefined>(undefined);
@@ -182,7 +182,7 @@ export function Tooltip({
   children,
 }: {
   label: string | undefined;
-  command?: AppCommand;
+  command?: KeyedCommand;
   children: ReactElement<AnchorProps>;
 }): React.JSX.Element {
   const id = useId();

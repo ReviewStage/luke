@@ -1,25 +1,22 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { FEEDBACK_KIND, type FeedbackKind } from "@sidecar/feedback";
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import { appSettingsView } from "@sidecar/settings/wire";
-import {
-  cssCustomProperties,
-  SURFACE_PROPERTY,
-  type SurfaceProperty,
-} from "@sidecar/surface/react-css";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
-import { runAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
+import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
-import { FeedbackSlot } from "./feedback-slot";
+import { FeedbackDialog } from "./feedback-dialog";
 import { MarkdownMessage } from "./markdown-message";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
@@ -32,9 +29,6 @@ import { useSignInFaceCycle } from "./sign-in-gate";
 import { CAPTION_TONE } from "./strip-hold";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
-import { useFeedbackComposer } from "./use-feedback-composer";
-import { useMeasuredHeight } from "./use-measured-height";
-import type { PanelEntrySurface } from "./use-panel-entry";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSignIn } from "./use-sign-in";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -45,14 +39,6 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
-
-function surfaceHeightStyle(feedbackHeight: number | undefined): CSSProperties {
-  const properties: Partial<Record<SurfaceProperty, string>> = {};
-  if (feedbackHeight !== undefined) {
-    properties[SURFACE_PROPERTY.FEEDBACK_HEIGHT] = `${feedbackHeight}px`;
-  }
-  return cssCustomProperties(properties);
-}
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -69,7 +55,8 @@ export function App(): React.JSX.Element {
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
     [state?.settings],
   );
-  const [feedbackElement, feedbackHeight] = useMeasuredHeight();
+  /** The note being written to the people who make Luke, while its dialog stands. */
+  const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -121,45 +108,14 @@ export function App(): React.JSX.Element {
    */
   const signInFace = useSignInFaceCycle(usePrefersReducedMotion() || !accountGated);
 
-  /**
-   * What the window is drawn as: its own content, or that content stood down
-   * to the feedback composer drawn as a sheet over it. Held with a ref because
-   * a composer's reply reads whether it is still the shape on screen.
-   */
-  const [presentation, applyPresentation, presentationOf] = useStateWithRef<PanelPresentation>(
-    PANEL_PRESENTATION.PANEL,
-  );
-  const leave = useCallback(() => applyPresentation(PANEL_PRESENTATION.PANEL), [applyPresentation]);
-
-  /**
-   * Brings the panel back around the Feedback section a note was begun from —
-   * the settings front page, which changing to the tab lands on.
-   */
-  const restorePanel = useCallback(() => {
-    changeTab(PANEL_TAB.SETTINGS);
-    leave();
-  }, [changeTab, leave]);
-
-  /**
-   * The panel every composer stands down from and comes back to, gathered
-   * once so each composer's hook is handed the same one.
-   */
-  const panelEntrySurface: PanelEntrySurface = {
-    presentation: presentationOf,
-    applyPresentation,
-    restorePanel,
-    leave,
-  };
+  /** What the window is drawn as, which is only ever its own content now. */
+  const presentation: PanelPresentation = PANEL_PRESENTATION.PANEL;
 
   const signIn = useSignIn();
 
-  const stillMotion = usePrefersReducedMotion();
-
-  const feedback = useFeedbackComposer({
-    surface: panelEntrySurface,
-    presentation,
-    stillMotion,
-  });
+  // The menu bar's Help items open the same dialog Settings' buttons do.
+  useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => setFeedbackKind(FEEDBACK_KIND.FEEDBACK));
+  useAppCommand(APP_COMMAND.SUGGEST_FEATURE, () => setFeedbackKind(FEEDBACK_KIND.PROMPT));
 
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
@@ -339,11 +295,6 @@ export function App(): React.JSX.Element {
         signIn.cancelSignIn();
         return;
       }
-      // Escape out of the composer leaves the shape and keeps the draft.
-      if (presentation === PANEL_PRESENTATION.FEEDBACK) {
-        feedback.control.dismiss();
-        return;
-      }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
@@ -361,7 +312,6 @@ export function App(): React.JSX.Element {
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
-    feedback.control.dismiss,
     presentation,
     signIn.cancelSignIn,
     signIn.signInWait,
@@ -384,7 +334,6 @@ export function App(): React.JSX.Element {
 
   const shownStopHotkey = state.hotkeys.stop;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
-  const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
 
   const microphone: MicrophoneControl = {
     status: state.audio.microphoneStatus,
@@ -433,7 +382,6 @@ export function App(): React.JSX.Element {
       // lays it out.
       data-surface="desktop"
       style={{
-        ...surfaceHeightStyle(feedbackHeight),
         ...caption.style,
         // The sidebar's width lays out the shell and Settings' page list, and
         // places the captions over the work column beside it.
@@ -490,22 +438,18 @@ export function App(): React.JSX.Element {
             microphone,
             updates,
             settings,
-            feedback: feedback.control,
+            onFeedback: setFeedbackKind,
             panelOpen,
             shortcuts,
           }}
         />
       </div>
-      <span className="desktop-scrim" aria-hidden="true" />
-
-      {/* The panel stood down to the composer, drawn as a sheet in the same
-          window. */}
-      <FeedbackSlot
-        control={feedback.control}
-        drawn={feedbackOpen}
-        measure={feedbackElement}
-        confirming={feedback.confirming}
-        still={stillMotion}
+      {/* A note to the people who make Luke, written in a dialog over the
+          window, and the thank-you after it lands. */}
+      <FeedbackDialog
+        kind={feedbackKind}
+        account={account}
+        onClose={() => setFeedbackKind(undefined)}
       />
 
       {/* Luke's words while he says them: one element in every state, always

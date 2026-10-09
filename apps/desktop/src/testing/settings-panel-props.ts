@@ -37,17 +37,7 @@ export function settingsPanelProps(
       onOpenLatest: ignore,
     },
     settings: settingsView({ voiceAvailable: true }),
-    feedback: {
-      begin: ignore,
-      changeMessage: ignore,
-      changeName: ignore,
-      changeEmail: ignore,
-      attach: ignore,
-      removeImage: ignore,
-      dismiss: ignore,
-      cancel: ignore,
-      commit: ignore,
-    },
+    onFeedback: ignore,
     panelOpen: true,
     shortcuts: {
       voiceHotkeyHeld: false,
