@@ -106,7 +106,8 @@ interface InstallationTokenRequest {
   readonly permissions: InstallationTokenPermissions;
 }
 
-const HTTP_STATUS = { UNAUTHORIZED: 401, NOT_FOUND: 404 } as const;
+/** The statuses the reads here decide on by name; any other is answered as the status it is. */
+export const GITHUB_HTTP_STATUS = { UNAUTHORIZED: 401, FORBIDDEN: 403, NOT_FOUND: 404 } as const;
 
 /** The domain of the address GitHub links to an account while keeping the account's own private. */
 const GITHUB_NOREPLY_DOMAIN = "users.noreply.github.com";
@@ -183,7 +184,7 @@ export const GITHUB_FAILURE = {
 } as const;
 type GitHubFailure = (typeof GITHUB_FAILURE)[keyof typeof GITHUB_FAILURE];
 
-class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
+export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
   readonly reason: GitHubFailure;
   readonly status: number | undefined;
 }> {
@@ -209,7 +210,7 @@ export const SIGN_IN_REQUIRED = {
 } as const;
 type SignInRequiredReason = (typeof SIGN_IN_REQUIRED)[keyof typeof SIGN_IN_REQUIRED];
 
-class GitHubSignInRequired extends Data.TaggedError("GitHubSignInRequired")<{
+export class GitHubSignInRequired extends Data.TaggedError("GitHubSignInRequired")<{
   readonly reason: SignInRequiredReason;
 }> {
   override get message(): string {
@@ -531,7 +532,7 @@ function byMostRecentlyUpdated(left: GitHubRepository, right: GitHubRepository):
 }
 
 /** GitHub folds case in logins and repository names, so a name is the same name however it is spelled. */
-function sameName(left: string, right: string): boolean {
+export function sameName(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
 }
 
@@ -548,7 +549,11 @@ function unreadable(status: number): GitHubUnavailable {
   return new GitHubUnavailable({ reason: GITHUB_FAILURE.UNREADABLE, status });
 }
 
-function githubRead(path: string, bearer: Redacted.Redacted): HttpClientRequest.HttpClientRequest {
+/** One read of the API under the bearer given, the path rooted at the API's origin. */
+export function githubRead(
+  path: string,
+  bearer: Redacted.Redacted,
+): HttpClientRequest.HttpClientRequest {
   return HttpClientRequest.get(`${GITHUB_API}${path}`).pipe(
     HttpClientRequest.bearerToken(bearer),
     HttpClientRequest.setHeaders(GITHUB_HEADERS),
@@ -583,7 +588,7 @@ function send(
  * stored expiry, so GitHub refusing it means the user revoked the App's
  * authorization, which a new sign-in mends.
  */
-function sendAsUser(
+export function sendAsUser(
   request: HttpClientRequest.HttpClientRequest,
 ): Effect.Effect<
   HttpClientResponse.HttpClientResponse,
@@ -591,7 +596,7 @@ function sendAsUser(
   HttpClient.HttpClient
 > {
   return Effect.flatMap(send(request), (response) =>
-    response.status === HTTP_STATUS.UNAUTHORIZED
+    response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED
       ? Effect.fail(new GitHubSignInRequired({ reason: SIGN_IN_REQUIRED.TOKEN_REVOKED }))
       : Effect.succeed(response),
   );
@@ -664,7 +669,7 @@ function repositoriesOfInstallation(
     `/user/installations/${installationId}/repositories`,
     token,
     (response) =>
-      response.status === HTTP_STATUS.NOT_FOUND
+      response.status === GITHUB_HTTP_STATUS.NOT_FOUND
         ? Effect.succeed([])
         : Effect.map(readBody(response, InstallationRepositoriesSchema), (answer) =>
             answer.repositories.map(repositoryOf),
@@ -674,7 +679,7 @@ function repositoriesOfInstallation(
 }
 
 /** An OK answer's body under its schema; any other status is the status, and a body off the schema is unreadable. */
-function readBody<A>(
+export function readBody<A>(
   response: HttpClientResponse.HttpClientResponse,
   schema: Schema.Codec<A, unknown>,
 ): Effect.Effect<A, GitHubUnavailable> {
@@ -868,7 +873,7 @@ function githubAppService(
       Effect.gen(function* () {
         const jwt = yield* appJwt;
         const response = yield* send(githubRead(`/app/installations/${installationId}`, jwt));
-        if (response.status === HTTP_STATUS.NOT_FOUND) return Option.none();
+        if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Option.none();
         const record = yield* readBody(response, InstallationSchema);
         return Option.some(installationOf(record));
       }).pipe(Effect.scoped),
@@ -908,7 +913,7 @@ function githubAppService(
         const response = yield* sendAsUser(
           githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token),
         );
-        if (response.status === HTTP_STATUS.NOT_FOUND) return Option.none();
+        if (response.status === GITHUB_HTTP_STATUS.NOT_FOUND) return Option.none();
         return Option.some(userOf(yield* readBody(response, UserSchema)));
       }).pipe(Effect.scoped),
     userToken,

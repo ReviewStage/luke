@@ -45,6 +45,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   CODING_AGENTS_STOP: "codingAgents.stop",
+  /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
+  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

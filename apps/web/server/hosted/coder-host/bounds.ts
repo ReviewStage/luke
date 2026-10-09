@@ -26,6 +26,8 @@ export const CODER = {
   MESSAGES_HOLD: Duration.seconds(20),
   /** How often a held transcript read looks for a new message. */
   MESSAGES_POLL: Duration.millis(500),
+  /** How long one instance keeps what an agent published before asking GitHub again; a tab asks beside every page of a held read. */
+  PUBLISHED_TTL: Duration.seconds(30),
   /**
    * How long after its Start an agent with no turn row yet still reads as
    * starting. eve took the session and its first turn lands in seconds; an

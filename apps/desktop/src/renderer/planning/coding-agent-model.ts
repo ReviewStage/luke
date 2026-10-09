@@ -3,10 +3,16 @@ import {
   type CodingAgentCallFailure,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHECK_SUMMARY,
+  type CheckSummary,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
+  type CodingAgentPullRequest,
+  type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+  type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, type WireValue } from "@sidecar/wire";
@@ -19,8 +25,9 @@ import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
  * Pure decisions over the wire's shapes: how an agent is named on its tab,
  * what its status dot says, whether its transcript is still followed, how
  * a page of its messages joins the ones held, how a stored message's parts
- * are read for drawing, and what a Start that did not start says. Nothing
- * here asks anything.
+ * are read for drawing, what a Start that did not start says, and what
+ * its pull request pill, its branch chip, their menu, and the row that
+ * sums a finished turn up say. Nothing here asks anything.
  */
 
 /** What each status says beside its dot. */
@@ -237,4 +244,72 @@ const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
 /** Whether a link in the transcript is one the tab opens: a page on GitHub, such as the pull request the agent opened. */
 export function opensOnGitHub(href: string): boolean {
   return GITHUB_ADDRESS.test(href);
+}
+
+/** What each pull request state is called, on the pill's label and beside the summary's number. */
+const PULL_REQUEST_STATE_LABEL = {
+  [PULL_REQUEST_STATE.OPEN]: "Open",
+  [PULL_REQUEST_STATE.DRAFT]: "Draft",
+  [PULL_REQUEST_STATE.MERGED]: "Merged",
+  [PULL_REQUEST_STATE.CLOSED]: "Closed",
+} as const satisfies Record<PullRequestState, string>;
+
+/** What the check dot says to a reader who cannot see its colour. */
+export const CHECK_SUMMARY_LABEL = {
+  [CHECK_SUMMARY.PENDING]: "Checks pending",
+  [CHECK_SUMMARY.PASSING]: "Checks passing",
+  [CHECK_SUMMARY.FAILING]: "Checks failing",
+  [CHECK_SUMMARY.NONE]: "No checks",
+} as const satisfies Record<CheckSummary, string>;
+
+/** The verb the summary row opens with, by where the pull request stands. */
+const PUBLISHED_VERB = {
+  [PULL_REQUEST_STATE.OPEN]: "Opened",
+  [PULL_REQUEST_STATE.DRAFT]: "Opened draft",
+  [PULL_REQUEST_STATE.MERGED]: "Merged",
+  [PULL_REQUEST_STATE.CLOSED]: "Closed",
+} as const satisfies Record<PullRequestState, string>;
+
+/** GitHub's own page of a pull request's changes: its Files tab. */
+const FILES_TAB = "/files";
+
+/** The command that brings the agent's branch onto a developer's machine, as Copy checkout command puts it on the clipboard. */
+export function checkoutCommand(branch: string): string {
+  return `git fetch origin ${branch} && git switch ${branch}`;
+}
+
+/** Where the agent's changes are read on GitHub: the pull request's Files tab, or the branch compared against the repository's default where there is no pull request yet. */
+export function changesUrl(published: CodingAgentPullRequestAnswer): string | undefined {
+  if (published.pullRequest !== null) return `${published.pullRequest.url}${FILES_TAB}`;
+  if (published.branch === null) return undefined;
+  return `https://github.com/${published.repository}/compare/${published.branch}?expand=1`;
+}
+
+/** The number as the pill and the summary spell it. */
+export function pullRequestNumberLabel(
+  pullRequest: Pick<CodingAgentPullRequest, "number">,
+): string {
+  return `#${pullRequest.number}`;
+}
+
+/** One line summing a finished turn up: what was opened, and how much changed. */
+export function publishedSummary(pullRequest: CodingAgentPullRequest): string {
+  const files = pullRequest.changedFiles === 1 ? "1 file" : `${pullRequest.changedFiles} files`;
+  return `${PUBLISHED_VERB[pullRequest.state]} ${pullRequestNumberLabel(pullRequest)} · +${pullRequest.additions} −${pullRequest.deletions} in ${files}`;
+}
+
+/** The pill's own words for a reader who cannot see it: the number, where it stands, and its checks. */
+export function pullRequestPillLabel(pullRequest: CodingAgentPullRequest): string {
+  return `Pull request ${pullRequestNumberLabel(pullRequest)}, ${PULL_REQUEST_STATE_LABEL[pullRequest.state].toLowerCase()}, ${CHECK_SUMMARY_LABEL[pullRequest.checks].toLowerCase()}`;
+}
+
+/** How long a tab lets pass between two reads of what the agent published while its transcript keeps landing pages, the service keeping its own answer about as long. */
+export const PUBLISHED_REREAD_MS = 15_000;
+
+/** Whether the row summing the turn up is drawn: the agent has ended and a pull request stands. */
+export function showsPublishedRow(
+  status: CodingAgentStatus,
+  published: CodingAgentPullRequestAnswer | undefined,
+): published is CodingAgentPullRequestAnswer & { pullRequest: CodingAgentPullRequest } {
+  return !agentStillWriting(status) && published?.pullRequest != null;
 }

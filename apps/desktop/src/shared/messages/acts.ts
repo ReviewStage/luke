@@ -19,6 +19,7 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentPullRequestAnswerView,
   codingAgentAgentAnswerSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
@@ -27,6 +28,8 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentPullRequestAnswerViewSchema,
+  codingAgentPullRequestParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
 } from "@sidecar/hosted/coding-agent-view";
@@ -124,8 +127,9 @@ export const ACT_KIND = {
    * on, the account's default among them read and written, the plan's
    * agents with their status, one started under the press's own key, one's
    * transcript past a cursor (held open by the service while the agent
-   * runs), and one stopped. The window holds what it draws; nothing here
-   * does.
+   * runs), one stopped, and what one published: its branch and pull
+   * request as GitHub holds them. The window holds what it draws; nothing
+   * here does.
    */
   CODING_AGENTS_MODELS: "codingAgents.models",
   CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
@@ -139,6 +143,7 @@ export const ACT_KIND = {
    * an agent's end is held back by, and what clears the tab's unseen dot.
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
+  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -475,6 +480,13 @@ export const ACT = {
     payload: record({ agentId: EffectSchema.NullOr(exactId) }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: {
+    payload: actSchema(codingAgentPullRequestParamsSchema),
+    result: wireResult<CodingAgentPullRequestAnswerView>(
+      isReadable(codingAgentPullRequestAnswerViewSchema),
+    ),
+    refusal: "Could not read the agent's pull request on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

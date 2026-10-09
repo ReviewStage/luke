@@ -90,6 +90,11 @@ function fixture() {
           asked.push(`stop:${agentId}`);
           return STARTED;
         }),
+      codingAgentPullRequest: ({ agentId }) =>
+        Effect.sync(() => {
+          asked.push(`pull-request:${agentId}`);
+          return { repository: "acme/relay", branch: null, pullRequest: null };
+        }),
     },
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.

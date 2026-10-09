@@ -1,6 +1,7 @@
 import { Schema as EffectSchema } from "effect";
 import {
   codingAgentMessagesAnswerSchema,
+  codingAgentPullRequestAnswerSchema,
   codingAgentStartRequestSchema,
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
@@ -114,3 +115,18 @@ export const codingAgentStopParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentStopParams = typeof codingAgentStopParamsSchema.Type;
+
+/** One agent, as the window asks what it published. */
+export const codingAgentPullRequestParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentPullRequestParams = typeof codingAgentPullRequestParamsSchema.Type;
+
+/** What the agent published, as the window hears it: its branch and pull request as GitHub holds them, or why there is no answer. */
+export const codingAgentPullRequestAnswerViewSchema = EffectSchema.Union([
+  codingAgentPullRequestAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentPullRequestAnswerView = typeof codingAgentPullRequestAnswerViewSchema.Type;

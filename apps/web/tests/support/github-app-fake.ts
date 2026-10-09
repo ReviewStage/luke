@@ -176,21 +176,28 @@ function userJson(fixture: UserFixture) {
   };
 }
 
+/** What a repository answers on its own paths, where a test scripts one; nothing hands the request on to not found. */
+export type RepositoryScript = (sent: SentToGitHub) => Response | undefined;
+
 /**
  * A GitHub on which the user reaches the installations given, paged the way
  * GitHub pages them, the App mints a token for any of those installations,
- * and the developer and the App's bot are the people given, the fixture's
- * own when unsaid; nothing else: any other request fails.
+ * the developer and the App's bot are the people given, the fixture's own
+ * when unsaid, and a repository answers from the script given where a test
+ * hands one; nothing else: any other request fails.
  */
 export function githubReaching(
   installations: readonly InstallationFixture[],
   app: Layer.Layer<GitHubApp> = GITHUB_APP_LAYER,
   people: GitHubPeople = {},
+  repository: RepositoryScript = () => undefined,
 ): FakeGitHub {
   const user = people.user ?? GITHUB_FIXTURE_USER;
   const bot = people.bot === undefined ? GITHUB_FIXTURE_BOT : people.bot;
   return fakeGitHub((sent) => {
     const { pathname } = new URL(sent.url);
+    const scripted = repository(sent);
+    if (scripted !== undefined) return scripted;
     if (pathname === "/user") return Response.json(userJson(user));
     const byLogin = USER_BY_LOGIN.exec(pathname);
     if (byLogin !== null) {

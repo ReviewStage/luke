@@ -47,6 +47,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentMessageSchema: codingAgentWire.codingAgentMessageSchema,
     codingAgentCursorSchema: codingAgentWire.codingAgentCursorSchema,
     codingAgentMessagesAnswerSchema: codingAgentWire.codingAgentMessagesAnswerSchema,
+    codingAgentPullRequestSchema: codingAgentWire.codingAgentPullRequestSchema,
+    codingAgentPullRequestAnswerSchema: codingAgentWire.codingAgentPullRequestAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
   "coding-agent-view": {
     codingAgentModelsAnswerSchema: codingAgentView.codingAgentModelsAnswerSchema,
@@ -59,6 +61,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentMessagesParamsSchema: codingAgentView.codingAgentMessagesParamsSchema,
     codingAgentMessagesAnswerViewSchema: codingAgentView.codingAgentMessagesAnswerViewSchema,
     codingAgentStopParamsSchema: codingAgentView.codingAgentStopParamsSchema,
+    codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
+    codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
   "github-repositories-wire": {
     githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,

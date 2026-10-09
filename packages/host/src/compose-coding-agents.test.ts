@@ -3,9 +3,11 @@ import { it } from "@effect/vitest";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
+  PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import type { WireRecord } from "@sidecar/wire";
@@ -33,6 +35,22 @@ const MODELS = [
     efforts: ["low", "high"],
   },
 ];
+
+/** What the agent published, as the service answers it. */
+const PUBLISHED = {
+  repository: "acme/relay",
+  branch: "luke/teammate-invitations",
+  pullRequest: {
+    number: 123,
+    title: "Teammate invitations",
+    url: "https://github.com/acme/relay/pull/123",
+    state: PULL_REQUEST_STATE.OPEN,
+    checks: CHECK_SUMMARY.PASSING,
+    additions: 210,
+    deletions: 14,
+    changedFiles: 6,
+  },
+};
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
@@ -80,6 +98,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED } };
+      }),
+    pullRequest: (agentId) =>
+      Effect.sync(() => {
+        asked.push(`pull-request:${agentId}`);
+        return PUBLISHED;
       }),
   };
   return { client, asked };
@@ -141,6 +164,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: AGENT_ID }), {
       agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED },
     });
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
+      PUBLISHED,
+    );
 
     assert.deepEqual(asked, [
       "models",
@@ -150,6 +177,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `start:${PLAN_ID}:press-1:default`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       `stop:${AGENT_ID}`,
+      `pull-request:${AGENT_ID}`,
     ]);
   }),
 );

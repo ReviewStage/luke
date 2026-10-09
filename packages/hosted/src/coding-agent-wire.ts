@@ -148,6 +148,55 @@ export const codingAgentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(codingAgentSummarySchema),
 });
 
+/** Where a pull request stands on GitHub, as its pill is coloured. */
+export const PULL_REQUEST_STATE = {
+  OPEN: "open",
+  DRAFT: "draft",
+  MERGED: "merged",
+  CLOSED: "closed",
+} as const;
+
+export type PullRequestState = (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE];
+
+/** The checks on a pull request's head, read as one word: still running, every one passed, one failed, or none run at all. */
+export const CHECK_SUMMARY = {
+  PENDING: "pending",
+  PASSING: "passing",
+  FAILING: "failing",
+  NONE: "none",
+} as const;
+
+export type CheckSummary = (typeof CHECK_SUMMARY)[keyof typeof CHECK_SUMMARY];
+
+/** The pull request an agent opened, as GitHub holds it now: what its pill and its summary row say. */
+export const codingAgentPullRequestSchema = EffectSchema.Struct({
+  number: countedNumber,
+  title: EffectSchema.String,
+  /** The pull request's own page on GitHub. */
+  url: EffectSchema.String,
+  state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+  checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
+  additions: countedNumber,
+  deletions: countedNumber,
+  changedFiles: countedNumber,
+});
+
+export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
+
+/**
+ * What an agent published (GET): the repository it works in as `owner/name`,
+ * the branch it pushed, where GitHub holds one, and the pull request from
+ * it, where one is open or was; null for each it has not. A pull request's
+ * branch is its head.
+ */
+export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
+  repository: EffectSchema.String,
+  branch: EffectSchema.NullOr(EffectSchema.String),
+  pullRequest: EffectSchema.NullOr(codingAgentPullRequestSchema),
+});
+
+export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
+
 /**
  * One JSON object as the row holds it, read whole: a message part or the
  * metadata beside the parts, whose fields are the AI SDK's own vocabulary

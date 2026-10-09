@@ -219,3 +219,39 @@ it.effect(
       assert.deepEqual(failed, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
     }),
 );
+
+it.effect(
+  "reads what an agent published at its pull-request address, and an agent the service does not find reads as not found",
+  () =>
+    Effect.gen(function* () {
+      const published = {
+        repository: "acme/relay",
+        branch: "luke/teammate-invitations",
+        pullRequest: {
+          number: 123,
+          title: "Teammate invitations",
+          url: "https://github.com/acme/relay/pull/123",
+          state: "open",
+          checks: "passing",
+          additions: 210,
+          deletions: 14,
+          changedFiles: 6,
+        },
+      };
+      const api = fakeCloudApi({
+        [`GET /api/agents/${AGENT_ID}/pull-request`]: { answer: () => published },
+      });
+      const gone = fakeCloudApi({
+        [`GET /api/agents/${AGENT_ID}/pull-request`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const read = yield* Effect.provide(client().pullRequest(AGENT_ID), api.layer);
+      const missing = yield* Effect.provide(client().pullRequest(AGENT_ID), gone.layer);
+
+      assert.deepEqual(read, published);
+      assert.deepEqual(missing, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    }),
+);

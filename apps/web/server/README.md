@@ -1790,8 +1790,29 @@ eve offers no way to withdraw a queued message, so there is no DELETE.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.
+`GET /api/agents/{id}/pull-request` answers what the agent published
+(`coder-host/published.ts`): the repository, the branch it pushed, and the
+pull request from it with its state (`open`, `draft`, `merged`, `closed`),
+its checks as one word (`pending`, `passing`, `failing`, `none`), and its
+additions, deletions, and changed files; null for a branch or a pull
+request it has not. The agent reaches GitHub through `git` and `gh` in its
+shell alone, so its own transcript rows are where the two are named, and
+named for this agent and no other: the branch is read off the commands it
+ran (a push, a branch cut, a head given to `gh pr create`, or any name
+under `CODER.BRANCH_PREFIX`), the newest naming winning, and the pull
+request off any address of one on the agent's repository in its words or a
+tool's answer, case aside. GitHub then says what stands, on the developer's
+own App token (`github/pull-requests.ts`): the pull request by its number,
+else the newest from the branch, else whether the branch was pushed at all,
+with the head's check runs and commit statuses read together for the one
+word, and a head whose checks the App may not read reading as `none` with
+a warning rather than failing the answer. The answer is kept per agent for
+`CODER.PUBLISHED_TTL` (thirty seconds) in an Effect `Cache` built once with
+the routes, a failed read for no time, so a tab reading beside every held
+page asks GitHub a few times a minute at most.
 `tests/coding-agents-app.test.ts` answers the routes over a fake eve, a
-scripted GitHub, a fixed catalog, and PGlite; `tests/coder-host.test.ts`
+scripted GitHub, a fixed catalog, and PGlite, and
+`tests/coder-host-published.test.ts` holds the transcript scan alone; `tests/coder-host.test.ts`
 drives the host, the shared relay, and the held read on the test clock;
 `tests/coder-host-checkout.test.ts` holds the checkout over the sandbox
 double, reading every run for the token and never finding it.

@@ -25,6 +25,7 @@ export function codingAgentsControl(
     onStop: () => Promise.resolve(),
     onStatus: ignore,
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,
   };
 }
