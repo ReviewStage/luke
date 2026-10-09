@@ -150,7 +150,7 @@ it.effect(
       // The message's answer: running, still under the ended turn's id, as
       // eve has not opened the next turn yet. The transcript page the open
       // tab reads says the same, and then says the old end again.
-      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeMessaged(agent(CODING_AGENT_STATUS.RUNNING));
       notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.RUNNING);
       notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
       yield* Effect.yieldNow;
@@ -175,6 +175,34 @@ it.effect(
       // Ended under the new turn, the agent is left alone again.
       yield* TestClock.adjust(WATCH);
       assert.deepEqual(f.listed, [PLAN_ID, PLAN_ID, PLAN_ID]);
+      assert.equal(f.posted.length, 2);
+    }),
+);
+
+it.effect(
+  "a list that landed late, describing a turn the agent has left behind or no turn yet, says nothing newer: no second notice, and the watch for the next turn stands",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      // The message's answer, then a list asked before the message landing after it: still awaiting.
+      notices.observeMessaged(agent(CODING_AGENT_STATUS.RUNNING));
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      f.answer(PLAN_ID, { agents: [agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID })] });
+      yield* TestClock.adjust(WATCH);
+      assert.deepEqual(f.listed, [PLAN_ID]);
+
+      // The next turn is running; the old turn read running and then ended again is nothing, as is a read from before any turn.
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.STARTING, { turnId: null })]);
+      yield* Effect.yieldNow;
+      assert.equal(f.posted.length, 1);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { turnId: NEXT_TURN_ID })]);
+      yield* Effect.yieldNow;
       assert.equal(f.posted.length, 2);
     }),
 );

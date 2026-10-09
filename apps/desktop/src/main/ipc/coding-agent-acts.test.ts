@@ -44,6 +44,9 @@ function fixture() {
       observeStatus: (agentId, status) => {
         noted.push(`status:${agentId}=${status}`);
       },
+      observeMessaged: (agent) => {
+        noted.push(`messaged:${agent.id}=${agent.status}`);
+      },
       observeModels: (models) => {
         noted.push(`models:${models.length}`);
       },
@@ -147,7 +150,7 @@ it.effect(
   "a message carries the agent, the words, and their delivery, and hears the agent back",
   () =>
     Effect.gen(function* () {
-      const { router, asked } = fixture();
+      const { router, asked, noted } = fixture();
 
       const outcome = yield* router.performAct(
         {
@@ -159,6 +162,8 @@ it.effect(
 
       assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
       assert.deepEqual(asked, [`message:${AGENT_ID}:queue:Also expire them after a week.`]);
+      // The answer is noted as a message's, so the ledger watches for the turn it opens.
+      assert.deepEqual(noted, [`messaged:${AGENT_ID}=${STARTED.agent.status}`]);
     }),
 );
 

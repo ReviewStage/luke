@@ -27,10 +27,11 @@ import {
  * and starts the transcript reading again; the row the service wrote for
  * the line arrives on that read, and the line is let go in its favour
  * (`unreadSentLines`). A message that did not go comes back into the box
- * with why beside it and Retry, which sends the words in the box again
- * the same way; a refusal that is for good closes the box with its reason
- * in place of the field. Another agent's tab starts from nothing of this
- * one's.
+ * with why beside it and Retry, which sends the words again the same way;
+ * editing the words is a new message, sent the way the developer next
+ * chooses, so Retry goes with the edit. A refusal that is for good closes
+ * the box with its reason in place of the field. Another agent's tab
+ * starts from nothing of this one's.
  */
 
 /** How one message is sent: the agent, the words, and how they reach a turn under way, answered as the view hears it. */
@@ -67,6 +68,8 @@ interface Held {
   failed: { delivery: CodingAgentDelivery; note: string } | undefined;
   closed: string | undefined;
   sent: readonly SentLine[];
+  /** The service's rows that have answered a sent line, which no later line is read back by. */
+  taken: ReadonlySet<string>;
   /** How many lines this tab has sent, which names the next. */
   count: number;
 }
@@ -79,6 +82,7 @@ function fresh(agentId: string): Held {
     failed: undefined,
     closed: undefined,
     sent: [],
+    taken: new Set(),
     count: 0,
   };
 }
@@ -105,11 +109,16 @@ export function useAgentComposer(input: {
   const latest = useRef(input);
   latest.current = input;
 
-  // A line the transcript has read back is let go in the service's favour.
-  const sent = unreadSentLines(held.sent, messages);
+  // A line the transcript has read back is let go in the service's favour,
+  // and the row that answered it stays taken.
+  const read = unreadSentLines(held.sent, messages, held.taken);
+  const sent = read.lines;
   useEffect(() => {
     if (sent.length === held.sent.length) return;
-    setHeld((was) => ({ ...was, sent: unreadSentLines(was.sent, latest.current.messages) }));
+    setHeld((was) => {
+      const again = unreadSentLines(was.sent, latest.current.messages, was.taken);
+      return { ...was, sent: again.lines, taken: again.taken };
+    });
   }, [sent.length, held.sent.length]);
 
   const sendDraft = (delivery: CodingAgentDelivery) => {
@@ -151,7 +160,13 @@ export function useAgentComposer(input: {
 
   return {
     draft: held.draft,
-    setDraft: (text) => setHeld((was) => ({ ...was, draft: text })),
+    // Note that an edit lets Retry go, because the words are no longer the message that failed.
+    setDraft: (text) =>
+      setHeld((was) => ({
+        ...was,
+        draft: text,
+        failed: text === was.draft ? was.failed : undefined,
+      })),
     sending: held.sending,
     note: held.closed === undefined ? held.failed?.note : undefined,
     closed: held.closed,

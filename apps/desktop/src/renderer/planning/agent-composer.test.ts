@@ -320,13 +320,42 @@ test("a message that did not go comes back into the box with why and Retry, whic
   );
   assert.equal(tab.note(), undefined);
 
-  await tab.answer(1, { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED });
+  // Editing the words is a new message: Retry goes with the edit, and the edit goes the way the developer next chooses.
+  await tab.answer(1, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
+  assert.match(tab.note() ?? "", /still starting/u);
+  tab.type("Then add tests and docs.");
+  assert.equal(tab.note(), undefined);
+  assert.equal(tab.container.querySelector('[role="alert"] button'), null);
+  tab.key({ key: "Enter" });
+  assert.deepEqual(tab.sends[2] && { text: tab.sends[2].text, delivery: tab.sends[2].delivery }, {
+    text: "Then add tests and docs.",
+    delivery: CODING_AGENT_DELIVERY.STEER,
+  });
+
+  await tab.answer(2, { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED });
   assert.equal(tab.container.querySelector("textarea"), null);
   assert.match(
     tab.container.querySelector(".agent-composer-closed")?.textContent ?? "",
     /ended for good/u,
   );
   assert.equal(tab.note(), undefined);
+});
+
+test("two lines of the same words sent before either is read back are read back one row at a time, across pages", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.type("Add tests.");
+  tab.key({ key: "Enter" });
+  await tab.answer(0, RUNNING_AGENT);
+  tab.type("Add tests.");
+  tab.key({ key: "Enter" });
+  await tab.answer(1, RUNNING_AGENT);
+  assert.deepEqual(tab.bubbles(), ["Add tests.", "Add tests."]);
+
+  // The first row lands on its own page: one line is read back, the other still stands.
+  await tab.stand({ messages: [PLAN, row("m-1", "Add tests.")] });
+  assert.deepEqual(tab.bubbles(), ["Add tests.", "Add tests."]);
+  await tab.stand({ messages: [PLAN, row("m-1", "Add tests."), row("m-2", "Add tests.")] });
+  assert.deepEqual(tab.bubbles(), ["Add tests.", "Add tests."]);
 });
 
 test("the tab has one Stop, the composer's, while a turn runs, and it stops the agent", async () => {

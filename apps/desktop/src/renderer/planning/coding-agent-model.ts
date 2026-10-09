@@ -106,11 +106,13 @@ export function messageFailureNote(failure: CodingAgentCallFailure): string {
       return "This agent no longer exists.";
     case CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED:
       return "Sign in with GitHub again to message the agent.";
-    // A message names no repository and no model, so neither refusal is its own; each reads as no answer.
+    // A message names no repository and no model, so neither refusal is its own.
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
-    case CODING_AGENT_CALL_FAILURE.UNANSWERED:
       return "The message could not be sent. Try again.";
+    // No answer is not a refusal: the words may have reached the agent, and a message carries no key a second send could repeat under.
+    case CODING_AGENT_CALL_FAILURE.UNANSWERED:
+      return "Luke didn't hear back. Check the transcript before sending it again.";
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
@@ -319,18 +321,27 @@ export function knownDeveloperRows(messages: readonly CodingAgentMessage[]): Rea
   return new Set(developerRows(messages).map((message) => message.id));
 }
 
+/** The sent lines read against the transcript: the ones still not read back, and the rows that have answered one. */
+export interface SentLinesRead {
+  readonly lines: readonly SentLine[];
+  /** Every row that has answered a line, this read's and earlier ones', which no later line of the same words is read back by. */
+  readonly taken: ReadonlySet<string>;
+}
+
 /**
  * The sent lines the transcript has not read back yet. A line is read back
  * once a developer's row it did not know holds its words, each such row
  * answering one line in the order the lines went, so two lines of the same
- * words are read back one row at a time.
+ * words are read back one row at a time; the rows taken stay taken across
+ * reads, so a line let go does not hand its row to the next of its words.
  */
 export function unreadSentLines(
   sent: readonly SentLine[],
   messages: readonly CodingAgentMessage[],
-): readonly SentLine[] {
-  const claimed = new Set<string>();
-  return sent.filter((line) => {
+  taken: ReadonlySet<string> = new Set(),
+): SentLinesRead {
+  const claimed = new Set(taken);
+  const lines = sent.filter((line) => {
     const row = developerRows(messages).find(
       (message) =>
         !line.known.has(message.id) &&
@@ -341,6 +352,7 @@ export function unreadSentLines(
     claimed.add(row.id);
     return false;
   });
+  return { lines, taken: claimed };
 }
 
 /** A sent line as the tab draws it before the service's row lands: the developer's row, awaiting its delivery. */

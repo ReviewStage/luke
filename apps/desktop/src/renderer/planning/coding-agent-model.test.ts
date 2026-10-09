@@ -153,8 +153,10 @@ test("a message's refusals each say what to do, the agent ended for good closes 
   assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.NOT_FOUND), /no longer exists/u);
   assert.equal(
     messageFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY),
-    messageFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED),
+    messageFailureNote(CODING_AGENT_CALL_FAILURE.INVALID_CHOICE),
   );
+  // No answer is not a refusal: the words may have reached the agent.
+  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED), /didn't hear back/u);
   assert.equal(closesComposer(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED), true);
   assert.equal(closesComposer(CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY), false);
 });
@@ -183,15 +185,20 @@ test("a sent line is read back by a developer's row it did not know holding its 
   });
   // The plan already says the same words: the line is not read back by it.
   const first = sent("sent-1", "Go on.", [plan]);
-  assert.deepEqual(unreadSentLines([first], [plan]), [first]);
+  assert.deepEqual(unreadSentLines([first], [plan]).lines, [first]);
   // Two lines of the same words are read back one row at a time, in order.
   const second = sent("sent-2", "Go on.", [plan]);
   const one = [plan, developer("m-1", "Go on.", CODING_AGENT_DELIVERY.STEER)];
-  assert.deepEqual(unreadSentLines([first, second], one), [second]);
+  const read = unreadSentLines([first, second], one);
+  assert.deepEqual(read.lines, [second]);
+  assert.deepEqual([...read.taken], ["m-1"]);
+  // Read again with the first line let go, the row it took stays taken: the second line waits for its own.
+  assert.deepEqual(unreadSentLines(read.lines, one, read.taken).lines, [second]);
   const two = [...one, developer("m-2", "Go on.")];
-  assert.deepEqual(unreadSentLines([first, second], two), []);
+  assert.deepEqual(unreadSentLines(read.lines, two, read.taken).lines, []);
+  assert.deepEqual(unreadSentLines([first, second], two).lines, []);
   // Other words are nobody's.
-  assert.deepEqual(unreadSentLines([first], [plan, developer("m-3", "Stop.")]), [first]);
+  assert.deepEqual(unreadSentLines([first], [plan, developer("m-3", "Stop.")]).lines, [first]);
   assert.equal(messageWords(two[2] ?? plan), "Go on.");
 });
 

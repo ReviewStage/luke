@@ -30,9 +30,11 @@ import { modelLabel } from "#shared/model-label";
  * dot, until its tab is shown or the window comes forward on it. A message
  * to an agent that had ended reads it running under the ended turn's id
  * until eve opens the next turn, which is the old run read again and not
- * a new one: the ledger keeps the end it announced and keeps the plan
- * watched until the new turn's id arrives, whose own end is the next
- * notice. A Stop is the developer's own and announces nothing. The ledger
+ * a new one: the ledger keeps the end it announced, and on the message's
+ * own answer keeps the plan watched until the new turn's id arrives, whose
+ * own end is the next notice. A list that landed late, describing a turn
+ * the agent has left behind, says nothing newer. A Stop is the developer's
+ * own and announces nothing. The ledger
  * is this launch's and this account's, so an agent that ended before Luke
  * watched it, or while Luke was not running, is not announced, a reload of
  * the window announces nothing twice, and an account that signs out takes
@@ -108,6 +110,8 @@ export interface AgentNotices {
   observeAgents(agents: readonly CodingAgentSummary[]): void;
   /** One agent's status as a transcript page carried it; an agent no answer has named yet is left for the list. */
   observeStatus(agentId: string, status: CodingAgentStatus): void;
+  /** The agent as the answer to a message carried it: running, and with a line awaiting the turn it opens, which keeps its plan watched for that turn. */
+  observeMessaged(agent: CodingAgentSummary): void;
   /** The catalog as the panel last read it, for the model's name. */
   observeModels(models: readonly CatalogModel[]): void;
   /** A plan the host no longer holds: its agents are forgotten. */
@@ -125,6 +129,8 @@ interface HeldAgent {
   turnId: string | null;
   /** Whether a message of the developer's awaits a turn not yet opened, which keeps the plan watched past the end already announced. */
   awaiting: boolean;
+  /** The turns the agent has left behind, which a list that landed late may still describe. */
+  pastTurns: ReadonlySet<string>;
 }
 
 /** One turn's end as the ledger saw it, waiting to be announced. */
@@ -241,23 +247,29 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {
       const was = ledger.get(agentId);
-      const sameTurn = was !== undefined && was.turnId === next.turnId;
-      // A turn that ended stays ended: the reads overlap, and a list that
-      // read the agent running before it ended can land after the page that
-      // read it ended, which must not make its end a second turn's; and a
-      // message awaiting its turn reads the agent running under the ended
-      // turn's id, which is the same run until the next turn names itself.
-      // The plan stays watched meanwhile, so the next turn's id is read.
-      if (sameTurn && !stillWriting(was.status) && stillWriting(next.status)) {
-        ledger.set(agentId, { ...was, awaiting: true });
+      // An agent first seen ended ended before Luke watched it.
+      if (was === undefined) {
+        ledger.set(agentId, next);
         return;
       }
-      ledger.set(agentId, next);
-      // An agent first seen ended ended before Luke watched it; a turn that
-      // may still write has not ended; and one turn ends once.
-      if (was === undefined || stillWriting(next.status)) return;
-      if (sameTurn && !stillWriting(was.status)) return;
-      ended(agentId, next);
+      // The reads overlap, so a list can land after a newer read moved the
+      // ledger on: one describing a turn the agent has left behind, or no
+      // turn yet, says nothing newer and is let go whole.
+      if (next.turnId === null ? was.turnId !== null : was.pastTurns.has(next.turnId)) return;
+      if (was.turnId === next.turnId) {
+        // A turn that ended stays ended, so an end is never a second turn's,
+        // and running again under the ended turn's id is a late read or a
+        // message awaiting the next turn, which its own answer says.
+        if (!stillWriting(was.status)) return;
+        ledger.set(agentId, { ...next, pastTurns: was.pastTurns });
+        if (!stillWriting(next.status)) ended(agentId, next);
+        return;
+      }
+      // A new turn: the one before it is left behind, and its own end is the next notice.
+      const pastTurns = new Set(was.pastTurns);
+      if (was.turnId !== null) pastTurns.add(was.turnId);
+      ledger.set(agentId, { ...next, pastTurns });
+      if (!stillWriting(next.status)) ended(agentId, next);
     }
 
     /** Lets go of every agent `keep` refuses, their dots with them, as a plan deleted or an account left has no tab to clear one. */
@@ -285,16 +297,27 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       return [...plans];
     }
 
+    function heldOf(agent: CodingAgentSummary): HeldAgent {
+      return {
+        planId: agent.planId,
+        model: agent.model,
+        status: agent.status,
+        turnId: agent.turnId,
+        awaiting: false,
+        pastTurns: new Set(),
+      };
+    }
+
     const notices: AgentNotices = {
       observeAgents: (agents) => {
-        for (const agent of agents) {
-          observe(agent.id, {
-            planId: agent.planId,
-            model: agent.model,
-            status: agent.status,
-            turnId: agent.turnId,
-            awaiting: false,
-          });
+        for (const agent of agents) observe(agent.id, heldOf(agent));
+      },
+      observeMessaged: (agent) => {
+        observe(agent.id, heldOf(agent));
+        // The line awaits the turn it opens: the plan is watched until that turn names itself.
+        const held = ledger.get(agent.id);
+        if (held !== undefined && !stillWriting(held.status)) {
+          ledger.set(agent.id, { ...held, awaiting: true });
         }
       },
       observeStatus: (agentId, status) => {

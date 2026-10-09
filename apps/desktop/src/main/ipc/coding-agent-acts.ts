@@ -48,7 +48,12 @@ export interface CodingAgentActsDependencies {
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
     AgentNotices,
-    "observeAgents" | "observeStatus" | "observeModels" | "observePlanGone" | "shown"
+    | "observeAgents"
+    | "observeStatus"
+    | "observeMessaged"
+    | "observeModels"
+    | "observePlanGone"
+    | "shown"
   >;
 }
 
@@ -121,7 +126,9 @@ export function codingAgentActRows(
     },
     [ACT_KIND.CODING_AGENTS_MESSAGE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MESSAGE, sender);
-      return notedAgent(host.codingAgentMessage(params));
+      return noted(host.codingAgentMessage(params), (answer) => {
+        if ("agent" in answer) notices.observeMessaged(answer.agent);
+      });
     },
     [ACT_KIND.CODING_AGENTS_STOP]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_STOP, sender);

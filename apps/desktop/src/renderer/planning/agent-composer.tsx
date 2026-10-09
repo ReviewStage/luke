@@ -222,8 +222,13 @@ export function AgentComposer({
       event.currentTarget.blur();
       return;
     }
-    // ⌥Enter queues while a turn runs; the plain Enter is the field's own, which submits.
-    if (event.key === "Enter" && event.altKey && !event.shiftKey) {
+    // ⌥Enter queues while a turn runs, unless an input method is still composing with it; the plain Enter is the field's own, which submits.
+    if (
+      event.key === "Enter" &&
+      event.altKey &&
+      !event.shiftKey &&
+      !event.nativeEvent.isComposing
+    ) {
       event.preventDefault();
       if (!held) send(CODING_AGENT_DELIVERY.QUEUE);
     }
